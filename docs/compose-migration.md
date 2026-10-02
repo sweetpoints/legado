@@ -421,3 +421,8 @@ requests and configuration snapshots. Static images retain independent bitmap
 ownership after Glide cleanup; animations retain explicit leases. Cover title
 rasterization preserves horizontal/vertical typography, custom fonts, Unicode
 characters, adaptive sizes and author labels without depending on a View.
+
+Shared Compose cover components now display fixed 3:4 cropped covers and four-slot
+group previews, with a 1200ms title fallback for slow requests. Animated drawing
+follows the STARTED lifecycle and stops callbacks before releasing its Glide lease.
+Legacy cover Views remain until all consumers have moved to these components.
