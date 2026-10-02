@@ -721,3 +721,7 @@ Replaced the update dialog with Compose rich release notes, version metadata and
 ### Search scope Compose dialog
 
 Replaced the search scope dialog with Compose group/source tabs, enabled-group choices, all-source filtering, preserved independent selections and accessible stable-key rows. Confirmation preserves group click order and the original single-source name/URL format; all sources and cancellation retain their callback semantics. Saved identifiers restore selections and pending results, lifecycle subscription stops with the view and resumed delivery consumes before the parent-first callback. Added 9 JVM state tests, an actual subscription lifecycle test and compilation of 6 Compose plus 2 real Room/Fragment recreation tests. Removed the exclusive scope layout/menu; Android device execution is unavailable.
+
+### Shared rule syntax layer cleanup
+
+Moved unchanged Legado/JSON/JavaScript regular expressions into the pure model/analyzeRule package. Compose dictionary, HTTP TTS, TXT TOC and code-preview syntax projections now share model rules without depending on native CodeView extensions. The remaining native editor uses the same definitions. Existing keyword and syntax projection JVM tests plus full Android test compilation validate the package/import change.

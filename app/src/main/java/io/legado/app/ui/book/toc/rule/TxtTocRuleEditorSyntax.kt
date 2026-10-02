@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.*
-import io.legado.app.ui.widget.code.*
+import io.legado.app.model.analyzeRule.*
 
 /** Replacement CodeView's original JSON/JavaScript patterns, without modifying editable text. */
 class TxtTocRuleEditorSyntax(orange: Color, blue: Color, grey: Color, lightBlue: Color) : VisualTransformation {

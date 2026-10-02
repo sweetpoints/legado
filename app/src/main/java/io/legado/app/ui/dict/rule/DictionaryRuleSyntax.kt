@@ -6,7 +6,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import io.legado.app.ui.widget.code.*
+import io.legado.app.model.analyzeRule.*
 
 /** Same Legado, JSON and JavaScript token patterns as the previous rule CodeView. */
 class DictionaryRuleSyntax(orange: Color, blue: Color, grey: Color, lightBlue: Color) : VisualTransformation {

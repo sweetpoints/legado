@@ -7,17 +7,7 @@ import android.widget.ArrayAdapter
 import io.legado.app.R
 import splitties.init.appCtx
 import splitties.resources.color
-import java.util.regex.Pattern
-
-val legadoPattern: Pattern = Pattern.compile("\\|\\||&&|%%|@js:|@Json:|@css:|@@|@XPath:|@webjs:")
-val jsonPattern: Pattern = Pattern.compile("\"[A-Za-z0-9]*?\"\\:|\"|\\{|\\}|\\[|\\]")
-val wrapPattern: Pattern = Pattern.compile("\\\\n")
-val operationPattern: Pattern =
-    Pattern.compile(":|==|>|<|!=|>=|<=|->|=|%|-|-=|%=|\\+|\\-|\\-=|\\+=|\\^|\\&|\\|::|\\?|\\*")
-val jsPattern: Pattern = Pattern.compile(
-    "\\b(?:var|let|const|function|return|if|else|for|while|do|break|continue|switch|case|default|" +
-        "try|catch|finally|throw|new|delete|typeof|instanceof|in|of|void|this|true|false|null|undefined)\\b"
-)
+import io.legado.app.model.analyzeRule.*
 
 fun CodeView.addLegadoPattern() {
     addSyntaxPattern(legadoPattern, appCtx.color(R.color.md_orange_900))

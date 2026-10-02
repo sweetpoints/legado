@@ -28,7 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.repository.HttpTtsEditorField
-import io.legado.app.ui.widget.code.*
+import io.legado.app.model.analyzeRule.*
 
 internal fun httpTtsFieldLabel(field: HttpTtsEditorField): Int? = when (field) {
     HttpTtsEditorField.Name -> R.string.name; HttpTtsEditorField.Pause -> R.string.http_tts_pause_duration

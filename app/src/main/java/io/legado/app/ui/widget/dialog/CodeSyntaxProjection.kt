@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import io.legado.app.ui.widget.code.*
+import io.legado.app.model.analyzeRule.*
 import java.util.regex.Pattern
 import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
