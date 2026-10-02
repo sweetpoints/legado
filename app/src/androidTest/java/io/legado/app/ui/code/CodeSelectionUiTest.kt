@@ -71,7 +71,10 @@ import io.legado.app.ui.association.FileAssociationActivity
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportBookSourceViewModel
 import io.legado.app.ui.association.ImportRssSourceDialog
-import io.legado.app.ui.association.ImportRssSourceViewModel
+import io.legado.app.ui.association.RssImportViewModel
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import org.junit.Rule
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.ui.widget.code.KeywordTokenizer
@@ -89,6 +92,7 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
 class CodeSelectionUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val cacheKey = "code-selection-${UUID.randomUUID()}"
@@ -569,12 +573,14 @@ class CodeSelectionUiTest {
                             }
                             var ready = false
                             instrumentation.runOnMainSync {
-                                ready = parent?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-                                    ?.adapter?.itemCount == 2 && parent?.dialog?.window?.decorView?.hasWindowFocus() == true
+                                ready = (if (rss) parent?.let { ViewModelProvider(it)[RssImportViewModel::class.java].state.value.let { value -> value.interactive && value.items.size == 2 } } == true
+                                    else parent?.view?.findViewById<RecyclerView>(R.id.recycler_view)?.adapter?.itemCount == 2) &&
+                                    parent?.dialog?.window?.decorView?.hasWindowFocus() == true
                             }
                             ready
                         }
-                        instrumentation.runOnMainSync {
+                        if (rss) compose.onNodeWithTag("rss-import-code-1").performScrollTo().performClick()
+                        else instrumentation.runOnMainSync {
                             val list = parent!!.requireView().findViewById<RecyclerView>(R.id.recycler_view)
                             checkNotNull(list.findViewHolderForAdapterPosition(1)).itemView
                                 .findViewById<View>(R.id.tv_open).performClick()
@@ -725,7 +731,7 @@ class CodeSelectionUiTest {
                                         if (ready) {
                                             val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
                                             assertEquals(expected, preview!!.binding.codeView.text.toString())
-                                            val raw = if (rss) ViewModelProvider(parent!!)[ImportRssSourceViewModel::class.java].originalSourceJson(1)
+                                            val raw = if (rss) ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items[1].originalJson
                                                 else ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].originalSourceJson(1)
                                             assertEquals(edited, raw)
                                         }
@@ -740,7 +746,7 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 if (rss) {
-                                    val actual = ViewModelProvider(parent!!)[ImportRssSourceViewModel::class.java].allSources
+                                    val actual = ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items.map { GSON.fromJson(it.json, RssSource::class.java) }
                                     ready = actual.size == 2 && actual[1].sourceUrl == expectedUrl
                                     if (ready) { assertEquals(urls[0], actual[0].sourceUrl); assertEquals(script, actual[1].jsLib) }
                                 } else {

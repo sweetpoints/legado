@@ -1,5 +1,9 @@
 package io.legado.app.ui.association
 
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import org.junit.Rule
+
 import android.app.ActivityManager
 import android.content.ClipData
 import android.content.Intent
@@ -65,6 +69,7 @@ import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class SourceManualReplacementUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -133,7 +138,7 @@ class SourceManualReplacementUiTest {
                     assertTrue("The real source-rule query must be held", entered.await(15, java.util.concurrent.TimeUnit.SECONDS))
                     val model = main { if (rss) host.feed else host.book }
                     assertTrue("The query must still be held: rss=$rss manual=$manual recreate=$recreate",
-                        main { if (rss) host.feed.sourceUpdatePending.value == true else host.book.sourceUpdatePending.value == true })
+                        main { if (rss) (host.feed.state.value.busy || host.feed.state.value.pendingRefresh) else host.book.sourceUpdatePending.value == true })
                     val activity = main { host.parent.requireActivity() }
                     // ActivityScenario waits for an idle main thread before dispatching these
                     // transitions, which cannot happen while this held query animates progress.
@@ -156,12 +161,12 @@ class SourceManualReplacementUiTest {
                         }
                     }
                     assertTrue("Lifecycle transition must precede query release: rss=$rss manual=$manual recreate=$recreate",
-                        main { if (rss) host.feed.sourceUpdatePending.value == true else host.book.sourceUpdatePending.value == true })
+                        main { if (rss) (host.feed.state.value.busy || host.feed.state.value.pendingRefresh) else host.book.sourceUpdatePending.value == true })
                     release.countDown()
                     await("The retained comparison must finish") {
-                        main { if (rss) host.feed.sourceUpdatePending.value != true else host.book.sourceUpdatePending.value != true }
+                        main { if (rss) (!host.feed.state.value.busy && !host.feed.state.value.pendingRefresh) else host.book.sourceUpdatePending.value != true }
                     }
-                    main { assertNull(if (rss) host.feed.errorLiveData.value else host.book.errorLiveData.value) }
+                    main { assertNull(if (rss) host.feed.state.value.error else host.book.errorLiveData.value) }
                     if (!recreate) {
                         main {
                             activity.getSystemService(ActivityManager::class.java).appTasks
@@ -178,7 +183,7 @@ class SourceManualReplacementUiTest {
                             if (manual) rules.take(4).map { it.id } else emptyList<Long>(), ruleIds(menu))
                         val restored = host.parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().single()
                         assertTrue(restored.currentOriginalCode().contains("Edited Seed0"))
-                        assertNull(if (rss) host.feed.pendingReplacementDialog else host.book.pendingReplacementDialog)
+                        assertNull(if (rss) host.feed.state.value.effects.firstOrNull { it.action == RssImportAction.Manual || it.action == RssImportAction.Effective } else host.book.pendingReplacementDialog)
                     }
                     host.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
                     host.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
@@ -235,10 +240,8 @@ class SourceManualReplacementUiTest {
         AppConfig.importReplaceSource = false
         withImport(rss) { host ->
             host.names("Seed0", "Seed1")
-            main {
-                host.view<SearchView>(R.id.source_import_search).setQuery("Seed0", false)
-                if (rss) host.feed.setSelection(1, false) else host.book.setSelection(1, false)
-            }
+            host.query("Seed0")
+            main { if (rss) host.feed.select("1", false) else host.book.setSelection(1, false) }
             host.menu(R.id.menu_manual_replace_rule)
             var manual = host.child<ManualReplaceRulesDialog>()
             assertEquals(rules.take(4).map { it.id }, main { ruleIds(manual) })
@@ -250,10 +253,10 @@ class SourceManualReplacementUiTest {
             host.ready()
             host.names("Seed++0", "Seed+1") // Hidden, unchecked candidate is also replaced.
             main {
-                assertEquals(listOf(true, false), if (rss) host.feed.selectStatus else host.book.selectStatus)
-                assertEquals("Seed0", host.view<SearchView>(R.id.source_import_search).query.toString())
-                host.view<SearchView>(R.id.source_import_search).setQuery("", false)
+                assertEquals(listOf(true, false), if (rss) host.feed.state.value.items.map { it.key in host.feed.state.value.selected } else host.book.selectStatus)
+                assertEquals("Seed0", if (rss) host.feed.state.value.query else host.view<SearchView>(R.id.source_import_search).query.toString())
             }
+            host.query("")
             host.menu(R.id.menu_effective_replaces)
             val effective = host.child<EffectiveReplacesDialog>()
             main { assertEquals(rules.take(2).map { it.id }, ruleIds(effective)); effective.dismiss() }
@@ -320,7 +323,7 @@ class SourceManualReplacementUiTest {
             main { code.dismiss() }
             host.ready()
             host.names("Editor Seed+0", "Seed+1")
-            main { host.view<View>(R.id.tv_ok).performClick() }
+            host.click(R.id.tv_ok)
             await("Import not persisted") {
                 val stored = if (rss) appDb.rssSourceDao.getByKey(urls[0])?.sourceName
                     else appDb.bookSourceDao.getBookSource(urls[0])?.bookSourceName
@@ -373,7 +376,7 @@ class SourceManualReplacementUiTest {
             host.names("Seed+0", "Seed+1")
             host.manualEnabled(true)
             assertFalse(AppConfig.manualReplaceRule)
-            main { host.view<View>(R.id.tv_cancel).performClick() }
+            host.click(R.id.tv_cancel)
             AppConfig.importReplaceSource = true
         }
     }
@@ -395,13 +398,13 @@ class SourceManualReplacementUiTest {
                 host.names("Seed+0", "Seed+1")
                 assertFalse(AppConfig.importReplaceSource)
                 host.manualEnabled(true)
-                assertTrue(main { (if (rss) host.feed.errorLiveData.value else host.book.errorLiveData.value)
+                assertTrue(main { (if (rss) host.feed.state.value.error else host.book.errorLiveData.value)
                     ?.contains("Injected source-rule read failure") == true })
             }
             host.menu(R.id.menu_replace_source)
             host.ready()
             host.names("Seed++0", "Seed+1")
-            main { host.view<View>(R.id.tv_cancel).performClick() }
+            host.click(R.id.tv_cancel)
             AppConfig.importReplaceSource = false
         }
     }
@@ -448,7 +451,7 @@ class SourceManualReplacementUiTest {
             for (rss in listOf(false, true)) withImport(rss) { host ->
                 if (sourceAutomatic) host.names("Seed++0", "Seed+1") else host.names("Seed0", "Seed1")
                 host.manualEnabled(!sourceAutomatic)
-                main { host.view<View>(R.id.tv_cancel).performClick() }
+                host.click(R.id.tv_cancel)
             }
         }
         val readerCandidates = appDb.replaceRuleDao.findManualCandidates().map { it.id }
@@ -483,7 +486,7 @@ class SourceManualReplacementUiTest {
     private inner class Host(val scenario: ActivityScenario<FileAssociationActivity>, val rss: Boolean) {
         lateinit var parent: DialogFragment
         val book get() = ViewModelProvider(parent)[ImportBookSourceViewModel::class.java]
-        val feed get() = ViewModelProvider(parent)[ImportRssSourceViewModel::class.java]
+        val feed get() = ViewModelProvider(parent)[RssImportViewModel::class.java]
         fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
         fun findParent() = await("Missing import preview") {
             scenario.onActivity { activity ->
@@ -494,11 +497,11 @@ class SourceManualReplacementUiTest {
             ::parent.isInitialized && main { parent.view != null }
         }
         fun ready(top: DialogFragment = parent) = await("Preview still updating") {
-            main { view<View>(R.id.tv_ok).isEnabled &&
+            main { (if (rss) feed.state.value.interactive else view<View>(R.id.tv_ok).isEnabled) &&
                 top.dialog?.window?.decorView?.hasWindowFocus() == true }
         }
         fun names(vararg names: String) = main {
-            assertEquals(names.toList(), if (rss) feed.allSources.map { it.sourceName }
+            assertEquals(names.toList(), if (rss) feed.state.value.items.map { it.sourceName }
                 else book.allSources.map { it.bookSourceName })
         }
         inline fun <reified T : DialogFragment> child(): T {
@@ -512,6 +515,17 @@ class SourceManualReplacementUiTest {
             return checkNotNull(result)
         }
         fun menu(id: Int, dialog: DialogFragment = parent, waitForIdleAfterClick: Boolean = true) {
+            if (rss && dialog === parent) {
+                compose.onNodeWithTag("rss-import-menu").performClick()
+                val menu = when (id) {
+                    R.id.menu_replace_source -> RssImportMenu.Automatic
+                    R.id.menu_manual_replace_rule -> RssImportMenu.Manual
+                    R.id.menu_effective_replaces -> RssImportMenu.Effective
+                    else -> error("Unsupported RSS menu $id")
+                }
+                compose.onNodeWithTag("rss-import-menu-${menu.name}").performClick()
+                return
+            }
             val toolbar = main { dialog.requireView().findViewById<Toolbar>(R.id.tool_bar) }
             main { assertTrue(toolbar.menu.findItem(id).isVisible); toolbar.showOverflowMenu() }
             await("Missing overflow") { main { toolbar.isOverflowMenuShowing } }
@@ -537,7 +551,17 @@ class SourceManualReplacementUiTest {
                 }
             }
         }
-        fun manualEnabled(enabled: Boolean, dialog: DialogFragment = parent) = main {
+        fun manualEnabled(enabled: Boolean, dialog: DialogFragment = parent) {
+            if (rss && dialog === parent) {
+                compose.onNodeWithTag("rss-import-menu").performClick()
+                val manual = compose.onNodeWithTag("rss-import-menu-Manual").assertIsDisplayed()
+                if (enabled) manual.assertIsEnabled() else manual.assertIsNotEnabled()
+                compose.onNodeWithTag("rss-import-menu-Automatic").assertIsDisplayed()
+                androidx.test.espresso.Espresso.pressBack()
+                main { assertEquals(!enabled, feed.state.value.automatic) }
+                return
+            }
+            main {
             val toolbar = dialog.requireView().findViewById<Toolbar>(R.id.tool_bar)
             val item = toolbar.menu.findItem(R.id.menu_manual_replace_rule)
             assertTrue("Manual source replacement remains visible", item.isVisible)
@@ -548,7 +572,21 @@ class SourceManualReplacementUiTest {
                 assertEquals(!enabled, automatic.isChecked)
             }
         }
+        }
+        fun query(value: String) {
+            if (rss) compose.onNodeWithTag("rss-import-search").performTextReplacement(value)
+            else main { view<SearchView>(R.id.source_import_search).setQuery(value, false) }
+        }
+        fun click(id: Int) {
+            if (rss) compose.onNodeWithTag(if (id == R.id.tv_ok) "rss-import-confirm" else "rss-import-cancel").performClick()
+            else main { view<View>(id).performClick() }
+        }
         fun open(index: Int): CodeDialog {
+            if (rss) {
+                val key = main { feed.state.value.items[index].key }
+                compose.onNodeWithTag("rss-import-code-$key").performScrollTo().performClick()
+                return child()
+            }
             await("Source row missing") { main { view<RecyclerView>(R.id.recycler_view).let {
                 !it.hasPendingAdapterUpdates() && it.findViewHolderForAdapterPosition(index) != null
             } } }

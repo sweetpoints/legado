@@ -106,7 +106,6 @@ class ImportBookSourceStateTest {
     fun `import comment rows reset collapsed state when rebound`() {
         listOf(
             "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt",
-            "src/main/java/io/legado/app/ui/association/ImportRssSourceDialog.kt",
         ).forEach { path ->
             val source = readProjectFile(path)
             val textIndex = source.indexOf("showComment.text =")
@@ -123,7 +122,6 @@ class ImportBookSourceStateTest {
     fun `association import status labels use localized resources`() {
         val importDialogs = listOf(
             "ImportBookSourceDialog.kt",
-            "ImportRssSourceDialog.kt",
         )
 
         importDialogs.forEach { fileName ->
@@ -268,17 +266,12 @@ class ImportBookSourceStateTest {
         assertTrue(codeMenu.contains("@+id/menu_search_next"))
         assertTrue(codeMenu.contains("@+id/menu_replace_rule"))
 
-        val rssDialog = readProjectFile(
-            "src/main/java/io/legado/app/ui/association/ImportRssSourceDialog.kt"
-        )
-        assertTrue(rssDialog.contains("viewModel.setUseSourceReplacement(item.isChecked)"))
-        assertTrue(rssDialog.contains("viewModel.originalSourceJson(position)"))
-        assertTrue(rssDialog.contains("alternateCode = viewModel.replacedSourceJson(position)"))
-        assertTrue(rssDialog.contains("showReplaceRules = true"))
-        assertTrue(rssDialog.contains("override fun onOpenReplaceRules"))
-        assertTrue(rssDialog.contains("pendingReplacementRefresh"))
-        assertTrue(rssDialog.contains("viewModel.refreshSourceReplacements(index, source)"))
-        assertFalse(rssDialog.contains("menu_replace_source)?.isVisible = false"))
+        // RSS's mutable legacy source assertions are covered by RssImportViewModelTest
+        // and the real mixed Book/RSS CodeSelectionUiTest callbacks.
+        assertEquals(io.legado.app.R.string.import_status_new, rssImportStatus(io.legado.app.data.repository.RssImportStatus.New))
+        assertEquals(io.legado.app.R.string.import_status_update, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Update))
+        assertEquals(io.legado.app.R.string.import_status_exist, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Existing))
+        assertEquals(io.legado.app.R.string.import_status_error, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Error))
     }
 
     private fun readProjectFile(pathInApp: String): String {

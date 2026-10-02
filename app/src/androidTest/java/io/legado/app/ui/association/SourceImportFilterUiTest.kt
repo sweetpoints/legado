@@ -1,5 +1,8 @@
 package io.legado.app.ui.association
 
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import org.junit.Rule
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -55,6 +58,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class SourceImportFilterUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -204,12 +208,7 @@ class SourceImportFilterUiTest {
             host.assertQuery("OnlyNeedle", 1)
             host.selection(true, false, true)
             host.query("does-not-exist")
-            main {
-                assertEquals(context.getString(R.string.import_no_results),
-                    host.view<TextView>(R.id.tv_msg).text.toString())
-                assertTrue(host.view<TextView>(R.id.tv_msg).isShown)
-                assertFalse(host.view<View>(R.id.tv_footer_left).isEnabled)
-            }
+            host.noResults()
             host.footer(0, 0, 2, all = true)
             host.query("", 0, 1, 2)
             host.query("OnlyNeedle", 1)
@@ -315,7 +314,7 @@ class SourceImportFilterUiTest {
             host.group("Remember add", true)
             host.inspectGroupDialog("Remember add", true)
             screenshot("source-remembered-group-book")
-            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+            host.cancelGroup()
             host.setGroup("Remember replace", false)
             host.click(R.id.tv_ok)
             await("Remembered replacement group was not applied") {
@@ -327,7 +326,7 @@ class SourceImportFilterUiTest {
             host.group("Remember replace", false)
             host.inspectGroupDialog("Remember replace", false)
             screenshot("source-remembered-group-rss")
-            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+            host.cancelGroup()
             host.menu(R.id.menu_remember_source_group)
             host.group(null, false)
             assertFalse(AppConfig.importRememberGroup)
@@ -382,7 +381,7 @@ class SourceImportFilterUiTest {
     private inner class ImportHost(val scenario: ActivityScenario<out FragmentActivity>, val rss: Boolean) {
         lateinit var parent: DialogFragment
         private val book get() = ViewModelProvider(parent)[ImportBookSourceViewModel::class.java]
-        private val feed get() = ViewModelProvider(parent)[ImportRssSourceViewModel::class.java]
+        private val feed get() = ViewModelProvider(parent)[RssImportViewModel::class.java]
         fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
         private fun toolbar() = view<Toolbar>(R.id.tool_bar)
         private fun indices() = (view<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>).getItems()
@@ -397,39 +396,62 @@ class SourceImportFilterUiTest {
         }
 
         fun awaitReady() = await("Import dialog not ready: rss=$rss") {
-            main { parent.view != null && view<View>(R.id.tv_ok).isEnabled &&
+            main { parent.view != null && (if (rss) feed.state.value.interactive else view<View>(R.id.tv_ok).isEnabled) &&
                 parent.dialog?.window?.decorView?.hasWindowFocus() == true }
         }
 
         fun query(query: String, vararg expected: Int) {
-            main { view<SearchView>(R.id.source_import_search).setQuery(query, false) }
+            if (rss) compose.onNodeWithTag("rss-import-search").performTextReplacement(query)
+            else main { view<SearchView>(R.id.source_import_search).setQuery(query, false) }
             assertQuery(query, *expected)
         }
 
         fun assertQuery(query: String, vararg expected: Int) {
             await("Filter '$query' did not resolve ${expected.toList()}: rss=$rss") {
-                main { indices() == expected.toList() }
+                main { if (rss) visibleRssImportItems(feed.state.value, RssImportSearchLabels(context.getString(R.string.enabled),
+                    context.getString(R.string.disabled), context.getString(R.string.need_login), context.getString(R.string.no_group))).map { it.key.toInt() } == expected.toList()
+                    else indices() == expected.toList() }
             }
-            main {
-                assertEquals(query, view<SearchView>(R.id.source_import_search).query.toString())
-                assertEquals(query, if (rss) feed.searchQuery else book.searchQuery)
-            }
+            if (rss) compose.onNodeWithTag("rss-import-search").assertTextContains(query)
+            else main { assertEquals(query, view<SearchView>(R.id.source_import_search).query.toString()) }
+            main { assertEquals(query, if (rss) feed.state.value.query else book.searchQuery) }
         }
 
         fun selection(vararg expected: Boolean) = main {
             assertEquals("Selection must use original indices: rss=$rss", expected.toList(),
-                if (rss) feed.selectStatus.toList() else book.selectStatus.toList())
+                if (rss) feed.state.value.items.map { it.key in feed.state.value.selected } else book.selectStatus.toList())
         }
 
-        fun footer(selected: Int, visible: Int, total: Int, all: Boolean) = main {
-            assertEquals(context.getString(if (all) R.string.import_unselect_results
-                else R.string.import_select_results, selected, visible, total),
-                view<TextView>(R.id.tv_footer_left).text.toString())
+        fun footer(selected: Int, visible: Int, total: Int, all: Boolean) {
+            val expected = context.getString(if (all) R.string.import_unselect_results else R.string.import_select_results, selected, visible, total)
+            if (rss) compose.onNodeWithTag("rss-import-select-visible").assertTextContains(expected)
+            else main { assertEquals(expected, view<TextView>(R.id.tv_footer_left).text.toString()) }
         }
-
-        fun click(id: Int) { main { assertTrue(view<View>(id).performClick()) } }
+        fun noResults() {
+            if (rss) {
+                compose.onNodeWithText(context.getString(R.string.import_no_results)).assertIsDisplayed()
+                compose.onNodeWithTag("rss-import-select-visible").assertIsNotEnabled()
+            } else main {
+                assertEquals(context.getString(R.string.import_no_results), view<TextView>(R.id.tv_msg).text.toString())
+                assertTrue(view<View>(R.id.tv_msg).isShown); assertFalse(view<View>(R.id.tv_footer_left).isEnabled)
+            }
+        }
+        fun click(id: Int) {
+            if (rss) compose.onNodeWithTag(when (id) {
+                R.id.tv_ok -> "rss-import-confirm"
+                R.id.tv_cancel -> "rss-import-cancel"
+                else -> "rss-import-select-visible"
+            }).performClick()
+            else main { assertTrue(view<View>(id).performClick()) }
+        }
 
         fun rowClick(position: Int, id: Int) {
+            if (rss) {
+                val key = main { visibleRssImportItems(feed.state.value, RssImportSearchLabels(context.getString(R.string.enabled),
+                    context.getString(R.string.disabled), context.getString(R.string.need_login), context.getString(R.string.no_group)))[position].key }
+                compose.onNodeWithTag("rss-import-${if (id == R.id.tv_open) "code" else "check"}-$key").performScrollTo().performClick()
+                return
+            }
             await("Filtered row $position is not laid out: rss=$rss") {
                 main { view<RecyclerView>(R.id.recycler_view).let {
                     !it.hasPendingAdapterUpdates() && it.findViewHolderForAdapterPosition(position) != null
@@ -440,6 +462,13 @@ class SourceImportFilterUiTest {
         }
 
         fun rejectStaleRowAfterQuery(query: String, originalIndex: Int) {
+            if (rss) {
+                val stale = compose.onNodeWithTag("rss-import-check-0")
+                this.query(query, originalIndex)
+                stale.assertDoesNotExist()
+                main { assertTrue(parent.childFragmentManager.fragments.none { it is CodeDialog }) }
+                return
+            }
             await("Initial row is not laid out") {
                 main { view<RecyclerView>(R.id.recycler_view).let {
                     !it.hasPendingAdapterUpdates() && it.findViewHolderForAdapterPosition(0) != null
@@ -460,6 +489,17 @@ class SourceImportFilterUiTest {
         }
 
         fun menu(id: Int) {
+            if (rss) {
+                compose.onNodeWithTag("rss-import-menu").performClick()
+                val menu = when (id) {
+                    R.id.menu_replace_source -> RssImportMenu.Automatic
+                    R.id.menu_remember_source_group -> RssImportMenu.RememberGroup
+                    R.id.menu_show_comment -> RssImportMenu.ShowComment
+                    else -> error("Unsupported RSS menu $id")
+                }
+                compose.onNodeWithTag("rss-import-menu-${menu.name}").performClick()
+                awaitReady(); return
+            }
             val title = main { toolbar().menu.findItem(id).title.toString() }
             main { toolbar().showOverflowMenu() }
             await("Import overflow missing") { main { toolbar().isOverflowMenuShowing } }
@@ -491,29 +531,53 @@ class SourceImportFilterUiTest {
             scenario.state == Lifecycle.State.DESTROYED
         }
 
-        fun group(expected: String?, add: Boolean) = main {
-            assertEquals(expected, if (rss) feed.groupName else book.groupName)
-            assertEquals(add, if (rss) feed.isAddGroup else book.isAddGroup)
+        fun group(expected: String?, add: Boolean) {
+            main {
+                assertEquals(expected, if (rss) feed.state.value.group else book.groupName)
+                assertEquals(add, if (rss) feed.state.value.addGroup else book.isAddGroup)
+            }
             val title = expected?.let { context.getString(R.string.diy_edit_source_group_title, it) }
                 ?.let { if (add) "+$it" else it } ?: context.getString(R.string.diy_source_group)
-            assertEquals(title, toolbar().menu.findItem(R.id.menu_new_group).title.toString())
-            assertEquals(AppConfig.importRememberGroup, toolbar().menu.findItem(R.id.menu_remember_source_group).isChecked)
-            assertNull(toolbar().menu.findItem(R.id.menu_remember_source_group).icon)
-            val menuIds = (0 until toolbar().menu.size()).map { toolbar().menu.getItem(it).itemId }
-            assertEquals(menuIds.indexOf(R.id.menu_show_comment) + 1,
-                menuIds.indexOf(R.id.menu_remember_source_group))
+            if (rss) {
+                compose.onNodeWithTag("rss-import-group").assertTextContains(title)
+                main { assertEquals(AppConfig.importRememberGroup, feed.state.value.preferences.rememberGroup) }
+                assertEquals(RssImportMenu.ShowComment.ordinal + 1, RssImportMenu.RememberGroup.ordinal)
+            } else main {
+                assertEquals(title, toolbar().menu.findItem(R.id.menu_new_group).title.toString())
+                assertEquals(AppConfig.importRememberGroup, toolbar().menu.findItem(R.id.menu_remember_source_group).isChecked)
+                assertNull(toolbar().menu.findItem(R.id.menu_remember_source_group).icon)
+                val menuIds = (0 until toolbar().menu.size()).map { toolbar().menu.getItem(it).itemId }
+                assertEquals(menuIds.indexOf(R.id.menu_show_comment) + 1, menuIds.indexOf(R.id.menu_remember_source_group))
+            }
         }
 
         fun inspectGroupDialog(expected: String?, add: Boolean) {
+            if (rss) {
+                compose.onNodeWithTag("rss-import-group").performClick()
+                compose.onNodeWithTag("rss-import-group-name").assertTextContains(expected.orEmpty())
+                if (add) compose.onNodeWithTag("rss-import-add-group").assertIsOn()
+                else compose.onNodeWithTag("rss-import-add-group").assertIsOff()
+                return
+            }
             onView(withId(R.id.menu_new_group)).inRoot(isDialog()).perform(click())
             onView(withId(R.id.edit_view)).inRoot(isDialog()).check(matches(withText(expected.orEmpty())))
             onView(withId(R.id.sw_add_group)).inRoot(isDialog()).check(matches(if (add) isChecked() else not(isChecked())))
         }
 
+        fun cancelGroup() {
+            if (rss) compose.onNodeWithTag("rss-import-group-cancel").performClick()
+            else onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+        }
         fun setGroup(value: String, add: Boolean) {
-            val current = main { (if (rss) feed.groupName else book.groupName) to
-                (if (rss) feed.isAddGroup else book.isAddGroup) }
+            val current = main { (if (rss) feed.state.value.group else book.groupName) to
+                (if (rss) feed.state.value.addGroup else book.isAddGroup) }
             inspectGroupDialog(current.first, current.second)
+            if (rss) {
+                compose.onNodeWithTag("rss-import-group-name").performTextReplacement(value)
+                if (current.second != add) compose.onNodeWithTag("rss-import-add-group").performClick()
+                compose.onNodeWithTag("rss-import-group-ok").performClick()
+                awaitReady(); group(value, add); return
+            }
             onView(withId(R.id.edit_view)).inRoot(isDialog()).perform(replaceText(value))
             if (current.second != add) onView(withId(R.id.sw_add_group)).inRoot(isDialog()).perform(click())
             onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
