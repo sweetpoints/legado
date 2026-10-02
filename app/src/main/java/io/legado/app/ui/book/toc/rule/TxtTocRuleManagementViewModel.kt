@@ -179,7 +179,7 @@ class TxtTocRuleManagementViewModel(private val repository: TxtTocRuleManagement
     }
     fun deleteHistory(url: String) = operation {
         historyRevision++; historyJob?.cancel()
-        repository.removeUrl(url); mutableState.value = state.value.copy(history = repository.history())
+        repository.removeUrl(url); mutableState.value = state.value.copy(history = state.value.history.filterNot { it == url })
     }
     fun confirmOnline() {
         val input = state.value.onlineInput

@@ -21,7 +21,6 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
-import io.legado.app.ui.book.toc.rule.TxtTocRuleAdapter
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleAdapter
@@ -115,6 +114,7 @@ class RuleSelectionShareTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun txtTocSelectionSharesAllRuleFieldsWithoutUnselectedRules() {
         val id = System.currentTimeMillis()
         val rule = TxtTocRule(
@@ -124,14 +124,44 @@ class RuleSelectionShareTest {
         val other = TxtTocRule(id = id + 1, name = "Unselected toc $id", rule = "Other")
         appDb.txtTocRuleDao.insert(rule, other)
         try {
-            val json = shareSelection(TxtTocRuleActivity::class.java, R.menu.txt_toc_rule_sel) { activity ->
-                val adapter = activity.findViewById<RecyclerView>(R.id.recycler_view).adapter as TxtTocRuleAdapter
-                val index = adapter.getItems().indexOfFirst { it.id == rule.id }
-                if (index < 0 || adapter.getItems().none { it.id == other.id }) false else {
-                    assertTrue(adapter.dragSelectCallback.onSelectChange(index, true))
-                    assertEquals(listOf(rule.id), adapter.selection.map { it.id })
-                    true
+            val chooser = AtomicReference<Intent?>()
+            val monitor = object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.action != Intent.ACTION_CHOOSER) return null
+                    chooser.set(intent)
+                    return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
                 }
+            }
+            instrumentation.addMonitor(monitor)
+            var sharedUri: Uri? = null
+            var json = ""
+            try {
+                runAndroidComposeUiTest<TxtTocRuleActivity> {
+                    waitUntil(timeoutMillis = 15000) {
+                        val rows = activity?.viewModel?.state?.value?.rules.orEmpty()
+                        rows.any { it.id == rule.id } && rows.any { it.id == other.id }
+                    }
+                    onNodeWithTag("txt-toc-selection-menu").assertIsNotEnabled()
+                    assertNull("Empty selection must not launch a share", chooser.get())
+                    onNodeWithTag("txt-toc-list").performScrollToNode(hasTestTag("txt-toc-select-${rule.id}"))
+                    onNodeWithTag("txt-toc-select-${rule.id}").performClick().assertIsOn()
+                    onNodeWithTag("txt-toc-selection-menu").performClick()
+                    onNodeWithTag("txt-toc-share").performClick()
+                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
+                    @Suppress("DEPRECATION")
+                    val intent = checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                    assertEquals(Intent.ACTION_SEND, intent.action)
+                    assertEquals("text/*", intent.type)
+                    assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                    @Suppress("DEPRECATION")
+                    val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+                    sharedUri = uri
+                    assertEquals("content", uri.scheme)
+                    json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                }
+            } finally {
+                instrumentation.removeMonitor(monitor)
+                sharedUri?.lastPathSegment?.let { File(context.cacheDir, it).delete() }
             }
             val restored = GSON.fromJsonArray<TxtTocRule>(json).getOrThrow().single()
             assertEquals(GSON.toJson(rule), GSON.toJson(restored))

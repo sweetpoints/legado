@@ -162,13 +162,7 @@ class ManagePopupActionMigrationTest {
             "callBack.delete(item)",
             "selected.remove(item)"
         )
-        assertActions(
-            TXT_TOC_RULE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "callBack.del(source)",
-            "selected.remove(source)"
-        )
+
     }
 
     @Test
@@ -180,7 +174,7 @@ class ManagePopupActionMigrationTest {
             "item(context.getString(R.string.auto_task_move_down), \"moveDown\")",
             "item(context.getString(R.string.delete), \"delete\")"
         )
-        listOf(RSS_SOURCE, REPLACE_RULE, TXT_TOC_RULE).forEach { path ->
+        listOf(RSS_SOURCE, REPLACE_RULE).forEach { path ->
             assertOrdered(
                 path,
                 "item(context.getString(R.string.to_top), \"top\")",
@@ -224,7 +218,6 @@ class ManagePopupActionMigrationTest {
         const val RSS_SOURCE = "src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt"
         const val RULE_SUB = "src/main/java/io/legado/app/ui/rss/subscription/RuleSubAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        const val TXT_TOC_RULE = "src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt"
-        val adapterFiles = listOf(AUTO_TASK, RSS_SOURCE, RULE_SUB, REPLACE_RULE, TXT_TOC_RULE)
+        val adapterFiles = listOf(AUTO_TASK, RSS_SOURCE, RULE_SUB, REPLACE_RULE)
     }
 }

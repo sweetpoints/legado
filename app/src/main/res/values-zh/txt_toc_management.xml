@@ -1,0 +1,4 @@
+<resources>
+    <string name="txt_toc_move_up">上移</string>
+    <string name="txt_toc_move_down">下移</string>
+</resources>

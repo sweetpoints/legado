@@ -83,7 +83,7 @@ class TxtTocRuleManagementViewModelTest {
         val repo = Fake(); val gate = CompletableDeferred<List<String>>(); var reads = 0
         repo.historyRead = { if (++reads == 1) withContext(NonCancellable) { gate.await() } else listOf("new") }
         val vm = model(repo); runCurrent(); vm.showOnline(true); runCurrent(); vm.inputOnline("[]"); vm.deleteHistory("old"); runCurrent()
-        gate.complete(listOf("old")); runCurrent(); assertEquals(listOf("new"), vm.state.value.history); assertEquals("[]", vm.state.value.onlineInput)
+        gate.complete(listOf("old")); runCurrent(); assertTrue(vm.state.value.history.isEmpty()); assertEquals("[]", vm.state.value.onlineInput)
         vm.confirmOnline(); runCurrent(); assertFalse(vm.state.value.online); assertEquals("[]", vm.consumeEffect()?.value)
     }
     @Test fun exportCopyKeepsOriginalUrlAndPassphraseAndPendingEffectsRestoreOnce() = runTest(dispatcher) {
@@ -93,6 +93,13 @@ class TxtTocRuleManagementViewModelTest {
         vm.exportFinished("https://another"); vm.createPassphrase(); runCurrent(); assertNull(vm.state.value.exportUrl)
         vm.copyPassphrase(); val restored = model(repo, snapshot(saved)); runCurrent()
         assertEquals("phrase:https://another", restored.consumeEffect()?.value); assertNull(restored.consumeEffect())
+    }
+    @Test fun deletingDefaultHistoryHidesItNowAndNextOpenReintroducesIt() = runTest(dispatcher) {
+        val url = io.legado.app.data.repository.DEFAULT_TXT_TOC_RULE_URL
+        val repo = Fake().apply { historyRead = { listOf(url, "https://other") } }; val vm = model(repo); runCurrent()
+        vm.showOnline(true); runCurrent(); assertEquals(listOf(url, "https://other"), vm.state.value.history)
+        vm.deleteHistory(url); runCurrent(); assertEquals(listOf("https://other"), vm.state.value.history)
+        vm.showOnline(false); vm.showOnline(true); runCurrent(); assertEquals(listOf(url, "https://other"), vm.state.value.history)
     }
     private class Fake : TxtTocRuleManagementRepository {
         val rows = MutableStateFlow(listOf(TxtTocRuleSnapshot(1, "alpha", "alpha", example = "Chapter A", serialNumber = 42), TxtTocRuleSnapshot(2, "beta", "beta", "$1", "Chapter B", 42, false), TxtTocRuleSnapshot(3, "gamma", "gamma", serialNumber = 42)))
