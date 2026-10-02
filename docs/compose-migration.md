@@ -376,6 +376,12 @@ retain metadata, read progress, unread/loading state, title modes and click/long
 contracts. Cover rendering is an injected slot; existing shelf consumers remain until
 their feature Routes connect these components.
 
+The first bookshelf-page state foundation observes Room and preferences as cancellable
+Flows, performs sorting/snapshot mapping off Main and exposes immutable entries.
+Domain books remain private to the state holder for existing navigation/refresh APIs.
+Group switches discard stale results and old refresh targets; parameters, goto-top
+requests and lifecycle-bound update labels survive recreation.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
