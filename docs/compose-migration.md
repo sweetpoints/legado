@@ -753,3 +753,7 @@ Added immutable task rows and an I/O management repository for field-preserving 
 ### Audio speed and timer Compose popup
 
 Replaced the audio slider popup content with Compose and accessible discrete controls. Speed preserves 0.5..3.0 in tenths, timer preserves 0..180 whole minutes, and programmatic refresh leaves playback unchanged. User changes retain the existing playback APIs, whose persistence/service behavior remains owned by AudioPlay. Native positioning and popup styling remain; view-tree owners and composition disposal cover dismissal, reopening and host destruction. Added 3 JVM normalization/dispatch tests and compilation of 2 Compose plus 1 actual native popup lifecycle test. Removed the exclusive slider layout; Android device execution is unavailable.
+
+### RSS favorite configuration data and draft state
+
+Added private revisioned favorite-configuration drafts and saved-state identifiers, retaining title/group editing and the existing reading/video host ownership of persistence. Blank edits fall back to original nullable fields, nonblank edits keep their exact text, and save/delete callbacks restore from disk before consumed delivery. Debounced autosave and lifecycle flush protect large drafts without placing their content in Bundle state. Added 8 JVM state tests plus compilation of 3 real AtomicFile/recovery tests. Legacy configuration UI remains for separate Compose integration; Android device execution is unavailable.
