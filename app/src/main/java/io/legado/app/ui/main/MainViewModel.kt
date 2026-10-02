@@ -2,6 +2,7 @@ package io.legado.app.ui.main
 
 import android.app.Application
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.RecyclerView.RecycledViewPool
 import io.legado.app.R
@@ -15,6 +16,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.saveReadRecordSnapshot
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.BottomBarSkinManager
 import io.legado.app.help.DefaultData
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
@@ -26,32 +28,70 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
+import io.legado.app.model.RuleUpdate
+import io.legado.app.model.SourceCallBack
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.CacheBookService
+import io.legado.app.ui.navigation.MainDestination
 import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import kotlin.collections.forEach
+import kotlin.math.min
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import kotlin.collections.forEach
-import kotlin.math.min
-import io.legado.app.model.RuleUpdate
-import io.legado.app.model.SourceCallBack
 
-class MainViewModel(application: Application) : BaseViewModel(application) {
+class MainViewModel(
+    application: Application,
+    private val savedStateHandle: SavedStateHandle,
+) : BaseViewModel(application) {
+    private val _uiState = MutableStateFlow(
+        MainUiState(
+            selectedDestination = MainDestination.fromKey(
+                savedStateHandle["mainDestination"] ?: AppConfig.defaultHomePage
+            ),
+            skinName = BottomBarSkinManager.active,
+            isEInkMode = AppConfig.isEInkMode,
+        ).withVisibleDestinations(AppConfig.showDiscovery, AppConfig.showRSS)
+    )
+    val uiState = _uiState.asStateFlow()
+
+    fun selectDestination(destination: MainDestination) {
+        if (destination !in _uiState.value.destinations) return
+        savedStateHandle["mainDestination"] = destination.key
+        _uiState.update { it.copy(selectedDestination = destination) }
+    }
+
+    fun refreshNavigation() {
+        _uiState.update {
+            it.withVisibleDestinations(AppConfig.showDiscovery, AppConfig.showRSS)
+                .copy(isEInkMode = AppConfig.isEInkMode)
+        }
+        savedStateHandle["mainDestination"] = _uiState.value.selectedDestination.key
+    }
+
+    fun refreshBottomBarSkin() {
+        _uiState.update {
+            it.copy(skinName = BottomBarSkinManager.active, skinRevision = it.skinRevision + 1)
+        }
+    }
+
     private var threadCount = AppConfig.threadCount
     private var poolSize = min(threadCount, AppConst.MAX_THREAD)
     private var upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()

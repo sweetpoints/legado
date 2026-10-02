@@ -155,7 +155,7 @@ class ContentReversalCacheTest {
                     ReadBookViewModel(context.applicationContext as Application).resourceThemeChanged(second))
                 version.set(2)
                 repeat(10) { bodies.set(it, 0) }; imageRequests.set(0)
-                val shelf = withContext(Main) { MainViewModel(context.applicationContext as Application).also { store.put("shelf", it) } }
+                val shelf = withContext(Main) { MainViewModel(context.applicationContext as Application, androidx.lifecycle.SavedStateHandle()).also { store.put("shelf", it) } }
                 val jobField = MainViewModel::class.java.getDeclaredField("upTocJob").apply { isAccessible = true }
                 suspend fun refreshShelf(book: Book, preload: Int, policy: TocUpdatePolicy) {
                     preferences.edit().putInt(PreferKey.preDownloadNum, preload).commit()

@@ -25,15 +25,15 @@ import io.legado.app.utils.openUrl
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
+import java.io.File
 import kotlinx.coroutines.delay
 import splitties.init.appCtx
-import java.io.File
 
 /**
  * 「关于」页 —— Compose 迁移的参考样板。
  *
  * 相比最初的实现：
- * * 不再需要 `activity_about.xml`（根布局由 [io.legado.app.base.ComposeRootBinding] 提供）
+ * * 不再需要 `activity_about.xml`（通过 Activity.setContent 创建组合）
  * * 不再需要 `AboutFragment`（PreferenceFragmentCompat）与 `R.xml.about`，
  *   偏好列表已由 [AboutScreen] 用纯 Compose 重写
  * * 「公众号高亮」由原来的 `ForegroundColorSpan` + `post {}` 改为 Compose 的

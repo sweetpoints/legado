@@ -2,16 +2,12 @@
 
 package io.legado.app.ui.main
 
-import android.graphics.Rect
-import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.text.format.DateUtils
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.doOnLayout
-import androidx.core.view.get
+import androidx.compose.runtime.Composable
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -19,18 +15,15 @@ import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import io.legado.app.BuildConfig
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityMainBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.BottomBarSkinManager
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.SourceSharePassphraseImportPolicy
 import io.legado.app.help.book.BookHelp
@@ -45,88 +38,81 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.about.CrashLogsDialog
 import io.legado.app.ui.about.UpdateDialog
-import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportDictRuleDialog
 import io.legado.app.ui.association.ImportHttpTtsDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
+import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
 import io.legado.app.ui.main.explore.ExploreFragment
+import io.legado.app.ui.main.interop.LegacyMainPager
 import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.ui.main.rss.RssFragment
+import io.legado.app.ui.navigation.MainDestination
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.ui.widget.text.BadgeView
 import io.legado.app.utils.clearClip
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.isCreated
-import io.legado.app.utils.imeHeight
-import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import splitties.views.bottomPadding
-import kotlin.coroutines.resume
-import kotlin.time.Duration.Companion.hours
 
 /**
  * 主界面
  */
 @Suppress("PrivatePropertyName")
-class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
-    BottomNavigationView.OnNavigationItemSelectedListener,
-    BottomNavigationView.OnNavigationItemReselectedListener,
+class MainActivity : BaseComposeActivity(),
     MainViewModel.CallBack {
 
-    override val binding by viewBinding(ActivityMainBinding::inflate)
-    override val viewModel by viewModels<MainViewModel>()
+    val viewModel by viewModels<MainViewModel>()
     private val idBookshelf = 0
     private val idBookshelf1 = 11
     private val idBookshelf2 = 12
     private val idExplore = 1
     private val idRss = 2
     private val idMy = 3
+    private var updatingNavigation = false
     private var exitTime: Long = 0
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
-    private var pagePosition = 0
+    private val pagePosition get() = viewModel.uiState.value.selectedIndex
     private val fragmentMap = hashMapOf<Int, Fragment>()
-    private var bottomMenuCount = 4
+    private val bottomMenuCount get() = viewModel.uiState.value.destinations.size
     private val EXIT_INTERVAL = 2000L
-    private val realPositions = arrayOf(idBookshelf, idExplore, idRss, idMy)
-    private val menuIdToSlot = linkedMapOf(
-        R.id.menu_bookshelf to "bookshelf",
-        R.id.menu_discovery to "home",
-        R.id.menu_rss to "notes",
-        R.id.menu_my_config to "settings",
-    )
+    private val realPositions get() = viewModel.uiState.value.destinations.map { it.legacyId }
+    private val viewPagerMain by lazy { ViewPager(this).apply { id = R.id.view_pager_main } }
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
     }
-    private var onUpBooksBadgeView: BadgeView? = null
     private var lastPassphraseText: String? = null
     private var pendingPassphraseRead = false
     private var passphraseReadGeneration = 0
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        MainRoute(viewModel, onDestinationReselected = ::onDestinationReselected) { state ->
+            LegacyMainPager(viewPagerMain, state.selectedIndex)
+        }
+    }
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
         upBottomMenu()
         initView()
-        upHomePage()
         upBottomBarSkin()
         onBackPressedDispatcher.addCallback(this) {
             if (pagePosition != 0) {
-                binding.viewPagerMain.currentItem = 0
+                viewModel.selectDestination(MainDestination.Bookshelf)
                 return@addCallback
             }
             (fragmentMap[getFragmentId(0)] as? BookshelfFragment2)?.let {
@@ -162,18 +148,18 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             //设置回调
             viewModel.setActivityCallback(this@MainActivity)
             //自动更新书源
-            binding.viewPagerMain.postDelayed(1000) {
+            window.decorView.postDelayed(1000) {
                 viewModel.ruleSubsUp()
             }
             scheduleSourceSharePassphraseRead(1500)
             //自动更新书籍
             val isAutoRefreshedBook = savedInstanceState?.getBoolean("isAutoRefreshedBook") ?: false
             if (AppConfig.autoRefreshBook && !isAutoRefreshedBook) {
-                binding.viewPagerMain.postDelayed(2000) {
+                window.decorView.postDelayed(2000) {
                     viewModel.upAllBookToc()
                 }
             }
-            binding.viewPagerMain.postDelayed(3000) {
+            window.decorView.postDelayed(3000) {
                 viewModel.postLoad()
             }
         }
@@ -204,68 +190,32 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    override fun onNavigationItemSelected(item: MenuItem): Boolean = binding.run {
-        when (item.itemId) {
-            R.id.menu_bookshelf ->
-                viewPagerMain.setCurrentItem(0, false)
-
-            R.id.menu_discovery ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-
-            R.id.menu_rss ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idRss), false)
-
-            R.id.menu_my_config ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
-        }
-        return false
-    }
-
-    override fun onNavigationItemReselected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_bookshelf -> {
+    private fun onDestinationReselected(destination: MainDestination) {
+        when (destination) {
+            MainDestination.Bookshelf -> {
                 if (System.currentTimeMillis() - bookshelfReselected > 300) {
                     bookshelfReselected = System.currentTimeMillis()
                 } else {
                     (fragmentMap[getFragmentId(0)] as? BaseBookshelfFragment)?.gotoTop()
                 }
             }
-
-            R.id.menu_discovery -> {
+            MainDestination.Explore -> {
                 if (System.currentTimeMillis() - exploreReselected > 300) {
                     exploreReselected = System.currentTimeMillis()
                 } else {
-                    (fragmentMap[1] as? ExploreFragment)?.compressExplore()
+                    (fragmentMap[idExplore] as? ExploreFragment)?.compressExplore()
                 }
             }
+            else -> Unit
         }
     }
 
-    private fun initView() = binding.run {
-        root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val keyboardHeight = windowInsets.imeHeight
-            view.bottomPadding = keyboardHeight
-            if (keyboardHeight > 0) view.doOnLayout {
-                currentFocus?.takeIf { it.onCheckIsTextEditor() }?.let { input ->
-                    input.requestRectangleOnScreen(Rect(0, 0, input.width, input.height), true)
-                }
-            }
-            windowInsets
-        }
+    private fun initView() {
         viewPagerMain.setEdgeEffectColor(primaryColor)
         viewPagerMain.offscreenPageLimit = 3
         viewPagerMain.adapter = adapter
+        viewPagerMain.setCurrentItem(pagePosition, false)
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
-        bottomNavigationView.setOnNavigationItemSelectedListener(this@MainActivity)
-        bottomNavigationView.setOnNavigationItemReselectedListener(this@MainActivity)
-        if (AppConfig.isEInkMode) {
-            bottomNavigationView.setBackgroundResource(R.drawable.bg_eink_border_top)
-        }
-        bottomNavigationView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val height = windowInsets.navigationBarHeight
-            view.bottomPadding = height
-            windowInsets.inset(0, 0, 0, height)
-        }
     }
 
     /**
@@ -434,28 +384,13 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     override fun observeLiveBus() {
-        viewModel.onUpBooksLiveData.observe(this) {
-            if (onUpBooksBadgeView == null) {
-                onUpBooksBadgeView = binding.bottomNavigationView.addBadgeView(0)
-            }
-            onUpBooksBadgeView!!.setBadgeCount(it)
-        }
         observeEvent<String>(EventBus.RECREATE) {
             recreate()
         }
         observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
-            binding.apply {
-                if (it) {
-                    bottomNavigationView.menu.clear()
-                    bottomNavigationView.inflateMenu(R.menu.main_bnv)
-                    onUpBooksBadgeView = null
-                }
-                upBottomMenu()
-                upBottomBarSkin()
-                if (it) {
-                    viewPagerMain.setCurrentItem(bottomMenuCount - 1, false)
-                }
-            }
+            upBottomMenu()
+            upBottomBarSkin()
+            if (it) viewModel.selectDestination(MainDestination.My)
         }
         observeEvent<String>(EventBus.BOTTOM_BAR_SKIN) {
             upBottomBarSkin()
@@ -474,25 +409,14 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun upBottomMenu() {
-        val showDiscovery = AppConfig.showDiscovery
-        val showRss = AppConfig.showRSS
-        binding.bottomNavigationView.menu.let { menu ->
-            menu.findItem(R.id.menu_discovery).isVisible = showDiscovery
-            menu.findItem(R.id.menu_rss).isVisible = showRss
+        updatingNavigation = true
+        try {
+            viewModel.refreshNavigation()
+            adapter.notifyDataSetChanged()
+            if (viewPagerMain.adapter != null) viewPagerMain.setCurrentItem(pagePosition, false)
+        } finally {
+            updatingNavigation = false
         }
-        var index = 0
-        if (showDiscovery) {
-            index++
-            realPositions[index] = idExplore
-        }
-        if (showRss) {
-            index++
-            realPositions[index] = idRss
-        }
-        index++
-        realPositions[index] = idMy
-        bottomMenuCount = index + 1
-        adapter.notifyDataSetChanged()
     }
 
     private fun scheduleSourceSharePassphraseRead(delayMillis: Long) {
@@ -517,7 +441,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         generation: Int = passphraseReadGeneration
     ) {
         pendingPassphraseRead = false
-        binding.viewPagerMain.postDelayed(delayMillis) {
+        window.decorView.postDelayed(delayMillis) {
             if (generation != passphraseReadGeneration) return@postDelayed
             val hasWindowFocus = hasWindowFocus()
             if (!hasWindowFocus) {
@@ -582,32 +506,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun upBottomBarSkin() {
-        val skin = BottomBarSkinManager.active
-        if (skin.isEmpty() || !BottomBarSkinManager.hasSkin(skin)) {
-            binding.bottomNavigationView.applySkin(null, 0)
-            return
-        }
-        val sizePx = 30.dpToPx()
-        val map = HashMap<Int, StateListDrawable>()
-        menuIdToSlot.forEach { (id, slot) ->
-            BottomBarSkinManager.getStateDrawable(skin, slot, sizePx)?.let { map[id] = it }
-        }
-        binding.bottomNavigationView.applySkin(map, sizePx)
-    }
-
-    private fun upHomePage() {
-        when (AppConfig.defaultHomePage) {
-            "bookshelf" -> {}
-            "explore" -> if (AppConfig.showDiscovery) {
-                binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-            }
-
-            "rss" -> if (AppConfig.showRSS) {
-                binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idRss), false)
-            }
-
-            "my" -> binding.viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
-        }
+        viewModel.refreshBottomBarSkin()
     }
 
     private fun getFragmentId(position: Int): Int {
@@ -621,8 +520,8 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private inner class PageChangeCallback : ViewPager.SimpleOnPageChangeListener() {
 
         override fun onPageSelected(position: Int) {
-            pagePosition = position
-            binding.bottomNavigationView.menu[realPositions[position]].isChecked = true
+            if (updatingNavigation) return
+            viewModel.uiState.value.destinations.getOrNull(position)?.let(viewModel::selectDestination)
         }
 
     }
@@ -638,6 +537,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         override fun getItemPosition(any: Any): Int {
             val position = (any as MainFragmentInterface).position
                 ?: return POSITION_NONE
+            if (position !in 0 until bottomMenuCount) return POSITION_NONE
             val fragmentId = getId(position)
             if ((fragmentId == idBookshelf1 && any is BookshelfFragment1)
                 || (fragmentId == idBookshelf2 && any is BookshelfFragment2)

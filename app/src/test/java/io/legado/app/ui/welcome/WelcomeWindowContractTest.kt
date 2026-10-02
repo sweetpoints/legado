@@ -11,7 +11,7 @@ class WelcomeWindowContractTest {
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/welcome/WelcomeActivity.kt"
         )
-        val base = projectFile("src/main/java/io/legado/app/base/BaseActivity.kt")
+        val base = projectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt")
         val manifest = projectFile("src/main/AndroidManifest.xml")
         val styles = projectFile("src/main/res/values/styles.xml")
         val config = projectFile(

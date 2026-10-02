@@ -165,7 +165,7 @@ class SourceManualReplacementUiTest {
                     if (!recreate) {
                         main {
                             activity.getSystemService(ActivityManager::class.java).appTasks
-                                .single { it.taskInfo.taskId == activity.taskId }.moveToFront()
+                                .single { it.taskInfo?.taskId == activity.taskId }.moveToFront()
                         }
                         await("The application task must return to the foreground") {
                             main { ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity) == Stage.RESUMED }

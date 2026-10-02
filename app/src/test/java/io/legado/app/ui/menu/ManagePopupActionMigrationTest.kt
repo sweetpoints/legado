@@ -84,7 +84,7 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `base activity and fragments install the toolbar overflow bridge`() {
-        val activity = readProjectFile("src/main/java/io/legado/app/base/BaseActivity.kt")
+        val activity = readProjectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt")
         val fragment = readProjectFile("src/main/java/io/legado/app/base/BaseFragment.kt")
 
         listOf(
@@ -94,7 +94,7 @@ class ManagePopupActionMigrationTest {
             "showIcons = showOpenMenuIcon",
             "onPrepareOptionsMenu(toolbarMenu)",
             "onMenuOpened(Window.FEATURE_OPTIONS_PANEL, toolbarMenu)"
-        ).forEach { expected -> assertContains("BaseActivity.kt", activity, expected) }
+        ).forEach { expected -> assertContains("BaseThemedActivity.kt", activity, expected) }
         assertFalse(activity.contains("if (view is Toolbar) view.installActivityOverflowMenu()"))
         assertContains("BaseFragment.kt", fragment, "it.installMd3OverflowMenu()")
     }

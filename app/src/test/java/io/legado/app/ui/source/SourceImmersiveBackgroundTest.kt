@@ -67,7 +67,7 @@ class SourceImmersiveBackgroundTest {
         val menu = projectFile("src/main/java/io/legado/app/utils/MenuExtensions.kt").readText()
         assertTrue(menu.contains("(impl.actionView as? SearchView)?.applyTint(tintColor)"))
 
-        val activity = projectFile("src/main/java/io/legado/app/base/BaseActivity.kt").readText()
+        val activity = projectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt").readText()
         val fragment = projectFile("src/main/java/io/legado/app/base/BaseFragment.kt").readText()
         assertTrue(
             activity.contains("transparentBar = titleBar?.usesTransparentForeground == true")

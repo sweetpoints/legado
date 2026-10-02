@@ -1,4 +1,4 @@
-package io.legado.app.lib.theme.compose
+package io.legado.app.ui.theme
 
 import android.content.Context
 import androidx.compose.material3.MaterialTheme

@@ -1,24 +1,16 @@
 package io.legado.app.ui.about
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -31,12 +23,14 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.lib.theme.compose.LocalLegadoColors
+import io.legado.app.ui.components.LegadoTopAppBar
+import io.legado.app.ui.components.SettingsCategoryHeader
+import io.legado.app.ui.components.SettingsRow
+import io.legado.app.ui.theme.LocalLegadoColors
 
 /**
  * 「关于」页的 Compose 实现。
@@ -95,8 +89,8 @@ fun AboutScreen(
         }
 
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(aboutMainItems) { item ->
-                AboutRow(
+            items(aboutMainItems, key = { it.key }) { item ->
+                SettingsRow(
                     title = stringResource(item.titleRes),
                     summary = when {
                         item.key == "update_log" -> versionSummary
@@ -106,9 +100,9 @@ fun AboutScreen(
                     onClick = { onItemClick(item.key) },
                 )
             }
-            item { AboutCategoryHeader(stringResource(R.string.other)) }
-            items(aboutOtherItems) { item ->
-                AboutRow(
+            item { SettingsCategoryHeader(stringResource(R.string.other)) }
+            items(aboutOtherItems, key = { it.key }) { item ->
+                SettingsRow(
                     title = stringResource(item.titleRes),
                     summary = item.summaryRes?.let { stringResource(it) },
                     onClick = { onItemClick(item.key) },
@@ -144,24 +138,15 @@ private val aboutOtherItems = listOf(
 /**
  * 顶栏。原实现是 `TitleBar` + `R.menu.about`，这里改为纯 Compose。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AboutTopBar(
     onBack: () -> Unit,
     onShare: () -> Unit,
     onScoring: () -> Unit,
 ) {
-    val colors = LocalLegadoColors.current
-    TopAppBar(
-        title = { Text(stringResource(R.string.about)) },
-        navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = stringResource(R.string.back),
-                )
-            }
-        },
+    LegadoTopAppBar(
+        title = stringResource(R.string.about),
+        onBack = onBack,
         actions = {
             IconButton(onClick = onShare) {
                 Icon(
@@ -176,71 +161,7 @@ private fun AboutTopBar(
                 )
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = colors.primary,
-            titleContentColor = colors.onPrimary,
-            navigationIconContentColor = colors.onPrimary,
-            actionIconContentColor = colors.onPrimary,
-        ),
     )
-}
-
-/**
- * 单行偏好。[view_preference.xml](../res/layout/view_preference.xml) 的等价实现：
- * 左右 16dp / 上下 10dp、最小高度 60dp、标题 16sp、摘要 14sp 且上边距 8dp。
- */
-@Composable
-private fun AboutRow(
-    title: String,
-    summary: String?,
-    onClick: () -> Unit,
-) {
-    val colors = LocalLegadoColors.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = 60.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = title,
-            fontSize = 16.sp,
-            color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (!summary.isNullOrEmpty()) {
-            Text(
-                text = summary,
-                fontSize = 14.sp,
-                color = colors.textSecondary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}
-
-/**
- * 分类标题。[view_preference_category.xml](../res/layout/view_preference_category.xml) 的等价实现：
- * 上方 8dp 间隔 + 上 16dp / 下 8dp / 左 16dp 内边距。
- *
- * 原布局用的是静态 `@color/accent`，这里改用主题强调色（`ThemeStore`）以便跟随用户自定义主题。
- */
-@Composable
-private fun AboutCategoryHeader(title: String) {
-    val colors = LocalLegadoColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = title,
-            color = colors.accent,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
-        )
-    }
 }
 
 /**
