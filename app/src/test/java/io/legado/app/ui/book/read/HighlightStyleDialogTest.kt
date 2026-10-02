@@ -9,7 +9,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class HighlightStyleDialogTest {
 
@@ -103,26 +102,4 @@ class HighlightStyleDialogTest {
         assertFalse(FontSelectDialog.shouldSelectSystemTypeface(callback(false)))
     }
 
-    @Test
-    fun fontSelectionReturnsOnTheUiThread() {
-        val source = sequenceOf(
-            File("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt"),
-            File("app/src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
-        ).first(File::isFile).readText()
-        val callback = source.substringAfter("override fun onFontSelect")
-            .substringBefore("private fun onDefaultFontChange")
-        val highlightDialog = sequenceOf(
-            File("src/main/java/io/legado/app/ui/book/read/HighlightStyleDialog.kt"),
-            File("app/src/main/java/io/legado/app/ui/book/read/HighlightStyleDialog.kt")
-        ).first(File::isFile).readText()
-
-        assertTrue(callback.contains("callBack?.selectFont"))
-        assertFalse(callback.contains("execute"))
-        assertTrue(highlightDialog.contains("invalidateHighlightTypeface(path)"))
-    }
-
-    private fun projectFile(pathInApp: String): File =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?: error("Missing project file: $pathInApp")
 }

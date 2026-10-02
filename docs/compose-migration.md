@@ -55,6 +55,11 @@ ui/
     VerificationCodeScreen.kt  captcha image/input and source actions
     VerificationCodeViewModel.kt restorable input, confirmation and completion
     VerificationCodeImageLoader.kt cancellable Glide request + independent preview file
+  font/
+    FontSelectDialog.kt        file picker, permissions and UI-thread callback
+    FontSelectRoute.kt         lifecycle-aware pending selections and font preview
+    FontSelectScreen.kt        font list, menus and system-font choice
+    FontSelectViewModel.kt     cancellable listing/import and restored selection
   config/
     CoverRuleConfigDialog.kt   Compose host for cover-rule editing
     CoverRuleRoute.kt
@@ -256,6 +261,14 @@ artwork remain compatible. Static images use independent bitmap copies; animated
 images retain a Glide lease and use a lifecycle-managed Compose painter, preserving
 GIF playback. Animation callbacks stop before pooled resources are released. The
 exclusive XML, PhotoView and its unused gesture helpers are removed.
+
+Font selection now uses Compose for the font list, menu and system-font choice.
+Private/external fonts retain path identity, Chinese-name sorting, typeface previews
+and current-selection styling. Listing, import validation and bounded preview
+caching run on IO. Directory permissions and file picker contracts remain intact;
+selection callbacks run on the resumed UI thread without a ViewModel host reference.
+Default-font inheritance remains independent of global system-font selection.
+The exclusive adapter, two layouts and menu resource are removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
