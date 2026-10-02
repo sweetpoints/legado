@@ -432,3 +432,9 @@ and a restorable action picker. Preference writes remain immediate, while actual
 closure validates that a reader-menu area exists and recalculates click geometry.
 Configuration changes preserve the picker and release only the current dialog lease.
 The exclusive click-area XML layout is removed.
+
+Dictionary-rule editing now uses a Compose form with a SavedState draft, selection
+and full-code-editor target. Room reads and atomic rename/save transactions run
+through a data repository. Failed loads block writes and offer retry; dirty exits
+require confirmation, and stale paste/editor results cannot overwrite later edits.
+The exclusive editor layout and menu XML are removed.
