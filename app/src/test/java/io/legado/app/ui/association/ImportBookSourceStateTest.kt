@@ -107,7 +107,6 @@ class ImportBookSourceStateTest {
         listOf(
             "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt",
             "src/main/java/io/legado/app/ui/association/ImportRssSourceDialog.kt",
-            "src/main/java/io/legado/app/ui/association/ImportTxtTocRuleDialog.kt",
         ).forEach { path ->
             val source = readProjectFile(path)
             val textIndex = source.indexOf("showComment.text =")
@@ -126,7 +125,6 @@ class ImportBookSourceStateTest {
             "ImportBookSourceDialog.kt",
             "ImportRssSourceDialog.kt",
             "ImportThemeDialog.kt",
-            "ImportTxtTocRuleDialog.kt",
         )
 
         importDialogs.forEach { fileName ->
