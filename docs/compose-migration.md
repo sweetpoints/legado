@@ -757,3 +757,7 @@ Replaced the audio slider popup content with Compose and accessible discrete con
 ### RSS favorite configuration data and draft state
 
 Added private revisioned favorite-configuration drafts and saved-state identifiers, retaining title/group editing and the existing reading/video host ownership of persistence. Blank edits fall back to original nullable fields, nonblank edits keep their exact text, and save/delete callbacks restore from disk before consumed delivery. Debounced autosave and lifecycle flush protect large drafts without placing their content in Bundle state. Added 8 JVM state tests plus compilation of 3 real AtomicFile/recovery tests. Legacy configuration UI remains for separate Compose integration; Android device execution is unavailable.
+
+### Highlight rule editor data and saved draft
+
+Added complete immutable rule/style drafts and I/O persistence, preserving hidden metadata, existing regex validation, scope/group policy and new-rule ordering. Revisioned AtomicFile sessions keep large patterns outside Bundle state; initial seed content stays available until persistence succeeds. Save records the stable UUID before Room insertion and stores a completion receipt, so retries retain the assigned record/order. Saved state retains only small session/event/color identifiers and consumed completion flags. Added 6 repository and 7 ViewModel JVM tests plus compilation of 2 real metadata/UUID/order/session tests. Legacy rule UI remains for separate Compose integration; Android device execution is unavailable.
