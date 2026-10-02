@@ -65,6 +65,10 @@ ui/
     MangaEpaperRoute.kt
     MangaEpaperScreen.kt       threshold slider and step controls
     MangaEpaperViewModel.kt    restorable threshold and dismissal persistence
+    MangaColorFilterDialog.kt  thin Compose host and independent reader preview copies
+    MangaColorFilterRoute.kt
+    MangaColorFilterScreen.kt  brightness/R/G/B/A controls and numeric input
+    MangaColorFilterViewModel.kt restorable immutable filter draft
   widget/dialog/
     WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
     WaitDialogContent.kt       stateless Compose progress/message content
@@ -166,6 +170,12 @@ immutable StateFlow, lifecycle-aware reader previews and SavedStateHandle drafts
 Closing without an edit preserves the stored threshold rather than writing the
 old default of 150. Rotation does not persist the draft; delayed reads cannot
 overwrite edits or write after dismissal. The dedicated XML layout is removed.
+
+Manga color-filter settings now use Compose for brightness and RGBA controls,
+retaining the 0–255 range, slider and single-step adjustments and adding numeric
+input. Drafts survive recreation without early persistence. Reader callbacks
+receive independent mutable copies of immutable UI state; late reads and repeat
+dismissals cannot replace or resave a finished draft. The XML layout is removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
