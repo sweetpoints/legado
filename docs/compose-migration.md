@@ -857,3 +857,7 @@ Replaced ImportLocalBookDialog with a stateless Compose Screen and lifecycle-awa
 ### Bottom browser Compose shell
 
 Replaced BottomWebViewDialog XML/ViewBinding with a Compose Route and stateless Screen. AndroidView contains only the original native WebView and fullscreen-video surfaces; existing browser configuration, requests, JavaScript, download, back navigation, sheet sizing and pool ownership remain in the kernel. The fullscreen slot mounts only while active and composition is disposed before the pool lease is released. Removed one exclusive layout and replaced eight source-string assertions with five actual interop/host tests. Existing browser show, sizing, request and shared image-decoder tests remain. Validated with the full JVM suite and Android test compilation.
+
+### RSS source editor durable draft and save repository
+
+Added immutable drafts for all 33 text fields and eight flags, preserving source metadata and rule completion. Room saves update renamed article/favorite origins transactionally and retain cache invalidation behavior. A durable pre-transaction journal and full JSON fingerprints recover committed saves after invalidation or draft-write failures while rejecting concurrent target changes. Disk drafts and code-editor transfer files keep large rules out of saved-state payloads. Added four JVM projection tests and ten actual Room/disk recovery tests. Validated with the complete JVM suite and Android test compilation.
