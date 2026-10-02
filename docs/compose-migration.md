@@ -889,3 +889,7 @@ Added immutable eight-field drafts, per-field undo/redo, preview state, small sa
 ### RSS source debug sessions
 
 Added an immutable Room source/sort repository and owned Debug execution lease, retaining shared engine behavior and callback identity. Reruns join previous parser children before acquiring a successor; stop releases only the current owner. ViewModel state restores queries, selection and bounded logs from private disk records without automatically rerunning interrupted work; list/content HTML stay out of saved state. Added ten JVM session tests and five actual Room/Rhino/local-HTTP/disk tests. Validated with all JVM tests and Android test compilation.
+
+### Unused legacy layout cleanup
+
+Removed fourteen orphan layouts after checking committed production, test and module sources for layout names, generated Binding names and XML references. These include obsolete donate/group shells, loading templates, login rows and unused single-selection/video/tab templates. Active chapter-source and replacement-editor migration resources are excluded. Validated through complete production/Android-test compilation and JVM tests to detect missing generated resources.
