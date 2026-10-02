@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.read
 
-import org.junit.Assert.assertFalse
+import io.legado.app.ui.book.read.config.PaddingPanelVisibility
+import io.legado.app.data.preferences.PaddingRegion
+import io.legado.app.data.preferences.paddingRegionEvents
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -32,46 +34,38 @@ class ReadPaddingBehaviorSourceTest {
         assertTrue(source.contains("progress = state.getInt(STATE_PROGRESS)"))
     }
 
-    @Test
-    fun `pending body edits stay scoped and are not discarded`() {
-        val source = paddingDialogSource()
-
-        assertTrue(source.contains("val region: Region"))
-        assertTrue(source.contains("private var pendingBodyEdit: PaddingEdit?"))
-        assertTrue(source.contains("private val bodyThrottle = throttle<Unit>(150, leading = false)"))
-        assertTrue(source.contains("finishPendingBodyEditIfDifferent(edit)"))
-        assertTrue(source.contains("finishPendingBodyEdit()\n        curRegion = region"))
-        assertTrue(source.contains("override fun onDestroyView() {\n        finishPendingBodyEdit()"))
-        assertTrue(source.contains("override fun onDismiss(dialog: DialogInterface) {\n        finishPendingBodyEdit()"))
+    @Test fun visibilityLeaseBalancesDuplicateDismissAndViewRecreation() {
+        val host = object : PaddingPanelVisibility.Owner { override var bottomDialog = 1 }
+        val panel = PaddingPanelVisibility()
+        panel.acquire(host)
+        panel.acquire(host)
+        org.junit.Assert.assertEquals(2, host.bottomDialog)
+        panel.release()
+        panel.release()
+        org.junit.Assert.assertEquals(1, host.bottomDialog)
+        panel.acquire(host)
+        org.junit.Assert.assertEquals(2, host.bottomDialog)
+        panel.release()
+        org.junit.Assert.assertEquals(1, host.bottomDialog)
     }
 
-    @Test
-    fun `tracking blocks region actions and reset uses config defaults`() {
-        val source = paddingDialogSource()
-
-        assertTrue(source.contains("setPanelActionsEnabled(false)"))
-        assertTrue(source.contains("setPanelActionsEnabled(true)"))
-        assertTrue(source.contains("private var activeTrackingCount = 0"))
-        assertTrue(source.contains("private val defaultConfig = ReadBookConfig.Config()"))
-        assertTrue(source.contains("lockLR && region == curRegion"))
-        assertTrue(source.contains("ReadBookConfig.save()"))
-        assertTrue(source.contains("bottomDialog++"))
-        assertTrue(source.contains("bottomDialog--"))
+    @Test fun visibilityLeaseReleasesTheOldActivityWhenConfigurationChanges() {
+        val oldHost = object : PaddingPanelVisibility.Owner { override var bottomDialog = 0 }
+        val newHost = object : PaddingPanelVisibility.Owner { override var bottomDialog = 0 }
+        val panel = PaddingPanelVisibility()
+        panel.acquire(oldHost)
+        panel.acquire(newHost)
+        org.junit.Assert.assertEquals(0, oldHost.bottomDialog)
+        org.junit.Assert.assertEquals(1, newHost.bottomDialog)
+        panel.release()
+        org.junit.Assert.assertEquals(0, newHost.bottomDialog)
     }
 
-    @Test
-    fun `padding panel is centered without covering the page footer`() {
-        val source = paddingDialogSource()
-
-        assertTrue(source.contains("gravity = Gravity.CENTER"))
-        assertFalse(source.contains("gravity = Gravity.BOTTOM"))
-        assertTrue(source.contains("setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)"))
-        assertTrue(source.contains("cornerRadius = radius"))
+    @Test fun bodyAndInformationPaddingKeepTheirExistingUpdatePayloads() {
+        org.junit.Assert.assertEquals(arrayListOf(10, 5), paddingRegionEvents(PaddingRegion.BODY))
+        org.junit.Assert.assertEquals(arrayListOf(2), paddingRegionEvents(PaddingRegion.HEADER))
+        org.junit.Assert.assertEquals(arrayListOf(2), paddingRegionEvents(PaddingRegion.FOOTER))
     }
-
-    private fun paddingDialogSource(): String = projectFile(
-        "src/main/java/io/legado/app/ui/book/read/config/PaddingConfigDialog.kt"
-    ).readText().normalizeLines()
 
     private fun String.normalizeLines(): String = replace("\r\n", "\n")
 

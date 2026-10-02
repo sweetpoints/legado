@@ -287,6 +287,12 @@ and parent-first service callbacks remain intact. Pending choices are consumed o
 a restored completed dialog closes without replaying its service callback.
 The exclusive timer layout is removed.
 
+Reader padding now uses Compose controls for header/body/footer offsets, linked
+horizontal sides, divider visibility and confirmed region defaults. BODY changes
+retain 150ms trailing windows with final/cancel/destroy flushing; reader refresh
+payloads and shared/local style isolation remain intact. Window fading and the
+view-scoped reader visibility lease are retained. The exclusive layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
