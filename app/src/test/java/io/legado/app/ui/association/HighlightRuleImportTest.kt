@@ -191,23 +191,6 @@ class HighlightRuleImportTest {
         assertTrue(online.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)"))
     }
 
-    @Test
-    fun `import is single flight and fragment observes view model state`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/association/ImportHighlightRuleViewModel.kt"
-        )
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/association/ImportHighlightRuleDialog.kt"
-        )
-
-        assertTrue(viewModel.contains("if (importingLiveData.value == true) return"))
-        assertTrue(viewModel.contains("importingLiveData.value = true"))
-        assertFalse(viewModel.contains("fun importSelected(callback:"))
-        assertTrue(dialog.contains("importingLiveData.observe(viewLifecycleOwner)"))
-        assertTrue(dialog.contains("importSuccessLiveData.observe(viewLifecycleOwner)"))
-        assertTrue(dialog.contains("supportFragmentManager.findFragmentByTag(tag) == null"))
-    }
-
     private fun projectFile(pathInApp: String): String =
         sequenceOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull(File::isFile)

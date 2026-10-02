@@ -220,10 +220,10 @@ class SharedFileImportTest {
             }
             launchShare(file, "application/octet-stream").use { scenario ->
                 awaitDialog(scenario)
-                onView(withText(rule.name)).check(matches(isDisplayed()))
+                compose.onNodeWithText(rule.name).assertIsDisplayed()
                 assertFalse(appDb.highlightRuleDao.all.any { it.uuid == rule.uuid })
                 screenshot("share-highlight-$typed")
-                onView(withId(R.id.tv_ok)).perform(click())
+                compose.onNodeWithTag("highlight-import-confirm").performClick()
                 await { appDb.highlightRuleDao.all.any { it.uuid == rule.uuid } }
                 val saved = appDb.highlightRuleDao.all.single { it.uuid == rule.uuid }
                 assertEquals(rule.styleObj(), saved.styleObj())
@@ -669,11 +669,11 @@ class SharedFileImportTest {
         launchShare(archive, "application/zip").use { scenario ->
             awaitDialog(scenario)
             imported.forEach { rule ->
-                onView(withText(rule.name)).inRoot(isDialog()).check(matches(isDisplayed()))
+                compose.onNodeWithText(rule.name).assertIsDisplayed()
                 assertFalse(appDb.highlightRuleDao.all.any { it.uuid == rule.uuid })
             }
             screenshot("share-local-archive-json-preview")
-            onView(withId(R.id.tv_ok)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-import-confirm").performClick()
             await { imported.all { rule -> appDb.highlightRuleDao.all.any { it.uuid == rule.uuid } } }
             imported.forEach { rule ->
                 assertEquals(rule.styleObj(), appDb.highlightRuleDao.all.single { it.uuid == rule.uuid }.styleObj())
