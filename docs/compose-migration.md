@@ -689,3 +689,7 @@ Replaced TextDialog with Compose content, right-side help directory, rendered se
 ### Reader text action data foundation
 
 Added value-only action/component snapshots and an I/O discovery/preferences repository. Existing primary/more menu configuration preserves action order and process-text applications; missing or failed application discovery keeps built-in actions. Component-based identities survive PackageManager reordering, while duplicate entries remain distinct. Speak-mode toggles serialize on the repository dispatcher. Added 7 JVM partition/discovery/thread tests and compilation of 1 actual PackageManager/resource test. Legacy popup remains for separate Compose integration; Android device execution is unavailable.
+
+### Automatic task import data and state foundation
+
+Added private disk import sessions and an I/O repository for JSON, URI and URL task imports. Full task configuration stays outside Bundle state; selection and editor receipts use small saved identifiers. Import preserves local ordering and latest run metadata, with persisted commit/refresh markers for retry. Repeated editor saves accept changed content and ignore successful identical replay; failed saves remain retryable. Cancellation ignores non-cooperative late loads. Added 11 JVM state tests and compilation of 5 real Room/session tests. Legacy UI remains for separate Compose integration; Android device execution is unavailable.
