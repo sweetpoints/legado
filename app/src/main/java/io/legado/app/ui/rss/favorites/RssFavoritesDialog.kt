@@ -1,82 +1,60 @@
 package io.legado.app.ui.rss.favorites
 
+import android.content.DialogInterface
+import android.graphics.Color
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.compose.runtime.Composable
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssStar
-import io.legado.app.databinding.DialogRssFavoriteConfigBinding
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.data.repository.FileRssFavoriteConfigRepository
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.launch
+import splitties.init.appCtx
 
-class RssFavoritesDialog() : BaseDialogFragment(R.layout.dialog_rss_favorite_config, true) {
-
-    constructor(rssArticle: RssArticle) : this() {
-        arguments = Bundle().apply {
-            putString("title", rssArticle.title)
-            putString("group", rssArticle.group)
+class RssFavoritesDialog() : BaseComposeDialogFragment() {
+    constructor(rssArticle: RssArticle) : this() { arguments = request(rssArticle.title, rssArticle.group) }
+    constructor(rssStar: RssStar) : this() { arguments = request(rssStar.title, rssStar.group) }
+    private fun request(title: String?, group: String?) = Bundle().apply {
+        putString("requestId", FileRssFavoriteConfigRepository.stage(appCtx, title, group))
+    }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val legacy = arguments
+        if (legacy?.containsKey("requestId") != true) arguments = request(legacy?.getString("title"), legacy?.getString("group")).apply {
+            putBoolean("emptyRequest", legacy == null)
         }
     }
-
-    constructor(rssStar: RssStar) : this() {
-        arguments = Bundle().apply {
-            putString("title", rssStar.title)
-            putString("group", rssStar.group)
-        }
+    internal val model by viewModels<RssFavoriteConfigViewModel> {
+        viewModelFactory { initializer { RssFavoriteConfigViewModel(FileRssFavoriteConfigRepository(requireContext()),
+            createSavedStateHandle(), requireArguments().getString("requestId")!!) } }
     }
-
-    private val binding by viewBinding(DialogRssFavoriteConfigBinding::bind)
-
     override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
+        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        val arguments = arguments ?: let {
-            dismiss()
-            return
-        }
-
-        var title = arguments.getString("title")
-        var group = arguments.getString("group")
-        binding.run {
-            editTitle.setText(title)
-            editGroup.setText(group)
-            tvCancel.setOnClickListener {
-                dismiss()
-            }
-            tvOk.setOnClickListener {
-                val editTitle = editTitle.text.toString()
-                if (editTitle.isNotBlank()) {
-                    title = editTitle
-                }
-                val editGroup = editGroup.text.toString()
-                if (editGroup.isNotBlank()) {
-                    group = editGroup
-                }
-                callback?.updateFavorite(title, group)
-                dismiss()
-            }
-            tvFooterLeft.setOnClickListener {
-                callback?.deleteFavorite()
-                dismiss()
-            }
-        }
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        requireView().setBackgroundColor(Color.TRANSPARENT)
+        if (arguments?.getBoolean("emptyRequest") == true) model.cancel()
     }
-
+    override fun onStop() { lifecycleScope.launch { runCatching { model.flushDraft() } }; super.onStop() }
+    @Composable override fun Content() {
+        RssFavoriteConfigRoute(model, { isAdded && !parentFragmentManager.isStateSaved },
+            { title, group -> callback?.updateFavorite(title, group) }, { callback?.deleteFavorite() }, ::dismissAllowingStateLoss, { isCancelable = it })
+    }
+    override fun onCancel(dialog: DialogInterface) { model.cancel(); super.onCancel(dialog) }
     val callback get() = (parentFragment as? Callback) ?: (activity as? Callback)
-
     interface Callback {
-
         fun updateFavorite(title: String?, group: String?)
-
         fun deleteFavorite()
-
     }
-
 }
