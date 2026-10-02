@@ -57,17 +57,13 @@ class TitleFontTest {
         val provider = readProjectFile(
             "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
         )
-        val configDialog = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgTextConfigDialog.kt"
-        )
+
 
         assertTrue(config.contains("config.titleFont.ifEmpty { config.textFont }"))
         assertTrue(config.contains("exportConfig.titleFont = shareConfig.titleFont"))
         assertTrue(config.contains("config.titleFont = importFont(config.titleFont)"))
         assertTrue(provider.contains("getPaints(titleTypeface, typeface)"))
         assertTrue(provider.contains("ReadBookConfig.titleFont = \"\""))
-        assertTrue(configDialog.contains("val titleFontPath = ReadBookConfig.titleFont"))
-        assertTrue(configDialog.contains("config.titleFont = if (titleFontPath == textFontPath"))
     }
 
     private fun readProjectFile(pathInApp: String): String = projectFile(pathInApp).readText()

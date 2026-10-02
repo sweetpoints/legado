@@ -1,5 +1,9 @@
 package io.legado.app.ui.book.read.page.provider
 
+import org.junit.Assert.assertEquals
+import io.legado.app.data.preferences.BgTextSetting
+import io.legado.app.data.preferences.bgTextUpdate
+import io.legado.app.ui.book.read.config.BgTextConfigDialog
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -34,24 +38,13 @@ class ReviewIconColorSourceTest {
     }
 
     @Test
-    fun `color picker uses a unique id and refreshes review rendering`() {
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgTextConfigDialog.kt"
-        ).readText().normalizeLines()
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
-        ).readText().normalizeLines()
-        val layout = projectFile(
-            "src/main/res/layout/dialog_read_bg_text.xml"
-        ).readText().normalizeLines()
-
-        assertTrue(dialog.contains("const val REVIEW_ICON_COLOR = 124"))
-        assertTrue(dialog.contains(".setDialogId(REVIEW_ICON_COLOR)"))
-        assertTrue(dialog.contains("ReadBookConfig.reviewIconColor = 0"))
-        assertTrue(dialog.contains("arrayListOf(8, 9, 11)"))
+    fun `color picker ids remain unique and review color has the exact refresh payload`() {
+        assertEquals(124, BgTextConfigDialog.REVIEW_ICON_COLOR)
+        assertEquals(5, setOf(BgTextConfigDialog.TEXT_COLOR, BgTextConfigDialog.BG_COLOR,
+            BgTextConfigDialog.TEXT_ACCENT_COLOR, BgTextConfigDialog.REVIEW_ICON_COLOR, BgTextConfigDialog.UNDERLINE_COLOR).size)
+        assertEquals(listOf(8, 9, 11), bgTextUpdate(BgTextSetting.ReviewColor).codes)
+        val activity = projectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt").readText()
         assertTrue(activity.contains("REVIEW_ICON_COLOR ->"))
-        assertTrue(layout.contains("@+id/tv_review_icon_color"))
-        assertTrue(layout.contains("@string/review_icon_color_title"))
     }
 
     private fun String.normalizeLines(): String = replace("\r\n", "\n")

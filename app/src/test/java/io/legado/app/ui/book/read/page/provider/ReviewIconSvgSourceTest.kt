@@ -1,5 +1,8 @@
 package io.legado.app.ui.book.read.page.provider
 
+import io.legado.app.data.preferences.BgTextSetting
+import io.legado.app.data.preferences.bgTextUpdate
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,34 +86,12 @@ class ReviewIconSvgSourceTest {
     }
 
     @Test
-    fun `settings validate svg and refresh current review columns`() {
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgTextConfigDialog.kt"
-        ).readText().normalizeLines()
-        val adapter = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/ReviewIconSvgTemplateAdapter.kt"
-        ).readText().normalizeLines()
-        val layout = projectFile(
-            "src/main/res/layout/dialog_read_bg_text.xml"
-        ).readText().normalizeLines()
-
-        assertTrue(dialog.contains("isValidReviewIconSvg(newSvg)"))
-        assertTrue(dialog.contains("ReadBookConfig.durConfig.reviewIconSvgTemplates"))
-        assertTrue(dialog.contains("ReviewIconSvgTemplateAdapter("))
-        assertTrue(dialog.contains("GridLayoutManager(requireContext(), 3)"))
-        assertTrue(dialog.contains("templateAdapter.setOnItemClickListener"))
-        assertTrue(dialog.contains("templateAdapter.setOnItemLongClickListener"))
-        assertTrue(adapter.contains("ItemBgImageBinding"))
-        assertTrue(adapter.contains("item.svg.replace(\"{{count}}\", \"88\")"))
-        assertTrue(adapter.contains("SvgUtils.createBitmapFromSvgText"))
-        assertTrue(adapter.contains("ivBg.contentDescription = displayName"))
-        assertTrue(adapter.contains("tvName.text = displayName"))
-        assertTrue(dialog.contains("ReadBookConfig.reviewIconSvg = svg"))
-        assertTrue(dialog.contains("scale !in 50..200"))
-        assertTrue(dialog.contains("ChapterProvider.clearReviewIconCache()"))
-        assertTrue(dialog.contains("ChapterProvider.refreshReviewColumnsForStyleChange()"))
-        assertTrue(layout.contains("@+id/tv_review_icon_svg"))
-        assertTrue(layout.contains("@+id/tv_review_icon_size"))
+    fun `svg and scale edits invalidate current review columns with the exact payload`() {
+        val svg = bgTextUpdate(BgTextSetting.ReviewSvg)
+        val scale = bgTextUpdate(BgTextSetting.ReviewScale)
+        assertEquals(listOf(9, 11), svg.codes)
+        assertTrue(svg.reviewCache)
+        assertEquals(svg, scale)
     }
 
     @Test

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bg_text_working">Working…</string>
+    <string name="bg_text_restore_title">Select a preset layout</string>
+    <string name="bg_text_import_address">Enter address</string>
+    <string name="bg_text_color_channel">%1$s color channel</string>
+    <string name="bg_text_color_invalid">Enter a valid hexadecimal color</string>
+    <string name="bg_text_imported">Imported successfully</string>
+    <string name="bg_text_exported">Exported successfully: %1$s</string>
+    <string name="bg_text_background_set">Background set successfully</string>
+    <string name="bg_text_minimum_presets">At least five presets are required</string>
+    <string name="bg_text_failed">Failed: %1$s</string>
+</resources>

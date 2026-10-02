@@ -28,7 +28,7 @@ data class ReaderBackgroundExportSnapshot(
 
 interface ReaderBackgroundFilesRepository {
     suspend fun export(snapshot: ReaderBackgroundExportSnapshot, directory: String): String
-    /** Returns the imported preset as JSON; applying it belongs to the resumed UI owner. */
+    /** Returns the imported preset as JSON; applying it belongs to the main-thread settings owner. */
     suspend fun importFile(uri: String): String
     suspend fun importUrl(url: String): String
     /** Returns a stored background filename without modifying the active preset. */
