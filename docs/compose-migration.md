@@ -697,3 +697,7 @@ Added private disk import sessions and an I/O repository for JSON, URI and URL t
 ### Reader text action Compose popup
 
 Replaced the reader action popup content with Compose primary/more partitions and accessible click/long-click actions. The native bridge preserves reader callbacks, resource IDs, all three positioning branches, platform copy/share/browser/process-text dispatch and finalization. Lifecycle owners and explicit composition disposal cover dismiss, detach and host destruction. Added 6 JVM state tests and compilation of 6 Compose/platform tests; replaced source-only positioning checks with boundary behavior tests. Removed two exclusive layouts and the exclusive menu XML. Android device execution is unavailable.
+
+### Automatic task import Compose page
+
+Replaced the import dialog with a stable-key Compose list, selection counts, import status, code editing, progress and retry controls. Parent-first CodeDialog callbacks retain request receipts across recreation and accept successive editor saves. Resumed navigation consumes the request before opening its child; busy work protects cancellation and confirmation. Added compilation of 4 Compose and 2 real Fragment restore tests, retaining unrelated storage/routing contracts. Shared import tests now address Compose row actions directly instead of removed layout IDs. Removed the old import ViewModel implementation and the last exclusive source-import item layout; shared recycler resources remain. Android device execution is unavailable.

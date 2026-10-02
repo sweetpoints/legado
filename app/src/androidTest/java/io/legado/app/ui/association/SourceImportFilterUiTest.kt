@@ -132,7 +132,7 @@ class SourceImportFilterUiTest {
                     host.findParent()
                     host.awaitReady()
                     host.query("Keep", 1)
-                    host.rowClick(0, R.id.cb_source_name)
+                    host.rowClick(0, false)
                     host.selection(true, false)
                     val preview = host.open(0, 1)
                     val edited = GSON.toJson(source(rss, url("auto-$rss/edited"), "Kept edit", "Wanted", ""))
@@ -185,20 +185,20 @@ class SourceImportFilterUiTest {
             screenshot("source-filter-count-$rss")
             if (!rss) {
                 host.query("Hidden", 0)
-                host.rowClick(0, R.id.cb_source_name)
+                host.rowClick(0, false)
                 host.query("TWIN", 1, 2)
                 host.menu(R.id.menu_select_new_source)
                 host.selection(false, true, false)
                 host.menu(R.id.menu_select_update_source)
                 host.selection(false, true, true)
                 host.query("Hidden", 0)
-                host.rowClick(0, R.id.cb_source_name)
+                host.rowClick(0, false)
                 host.query("TWIN", 1, 2)
             } else {
                 host.click(R.id.tv_footer_left)
             }
             host.selection(true, true, true)
-            host.rowClick(0, R.id.cb_source_name)
+            host.rowClick(0, false)
             host.selection(true, false, true)
             host.query("CANDIDATE-1", 1)
             host.query("group:Precise", 1)
@@ -245,7 +245,7 @@ class SourceImportFilterUiTest {
             host.click(R.id.tv_footer_left)
             host.selection(false, false, false)
             host.query("Edited-$id", 1)
-            host.rowClick(0, R.id.cb_source_name)
+            host.rowClick(0, false)
             host.selection(false, true, false)
             host.setGroup("Imported group", false)
             host.click(R.id.tv_ok)
@@ -446,15 +446,15 @@ class SourceImportFilterUiTest {
             else compose.onNodeWithTag(when (id) { R.id.tv_ok -> "book-import-confirm"; R.id.tv_cancel -> "book-import-cancel"; else -> "book-import-select-visible" }).performClick()
         }
 
-        fun rowClick(position: Int, id: Int) {
+        fun rowClick(position: Int, openCode: Boolean) {
             if (rss) {
                 val key = main { visibleRssImportItems(feed.state.value, RssImportSearchLabels(context.getString(R.string.enabled),
                     context.getString(R.string.disabled), context.getString(R.string.need_login), context.getString(R.string.no_group)))[position].key }
-                compose.onNodeWithTag("rss-import-${if (id == R.id.tv_open) "code" else "check"}-$key").performScrollTo().performClick()
+                compose.onNodeWithTag("rss-import-${if (openCode) "code" else "check"}-$key").performScrollTo().performClick()
                 return
             }
             val key = main { visibleBookImportItems(book.state.value, bookLabels())[position].key }
-            compose.onNodeWithTag("book-import-${if (id == R.id.tv_open) "code" else "check"}-$key").performScrollTo().performClick()
+            compose.onNodeWithTag("book-import-${if (openCode) "code" else "check"}-$key").performScrollTo().performClick()
         }
 
         fun rejectStaleRowAfterQuery(query: String, originalIndex: Int) {
@@ -503,7 +503,7 @@ class SourceImportFilterUiTest {
         }
 
         fun open(position: Int, originalIndex: Int): CodeDialog {
-            rowClick(position, R.id.tv_open)
+            rowClick(position, true)
             var code: CodeDialog? = null
             await("Source code preview missing: rss=$rss") {
                 main {

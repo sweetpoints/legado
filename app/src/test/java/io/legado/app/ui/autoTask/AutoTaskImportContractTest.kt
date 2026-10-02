@@ -64,39 +64,6 @@ class AutoTaskImportContractTest {
         assertTrue(block.contains("AutoTaskScheduler.refresh(context)"))
     }
 
-    @Test
-    fun `automatic task import is single shot and validates editable fields`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/ImportAutoTaskViewModel.kt"
-        )
-
-        assertTrue(viewModel.contains("if (importStarted) return"))
-        assertTrue(viewModel.contains("importStarted = false"))
-        assertTrue(viewModel.contains("validateImportedTask"))
-        assertTrue(viewModel.contains("AutoTask.DEFAULT_CRON"))
-        assertTrue(viewModel.contains("CronSchedule.parse(normalized.cron.orEmpty())"))
-        assertTrue(viewModel.contains("AutoTask.normalizeScript(normalized.script).isBlank()"))
-
-        val importBlock = viewModel.substringAfter("fun importSelect(")
-            .substringBefore("fun importSource(")
-        val editBlock = viewModel.substringAfter("fun updateTaskAt(")
-            .substringBefore("private suspend fun importSourceAwait(")
-        assertTrue(importBlock.contains(".map(::validateImportedTask)"))
-        assertTrue(editBlock.contains("validateImportedTask(task)"))
-    }
-
-    @Test
-    fun `automatic task import keeps the dialog title readable`() {
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/ImportAutoTaskDialog.kt"
-        )
-        val setup = dialog.substringAfter("override fun onFragmentCreated")
-            .substringBefore("binding.rotateLoading.visible()")
-
-        assertTrue(setup.contains("binding.toolBar.setBackgroundColor(primaryColor)"))
-        assertTrue(setup.indexOf("setBackgroundColor") < setup.indexOf("setTitle"))
-    }
-
     private fun projectFile(pathInApp: String): String {
         return listOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull { it.isFile }
