@@ -797,3 +797,7 @@ Added immutable favorite rows excluding large article bodies and a single Room s
 ### Theme list Compose dialog
 
 Replaced the theme list with stable-key Compose rows, separate apply/share/delete controls, captured deletion confirmation and clipboard import. Public refresh/index bridge methods remain; theme JSON sharing prepares a durable receipt before consumed resumed-host delivery. Canceled noncooperative share reads recheck coroutine activity, so a pause/resume cannot dispatch an old read. Added compilation of 6 Compose interaction/lifecycle/restore tests and 2 real Fragment/clipboard/recreation tests. Removed the exclusive theme row layout and menu; shared recycler consumers remain. Full JVM tests and Android test compilation validate integration; Android device execution is unavailable.
+
+### Replacement rule group management Compose dialog
+
+Replaced the replacement-rule group manager with a reusable named-group Compose screen and its own saved editor state. Stable name keys preserve edit/delete targets across list changes, editor cancellation leaves memberships unchanged, and busy mutations prevent dismissal or repeat actions. Existing 90-percent dialog sizing and public callers remain. Added compilation of 3 real Compose interaction/narrow-dark-layout tests and 1 actual Fragment/Room/recreation test preserving all rule metadata. Shared group layouts and menus retain other consumers. Full JVM tests and Android test compilation validate integration; Android device execution is unavailable.
