@@ -665,3 +665,7 @@ Added background-staged private text requests, rich HTML/Markdown projection, an
 ### Curl conversion data and draft foundation
 
 Moved the existing pure curl converter into the model layer without changing conversion logic. Added independent compute/I/O repository boundaries and revisioned private AtomicFile drafts with shared per-path locks, preserving direction detection and precise conversion errors. Large command input/output stays outside Bundle state and older writes cannot overwrite newer drafts. Initial seed content survives a failed first draft write so retry cannot consume an empty request. Added 6 repository JVM tests, retained existing converter coverage, and compilation of 2 real concurrent disk/recovery tests. Legacy host receives only the package import update; Compose integration follows separately. Android device execution is unavailable.
+
+### Book source picker data and state foundation
+
+Added an I/O Room repository and saved source picker state. Enabled source search retains DAO ordering and immutable name/group rows; selection re-reads the complete latest source before consumed callback delivery. Pending selection restores without bundling source JSON, cancellation ignores late results, and finished restoration only closes. Delay settings retain 0..9999 bounds, retryable writes, restored drafts, and protection against late preference reads. Added 8 JVM state tests plus compilation of 4 real Room/preferences tests. Legacy UI remains for separate Compose integration; Android device execution is unavailable.
