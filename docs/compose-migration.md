@@ -705,3 +705,7 @@ Replaced the import dialog with a stable-key Compose list, selection counts, imp
 ### Search scope data foundation
 
 Added an I/O repository and immutable source-name/URL projection for the search scope picker. Group choices retain enabled-source filtering; the source tab retains all sources, DAO ordering and name/group/URL/comment queries, including disabled sources. Added 4 JVM snapshot/flow/thread tests plus compilation of 1 actual Room filtering test. Legacy scope UI remains for separate Compose integration; Android device execution is unavailable.
+
+### Update dialog data and saved state foundation
+
+Added background private update requests and saved action tokens, keeping release notes and large metadata outside Bundle state. Formal and beta requests preserve primary/backup/mirror targets, browser priority and ignore-version rules. Rich release notes project on the compute dispatcher; ignore-version preferences use I/O and retain explicit retry on failure. Added 8 JVM state tests, converted two beta download source checks to actual state behavior, and compilation of 2 real disk/preferences tests. Native downloading/installing remains delegated to the existing service; Compose UI follows separately. Android device execution is unavailable.

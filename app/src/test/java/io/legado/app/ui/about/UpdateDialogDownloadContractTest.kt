@@ -1,30 +1,37 @@
 package io.legado.app.ui.about
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.io.File
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.repository.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.*
+import org.junit.*
+import org.junit.Assert.*
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class UpdateDialogDownloadContractTest {
-
-    @Test
-    fun `beta update uses the system download flow`() {
-        val source = File(
-            "src/main/java/io/legado/app/ui/about/UpdateDialog.kt"
-        ).readText()
-        val clickHandler = source.substringAfter(
-            "binding.btnBetaUpdate.setOnClickListener"
-        ).substringBefore("if (!isBetaUpdate)")
-
-        assertTrue(clickHandler.contains("startDownload(arguments?.getString(\"url\"))"))
-        assertFalse(clickHandler.contains("openUrl"))
+    private val dispatcher = StandardTestDispatcher()
+    @Before fun setup() { Dispatchers.setMain(dispatcher) }
+    @After fun cleanup() { Dispatchers.resetMain() }
+    private val repo = object : UpdateDialogRepository {
+        override suspend fun load(id: String) = UpdateDialogRequest("beta", "Log", "primary", "app.apk", "backup", "mirror", "alternate", beta = true)
+        override suspend fun ignore(version: String) { error("Beta cannot ignore") }
     }
-
-    @Test
-    fun `beta update exposes browser fallback in toolbar`() {
-        val source = File("src/main/java/io/legado/app/ui/about/UpdateDialog.kt").readText()
-        assertTrue(source.contains("binding.toolBar.inflateMenu(R.menu.app_update)"))
-        assertTrue(source.contains("binding.toolBar.menu.findItem(R.id.menu_open_in_browser).isVisible = true"))
-        assertTrue(source.contains("arguments?.getString(\"url\").orEmpty()"))
+    @Test fun betaUpdateQueuesNativeDownloadAndHidesAlternateTargets() = runTest(dispatcher) {
+        val model = UpdateDialogViewModel(repo, SavedStateHandle(), "id", dispatcher)
+        try {
+            runCurrent(); model.download(UpdateDownloadTarget.Backup); assertNull(model.state.value.effect)
+            model.ignore(); assertNull(model.state.value.effect); assertTrue(model.state.value.downloadTargets.isEmpty())
+            model.download(); val effect = model.state.value.effect!!
+            assertEquals(UpdateDialogAction.Download, effect.action); assertEquals("primary", effect.url); assertEquals("app.apk", effect.fileName)
+        } finally { model.stop(); runCurrent() }
+    }
+    @Test fun betaBrowserFallbackUsesPrimaryAndKeepsUpdateOpen() = runTest(dispatcher) {
+        val model = UpdateDialogViewModel(repo, SavedStateHandle(), "id", dispatcher)
+        try {
+            runCurrent(); model.browser(); val effect = model.state.value.effect!!
+            assertEquals(UpdateDialogAction.Browser, effect.action); assertEquals("primary", effect.url)
+            model.delivered(effect.id); assertFalse(model.state.value.finished)
+        } finally { model.stop(); runCurrent() }
     }
 }
