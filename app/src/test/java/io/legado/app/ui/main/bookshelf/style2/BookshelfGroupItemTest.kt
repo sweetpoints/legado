@@ -102,6 +102,11 @@ class BookshelfGroupItemTest {
         assertNull(persisted.coverSourceOrigin)
     }
 
+    @Test fun authorSortUsesAuthorsEvenWhenTitleOrderDiffers() {
+        val books = listOf(book("first", name = "A").copy(author = "Zulu"), book("second", name = "Z").copy(author = "Alpha"))
+        assertEquals(listOf("second", "first"), sortBookshelfBooks(books, 5).map { it.bookUrl })
+    }
+
     private fun urls(item: BookshelfGroupItem) = item.previewBooks.map { it.bookUrl }
 
     private fun book(

@@ -11,47 +11,11 @@ import javax.xml.parsers.DocumentBuilderFactory
 class HomeFastScrollerContractTest {
 
     @Test
-    fun `folder bookshelf and discovery use independent fast scrollers`() {
-        assertFastScrollerLayout(
-            layout = "fragment_bookshelf2.xml",
-            recyclerId = "rv_bookshelf",
-            constraintTarget = "refresh_layout",
-        )
+    fun `discovery uses an independent fast scroller`() {
         assertFastScrollerLayout(
             layout = "fragment_explore.xml",
             recyclerId = "rv_find",
             constraintTarget = "rv_find",
-        )
-
-        val bookshelf = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
-        ).readText()
-        assertInOrder(
-            bookshelf.sourceSection(
-                "private fun initRecyclerView() {",
-                "private fun upFastScrollerBar() {",
-            ),
-            "fastScroller.attachRecyclerView(binding.rvBookshelf)",
-            "upFastScrollerBar()",
-        )
-        assertFastScrollerToggle(
-            bookshelf.sourceSection(
-                "private fun upFastScrollerBar() {",
-                "override fun upGroup(data: List<BookGroup>)",
-            ),
-            "AppConfig.showBookshelfFastScroller",
-            "binding.rvBookshelf",
-        )
-        assertInOrder(
-            bookshelf.sourceSection(
-                "observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {",
-                "override fun onDestroyView() {",
-            ),
-            "booksAdapter.notifyDataSetChanged()",
-            "upFastScrollerBar()",
-        )
-        assertDetachBeforeSuper(
-            bookshelf.sourceSection("override fun onDestroyView() {", "\n}"),
         )
 
         val explore = projectFile(
