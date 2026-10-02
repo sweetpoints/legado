@@ -1,87 +1,53 @@
 package io.legado.app.ui.widget.number
 
 import android.content.Context
-import android.widget.NumberPicker
-import androidx.appcompat.app.AlertDialog
+import android.view.Window
+import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.activity.ComponentDialog
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.hideSoftInput
+import io.legado.app.ui.theme.LegadoComposeTheme
+import io.legado.app.utils.setLayout
 
-class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = false) {
-    private val builder = AlertDialog.Builder(context)
-    private var numberPicker: NumberPicker? = null
-    private var maxValue: Int? = null
-    private var minValue: Int? = null
-    private var value: Int? = null
-    private var displayedValues: Array<String>? = null
+/** Keeps the fluent caller API while each show owns an independent Compose dialog lifecycle. */
+class NumberPickerDialog(private val context: Context, private val isDecimalMode: Boolean = false) {
+    private var title = ""
+    private var maximum = 0
+    private var minimum = 0
+    private var initial = 0
+    private var labels: List<String>? = null
+    private var customTextId: Int? = null
+    private var customListener: (() -> Unit)? = null
 
-    init {
-        builder.setView(R.layout.dialog_number_picker)
-    }
-
-    fun setTitle(title: String): NumberPickerDialog {
-        builder.setTitle(title)
-        return this
-    }
-
-    fun setMaxValue(value: Int): NumberPickerDialog {
-        maxValue = value
-        return this
-    }
-
-    fun setMinValue(value: Int): NumberPickerDialog {
-        minValue = value
-        return this
-    }
-
-    fun setValue(value: Int): NumberPickerDialog {
-        this.value = value
-        return this
-    }
-
-    fun setDisplayedValues(values: Array<String>): NumberPickerDialog {
-        displayedValues = values
-        return this
-    }
-
-    fun setCustomButton(textId: Int, listener: (() -> Unit)?): NumberPickerDialog {
-        builder.setNeutralButton(textId) { _, _ ->
-            numberPicker?.let {
-                it.clearFocus()
-                it.hideSoftInput()
-                listener?.invoke()
-            }
-        }
-        return this
-    }
+    fun setTitle(title: String): NumberPickerDialog = apply { this.title = title }
+    fun setMaxValue(value: Int): NumberPickerDialog = apply { maximum = value }
+    fun setMinValue(value: Int): NumberPickerDialog = apply { minimum = value }
+    fun setValue(value: Int): NumberPickerDialog = apply { initial = value }
+    fun setDisplayedValues(values: Array<String>): NumberPickerDialog = apply { labels = values.toList() }
+    fun setCustomButton(textId: Int, listener: (() -> Unit)?): NumberPickerDialog = apply { customTextId = textId; customListener = listener }
 
     fun show(callBack: ((value: Int) -> Unit)?) {
-        builder.setPositiveButton(R.string.ok) { _, _ ->
-            numberPicker?.let { np ->
-                np.clearFocus()
-                np.hideSoftInput()
-                callBack?.invoke(np.value)
-            }
-        }
-        builder.setNegativeButton(R.string.cancel, null)
-        val dialog = builder.show().applyTint()
-        numberPicker = dialog.findViewById(R.id.number_picker)
-        numberPicker?.let { np ->
-            minValue?.let {
-                np.minValue = it
-            }
-            maxValue?.let {
-                np.maxValue = it
-            }
-            value?.let {
-                np.value = it
-            }
-            if (isDecimalMode) {
-                np.displayedValues = Array(maxValue!! - minValue!! + 1) { i ->
-                    ((minValue!! + i) / 10.0).toString()
+        val config = NumberPickerConfig(title, minimum, maximum, initial, isDecimalMode, labels)
+        val customLabel = customTextId?.let(context::getString)
+        val neutral = customListener
+        val dialog = ComponentDialog(context)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    NumberPickerRoute(config, customLabel, { callBack?.invoke(it) }, { neutral?.invoke() }, dialog::dismiss)
                 }
             }
-            displayedValues?.let { np.displayedValues = it }
+        })
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawableResource(R.color.transparent)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
+        dialog.setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 }

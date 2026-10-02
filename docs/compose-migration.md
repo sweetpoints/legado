@@ -309,6 +309,11 @@ and system settings navigation remain intact. Preference listeners live only whi
 resumed and running playback receives the original configuration-change event.
 The exclusive preference XML is removed.
 
+Number-picker dialogs now use Compose wheel and direct-input controls with the
+existing fluent API, labels, decimal presentation, cyclic selection and neutral
+button contract. Drafts survive recreation; confirmation returns the raw integer
+once and cancellation delivers no result. The exclusive picker layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,

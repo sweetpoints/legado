@@ -1,5 +1,12 @@
 package io.legado.app.ui.highlight
 
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertTextContains
+import org.junit.Rule
+
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -15,7 +22,6 @@ import android.view.ViewGroup
 import android.view.Window
 import android.view.inspector.WindowInspector
 import android.widget.ListView
-import android.widget.NumberPicker
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
@@ -68,6 +74,7 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
 class HighlightGroupUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val dao = appDb.highlightRuleDao
@@ -131,14 +138,12 @@ class HighlightGroupUiTest {
         }
         fun edit(id: Int, value: Int?) {
             onView(withId(id)).inRoot(isDialog()).perform(scrollTo(), click())
-            if (value != null) instrumentation.runOnMainSync {
-                val picker = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                    .findViewById<NumberPicker>(R.id.number_picker)
-                picker.value = value
-                if (id == R.id.tv_highlight_letter_spacing) assertEquals("-20%", picker.displayedValues[value])
+            if (value != null) {
+                val label = if (id == R.id.tv_highlight_letter_spacing) "${value - 50}%" else value.toString()
+                compose.onNodeWithTag("number-input").performTextReplacement(label)
+                if (id == R.id.tv_highlight_letter_spacing) compose.onNodeWithTag("number-input").assertTextContains("-20%")
             }
-            onView(withId(if (value == null) android.R.id.button3 else android.R.id.button1))
-                .inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag(if (value == null) "number-custom" else "number-confirm").performClick()
         }
         fun save() {
             onView(withId(R.id.tv_highlight_font_size)).inRoot(isDialog()).perform(backAction())
@@ -183,14 +188,8 @@ class HighlightGroupUiTest {
         }
         openStyle()
         onView(withText(margin(125))).inRoot(isDialog()).perform(click())
-        instrumentation.runOnMainSync {
-            val picker = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
-                .findViewById<NumberPicker>(R.id.number_picker)
-            assertEquals(25, picker.minValue)
-            assertEquals(200, picker.maxValue)
-            picker.value = 150
-        }
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("number-input").performTextReplacement("150")
+        compose.onNodeWithTag("number-confirm").performClick()
         onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))
         onView(withText(R.string.highlight_bg_color)).inRoot(isDialog()).perform(click(), click())
         onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))

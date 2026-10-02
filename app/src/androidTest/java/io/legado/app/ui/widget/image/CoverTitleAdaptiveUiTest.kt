@@ -1,5 +1,12 @@
 package io.legado.app.ui.widget.image
 
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertTextContains
+import org.junit.Rule
+
 import android.content.Intent
 import android.app.Activity
 import android.app.Instrumentation
@@ -10,18 +17,14 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.view.View
-import android.widget.NumberPicker
 import java.io.File
 import android.widget.FrameLayout
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.UiController
-import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -42,7 +45,6 @@ import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.accentColor
-import org.hamcrest.Matcher
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,6 +56,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class CoverTitleAdaptiveUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
@@ -291,15 +294,8 @@ class CoverTitleAdaptiveUiTest {
             sizes.forEachIndexed { index, (key, label) ->
                 scrollCoverStylePreference(key)
                 onView(withText(label)).perform(click())
-                onView(withId(R.id.number_picker)).perform(object : ViewAction {
-                    override fun getDescription() = "select cover font percentage"
-                    override fun getConstraints(): Matcher<View> = isAssignableFrom(NumberPicker::class.java)
-                    override fun perform(uiController: UiController, view: View) {
-                        (view as NumberPicker).value = 110 + index * 10
-                        uiController.loopMainThreadUntilIdle()
-                    }
-                })
-                onView(withId(android.R.id.button1)).perform(click())
+                compose.onNodeWithTag("number-input").performTextReplacement((110 + index * 10).toString())
+                compose.onNodeWithTag("number-confirm").performClick()
             }
             var before: ConfigActivity? = null
             instrumentation.runOnMainSync {
