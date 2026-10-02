@@ -26,6 +26,14 @@ ui/
     MainUiState.kt
     MainViewModel.kt            main state and existing application operations
     interop/LegacyMainPager.kt  temporary adapter for unmigrated destinations
+  main/my/
+    MyFragment.kt             transitional pager host for Compose content
+    MyRoute.kt
+    MyScreen.kt               My/More list, theme choices and customization dialog
+    MyViewModel.kt            configuration observation, runtime state and draft
+    MyMoreActivity.kt         Compose More screen; preserves ConfigActivity intent routing
+    MySettingItem.kt          stable preference keys and display metadata
+    MyNavigation.kt           platform actions shared by the two entry points
   welcome/
     WelcomeActivity.kt         startup/window/navigation effects
     WelcomeScreen.kt           static screen state and rendering
@@ -67,12 +75,16 @@ it. Do not create a domain layer or a Gradle module solely to wrap one existing 
 
 ## Current boundary
 
-The main shell, welcome screen, and automatic-task debug screen no longer have XML
-layouts or ViewBinding. The existing About screen now shares theme, top bar and
+The main shell, welcome screen, automatic-task debug screen, and My/More screen
+content no longer have XML layouts or ViewBinding. My/More also removes its Preference
+XML and uses a preferences repository to retain existing backup-compatible keys.
+The customization draft is saved separately from committed settings; Cancel does
+not persist it or change services. Service observers run only while the destination
+is resumed, and runtime status synchronization does not restart services. The existing About screen now shares theme, top bar and
 settings components. The Compose host no longer inherits the ViewBinding host.
 
-The main shell still hosts the existing bookshelf, discovery, RSS and My fragments
-inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
+The main shell still hosts bookshelf, discovery and RSS View fragments and the
+Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
 source editors/import dialogs, RSS screens, file management, reading/audio/manga/PDF
 controls, and all other dialogs. Completion must not be inferred from enabling

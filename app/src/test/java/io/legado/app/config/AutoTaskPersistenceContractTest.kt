@@ -171,8 +171,8 @@ class AutoTaskPersistenceContractTest {
         val manifest = file("app/src/main/AndroidManifest.xml").readText()
         val scheduler = file("app/src/main/java/io/legado/app/service/AutoTaskScheduler.kt").readText()
         val service = file("app/src/main/java/io/legado/app/service/AutoTaskJobService.kt").readText()
-        val preferences = file("app/src/main/res/xml/pref_main.xml").readText()
-        val myFragment = file("app/src/main/java/io/legado/app/ui/main/my/MyFragment.kt").readText()
+        val preferences = file("app/src/main/java/io/legado/app/ui/main/my/MySettingItem.kt").readText()
+        val myFragment = file("app/src/main/java/io/legado/app/ui/main/my/MyViewModel.kt").readText()
         assertTrue(manifest.contains("android.permission.RECEIVE_BOOT_COMPLETED"))
         assertTrue(manifest.contains("android.permission.BIND_JOB_SERVICE"))
         assertTrue(manifest.contains(".service.AutoTaskJobService"))
@@ -212,10 +212,10 @@ class AutoTaskPersistenceContractTest {
         assertTrue(cancelJob > stopMarker)
         assertTrue(releaseSlot > cancelJob)
         assertTrue(cancelScope > releaseSlot)
-        assertTrue(preferences.contains("android:key=\"autoTaskService\""))
-        assertTrue(myFragment.contains("val appContext = requireContext().applicationContext"))
-        assertTrue(myFragment.contains("Coroutine.async { AutoTaskScheduler.refresh(appContext) }"))
-        assertTrue(myFragment.contains("AutoTaskScheduler.cancelAll(appContext)"))
+        assertTrue(preferences.contains("MySettingItem(\"autoTaskService\""))
+        assertTrue(myFragment.contains("PreferKey.autoTaskService -> viewModelScope.launch(Dispatchers.IO)"))
+        assertTrue(myFragment.contains("AutoTaskScheduler.refresh(context)"))
+        assertTrue(myFragment.contains("AutoTaskScheduler.cancelAll(context)"))
     }
 
     @Test

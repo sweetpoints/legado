@@ -226,6 +226,9 @@
         <activity
             android:name=".ui.config.ConfigActivity"
             android:launchMode="standard" />
+        <activity
+            android:name=".ui.main.my.MyMoreActivity"
+            android:exported="false" />
         <!-- 底栏图集 -->
         <activity
             android:name=".ui.config.BottomBarSkinActivity"
