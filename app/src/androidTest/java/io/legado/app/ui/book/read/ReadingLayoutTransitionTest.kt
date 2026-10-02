@@ -89,7 +89,7 @@ class ReadingLayoutTransitionTest {
                 .putExtra("bookUrl", book.bookUrl)).use { scenario ->
                 scenario.onActivity { activity ->
                     activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                        .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                        .forEach { it.dismiss() }
                 }
                 awaitReader(scenario, book.bookUrl, false)
                 val initial = capture(scenario, "layout-cover-before")

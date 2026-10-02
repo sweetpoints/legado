@@ -103,7 +103,7 @@ class TocReverseNavigationTest {
                 .putExtra("bookUrl", fixture.book.bookUrl)).use { reader ->
                 reader.onActivity { activity ->
                     activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                        .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                        .forEach { it.dismiss() }
                 }
                 await {
                     ReadBook.book?.bookUrl == fixture.book.bookUrl &&

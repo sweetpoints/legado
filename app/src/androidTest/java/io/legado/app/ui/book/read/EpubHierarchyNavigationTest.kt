@@ -321,7 +321,7 @@ class EpubHierarchyNavigationTest {
     }
     private fun dismissFirstRun(reader: ActivityScenario<ReadBookActivity>) = reader.onActivity { activity ->
         activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-            .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+            .forEach { it.dismiss() }
     }
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()

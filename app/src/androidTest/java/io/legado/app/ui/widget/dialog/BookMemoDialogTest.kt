@@ -103,7 +103,7 @@ class BookMemoDialogTest {
             .putExtra("bookUrl", book.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismiss() }
         }
         await {
             ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.isCompleted == true &&

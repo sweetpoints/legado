@@ -273,7 +273,7 @@ class PdfZoomNavigationTest {
             activity.requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismiss() }
         }
         await { ReadBook.book?.bookUrl == book.bookUrl && images(it).isNotEmpty() &&
             ReadBook.curTextChapter?.isCompleted == true && it.bottomDialog == 0 &&

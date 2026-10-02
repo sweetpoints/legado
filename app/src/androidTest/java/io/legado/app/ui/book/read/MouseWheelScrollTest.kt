@@ -213,7 +213,7 @@ class MouseWheelScrollTest {
             .putExtra("bookUrl", book.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismiss() }
         }
         awaitReader {
             val page = it.readerView.curPage.textPage

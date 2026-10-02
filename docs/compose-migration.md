@@ -426,3 +426,9 @@ Shared Compose cover components now display fixed 3:4 cropped covers and four-sl
 group previews, with a 1200ms title fallback for slow requests. Animated drawing
 follows the STARTED lifecycle and stops callbacks before releasing its Glide lease.
 Legacy cover Views remain until all consumers have moved to these components.
+
+Reader click-area configuration now uses a full-screen Compose nine-region grid
+and a restorable action picker. Preference writes remain immediate, while actual
+closure validates that a reader-menu area exists and recalculates click geometry.
+Configuration changes preserve the picker and release only the current dialog lease.
+The exclusive click-area XML layout is removed.

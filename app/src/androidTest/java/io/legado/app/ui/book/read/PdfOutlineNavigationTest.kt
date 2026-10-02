@@ -136,7 +136,7 @@ class PdfOutlineNavigationTest {
             waitUntil { ReadBook.book?.bookUrl == book.bookUrl && ReadBook.curTextChapter?.pages?.isNotEmpty() == true }
             reader.onActivity { activity ->
                 activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                    .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                    .forEach { it.dismiss() }
             }
             reader.onActivity { it.openChapterList() }
             waitUntil { outlineRows()?.contains("目标十三页") == true }

@@ -1547,7 +1547,7 @@ class TitleFontWeightRenderingTest {
             .putExtra("bookUrl", fixture.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismiss() }
         }
         awaitReader {
             val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage

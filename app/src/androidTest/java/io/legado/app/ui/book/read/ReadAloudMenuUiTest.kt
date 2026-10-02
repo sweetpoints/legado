@@ -141,7 +141,7 @@ class ReadAloudMenuUiTest {
             .putExtra("bookUrl", fixture.bookUrl))
         scenario!!.onActivity { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                .forEach { it.view?.findViewById<View>(R.id.iv_close)?.performClick() }
+                .forEach { it.dismiss() }
         }
         await("reader content") {
             ReadBook.book?.bookUrl == fixture.bookUrl && ReadBook.curTextChapter?.isCompleted == true &&
