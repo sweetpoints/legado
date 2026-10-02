@@ -1,4 +1,4 @@
-package io.legado.app.ui.code
+package io.legado.app.model.analyzeRule
 
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.GSON

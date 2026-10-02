@@ -1,5 +1,6 @@
 package io.legado.app.ui.code
 
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -8,8 +9,8 @@ import io.legado.app.base.BaseDialogFragment
 import io.legado.app.databinding.DialogCurlAnalyzeUrlBinding
 import io.legado.app.help.IntentData
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.code.CurlAnalyzeUrlConverter.ConversionException
-import io.legado.app.ui.code.CurlAnalyzeUrlConverter.ErrorReason
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter.ConversionException
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter.ErrorReason
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout

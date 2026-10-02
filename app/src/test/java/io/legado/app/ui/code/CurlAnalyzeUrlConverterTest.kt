@@ -1,8 +1,9 @@
 package io.legado.app.ui.code
 
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.ui.code.CurlAnalyzeUrlConverter.ConversionException
-import io.legado.app.ui.code.CurlAnalyzeUrlConverter.ErrorReason
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter.ConversionException
+import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter.ErrorReason
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import org.junit.Assert.assertEquals
