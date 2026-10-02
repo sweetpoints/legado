@@ -717,3 +717,7 @@ Replaced CodeDialog with selectable Compose code text, background syntax project
 ### Update Compose dialog
 
 Replaced the update dialog with Compose rich release notes, version metadata and formal/beta actions. Resumed handoff retains the existing app-update download service and browser contracts, with explicit retry after a failed handoff; closing the dialog leaves service work alone. Legacy arguments upgrade to private disk requests and the scroll state is created after content loads to preserve its restored offset. Added compilation of 7 Compose and 2 real recreation tests; obsolete binding/XML assertions were removed while update caller lifecycle tests remain. Removed the exclusive update layout/menu; Android device execution is unavailable.
+
+### Search scope Compose dialog
+
+Replaced the search scope dialog with Compose group/source tabs, enabled-group choices, all-source filtering, preserved independent selections and accessible stable-key rows. Confirmation preserves group click order and the original single-source name/URL format; all sources and cancellation retain their callback semantics. Saved identifiers restore selections and pending results, lifecycle subscription stops with the view and resumed delivery consumes before the parent-first callback. Added 9 JVM state tests, an actual subscription lifecycle test and compilation of 6 Compose plus 2 real Room/Fragment recreation tests. Removed the exclusive scope layout/menu; Android device execution is unavailable.
