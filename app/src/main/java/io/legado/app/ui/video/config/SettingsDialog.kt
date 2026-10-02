@@ -1,75 +1,37 @@
 package io.legado.app.ui.video.config
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Bundle
-import android.view.View
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogVideoSettingsBinding
-import io.legado.app.model.VideoPlay
-import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import android.view.ViewGroup
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.preferences.AppVideoSettingsRepository
+import io.legado.app.utils.setLayout
 
-class SettingsDialog(private val context: Context, private val callBack: CallBack? = null) :
-    BaseDialogFragment(R.layout.dialog_video_settings) {
-    private val binding by viewBinding(DialogVideoSettingsBinding::bind)
+class SettingsDialog() : BaseComposeDialogFragment() {
+    // Preserve callers while allowing FragmentManager to recreate the dialog without retaining a Context.
+    @Suppress("UNUSED_PARAMETER")
+    constructor(context: Context, callBack: CallBack? = null) : this()
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initData()
-        initView()
+    private val viewModel by viewModels<VideoSettingsViewModel> {
+        viewModelFactory { initializer {
+            VideoSettingsViewModel(AppVideoSettingsRepository(), createSavedStateHandle())
+        } }
     }
-
-    @SuppressLint("SetTextI18n")
-    private fun initData() {
-        binding.run {
-            tvPressSpeed.text = (VideoPlay.longPressSpeed / 10.0f).toPressSpeedStr()
-            cbAutoPlay.isChecked = VideoPlay.autoPlay
-            cbDefaultFloatWindow.isChecked = VideoPlay.defaultFloatWindow
-            cbStartFull.isChecked = VideoPlay.startFull
-            cbFullBottomProgress.isChecked = VideoPlay.fullBottomProgressBar
-        }
+    override fun onStart() {
+        super.onStart()
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-
-    @SuppressLint("SetTextI18n")
-    private fun initView() {
-        binding.run {
-            cbAutoPlay.setOnCheckedChangeListener { _, isChecked ->
-                VideoPlay.autoPlay = isChecked
-                ctStartFull.visibility = if (isChecked) View.VISIBLE else View.GONE
-            }
-            cbDefaultFloatWindow.setOnCheckedChangeListener { _, isChecked ->
-                VideoPlay.defaultFloatWindow = isChecked
-            }
-            cbStartFull.setOnCheckedChangeListener { _, isChecked ->
-                VideoPlay.startFull = isChecked
-            }
-            cbFullBottomProgress.setOnCheckedChangeListener { _, isChecked ->
-                VideoPlay.fullBottomProgressBar = isChecked
-            }
-            tvPressSpeed.setOnClickListener { _ ->
-                NumberPickerDialog(requireContext(), true)
-                    .setTitle(getString(R.string.press_speed))
-                    .setMaxValue(60)
-                    .setMinValue(5)
-                    .setValue(VideoPlay.longPressSpeed)
-                    .setCustomButton((R.string.btn_default_s)) {
-                        VideoPlay.longPressSpeed = 30
-                        tvPressSpeed.text = 3.0f.toPressSpeedStr()
-                    }
-                    .show {
-                        VideoPlay.longPressSpeed = it
-                        tvPressSpeed.text = (it / 10.0f).toPressSpeedStr()
-                    }
-            }
-        }
+    @Composable override fun Content() {
+        VideoSettingsRoute(viewModel,
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
     }
-
-    private fun Float.toPressSpeedStr(): String {
-        return context.getString(R.string.press_speed_summary, this)
-    }
-    interface CallBack {
-//        fun upUi()
-    }
-
+    interface CallBack
 }

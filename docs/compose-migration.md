@@ -60,6 +60,11 @@ ui/
     CoverRuleRoute.kt
     CoverRuleScreen.kt         form, validation and operation feedback
     CoverRuleViewModel.kt      restorable draft and cancellable operations
+  video/config/
+    SettingsDialog.kt         recreatable host; compatibility constructor retains no Context
+    VideoSettingsRoute.kt
+    VideoSettingsScreen.kt    settings and Compose speed-selection dialog
+    VideoSettingsViewModel.kt  immediate preferences and separate speed draft
   book/manga/config/
     MangaEpaperDialog.kt       thin Compose host and reader preview callback
     MangaEpaperRoute.kt
@@ -194,6 +199,13 @@ copies. Each RESUMED entry reapplies the current draft because the reader itself
 reloads committed settings during recreation. Only real dismissal persists;
 subsequent edits, preview requests and duplicate dismissal callbacks are ignored.
 The dedicated XML layout is removed.
+
+Video settings and the long-press speed picker now use Compose. Boolean settings
+retain immediate writes to existing preference keys. The speed picker retains
+0.5–6.0 in 0.1 increments, explicit confirmation/cancellation and a 3.0 default;
+its uncommitted draft survives recreation. Fullscreen-on-start visibility follows
+autoplay from the first composition. The DialogFragment has a no-argument
+constructor and no retained Context. Its dedicated XML layout is removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
