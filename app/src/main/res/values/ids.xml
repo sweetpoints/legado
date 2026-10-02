@@ -22,4 +22,5 @@
     <item name="code_share_selection" type="id" />
 
     <item name="view_pager_main" type="id" />
+    <item name="compose_dialog_content" type="id" />
 </resources>
