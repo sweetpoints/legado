@@ -729,3 +729,7 @@ Moved unchanged Legado/JSON/JavaScript regular expressions into the pure model/a
 ### RSS reading history data and saved state
 
 Added an I/O history repository and immutable rows while preserving descending read-time order and distinct null/all versus empty-origin filters. Navigation saves a small record hash and re-reads current article metadata before host delivery. Clear confirmation uses a fresh count, restores by recounting and protects an active deletion; canceled and finished requests reject late reads. Added 8 JVM state tests and compilation of 3 real Room ordering/filter/deletion/metadata tests. Shared RSS sort APIs remain intact; Compose history UI follows separately. Android device execution is unavailable.
+
+### Reader search menu Compose content
+
+Replaced the reader search menu layout, controls and in/out animations with Compose while preserving its public reader bridge and callbacks. Immutable result snapshots keep current/previous navigation, clamp edge navigation safely and guard empty result lists. Completed exits deliver once, interrupted exits cannot hide a reopened panel, and the floating navigation remains available until the reader hides the host. Compose navigation-bar padding and reader colors preserve integration; detaching disposes composition and drops pending callbacks. Animation completions wait for a resumed host before dispatch. Added 5 JVM state tests and compilation of 4 actual Compose navigation/animation/lifecycle tests. Removed the exclusive search menu layout; Android device execution is unavailable.
