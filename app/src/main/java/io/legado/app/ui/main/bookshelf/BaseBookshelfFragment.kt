@@ -204,7 +204,11 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
+        handleBookshelfMenu(item.itemId)
+    }
+
+    protected fun handleBookshelfMenu(itemId: Int) {
+        when (itemId) {
             R.id.menu_remote -> startActivity<RemoteBookActivity>()
             R.id.menu_search -> startActivity<SearchActivity>()
             R.id.menu_update_toc -> activityViewModel.upToc(books, onlyUpdateRead)

@@ -468,3 +468,9 @@ flow. Selection remains a SavedState draft until Apply or Default; cancellation
 does not write preferences. Delete confirmation survives restoration, failures
 remain visible, and editor/default/cancel callbacks preserve their host contracts.
 The exclusive server-list item layout and menu are removed.
+
+Style-1 bookshelf groups, toolbar, tabs, header and paging now use Compose. Each
+group retains independent SavedState and scroll state, while only the active page
+collects book updates and runs its age ticker in RESUMED. Group identity survives
+reordering, header queries are skipped when disabled, and existing main-menu APIs
+remain compatible with style 2. The exclusive style-1 parent layout is removed.

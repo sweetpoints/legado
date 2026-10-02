@@ -192,15 +192,6 @@ class BookshelfReadProgressTest {
             assertEquals("1", text.androidAttribute("layout_weight"))
         }
 
-        val style1 = parseProjectXml("src/main/res/layout/fragment_bookshelf1.xml")
-        assertEquals(
-            "@layout/view_bookshelf_header",
-            style1.findElementById("@+id/shelf_header").getAttribute("layout"),
-        )
-        val viewPager = style1.findElementById("@+id/view_pager_bookshelf")
-        assertEquals("0dp", viewPager.androidAttribute("layout_height"))
-        assertEquals("1", viewPager.androidAttribute("layout_weight"))
-
         val style2 = parseProjectXml("src/main/res/layout/fragment_bookshelf2.xml")
         assertEquals(
             "@+id/shelf_header",
