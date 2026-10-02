@@ -841,3 +841,7 @@ Updated the existing Compose debug page to use an explicit saved-state repositor
 ### Local file picker data and saved state
 
 Added immutable file/directory projections and an I/O filesystem repository, retaining directory-first name ordering, existing hidden-entry visibility and exact extension disabling. Canonical fixed-root checks prevent traversal and external symlink creation; final confirmation revalidates the selected file/directory. Small directory/selection/scroll/result state and saved folder-editor selections restore independently. Active create/confirm guards repeated operations and canceled noncooperative results cannot publish late state. Typed validation issues allow localized UI messages while platform errors retain their details. Added 6 actual temporary-filesystem JVM tests and 11 state tests. Legacy picker host remains for separate Compose integration; Android device execution is unavailable.
+
+### Local file picker Compose page
+
+Migrated FilePickerDialog to a lifecycle-aware Compose Route and stateless Screen, retaining exact extension filtering, current-directory selection, folder creation, navigation, both callback targets, and host dismissal. Typed picker issues use English and Chinese resources. Removed the former ViewModel, two exclusive layouts and menu; shared path-picker assets remain. Added ten Compose tests and three host restoration tests. Validated with the complete JVM suite and Android test compilation; device tests require a connected Android device.
