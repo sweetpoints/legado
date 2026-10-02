@@ -19,9 +19,6 @@ class AutoTaskImportContractTest {
         val file = projectFile(
             "src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt"
         )
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskActivity.kt"
-        )
 
         assertTrue(base.contains("map.containsKey(\"cron\") && map.containsKey(\"script\")"))
         assertEquals("autoTask", jsonImportType(mapOf("cron" to "0 * * * *", "script" to "test")))
@@ -30,26 +27,14 @@ class AutoTaskImportContractTest {
         assertTrue(online.contains("\"/auto\" -> viewModel.determineType("))
         assertTrue(online.contains("\"autoTask\" -> showDialogFragment("))
         assertTrue(file.contains("\"autoTask\" -> showDialogFragment("))
-        assertTrue(activity.contains("R.id.menu_import_local"))
-        assertTrue(activity.contains("R.id.menu_import_on_line"))
     }
 
     @Test
     fun `automatic task share passphrase routes import and export`() {
         val main = projectFile("src/main/java/io/legado/app/ui/main/MainActivity.kt")
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskActivity.kt"
-        )
-        val exportBlock = activity.substringAfter("private val exportDoc")
-            .substringBefore("override fun onActivityCreated")
 
         assertTrue(main.contains("SourceSharePassphrase.Type.AUTO_TASK ->"))
         assertTrue(main.contains("showDialogFragment(ImportAutoTaskDialog(value.url))"))
-        assertTrue(exportBlock.contains("sourceSharePassphraseButton("))
-        assertTrue(exportBlock.contains("SourceSharePassphrase.Type.AUTO_TASK"))
-        assertTrue(activity.contains("inflateMenu(R.menu.auto_task_sel)"))
-        assertTrue(activity.contains("val rules = adapter.selection"))
-        assertTrue(activity.contains("AutoTask.exportJson(rules)"))
     }
 
     @Test

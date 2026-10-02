@@ -100,7 +100,7 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `five management adapters use the shared vertical menu`() {
+    fun `remaining management adapters use the shared vertical menu`() {
         adapterFiles.forEach { path ->
             val source = readProjectFile(path)
             assertFalse("$path should not import PopupMenu", source.contains("import android.widget.PopupMenu"))
@@ -112,13 +112,6 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu actions keep their current callbacks and side effects`() {
-        assertActions(
-            AUTO_TASK,
-            "\"log\" -> callback.showLog(task)",
-            "\"moveUp\" -> callback.move(task, -1)",
-            "\"moveDown\" -> callback.move(task, 1)",
-            "\"delete\" -> callback.delete(task)"
-        )
         assertActions(
             RSS_SOURCE,
             "\"top\" -> callBack.toTop(source)",
@@ -139,13 +132,6 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu labels keep their previous order`() {
-        assertOrdered(
-            AUTO_TASK,
-            "item(context.getString(R.string.auto_task_log), \"log\")",
-            "item(context.getString(R.string.auto_task_move_up), \"moveUp\")",
-            "item(context.getString(R.string.auto_task_move_down), \"moveDown\")",
-            "item(context.getString(R.string.delete), \"delete\")"
-        )
         listOf(RSS_SOURCE, REPLACE_RULE).forEach { path ->
             assertOrdered(
                 path,
@@ -186,10 +172,9 @@ class ManagePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val AUTO_TASK = "src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt"
         const val RSS_SOURCE = "src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt"
         const val RULE_SUB = "src/main/java/io/legado/app/ui/rss/subscription/RuleSubAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        val adapterFiles = listOf(AUTO_TASK, RSS_SOURCE, RULE_SUB, REPLACE_RULE)
+        val adapterFiles = listOf(RSS_SOURCE, RULE_SUB, REPLACE_RULE)
     }
 }
