@@ -5,6 +5,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 
 import android.app.Activity
@@ -136,32 +138,31 @@ class HighlightGroupUiTest {
                 expanded
             }
         }
-        fun edit(id: Int, value: Int?) {
-            onView(withId(id)).inRoot(isDialog()).perform(scrollTo(), click())
+        fun edit(tag: String, value: Int?) {
+            compose.onNodeWithTag(tag).performScrollTo().performClick()
             if (value != null) {
-                val label = if (id == R.id.tv_highlight_letter_spacing) "${value - 50}%" else value.toString()
-                compose.onNodeWithTag("number-input").performTextReplacement(label)
-                if (id == R.id.tv_highlight_letter_spacing) compose.onNodeWithTag("number-input").assertTextContains("-20%")
+                compose.onNodeWithTag("highlight-style-number-input").performTextReplacement(value.toString())
+                if (tag == "highlight-style-letter-spacing") compose.onNodeWithTag("highlight-style-number-input").assertTextContains("-20")
             }
-            compose.onNodeWithTag(if (value == null) "number-custom" else "number-confirm").performClick()
+            compose.onNodeWithTag(if (value == null) "highlight-style-number-default" else "highlight-style-number-save").performClick()
         }
         fun save() {
-            onView(withId(R.id.tv_highlight_font_size)).inRoot(isDialog()).perform(backAction())
+            pressBack()
             onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
         }
         openStyle()
-        edit(R.id.tv_highlight_font_size, 42)
-        edit(R.id.tv_highlight_letter_spacing, 30)
+        edit("highlight-style-font-size", 42)
+        edit("highlight-style-letter-spacing", -20)
         screenshot("highlight-font-metrics-settings")
         save()
         await { dao.all.first().styleObj().let { it.fontSize == 42f && it.letterSpacing == -0.2f } }
         scenario!!.recreate()
         awaitRules(dao.all)
         openStyle()
-        onView(withId(R.id.tv_highlight_font_size)).inRoot(isDialog()).perform(scrollTo())
-            .check(matches(withText(context.getString(R.string.text_size) + " · 42")))
-        edit(R.id.tv_highlight_font_size, null)
-        edit(R.id.tv_highlight_letter_spacing, null)
+        compose.onNodeWithTag("highlight-style-font-size").performScrollTo()
+            .assertTextContains(context.getString(R.string.text_size) + " · 42")
+        edit("highlight-style-font-size", null)
+        edit("highlight-style-letter-spacing", null)
         save()
         await { dao.all.first().styleObj().let { it.fontSize == null && it.letterSpacing == null } }
     }
@@ -183,16 +184,17 @@ class HighlightGroupUiTest {
             onView(withId(R.id.btn_style)).inRoot(isDialog()).perform(click())
         }
         fun saveStyle() {
-            onView(withText(R.string.highlight_bg_color)).inRoot(isDialog()).perform(backAction())
+            pressBack()
             onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
         }
         openStyle()
-        onView(withText(margin(125))).inRoot(isDialog()).perform(click())
-        compose.onNodeWithTag("number-input").performTextReplacement("150")
-        compose.onNodeWithTag("number-confirm").performClick()
-        onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))
-        onView(withText(R.string.highlight_bg_color)).inRoot(isDialog()).perform(click(), click())
-        onView(withText(margin(150))).inRoot(isDialog()).check(matches(isDisplayed()))
+        compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().assertTextContains(margin(125)).performClick()
+        compose.onNodeWithTag("highlight-style-number-input").performTextReplacement("150")
+        compose.onNodeWithTag("highlight-style-number-save").performClick()
+        compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().assertTextContains(margin(150)).assertIsDisplayed()
+        compose.onNodeWithTag("highlight-style-toggle-Fill").performScrollTo().performClick()
+        compose.onNodeWithTag("highlight-style-toggle-Fill").performScrollTo().performClick()
+        compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().assertTextContains(margin(150)).assertIsDisplayed()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "highlight-pill-margin-settings.png")
@@ -203,9 +205,9 @@ class HighlightGroupUiTest {
         scenario!!.recreate()
         awaitRules(dao.all)
         openStyle()
-        onView(withText(margin(150))).inRoot(isDialog()).perform(click())
-        onView(withId(android.R.id.button3)).inRoot(isDialog()).perform(click())
-        onView(withText(margin(100))).inRoot(isDialog()).check(matches(isDisplayed()))
+        compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().performClick()
+        compose.onNodeWithTag("highlight-style-number-default").performClick()
+        compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().assertTextContains(margin(100)).assertIsDisplayed()
         saveStyle()
         await { dao.all.first().styleObj().pillPaddingScale == null }
     }

@@ -645,3 +645,7 @@ Replaced BookMemoDialog with a pure Compose half-height Route/Screen, portrait a
 ### Highlight style pure operations foundation
 
 Added independent immutable style operations for all nine channels, color defaults and changes, fill and underline cycling, inherited font metrics, preset swatches, and the original setting bounds. The existing StyleHost retains live persistence ownership. Added 6 JVM behavior tests; legacy host remains for separate Compose integration.
+
+### Highlight style Compose page
+
+Replaced all highlight style content with Compose while retaining the existing bottom-sheet window and public StyleHost/color/font/editor contracts. Nine channels, presets, metrics, decoration tuning and number drafts use immutable state and resumed consumed effects. External host refresh updates state without creating callback loops; font invalidation remains on the main host. Added 9 JVM state tests and compilation of 8 actual Compose/host tests. Removed the exclusive style and channel XML; Android device execution remains unavailable.
