@@ -633,3 +633,7 @@ Added a Room repository and saved memo editor ViewModel. Memo observation remain
 ### Review detail Compose page
 
 Replaced the review detail recycler with Compose comment/reply rows, resizing, embedded replies, paged loading, badges, source-aware images and photo navigation. Audio keeps a main-thread platform controller with released resources; media preparation and disk sessions remain in the captured-target repository. Saved effects wait for disk restoration and resumed delivery before consumption; concurrent reply caches serialize to retain all parents. Added 11 ViewModel behavior tests, 3 actual row-format tests, and compilation of 14 Compose/platform/host tests. Removed obsolete source-only assertions and the exclusive comment XML. Android device execution remains unavailable.
+
+### Book source import data and state foundation
+
+Added serialized immutable import entries, an I/O repository, durable request/session storage, and a saved import ViewModel. Preserve JSON/URI/URL/JavaScript input, all source metadata, scoped replacements and invalid-preview blocking, filtered selection, group preferences, original enabled/explore/custom order, and captured reader reimport delivery. Large edited code lives in AtomicFile requests rather than SavedState. Import publication remains noncancelable and completion is cached for recovery. Added 11 parser/pipeline and 15 state JVM tests plus compilation of 7 real Room/JavaScript/URI/disk tests. Legacy host remains for separate Compose integration; Android device execution is unavailable.
