@@ -44,7 +44,6 @@ class PredictiveBackTest {
             "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt",
             "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
             "src/main/java/io/legado/app/ui/code/CodeEditActivity.kt",
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt",
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt",
             "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt",
             "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt",
