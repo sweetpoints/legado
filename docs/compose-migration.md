@@ -365,6 +365,11 @@ on IO; export preparation is cancellable and resumed platform actions consume th
 queue entry before delivery. Cache deletion belongs to the ViewModel scope and its
 completion toast does not replay service reset. Exclusive item/menu XML is removed.
 
+Animated Drawable ownership is shared in data/image and the lifecycle painter in
+ui/components/image. Photo retains a compatibility adapter; drawing callbacks stop
+before Main-thread Glide release. New cover components can reuse the same contract
+without making the data layer depend on dialog UI.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
