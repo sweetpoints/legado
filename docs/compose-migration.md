@@ -43,6 +43,9 @@ ui/
     AutoTaskDebugRoute.kt
     AutoTaskDebugScreen.kt
     AutoTaskDebugViewModel.kt
+  widget/dialog/
+    WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
+    WaitDialogContent.kt       stateless Compose progress/message content
   about/
     AboutActivity.kt           Android effects and existing application operations
     AboutScreen.kt             stateless screen using common settings components
@@ -110,6 +113,10 @@ records are cleared after confirmation. Small exports retain text sharing; expor
 over 64,000 characters use independent cache files written off the main thread.
 Detail and share requests remain pending until a resumed host handles them. Text
 selection and web links use Compose APIs. App-log details still use shared TextDialog.
+
+WaitDialog now renders Compose progress and text without a layout or ViewBinding.
+Its existing show/dismiss/setText API remains valid. Reusing the same dialog installs
+a fresh Compose host for the new ComponentDialog lifecycle.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
