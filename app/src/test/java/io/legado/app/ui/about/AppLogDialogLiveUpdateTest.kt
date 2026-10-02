@@ -15,7 +15,7 @@ class AppLogDialogLiveUpdateTest {
     @Test
     fun `saved logs invalidate the visible dialog snapshot`() {
         assertEquals(
-            2,
+            3,
             Regex("postEvent\\(EventBus\\.APP_LOG_UPDATED, true\\)")
                 .findAll(appLog)
                 .count(),
