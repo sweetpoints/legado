@@ -1,20 +1,20 @@
 package io.legado.app.ui.widget.dialog
 
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.lifecycle.ViewModelProvider
+import org.junit.Rule
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.text.Spanned
-import android.text.TextPaint
 import android.view.View
-import android.widget.EditText
-import android.widget.TextView
 import androidx.core.net.toUri
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
@@ -44,7 +44,6 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.fromJsonArray
-import io.noties.markwon.core.spans.StrongEmphasisSpan
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -56,6 +55,7 @@ import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class BookMemoDialogTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
@@ -122,47 +122,45 @@ class BookMemoDialogTest {
         }
         screenshot("book-memo-five-buttons")
         onView(withId(R.id.ll_memo)).perform(click())
-        await { memoDialog(it)?.view?.findViewById<View>(R.id.memo_edit_save)?.isEnabled == true }
+        await { memoDialog(it)?.let { dialog -> ViewModelProvider(dialog)[BookMemoViewModel::class.java].state.value.loaded } == true }
         scenario!!.onActivity {
             val window = memoDialog(it)!!.requireDialog().window!!
             val screenHeight = context.resources.displayMetrics.heightPixels
             assertTrue("Memo uses a half-height panel", window.attributes.height in (screenHeight * .4f).toInt()..(screenHeight * .6f).toInt())
         }
-        onView(withId(R.id.memo_edit_save)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("memo-edit-save").performClick()
         val markdown = "# 备忘标题\n\n**重要内容**\n\n- 第一条\n- 第二条"
-        onView(withId(R.id.memo_editor)).inRoot(isDialog()).perform(replaceText(markdown), closeSoftKeyboard())
+        compose.onNodeWithTag("memo-editor").performTextReplacement(markdown)
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
         scenario!!.recreate()
-        await { memoDialog(it)?.view?.findViewById<EditText>(R.id.memo_editor)?.text?.toString() == markdown }
-        onView(withId(R.id.memo_edit_save)).inRoot(isDialog()).perform(click())
-        await { memoDialog(it)?.view?.findViewById<View>(R.id.memo_editor)?.visibility == View.GONE &&
-            memoDialog(it)?.view?.findViewById<TextView>(R.id.memo_content)?.text?.contains("重要内容") == true }
+        await { memoDialog(it)?.let { dialog -> ViewModelProvider(dialog)[BookMemoViewModel::class.java].state.value.let { state -> state.loaded && state.editing && state.draft == markdown } } == true }
+        compose.onNodeWithTag("memo-edit-save").performClick()
+        await { memoDialog(it)?.let { dialog -> ViewModelProvider(dialog)[BookMemoViewModel::class.java].state.value.let { state -> !state.editing && state.memo?.content == markdown } } == true }
+        compose.onNodeWithText("重要内容").assertIsDisplayed()
         assertEquals(markdown, appDb.bookMemoDao.get(book.bookUrl)!!.content)
-        scenario!!.onActivity {
-            val rendered = memoDialog(it)!!.requireView().findViewById<TextView>(R.id.memo_content).text
-            assertTrue(rendered is Spanned)
-            val styled = rendered as Spanned
-            val bold = styled.getSpans(0, styled.length, StrongEmphasisSpan::class.java).single()
-            assertEquals("重要内容", styled.subSequence(styled.getSpanStart(bold), styled.getSpanEnd(bold)).toString())
-            val paint = TextPaint()
-            bold.updateDrawState(paint)
-            assertTrue("Markdown bold must affect actual text drawing", paint.isFakeBoldText)
-        }
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("重要内容").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val rendered = layouts.single().layoutInput.text
+        assertTrue("Markdown bold must reach the actual Compose text layout", rendered.spanStyles.any {
+            it.item.fontWeight == FontWeight.Bold && rendered.text.substring(it.start, it.end) == "重要内容"
+        })
         screenshot("book-memo-markdown")
         scenario!!.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
         await { it.findViewById<ReadView>(R.id.read_view).width > it.findViewById<ReadView>(R.id.read_view).height &&
             memoDialog(it)?.dialog?.window?.attributes?.height?.let { height ->
                 val screenHeight = context.resources.displayMetrics.heightPixels
                 height in (screenHeight * .4f).toInt()..(screenHeight * .6f).toInt()
-            } == true &&
-            (memoDialog(it)?.view?.findViewById<View>(R.id.memo_scroll)?.height ?: 0) >=
-                (48 * context.resources.displayMetrics.density).toInt() &&
-            memoDialog(it)?.view?.findViewById<TextView>(R.id.memo_content)?.text?.contains("重要内容") == true }
-        onView(withId(R.id.memo_edit_save)).inRoot(isDialog()).check(matches(isCompletelyDisplayed()))
-        onView(withId(R.id.memo_clear_cancel)).inRoot(isDialog()).check(matches(isCompletelyDisplayed()))
+            } == true }
+        compose.onNodeWithText("重要内容").assertIsDisplayed()
+        compose.onNodeWithTag("memo-edit-save").assertIsDisplayed()
+        compose.onNodeWithTag("memo-clear-cancel").assertIsDisplayed()
+        val contentHeight = compose.onNodeWithTag("memo-scroll").fetchSemanticsNode().boundsInRoot.height
+        assertTrue("Landscape keeps readable memo space", contentHeight >= 48 * context.resources.displayMetrics.density)
         screenshot("book-memo-landscape")
-        onView(withId(R.id.memo_clear_cancel)).inRoot(isDialog()).perform(click())
-        onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
-        await { memoDialog(it)?.view?.findViewById<TextView>(R.id.memo_content)?.text?.toString() == context.getString(R.string.book_memo_empty) }
+        compose.onNodeWithTag("memo-clear-cancel").performClick()
+        compose.onNodeWithTag("memo-confirm").performClick()
+        await { memoDialog(it)?.let { dialog -> ViewModelProvider(dialog)[BookMemoViewModel::class.java].state.value.memo?.content == "" } == true }
+        compose.onNodeWithTag("memo-empty").assertTextEquals(context.getString(R.string.book_memo_empty))
         assertEquals("", appDb.bookMemoDao.get(book.bookUrl)!!.content)
     }
 

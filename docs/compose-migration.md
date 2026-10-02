@@ -637,3 +637,7 @@ Replaced the review detail recycler with Compose comment/reply rows, resizing, e
 ### Book source import data and state foundation
 
 Added serialized immutable import entries, an I/O repository, durable request/session storage, and a saved import ViewModel. Preserve JSON/URI/URL/JavaScript input, all source metadata, scoped replacements and invalid-preview blocking, filtered selection, group preferences, original enabled/explore/custom order, and captured reader reimport delivery. Large edited code lives in AtomicFile requests rather than SavedState. Import publication remains noncancelable and completion is cached for recovery. Added 11 parser/pipeline and 15 state JVM tests plus compilation of 7 real Room/JavaScript/URI/disk tests. Legacy host remains for separate Compose integration; Android device execution is unavailable.
+
+### Book memo Compose page and reusable Markdown
+
+Replaced BookMemoDialog with a pure Compose half-height Route/Screen, portrait and landscape actions, editable selection/composition, keyboard focus, explicit discard/clear confirmation, and lifecycle draft checkpoints. Added immutable CommonMark/table projection and reusable selectable Compose Markdown with links, tables, lists, code, headings and lifecycle-owned static/animated images. Reader bottom-dialog visibility uses an idempotent lease. Kept existing real reader rotation/backup tests and added 5 Markdown JVM tests plus compilation of 10 new Compose tests. Removed the exclusive memo XML. Android device execution remains unavailable.
