@@ -49,6 +49,12 @@ ui/
     OpenUrlConfirmRoute.kt
     OpenUrlConfirmScreen.kt    external-link confirmation and source actions
     OpenUrlConfirmViewModel.kt restorable source-action confirmation and completion
+    VerificationCodeActivity.kt transparent request-scoped Compose host
+    VerificationCodeDialog.kt
+    VerificationCodeRoute.kt
+    VerificationCodeScreen.kt  captcha image/input and source actions
+    VerificationCodeViewModel.kt restorable input, confirmation and completion
+    VerificationCodeImageLoader.kt cancellable Glide request + independent preview file
   config/
     CoverRuleConfigDialog.kt   Compose host for cover-rule editing
     CoverRuleRoute.kt
@@ -73,6 +79,7 @@ data/repository/
   AppLogsRepository.kt         application/HTTP log details and export snapshots
   CoverRuleRepository.kt       cover-rule load/save/delete on Dispatchers.IO
   OpenUrlSourceRepository.kt   source disable/delete operations off the UI thread
+  VerificationSourceRepository.kt captcha source actions on Dispatchers.IO
 ```
 
 These are project conventions, not a package hierarchy mandated by Compose. Keep
@@ -140,6 +147,14 @@ External-link confirmation and its transparent Activity now use Compose without
 ViewBinding. The public URI, MIME and source arguments remain compatible. Source
 mutations do not retain a Fragment callback. Recreation keeps one dialog and does
 not finish the host; normal dismissal still finishes it.
+
+Image verification and its transparent Activity now use Compose without XML UI or
+ViewBinding. Input, confirmation and completion state survive recreation; request
+results remain isolated by verificationResultKey. Configuration changes do not
+cancel the request or finish the host. Glide waits and preview-file writes run on
+IO with cancellation cleanup. Each enlarged preview uses an independent cache
+file, so reloading cannot recycle a bitmap held by a restored PhotoDialog. The shared
+PhotoDialog remains a legacy consumer and will be migrated separately.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
