@@ -817,3 +817,7 @@ Replaced favorites with stable-key Compose group tabs, swipe pages, independentl
 ### Book source group management Compose dialog
 
 Replaced book-source group management with the shared stable-key Compose group screen and saved editor state. Its I/O repository performs membership edits in Room transactions, assigns added groups only to ungrouped records and retains complete source metadata and existing DAO check-state behavior. Public dialog callers and sizing remain. Existing shared state/UI tests cover repeat guards and canceled results; added compilation of 2 actual Room metadata/membership cases and 1 real Fragment/editor-recreation test. Shared layouts/menu still have RSS-source and highlight consumers. Full JVM tests and Android test compilation validate integration; Android device execution is unavailable.
+
+### Highlight group management data and state
+
+Added an I/O highlight-group repository retaining whole-label trim matching and NOCASE ordering, distinct from comma-separated source memberships. Saved rename/delete/move stages distinguish actual no-group labels from moving rules to null. Blank rename remains a no-op, failures retain retryable dialogs, and successful delete/move produce consumed refresh receipts. Lifecycle observation can pause/retry without canceling owned mutations; canceled noncooperative results cannot publish stale state. Added 7 JVM state tests and compilation of 3 actual Room full-metadata/move/delete/order tests. Legacy group host remains for separate Compose integration; Android device execution is unavailable.
