@@ -673,3 +673,7 @@ Added an I/O Room repository and saved source picker state. Enabled source searc
 ### Book source picker Compose page
 
 Replaced the full-screen picker with a stable-URL Compose list, live enabled-source search, name/group display, progress/retry states and a saved delay editor. Resumed selection consumes the complete source before the parent-first callback; finished restoration only closes. Native and Compose back preserve pending-write guards. Added compilation of 5 actual Compose/Fragment tests, including small-window scrolling, delay persistence, full source metadata and recreation. Removed the exclusive picker layout/menu; common text items remain for other consumers. Android device execution is unavailable.
+
+### Curl conversion Compose page
+
+Replaced the converter with Compose input/output, direction controls, conversion/copy/insert actions, selection/composition and a scrollable compact layout. Conversion ignores late results after edits, output remains selectable and read-only, and native insertion retains the parent-first asynchronous result contract. Captured side effects use disk payloads and resumed consumed delivery; restored delivered insertions are not automatically repeated. Added 10 JVM state tests plus compilation of 8 actual Compose/Fragment tests. Removed the exclusive converter layout/menu; Android device execution is unavailable.
