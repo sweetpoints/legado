@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.v2.runAndroidComposeUiTest
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -21,7 +23,6 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.book.toc.rule.TxtTocRuleAdapter
 import io.legado.app.ui.dict.rule.DictRuleActivity
-import io.legado.app.ui.dict.rule.DictRuleAdapter
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleAdapter
 import io.legado.app.ui.highlight.HighlightRuleActivity
@@ -140,6 +141,7 @@ class RuleSelectionShareTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun dictionarySelectionSharesTheCompleteUrlAndDisplayRule() {
         val id = UUID.randomUUID().toString()
         val rule = DictRule(
@@ -150,14 +152,44 @@ class RuleSelectionShareTest {
         val other = DictRule(name = "Unselected dictionary $id", urlRule = "https://example.invalid/other")
         appDb.dictRuleDao.insert(rule, other)
         try {
-            val json = shareSelection(DictRuleActivity::class.java, R.menu.dict_rule_sel) { activity ->
-                val adapter = activity.findViewById<RecyclerView>(R.id.recycler_view).adapter as DictRuleAdapter
-                val index = adapter.getItems().indexOfFirst { it.name == rule.name }
-                if (index < 0 || adapter.getItems().none { it.name == other.name }) false else {
-                    assertTrue(adapter.dragSelectCallback.onSelectChange(index, true))
-                    assertEquals(listOf(rule.name), adapter.selection.map { it.name })
-                    true
+            val chooser = AtomicReference<Intent?>()
+            val monitor = object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.action != Intent.ACTION_CHOOSER) return null
+                    chooser.set(intent)
+                    return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
                 }
+            }
+            instrumentation.addMonitor(monitor)
+            var sharedUri: Uri? = null
+            var json = ""
+            try {
+                runAndroidComposeUiTest<DictRuleActivity> {
+                    waitUntil(timeoutMillis = 15000) {
+                        val rows = activity?.viewModel?.state?.value?.rules.orEmpty()
+                        rows.any { it.name == rule.name } && rows.any { it.name == other.name }
+                    }
+                    onNodeWithTag("dictionary-selection-menu").assertIsNotEnabled()
+                    assertNull("Empty selection must not launch a share", chooser.get())
+                    onNodeWithTag("dictionary-list").performScrollToNode(hasTestTag("dictionary-select-${rule.name}"))
+                    onNodeWithTag("dictionary-select-${rule.name}").performClick().assertIsOn()
+                    onNodeWithTag("dictionary-selection-menu").performClick()
+                    onNodeWithTag("dictionary-share").performClick()
+                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
+                    @Suppress("DEPRECATION")
+                    val intent = checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                    assertEquals(Intent.ACTION_SEND, intent.action)
+                    assertEquals("text/*", intent.type)
+                    assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                    @Suppress("DEPRECATION")
+                    val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+                    sharedUri = uri
+                    assertEquals("content", uri.scheme)
+                    json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                }
+            } finally {
+                instrumentation.removeMonitor(monitor)
+                sharedUri?.lastPathSegment?.let { File(context.cacheDir, it).delete() }
             }
             val restored = GSON.fromJsonArray<DictRule>(json).getOrThrow().single()
             assertEquals(GSON.toJson(rule), GSON.toJson(restored))

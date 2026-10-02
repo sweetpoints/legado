@@ -142,12 +142,6 @@ class SelectActionBarPopupActionMigrationTest {
                 "@+id/menu_export_selection",
                 "@+id/menu_share_source"
             ),
-            "dict_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            ),
             "replace_rule_sel.xml" to listOf(
                 "@+id/menu_enable_selection",
                 "@+id/menu_disable_selection",

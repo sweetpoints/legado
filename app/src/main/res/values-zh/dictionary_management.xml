@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dictionary_move_up">规则上移</string>
+    <string name="dictionary_move_down">规则下移</string>
+</resources>

@@ -474,3 +474,10 @@ group retains independent SavedState and scroll state, while only the active pag
 collects book updates and runs its age ticker in RESUMED. Group identity survives
 reordering, header queries are skipped when disabled, and existing main-menu APIs
 remain compatible with style 2. The exclusive style-1 parent layout is removed.
+
+Dictionary-rule management now uses Compose lists, menus and modals with immutable
+Room snapshots, stable selection and lifecycle-consumed sharing/import effects.
+Range selection preserves ToggleAndReverse semantics. Drag cancellation, pause and
+restoration revert unfinished selection/order changes; only completed reorders
+write atomically. The old adapters/ViewModel and exclusive page/item/menu XML are
+removed. Imports, export, complete JSON sharing and online history remain available.
