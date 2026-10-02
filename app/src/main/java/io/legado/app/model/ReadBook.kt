@@ -618,6 +618,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun updateHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.update(highlight)
+        applyUpdatedHighlight(highlight)
+    }
+
+    /** Refresh the UI after the annotation has been persisted. Call on the main thread. */
+    internal fun applyUpdatedHighlight(highlight: BookHighlight) {
         if (!highlight.isForBook(book)) return
         highlights = highlights.map { if (it.time == highlight.time) highlight else it }
         highlightsVersion++
@@ -627,6 +632,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun removeHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.delete(highlight)
+        applyRemovedHighlight(highlight)
+    }
+
+    /** Refresh the UI after the annotation has been deleted. Call on the main thread. */
+    internal fun applyRemovedHighlight(highlight: BookHighlight) {
         if (!highlight.isForBook(book)) return
         highlights = highlights.filter { it.time != highlight.time }
         highlightsVersion++

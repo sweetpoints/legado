@@ -331,6 +331,12 @@ and charset suggestions, WebView selection and all request/script fields. Existi
 AnalyzeUrl setters retain JSON and retry/DNS parsing behavior. Confirm returns once;
 cancel/backdrop returns no result. The exclusive URL-option layout is removed.
 
+Highlight-note editing now uses Compose with restorable text/note drafts and explicit
+save/delete/cancel actions. Editing does not mutate the live annotation before save.
+Database writes run on IO and refresh reader state on Main; failures retain the draft
+for retry. Existing annotation identity/style are preserved and completed restores
+close without replaying persistence. The exclusive layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
