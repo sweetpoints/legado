@@ -3,25 +3,16 @@ package io.legado.app.ui.book.read.config
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
+import io.legado.app.data.preferences.ReadStyleSlider
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class ReadStyleLineSpacingTest {
 
     @Test
-    fun `seek bar exposes the requested range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_read_book_style.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val lineSpacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_line_size" }
-
-        assertEquals("50", lineSpacing.getAttribute("app:max"))
+    fun `Compose slider exposes the requested range`() {
+        assertEquals(50, ReadStyleSlider.LineSpacing.maximum)
+        assertEquals("-2.0", ReadStyleSlider.LineSpacing.display(0))
+        assertEquals("3.0", ReadStyleSlider.LineSpacing.display(ReadStyleSlider.LineSpacing.maximum))
     }
 
     @Test

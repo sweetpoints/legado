@@ -81,6 +81,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import org.junit.Rule
 import org.junit.After
@@ -1415,7 +1416,7 @@ class TitleFontWeightRenderingTest {
         ReadTipConfig.tipHeaderRightTemplate = ReaderInfoTemplate.BATTERY
         launchReader()
         scenario!!.onActivity { ReadStyleDialog().showNow(it.supportFragmentManager, "battery-style") }
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo(), click())
+        compose.onNodeWithTag("read-style-tip").performScrollTo().performClick()
         compose.onNodeWithTag("tip-template-HeaderLeft").performScrollTo().performClick()
         compose.onNodeWithTag("tip-template-editor").performTextReplacement("")
         compose.onNodeWithTag("tip-placeholder-${ReaderInfoTemplate.BATTERY_NUMBER_ICON}").performScrollTo().performClick()
@@ -1487,11 +1488,9 @@ class TitleFontWeightRenderingTest {
         scenario!!.onActivity {
             ReadStyleDialog().showNow(it.supportFragmentManager, "title-weight-style")
         }
-        // Reveal the item within its horizontal scroller without starting Android's edge-back gesture.
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo())
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).check(matches(isCompletelyDisplayed()))
+        compose.onNodeWithTag("read-style-tip").performScrollTo().assertIsDisplayed()
         screenshot("title-weight-information-entry")
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("read-style-tip").performClick()
         compose.onNodeWithTag("tip-title-weight").performScrollTo().assertExists()
         val weights = context.resources.getStringArray(R.array.text_font_weight)
         chooseTitleWeight(weights[0], 0, 400)
@@ -1512,9 +1511,7 @@ class TitleFontWeightRenderingTest {
             assertFontWeight(ChapterProvider.contentPaint.typeface, 700)
             ReadStyleDialog().showNow(it.supportFragmentManager, "title-weight-style")
         }
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo())
-        onView(withId(R.id.tv_tip)).inRoot(isDialog())
-            .check(matches(isCompletelyDisplayed())).perform(click())
+        compose.onNodeWithTag("read-style-tip").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithTag("tip-title-weight").performScrollTo().assertTextContains(weights[0])
         screenshot("title-weight-settings-restored")
         dismissSettings()
@@ -1558,7 +1555,8 @@ class TitleFontWeightRenderingTest {
 
     private fun dismissSettings() {
         androidx.test.espresso.Espresso.pressBack()
-        onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(pressBack())
+        compose.onNodeWithTag("read-style-tip").assertExists()
+        androidx.test.espresso.Espresso.pressBack()
     }
 
     private fun assertFontWeight(typeface: Typeface, weight: Int) {
