@@ -6,7 +6,7 @@ on:
       - '.github/workflows/pdf-runtime-test.yml'
       - '.github/scripts/pdf-runtime-test.init.gradle'
       - '.github/scripts/run-pdf-runtime.sh'
-      - 'app/build.gradle'
+      - 'app/build.gradle.kts'
       - 'app/*proguard*'
       - 'gradle/libs.versions.toml'
       - 'app/src/main/java/io/legado/app/model/localBook/Pdf*'

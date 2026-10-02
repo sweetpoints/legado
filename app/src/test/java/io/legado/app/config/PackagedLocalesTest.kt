@@ -9,13 +9,14 @@ class PackagedLocalesTest {
     @Test
     fun `packaged locales cover app and required dependency translations`() {
         val root = repositoryRoot()
-        val buildFile = File(root, "app/build.gradle").readText()
-        val marker = "resourceConfigurations += ["
+        val buildFile = File(root, "app/build.gradle.kts").readText()
+        // Kotlin DSL 形式：resourceConfigurations.addAll(\n listOf(\n "en", … ) )
+        val marker = "resourceConfigurations.addAll("
         val blockStart = buildFile.indexOf(marker)
         require(blockStart >= 0) { "Missing resourceConfigurations block" }
-        val blockEnd = buildFile.indexOf(']', blockStart)
+        val blockEnd = buildFile.indexOf(')', blockStart)
         require(blockEnd > blockStart) { "Unclosed resourceConfigurations block" }
-        val configuredLocales = Regex("'([^']+)'")
+        val configuredLocales = Regex("\"([^\"]+)\"")
             .findAll(buildFile.substring(blockStart, blockEnd))
             .map { it.groupValues[1] }
             .toSet()
@@ -39,13 +40,14 @@ class PackagedLocalesTest {
 
     @Test
     fun `runtime orphan exclusions stay narrow`() {
-        val buildFile = File(repositoryRoot(), "app/build.gradle").readText()
-        val marker = "resources.excludes.addAll(["
+        val buildFile = File(repositoryRoot(), "app/build.gradle.kts").readText()
+        // Kotlin DSL 形式：resources.excludes.addAll(\n listOf(\n "…", … ) )
+        val marker = "resources.excludes.addAll("
         val blockStart = buildFile.indexOf(marker)
         require(blockStart >= 0) { "Missing resource exclusion block" }
-        val blockEnd = buildFile.indexOf(']', blockStart)
+        val blockEnd = buildFile.indexOf(')', blockStart)
         require(blockEnd > blockStart) { "Unclosed resource exclusion block" }
-        val configuredExclusions = Regex("'([^']+)'")
+        val configuredExclusions = Regex("\"([^\"]+)\"")
             .findAll(buildFile.substring(blockStart, blockEnd))
             .map { it.groupValues[1] }
             .toSet()

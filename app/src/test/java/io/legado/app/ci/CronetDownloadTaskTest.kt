@@ -8,7 +8,8 @@ import java.io.File
 class CronetDownloadTaskTest {
 
     private val downloadTask by lazy {
-        readProjectFile("app/download.gradle").replace("\r\n", "\n")
+        // download.gradle 已并入 app/build.gradle.kts（Kotlin DSL 迁移）
+        readProjectFile("app/build.gradle.kts").replace("\r\n", "\n")
     }
 
     @Test
@@ -16,8 +17,8 @@ class CronetDownloadTaskTest {
         val safeFileName = "\"${'$'}{abi}.so\""
         val ambiguousFileName = "\"${'$'}abi.so\""
 
-        assertTrue(downloadTask.contains("new File(soPath, $safeFileName)"))
-        assertFalse(downloadTask.contains("new File(soPath, $ambiguousFileName)"))
+        assertTrue(downloadTask.contains("File(cronetSoPath, $safeFileName)"))
+        assertFalse(downloadTask.contains("File(cronetSoPath, $ambiguousFileName)"))
     }
 
     @Test

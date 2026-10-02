@@ -2,13 +2,13 @@
 
 kotlin = "2.4.10"
 ksp = "2.3.11"
-# AGP 9.x：Compose 1.12.x（BOM 2026.08.00+）要求 AGP >= 9.1.0。
-# 选 9.1.1 的两个约束：① 它的最低 Gradle 要求与 wrapper 的 9.3.1 匹配（9.3.3 要求 Gradle >= 9.5.0）；
-# ② Kotlin 2.4.10 官方支持的 AGP 上限是 9.1.0。
+# AGP 9.x：Compose 1.12.x（BOM 2026.08.00+）要求 AGP >= 9.1.0 且 compileSdk >= 37。
+# 注意：Kotlin 2.4.10 官方支持的 AGP 上限是 9.1.0，当前 9.4.1 已超出该矩阵（可正常构建，但不在官方支持区间内）。
 agp = "9.4.1"
-# Compose BOM 统一管理 androidx.compose.* 版本；与 Kotlin 2.4.10 在版本目录中解耦
-# 注意：BOM 2026.08.00+ 锁定 Compose 1.12.x，要求 AGP >= 9.1.0 且 compileSdk >= 37。
+# Compose BOM 统一管理 androidx.compose.* 版本
 composeBom = "2026.09.00"
+# compileSdk 统一在此声明，替代原先根 build.gradle 的 ext.compile_sdk_version
+compileSdk = "37"
 appcompat = "1.7.1"
 colorpicker = "1.1.0"
 constraintlayout = "2.2.1"

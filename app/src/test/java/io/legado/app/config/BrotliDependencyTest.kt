@@ -11,7 +11,7 @@ class BrotliDependencyTest {
     fun `brotli uses the direct decoder without the okhttp wrapper`() {
         val root = repositoryRoot()
         val versionCatalog = File(root, "gradle/libs.versions.toml").readText()
-        val appBuild = File(root, "app/build.gradle").readText()
+        val appBuild = File(root, "app/build.gradle.kts").readText()
 
         assertTrue(versionCatalog.contains("brotli = \"0.1.2\""))
         assertTrue(

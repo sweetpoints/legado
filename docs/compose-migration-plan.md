@@ -20,7 +20,7 @@
 
 1. **Compose 接入已完成并验证**：Phase 0 脚手架（编译链、依赖、`BaseComposeActivity`、主题桥）+ About 页完整迁移，`:app:compileAppDebugKotlin`、`:app:testAppDebugUnitTest`、`:app:assembleAppDebug`、`:app:assembleAppRelease` 全部通过。详见第 5 节。
 2. **渐进式迁移是低风险、可随时回退的**：老 View 页面完全不受影响，新页面可以纯 Compose，两者在同一界面内共存。
-3. **为解锁 Compose 1.12.x 同步完成了 AGP 大版本升级**（AGP 8.13.2 → 9.1.1、Gradle 8.14.4 → 9.3.1、compileSdk 36 → 37）。这是独立的一组改动，可单独回退，详见 5.9 节。
+3. **为解锁 Compose 1.12.x 同步完成了 AGP 大版本升级**（AGP 8.13.2 → 9.4.1、Gradle 8.14.4 → 9.6.0、compileSdk 36 → 37）。这是独立的一组改动，可单独回退，详见 5.9 节。
 4. **升级中发现并修复了一处 R8 回归**（AGP 9 把「缺失类」从警告升为错误），详见 5.12 节。
 5. **发现一个既有的 debug 打包阻塞点（已解决）**：`:app:assembleAppDebug` 在**未改动的 HEAD 上也会失败**——第三方 Rhino fork 用了 `MethodHandle`/`VarHandle`（要求 minSdk ≥ 26，项目原为 23）。已按决策把 **minSdk 提升到 26**，`assembleAppDebug` 现已通过，详见 5.11 节。
 6. **About 页已完成全量 Compose 化**（偏好列表也用 Compose 重写，`AboutFragment` 与 `R.xml.about` 已删除），可作为 `ui/config` 等设置类页面的样板，详见 5.4 节。
@@ -56,7 +56,7 @@
 
 | 能力 | 依赖 | 位置 |
 | --- | --- | --- |
-| 规则解析 | jsoup 1.23.2、JsoupXpath 2.5.3、json-path 3.0.0 | [app/build.gradle](../app/build.gradle) |
+| 规则解析 | jsoup 1.23.2、JsoupXpath 2.5.3、json-path 3.0.0 | [app/build.gradle.kts](../app/build.gradle.kts) |
 | JS 书源 | Rhino（htmlunit fork `org.htmlunit:htmlunit-core-js:5.3.0-legado.4`） | `modules:rhino`（包名 `com.script`） |
 | 数据库 | Room 2.8.4 + KSP | `data/` |
 | 中文简繁转换 | `com.github.liuyueyi.quick-chinese-transfer` 0.2.17 | `utils/ChineseUtils.kt` |
@@ -184,7 +184,7 @@ Flutter 侧要重建的东西，逐项都对应项目的核心能力：
 | 2.4.20 | 7.6.3–9.7.0 | 8.5.2–**9.3.1** | 26.4 |
 | 2.4.0–2.4.10（= 本仓库） | 7.6.3–9.5.0 | 8.5.2–**9.1.0** | 26.4 |
 
-⚠️ **冲突**：Compose 1.12.x 要求 **AGP ≥ 9.1.0**，而 Kotlin **2.4.10** 官方支持的 AGP 上限正好是 **9.1.0**（零余量）。本次为解锁 Compose 1.12.x 把 AGP 升到 9.1.1，已略微越过 2.4.10 的官方矩阵。**一旦真正引入 KMP，应把 Kotlin 一并升到 2.4.20**（支持 AGP 至 9.3.1、Gradle 至 9.7.0），届时 AGP 可继续上探。
+⚠️ **冲突**：Compose 1.12.x 要求 **AGP ≥ 9.1.0**，而 Kotlin **2.4.10** 官方支持的 AGP 上限正好是 **9.1.0**（零余量）。本次为解锁 Compose 1.12.x 把 AGP 升到了 9.4.1，**已明显超出** 2.4.10 的官方矩阵（Gradle 9.6.0 同样超过了 9.5.0 的上限）。**一旦真正引入 KMP，应把 Kotlin 一并升到 2.4.20**（支持 AGP 至 9.3.1、Gradle 至 9.7.0），届时 AGP 可继续上探。
 
 KMP 官方还明确劝退"同一 Gradle 工程声明多个相似 target"，建议按 module 拆分——这与第 8 节的 `core` / `platform` 模块化思路一致。
 
@@ -342,7 +342,7 @@ java.get('url');  java.ajax(url);  java.md5Encode(x);  java.getElement(path);
 | 文件 | 改动 |
 | --- | --- |
 | [gradle/libs.versions.toml](../gradle/libs.versions.toml) | 新增 `composeBom = "2026.09.00"`；新增 compose 依赖别名（bom/ui/graphics/foundation/material3/tooling/tooling-preview/runtime-livedata/ui-viewbinding）与 `lifecycle-runtime-compose`；新增插件别名 `kotlin-compose = org.jetbrains.kotlin.plugin.compose`（版本跟随 `kotlin`） |
-| [app/build.gradle](../app/build.gradle) | 应用 `libs.plugins.kotlin.compose`；`buildFeatures` 增加 `compose = true`（与 `viewBinding` 并存）；新增 compose 依赖块；`testOptions.unitTests.returnDefaultValues = true`（修既有单测失败）；`minSdk 23 → 26`（见 5.11） |
+| [app/build.gradle.kts](../app/build.gradle.kts) | 应用 `libs.plugins.kotlin.compose`；`buildFeatures` 增加 `compose = true`（与 `viewBinding` 并存）；新增 compose 依赖块；`testOptions.unitTests.returnDefaultValues = true`（修既有单测失败）；`minSdk 23 → 26`（见 5.11） |
 | [BaseComposeActivity.kt](../app/src/main/java/io/legado/app/base/BaseComposeActivity.kt) | **新增**。Compose 页面基类 |
 | [LegadoComposeTheme.kt](../app/src/main/java/io/legado/app/lib/theme/compose/LegadoComposeTheme.kt) | **新增**。旧主题体系 → Compose 的主题桥 |
 | [AboutActivity.kt](../app/src/main/java/io/legado/app/ui/about/AboutActivity.kt) | 改为继承 `BaseComposeActivity`；接收从 Fragment 迁来的业务逻辑（Markdown 对话框、日志/堆转储导出） |
@@ -350,7 +350,7 @@ java.get('url');  java.ajax(url);  java.md5Encode(x);  java.getElement(path);
 | [CheckAppUpdate.kt](../app/src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt) | 新增 `AppCompatActivity.checkAppUpdate` 重载（Fragment 版保留不动） |
 | ~~`AboutFragment.kt`~~ / ~~`res/xml/about.xml`~~ | **已删除**（偏好列表改为 Compose，见 5.4） |
 | [UpdateDialogLifecycleTest.kt](../app/src/test/java/io/legado/app/ui/about/UpdateDialogLifecycleTest.kt) | 该测试断言源码文本，更新其检查路径 `AboutFragment.kt` → `AboutActivity.kt` |
-| [settings.gradle](../settings.gradle) | 移除已过时的 R8 版本钉制（见 5.9） |
+| [settings.gradle.kts](../settings.gradle.kts) | 移除已过时的 R8 版本钉制（见 5.9） |
 
 > 上表只列 Compose 接入相关改动；为解锁最新 Compose 而做的 **AGP / Gradle / compileSdk 升级**是独立的一组改动，见 **5.9 节**，可单独回退。
 
@@ -455,6 +455,13 @@ abstract class ComposeDialogFragment : BaseDialogFragment(R.layout.dialog_compos
 | --- | --- | --- |
 | `UpdateDialogLifecycleTest` | `ui/about/AboutFragment.kt` 含 `"check_update" -> checkAppUpdate()` | About 迁移时需改路径（已处理） |
 | `FontSelectionStyleTest` | `FontAdapter.kt` 含 `rootCard.background = GradientDrawable()...`、`tvFont.typeface = kotlin.runCatching`；`item_font.xml` 含 `@+id/root_card`；`FontSelectDialog.kt` 含 `adapter.setItems(it)`、`private fun mergeFontItems` 等 | **迁移 FontSelectDialog 需重写其中 4 个用例** |
+| `CronetDownloadTaskTest` | `app/download.gradle` 含 `new File(soPath, "${abi}.so")` | Groovy→Kotlin DSL 后需改文件名**与断言串**（见 5.13） |
+| `BrotliDependencyTest` | `app/build.gradle` 含 `implementation(libs.brotli.dec)` | 同上 |
+| `PackagedLocalesTest`（2 个用例） | `app/build.gradle` 含 `resourceConfigurations += [`、`resources.excludes.addAll([` 与**单引号**字符串列表 | 断言的是 Groovy 语法，Kotlin 化后标记串、括号、引号全要改 |
+| `McpServiceContractTest` | `app/build.gradle` 含 `module: 'kotlin-reflect'` | 同上，Kotlin 写法为 `module = "kotlin-reflect"` |
+
+> 这 5 处是在 Kotlin DSL 迁移时**一次跑全量单测才暴露**的——它们全都在读 `app/build.gradle`，文件一改名就集体失败。
+> 教训：这类"契约测试"的受影响面，只有跑全量测试才看得见；改文件名/语法前先 `grep` 一遍测试目录。
 
 **排期含义**：迁移一个界面时，除了界面代码本身，还要检查并重写这类"设计契约测试"。建议在动每个页面之前先 `grep` 它的文件名，成本可提前量化。
 
@@ -467,14 +474,17 @@ abstract class ComposeDialogFragment : BaseDialogFragment(R.layout.dialog_compos
 
 **最小投入最大收益的做法**：完成 Phase 2 的非阅读器部分后，规定"所有新页面一律用 Compose"，阅读器永久保持 View 实现。
 
-### 5.9 构建工具链升级（AGP 8.13.2 → 9.1.1）
+### 5.9 构建工具链升级（AGP 8.13.2 → 9.4.1）
 
 本次同时完成了 AGP 大版本升级，目的是解锁最新的 Compose BOM。
 
-| 项 | 升级前 | 升级后 | 原因 |
+> 版本演进说明：升级过程先落在 **AGP 9.1.1 + Gradle 9.3.1**（当时 Gradle 缓存里只有 9.3.1），
+> 随后团队又自行升到 **AGP 9.4.1 + Gradle 9.6.0**。下表与全文以**当前实际版本**为准。
+
+| 项 | 升级前 | 现在 | 说明 |
 | --- | --- | --- | --- |
-| AGP | 8.13.2 | **9.1.1** | Compose 1.12.x 要求 AGP ≥ 9.1.0；9.3.3 要求 Gradle ≥ 9.5.0，与 Gradle 9.3.1 不匹配 |
-| Gradle | 8.14.4 | **9.3.1** | AGP 9 要求 Gradle 9；9.3.1 与 AGP 9.1.x 匹配，且仍是 Kotlin 2.4.10 支持范围内（≤9.5.0） |
+| AGP | 8.13.2 | **9.4.1** | Compose 1.12.x 要求 AGP ≥ 9.1.0。⚠️ Kotlin 2.4.10 官方支持的 AGP 上限是 9.1.0，9.4.1 已超出该矩阵（**能正常构建**，但不在官方支持区间内；若要 KMP 应把 Kotlin 升到 2.4.20） |
+| Gradle | 8.14.4 | **9.6.0** | AGP 9 要求 Gradle 9。⚠️ 同样超出 Kotlin 2.4.10 官方支持的 Gradle 上限（9.5.0） |
 | compileSdk | 36 | **37** | Compose 1.12.x 要求 compileSdk ≥ 37（SDK 37 采用次版本号，`37` 即 `37.0`） |
 | Compose BOM | — | **2026.09.00**（Compose 1.12.1 / Material3 1.4.0） | 最新稳定 |
 
@@ -497,14 +507,14 @@ Failed to apply plugin 'org.jetbrains.kotlin.android'.
 
 **本仓库实际改动**：
 
-- [app/build.gradle](../app/build.gradle)、[build.gradle](../build.gradle)、[modules/book/build.gradle](../modules/book/build.gradle)、[modules/rhino/build.gradle](../modules/rhino/build.gradle)：移除 `kotlin.android` 插件
-- [gradle/libs.versions.toml](../gradle/libs.versions.toml)：删除 `kotlin-android` 插件条目，`agp` 升到 9.1.1，`composeBom` 设为 2026.09.00
-- [gradle/wrapper/gradle-wrapper.properties](../gradle/wrapper/gradle-wrapper.properties)：`gradle-8.14.4` → `gradle-9.3.1`
-- [build.gradle](../build.gradle)：`compile_sdk_version` 36 → 37
+- [app/build.gradle.kts](../app/build.gradle.kts)、[build.gradle.kts](../build.gradle.kts)、[modules/book/build.gradle.kts](../modules/book/build.gradle.kts)、[modules/rhino/build.gradle.kts](../modules/rhino/build.gradle.kts)：移除 `kotlin.android` 插件
+- [gradle/libs.versions.toml](../gradle/libs.versions.toml)：删除 `kotlin-android` 插件条目，`agp` 升到 9.4.1，`composeBom` 设为 2026.09.00
+- [gradle/wrapper/gradle-wrapper.properties](../gradle/wrapper/gradle-wrapper.properties)：`gradle-8.14.4` → `gradle-9.6.0`
+- [build.gradle.kts](../build.gradle.kts)：`compile_sdk_version` 36 → 37
 - [gradle.properties](../gradle.properties)：删除 5 个已移除的 `android.defaults.buildfeatures.*`；`org.gradle.unsafe.configuration-cache` 更名为 Gradle 9 的 `org.gradle.configuration-cache`
-- [settings.gradle](../settings.gradle)：**移除 R8 版本钉制**
+- [settings.gradle.kts](../settings.gradle.kts)：**移除 R8 版本钉制**
 
-**关于 R8 钉制**：`settings.gradle` 原先通过 `pluginManagement.buildscript` 钉了 `com.android.tools:r8:9.1.29` 并加了 `r8-releases` 仓库，注释写明「Kotlin 2.4 metadata requires R8 9.1.29 or newer」——那是因为 AGP 8.13.2 自带的 R8 更旧。AGP 9.1.1 自带 **R8 9.1.31**（≥ 9.1.29），该钉制于是变成一次**降级**，并触发警告：
+**关于 R8 钉制**：`settings.gradle.kts` 原先通过 `pluginManagement.buildscript` 钉了 `com.android.tools:r8:9.1.29` 并加了 `r8-releases` 仓库，注释写明「Kotlin 2.4 metadata requires R8 9.1.29 or newer」——那是因为 AGP 8.13.2 自带的 R8 更旧。AGP 9 自带的 R8 已满足该要求，该钉制于是变成一次**降级**，并触发警告：
 
 ```
 WARNING: Your project includes version 9.1.29 of R8, while Android Gradle Plugin was shipped with 9.1.31.
@@ -516,7 +526,7 @@ WARNING: Your project includes version 9.1.29 of R8, while Android Gradle Plugin
 
 **回退方案**：若必须暂时保留 `kotlin-android` 插件结构，可在 `gradle.properties` 设 `android.builtInKotlin=false` **并** `android.newDsl=false`（后者必需，因为 `kotlin-android` 与新 DSL 不兼容）。注意这是**临时**手段——AGP 10.0 将不再支持关闭内置 Kotlin。
 
-**⚠️ 与未来 KMP 的冲突**：Kotlin 2.4.10 官方支持的 AGP 上限是 **9.1.0**，本次为解锁 Compose 1.12.x 升到 **9.1.1**，已略微越界。引入 KMP 时应把 **Kotlin 升到 2.4.20**（支持 AGP 至 9.3.1、Gradle 至 9.7.0）。详见第 4.2 节。
+**⚠️ 与未来 KMP 的冲突**：Kotlin 2.4.10 官方支持的 AGP 上限是 **9.1.0**，本次为解锁 Compose 1.12.x 升到了 **9.4.1**，已明显越界。引入 KMP 时应把 **Kotlin 升到 2.4.20**（支持 AGP 至 9.3.1、Gradle 至 9.7.0）。详见第 4.2 节。
 
 ### 5.10 如何复现本次验证
 
@@ -541,7 +551,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 
 | 任务 | 结果 | 说明 |
 | --- | --- | --- |
-| `:app:compileAppDebugKotlin` | ✅ 通过 | Compose 1.12.1 + AGP 9.1.1 + 内置 Kotlin |
+| `:app:compileAppDebugKotlin` | ✅ 通过 | Compose 1.12.1 + AGP 9.4.1 + 内置 Kotlin |
 | `:app:assembleAppRelease` | ✅ 通过 | 产出 27 MB APK（4 个 dex，含 Compose 运行时类与原生库） |
 | `:app:assembleAppDebug` | ❌ 失败 | **仓库既有问题**（5.11 节），与本次改动无关 |
 
@@ -632,7 +642,7 @@ mvn --batch-mode -T 1 -U clean install -Dmaven.test.skip=true -Dgpg.skip=true \
 
 这是本次升级中**唯一一处因升级而破坏既有构建**的地方，必须记录：
 
-| 构建 | 未改动的 HEAD（AGP 8.13.2） | 升级后（AGP 9.1.1） |
+| 构建 | 未改动的 HEAD（AGP 8.13.2） | 升级后（AGP 9.4.1） |
 | --- | --- | --- |
 | `:app:assembleAppDebug` | ❌ D8 MethodHandle（既有问题） | ❌ 同样错误 → **非升级引起** |
 | `:app:assembleAppRelease` | ✅ **成功** | ❌ `minifyAppReleaseWithR8` 失败 → **升级引起的回归** |
@@ -646,7 +656,7 @@ Missing class kotlin.reflect.full.KClasses   (referenced from: io.ktor.server.en
 Missing class kotlin.reflect.jvm.ReflectJvmMapping (referenced from: io.ktor.server.engine.ServerHostUtilsKt...)
 ```
 
-**背景**：本仓库刻意排除了 `kotlin-reflect`（[app/build.gradle](../app/build.gradle) 中 `//implementation(libs.kotlin.reflect)` 被注释，且对三个依赖做了 `exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect'`），但 Ktor server 的开发模式自动重载 / 模块反射加载会引用这些类。这些路径在 release 运行时不会执行。
+**背景**：本仓库刻意排除了 `kotlin-reflect`（[app/build.gradle.kts](../app/build.gradle.kts) 中 `//implementation(libs.kotlin.reflect)` 被注释，且对三个依赖做了 `exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect'`），但 Ktor server 的开发模式自动重载 / 模块反射加载会引用这些类。这些路径在 release 运行时不会执行。
 
 **修复**：按 R8 生成的 `app/build/outputs/mapping/appRelease/missing_rules.txt`，在 [app/proguard-rules.pro](../app/proguard-rules.pro) 中补上：
 
@@ -657,6 +667,73 @@ Missing class kotlin.reflect.jvm.ReflectJvmMapping (referenced from: io.ktor.ser
 ```
 
 **给后续升级者的提醒**：升 AGP 大版本后，除了看编译是否通过，**必须**跑一次 `assembleRelease`——R8 的行为变化（缺失类、keep 规则、优化策略）只在 release 路径暴露，debug 编译完全测不出来。
+
+### 5.13 Gradle 脚本迁移到 Kotlin DSL（`.kts`）
+
+7 个构建脚本已全部从 Groovy 转为 Kotlin DSL：
+
+| 原文件 | 现在 |
+| --- | --- |
+| `settings.gradle` | `settings.gradle.kts` |
+| `build.gradle` | `build.gradle.kts` |
+| `app/build.gradle` | `app/build.gradle.kts` |
+| `modules/book/build.gradle` | `modules/book/build.gradle.kts` |
+| `modules/rhino/build.gradle` | `modules/rhino/build.gradle.kts` |
+| `app/download.gradle` | **已并入** `app/build.gradle.kts` |
+| `app/cronet-loader.gradle` | **已并入** `app/build.gradle.kts` |
+
+**为什么后两个被"并入"而不是重命名**：Kotlin DSL 下这两条路都走不通——
+
+1. `apply(from = "x.gradle.kts")` 的脚本**编译期看不到** `app` 的 `plugins {}` 引入的插件类，因此 `Download` 类型无法解析（Groovy 靠动态分发侥幸能用，Kotlin 是静态编译，直接 `Unresolved reference 'Download'`）。
+2. 在这类脚本里写 `buildscript { classpath(...) }` 虽然能补上 classpath，但 `buildscript` 本身不该再新增（本项目决定不使用），且会与版本目录形成双重版本来源。
+
+并入主脚本后，`Download` 来自 `plugins { alias(libs.plugins.download) }`（版本仍由版本目录管理）；
+ASM（`org.objectweb.asm`）则来自 AGP 自身的传递依赖，无需再声明。
+
+**Kotlin DSL 迁移中踩到的坑（都靠编译期报错快速定位）**：
+
+| # | 现象 | 原因与处理 |
+| --- | --- | --- |
+| 1 | `SimpleDateFormat(pattern, TimeZone)` 无匹配构造 | Groovy 的 `Date.format(p, tz)` 是扩展方法；Kotlin 需 `SimpleDateFormat(pattern, Locale)` 再 `timeZone = ...` |
+| 2 | `coreLibraryDesugaringEnabled` 未解析 | Kotlin 属性名是 `isCoreLibraryDesugaringEnabled`（Java 的 `isX/setX` 命名） |
+| 3 | `returnDefaultValues` 变为 `isReturnDefaultValues` | 同上：Groovy 与 Kotlin DSL 的属性名规则不同 |
+| 4 | 库模块的 `targetSdk` 未解析 | AGP 9 的 Kotlin DSL 已不向库模块暴露 `targetSdk`（本就应由 app 决定），已删除 |
+| 5 | `resourceConfigurations`、`assets.srcDirs()` 弃用警告 | AGP 9 建议改用 `androidResources.localeFilters` / `assets.directories`；**当前只是警告，不阻塞**，留待后续 |
+| 6 | `android { kotlin { jvmToolchain { … } } }` | AGP 9 确实在 `android` 扩展内提供了 `kotlin` 块，可原样迁移（Groovy 当年能写在这里是靠 owner 回退，Kotlin DSL 没有该回退，但此处不需要） |
+| 7 | Groovy 的 `assert` 必须换成 `check()` | **Kotlin 的 `assert` 默认不启用**，会静默失效——`cronet-loader` 里的字节码前置校验尤其危险 |
+
+**已验证**：`compileAppDebugKotlin`、`testAppDebugUnitTest`、`testAppReleaseUnitTest`、`assembleAppDebug`、`assembleAppRelease`。
+
+**⚠️ `org.gradle.jvmargs` 不能删**：本工程（约 19 万行 Kotlin + KSP + R8）用 Gradle 默认的 512 MiB 堆 / 384 MiB Metaspace 会直接 OOM：
+
+```
+Gradle build daemon has been stopped: since the JVM garbage collector is
+thrashing and after running out of JVM Metaspace
+```
+
+如需自定义内存，建议写在**用户级** `~/.gradle/gradle.properties`，而不是删掉项目里的这行（否则 CI 也会 OOM）。
+
+**⚠️ 连带面：CI 用 `sed` 改写构建脚本，必须同步改**
+
+这是本次迁移最容易漏掉的一环——7 个 workflow 里有 **8 处**按 **Groovy 语法**改写 `app/build.gradle`，
+文件改名 + 语法变化后会**静默失效**（版本号注入失败、包名后缀没换），比编译错误危险得多。已全部修正：
+
+| Workflow | 原（Groovy） | 现（Kotlin DSL） |
+| --- | --- | --- |
+| `BetaRelease.yml`、`test.yml` | `s/^def version = .*/def version = "…"/` | `s\|^val appVersion = .*\|val appVersion = "…"\|` |
+| `BetaRelease.yml`、`test.yml`、`TestRelease.yml` | `s/'.release'/'.releaseA'/` | `s/".release"/".releaseA"/` |
+| `release.yml` | `/^def version =/c def version = "…"` | `/^val appVersion =/c val appVersion = "…"` |
+| `TestRelease.yml` | `sed -n "s/^def versionCodeBaseCommit = '\([^']*\)'…` | `sed -n 's/^val versionCodeBaseCommit = "\([^"]*\)"…` |
+| `TestRelease.yml` | `awk '/^def versionCodeAtBase = /` | `awk '/^val versionCodeAtBase = /` |
+| `cronet-runtime-test.yml`、`pdf-runtime-test.yml`、`source-browser-test.yml` | `paths: app/build.gradle`（+ `download.gradle`/`cronet-loader.gradle`） | `paths: app/build.gradle.kts` |
+
+这些 sed/awk 模式已**在副本上逐条实测**（版本号注入、`.release`→`.releaseA`、基线哈希与版本码提取）。
+注意 macOS 的 BSD `sed -i` 需要后缀参数，而 CI 跑在 Linux 用 GNU sed——**本地测这些命令时要留意这个差异**，否则会误判模式无效。
+
+**CI 的 3 个 init 脚本仍为 Groovy**（`.github/scripts/*.init.gradle`）。不建议转换：Kotlin DSL 的 init 脚本要引用 `androidComponents` 等 AGP 类型，就得在 init 脚本里钉 AGP 的 classpath 并硬编码其版本，反而更脆。Gradle 支持二者混用。
+
+> 另外 `source-browser-test.init.gradle` 里的 `variant.minSdk = 26` 现在是**冗余**的（全局 minSdk 已是 26），
+> 可随下次 CI 清理一并删除——但要注意同步删掉 workflow 里的 `--init-script` 参数与 `paths` 触发项。
 
 ---
 

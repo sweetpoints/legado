@@ -64,8 +64,8 @@ class McpServiceContractTest {
         assertTrue(service.contains("if (destroyed) return"))
         assertTrue(Regex("""@Synchronized\s+override fun onDestroy\(\)""").containsMatchIn(service))
 
-        val build = projectFile("app/build.gradle")
-        assertTrue(build.contains("module: 'kotlin-reflect'"))
+        val build = projectFile("app/build.gradle.kts")
+        assertTrue(build.contains("module = \"kotlin-reflect\""))
     }
 
     @Test
