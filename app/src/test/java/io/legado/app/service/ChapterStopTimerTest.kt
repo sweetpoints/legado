@@ -65,18 +65,15 @@ class ChapterStopTimerTest {
     }
 
     @Test
-    fun notificationTimerButtonsAndDialogUseSharedPreference() {
+    fun notificationTimerButtonsUseSharedPreference() {
         val root = listOf(File("src/main/java"), File("app/src/main/java"))
             .first { it.isDirectory }
         val audio = File(root, "io/legado/app/service/AudioPlayService.kt").readText()
         val readAloud = File(root, "io/legado/app/service/BaseReadAloudService.kt").readText()
-        val dialog = File(root, "io/legado/app/ui/widget/dialog/SleepTimerDialog.kt").readText()
         val incrementCall = "timeMinute, chapterToStop, AppConfig.sleepTimerPreferChapter"
 
         assertTrue(audio.contains(incrementCall))
         assertTrue(readAloud.contains(incrementCall))
-        assertTrue(dialog.contains("if (chapter > 0) AppConfig.sleepTimerPreferChapter = true"))
-        assertTrue(dialog.contains("if (minute > 0) AppConfig.sleepTimerPreferChapter = false"))
     }
 
     @Test

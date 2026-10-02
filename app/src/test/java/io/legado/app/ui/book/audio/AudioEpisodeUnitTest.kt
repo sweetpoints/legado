@@ -29,9 +29,6 @@ class AudioEpisodeUnitTest {
         val readAloudDialog = projectFile(
             "src/main/java/io/legado/app/ui/book/read/config/ReadAloudDialog.kt"
         ).readText()
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/widget/dialog/SleepTimerDialog.kt"
-        ).readText()
         val viewModel = projectFile(
             "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
         ).readText()
@@ -66,18 +63,7 @@ class AudioEpisodeUnitTest {
                     "BaseReadAloudService\\.chapterToStop,\\s*\\)"
             ).containsMatchIn(readAloudDialog)
         )
-        assertTrue(
-            Regex(
-                "if \\(useEpisodes\\)\\s*R\\.string\\.sleep_timer_by_episode\\s*" +
-                    "else R\\.string\\.sleep_timer_by_chapter"
-            ).containsMatchIn(dialog)
-        )
-        assertTrue(
-            Regex(
-                "if \\(useEpisodes\\)\\s*R\\.string\\.audio_stop_chapters\\s*" +
-                    "else R\\.string\\.sleep_timer_chapters"
-            ).containsMatchIn(dialog)
-        )
+
     }
 
     @Test

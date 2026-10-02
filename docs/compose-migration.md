@@ -281,6 +281,12 @@ key drafts and focused input survive recreation; hardware down/up events are cap
 before text input, while BACK/DEL retain platform behavior. Reset changes the draft
 and confirmation persists both fields together. The exclusive layout is removed.
 
+Sleep-timer selection now uses Compose with minute/chapter/episode presets and a
+restorable custom editor. Bounds, custom history, exclusive timer-mode preferences
+and parent-first service callbacks remain intact. Pending choices are consumed once;
+a restored completed dialog closes without replaying its service callback.
+The exclusive timer layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
