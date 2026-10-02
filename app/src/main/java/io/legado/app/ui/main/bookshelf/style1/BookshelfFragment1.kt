@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
@@ -21,6 +22,7 @@ import io.legado.app.data.repository.RoomBookshelfPageRepository
 import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
 import io.legado.app.ui.main.bookshelf.style1.books.BookshelfPageParameters
 import io.legado.app.ui.main.bookshelf.style1.books.BookshelfPageViewModel
 import io.legado.app.ui.theme.LegadoComposeTheme
@@ -53,6 +55,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(0) {
                 }
             } })["bookshelf.page.${group.id}", BookshelfPageViewModel::class.java]
         }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (savedInstanceState != null) removeLegacyBookshelfPages(childFragmentManager)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         ComposeView(requireContext()).apply {
@@ -101,4 +108,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(0) {
         } }
     }
     override fun onDestroyView() { homeModel.stop(); pageModels.values.forEach { it.stop() }; super.onDestroyView() }
+}
+
+/** Old pager children must be removed before FragmentManager tries to find the retired container. */
+internal fun removeLegacyBookshelfPages(manager: FragmentManager) {
+    val pages = manager.fragments.filterIsInstance<BooksFragment>()
+    if (pages.isEmpty()) return
+    manager.beginTransaction().apply { pages.forEach(::remove) }.commitNow()
 }
