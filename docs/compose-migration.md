@@ -348,6 +348,12 @@ indices and automatic mode. Light/dark preferences retain their separate keys;
 resumed hosts reapply the selected theme after recreation without extra writes.
 The exclusive theme-picker layout is removed.
 
+Text-selection menu customization now uses a Compose list with bar/More zones,
+cross-zone drag reorder, transfer arrows, accessible move actions and defaults.
+Only completed gestures persist; cancellation and recreation restore the baseline.
+Existing JSON and expanded-menu migration remain compatible. The exclusive item
+layout and menu XML are removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
