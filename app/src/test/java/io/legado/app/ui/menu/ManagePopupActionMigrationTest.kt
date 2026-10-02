@@ -100,32 +100,9 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `dialog overflow menus use the shared vertical bridge`() {
-        listOf(
-            "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
-        ).forEach { path ->
-            val source = readProjectFile(path)
-            assertContains(path, source, "installMd3OverflowMenu(")
-            assertContains(path, source, "showIcons = true")
-            assertContains(
-                path,
-                source,
-                "onOpenCustomMenu = { it.applyOpenTint(requireContext()) }"
-            )
-        }
-    }
-
-    @Test
     fun `dialog menu actions provide icons for the vertical menu`() {
         val menus = mapOf(
             "rss_read_record.xml" to listOf("menu_clear"),
-            "source_login.xml" to listOf(
-                "menu_ok",
-                "menu_show_login_header",
-                "menu_del_login_header",
-                "menu_clear_login_info",
-                "menu_log"
-            )
         )
         menus.forEach { (file, ids) ->
             val source = readProjectFile("src/main/res/menu/$file")

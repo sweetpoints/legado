@@ -1,0 +1,4 @@
+<resources>
+    <string name="source_login_show_password">显示密码</string>
+    <string name="source_login_hide_password">隐藏密码</string>
+</resources>

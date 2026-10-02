@@ -450,3 +450,10 @@ pull refresh, stable book keys and an optional accessible fast-scroll rail. Save
 scroll positions survive the initial empty Room-loading phase. Fragment pager APIs
 remain compatible, including group-only-update-read changes. Four old adapters and
 the exclusive book-page layout are removed; style-2 shared item layouts remain.
+
+Source-login forms now use Compose controls and a SavedState ViewModel for legacy
+and v2 dynamic schemas, JS actions, field updates, debouncing, countdowns and header
+commands. An observable source-initialization state protects restored dialogs from
+reading partially loaded data, with visible failure and retry. Actual closure
+persists legacy drafts and finishes the host; recreation does neither. Exclusive
+login layout/menu XML and the old v2 View delegate are removed.

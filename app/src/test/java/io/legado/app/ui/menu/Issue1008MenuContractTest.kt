@@ -10,11 +10,6 @@ class Issue1008MenuContractTest {
     @Test
     fun sourceIconsAndRssOverflowFollowReportedMenuContract() {
         assertItemIcon(
-            "src/main/res/menu/source_login.xml",
-            "menu_show_login_header",
-            "ic_add_online"
-        )
-        assertItemIcon(
             "src/main/res/menu/book_source.xml",
             "menu_group_sources_by_domain",
             "ic_add_online"

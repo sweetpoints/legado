@@ -2,6 +2,8 @@ package io.legado.app.ui.login
 
 import android.app.Application
 import android.content.Intent
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.script.rhino.runScriptWithContext
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
@@ -18,8 +20,17 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.toastOnUi
 
+sealed interface SourceLoginInitialization {
+    data object Idle : SourceLoginInitialization
+    data object Loading : SourceLoginInitialization
+    data object Ready : SourceLoginInitialization
+    data class Failed(val message: String) : SourceLoginInitialization
+}
+
 class SourceLoginViewModel(application: Application) : BaseViewModel(application) {
 
+    private val initializationState = MutableStateFlow<SourceLoginInitialization>(SourceLoginInitialization.Idle)
+    val initialization = initializationState.asStateFlow()
     var source: BaseSource? = null
     var headerMap: Map<String, String> = emptyMap()
     var book: Book? = null
@@ -28,6 +39,7 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
     var loginInfo: MutableMap<String, String> = mutableMapOf()
 
     fun initData(intent: Intent, success: (bookSource: BaseSource) -> Unit, error: () -> Unit) {
+        initializationState.value = SourceLoginInitialization.Loading
         execute {
             bookType = intent.getIntExtra("bookType", 0)
             when (bookType) {
@@ -74,11 +86,14 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
             source
         }.onSuccess {
             if (it != null) {
+                initializationState.value = SourceLoginInitialization.Ready
                 success.invoke(it)
             } else {
+                initializationState.value = SourceLoginInitialization.Failed("未找到书源")
                 context.toastOnUi("未找到书源")
             }
         }.onError {
+            initializationState.value = SourceLoginInitialization.Failed(it.localizedMessage ?: it.toString())
             error.invoke()
             AppLog.put("登录 UI 初始化失败\n$it", it, true)
         }
