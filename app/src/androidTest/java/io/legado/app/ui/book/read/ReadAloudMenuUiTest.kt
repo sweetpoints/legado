@@ -292,7 +292,7 @@ class ReadAloudMenuUiTest {
             scenario!!.onActivity { it.showReadAloudDialog() }
             await("aloud dialog visible") { it.bottomDialog == 1 }
             scenario!!.onActivity { assertFalse(it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible) }
-            onView(withId(R.id.ll_main_menu)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("read-aloud-main-menu").performClick()
             await("returned to main menu") { it.bottomDialog == 0 && it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
             screenshot("aloud-main-menu-paused-$paused")
             scenario!!.onActivity {

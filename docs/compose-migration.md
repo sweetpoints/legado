@@ -314,6 +314,12 @@ existing fluent API, labels, decimal presentation, cyclic selection and neutral
 button contract. Drafts survive recreation; confirmation returns the raw integer
 once and cancellation delivers no result. The exclusive picker layout is removed.
 
+The read-aloud control panel now uses Compose playback/chapter/paragraph controls,
+rate and timer sliders, system-rate following and child-dialog entry points. Runtime
+updates and engine summaries remain lifecycle-aware; queued host actions survive
+recreation and are consumed once before delivery. Engine-name database access runs
+on IO. The bottom reader visibility lease and exclusive-layout removal are retained.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
