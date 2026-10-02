@@ -725,3 +725,7 @@ Replaced the search scope dialog with Compose group/source tabs, enabled-group c
 ### Shared rule syntax layer cleanup
 
 Moved unchanged Legado/JSON/JavaScript regular expressions into the pure model/analyzeRule package. Compose dictionary, HTTP TTS, TXT TOC and code-preview syntax projections now share model rules without depending on native CodeView extensions. The remaining native editor uses the same definitions. Existing keyword and syntax projection JVM tests plus full Android test compilation validate the package/import change.
+
+### RSS reading history data and saved state
+
+Added an I/O history repository and immutable rows while preserving descending read-time order and distinct null/all versus empty-origin filters. Navigation saves a small record hash and re-reads current article metadata before host delivery. Clear confirmation uses a fresh count, restores by recounting and protects an active deletion; canceled and finished requests reject late reads. Added 8 JVM state tests and compilation of 3 real Room ordering/filter/deletion/metadata tests. Shared RSS sort APIs remain intact; Compose history UI follows separately. Android device execution is unavailable.
