@@ -370,6 +370,12 @@ ui/components/image. Photo retains a compatibility adapter; drawing callbacks st
 before Main-thread Glide release. New cover components can reuse the same contract
 without making the data layer depend on dialog UI.
 
+Bookshelf foundations now include immutable display snapshots and shared Compose
+book/group cards and statistics headers. Standard, compact and grid presentations
+retain metadata, read progress, unread/loading state, title modes and click/long-click
+contracts. Cover rendering is an injected slot; existing shelf consumers remain until
+their feature Routes connect these components.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
