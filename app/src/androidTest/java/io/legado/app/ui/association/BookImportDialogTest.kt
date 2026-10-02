@@ -31,13 +31,9 @@ class BookImportDialogTest {
                 compose.waitUntil { compose.onAllNodesWithTag("book-import-check-0").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithTag("book-import-check-0").performClick().assertIsOff()
                 compose.onNodeWithTag("book-import-code-0").performClick()
-                scenario.onActivity { activity ->
-                    val parent = activity.supportFragmentManager.findFragmentByTag("book-import") as ImportBookSourceDialog
-                    parent.childFragmentManager.executePendingTransactions()
-                    val code = parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().single()
-                    code.binding.codeView.setText(GSON.toJson(edited))
-                    assertTrue(code.binding.toolBar.menu.performIdentifierAction(R.id.menu_save, 0))
-                }
+                compose.waitUntil { compose.onAllNodesWithTag("code-body").fetchSemanticsNodes().any { !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled) } }
+                compose.onNodeWithTag("code-body").performTextReplacement(GSON.toJson(edited))
+                compose.onNodeWithTag("code-save").performClick()
                 compose.waitUntil { compose.onAllNodesWithText("Edited BookSource").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithTag("book-import-check-0").assertIsOff()
                 scenario.recreate()

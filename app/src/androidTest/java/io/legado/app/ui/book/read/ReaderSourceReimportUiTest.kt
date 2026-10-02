@@ -198,7 +198,7 @@ class ReaderSourceReimportUiTest {
         main {
             val code = dialog().childFragmentManager.fragments.filterIsInstance<CodeDialog>().single()
             assertTrue(code.currentOriginalCode().contains("#before@text"))
-            assertTrue(code.binding.codeView.text.toString().contains("#after@text"))
+            assertTrue(code.model.state.value.displayed.contains("#after@text"))
         }
         pressBack()
         compose.onNodeWithTag("book-import-cancel").performClick()

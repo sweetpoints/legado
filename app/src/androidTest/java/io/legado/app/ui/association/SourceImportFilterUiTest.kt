@@ -136,8 +136,8 @@ class SourceImportFilterUiTest {
                     host.selection(true, false)
                     val preview = host.open(0, 1)
                     val edited = GSON.toJson(source(rss, url("auto-$rss/edited"), "Kept edit", "Wanted", ""))
-                    main { preview.binding.codeView.setText(edited) }
-                    onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+                    compose.onNodeWithTag("code-body").performTextReplacement(edited)
+                    compose.onNodeWithTag("code-save").performClick()
                     host.awaitReady()
                     host.query("Kept edit", 1)
                     host.recreate()
@@ -217,9 +217,9 @@ class SourceImportFilterUiTest {
             main {
                 assertTrue(preview.currentOriginalCode().contains(candidateUrls[1]))
                 assertFalse(preview.currentOriginalCode().contains(candidateUrls[0]))
-                preview.binding.codeView.setText(edited)
             }
-            onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("code-body").performTextReplacement(edited)
+            compose.onNodeWithTag("code-save").performClick()
             host.awaitReady()
             host.assertQuery("OnlyNeedle")
             host.selection(true, false, true)
@@ -231,7 +231,7 @@ class SourceImportFilterUiTest {
             val derivedPreview = host.open(0, 1)
             main {
                 assertTrue(derivedPreview.currentOriginalCode().contains("Edited-$id"))
-                assertTrue(derivedPreview.binding.codeView.text.toString().contains("Derived-$id"))
+                assertTrue(derivedPreview.model.state.value.displayed.contains("Derived-$id"))
                 derivedPreview.dismiss()
             }
             host.awaitReady()
@@ -508,7 +508,7 @@ class SourceImportFilterUiTest {
             await("Source code preview missing: rss=$rss") {
                 main {
                     code = parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
-                    code?.dialog?.window?.decorView?.hasWindowFocus() == true
+                    code?.dialog?.window?.decorView?.hasWindowFocus() == true && code?.model?.state?.value?.loaded == true
                 }
             }
             return checkNotNull(code).also { main { assertEquals(originalIndex.toString(), it.requestId) } }

@@ -18,9 +18,9 @@ class CodeDialogViewModelTest {
     }
     private class Store : CodeDialogRepository {
         val disk = mutableMapOf<String, CodeDialogDraft>(); var readGate: CompletableDeferred<Unit>? = null
-        var failRead = false; var failWrite = false
+        var failRead = false; var failWrite = false; var writeGate: CompletableDeferred<Unit>? = null
         override suspend fun read(id: String): CodeDialogDraft? { readGate?.await(); if (failRead) error("read failure"); return disk[id] }
-        override suspend fun write(id: String, draft: CodeDialogDraft) { if (failWrite) error("disk full"); if ((disk[id]?.revision ?: -1) <= draft.revision) disk[id] = draft }
+        override suspend fun write(id: String, draft: CodeDialogDraft) { writeGate?.await(); if (failWrite) error("disk full"); if ((disk[id]?.revision ?: -1) <= draft.revision) disk[id] = draft }
     }
     private fun vm(store: Store = Store(), saved: SavedStateHandle = SavedStateHandle(), editable: Boolean = true,
         source: Boolean = false, original: String = "abc ABC abc", alternate: String? = "derived", show: Boolean = false) =
@@ -114,6 +114,111 @@ class CodeDialogViewModelTest {
         val restored = vm(store, SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) })); runCurrent()
         assertTrue(restored.state.value.finished); assertNull(restored.state.value.error)
         restored.action(CodeDialogAction.Save); assertTrue(restored.state.value.effects.isEmpty())
+    }
+
+    @Test fun sourceEditorRefreshRestoresRequestedPreviewWithoutReplacingOriginal() = scenario {
+        val model = vm(source = true, show = true); runCurrent(); model.action(CodeDialogAction.Editor)
+        model.consume(model.state.value.effects.single().id); model.editorResult("edited", 3)
+        assertFalse(model.state.value.showingAlternate); model.alternate("replaced edited")
+        assertTrue(model.state.value.showingAlternate); assertEquals("replaced edited", model.state.value.displayed)
+        assertEquals("edited", model.state.value.original); model.preview(false); model.alternate("later")
+        assertFalse(model.state.value.showingAlternate); assertEquals("edited", model.state.value.displayed)
+    }
+
+    private class Transfer : CodeDialogTransferRepository {
+        val files = mutableMapOf<String, String>(); val deleted = mutableListOf<String>()
+        var failRead = false; var writeGate: CompletableDeferred<Unit>? = null; var readGate: CompletableDeferred<Unit>? = null
+        override suspend fun write(text: String): String { writeGate?.await(); val path = "input-${files.size}"; files[path] = text; return path }
+        override suspend fun read(path: String): String { readGate?.await(); if (failRead) error("missing result"); return files[path] ?: error("missing result") }
+        override suspend fun delete(vararg paths: String?) { paths.filterNotNull().forEach { files.remove(it); deleted += it } }
+    }
+    @Test fun preparedEditorPathRestoresWithoutRewritingOrRelauchingConsumedEffect() = scenario {
+        val store = Store(); val files = Transfer(); val saved = SavedStateHandle()
+        val model = CodeDialogViewModel(store, saved, "large".repeat(100000), "derived", true, true, transfer = files).also { models += it }
+        runCurrent(); model.action(CodeDialogAction.Editor); model.prepareEditor(); runCurrent()
+        assertTrue(model.state.value.editorPrepared); assertEquals("large".repeat(100000), files.files[model.state.value.editorPath])
+        model.consume(model.state.value.effects.single().id); model.stop()
+        val restored = CodeDialogViewModel(store, SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }), "", null, true, true, transfer = files).also { models += it }
+        runCurrent(); assertTrue(restored.state.value.editorPending); assertTrue(restored.state.value.editorPrepared)
+        assertTrue(restored.state.value.effects.isEmpty()); assertEquals(1, files.files.size)
+        files.files["output"] = "returned"; restored.editorReturned(true, null, "output", 4); runCurrent()
+        assertEquals("returned", restored.state.value.original); assertEquals(4, restored.state.value.selectionStart)
+        assertEquals(listOf(CodeDialogAction.EditorSaved), restored.state.value.effects.map { it.action })
+        assertTrue(files.files.isEmpty()); assertFalse(restored.state.value.finished)
+    }
+    @Test fun cancelledAndReadOnlyEditorResultsCleanBothPathsWithoutChangingOriginal() = scenario {
+        for (readOnly in listOf(false, true)) {
+            val files = Transfer(); val model = CodeDialogViewModel(Store(), SavedStateHandle(), "original", "derived", true, false, readOnly, transfer = files).also { models += it }
+            runCurrent(); model.action(CodeDialogAction.Editor); model.prepareEditor(); runCurrent()
+            assertEquals(if (readOnly) "derived" else "original", files.files[model.state.value.editorPath])
+            model.consume(model.state.value.effects.single().id); files.files["output"] = "discarded"
+            model.editorReturned(readOnly, null, "output", 3); runCurrent()
+            assertEquals("original", model.state.value.original); assertFalse(model.state.value.editorPending)
+            assertTrue(files.files.isEmpty()); assertTrue(model.state.value.effects.isEmpty())
+        }
+    }
+    @Test fun failedTransferReadKeepsDraftAndRetainsTransferForRecovery() = scenario {
+        val files = Transfer(); val model = CodeDialogViewModel(Store(), SavedStateHandle(), "keep", null, true, false, transfer = files).also { models += it }
+        runCurrent(); model.action(CodeDialogAction.Editor); model.prepareEditor(); runCurrent()
+        model.consume(model.state.value.effects.single().id); files.failRead = true
+        model.editorReturned(true, null, "missing", 0); runCurrent()
+        assertEquals("keep", model.state.value.original); assertEquals("missing result", model.state.value.error)
+        assertFalse(model.state.value.editorPending); assertEquals("keep", files.files.values.single())
+        model.action(CodeDialogAction.Editor); model.prepareEditor(); runCurrent(); assertTrue(model.state.value.editorPrepared)
+    }
+    @Test fun resultArrivingBeforeDraftRestoreWaitsForLoadAndAppliesOnce() = scenario {
+        val store = Store(); val files = Transfer(); val saved = SavedStateHandle()
+        val first = CodeDialogViewModel(store, saved, "original", null, true, true, transfer = files).also { models += it }
+        runCurrent(); first.action(CodeDialogAction.Editor); first.prepareEditor(); runCurrent(); first.consume(first.state.value.effects.single().id); first.stop()
+        store.readGate = CompletableDeferred(); files.files["output"] = "edited"
+        val restored = CodeDialogViewModel(store, SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }), "old", null, true, true, transfer = files).also { models += it }
+        runCurrent(); restored.editorReturned(true, null, "output", 2); runCurrent()
+        assertTrue(files.files.containsKey("output")); assertFalse(restored.state.value.loaded)
+        store.readGate!!.complete(Unit); runCurrent(); assertEquals("edited", restored.state.value.original)
+        assertTrue(files.files.isEmpty()); assertEquals(1, restored.state.value.effects.size)
+        restored.editorReturned(true, "duplicate", null, 0); runCurrent(); assertEquals("edited", restored.state.value.original)
+    }
+
+    @Test fun completedDurableResultSurvivesProcessSnapshotEvenWhenOutputWasAlreadyCleaned() = scenario {
+        val store = Store(); val files = Transfer(); val saved = SavedStateHandle()
+        val first = CodeDialogViewModel(store, saved, "original", "derived", true, true, transfer = files).also { models += it }
+        runCurrent(); first.action(CodeDialogAction.Editor); first.prepareEditor(); runCurrent()
+        first.consume(first.state.value.effects.single().id); first.stop()
+        saved["editorReturning"] = true; saved["editorAccepted"] = true; saved["editorOutputPath"] = "cleaned-output"; saved["editorCursor"] = 2
+        val id = saved.get<String>("session")!!; val previous = store.disk[id]!!
+        store.disk[id] = CodeDialogDraft("durable result", null, previous.revision + 1)
+        val restored = CodeDialogViewModel(store, SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }), "old", null, true, true, transfer = files).also { models += it }
+        runCurrent(); assertEquals("durable result", restored.state.value.original)
+        assertEquals(2, restored.state.value.selectionStart); assertNull(restored.state.value.error)
+        assertEquals(listOf(CodeDialogAction.EditorSaved), restored.state.value.effects.map { it.action })
+        assertFalse(restored.state.value.editorPending)
+    }
+
+    @Test fun cancelledReturnReadFinishesDurablyWithoutPublishingFromClearedVm() = scenario {
+        cancelledReturn(writePhase = false)
+    }
+    @Test fun cancelledReturnWriteFinishesDurablyWithoutPublishingFromClearedVm() = scenario {
+        cancelledReturn(writePhase = true)
+    }
+    private suspend fun TestScope.cancelledReturn(writePhase: Boolean) {
+        val store = Store(); val files = Transfer(); val saved = SavedStateHandle()
+        val model = CodeDialogViewModel(store, saved, "original", null, true, true, transfer = files).also { models += it }
+        runCurrent(); model.action(CodeDialogAction.Editor); model.prepareEditor(); runCurrent(); model.consume(model.state.value.effects.single().id)
+        files.files["output"] = "returned result"
+        val gate = CompletableDeferred<Unit>()
+        if (writePhase) store.writeGate = gate else files.readGate = gate
+        model.editorReturned(true, null, "output", 4); runCurrent()
+        val snapshot = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
+        model.stop(); runCurrent(); assertTrue(files.files.containsKey("output"))
+        gate.complete(Unit); runCurrent()
+        assertEquals("returned result", store.disk.values.single().original)
+        assertTrue(files.files.isEmpty()); assertEquals("original", model.state.value.original)
+        assertTrue(model.state.value.effects.isEmpty())
+        store.writeGate = null; files.readGate = null
+        val restored = CodeDialogViewModel(store, snapshot, "old", null, true, true, transfer = files).also { models += it }
+        runCurrent(); assertEquals("returned result", restored.state.value.original)
+        assertEquals(listOf(CodeDialogAction.EditorSaved), restored.state.value.effects.map { it.action })
+        assertFalse(restored.state.value.editorPending)
     }
 
 }

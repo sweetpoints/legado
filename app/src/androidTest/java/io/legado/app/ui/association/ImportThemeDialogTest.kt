@@ -26,13 +26,9 @@ class ImportThemeDialogTest {
             compose.waitUntil { compose.onAllNodesWithTag("theme-import-check-0").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("theme-import-check-0").performClick().assertIsOff()
             compose.onNodeWithTag("theme-import-code-0").performClick()
-            scenario.onActivity { activity ->
-                val parent = activity.supportFragmentManager.findFragmentByTag("theme-import") as ImportThemeDialog
-                parent.childFragmentManager.executePendingTransactions()
-                val code = parent.childFragmentManager.fragments.filterIsInstance<CodeDialog>().single()
-                code.binding.codeView.setText(GSON.toJson(edited))
-                assertTrue(code.binding.toolBar.menu.performIdentifierAction(R.id.menu_save, 0))
-            }
+            compose.waitUntil { compose.onAllNodesWithTag("code-body").fetchSemanticsNodes().any { !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled) } }
+            compose.onNodeWithTag("code-body").performTextReplacement(GSON.toJson(edited))
+            compose.onNodeWithTag("code-save").performClick()
             compose.waitUntil { compose.onAllNodesWithText(edited.themeName).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("theme-import-check-0").assertIsOff()
             scenario.recreate()

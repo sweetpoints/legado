@@ -586,7 +586,7 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 preview = parent!!.childFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
-                                ready = preview?.dialog?.window?.decorView?.hasWindowFocus() == true
+                                ready = preview?.dialog?.window?.decorView?.hasWindowFocus() == true && preview?.model?.state?.value?.loaded == true
                             }
                             ready
                         }
@@ -595,12 +595,12 @@ class CodeSelectionUiTest {
                             assertEquals("1", preview!!.requestId)
                             original = preview!!.currentOriginalCode()
                             preview!!.setReplaceRuleRefreshPending(true)
-                            assertFalse(preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled)
+                            assertFalse(!preview!!.model.state.value.busy)
                             preview!!.setReplaceRuleRefreshPending(false)
-                            assertEquals(replacements, preview!!.binding.cbSourceReplacementPreview.isChecked)
-                            assertTrue(preview!!.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
+                            assertEquals(replacements, preview!!.model.state.value.showingAlternate)
+                            assertTrue((!preview!!.model.state.value.showingAlternate || preview!!.model.sourcePreview))
                         }
-                        onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                        compose.onNodeWithTag("code-fullscreen").performClick()
                         var inputPath: String? = null
                         await {
                             var ready = false
@@ -654,12 +654,12 @@ class CodeSelectionUiTest {
                             instrumentation.runOnMainSync {
                                 val expected = if (replacements) edited.replace("#edited", "#edited-once") else edited
                                 ready = preview!!.currentOriginalCode() == edited &&
-                                    preview!!.binding.codeView.text.toString() == expected &&
+                                    preview!!.model.state.value.displayed == expected &&
                                     preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
+                                    !preview!!.model.state.value.busy
                                 if (ready) {
-                                    assertEquals(replacements, preview!!.binding.cbSourceReplacementPreview.isChecked)
-                                    assertTrue(preview!!.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
+                                    assertEquals(replacements, preview!!.model.state.value.showingAlternate)
+                                    assertTrue((!preview!!.model.state.value.showingAlternate || preview!!.model.sourcePreview))
                                 }
                             }
                             ready
@@ -673,7 +673,7 @@ class CodeSelectionUiTest {
                             } finally { bitmap.recycle() }
                         }
                         // Discard a second edit: only the cursor may return, never the discarded draft.
-                        onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                        compose.onNodeWithTag("code-fullscreen").performClick()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -693,7 +693,7 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 ready = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
+                                    !preview!!.model.state.value.busy
                                 if (ready) assertEquals(edited, preview!!.currentOriginalCode())
                             }
                             ready
@@ -702,7 +702,7 @@ class CodeSelectionUiTest {
                             // A malformed draft stays editable; it must not overwrite the valid candidate.
                             val invalid = "] invalid source draft"
                             for (draft in listOf(invalid, edited)) {
-                                onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                                compose.onNodeWithTag("code-fullscreen").performClick()
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
@@ -723,10 +723,10 @@ class CodeSelectionUiTest {
                                     instrumentation.runOnMainSync {
                                         ready = preview!!.currentOriginalCode() == draft &&
                                             preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                            preview!!.binding.toolBar.menu.findItem(R.id.menu_fullscreen_edit).isEnabled
+                                            !preview!!.model.state.value.busy
                                         if (ready) {
                                             val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
-                                            assertEquals(expected, preview!!.binding.codeView.text.toString())
+                                            assertEquals(expected, preview!!.model.state.value.displayed)
                                             val raw = if (rss) ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items[1].originalJson
                                                 else ViewModelProvider(parent!!)[BookImportViewModel::class.java].state.value.items.find { it.key == "1" }?.originalJson
                                             assertEquals(edited, raw)
@@ -736,7 +736,7 @@ class CodeSelectionUiTest {
                                 }
                             }
                         }
-                        onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+                        compose.onNodeWithTag("code-save").performClick()
                         val expectedUrl = urls[1] + if (replacements) "#edited-once" else "#edited"
                         await {
                             var ready = false
@@ -762,15 +762,15 @@ class CodeSelectionUiTest {
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true
+                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true && readOnlyPreview.model.state.value.loaded
                                 }
                                 ready
                             }
                             instrumentation.runOnMainSync {
-                                assertTrue(readOnlyPreview.binding.cbSourceReplacementPreview.isChecked)
-                                assertFalse(readOnlyPreview.binding.toolBar.menu.findItem(R.id.menu_save).isVisible)
+                                assertTrue(readOnlyPreview.model.state.value.showingAlternate)
+                                assertFalse((!readOnlyPreview.model.state.value.showingAlternate || readOnlyPreview.model.sourcePreview))
                             }
-                            onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+                            compose.onNodeWithTag("code-fullscreen").performClick()
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
@@ -785,7 +785,7 @@ class CodeSelectionUiTest {
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true
+                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true && readOnlyPreview.model.state.value.loaded
                                     if (ready) assertEquals(edited, readOnlyPreview.currentOriginalCode())
                                 }
                                 ready
@@ -873,159 +873,87 @@ class CodeSelectionUiTest {
         assertEquals(cursor, scenario!!.result.resultData.getIntExtra("cursorPosition", -1))
     }
 
-    @Test fun nativePreviewTypesLongCodeWithoutRunningUnusedCompletion() {
+    @Test fun composePreviewTypesLongCodeWithSelectionAndActualIme() {
         launchEditor()
         val code = "{\"jsLib\":\"" + "var value = '中文'; ".repeat(12_000) + "\"}"
         val dialog = CodeDialog(code, disableEdit = false)
         val timings = linkedMapOf<String, Long>()
-        var tokenCalls = 0
-        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "native-input-cost") }
+        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "compose-input-cost") }
         try {
-            await {
-                var ready = false
-                instrumentation.runOnMainSync { ready = dialog.dialog?.window?.decorView?.hasWindowFocus() == true }
-                ready
-            }
-            instrumentation.runOnMainSync {
-                dialog.binding.codeView.setTokenizer(object : MultiAutoCompleteTextView.Tokenizer {
-                    override fun findTokenStart(text: CharSequence, cursor: Int): Int {
-                        tokenCalls++
-                        return KeywordTokenizer().findTokenStart(text, cursor)
-                    }
-                    override fun findTokenEnd(text: CharSequence, cursor: Int) = text.length
-                    override fun terminateToken(text: CharSequence) = text
-                })
-                assertNull(dialog.binding.codeView.adapter)
-                assertFalse("Code preview must not invoke prose spell checking", dialog.binding.codeView.isSuggestionsEnabled)
-                assertFalse("Code preview must not run EmojiCompat over the whole document", dialog.binding.codeView.isEmojiCompatEnabled)
-            }
+            await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }; ready }
             val focusStart = SystemClock.uptimeMillis()
-            onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("code-body").performClick()
             await {
-                var visible = false
-                instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
-                        ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                }
-                visible
+                var visible = false; instrumentation.runOnMainSync {
+                    visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }; visible
             }
             timings["focusAndImeMs"] = SystemClock.uptimeMillis() - focusStart
             val offset = code.length - 2
-            val frame = CountDownLatch(1)
+            compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
             val inputStart = SystemClock.uptimeMillis()
-            instrumentation.runOnMainSync {
-                val view = dialog.binding.codeView
-                val selectionStart = SystemClock.uptimeMillis()
-                view.setSelection(offset)
-                timings["selectionMs"] = SystemClock.uptimeMillis() - selectionStart
-                assertTrue(view.isHardwareAccelerated)
-                view.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
-                assertTrue(checkNotNull(view.onCreateInputConnection(EditorInfo())).commitText("中", 1))
-                view.postInvalidateOnAnimation()
-            }
-            assertTrue("The typed character never reached a committed frame", frame.await(10, TimeUnit.SECONDS))
-            timings["inputAndFrameMs"] = SystemClock.uptimeMillis() - inputStart
-            instrumentation.runOnMainSync {
-                assertEquals(code.substring(0, offset) + "中" + code.substring(offset), dialog.currentOriginalCode())
-                assertEquals(0, tokenCalls)
-            }
+            compose.onNodeWithTag("code-body").performTextInput("中")
+            compose.waitForIdle(); timings["inputAndFrameMs"] = SystemClock.uptimeMillis() - inputStart
+            val expected = code.substring(0, offset) + "中" + code.substring(offset)
+            instrumentation.runOnMainSync { assertEquals(expected, dialog.currentOriginalCode()); assertEquals(offset + 1, dialog.model.state.value.selectionEnd) }
             val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-            File(artifacts, "native-preview-input.txt").writeText("characters=${code.length}\ntokenCalls=$tokenCalls\n$timings\n")
+            File(artifacts, "compose-preview-input.txt").writeText("characters=${code.length}\n$timings\n")
             checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
-                try { File(artifacts, "native-preview-input.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+                try { File(artifacts, "compose-preview-input.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
                 finally { bitmap.recycle() }
             }
-            assertTrue("Typing still stalls the native preview: $timings", timings.getValue("inputAndFrameMs") < 1_000)
-            instrumentation.runOnMainSync {
-                val view = dialog.binding.codeView
-                view.setAdapter(ArrayAdapter(context, android.R.layout.simple_list_item_1, listOf("target")))
-                view.setText("prefix target")
-                view.setSelection(view.length())
-                assertTrue(view.enoughToFilter())
-                assertFalse("Code completion must not enable prose spell checking", view.isSuggestionsEnabled)
-                assertTrue("An installed completion adapter must still tokenize", tokenCalls > 0)
-                view.dismissDropDown()
-            }
-        } finally {
-            instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
-        }
+            assertTrue("Typing stalls the code preview: $timings", timings.getValue("inputAndFrameMs") < 1_000)
+            compose.onNodeWithTag("code-body").performTextReplacement("prefix target")
+            compose.onNodeWithTag("code-body").assertTextEquals("prefix target")
+        } finally { instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() } }
     }
 
-    @Test fun nativePreviewReportsActualAccessibilityPayloadDuringRepeatedDeletion() {
+    @Test fun composePreviewReportsActualAccessibilityPayloadDuringRepeatedDeletion() {
         launchEditor()
         var expected = "{\"jsLib\":\"" + "var value = '中文'; ".repeat(4_500) + "\"}"
         val dialog = CodeDialog(expected, disableEdit = false)
         val report = StringBuilder("characters=${expected.length}\n")
         val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "native-accessibility-cost") }
+        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "compose-accessibility-cost") }
         try {
+            await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }; ready }
+            compose.onNodeWithTag("code-body").performClick()
             await {
-                var ready = false
-                instrumentation.runOnMainSync { ready = dialog.dialog?.window?.decorView?.hasWindowFocus() == true }
-                ready
-            }
-            onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
-            await {
-                var visible = false
-                instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
-                        ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                }
-                visible
+                var visible = false; instrumentation.runOnMainSync {
+                    visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }; visible
             }
             assertTrue(context.getSystemService(AccessibilityManager::class.java).isEnabled)
             repeat(4) { iteration ->
-                val before = expected
-                val cursor = before.length - 2
-                val frame = CountDownLatch(1)
-                var editMs = 0L
-                var committedAt = 0L
-                instrumentation.runOnMainSync { dialog.binding.codeView.setSelection(cursor) }
+                val before = expected; val cursor = before.length - 2
+                compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(cursor))
                 val started = SystemClock.uptimeMillis()
                 val event = instrumentation.uiAutomation.executeAndWaitForEvent({
-                    instrumentation.runOnMainSync {
-                        val view = dialog.binding.codeView
-                        assertTrue(view.isHardwareAccelerated)
-                        view.viewTreeObserver.registerFrameCommitCallback {
-                            committedAt = SystemClock.uptimeMillis()
-                            frame.countDown()
-                        }
-                        val editStarted = SystemClock.uptimeMillis()
-                        assertTrue(checkNotNull(view.onCreateInputConnection(EditorInfo())).deleteSurroundingText(1, 0))
-                        editMs = SystemClock.uptimeMillis() - editStarted
-                        view.postInvalidateOnAnimation()
-                    }
+                    instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
                 }, { received ->
                     received.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
-                        received.packageName?.toString() == context.packageName &&
-                        received.fromIndex == cursor - 1 && received.removedCount == 1 && received.addedCount == 0
+                        received.packageName?.toString() == context.packageName && received.fromIndex == cursor - 1 &&
+                        received.removedCount == 1 && received.addedCount == 0
                 }, 10_000)
                 try {
-                    assertTrue("Deleted text never reached a committed frame", frame.await(10, TimeUnit.SECONDS))
                     expected = before.removeRange(cursor - 1, cursor)
                     val parcel = Parcel.obtain()
                     val bytes = try { event.writeToParcel(parcel, 0); parcel.dataSize() } finally { parcel.recycle() }
-                    report.append("delete=$iteration; parcelBytes=$bytes; beforeChars=${event.beforeText?.length}; " +
-                        "textChars=${event.text.firstOrNull()?.length}; editMs=$editMs; frameMs=${committedAt - started}\n")
-                    File(artifacts, "native-preview-accessibility.txt").writeText(report.toString())
-                    assertEquals("Accessibility must retain the pre-edit text", before, event.beforeText?.toString())
-                    assertEquals("Accessibility must expose the edited text", expected, event.text.single().toString())
-                    instrumentation.runOnMainSync {
-                        assertEquals(expected, dialog.currentOriginalCode())
-                        assertEquals(cursor - 1, dialog.binding.codeView.selectionStart)
-                        assertEquals(cursor - 1, dialog.binding.codeView.selectionEnd)
+                    report.append("delete=$iteration; parcelBytes=$bytes; beforeChars=${event.beforeText?.length}; textChars=${event.text.firstOrNull()?.length}; frameMs=${SystemClock.uptimeMillis() - started}\n")
+                    assertEquals(before, event.beforeText?.toString()); assertEquals(expected, event.text.single().toString())
+                    compose.waitForIdle(); instrumentation.runOnMainSync {
+                        assertEquals(expected, dialog.currentOriginalCode()); assertEquals(cursor - 1, dialog.model.state.value.selectionStart)
+                        assertEquals(cursor - 1, dialog.model.state.value.selectionEnd)
                     }
                 } finally { event.recycle() }
             }
         } finally {
-            File(artifacts, "native-preview-accessibility.txt").writeText(report.toString())
+            File(artifacts, "compose-preview-accessibility.txt").writeText(report.toString())
             instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
         }
     }
 
-
     @Test fun reportedRssPreviewMeasuresOpeningImeAndEditsWithItsActualIcon() {
-        // Pin the reporter's public sample without executing any source JavaScript.
         val connection = java.net.URL("https://github.com/user-attachments/files/32066159/shareRssSource.json")
             .openConnection().apply { connectTimeout = 15_000; readTimeout = 15_000 }
         val bytes = connection.getInputStream().use { it.readBytes() }
@@ -1033,110 +961,38 @@ class CodeSelectionUiTest {
             .joinToString("") { "%02x".format(it.toInt() and 255) }
         assertEquals("0893a7bf2af946735d331d1e37acdf3aa3bf05f3b5beb45181f736e15509f9a9", digest)
         val rss = GSON.fromJson(bytes.toString(Charsets.UTF_8), Array<RssSource>::class.java).single()
-        val actual = GSON.toJson(rss)
-        val withoutIcon = GSON.toJson(rss.copy(sourceIcon = ""))
-        launchEditor()
-        val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
+        val actual = GSON.toJson(rss); val withoutIcon = GSON.toJson(rss.copy(sourceIcon = ""))
+        launchEditor(); val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
         val report = StringBuilder("sampleSha256=$digest\n")
         try {
-            for ((label, code) in listOf("actual" to actual, "without-icon" to withoutIcon,
-                "actual-unwrapped" to actual, "actual-monospace" to actual)) {
-                val dialog = CodeDialog(code, disableEdit = false)
-                var expected = code
+            for ((label, code) in listOf("actual" to actual, "without-icon" to withoutIcon)) {
+                val dialog = CodeDialog(code, disableEdit = false); var expected = code
                 val opened = SystemClock.uptimeMillis()
-                scenario!!.onActivity {
-                    dialog.showNow(it.supportFragmentManager, "reported-rss-$label")
-                    if (label == "actual-unwrapped") dialog.binding.codeView.setHorizontallyScrolling(true)
-                    if (label == "actual-monospace") dialog.binding.codeView.typeface = android.graphics.Typeface.MONOSPACE
-                }
+                scenario!!.onActivity { dialog.show(it.supportFragmentManager, "reported-rss-$label") }
                 try {
-                    await {
-                        var ready = false
-                        instrumentation.runOnMainSync {
-                            ready = dialog.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                dialog.binding.codeView.layout != null
-                        }
-                        ready
-                    }
+                    await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded && dialog.dialog?.window?.decorView?.hasWindowFocus() == true }; ready }
                     report.append("$label; characters=${code.length}; openMs=${SystemClock.uptimeMillis() - opened}\n")
-                    instrumentation.runOnMainSync {
-                        val view = dialog.binding.codeView
-                        report.append("$label; breakStrategy=${view.breakStrategy}; hyphenation=${view.hyphenationFrequency}; lines=${view.lineCount}\n")
-                    }
-                    val focusStarted = SystemClock.uptimeMillis()
-                    onView(withId(R.id.code_view)).inRoot(isDialog()).perform(click())
-                    await {
-                        var visible = false
-                        instrumentation.runOnMainSync {
-                            visible = ViewCompat.getRootWindowInsets(dialog.binding.codeView)
-                                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                        }
-                        visible
-                    }
+                    val focusStarted = SystemClock.uptimeMillis(); compose.onNodeWithTag("code-body").performClick()
+                    await { var visible = false; instrumentation.runOnMainSync { visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true }; visible }
                     report.append("$label; focusImeMs=${SystemClock.uptimeMillis() - focusStarted}\n")
                     for (offset in listOf(15, code.length / 2, code.length - 3)) {
-                        val frame = CountDownLatch(1)
-                        val started = SystemClock.uptimeMillis()
-                        var editMs = 0L
-                        var selectionMs = 0L
-                        val sampling = java.util.concurrent.atomic.AtomicBoolean(label == "actual" && offset == 15)
-                        val stacks = HashMap<String, Int>()
-                        val sampler = if (sampling.get()) kotlin.concurrent.thread(name = "preview-edit-sampler", isDaemon = true) {
-                            while (sampling.get()) {
-                                val stack = android.os.Looper.getMainLooper().thread.stackTrace.joinToString("\n")
-                                stacks[stack] = (stacks[stack] ?: 0) + 1
-                                Thread.sleep(5)
-                            }
-                        } else null
-                        try {
-                            instrumentation.runOnMainSync {
-                                val view = dialog.binding.codeView
-                                val selectStarted = SystemClock.uptimeMillis()
-                                view.setSelection(offset)
-                                selectionMs = SystemClock.uptimeMillis() - selectStarted
-                                view.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
-                                val input = checkNotNull(view.onCreateInputConnection(EditorInfo()))
-                                val editStarted = SystemClock.uptimeMillis()
-                                assertTrue(input.commitText("x", 1))
-                                editMs = SystemClock.uptimeMillis() - editStarted
-                                view.postInvalidateOnAnimation()
-                            }
-                        } finally {
-                            sampling.set(false)
-                            sampler?.join(5_000)
-                            if (sampler != null) {
-                                assertFalse("Main-thread sampler stopped", sampler.isAlive)
-                                File(artifacts, "reported-rss-edit-stacks.txt").writeText(
-                                    stacks.entries.sortedByDescending { it.value }
-                                        .joinToString("\n\n") { "samples=${it.value}\n${it.key}" })
-                            }
-                        }
-                        assertTrue("$label input did not commit a frame", frame.await(15, TimeUnit.SECONDS))
+                        compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
+                        val started = SystemClock.uptimeMillis(); compose.onNodeWithTag("code-body").performTextInput("x")
                         expected = expected.substring(0, offset) + "x" + expected.substring(offset)
-                        instrumentation.runOnMainSync {
-                            assertEquals(expected, dialog.currentOriginalCode())
-                            assertEquals(offset + 1, dialog.binding.codeView.selectionEnd)
+                        compose.waitForIdle(); instrumentation.runOnMainSync {
+                            assertEquals(expected, dialog.currentOriginalCode()); assertEquals(offset + 1, dialog.model.state.value.selectionEnd)
                         }
-                        report.append("$label; offset=$offset; selectMs=$selectionMs; editMs=$editMs; frameMs=${SystemClock.uptimeMillis() - started}\n")
-                        val deleteStarted = SystemClock.uptimeMillis()
-                        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
+                        report.append("$label; offset=$offset; inputFrameMs=${SystemClock.uptimeMillis() - started}\n")
+                        val deleteStarted = SystemClock.uptimeMillis(); instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
                         expected = expected.removeRange(offset, offset + 1)
-                        await {
-                            var matches = false
-                            instrumentation.runOnMainSync { matches = dialog.currentOriginalCode() == expected }
-                            matches
-                        }
+                        await { var matches = false; instrumentation.runOnMainSync { matches = dialog.currentOriginalCode() == expected }; matches }
                         report.append("$label; offset=$offset; keyDeleteMs=${SystemClock.uptimeMillis() - deleteStarted}\n")
                     }
                     checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
                         try { File(artifacts, "reported-rss-$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
                         finally { bitmap.recycle() }
                     }
-                } finally {
-                    closeSoftKeyboard()
-                    instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
-                    instrumentation.waitForIdleSync()
-                }
+                } finally { closeSoftKeyboard(); instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }; instrumentation.waitForIdleSync() }
             }
         } finally { File(artifacts, "reported-rss-preview.txt").writeText(report.toString()) }
     }

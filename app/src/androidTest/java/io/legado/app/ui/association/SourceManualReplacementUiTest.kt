@@ -129,10 +129,8 @@ class SourceManualReplacementUiTest {
         for (rss in listOf(false, true)) for (manual in listOf(false, true)) for (recreate in listOf(false, true)) {
             withImport(rss) { host ->
                 val code = host.open(0)
-                main {
-                    code.binding.cbSourceReplacementPreview.isChecked = false
-                    code.binding.codeView.setText(GSON.toJson(source(rss, 0, "Edited Seed0")))
-                }
+                originalPreview()
+                    compose.onNodeWithTag("code-body").performTextReplacement(GSON.toJson(source(rss, 0, "Edited Seed0")))
                 withBlockedSourceRules { entered, release ->
                     host.menu(if (manual) R.id.menu_manual_replace_rule else R.id.menu_effective_replaces,
                         code, waitForIdleAfterClick = false)
@@ -237,6 +235,12 @@ class SourceManualReplacementUiTest {
         }
     }
 
+    private fun originalPreview() {
+        if (compose.onAllNodesWithTag("code-preview-toggle").fetchSemanticsNodes().isEmpty()) return
+        val checkbox = compose.onNodeWithTag("code-preview-toggle")
+        if (checkbox.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ToggleableState] == androidx.compose.ui.state.ToggleableState.On) checkbox.performClick()
+    }
+
     private fun manualFlow(rss: Boolean) {
         AppConfig.importReplaceSource = false
         withImport(rss) { host ->
@@ -255,7 +259,7 @@ class SourceManualReplacementUiTest {
             host.names("Seed++0", "Seed+1") // Hidden, unchecked candidate is also replaced.
             main {
                 assertEquals(listOf(true, false), if (rss) host.feed.state.value.items.map { it.key in host.feed.state.value.selected } else host.book.state.value.items.map { it.key in host.book.state.value.selected })
-                assertEquals("Seed0", if (rss) host.feed.state.value.query else host.view<SearchView>(R.id.source_import_search).query.toString())
+                assertEquals("Seed0", if (rss) host.feed.state.value.query else host.book.state.value.query)
             }
             host.query("")
             host.menu(R.id.menu_effective_replaces)
@@ -263,10 +267,8 @@ class SourceManualReplacementUiTest {
             main { assertEquals(rules.take(2).map { it.id }, ruleIds(effective)); effective.dismiss() }
             host.ready()
             var code = host.open(0)
-            main {
-                code.binding.cbSourceReplacementPreview.isChecked = false
-                code.binding.codeView.setText(GSON.toJson(source(rss, 0, "Edited Seed0")))
-            }
+            originalPreview()
+                compose.onNodeWithTag("code-body").performTextReplacement(GSON.toJson(source(rss, 0, "Edited Seed0")))
             host.menu(R.id.menu_manual_replace_rule, code)
             manual = host.child()
             // Clear inherited global selection, then choose the mixed-scope rule only.
@@ -290,8 +292,8 @@ class SourceManualReplacementUiTest {
             code = host.child()
             host.ready(code)
             main { assertTrue(code.currentOriginalCode().contains("Edited Seed0")) }
-            main { code.binding.cbSourceReplacementPreview.isChecked = false }
-            onView(withId(R.id.menu_fullscreen_edit)).inRoot(isDialog()).perform(click())
+            originalPreview()
+            compose.onNodeWithTag("code-fullscreen").performClick()
             var editor: CodeEditor? = null
             await("Manual source editor missing") {
                 main {
@@ -309,10 +311,8 @@ class SourceManualReplacementUiTest {
             host.ready(code)
             host.names("Editor Seed+0", "Seed+1")
             main { assertTrue(code.currentOriginalCode().contains("Editor Seed0")) }
-            main {
-                code.binding.cbSourceReplacementPreview.isChecked = false
-                code.binding.codeView.setText("{ invalid draft")
-            }
+            originalPreview()
+                compose.onNodeWithTag("code-body").performTextReplacement("{ invalid draft")
             host.menu(R.id.menu_manual_replace_rule, code)
             main {
                 assertEquals("{ invalid draft", code.currentOriginalCode())
@@ -497,7 +497,8 @@ class SourceManualReplacementUiTest {
         }
         fun ready(top: DialogFragment = parent) = await("Preview still updating") {
             main { (if (rss) feed.state.value.interactive else book.state.value.interactive) &&
-                top.dialog?.window?.decorView?.hasWindowFocus() == true }
+                top.dialog?.window?.decorView?.hasWindowFocus() == true &&
+                (top !is CodeDialog || top.model.state.value.loaded && !top.model.state.value.busy) }
         }
         fun names(vararg names: String) = main {
             assertEquals(names.toList(), if (rss) feed.state.value.items.map { it.sourceName }
@@ -510,12 +511,21 @@ class SourceManualReplacementUiTest {
                     result = parent.childFragmentManager.fragments.filterIsInstance<T>().lastOrNull()
                     result?.dialog?.window?.decorView?.hasWindowFocus() == true &&
                         (result !is EffectiveReplacesDialog || ViewModelProvider(checkNotNull(result))[EffectiveReplacementViewModel::class.java].state.value.loading == false) &&
-                        (result !is ManualReplaceRulesDialog || ViewModelProvider(checkNotNull(result))[ManualReplacementViewModel::class.java].state.value.loading == false)
+                        (result !is ManualReplaceRulesDialog || ViewModelProvider(checkNotNull(result))[ManualReplacementViewModel::class.java].state.value.loading == false) &&
+                        (result !is CodeDialog || (result as CodeDialog).model.state.value.loaded)
                 }
             }
             return checkNotNull(result)
         }
         fun menu(id: Int, dialog: DialogFragment = parent, waitForIdleAfterClick: Boolean = true) {
+            if (dialog is CodeDialog) {
+                val action = when (id) { R.id.menu_manual_replace_rule -> "Manual"; R.id.menu_effective_replaces -> "Effective"; R.id.menu_replace_rule -> "ReplaceRules"; else -> error("Unknown code action") }
+                compose.onNodeWithTag("code-menu").performClick()
+                val item = compose.onNodeWithTag("code-action-$action")
+                if (waitForIdleAfterClick) item.performClick()
+                else { val click = item.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.OnClick].action!!; main { assertTrue(click()) } }
+                return
+            }
             if (rss && dialog === parent) {
                 compose.onNodeWithTag("rss-import-menu").performClick()
                 val menu = when (id) {
@@ -566,6 +576,12 @@ class SourceManualReplacementUiTest {
             }
         }
         fun manualEnabled(enabled: Boolean, dialog: DialogFragment = parent) {
+            if (dialog is CodeDialog) {
+                compose.onNodeWithTag("code-menu").performClick()
+                val item = compose.onNodeWithTag("code-action-Manual").assertIsDisplayed()
+                if (enabled) item.assertIsEnabled() else item.assertIsNotEnabled()
+                androidx.test.espresso.Espresso.pressBack(); return
+            }
             if (rss && dialog === parent) {
                 compose.onNodeWithTag("rss-import-menu").performClick()
                 val manual = compose.onNodeWithTag("rss-import-menu-Manual").assertIsDisplayed()
