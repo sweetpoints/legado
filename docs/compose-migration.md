@@ -873,3 +873,7 @@ Moved pure result-order/filter policy to the model layer with the former package
 ### Chapter source content and recoverable cache commits
 
 Added private immutable chapter sessions and disk receipts for fetched content, merged chapter caches and source-change actions. Cache journals precede body writes; an atomic BookHelp fence verifies the previous body hash before recovery and prevents stale receipts overwriting a newer body or chapter metadata. An explicit retry action may abandon only uncommitted cache intents. Added nine JVM tests and four actual Room/cache tests, including concurrent writer rejection and already-written receipt recovery. Existing BookHelp save behavior remains unchanged. Validated with all JVM tests and Android test compilation.
+
+### Chapter source state and automation
+
+Added immutable search, TOC, selection and automation state with private disk sessions, preference boundaries and small saved identities. Durable cache receipts advance batch progress once, stop requests finish an already-started commit, and ambiguous/missing matches pause for explicit chapter selection or skip. Restoring never restarts pending network work automatically. Current-source deletion waits for a successful replacement action. Added thirteen JVM tests covering recovery, IO failures, cancellation and query changes during projection. Validated with all JVM tests and Android test compilation.
