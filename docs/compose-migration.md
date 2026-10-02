@@ -741,3 +741,7 @@ Added immutable cover sessions and an I/O store retaining enabled cached covers,
 ### RSS reading history Compose dialog
 
 Replaced the history dialog with stable-key Compose rows, independent title/URL scrolling, browser links, progress/retry and fresh clear-count confirmation. Origin arguments and small pending keys survive recreation; resumed navigation re-reads complete latest article metadata and ignores canceled late results. Configuration recreation refreshes the history/count, loading blocks deletion, and cancellation invalidates a pending count. Expanded JVM state tests to 9 and compiled 9 Compose plus 3 real Fragment/filter/scroll/recreation tests. Removed the exclusive history item layout/menu and their two source-only menu checks; shared RSS sorting and recycler consumers remain. Android device execution is unavailable.
+
+### Change cover Compose page
+
+Replaced the full-screen cover picker with a stable-ID three-column Compose grid, progress/retry and distinct stop/refresh/resume actions. Shared ComposeCover preserves source metadata, explicit network-image behavior and the default-cover sentinel. Resumed selection waits for a durable receipt and consumes before the existing activity callback; canceled or destroyed hosts stop owned search work. Added compilation of 6 Compose/route tests and 2 real BookInfoEditActivity/Room/recreation tests. Removed the old picker ViewModel/Adapter and two exclusive layouts plus the menu; public book-info callers and cover APIs remain intact. Android device execution is unavailable.
