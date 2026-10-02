@@ -124,7 +124,6 @@ class ImportBookSourceStateTest {
     fun `association import status labels use localized resources`() {
         val importDialogs = listOf(
             "ImportBookSourceDialog.kt",
-            "ImportDictRuleDialog.kt",
             "ImportReplaceRuleDialog.kt",
             "ImportRssSourceDialog.kt",
             "ImportThemeDialog.kt",
@@ -143,7 +142,6 @@ class ImportBookSourceStateTest {
         }
 
         importDialogs
-            .filterNot { it == "ImportDictRuleDialog.kt" }
             .forEach { fileName ->
                 val source = readProjectFile(
                     "src/main/java/io/legado/app/ui/association/$fileName"

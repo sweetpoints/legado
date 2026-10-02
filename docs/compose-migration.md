@@ -487,3 +487,9 @@ AtomicFile sessions for complete JSON drafts. SavedState retains stable keys and
 selection without large payloads. Code-edit requests are consumed in RESUMED, and
 failed inserts retain drafts for retry; completion markers prevent replay after
 restoration. Shared importer layouts remain for other consumers.
+
+Dictionary-rule import now uses a Compose comparison list and stable code-editor
+keys. Local matches remain unchecked by default, including changed payloads;
+code renames recompute local status without resetting selection. Complete drafts
+and completion markers live in AtomicFile sessions, with retry after write failure.
+All rule fields and the existing importer/host contracts remain supported.
