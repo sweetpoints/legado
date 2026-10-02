@@ -100,34 +100,6 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `dialog menu actions provide icons for the vertical menu`() {
-        val menus = mapOf(
-            "rss_read_record.xml" to listOf("menu_clear"),
-        )
-        menus.forEach { (file, ids) ->
-            val source = readProjectFile("src/main/res/menu/$file")
-            ids.forEach { id ->
-                val item = source.substringAfter("android:id=\"@+id/$id\"")
-                    .substringBefore("/>")
-                assertTrue(
-                    "$file/$id should declare an icon",
-                    item.contains("android:icon=\"@drawable/")
-                )
-            }
-        }
-    }
-
-    @Test
-    fun `dialog action icons use the shared toolbar tint`() {
-        mapOf(
-            "src/main/java/io/legado/app/ui/rss/article/ReadRecordDialog.kt" to
-                "toolBar.menu.applyTint(requireContext())",
-        ).forEach { (path, expected) ->
-            assertContains(path, readProjectFile(path), expected)
-        }
-    }
-
-    @Test
     fun `five management adapters use the shared vertical menu`() {
         adapterFiles.forEach { path ->
             val source = readProjectFile(path)

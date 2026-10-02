@@ -30,12 +30,14 @@ class RssReadRecordViewModel(private val repository: RssReadRecordRepository,
     fun load() {
         if (state.value.finished || work?.isActive == true) return
         mutable.value = state.value.copy(loading = true, error = null)
+        val revision = countRevision
         work = viewModelScope.launch {
             try {
                 val items = repository.load(origin).toList()
                 val count = if (saved.get<Boolean>("rssHistory.confirmClear") == true) repository.count(origin) else null
                 if (state.value.finished) return@launch
-                mutable.value = state.value.copy(items = items, clearCount = count, loading = false, loaded = true, effect = restoreEffect(items))
+                val currentCount = if (revision == countRevision && saved.get<Boolean>("rssHistory.confirmClear") == true) count else null
+                mutable.value = state.value.copy(items = items, clearCount = currentCount, loading = false, loaded = true, effect = restoreEffect(items))
             } catch (error: Throwable) { failure(error) }
         }
     }
@@ -62,7 +64,7 @@ class RssReadRecordViewModel(private val repository: RssReadRecordRepository,
         work?.cancel(); mutable.value = state.value.copy(busy = false, clearCount = null)
     }
     fun confirmClear() {
-        if (state.value.busy || state.value.clearCount == null || state.value.finished) return
+        if (state.value.loading || state.value.busy || state.value.clearCount == null || state.value.finished) return
         mutable.value = state.value.copy(busy = true, error = null)
         work = viewModelScope.launch {
             try {

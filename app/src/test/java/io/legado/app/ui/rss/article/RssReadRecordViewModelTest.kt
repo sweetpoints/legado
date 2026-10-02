@@ -80,5 +80,16 @@ class RssReadRecordViewModelTest {
         model.delivered(fresh.id); model.requestClear(); runCurrent(); model.confirmClear(); model.confirmClear(); model.cancel(); model.cancelClear(); runCurrent()
         assertFalse(model.state.value.finished); assertTrue(model.state.value.busy); assertEquals(1, repo.deletes)
         repo.clearGate!!.complete(Unit); runCurrent(); assertFalse(model.state.value.finished); assertTrue(model.state.value.items.isEmpty())
+    }    @Test fun cancelledRestoredConfirmationIgnoresUncooperativeLateCountAndLoadingBlocksClear() = test {
+        val repo = Fake().apply { countGate = CompletableDeferred(); ignoreCancellation = true }
+        val saved = SavedStateHandle(mapOf("rssHistory.confirmClear" to true))
+        val restored = model(repo, saved); runCurrent(); assertTrue(restored.state.value.loading)
+        restored.cancelClear(); repo.countGate!!.complete(Unit); runCurrent()
+        assertNull(restored.state.value.clearCount); assertFalse(saved.get<Boolean>("rssHistory.confirmClear")!!); assertEquals(0, repo.deletes)
+        restored.requestClear(); runCurrent(); assertEquals(7, restored.state.value.clearCount)
+        repo.loadGate = CompletableDeferred(); restored.load(); runCurrent(); assertTrue(restored.state.value.loading)
+        restored.confirmClear(); assertEquals(0, repo.deletes)
+        restored.cancelClear(); repo.loadGate!!.complete(Unit); runCurrent(); assertNull(restored.state.value.clearCount)
     }
+
 }
