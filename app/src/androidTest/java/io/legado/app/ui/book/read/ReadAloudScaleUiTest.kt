@@ -14,7 +14,6 @@ import android.view.View
 import android.widget.TextView
 import android.widget.ImageView
 import androidx.core.view.isVisible
-import androidx.preference.SeekBarPreference
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -38,6 +37,13 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,6 +55,7 @@ import org.junit.runner.RunWith
 /** Actual reader layout and touch bounds; this fixture does not test service lifecycle. */
 @RunWith(AndroidJUnit4::class)
 class ReadAloudScaleUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -57,6 +64,7 @@ class ReadAloudScaleUiTest {
         PreferKey.readAloudControlsRealtime, PreferKey.readAloudControlsPosition,
         PreferKey.readAloudControlsAutoHide,
         PreferKey.readAloudControlsDrag, PreferKey.readAloudControlsDock, PreferKey.readAloudControlsOpacity,
+        PreferKey.readAloudControlsThreshold,
         PreferKey.readAloudControlsX, PreferKey.readAloudControlsY, "readAloudControlsWidth")
         .associateWith { prefs.all[it] }
     private val savedRunning = BaseReadAloudService.isRun
@@ -205,29 +213,37 @@ class ReadAloudScaleUiTest {
         File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt").writeText(evidence.toString())
     }
 
+    @Test fun controlsSettingsRecreationAndRepeatedDismissReleaseEachHostCounterOnce() {
+        lateinit var previousActivity: ReadBookActivity
+        scenario!!.onActivity {
+            previousActivity = it
+            assertEquals(0, it.bottomDialog)
+            ReadAloudControlsDialog().show(it.supportFragmentManager, "controls-counter")
+        }
+        await("settings counted") { it.bottomDialog == 1 }
+        scenario!!.recreate()
+        await("restored settings counted") {
+            it.supportFragmentManager.findFragmentByTag("controls-counter")?.view != null && it.bottomDialog == 1
+        }
+        assertEquals(0, previousActivity.bottomDialog)
+        scenario!!.onActivity {
+            val dialog = it.supportFragmentManager.findFragmentByTag("controls-counter") as ReadAloudControlsDialog
+            dialog.dismiss()
+            dialog.dismiss()
+        }
+        await("settings counter released") { it.bottomDialog == 0 }
+    }
+
     @Test fun legacySizeAndSelectedWidthSurviveSettingsAndReaderRecreation() {
         prefs.edit().putInt(PreferKey.readAloudControlsSize, 72).remove("readAloudControlsWidth").commit()
         scenario!!.onActivity {
             ReadAloudControlsDialog().show(it.supportFragmentManager, "scale-settings")
         }
-        await("width preference") { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("scale-settings")
-            val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
-                as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>("readAloudControlsWidth") != null
-        }
+        compose.onNodeWithTag("aloud-controls-value-Width").performScrollTo().assertTextEquals("432")
         screenshot("aloud-scale-legacy-settings")
-        scenario!!.onActivity { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("scale-settings") as ReadAloudControlsDialog
-            val fragment = dialog.childFragmentManager.findFragmentByTag("controls")
-                as ReadAloudControlsDialog.ControlsPreferenceFragment
-            val width = checkNotNull(fragment.findPreference<SeekBarPreference>("readAloudControlsWidth"))
-            assertEquals("Old 72dp height maps to the original long width", 432, width.value)
-            assertEquals(85, width.min)
-            assertEquals(432, width.max)
-            width.value = 85
-            dialog.dismiss()
-        }
+        compose.onNodeWithTag("aloud-controls-slider-Width").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(85f)) }
+        scenario!!.onActivity { (it.supportFragmentManager.findFragmentByTag("scale-settings") as ReadAloudControlsDialog).dismiss() }
         await("settings dismissed") { it.bottomDialog == 0 }
         scenario!!.recreate()
         scenario!!.onActivity {
@@ -356,23 +372,12 @@ class ReadAloudScaleUiTest {
                 Color.alpha((bar.background as GradientDrawable).color!!.defaultColor))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "new-defaults")
         }
-        await("new settings") { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("new-defaults")
-            val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
-                as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity) != null
-        }
-        scenario!!.onActivity { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("new-defaults") as ReadAloudControlsDialog
-            val fragment = dialog.childFragmentManager.findFragmentByTag("controls")
-                as ReadAloudControlsDialog.ControlsPreferenceFragment
-            assertEquals(85, fragment.findPreference<SeekBarPreference>("readAloudControlsWidth")!!.value)
-            assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
-            val opacity = fragment.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity)!!
-            assertEquals(90, opacity.value)
-            opacity.value = 30
-            dialog.dismiss()
-        }
+        compose.onNodeWithTag("aloud-controls-value-Width").performScrollTo().assertTextEquals("85")
+        assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
+        compose.onNodeWithTag("aloud-controls-value-Opacity").performScrollTo().assertTextEquals("90")
+        compose.onNodeWithTag("aloud-controls-slider-Opacity").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(30f)) }
+        scenario!!.onActivity { (it.supportFragmentManager.findFragmentByTag("new-defaults") as ReadAloudControlsDialog).dismiss() }
         await("new settings dismissed") { it.bottomDialog == 0 }
         scenario!!.recreate()
         scenario!!.onActivity {
@@ -388,12 +393,7 @@ class ReadAloudScaleUiTest {
             assertEquals(76, Color.alpha((bar.background as GradientDrawable).color!!.defaultColor))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "saved-opacity")
         }
-        await("saved opacity preference") { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("saved-opacity")
-            val fragment = dialog?.childFragmentManager?.findFragmentByTag("controls")
-                as? ReadAloudControlsDialog.ControlsPreferenceFragment
-            fragment?.findPreference<SeekBarPreference>(PreferKey.readAloudControlsOpacity)?.value == 30
-        }
+        compose.onNodeWithTag("aloud-controls-value-Opacity").performScrollTo().assertTextEquals("30")
         scenario!!.onActivity {
             (it.supportFragmentManager.findFragmentByTag("saved-opacity") as ReadAloudControlsDialog).dismiss()
         }

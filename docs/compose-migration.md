@@ -320,6 +320,12 @@ updates and engine summaries remain lifecycle-aware; queued host actions survive
 recreation and are consumed once before delivery. Engine-name database access runs
 on IO. The bottom reader visibility lease and exclusive-layout removal are retained.
 
+Floating read-aloud controls now have Compose settings for six independent toggles,
+width, opacity, hide threshold and reveal/reset-position actions. Legacy width
+migration, numeric bounds, release-time persistence, draft flushing and settings
+backup remain compatible. Preference observation follows the resumed lifecycle and
+reader visibility counters release once per view. The preference XML is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,

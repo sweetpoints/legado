@@ -308,28 +308,23 @@ class ReadAloudMenuUiTest {
         prefs.edit().remove(PreferKey.readAloudControlsRealtime).remove(PreferKey.readAloudControlsPause)
             .remove(PreferKey.readAloudControlsPosition).commit()
         scenario!!.onActivity { ReadAloudControlsDialog().showNow(it.supportFragmentManager, "controls-defaults") }
-        onView(withText(R.string.read_aloud_controls_realtime)).inRoot(isDialog()).check(matches(isDisplayed()))
-        onView(withText(R.string.read_aloud_controls_pause)).inRoot(isDialog()).check(matches(isDisplayed()))
-        onView(withText(R.string.read_aloud_controls_position)).inRoot(isDialog()).check(matches(isDisplayed()))
+        compose.onNodeWithTag("aloud-controls-switch-${PreferKey.readAloudControlsRealtime}").assertExists()
+        compose.onNodeWithTag("aloud-controls-switch-${PreferKey.readAloudControlsPause}").assertExists()
+        compose.onNodeWithTag("aloud-controls-switch-${PreferKey.readAloudControlsPosition}").assertExists()
         assertTrue(prefs.getBoolean(PreferKey.readAloudControlsRealtime, false))
         assertTrue(prefs.getBoolean(PreferKey.readAloudControlsPause, false))
         assertTrue(prefs.getBoolean(PreferKey.readAloudControlsPosition, false))
-        val positions = ArrayList<Int>()
-        for (title in listOf(R.string.read_aloud_controls_realtime, R.string.read_aloud_controls_pause,
-            R.string.read_aloud_controls_position)) {
-            onView(withText(title)).inRoot(isDialog()).check { view, _ ->
-                positions += IntArray(2).also(view::getLocationOnScreen)[1]
-            }
+        val positions = listOf(PreferKey.readAloudControlsRealtime, PreferKey.readAloudControlsPause,
+            PreferKey.readAloudControlsPosition).map {
+            compose.onNodeWithTag("aloud-controls-switch-$it").fetchSemanticsNode().boundsInRoot.top
         }
         assertTrue(positions[0] < positions[1] && positions[1] < positions[2])
         screenshot("aloud-independent-switches")
-        onView(withText(R.string.read_aloud_controls_pause)).inRoot(isDialog()).perform(click())
-        onView(withText(R.string.read_aloud_controls_pause)).inRoot(isDialog())
-            .perform(androidx.test.espresso.action.ViewActions.pressBack())
+        compose.onNodeWithTag("aloud-controls-switch-${PreferKey.readAloudControlsPause}").performClick()
+        pressBack()
         scenario!!.onActivity { ReadAloudControlsDialog().showNow(it.supportFragmentManager, "controls-reopen") }
         assertFalse("Opening settings must retain explicit false", prefs.getBoolean(PreferKey.readAloudControlsPause, true))
-        onView(withText(R.string.read_aloud_controls_pause)).inRoot(isDialog())
-            .perform(androidx.test.espresso.action.ViewActions.pressBack())
+        pressBack()
         scenario!!.onActivity {
             playbackFlag("isRun", true)
             BaseReadAloudService.restoreReadAloudFollow()
