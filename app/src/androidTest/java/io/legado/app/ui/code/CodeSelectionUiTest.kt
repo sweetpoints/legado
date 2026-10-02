@@ -69,7 +69,7 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.association.FileAssociationActivity
 import io.legado.app.ui.association.ImportBookSourceDialog
-import io.legado.app.ui.association.ImportBookSourceViewModel
+import io.legado.app.ui.association.BookImportViewModel
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.RssImportViewModel
 import androidx.compose.ui.test.*
@@ -574,17 +574,13 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 ready = (if (rss) parent?.let { ViewModelProvider(it)[RssImportViewModel::class.java].state.value.let { value -> value.interactive && value.items.size == 2 } } == true
-                                    else parent?.view?.findViewById<RecyclerView>(R.id.recycler_view)?.adapter?.itemCount == 2) &&
+                                    else parent?.let { ViewModelProvider(it)[BookImportViewModel::class.java].state.value.let { value -> value.interactive && value.items.size == 2 } } == true) &&
                                     parent?.dialog?.window?.decorView?.hasWindowFocus() == true
                             }
                             ready
                         }
                         if (rss) compose.onNodeWithTag("rss-import-code-1").performScrollTo().performClick()
-                        else instrumentation.runOnMainSync {
-                            val list = parent!!.requireView().findViewById<RecyclerView>(R.id.recycler_view)
-                            checkNotNull(list.findViewHolderForAdapterPosition(1)).itemView
-                                .findViewById<View>(R.id.tv_open).performClick()
-                        }
+                        else compose.onNodeWithTag("book-import-code-1").performScrollTo().performClick()
                         var preview: CodeDialog? = null
                         await {
                             var ready = false
@@ -732,7 +728,7 @@ class CodeSelectionUiTest {
                                             val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
                                             assertEquals(expected, preview!!.binding.codeView.text.toString())
                                             val raw = if (rss) ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items[1].originalJson
-                                                else ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].originalSourceJson(1)
+                                                else ViewModelProvider(parent!!)[BookImportViewModel::class.java].state.value.items.find { it.key == "1" }?.originalJson
                                             assertEquals(edited, raw)
                                         }
                                     }
@@ -750,7 +746,7 @@ class CodeSelectionUiTest {
                                     ready = actual.size == 2 && actual[1].sourceUrl == expectedUrl
                                     if (ready) { assertEquals(urls[0], actual[0].sourceUrl); assertEquals(script, actual[1].jsLib) }
                                 } else {
-                                    val actual = ViewModelProvider(parent!!)[ImportBookSourceViewModel::class.java].allSources
+                                    val actual = ViewModelProvider(parent!!)[BookImportViewModel::class.java].state.value.items.map { GSON.fromJson(it.json, BookSource::class.java) }
                                     ready = actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
                                     if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
                                 }

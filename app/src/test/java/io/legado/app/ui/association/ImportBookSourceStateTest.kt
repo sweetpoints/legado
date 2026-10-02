@@ -62,137 +62,15 @@ class ImportBookSourceStateTest {
     }
 
     @Test
-    fun `direct JS source import preserves coroutine cancellation`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceViewModel.kt"
-        )
-        assertTrue(source.contains("else -> runCatchingCancellable"))
-        val directImport = source.substringAfter("else -> runCatchingCancellable")
-            .substringBefore("}.getOrElse")
-
-        assertTrue(directImport.contains("JsSourceConfig.extract(mText, coroutineContext)"))
-    }
-
-    @Test
-    fun `book source import shows icon for empty states and hides it for results`() {
-        val dialog = readProjectFile(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt"
-        )
-        val errorState = dialog.substringAfter("viewModel.errorLiveData.observe")
-            .substringBefore("viewModel.successLiveData.observe")
-        assertTrue(errorState.contains("binding.ivEmpty.visible()"))
-        val successState = dialog.substringAfter("viewModel.successLiveData.observe")
-            .substringBefore("viewModel.sourceUpdatePending.observe")
-        val populatedState = successState.substringAfter("if (it > 0)")
-            .substringBefore("} else {")
-        assertTrue(populatedState.contains("binding.ivEmpty.gone()"))
-        assertTrue(populatedState.contains("binding.tvMsg.gone()"))
-        assertTrue(successState.substringAfter("} else {").contains("binding.ivEmpty.visible()"))
-
-        val layout = readProjectFile("src/main/res/layout/dialog_recycler_view.xml")
-        assertTrue(layout.contains("@+id/ll_empty"))
-        val emptyIcon = layout.substringAfter("@+id/iv_empty").substringBefore("/>")
-        assertTrue(emptyIcon.contains("@drawable/ic_description"))
-        assertTrue(emptyIcon.contains("android:visibility=\"gone\""))
-        val message = layout.substringAfter("@+id/tv_msg").substringBefore("/>")
-        assertTrue(message.contains("android:layout_width=\"match_parent\""))
-        assertTrue(message.contains("android:visibility=\"gone\""))
-
-        val icon = readProjectFile("src/main/res/drawable/ic_description.xml")
-        assertTrue(icon.contains("android:pathData="))
-    }
-
-    @Test
-    fun `import comment rows reset collapsed state when rebound`() {
-        listOf(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt",
-        ).forEach { path ->
-            val source = readProjectFile(path)
-            val textIndex = source.indexOf("showComment.text =")
-            val resetIndex = source.indexOf("showComment.maxLines = 3", textIndex)
-            val visibleIndex = source.indexOf("showComment.visible()", textIndex)
-            assertTrue(textIndex >= 0 && resetIndex > textIndex && visibleIndex > resetIndex)
-        }
-
-        val layout = readProjectFile("src/main/res/layout/item_source_import.xml")
-        assertTrue(layout.contains("android:maxLines=\"3\""))
-    }
-
-    @Test
-    fun `association import status labels use localized resources`() {
-        val importDialogs = listOf(
-            "ImportBookSourceDialog.kt",
-        )
-
-        importDialogs.forEach { fileName ->
-            val source = readProjectFile(
-                "src/main/java/io/legado/app/ui/association/$fileName"
-            )
-            assertTrue(source.contains("R.string.import_status_new"))
-            assertTrue(source.contains("R.string.import_status_exist"))
-            assertFalse(source.contains("\"新增\""))
-            assertFalse(source.contains("\"更新\""))
-            assertFalse(source.contains("\"已有\""))
-        }
-
-        importDialogs
-            .forEach { fileName ->
-                val source = readProjectFile(
-                    "src/main/java/io/legado/app/ui/association/$fileName"
-                )
-                assertTrue(source.contains("R.string.import_status_update"))
-            }
+    fun `book import status labels resolve localized resources`() {
+        assertEquals(io.legado.app.R.string.import_status_new, bookImportStatus(io.legado.app.data.repository.BookImportStatus.New))
+        assertEquals(io.legado.app.R.string.import_status_update, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Update))
+        assertEquals(io.legado.app.R.string.import_status_exist, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Existing))
+        assertEquals(io.legado.app.R.string.import_status_error, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Error))
     }
 
     @Test
     fun `book source replacement preview is isolated from other import dialogs`() {
-        val dialog = readProjectFile(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceDialog.kt"
-        )
-        assertTrue(dialog.contains("viewModel.setUseSourceReplacement(item.isChecked)"))
-        assertTrue(dialog.contains("viewModel.originalSourceJson(position)"))
-        assertTrue(dialog.contains("alternateCode = viewModel.replacedSourceJson(position)"))
-        assertTrue(dialog.contains("showReplaceRules = true"))
-        assertTrue(dialog.contains("override fun onOpenReplaceRules"))
-        assertTrue(dialog.contains("ReplaceRuleActivity::class.java"))
-        assertTrue(dialog.contains("dialog.currentOriginalCode() to dialog.requestId"))
-        assertTrue(dialog.contains("viewModel.refreshSourceReplacements(index, source)"))
-        assertTrue(dialog.contains("pendingReplacementRefresh"))
-        assertTrue(dialog.contains("startPendingReplacementRefresh()"))
-        assertTrue(
-            dialog.contains(
-                "if (!startPendingReplacementRefresh() && pendingReplacementRefresh == null)"
-            )
-        )
-        assertTrue(dialog.contains("dialog.clearAlternateCode()"))
-        assertTrue(dialog.contains("override fun isReplaceRuleRefreshPending"))
-        assertTrue(dialog.contains("parseBookSourceJson(code, allowSourceUrls = false)"))
-        assertTrue(dialog.contains("viewModel.replacedSourceJson(index)"))
-        assertTrue(dialog.contains("refreshAlternateCode()"))
-        val syncOpenCodeDialog = dialog.substringAfter("private fun syncOpenCodeDialog()")
-            .substringBefore("private fun parseDraftSource")
-        assertTrue(syncOpenCodeDialog.contains("dialog.setReplaceRuleRefreshPending(false)"))
-        val interactionState = dialog.substringAfter("private fun updateInteractionState()")
-            .substringBefore("override fun onCodeSave")
-        assertTrue(interactionState.contains("menu_select_new_source)?.isEnabled = importEnabled"))
-        assertTrue(interactionState.contains("menu_select_update_source)?.isEnabled = importEnabled"))
-
-        val viewModel = readProjectFile(
-            "src/main/java/io/legado/app/ui/association/ImportBookSourceViewModel.kt"
-        )
-        val refreshReplacement = viewModel.substringAfter("fun refreshSourceReplacements")
-            .substringBefore("private fun selectedRules")
-        assertTrue(refreshReplacement.contains("automaticSourceReplacement = previousMode"))
-        assertTrue(refreshReplacement.contains("AppConfig.importReplaceSource = automatic"))
-        assertTrue(refreshReplacement.contains("applyCandidateSources()"))
-        val setSelection = viewModel.substringAfter("fun setSelection")
-            .substringBefore("fun updateSource")
-        assertTrue(
-            setSelection.contains(
-                "if (sourceUpdatePending.value == true || !canImportSource(index)) return"
-            )
-        )
-
         val codeDialog = readProjectFile(
             "src/main/java/io/legado/app/ui/widget/dialog/CodeDialog.kt"
         )

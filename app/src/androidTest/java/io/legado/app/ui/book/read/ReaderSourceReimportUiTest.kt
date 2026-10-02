@@ -52,7 +52,7 @@ import io.legado.app.help.storage.Restore
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.association.ImportBookSourceDialog
-import io.legado.app.ui.association.ImportBookSourceViewModel
+import io.legado.app.ui.association.BookImportViewModel
 import io.legado.app.ui.book.read.config.ReaderMenuConfigDialog
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.widget.PopupAction
@@ -67,6 +67,8 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
+import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -184,12 +186,12 @@ class ReaderSourceReimportUiTest {
         openReimport()
         main {
             val vm = importer()
-            assertEquals(1, vm.allSources.size)
-            assertEquals(source.lastUpdateTime, vm.allSources.single().lastUpdateTime)
-            assertEquals(listOf(true), vm.selectStatus)
-            assertEquals(listOf(false), vm.updateSourceStatus)
-            assertTrue(vm.originalSourceJson(0)!!.contains(source.bookSourceComment!!))
-            assertEquals("#after@text", vm.allSources.single().ruleContent?.content)
+            assertEquals(1, vm.state.value.items.size)
+            assertEquals(source.lastUpdateTime, GSON.fromJson(vm.state.value.items.single().json, BookSource::class.java).lastUpdateTime)
+            assertEquals(listOf(true), vm.state.value.items.map { it.key in vm.state.value.selected })
+            assertEquals(listOf(false), vm.state.value.items.map { it.status == io.legado.app.data.repository.BookImportStatus.Update })
+            assertTrue(vm.state.value.items.single().originalJson.contains(source.bookSourceComment!!))
+            assertEquals("#after@text", GSON.fromJson(vm.state.value.items.single().json, BookSource::class.java).ruleContent?.content)
         }
         openPreview()
         screenshot("reader-reimport-preview")
@@ -199,7 +201,7 @@ class ReaderSourceReimportUiTest {
             assertTrue(code.binding.codeView.text.toString().contains("#after@text"))
         }
         pressBack()
-        onView(withId(R.id.tv_cancel)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("book-import-cancel").performClick()
         await("cancel closes importer") { it.supportFragmentManager.fragments.none { f -> f is ImportBookSourceDialog } }
         assertEquals(before, GSON.toJson(appDb.bookSourceDao.getBookSource(source.bookSourceUrl)))
         assertSame(current, ReadBook.bookSource)
@@ -213,6 +215,7 @@ class ReaderSourceReimportUiTest {
         val oldVm = main { importer() }
         val oldDialog = main { dialog() }
         val oldActivity = main { it }
+        val confirmAction = compose.onNodeWithTag("book-import-confirm").assertIsEnabled().fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
         val blocked = CountDownLatch(1)
         val release = CountDownLatch(1)
         val error = AtomicReference<Throwable?>()
@@ -225,11 +228,9 @@ class ReaderSourceReimportUiTest {
             // Espresso drains the loading animation after a click, which would wait until the
             // transaction gate times out. Invoke the real button without waiting for import idle.
             instrumentation.runOnMainSync {
-                val confirm = oldDialog.requireView().findViewById<View>(R.id.tv_ok)
-                assertTrue(confirm.isEnabled && confirm.isShown)
-                assertTrue(confirm.performClick())
-                assertTrue("Import must be pending before recreation", oldVm.sourceUpdatePending.value == true)
-                assertFalse(oldVm.importFinished.value == true)
+                assertTrue(confirmAction())
+                assertTrue("Import must be pending before recreation", oldVm.state.value.busy)
+                assertFalse(oldVm.state.value.finished)
                 // ActivityScenario.recreate/onActivity wait for idle, which drains this deliberately
                 // blocked import's loading animation. Recreate and inspect through the real lifecycle.
                 oldActivity.recreate()
@@ -244,8 +245,8 @@ class ReaderSourceReimportUiTest {
                     val fragment = activity?.supportFragmentManager?.fragments
                         ?.filterIsInstance<ImportBookSourceDialog>()?.singleOrNull()
                     restoredPending = fragment != null && fragment !== oldDialog &&
-                        ViewModelProvider(fragment)[ImportBookSourceViewModel::class.java] === oldVm &&
-                        oldVm.sourceUpdatePending.value == true && oldVm.importFinished.value != true
+                        ViewModelProvider(fragment)[BookImportViewModel::class.java] === oldVm &&
+                        oldVm.state.value.busy && !oldVm.state.value.finished
                     if (restoredPending) scenarioDialog = fragment
                 }
                 if (!restoredPending) SystemClock.sleep(50)
@@ -306,12 +307,12 @@ class ReaderSourceReimportUiTest {
             val position = listOf(ReadBook.durChapterIndex, ReadBook.durChapterPos)
             // Execute the retained confirmation with the original dialog VM, as an already queued
             // operation would complete after the current book changes.
-            instrumentation.runOnMainSync { pendingVm.importSelect() }
+            instrumentation.runOnMainSync { pendingVm.confirm() }
             val importDeadline = SystemClock.uptimeMillis() + 15000
-            while (pendingVm.importFinished.value != true && SystemClock.uptimeMillis() < importDeadline) {
+            while (!pendingVm.state.value.finished && SystemClock.uptimeMillis() < importDeadline) {
                 SystemClock.sleep(50)
             }
-            assertTrue(pendingVm.importFinished.value == true)
+            assertTrue(pendingVm.state.value.finished)
             assertEquals("#after@text", appDb.bookSourceDao.getBookSource(source.bookSourceUrl)!!.ruleContent?.content)
             assertEquals(otherBook.bookUrl, ReadBook.book?.bookUrl)
             assertEquals(otherSource.bookSourceUrl, ReadBook.bookSource?.bookSourceUrl)
@@ -356,7 +357,7 @@ class ReaderSourceReimportUiTest {
         })
         onView(withText(R.string.reimport_book_source)).inRoot(isPlatformPopup()).perform(click())
         awaitImporter()
-        onView(withId(R.id.tv_cancel)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("book-import-cancel").performClick()
         scenario.close()
         val expected = loadReaderMenuConfig(context)
         runBlocking(Dispatchers.IO) {
@@ -400,7 +401,7 @@ class ReaderSourceReimportUiTest {
 
     private fun dialog() = checkNotNull(scenarioDialog)
     private var scenarioDialog: ImportBookSourceDialog? = null
-    private fun importer() = ViewModelProvider(dialog())[ImportBookSourceViewModel::class.java]
+    private fun importer() = ViewModelProvider(dialog())[BookImportViewModel::class.java]
 
     private fun openReimport() {
         openOverflow()
@@ -411,16 +412,12 @@ class ReaderSourceReimportUiTest {
     private fun awaitImporter() = await("one current-source import candidate") {
         scenarioDialog = it.supportFragmentManager.fragments.filterIsInstance<ImportBookSourceDialog>().singleOrNull()
         val dialog = scenarioDialog ?: return@await false
-        val vm = ViewModelProvider(dialog)[ImportBookSourceViewModel::class.java]
-        vm.successLiveData.value == 1 && vm.sourceUpdatePending.value != true &&
-            dialog.view?.findViewById<RecyclerView>(R.id.recycler_view)?.findViewHolderForAdapterPosition(0) != null
+        val vm = ViewModelProvider(dialog)[BookImportViewModel::class.java]
+        vm.state.value.items.size == 1 && vm.state.value.interactive && dialog.view != null
     }
 
     private fun openPreview() {
-        main {
-            dialog().requireView().findViewById<RecyclerView>(R.id.recycler_view)
-                .findViewHolderForAdapterPosition(0)!!.itemView.findViewById<View>(R.id.tv_open).performClick()
-        }
+        compose.onNodeWithTag("book-import-code-0").performScrollTo().performClick()
         await("native source code preview") {
             dialog().childFragmentManager.fragments.filterIsInstance<CodeDialog>().singleOrNull()
                 ?.dialog?.window?.decorView?.hasWindowFocus() == true

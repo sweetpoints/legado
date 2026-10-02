@@ -1,0 +1,161 @@
+package io.legado.app.ui.association
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import io.legado.app.R
+import io.legado.app.data.repository.BookImportPreferences
+import io.legado.app.data.repository.BookImportStatus
+
+internal enum class BookImportMenu(val label: Int) {
+    KeepName(R.string.keep_original_name), KeepGroup(R.string.keep_group), KeepEnable(R.string.keep_enable),
+    ShowComment(R.string.show_source_comment), RememberGroup(R.string.import_remember_group),
+    Automatic(R.string.replace_source_on_import), Effective(R.string.effective_replaces),
+    Manual(R.string.manual_replace_rule), ReplaceRules(R.string.menu_replace_rule),
+    SelectNew(R.string.select_new_source), SelectUpdate(R.string.select_update_source)
+}
+@Composable internal fun BookImportScreen(state: BookImportUiState, onSearch: (String) -> Unit,
+    onToggle: (String) -> Unit, onSelectVisible: () -> Unit, onCode: (String) -> Unit,
+    onExpand: (String) -> Unit, onMenu: (BookImportMenu) -> Unit, onGroup: () -> Unit,
+    onGroupDraft: (String) -> Unit, onAddGroup: (Boolean) -> Unit, onAcceptGroup: () -> Unit,
+    onCloseGroup: () -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit,
+    modifier: Modifier = Modifier) {
+    val labels = BookImportSearchLabels(stringResource(R.string.enabled), stringResource(R.string.disabled),
+        stringResource(R.string.need_login), stringResource(R.string.no_group),
+        stringResource(R.string.enabled_explore), stringResource(R.string.disabled_explore))
+    val visible = visibleBookImportItems(state, labels)
+    var menuOpen by remember { mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier) {
+        Column(Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding()) {
+            Surface(color = MaterialTheme.colorScheme.primary) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.import_book_source), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary)
+                    Box {
+                        IconButton({ menuOpen = true }, enabled = state.interactive, modifier = Modifier.testTag("book-import-menu")) {
+                            Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.menu), tint = MaterialTheme.colorScheme.onPrimary)
+                        }
+                        DropdownMenu(menuOpen, { menuOpen = false }) {
+                            BookImportMenu.entries.forEach { item ->
+                                val checked = when (item) {
+                                    BookImportMenu.KeepName -> state.preferences.keepName
+                                    BookImportMenu.KeepGroup -> state.preferences.keepGroup
+                                    BookImportMenu.KeepEnable -> state.preferences.keepEnable
+                                    BookImportMenu.ShowComment -> state.preferences.showComment
+                                    BookImportMenu.RememberGroup -> state.preferences.rememberGroup
+                                    BookImportMenu.Automatic -> state.automatic
+                                    else -> null
+                                }
+                                DropdownMenuItem(text = { Text(stringResource(item.label)) }, onClick = { menuOpen = false; onMenu(item) },
+                                    enabled = item != BookImportMenu.Manual || !state.automatic,
+                                    modifier = Modifier.testTag("book-import-menu-${item.name}"),
+                                    trailingIcon = { checked?.let { Checkbox(it, null) } })
+                            }
+                        }
+                    }
+                }
+            }
+            TextButton(onGroup, enabled = state.interactive, modifier = Modifier.fillMaxWidth().testTag("book-import-group")) {
+                Text(if (state.group.isNullOrBlank()) stringResource(R.string.diy_source_group)
+                    else (if (state.addGroup) "+" else "") + stringResource(R.string.diy_edit_source_group_title, state.group))
+            }
+            OutlinedTextField(state.query, onSearch, singleLine = true, label = { Text(stringResource(R.string.search)) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("book-import-search"))
+            if (state.loading || state.busy || state.pendingRefresh) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("book-import-progress"))
+            LazyColumn(Modifier.weight(1f, fill = false).fillMaxWidth().testTag("book-import-list")) {
+                state.error?.let { error -> item {
+                    Column(Modifier.padding(16.dp)) {
+                        Icon(painterResource(R.drawable.ic_description), null, Modifier.testTag("book-import-empty-icon"))
+                        Text(error, Modifier.testTag("book-import-error"), color = MaterialTheme.colorScheme.error)
+                        if (state.items.isEmpty()) TextButton(onRetry, enabled = !state.loading && !state.busy) { Text(stringResource(R.string.retry)) }
+                    }
+                } }
+                if (!state.loading && visible.isEmpty() && state.error == null) item {
+                    Column(Modifier.padding(16.dp)) {
+                        if (state.items.isEmpty()) Icon(painterResource(R.drawable.ic_description), null, Modifier.testTag("book-import-empty-icon"))
+                        Text(stringResource(if (state.items.isEmpty()) R.string.wrong_format else R.string.import_no_results), Modifier.testTag("book-import-empty"))
+                    }
+                }
+                items(visible, key = { it.key }) { item ->
+                    Row(Modifier.fillMaxWidth().testTag("book-import-row-${item.key}")
+                        .clickable(enabled = state.interactive && item.canImport) { onToggle(item.key) }.padding(horizontal = 8.dp)) {
+                        Checkbox(item.key in state.selected, { onToggle(item.key) }, enabled = state.interactive && item.canImport,
+                            modifier = Modifier.testTag("book-import-check-${item.key}"))
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                            Text(item.sourceName, style = MaterialTheme.typography.bodyLarge)
+                            val comment = item.replacementError?.takeIf { state.useReplacement }?.let {
+                                stringResource(R.string.source_replacement_error, it)
+                            } ?: item.sourceComment?.takeIf { state.preferences.showComment && it.isNotBlank() }
+                            comment?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = if (item.key in state.expanded) 39 else 3,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("book-import-comment-${item.key}")
+                                        .clickable(enabled = state.interactive) { onExpand(item.key) })
+                            }
+                            Text(stringResource(bookImportStatus(item.status)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton({ onCode(item.key) }, enabled = state.interactive, modifier = Modifier.testTag("book-import-code-${item.key}")) {
+                            Text(stringResource(R.string.open))
+                        }
+                    }
+                }
+            }
+            TextButton(onSelectVisible, enabled = state.interactive && visible.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().testTag("book-import-select-visible")) {
+                val all = visible.all { !it.canImport || it.key in state.selected }
+                Text(if (state.query.isNotEmpty()) stringResource(if (all) R.string.import_unselect_results else R.string.import_select_results,
+                    visible.count { it.key in state.selected }, visible.size, state.selectCount)
+                else stringResource(if (state.isSelectAll) R.string.select_cancel_count else R.string.select_all_count, state.selectCount, state.items.size))
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onCancel, enabled = !state.busy && !state.pendingRefresh, modifier = Modifier.testTag("book-import-cancel")) { Text(stringResource(R.string.cancel)) }
+                TextButton(onConfirm, enabled = state.interactive, modifier = Modifier.testTag("book-import-confirm")) { Text(stringResource(R.string.confirm)) }
+            }
+        }
+    }
+    if (state.groupOpen && !state.finished) AlertDialog(onDismissRequest = onCloseGroup,
+        title = { Text(stringResource(R.string.diy_edit_source_group)) }, text = {
+            Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .55f).dp).verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.add_group)); Text(stringResource(R.string.custom_group_summary), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(state.addGroupDraft, onAddGroup, Modifier.testTag("book-import-add-group"))
+                }
+                OutlinedTextField(state.groupDraft, onGroupDraft, label = { Text(stringResource(R.string.group_name)) },
+                    modifier = Modifier.fillMaxWidth().testTag("book-import-group-name"), singleLine = true)
+                LazyColumn(Modifier.heightIn(max = 180.dp)) {
+                    items(state.groups.filter { it.contains(state.groupDraft, ignoreCase = true) }) { group ->
+                        TextButton({ onGroupDraft(group) }, Modifier.fillMaxWidth()) { Text(group) }
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onAcceptGroup, Modifier.testTag("book-import-group-ok")) { Text(stringResource(R.string.confirm)) } },
+        dismissButton = { TextButton(onCloseGroup, Modifier.testTag("book-import-group-cancel")) { Text(stringResource(R.string.cancel)) } })
+}
+internal fun bookImportMenuPreferences(menu: BookImportMenu, value: BookImportUiState): BookImportPreferences = when (menu) {
+    BookImportMenu.KeepName -> value.preferences.copy(keepName = !value.preferences.keepName)
+    BookImportMenu.KeepGroup -> value.preferences.copy(keepGroup = !value.preferences.keepGroup)
+    BookImportMenu.KeepEnable -> value.preferences.copy(keepEnable = !value.preferences.keepEnable)
+    BookImportMenu.ShowComment -> value.preferences.copy(showComment = !value.preferences.showComment)
+    BookImportMenu.RememberGroup -> value.preferences.copy(rememberGroup = !value.preferences.rememberGroup, lastGroup = value.group, lastGroupAdd = value.addGroup)
+    else -> value.preferences
+}
+
+internal fun bookImportStatus(status: BookImportStatus): Int = when (status) {
+    BookImportStatus.New -> R.string.import_status_new
+    BookImportStatus.Update -> R.string.import_status_update
+    BookImportStatus.Existing -> R.string.import_status_exist
+    BookImportStatus.Error -> R.string.import_status_error
+}
