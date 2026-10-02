@@ -657,3 +657,7 @@ Added revisioned private AtomicFile code drafts and saved preview state. Origina
 ### Book source import Compose page
 
 Replaced ImportBookSourceDialog with stable-ID Compose selection, search and menus, grouped import settings, comments, replacement errors, and confirmation controls. Source code/manual/effective child callbacks retain their contracts; resumed publication updates only the captured reader book/source. Migrated only book-source branches in five existing integration suites, preserving RSS and native editor cases and real reader network/cache behavior. Added compilation of 12 new Compose/host tests. Removed the old import ViewModel; shared recycler/source item resources remain for active consumers. Android device execution is unavailable.
+
+### Text and help dialog data/state foundation
+
+Added background-staged private text requests, rich HTML/Markdown projection, and saved help state with directory selection, rendered literal search, offset-safe scroll requests, deadlines, and editor effects. Large content stays out of Bundle state; the model awaits request persistence before exposing it. HTML links, images, tables, lists, emphasis and CSS colors retain structured semantics, including functional RGB/alpha colors. Restored timers keep the original deadline and explicit close behavior. Added 6 projection and 10 ViewModel JVM tests plus compilation of 2 real request persistence tests. Legacy UI remains for separate Compose integration; Android device execution is unavailable.
