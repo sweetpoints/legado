@@ -865,3 +865,7 @@ Added immutable drafts for all 33 text fields and eight flags, preserving source
 ### RSS source editor saved state and actions
 
 Added a ViewModel for the four tabs, focus, all field text/selection, editor options, undo/redo, unsaved-exit decisions and lifecycle-delivered actions. Saved state retains small session and transfer identities; large drafts use private files. Save actions await durable repository receipts; cancelled saves and native editor returns recover without publishing UI actions after stop. Added twelve JVM tests for restored drafts, metadata, cancelled save/result handling, retry and exact-once delivery. Validated with all JVM tests and Android test compilation.
+
+### Chapter source search repository
+
+Moved pure result-order/filter policy to the model layer with the former package API retained as a compatibility delegate. Added IO search/store boundaries for cached results, source groups, bounded concurrent searches, word-count measurement, scores and current-source pinning. Results persist and publish sequentially per source; a later source failure retains earlier successful rows and never cancels other sources. Added ten JVM tests and two actual Room store tests. Validated with all JVM tests and Android test compilation.
