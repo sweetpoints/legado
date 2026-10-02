@@ -781,3 +781,7 @@ Added immutable bookmark seeds and private revisioned AtomicFile drafts, preserv
 ### Bookmark editor Compose dialog
 
 Replaced bookmark editing with separate Compose Screen/Route and the existing public Fragment constructors. Read-only chapter text, original text and notes preserve exact whitespace; delete remains limited to existing bookmarks. Transparent outside cancellation, IME actions, focus/selection restoration and busy protection retain host behavior. Resumed close delivery runs once; small argument IDs and durable drafts restore across Fragment recreation. Added compilation of 7 real Compose behavior tests and 3 actual Fragment/Room/recreation tests. Removed the exclusive bookmark layout. Full JVM tests and Android test compilation validate integration; Android device execution is unavailable.
+
+### Replacement rule group management data and state
+
+Added a reusable immutable named-group state model and a replacement-rule repository. Transactional add assigns only ungrouped records; rename/delete change exact memberships while retaining other groups and complete rule metadata. Saved editor targets follow names across reordered lists, failed mutations retain retryable input, and active mutations block repeated actions. Canceled noncooperative results cannot publish state. Added 5 JVM behavior tests and compilation of 3 real Room metadata/ungrouped/SQL-wildcard cases. Existing group dialog remains for separate Compose integration; Android device execution is unavailable.
