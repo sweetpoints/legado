@@ -1,30 +1,19 @@
 package io.legado.app.ui.widget.dialog
 
-import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
-import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
-import com.bumptech.glide.request.RequestOptions
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogPhotoViewBinding
-import io.legado.app.help.book.BookHelp
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.glide.ImageLoader
-import io.legado.app.help.glide.OkHttpModelLoader
-import io.legado.app.model.BookCover
-import io.legado.app.model.ImageProvider
-import io.legado.app.model.ReadBook
+import io.legado.app.ui.widget.dialog.photo.GlidePhotoImageLoader
+import io.legado.app.ui.widget.dialog.photo.PhotoRequest
+import io.legado.app.ui.widget.dialog.photo.PhotoRoute
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-/**
- * 显示图片
- */
-class PhotoDialog() : BaseDialogFragment(R.layout.dialog_photo_view) {
-
+/** Fullscreen Compose image viewer, including restored src/sourceOrigin/isBook arguments. */
+class PhotoDialog() : BaseComposeDialogFragment() {
     constructor(src: String, sourceOrigin: String? = null, isBook: Boolean = false) : this() {
         arguments = Bundle().apply {
             putString("src", src)
@@ -32,8 +21,6 @@ class PhotoDialog() : BaseDialogFragment(R.layout.dialog_photo_view) {
             putBoolean("isBook", isBook)
         }
     }
-
-    private val binding by viewBinding(DialogPhotoViewBinding::bind)
 
     override fun onStart() {
         super.onStart()
@@ -44,39 +31,13 @@ class PhotoDialog() : BaseDialogFragment(R.layout.dialog_photo_view) {
         }
     }
 
-    @SuppressLint("CheckResult")
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        if (!AppConfig.isEInkMode) {
-            binding.root.setBackgroundResource(R.color.photo_viewer_scrim)
+    @Composable
+    override fun Content() {
+        val loader = remember { GlidePhotoImageLoader(requireContext()) }
+        val request = remember(arguments) {
+            PhotoRequest(arguments?.getString("src").orEmpty(), arguments?.getString("sourceOrigin"),
+                arguments?.getBoolean("isBook") == true)
         }
-        binding.photoView.setOnClickListener { dismiss() }
-        val arguments = arguments ?: return
-        val src = arguments.getString("src") ?: return
-        ImageProvider.get(src)?.let {
-            binding.photoView.setImageBitmap(it)
-            return
-        }
-        val isBook = arguments.getBoolean("isBook")
-        val file = if (isBook) ReadBook.book?.let { book ->
-            BookHelp.getImage(book, src)
-        } else null
-        if (file?.exists() == true) {
-            ImageLoader.load(requireContext(), file)
-                .error(R.drawable.image_loading_error)
-                .dontTransform()
-                .downsample(DownsampleStrategy.NONE)
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .into(binding.photoView)
-        } else {
-            ImageLoader.load(requireContext(), src).apply {
-                arguments.getString("sourceOrigin")?.let { sourceOrigin ->
-                    apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, sourceOrigin))
-                }
-            }.error(if (isBook) BookCover.defaultDrawable else R.drawable.image_loading_error)
-                .dontTransform()
-                .downsample(DownsampleStrategy.NONE)
-                .into(binding.photoView)
-        }
+        PhotoRoute(request, loader, ::dismiss, AppConfig.isEInkMode)
     }
-
 }

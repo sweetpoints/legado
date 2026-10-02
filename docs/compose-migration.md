@@ -96,6 +96,11 @@ ui/
   widget/dialog/
     WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
     WaitDialogContent.kt       stateless Compose progress/message content
+    PhotoDialog.kt             argument-compatible fullscreen Compose viewer
+    photo/PhotoRoute.kt        cancellable image loading and animation lease
+    photo/PhotoScreen.kt       saveable zoom/pan, gestures and drawing
+    photo/PhotoImageLoader.kt  cached/local/remote loading off the UI thread
+    photo/PhotoAnimatedPainter.kt lifecycle-managed animated Drawable drawing
   about/
     AboutActivity.kt           Android effects and existing application operations
     AboutScreen.kt             stateless screen using common settings components
@@ -193,7 +198,7 @@ results remain isolated by verificationResultKey. Configuration changes do not
 cancel the request or finish the host. Glide waits and preview-file writes run on
 IO with cancellation cleanup. Each enlarged preview uses an independent cache
 file, so reloading cannot recycle a bitmap held by a restored PhotoDialog. The shared
-PhotoDialog remains a legacy consumer and will be migrated separately.
+PhotoDialog now uses the Compose viewer described below.
 
 Manga e-ink threshold settings now use Compose with a preferences boundary,
 immutable StateFlow, lifecycle-aware reader previews and SavedStateHandle drafts.
@@ -242,6 +247,15 @@ insertion preserves selection and IME composition; editor drafts survive recreat
 without writes on cancellation. Immediate setting writes retain existing UP_CONFIG
 payloads and external TIP_COLOR refresh does not overwrite open editor drafts.
 Both dedicated layouts are removed; FontSelectDialog is migrated independently.
+
+PhotoDialog now uses a pure Compose viewer with fit-center upscaling, delayed
+single-tap dismissal, double-tap and pinch zoom, bounded panning and fling decay.
+Zoom/pan survive saved-state restoration and same-source reloads. Existing
+src/sourceOrigin/isBook arguments, cache precedence, local book images and fallback
+artwork remain compatible. Static images use independent bitmap copies; animated
+images retain a Glide lease and use a lifecycle-managed Compose painter, preserving
+GIF playback. Animation callbacks stop before pooled resources are released. The
+exclusive XML, PhotoView and its unused gesture helpers are removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
