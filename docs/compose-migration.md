@@ -861,3 +861,7 @@ Replaced BottomWebViewDialog XML/ViewBinding with a Compose Route and stateless 
 ### RSS source editor durable draft and save repository
 
 Added immutable drafts for all 33 text fields and eight flags, preserving source metadata and rule completion. Room saves update renamed article/favorite origins transactionally and retain cache invalidation behavior. A durable pre-transaction journal and full JSON fingerprints recover committed saves after invalidation or draft-write failures while rejecting concurrent target changes. Disk drafts and code-editor transfer files keep large rules out of saved-state payloads. Added four JVM projection tests and ten actual Room/disk recovery tests. Validated with the complete JVM suite and Android test compilation.
+
+### RSS source editor saved state and actions
+
+Added a ViewModel for the four tabs, focus, all field text/selection, editor options, undo/redo, unsaved-exit decisions and lifecycle-delivered actions. Saved state retains small session and transfer identities; large drafts use private files. Save actions await durable repository receipts; cancelled saves and native editor returns recover without publishing UI actions after stop. Added twelve JVM tests for restored drafts, metadata, cancelled save/result handling, retry and exact-once delivery. Validated with all JVM tests and Android test compilation.
