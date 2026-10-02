@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auto_task_debug_interrupted">The previous run was interrupted. Run again to restart it.</string>
+</resources>

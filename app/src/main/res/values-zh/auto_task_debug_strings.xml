@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auto_task_debug_interrupted">上次调试已中断，点击再次运行可重新执行。</string>
+</resources>
