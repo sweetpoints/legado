@@ -59,7 +59,13 @@ import kotlinx.coroutines.launch
 class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source),
     Toolbar.OnMenuItemClickListener,
     ChangeChapterSourceAdapter.CallBack,
-    ChangeChapterTocAdapter.Callback {
+    ChangeChapterTocAdapter.Callback,
+    ChangeSourceWordCountFilterCallback {
+
+    override fun onWordCountFilterChanged(reloadMeasurements: Boolean) {
+        binding.toolBar.menu.syncChangeSourceResultOptions()
+        viewModel.onResultOptionsChanged(reloadMeasurements)
+    }
 
     constructor(
         name: String,
@@ -513,10 +519,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 viewModel.onResultOptionsChanged(enabled)
             }
 
-            R.id.menu_word_count_filter -> showChangeSourceWordCountFilter { reload ->
-                binding.toolBar.menu.syncChangeSourceResultOptions()
-                viewModel.onResultOptionsChanged(reload)
-            }
+            R.id.menu_word_count_filter -> showChangeSourceWordCountFilter()
 
             R.id.menu_start_stop -> viewModel.startOrStopSearch()
             R.id.menu_chapter_source_automation -> {

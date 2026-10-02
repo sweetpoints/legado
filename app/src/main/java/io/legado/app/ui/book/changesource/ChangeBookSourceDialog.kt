@@ -59,7 +59,13 @@ import kotlinx.coroutines.launch
  */
 class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_source),
     Toolbar.OnMenuItemClickListener,
-    ChangeBookSourceAdapter.CallBack {
+    ChangeBookSourceAdapter.CallBack,
+    ChangeSourceWordCountFilterCallback {
+
+    override fun onWordCountFilterChanged(reloadMeasurements: Boolean) {
+        binding.toolBar.menu.syncChangeSourceResultOptions()
+        viewModel.onResultOptionsChanged(reloadMeasurements)
+    }
 
     constructor(name: String, author: String) : this() {
         arguments = Bundle().apply {
@@ -396,10 +402,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                 viewModel.onResultOptionsChanged(enabled)
             }
 
-            R.id.menu_word_count_filter -> showChangeSourceWordCountFilter { reload ->
-                binding.toolBar.menu.syncChangeSourceResultOptions()
-                viewModel.onResultOptionsChanged(reload)
-            }
+            R.id.menu_word_count_filter -> showChangeSourceWordCountFilter()
 
             R.id.menu_start_stop -> viewModel.startOrStopSearch()
             R.id.menu_source_manage -> startActivity<BookSourceActivity>()

@@ -493,3 +493,7 @@ keys. Local matches remain unchecked by default, including changed payloads;
 code renames recompute local status without resetting selection. Complete drafts
 and completion markers live in AtomicFile sessions, with retry after write failure.
 All rule fields and the existing importer/host contracts remain supported.
+
+### Change-source word-count filter
+
+Migrated mode selection and numeric range editing to a Compose screen with a SavedStateHandle ViewModel and a preferences repository. Both change-source hosts retain menu synchronization and refresh callbacks; disabling filtering preserves stored bounds. Invalid ranges and save failures keep the draft open, and completion callbacks are consumed once while resumed. Shared edit-field XML remains for other consumers. Validation includes 8 JVM state tests and compilation of 3 Compose interaction/restoration tests; device execution is unavailable.
