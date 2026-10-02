@@ -845,3 +845,7 @@ Added immutable file/directory projections and an I/O filesystem repository, ret
 ### Local file picker Compose page
 
 Migrated FilePickerDialog to a lifecycle-aware Compose Route and stateless Screen, retaining exact extension filtering, current-directory selection, folder creation, navigation, both callback targets, and host dismissal. Typed picker issues use English and Chinese resources. Removed the former ViewModel, two exclusive layouts and menu; shared path-picker assets remain. Added ten Compose tests and three host restoration tests. Validated with the complete JVM suite and Android test compilation; device tests require a connected Android device.
+
+### Shared local book preview data and state
+
+Added an IO repository for immutable file metadata and a SavedStateHandle ViewModel for shared local-book preview selection, scrolling, busy state and one-time action tickets. Full Book objects, copy/parsing and final import remain owned by the existing FileAssociation pipeline. Added seven JVM tests and two actual FileDoc Android tests. Validated with all JVM tests and Android test compilation.
