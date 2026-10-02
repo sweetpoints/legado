@@ -685,3 +685,7 @@ Moved the shared file installer from the UI package into data/file and updated r
 ### Text/help Compose page and searchable rich text
 
 Replaced TextDialog with Compose content, right-side help directory, rendered search and match navigation, deadline/auto-close handling, restored scroll and full-source editor navigation. Plain/Markdown/HTML constructors retain their behavior while Fragment arguments keep only a request ID. Reusable rich text renders links, colors, emphasis, tables and lifecycle-owned images with long-press preview and selectable text; actual text geometry drives search scrolling. Added compilation of 12 Compose/platform/Fragment tests and replaced three old source-only checks. Removed the exclusive text layout/menu; Android device execution is unavailable.
+
+### Reader text action data foundation
+
+Added value-only action/component snapshots and an I/O discovery/preferences repository. Existing primary/more menu configuration preserves action order and process-text applications; missing or failed application discovery keeps built-in actions. Component-based identities survive PackageManager reordering, while duplicate entries remain distinct. Speak-mode toggles serialize on the repository dispatcher. Added 7 JVM partition/discovery/thread tests and compilation of 1 actual PackageManager/resource test. Legacy popup remains for separate Compose integration; Android device execution is unavailable.
