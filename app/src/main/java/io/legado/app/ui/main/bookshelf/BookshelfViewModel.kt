@@ -1,235 +1,72 @@
 package io.legado.app.ui.main.bookshelf
 
 import android.app.Application
-import androidx.lifecycle.MutableLiveData
-import com.google.gson.JsonObject
-import com.google.gson.stream.JsonWriter
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.replaceBookAfterSourceChange
-import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.book.savePreservingCustomCoverUrl
-import io.legado.app.help.book.update
-import io.legado.app.help.config.AppConfig
-import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.http.decompressed
-import io.legado.app.help.http.newCallResponseBody
-import io.legado.app.help.http.okHttpClient
-import io.legado.app.help.http.text
-import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.model.webBook.WebBook
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.GSON
-import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.fromJsonArray
-import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.isAbsUrl
-import io.legado.app.utils.isJsonArray
+import io.legado.app.data.repository.BookshelfTransferRepository
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStreamWriter
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class BookshelfViewModel(application: Application) : BaseViewModel(application) {
-    val addBookProgressLiveData = MutableLiveData(-1)
-    var addBookJob: Coroutine<*>? = null
-
-    fun addBookByUrl(bookUrls: String, groupId: Long) {
-        var successCount = 0
-        addBookJob = execute {
-            val hasBookUrlPattern: List<BookSourcePart> by lazy {
-                appDb.bookSourceDao.hasBookUrlPattern
-            }
-            val urls = bookUrls.split("\n")
-            for (url in urls) {
-                val bookUrl = url.trim()
-                if (bookUrl.isEmpty()) continue
-                val existedBook = appDb.bookDao.getBook(bookUrl)
-                if (existedBook != null) {
-                    val mergedGroup = mergeBookGroupForUrlAdd(existedBook.group, groupId)
-                    if (mergedGroup != existedBook.group) {
-                        existedBook.group = mergedGroup
-                        existedBook.update()
-                    }
-                    successCount++
-                    continue
-                }
-                val baseUrl = NetworkUtils.getBaseUrl(bookUrl) ?: continue
-                var source: BookSource? = null
-                val urlMatcher = AnalyzeUrl.paramPattern.matcher(bookUrl)
-                if (urlMatcher.find()) { //指定书源
-                    val origin = GSON.fromJsonObject<AnalyzeUrl.UrlOption>(
-                        bookUrl.substring(urlMatcher.end())
-                    ).getOrNull()?.getOrigin()
-                    try {
-                        origin?.let {
-                            appDb.bookSourceDao.getBookSource(it)?.let { bs ->
-                                if (bookUrl.matches(bs.bookUrlPattern!!.toRegex())) {
-                                    source = bs
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
-                if (source == null) { //根据域名找书源
-                    source = appDb.bookSourceDao.getBookSourceAddBook(baseUrl)
-                }
-                if (source == null) {
-                    for (bookSource in hasBookUrlPattern) { //在所有启用的书源中查找
-                        try {
-                            val bs = bookSource.getBookSource()!!
-                            if (bookUrl.matches(bs.bookUrlPattern!!.toRegex())) {
-                                source = bs
-                                break
-                            }
-                        } catch (_: Exception) {
-                        }
-                    }
-                }
-                val bookSource = source ?: continue
-                val book = Book(
-                    bookUrl = bookUrl,
-                    origin = bookSource.bookSourceUrl,
-                    originName = bookSource.bookSourceName
-                )
-                kotlin.runCatching {
-                    WebBook.getBookInfoAwait(bookSource, book)
-                }.onSuccess {
-                    val dbBook = appDb.bookDao.getBook(it.name, it.author)
-                    if (dbBook != null) {
-                        val toc = WebBook.getChapterListAwait(bookSource, it).getOrThrow()
-                        val migratedBook = migrateBookForUrlAdd(dbBook, it, toc, groupId)
-                        replaceBookAfterSourceChange(dbBook, migratedBook, toc, clearActiveReader = false)
-                    } else {
-                        it.group = mergeBookGroupForUrlAdd(it.group, groupId)
-                        it.order = appDb.bookDao.minOrder - 1
-                        it.savePreservingCustomCoverUrl()
-                    }
-                    successCount++
-                    addBookProgressLiveData.postValue(successCount)
-                }
-            }
-        }.onSuccess {
-            if (successCount > 0) {
+class BookshelfViewModel(application: Application, savedStateHandle: SavedStateHandle) : BaseViewModel(application) {
+    private val repository = BookshelfTransferRepository(application.applicationContext)
+    val transfer = BookshelfTransferSession(savedStateHandle)
+    private var addBookJob: Job? = null
+    private var exportJob: Job? = null
+    init { transfer.pendingFileImport.value?.let(::runFileImport) }
+    fun importBookshelfFile(uri: String, groupId: Long) { runFileImport(transfer.fileReady(uri, groupId)) }
+    private fun runFileImport(request: BookshelfFileImport) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { repository.importFile(request.uri, request.groupId) }
                 context.toastOnUi(R.string.success)
-            } else {
-                context.toastOnUi("添加网址失败")
-            }
-        }.onError {
-            AppLog.put("添加网址出错\n${it.localizedMessage}", it, true)
-        }.onFinally {
-            addBookProgressLiveData.postValue(-1)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { AppLog.put("导入书单失败\n${error.localizedMessage}", error, true) }
+            finally { transfer.fileFinished(request.id) }
         }
     }
-
-    fun exportBookshelf(books: List<Book>?, success: (file: File) -> Unit) {
-        execute {
-            books?.let {
-                val path = "${context.filesDir}/books.json"
-                FileUtils.delete(path)
-                val file = FileUtils.createFileWithReplace(path)
-                FileOutputStream(file).use { out ->
-                    val writer = JsonWriter(OutputStreamWriter(out, "UTF-8"))
-                    writer.setIndent("  ")
-                    writer.beginArray()
-                    books.forEach {
-                        val bookMap = hashMapOf<String, String?>()
-                        bookMap["name"] = it.name
-                        bookMap["author"] = it.author
-                        bookMap["intro"] = it.getDisplayIntro()
-                        GSON.toJson(bookMap, bookMap::class.java, writer)
-                    }
-                    writer.endArray()
-                    writer.close()
-                }
-                file
-            } ?: throw NoStackTraceException("书籍不能为空")
-        }.onSuccess {
-            success(it)
-        }.onError {
-            context.toastOnUi("导出书籍出错\n${it.localizedMessage}")
+    fun addBookByUrl(bookUrls: String, groupId: Long) {
+        val token = transfer.beginAdd()
+        addBookJob?.cancel()
+        addBookJob = viewModelScope.launch {
+            try {
+                val count = withContext(Dispatchers.IO) { repository.addUrls(bookUrls, groupId) { transfer.progress(token, it) } }
+                if (count > 0) context.toastOnUi(R.string.success) else context.toastOnUi("添加网址失败")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { AppLog.put("添加网址出错\n${error.localizedMessage}", error, true) }
+            finally { transfer.finish(token) }
         }
     }
-
-    fun importBookshelf(str: String, groupId: Long) {
-        execute {
-            val text = str.trim()
-            when {
-                text.isAbsUrl() -> {
-                    okHttpClient.newCallResponseBody {
-                        url(text)
-                    }.decompressed().text().let {
-                        importBookshelf(it, groupId)
-                    }
-                }
-
-                text.isJsonArray() -> {
-                    importBookshelfByJson(text, groupId)
-                }
-
-                else -> {
-                    throw NoStackTraceException("格式不对")
-                }
-            }
-        }.onError {
-            context.toastOnUi(it.localizedMessage ?: "ERROR")
+    fun cancelAdd() { transfer.cancelAdd(); addBookJob?.cancel() }
+    fun exportBookshelf(books: List<Book>?) {
+        exportJob?.cancel()
+        val snapshot = books?.map { it.copy() }
+        exportJob = viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) { repository.exportBooks(snapshot) }
+                transfer.exportReady(file.absolutePath)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { context.toastOnUi("导出书籍出错\n${error.localizedMessage}") }
         }
     }
-
-    private fun importBookshelfByJson(json: String, groupId: Long) {
-        execute {
-            importBookshelfJson(json, groupId)
-        }.onError {
-            AppLog.put("导入书单失败\n${it.localizedMessage}", it, true)
-        }.onSuccess {
-            context.toastOnUi(R.string.success)
+    fun importBookshelf(text: String, groupId: Long) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { repository.importBooks(text, groupId) }
+                context.toastOnUi(R.string.success)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { AppLog.put("导入书单失败\n${error.localizedMessage}", error, true) }
         }
     }
-
 }
 
-/** The file picker and system sharing use the same enabled-source matching. */
-internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutineScope {
-    val books = GSON.fromJsonArray<JsonObject>(json).getOrThrow().map { book ->
-        val name = book.get("name")
-        val author = book.get("author")
-        require(name != null && name.isJsonPrimitive && name.asJsonPrimitive.isString)
-        require(author == null || author.isJsonNull ||
-            author.isJsonPrimitive && author.asJsonPrimitive.isString)
-        name.asString.also { require(it.isNotBlank()) } to
-            author?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-    }.distinct()
-    val sources = appDb.bookSourceDao.allEnabledPart
-    val semaphore = Semaphore(AppConfig.threadCount)
-    val failures = books.map { (name, author) ->
-        async {
-            runCatching {
-                semaphore.withPermit {
-                    if (appDb.bookDao.has(name, author)) return@withPermit
-                    val book = sources.firstNotNullOfOrNull { part ->
-                        part.getBookSource()?.let { WebBook.preciseSearchAwait(it, name, author).getOrNull() }
-                    } ?: throw NoStackTraceException("没有搜索到<$name>$author")
-                    if (groupId > 0) book.group = groupId
-                    book.savePreservingCustomCoverUrl()
-                }
-            }.onFailure { currentCoroutineContext().ensureActive() }.exceptionOrNull()
-        }
-    }.awaitAll().filterNotNull()
-    if (failures.isNotEmpty()) {
-        throw NoStackTraceException(failures.joinToString("\n") { it.localizedMessage.orEmpty() })
-    }
-    Unit
-}
+/** Retained entry point for callers that import a bookshelf directly. */
+internal suspend fun importBookshelfJson(json: String, groupId: Long) =
+    io.legado.app.data.repository.importBookshelfJson(json, groupId)

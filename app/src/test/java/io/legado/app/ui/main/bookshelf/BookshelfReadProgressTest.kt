@@ -107,76 +107,6 @@ class BookshelfReadProgressTest {
     }
 
     @Test
-    fun `bookshelf settings expose display switches in order`() {
-        val document = parseProjectXml("src/main/res/layout/dialog_bookshelf_config.xml")
-        val progressRow = document.findElementById("@+id/ll_read_progress")
-        val progressLabel = progressRow.getElementsByTagName("TextView").item(0) as Element
-        val progressSpinner = document.findElementById("@+id/sp_read_progress")
-        val unreadSwitch = document.findElementById("@+id/sw_show_unread")
-        val lastUpdateSwitch = document.findElementById("@+id/sw_show_last_update_time")
-        val waitSwitch = document.findElementById("@+id/sw_show_wait_up_books")
-        val fastScrollerSwitch =
-            document.findElementById("@+id/sw_show_bookshelf_fast_scroller")
-        val recentReadingSwitch = document.findElementById("@+id/sw_show_recent_reading")
-        val statsSwitch = document.findElementById("@+id/sw_show_bookshelf_stats")
-        val layout = document.findElementById("@+id/ll_layout")
-        val sort = document.findElementById("@+id/ll_sort")
-        val columnsBottom = document.findElementById("@+id/layout_columns_bottom")
-        val bookNameChoice = document.findElementById("@+id/book_name_choice")
-
-        assertEquals("@string/read_progress", progressLabel.androidAttribute("text"))
-        assertEquals("@array/bookshelf_read_progress", progressSpinner.androidAttribute("entries"))
-        assertEquals(
-            "@+id/ll_group_style",
-            progressRow.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/ll_read_progress",
-            unreadSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/sw_show_unread",
-            lastUpdateSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/sw_show_last_update_time",
-            waitSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/sw_show_bookshelf_fast_scroller",
-            recentReadingSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals("@string/recent_reading", recentReadingSwitch.androidAttribute("text"))
-        assertEquals(
-            "@+id/sw_show_recent_reading",
-            statsSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals("@string/bookshelf_statistics", statsSwitch.androidAttribute("text"))
-        assertEquals(
-            "@+id/sw_show_bookshelf_stats",
-            layout.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/sw_show_bookshelf_stats",
-            sort.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals("bottom", columnsBottom.appAttribute("barrierDirection"))
-        assertEquals(
-            "ll_layout,ll_sort",
-            columnsBottom.appAttribute("constraint_referenced_ids"),
-        )
-        assertEquals(
-            "@+id/layout_columns_bottom",
-            bookNameChoice.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertEquals(
-            "@+id/sw_show_wait_up_books",
-            fastScrollerSwitch.appAttribute("layout_constraintTop_toBottomOf"),
-        )
-        assertFalse(document.findElementsById("@+id/sw_show_read_progress").isNotEmpty())
-    }
-
-    @Test
     fun `bookshelf layouts expose the shared header and keep content below it`() {
         val header = parseProjectXml("src/main/res/layout/view_bookshelf_header.xml")
         assertEquals("gone", header.documentElement.androidAttribute("visibility"))
@@ -234,16 +164,6 @@ class BookshelfReadProgressTest {
                 "if (showBookshelfStats || book != null) View.VISIBLE else View.GONE",
             ),
         )
-        val recentSetting = fragment.indexOf(
-            "AppConfig.showBookshelfRecentReading = swShowRecentReading.isChecked",
-        )
-        val statsSetting = fragment.indexOf(
-            "AppConfig.showBookshelfStats = swShowBookshelfStats.isChecked",
-        )
-        assertTrue(recentSetting >= 0)
-        assertTrue(fragment.indexOf("recreate = true", recentSetting) in 0..<statsSetting)
-        assertTrue(statsSetting >= 0)
-        assertTrue(fragment.indexOf("recreate = true", statsSetting) > statsSetting)
     }
 
     @Test
