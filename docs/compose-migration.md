@@ -777,3 +777,7 @@ Replaced the task homepage with stable-key Compose rows, filtered selection, bat
 ### Bookmark editor data and saved state
 
 Added immutable bookmark seeds and private revisioned AtomicFile drafts, preserving complete captured metadata and exact editable text. Small saved identifiers/selections restore drafts without placing large Parcelable content in Bundle state. Initial disk-write failures retain the seed for retry using the same UUID; committed receipts prevent repeat writes. Deletion retains edit-position permission and cancellation leaves Room unchanged. Late noncooperative reads/commits check cancellation before publishing UI state. Added 10 ViewModel JVM tests and compilation of 4 real Room/disk/failed-first-write recovery tests. Legacy UI remains for separate Compose integration; Android device execution is unavailable.
+
+### Bookmark editor Compose dialog
+
+Replaced bookmark editing with separate Compose Screen/Route and the existing public Fragment constructors. Read-only chapter text, original text and notes preserve exact whitespace; delete remains limited to existing bookmarks. Transparent outside cancellation, IME actions, focus/selection restoration and busy protection retain host behavior. Resumed close delivery runs once; small argument IDs and durable drafts restore across Fragment recreation. Added compilation of 7 real Compose behavior tests and 3 actual Fragment/Room/recreation tests. Removed the exclusive bookmark layout. Full JVM tests and Android test compilation validate integration; Android device execution is unavailable.

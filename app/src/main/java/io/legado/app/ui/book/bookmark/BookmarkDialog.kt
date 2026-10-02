@@ -1,79 +1,58 @@
 package io.legado.app.ui.book.bookmark
 
+import android.content.DialogInterface
+import android.graphics.Color
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.compose.runtime.Composable
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.data.appDb
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.DialogBookmarkBinding
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.data.repository.*
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import splitties.init.appCtx
 
-class BookmarkDialog() : BaseDialogFragment(R.layout.dialog_bookmark, true) {
-
+class BookmarkDialog() : BaseComposeDialogFragment() {
     constructor(bookmark: Bookmark, editPos: Int = -1) : this() {
-        arguments = Bundle().apply {
-            putInt("editPos", editPos)
-            putParcelable("bookmark", bookmark)
+        arguments = request(BookmarkEditorSeed.from(bookmark, editPos))
+    }
+    private fun request(seed: BookmarkEditorSeed) = Bundle().apply {
+        putString("requestId", FileBookmarkEditorRepository.stage(appCtx, seed))
+    }
+    @Suppress("DEPRECATION")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val legacy = arguments
+        if (legacy?.containsKey("requestId") != true) {
+            val bookmark = legacy?.getParcelable<Bookmark>("bookmark")
+            val seed = bookmark?.let { BookmarkEditorSeed.from(it, legacy?.getInt("editPos", -1) ?: -1) }
+                ?: BookmarkEditorSeed(0, "", "", 0, 0, "", "", "")
+            arguments = request(seed).apply { putBoolean("noData", bookmark == null) }
         }
     }
-
-    private val binding by viewBinding(DialogBookmarkBinding::bind)
-
+    internal val model by viewModels<BookmarkEditorViewModel> {
+        viewModelFactory { initializer { BookmarkEditorViewModel(FileBookmarkEditorRepository(requireContext()),
+            createSavedStateHandle(), requireArguments().getString("requestId")!!) } }
+    }
     override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
+        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        val arguments = arguments ?: let {
-            dismiss()
-            return
-        }
-
-        @Suppress("DEPRECATION")
-        val bookmark = arguments.getParcelable<Bookmark>("bookmark")
-        bookmark ?: let {
-            dismiss()
-            return
-        }
-        val editPos = arguments.getInt("editPos", -1)
-        binding.tvFooterLeft.visible(editPos >= 0)
-        binding.run {
-            tvChapterName.text = bookmark.chapterName
-            editBookText.setText(bookmark.bookText)
-            editContent.setText(bookmark.content)
-            tvCancel.setOnClickListener {
-                dismiss()
-            }
-            tvOk.setOnClickListener {
-                bookmark.bookText = editBookText.text?.toString() ?: ""
-                bookmark.content = editContent.text?.toString() ?: ""
-                lifecycleScope.launch {
-                    withContext(IO) {
-                        appDb.bookmarkDao.insert(bookmark)
-                    }
-                    dismiss()
-                }
-            }
-            tvFooterLeft.setOnClickListener {
-                lifecycleScope.launch {
-                    withContext(IO) {
-                        appDb.bookmarkDao.delete(bookmark)
-                    }
-                    dismiss()
-                }
-            }
-        }
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        requireView().setBackgroundColor(Color.TRANSPARENT)
+        if (arguments?.getBoolean("noData") == true) model.cancel()
     }
-
+    override fun onStop() { lifecycleScope.launch { runCatching { model.flushDraft() } }; super.onStop() }
+    @Composable override fun Content() {
+        BookmarkEditorRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::dismissAllowingStateLoss, { isCancelable = it })
+    }
+    override fun onCancel(dialog: DialogInterface) { model.cancel(); super.onCancel(dialog) }
 }
