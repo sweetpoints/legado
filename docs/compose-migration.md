@@ -877,3 +877,7 @@ Added private immutable chapter sessions and disk receipts for fetched content, 
 ### Chapter source state and automation
 
 Added immutable search, TOC, selection and automation state with private disk sessions, preference boundaries and small saved identities. Durable cache receipts advance batch progress once, stop requests finish an already-started commit, and ambiguous/missing matches pause for explicit chapter selection or skip. Restoring never restarts pending network work automatically. Current-source deletion waits for a successful replacement action. Added thirteen JVM tests covering recovery, IO failures, cancellation and query changes during projection. Validated with all JVM tests and Android test compilation.
+
+### RSS source editor Compose page
+
+Replaced RSS source edit Activity, native field adapter and exclusive XML with a stateless Compose Screen and lifecycle-aware Route. All four tabs, 33 fields, options, independent scrolling, custom keyboard assists, syntax display, native full-screen editor, unsaved-exit confirmation and save-before-debug/login/variable actions remain. Added IO repositories for assist preferences and QR sharing. Added sixteen Android Compose/host/repository tests; migrated only obsolete RSS editor source assertions in shared suites. Book editor resources and behavior tests remain. Validated with all JVM tests and Android test compilation.

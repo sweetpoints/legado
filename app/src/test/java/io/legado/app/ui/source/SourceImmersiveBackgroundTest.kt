@@ -18,7 +18,6 @@ class SourceImmersiveBackgroundTest {
 
         listOf(
             "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
-            "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt",
         ).forEach { path ->
             val source = projectFile(path).readText()
             assertTrue(source.contains("transparentNavBar && !AppConfig.isEInkMode"))

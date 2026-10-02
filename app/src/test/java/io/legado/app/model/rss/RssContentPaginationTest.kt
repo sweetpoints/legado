@@ -178,9 +178,6 @@ class RssContentPaginationTest {
     @Test
     fun `runtime keeps book-source pagination semantics and editor wiring`() {
         val rss = projectFile("src/main/java/io/legado/app/model/rss/Rss.kt")
-        val editor = projectFile(
-            "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt"
-        )
         val help = projectFile("src/main/assets/web/help/md/rssRuleHelp.md")
 
         assertTrue(rss.contains("contentData.second.size == 1"))
@@ -189,9 +186,6 @@ class RssContentPaginationTest {
         assertTrue(rss.contains("AppConfig.threadCount"))
         assertTrue(rss.contains("mapAsync(concurrency)"))
         assertTrue(rss.contains("contentList.joinToString(\"\\n\")"))
-        assertTrue(editor.indexOf("\"ruleContent\"") < editor.indexOf("\"nextContentUrl\""))
-        assertTrue(editor.contains("R.string.rule_next_content"))
-        assertTrue(editor.contains("ruleComplete(it.value, type = 2)"))
         assertTrue(help.contains("仅用于网页类型"))
         assertTrue(help.contains("一次返回多个 URL 时会并发获取一轮"))
     }
