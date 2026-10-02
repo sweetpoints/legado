@@ -46,12 +46,17 @@ ui/
   about/
     AboutActivity.kt           Android effects and existing application operations
     AboutScreen.kt             stateless screen using common settings components
+    AppLogDialog.kt            thin Compose host and system share/text-viewer effects
+    AppLogsRoute.kt
+    AppLogsScreen.kt           live lazy list, confirmation dialog and export menu
+    AppLogsViewModel.kt        restorable confirmation and pending detail/share state
     CrashLogsDialog.kt         thin Compose dialog host and text-viewer navigation
     CrashLogsRoute.kt
     CrashLogsScreen.kt         stateless lazy list and loading/error/empty feedback
     CrashLogsViewModel.kt      cancellable operations and pending log navigation
 data/repository/
   CrashLogsRepository.kt       local/backup crash-log I/O on Dispatchers.IO
+  AppLogsRepository.kt         application/HTTP log details and export snapshots
 ```
 
 These are project conventions, not a package hierarchy mandated by Compose. Keep
@@ -96,6 +101,15 @@ refreshes the list even after partial failure; cancelled reads cannot open delet
 logs. Pending text-viewer navigation is acknowledged only after the resumed host
 can show it. The shared TextDialog used to read log contents remains a legacy
 consumer and will be migrated separately.
+
+Application logs now expose immutable StateFlow snapshots with stable entry IDs;
+existing Triple-based consumers and event notifications remain compatible. The
+application-log dialog uses Compose for its list, clear confirmation and export
+menu, and collects live updates only while resumed. Both application and HTTP
+records are cleared after confirmation. Small exports retain text sharing; exports
+over 64,000 characters use independent cache files written off the main thread.
+Detail and share requests remain pending until a resumed host handles them. Text
+selection and web links use Compose APIs. App-log details still use shared TextDialog.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
