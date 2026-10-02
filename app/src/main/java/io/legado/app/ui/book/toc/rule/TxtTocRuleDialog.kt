@@ -191,7 +191,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
     }
 
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
-        viewModel.save(txtTocRule)
+        // The editor has already persisted successfully; observeAll refreshes this host.
     }
 
     @SuppressLint("InflateParams")

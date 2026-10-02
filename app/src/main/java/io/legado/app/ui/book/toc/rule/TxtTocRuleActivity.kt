@@ -225,7 +225,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
 
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
-        viewModel.save(txtTocRule)
+        // The editor has already persisted successfully; observeAll refreshes this host.
     }
 
     override fun update(vararg source: TxtTocRule) {
