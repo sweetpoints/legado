@@ -4,6 +4,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
@@ -62,6 +66,7 @@ import org.hamcrest.Matcher
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -75,6 +80,7 @@ import kotlin.concurrent.thread
 /** Uses the reader's real menu/import UI and uncached HTTP chapter downloads. */
 @RunWith(AndroidJUnit4::class)
 class ReaderSourceReimportUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -326,7 +332,7 @@ class ReaderSourceReimportUiTest {
         await("native reader menu configuration") {
             it.supportFragmentManager.fragments.filterIsInstance<ReaderMenuConfigDialog>().any { f -> f.view != null }
         }
-        onView(allOf(withId(R.id.check_box), withText(R.string.reimport_book_source))).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("reader-menu-item-reimportSource").performScrollTo().performClick()
         assertEquals(listOf("reimportSource"), loadReaderMenuConfig(context).more.filter { it == "reimportSource" })
         assertFalse("reimportSource" in loadReaderMenuConfig(context).primary)
         pressBack()

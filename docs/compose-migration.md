@@ -270,6 +270,12 @@ selection callbacks run on the resumed UI thread without a ViewModel host refere
 Default-font inheritance remains independent of global system-font selection.
 The exclusive adapter, two layouts and menu resource are removed.
 
+Reader-menu customization now uses a Compose list with explicit primary/More groups.
+Toggle, batch swipe selection, same-group drag reorder, accessibility move actions,
+all/none and defaults retain the existing persistence contract. Unfinished gestures
+restore their baseline after recreation; completed edits refresh the resumed reader.
+The exclusive item layout and menu XML are removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
