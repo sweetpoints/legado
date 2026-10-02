@@ -69,6 +69,10 @@ ui/
     MangaColorFilterRoute.kt
     MangaColorFilterScreen.kt  brightness/R/G/B/A controls and numeric input
     MangaColorFilterViewModel.kt restorable immutable filter draft
+    MangaFooterSettingDialog.kt thin Compose host for reader footer settings
+    MangaFooterSettingsRoute.kt lifecycle-aware draft preview restoration
+    MangaFooterSettingsScreen.kt visibility and alignment controls
+    MangaFooterSettingsViewModel.kt restorable draft and dismissal persistence
   widget/dialog/
     WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
     WaitDialogContent.kt       stateless Compose progress/message content
@@ -83,6 +87,10 @@ ui/
     CrashLogsRoute.kt
     CrashLogsScreen.kt         stateless lazy list and loading/error/empty feedback
     CrashLogsViewModel.kt      cancellable operations and pending log navigation
+data/preferences/
+  MangaEpaperPreferences.kt    existing e-ink preference key and IO reads
+  MangaColorFilterRepository.kt legacy JSON compatibility and immutable snapshots
+  MangaFooterSettingsRepository.kt footer JSON and independent reader event copies
 data/repository/
   CrashLogsRepository.kt       local/backup crash-log I/O on Dispatchers.IO
   AppLogsRepository.kt         application/HTTP log details and export snapshots
@@ -105,6 +113,8 @@ it. Do not create a domain layer or a Gradle module solely to wrap one existing 
 - ViewModels own changing screen state and screen operations; expose read-only flows.
   Store small restorable keys with SavedStateHandle, not Activity instances or bitmap data.
 - Static screens can use simple screen state without a ViewModel.
+- Use Material Surface to provide the theme background and content color;
+  MaterialTheme alone does not set the text foreground for arbitrary containers.
 - Keep UI state flowing down and events flowing up. Represent selection by stable
   destination identity, so configurable tab visibility cannot change what is selected.
 - Keep file decoding, database queries and network requests off the main thread.
@@ -176,6 +186,14 @@ retaining the 0–255 range, slider and single-step adjustments and adding numer
 input. Drafts survive recreation without early persistence. Reader callbacks
 receive independent mutable copies of immutable UI state; late reads and repeat
 dismissals cannot replace or resave a finished draft. The XML layout is removed.
+
+Manga footer settings now use Compose for all seven hide options, footer
+visibility and alignment. SavedStateHandle retains an immutable draft, preserving
+legacy JSON fields and defaults. Reader events receive independent configuration
+copies. Each RESUMED entry reapplies the current draft because the reader itself
+reloads committed settings during recreation. Only real dismissal persists;
+subsequent edits, preview requests and duplicate dismissal callbacks are ignored.
+The dedicated XML layout is removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
