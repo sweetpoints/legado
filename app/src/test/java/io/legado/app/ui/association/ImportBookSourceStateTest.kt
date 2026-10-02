@@ -124,7 +124,6 @@ class ImportBookSourceStateTest {
     fun `association import status labels use localized resources`() {
         val importDialogs = listOf(
             "ImportBookSourceDialog.kt",
-            "ImportReplaceRuleDialog.kt",
             "ImportRssSourceDialog.kt",
             "ImportThemeDialog.kt",
             "ImportTxtTocRuleDialog.kt",

@@ -1,5 +1,8 @@
 package io.legado.app.ui.association
 
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import org.junit.Rule
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.ClipData
@@ -76,6 +79,7 @@ import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class SharedFileImportTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -234,9 +238,10 @@ class SharedFileImportTest {
         val file = File(directory, "misleading-highlight-name.json").apply { writeText(GSON.toJson(listOf(rule))) }
         launchShare(file, "application/json").use { scenario ->
             awaitDialog(scenario)
-            onView(withText(R.string.import_replace_rule)).check(matches(isDisplayed()))
-            onView(withText(rule.name)).check(matches(isDisplayed()))
-            onView(withId(R.id.tv_ok)).perform(click())
+            compose.waitUntil { compose.onAllNodesWithText(rule.name).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(context.getString(R.string.import_replace_rule)).assertIsDisplayed()
+            compose.onNodeWithText(rule.name).assertIsDisplayed()
+            compose.onNodeWithTag("replace-import-confirm").performClick()
             await { appDb.replaceRuleDao.all.any { it.id == rule.id } }
             assertEquals("changed", appDb.replaceRuleDao.all.single { it.id == rule.id }.replacement)
             assertFalse(appDb.highlightRuleDao.all.any { it.pattern == id })
