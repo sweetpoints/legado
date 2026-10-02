@@ -276,6 +276,11 @@ all/none and defaults retain the existing persistence contract. Unfinished gestu
 restore their baseline after recreation; completed edits refresh the resumed reader.
 The exclusive item layout and menu XML are removed.
 
+Page-key editing now uses a Compose editor hosted by ComponentDialog. Previous/next
+key drafts and focused input survive recreation; hardware down/up events are captured
+before text input, while BACK/DEL retain platform behavior. Reset changes the draft
+and confirmation persists both fields together. The exclusive layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
