@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Preserve the existing reader callback IDs after replacing the menu inflater with typed actions. -->
+    <item name="menu_replace" type="id" />
+    <item name="menu_copy" type="id" />
+    <item name="menu_bookmark" type="id" />
+    <item name="menu_highlight" type="id" />
+    <item name="menu_aloud" type="id" />
+    <item name="menu_dict" type="id" />
+    <item name="menu_search_content" type="id" />
+    <item name="menu_browser" type="id" />
+    <item name="menu_share_str" type="id" />
+</resources>

@@ -9,18 +9,11 @@ import java.io.File
 class TextActionMenuSourceTest {
 
     @Test
-    fun `selection popup stays bottom anchored above selected text`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/TextActionMenu.kt"
-        ).readText()
-        val show = source.substringAfter("fun show(")
-            .substringBefore("inner class Adapter")
-
-        assertTrue(show.contains("Gravity.BOTTOM or Gravity.START"))
-        assertTrue(show.contains("windowHeight - startTopY"))
-        assertFalse(show.contains("moreMenuItems.isEmpty()"))
-        assertFalse(show.contains("contentView.measure("))
-        assertFalse(show.contains("contentView.measuredHeight"))
+    fun `selection popup preserves all native coordinate branches and exact threshold`() {
+        assertEquals(TextPopupPosition(TextPopupEdge.Bottom, 10, 400), textActionPopupPosition(1200, 10, 800, 820, 40, 860))
+        assertEquals(TextPopupPosition(TextPopupEdge.Top, 10, 100), textActionPopupPosition(1200, 10, 20, 100, 40, 601))
+        assertEquals(TextPopupPosition(TextPopupEdge.Top, 40, 600), textActionPopupPosition(1200, 10, 500, 100, 40, 600))
+        assertEquals(TextPopupPosition(TextPopupEdge.Top, 40, 400), textActionPopupPosition(1200, 10, 20, 100, 40, 400))
     }
 
     @Test
