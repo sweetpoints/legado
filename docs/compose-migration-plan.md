@@ -373,7 +373,40 @@ class ComposeRootBinding(private val composeView: ComposeView) : ViewBinding {
 旧体系取色是 `Context.primaryColor` 这类扩展属性（[MaterialValueHelper.kt](../app/src/main/java/io/legado/app/lib/theme/MaterialValueHelper.kt)），Compose 若用 Material3 默认配色会出现两套皮肤。`LegadoComposeTheme` 把旧取值收敛为 `LegadoColors` 并同时提供给 `MaterialTheme` 与 `LocalLegadoColors`：
 
 - 缓存策略：以 `context` 为 key 做 `remember`。主题色变更时 [ThemeConfig.kt](../app/src/main/java/io/legado/app/help/config/ThemeConfig.kt) 会 post `EventBus.RECREATE` 让 Activity `recreate()`，因此无需额外订阅。
-- 注意 `isDarkTheme` 由**主色亮度**决定，不是系统深色模式——迁移时不要用 `isSystemInDarkTheme()` 替代。
+- ⚠️ **文字色必须走资源限定符，不要用 `getPrimaryTextColor(isDarkTheme)` 这一套 helper。**
+  这是首版真机上真实踩到的 bug（About 页"白字白底看不见"）：
+
+  | | 取色源 | 默认配置下的结果 |
+  | --- | --- | --- |
+  | View 页面（`view_preference.xml`） | 资源限定符 `@color/primaryText` | day → `#de000000` 黑；night → `#ffffffff` 白 |
+  | **首版 Compose（错）** | `getPrimaryTextColor(isDarkTheme)` | 默认主色 `md_light_blue_600` 亮度仅 **0.29** → `isDarkTheme=false` → `md_dark_primary_text` = **白** |
+
+  背景是 `md_grey_50`（近白），于是**对比度只有 1.04:1**——等于看不见。修正后的实测对比度：
+
+  | 场景 | 对比度 |
+  | --- | --- |
+  | 日间 主文字 `#de000000` / 背景 `#FAFAFA` | **20.12:1** |
+  | 日间 摘要 `#8A2C2C2C` / 背景 `#FAFAFA` | 13.38:1 |
+  | 夜间 主文字 `#ffffffff` / 背景 `#212121` | 16.10:1 |
+  | 夜间 摘要 `#B3B3B3` / 背景 `#212121` | 7.68:1 |
+
+  **两条规则**：① 文字色用 `ContextCompat.getColor(context, R.color.primaryText / R.color.tv_text_summary)`
+  （随 `AppConfig.isNightTheme` 驱动的日夜模式切换，与 View 页面完全一致）；
+  ② **明暗判定（选 light/dark ColorScheme）用「背景色」亮度**，而不是 `isDarkTheme`（主色亮度）——
+  因为 `onBackground`/`onSurface` 必须与 `background` 形成对比。
+
+- 📌 **项目里其实有三套文字取色约定，混用就是这次的 bug**。迁移任何页面取色前先认清文字"坐在哪"：
+
+  | 约定 | 典型调用点 | 何时才正确 |
+  | --- | --- | --- |
+  | `getPrimaryTextColor(isColorLight(bottomBackground))` | [Preference.kt:62](../app/src/main/java/io/legado/app/lib/prefs/Preference.kt#L62)、`ToastUtils`、`DetailSeekBar`、`ThemeRadioNoButton`（10+ 处） | 文字位于**列表/面板背景**之上 |
+  | 资源限定符 `@color/primaryText` / `@color/tv_text_summary` | `view_preference.xml`（旧 About 页） | 随日夜模式切换的静态文字；**最省心** |
+  | `Context.primaryTextColor`（= `getPrimaryTextColor(isDarkTheme)`，按**主色**亮度） | 少 | **仅当文字位于主色之上**（工具栏一类） |
+
+  注意 `getPrimaryTextColor(dark)` 的参数名 `dark` 是误导：传 `true` 得到的是**黑字**（浅色背景用）。
+  真正语义是 `isColorLight(文字所在背景)`，与"是不是深色主题"无关。
+- 另一个坑：`MaterialTheme` **不会**设置 `LocalContentColor`（只有 `Surface`/`Scaffold` 会），
+  所以页面里直接写 `Text { }` 时不要依赖它的默认值，**显式传 `color = colors.textPrimary`**。
 
 ### 5.4 About 页：已完成全量 Compose 化（推荐作为设置类页面的样板）
 
@@ -462,6 +495,18 @@ abstract class ComposeDialogFragment : BaseDialogFragment(R.layout.dialog_compos
 
 > 这 5 处是在 Kotlin DSL 迁移时**一次跑全量单测才暴露**的——它们全都在读 `app/build.gradle`，文件一改名就集体失败。
 > 教训：这类"契约测试"的受影响面，只有跑全量测试才看得见；改文件名/语法前先 `grep` 一遍测试目录。
+
+**另一类坑：测试自身的"找仓库根"启发式**
+
+`TitleBarAccessibilityTest` 原本是「向上找第一个含子目录 `app` 的祖先」。这个启发式会被**构建产物**骗到：
+`assembleAppRelease` 会产出 `app/app/release/`（项目自 2022 年起就在 `.gitignore` 里忽略它），
+于是它停在 `app/` 上，去读 `app/app/src/...` 报 `FileNotFoundException`。
+
+后果很隐蔽：**单测通过与否取决于它和 `assembleRelease` 的先后顺序**——同一次 `gradlew test ... assembleRelease`，
+先跑测试就绿、后跑就红。已改为与项目其余 30+ 个测试一致的 `app/src/main` 标记。
+
+> 通用教训：让测试**依赖一个不会出现在子目录里的标记**（如 `app/src/main`、`settings.gradle.kts`），
+> 而不是"某个叫 app 的目录"。且 `assembleRelease` 之后先清 `app/app` 再跑测试。
 
 **排期含义**：迁移一个界面时，除了界面代码本身，还要检查并重写这类"设计契约测试"。建议在动每个页面之前先 `grep` 它的文件名，成本可提前量化。
 

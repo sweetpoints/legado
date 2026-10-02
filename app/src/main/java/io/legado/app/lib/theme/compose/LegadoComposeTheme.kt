@@ -12,16 +12,14 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import io.legado.app.R
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.isDarkTheme
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryColorDark
-import io.legado.app.lib.theme.primaryDisabledTextColor
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryDisabledTextColor
-import io.legado.app.lib.theme.secondaryTextColor
+import io.legado.app.utils.ColorUtils
 
 /**
  * 阅读现有主题体系（[io.legado.app.lib.theme.ThemeStore] + `lib/theme/MaterialValueHelper.kt`）
@@ -44,7 +42,12 @@ data class LegadoColors(
     val textSecondary: Color,
     val textPrimaryDisabled: Color,
     val textSecondaryDisabled: Color,
-    /** 与 [io.legado.app.lib.theme.isDarkTheme] 一致，注意它由主色亮度决定，而非系统深色模式。 */
+    /**
+     * 明暗由**背景色**亮度判定（`onBackground`/`onSurface` 必须与 `background` 对比）。
+     *
+     * 注意不要用 [io.legado.app.lib.theme.isDarkTheme]：那个是「主色是否浅」，
+     * 与背景明暗可能相反——默认浅蓝主色会让它得到 `false`，从而取出白色文字放到浅灰背景上。
+     */
     val isLight: Boolean,
 )
 
@@ -114,18 +117,43 @@ fun LegadoComposeTheme(
 
 private fun Context.toLegadoColors(): LegadoColors {
     val primary = Color(primaryColor)
+    val backgroundArgb = backgroundColor
+    // 明暗看背景色，不看主色：ColorScheme 的 onBackground/onSurface 必须与 background 形成对比
+    val isLight = ColorUtils.isColorLight(backgroundArgb)
     return LegadoColors(
         primary = primary,
         primaryDark = Color(primaryColorDark),
         // 主色之上的前景色取决于主色亮度，不能沿用页面文字色
         onPrimary = if (primary.luminance() > 0.5f) Color.Black else Color.White,
         accent = Color(accentColor),
-        background = Color(backgroundColor),
+        background = Color(backgroundArgb),
         bottomBackground = Color(bottomBackground),
-        textPrimary = Color(primaryTextColor),
-        textSecondary = Color(secondaryTextColor),
-        textPrimaryDisabled = Color(primaryDisabledTextColor),
-        textSecondaryDisabled = Color(secondaryDisabledTextColor),
-        isLight = !isDarkTheme,
+        // 文字色刻意走「资源限定符」，与 View 页面完全一致
+        // （view_preference.xml 用的是 @color/primaryText / @color/tv_text_summary，
+        //   它们随 AppConfig.isNightTheme 驱动的日夜模式切换）。
+        //
+        // ⚠️ 不要改用 getPrimaryTextColor(isDarkTheme) / primaryTextColor 这类 helper：
+        // 它们按「主色亮度」判定，而默认主色 md_light_blue_600 亮度仅 0.29（< 0.5），
+        // 会取出 md_dark_primary_text = #FFFFFFFF（白字），可背景是 md_grey_50（近白）
+        // —— 就是这个 bug 导致 About 页白字白底看不清。
+        textPrimary = Color(ContextCompat.getColor(this, R.color.primaryText)),
+        textSecondary = Color(ContextCompat.getColor(this, R.color.tv_text_summary)),
+        textPrimaryDisabled = Color(
+            ContextCompat.getColor(
+                this,
+                if (isLight) R.color.md_light_disabled else R.color.md_dark_disabled
+            )
+        ),
+        textSecondaryDisabled = Color(
+            ContextCompat.getColor(
+                this,
+                if (isLight) {
+                    androidx.appcompat.R.color.secondary_text_disabled_material_light
+                } else {
+                    androidx.appcompat.R.color.secondary_text_disabled_material_dark
+                }
+            )
+        ),
+        isLight = isLight,
     )
 }

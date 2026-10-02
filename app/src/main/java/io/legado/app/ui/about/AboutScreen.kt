@@ -84,10 +84,13 @@ fun AboutScreen(
                 text = stringResource(R.string.app_name),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
+                // 显式指定：不依赖 LocalContentColor 的默认值（MaterialTheme 并不设置它）
+                color = colors.textPrimary,
             )
             Text(
                 text = summaryText,
                 modifier = Modifier.fillMaxWidth(),
+                color = colors.textPrimary,
             )
         }
 
