@@ -2,11 +2,7 @@ package io.legado.app.ui.book.read
 
 import android.content.Context
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.help.TextSelectMenuConfig
-import io.legado.app.utils.getPrefBoolean
-import io.legado.app.utils.getPrefString
-import io.legado.app.utils.putPrefString
 
 enum class TextSelectMenuItem(val key: String, val menuId: Int?, val titleRes: Int) {
     Replace(TextSelectMenuConfig.KEY_REPLACE, R.id.menu_replace, R.string.replace),
@@ -25,18 +21,9 @@ enum class TextSelectMenuItem(val key: String, val menuId: Int?, val titleRes: I
     }
 }
 
-fun loadTextSelectMenuConfig(context: Context): TextSelectMenuConfig {
-    val json = context.getPrefString(PreferKey.textSelectMenuConfig)
-    if (json.isNullOrBlank()) {
-        val migrated = TextSelectMenuConfig.migrateFrom(
-            context.getPrefBoolean(PreferKey.expandTextMenu)
-        )
-        context.putPrefString(PreferKey.textSelectMenuConfig, migrated.toJson())
-        return migrated.normalized()
-    }
-    return TextSelectMenuConfig.fromJson(json).normalized()
-}
+// Compatibility entry points for the remaining View reader; persistence belongs to data.
+fun loadTextSelectMenuConfig(context: Context): TextSelectMenuConfig =
+    io.legado.app.data.preferences.loadTextSelectMenuConfig(context)
 
-fun saveTextSelectMenuConfig(context: Context, config: TextSelectMenuConfig) {
-    context.putPrefString(PreferKey.textSelectMenuConfig, config.normalized().toJson())
-}
+fun saveTextSelectMenuConfig(context: Context, config: TextSelectMenuConfig) =
+    io.legado.app.data.preferences.saveTextSelectMenuConfig(context, config)

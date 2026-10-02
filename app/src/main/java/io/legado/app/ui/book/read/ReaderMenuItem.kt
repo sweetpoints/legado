@@ -4,10 +4,7 @@ import android.content.Context
 import android.view.Menu
 import android.view.MenuItem
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.help.ReaderMenuConfig
-import io.legado.app.utils.getPrefString
-import io.legado.app.utils.putPrefString
 
 /** Stable logical actions exposed by the reader overflow menu. */
 enum class ReaderMenuItem(
@@ -62,19 +59,9 @@ enum class ReaderMenuItem(
     }
 }
 
-fun loadReaderMenuConfig(context: Context): ReaderMenuConfig {
-    val json = context.getPrefString(PreferKey.readerMenuConfig)
-    if (json.isNullOrBlank()) {
-        val config = ReaderMenuConfig.default()
-        saveReaderMenuConfig(context, config)
-        return config
-    }
-    return ReaderMenuConfig.fromJson(json).normalized()
-}
+// Compatibility entry points for the remaining View reader; persistence belongs to data.
+fun loadReaderMenuConfig(context: Context): ReaderMenuConfig =
+    io.legado.app.data.preferences.loadReaderMenuConfig(context)
 
-fun saveReaderMenuConfig(context: Context, config: ReaderMenuConfig) {
-    context.putPrefString(
-        PreferKey.readerMenuConfig,
-        config.normalized().toJson()
-    )
-}
+fun saveReaderMenuConfig(context: Context, config: ReaderMenuConfig) =
+    io.legado.app.data.preferences.saveReaderMenuConfig(context, config)

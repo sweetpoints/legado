@@ -354,6 +354,10 @@ Only completed gestures persist; cancellation and recreation restore the baselin
 Existing JSON and expanded-menu migration remain compatible. The exclusive item
 layout and menu XML are removed.
 
+Reader-menu and text-selection-menu preference serialization/migration now belong
+to the data layer. Remaining View entry points delegate to that implementation;
+Compose repositories do not depend on UI helpers.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
