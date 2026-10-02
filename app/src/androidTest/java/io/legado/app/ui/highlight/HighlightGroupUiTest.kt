@@ -221,9 +221,8 @@ class HighlightGroupUiTest {
 
         menu(R.id.menu_highlight_group_manage)
         groupAction("Characters", R.id.tv_edit)
-        onView(withId(R.id.edit_view)).inRoot(isDialog())
-            .perform(replaceText("People"), closeSoftKeyboard())
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("highlight-group-name").performTextReplacement("People")
+        compose.onNodeWithTag("highlight-group-rename-confirm").performClick()
         awaitGroup("People")
         screenshot("highlight-group-manager")
         pressBack()
@@ -234,9 +233,9 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "People" })
         menu(R.id.menu_highlight_group_manage)
         groupAction("People", R.id.tv_del)
-        onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("highlight-group-choose-move").performClick()
         // This is a real group named like the special ungrouped option.
-        choose("[$namedUngrouped]")
+        compose.onNodeWithTag("highlight-group-move-$namedUngrouped").performClick()
         await { dao.all.count { it.group == namedUngrouped } == 3 }
         assertEquals("Quotes", dao.all.single { it.name == "Quote" }.group)
         assertNull(dao.all.single { it.name == "Loose rule" }.group)
@@ -247,8 +246,8 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == namedUngrouped })
         menu(R.id.menu_highlight_group_manage)
         groupAction(namedUngrouped, R.id.tv_del)
-        onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
-        choose(context.getString(R.string.no_group))
+        compose.onNodeWithTag("highlight-group-choose-move").performClick()
+        compose.onNodeWithTag("highlight-group-move-none").performClick()
         await { dao.all.count { it.group == null } == 4 }
         pressBack()
         awaitRules(dao.all)
@@ -259,7 +258,7 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "Quotes" })
         menu(R.id.menu_highlight_group_manage)
         groupAction("Quotes", R.id.tv_del)
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("highlight-group-delete-confirm").performClick()
         await { dao.all.size == 4 }
         assertEquals(fixtures.filter { it.group != "Quotes" }.map { it.uuid }.toSet(),
             dao.all.map { it.uuid }.toSet())
@@ -419,19 +418,12 @@ class HighlightGroupUiTest {
 
     private fun groupAction(group: String, action: Int) {
         awaitGroup(group)
-        onView(allOf(withId(action), hasSibling(withText(group)))).inRoot(isDialog()).perform(click())
+        val tag = if (action == R.id.tv_edit) "highlight-group-edit-$group" else "highlight-group-delete-$group"
+        compose.onNodeWithTag(tag).performClick()
     }
 
-    private fun awaitGroup(group: String) = await {
-        var visible = false
-        scenario!!.onActivity { activity ->
-            val recycler = groupDialog(activity)?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-            visible = recycler != null && !recycler.hasPendingAdapterUpdates() &&
-                (0 until recycler.childCount).any {
-                    recycler.getChildAt(it).findViewById<TextView>(R.id.tv_group).text.toString() == group
-                }
-        }
-        visible
+    private fun awaitGroup(group: String) {
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("highlight-group-label-$group").fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun awaitRules(expected: List<HighlightRule>) = await {
