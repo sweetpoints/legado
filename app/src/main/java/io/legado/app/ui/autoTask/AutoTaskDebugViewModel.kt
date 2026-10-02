@@ -1,95 +1,113 @@
 package io.legado.app.ui.autoTask
 
-import android.app.Application
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.legado.app.R
-import io.legado.app.base.BaseViewModel
-import io.legado.app.data.entities.AutoTaskRule
-import io.legado.app.model.AutoTask
-import io.legado.app.model.AutoTaskRunner
-import io.legado.app.model.Debug
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import io.legado.app.data.repository.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
-data class AutoTaskDebugUiState(
-    val output: String = "",
-    val isLoading: Boolean = true,
-    val isRunning: Boolean = false,
-    val taskMissing: Boolean = false,
-    val error: String? = null,
-)
-
-class AutoTaskDebugViewModel(application: Application, savedStateHandle: SavedStateHandle) : BaseViewModel(application) {
-    private val _uiState = MutableStateFlow(AutoTaskDebugUiState())
-    val uiState = _uiState.asStateFlow()
-    private var task: AutoTaskRule? = null
+enum class AutoTaskDebugIssue { Busy, Interrupted }
+data class AutoTaskDebugUiState(val output: String = "", val isLoading: Boolean = true,
+    val isRunning: Boolean = false, val taskMissing: Boolean = false, val error: String? = null,
+    val issue: AutoTaskDebugIssue? = null, val closed: Boolean = false)
+private const val PREFIX = "autoTask.debug."
+class AutoTaskDebugViewModel(private val repository: AutoTaskDebugRepository, private val saved: SavedStateHandle,
+    private val taskId: String? = saved["autoTaskId"]) : ViewModel() {
+    // Compatibility with the existing SavedState factory until the host installs its explicit factory.
+    constructor(saved: SavedStateHandle) : this(AppAutoTaskDebugRepository(splitties.init.appCtx), saved)
+    private val session = saved.get<String>(PREFIX + "session") ?: UUID.randomUUID().toString().also { saved[PREFIX + "session"] = it }
+    private val mutable = MutableStateFlow(AutoTaskDebugUiState(closed = saved[PREFIX + "closed"] ?: false))
+    val uiState = mutable.asStateFlow()
+    private val guard = Any()
+    private val generation = AtomicLong()
+    private var revision = 0L
+    @Volatile private var stopped = false
+    @Volatile private var owner: AutoTaskDebugLease? = null
+    private var task: AutoTaskDebugSnapshot? = null
+    private var loadJob: Job? = null
     private var debugJob: Job? = null
-    private var owner: Debug.Callback? = null
-    @Volatile private var generation = 0L
-
-    init {
-        viewModelScope.launch {
-            task = withContext(Dispatchers.IO) {
-                savedStateHandle.get<String>(AutoTaskDebugActivity.EXTRA_ID)?.let(AutoTask::get)
-            }
-            _uiState.update { it.copy(isLoading = false, taskMissing = task == null) }
-            if (task != null) runDebug()
+    private var hasRun = saved.get<Boolean>(PREFIX + "hasRun") ?: false
+    private val records = Channel<AutoTaskDebugRecord>(Channel.CONFLATED)
+    private val writer = viewModelScope.launch { for (record in records) try { repository.write(session, record) } catch (error: Exception) { failed(error) } }
+    init { load() }
+    private fun load() {
+        loadJob = viewModelScope.launch {
+            try {
+                val loaded = taskId?.let { repository.load(it) }
+                currentCoroutineContext().ensureActive(); task = loaded
+                val record = repository.read(session)
+                currentCoroutineContext().ensureActive()
+                check(record == null || record.taskId == taskId) { "Invalid debug session" }
+                task = loaded
+                synchronized(guard) {
+                    revision = record?.revision ?: 0
+                    hasRun = hasRun || record?.hasRun == true
+                    mutable.value = uiState.value.copy(output = record?.output.orEmpty().takeLast(20_000), isLoading = false,
+                        taskMissing = loaded == null, issue = if (record?.running == true) AutoTaskDebugIssue.Interrupted else null)
+                    if (record?.running == true) checkpoint()
+                }
+                if (loaded != null && !hasRun && !uiState.value.closed) runDebug()
+            } catch (error: Exception) { currentCoroutineContext().ensureActive(); failed(error); mutable.value = uiState.value.copy(isLoading = false) }
         }
     }
-
+    fun retryLoad() { if (!stopped && !uiState.value.isLoading) { mutable.value = uiState.value.copy(isLoading = true, error = null); load() } }
+    private fun checkpoint() {
+        val id = taskId ?: return
+        revision++; records.trySend(AutoTaskDebugRecord(id, uiState.value.output, hasRun, uiState.value.isRunning, revision))
+    }
+    private fun change(token: Long, transform: (AutoTaskDebugUiState) -> AutoTaskDebugUiState) = synchronized(guard) {
+        if (!stopped && generation.get() == token) { mutable.value = transform(uiState.value); checkpoint() }
+    }
     fun runDebug() {
         val current = task ?: return
-        val runGeneration = ++generation
-        debugJob?.cancel()
-        owner?.let(Debug::cancelDebug)
-        val callback = object : Debug.Callback {
-            override fun printLog(state: Int, msg: String) {
-                if (generation == runGeneration) {
-                    _uiState.update {
-                        if (generation == runGeneration) it.copy(output = appendDebugOutput(it.output, msg)) else it
-                    }
-                }
-            }
-        }
-        owner = callback
-        _uiState.update { it.copy(output = "", isRunning = true, error = null) }
-        val sourceUrl = AutoTask.buildSource(current).bookSourceUrl
-        if (!Debug.startSimpleDebug(callback, sourceUrl)) {
-            _uiState.update { it.copy(isRunning = false, error = context.getString(R.string.auto_task_debug_busy)) }
-            return
+        if (stopped || uiState.value.closed || uiState.value.isLoading) return
+        val token = generation.incrementAndGet()
+        val previousJob = debugJob
+        previousJob?.cancel(); owner?.close(); owner = null
+        synchronized(guard) {
+            hasRun = true; saved[PREFIX + "hasRun"] = true
+            mutable.value = uiState.value.copy(output = "", isRunning = true, error = null, issue = null); checkpoint()
         }
         debugJob = viewModelScope.launch {
+            var lease: AutoTaskDebugLease? = null
             try {
-                val result = withContext(Dispatchers.IO) {
-                    AutoTaskRunner.runTask(context, current, persist = false)
+                // Debug.log routes through the global owner: the prior runner must finish before replacing it.
+                previousJob?.join()
+                currentCoroutineContext().ensureActive()
+                withContext(NonCancellable) {
+                    lease = repository.acquire(current) { line -> change(token) { it.copy(output = appendDebugOutput(it.output, line)) } }
                 }
-                if (generation == runGeneration) {
-                    _uiState.update { it.copy(output = appendDebugOutput(it.output, result.log)) }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                if (generation == runGeneration) _uiState.update { it.copy(error = error.localizedMessage) }
-            } finally {
-                Debug.cancelDebug(callback)
-                if (generation == runGeneration) _uiState.update { it.copy(isRunning = false) }
+                currentCoroutineContext().ensureActive()
+                if (lease == null) { change(token) { it.copy(issue = AutoTaskDebugIssue.Busy) }; return@launch }
+                owner = lease
+                val result = lease!!.run()
+                currentCoroutineContext().ensureActive()
+                change(token) { it.copy(output = appendDebugOutput(it.output, result.log)) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (error: Exception) { change(token) { it.copy(error = error.localizedMessage ?: "Error") } }
+            finally {
+                lease?.close(); if (owner === lease) owner = null
+                change(token) { it.copy(isRunning = false) }
             }
         }
     }
-
-    override fun onCleared() {
-        generation++
-        debugJob?.cancel()
-        owner?.let(Debug::cancelDebug)
-        super.onCleared()
+    fun close() {
+        if (uiState.value.closed) return
+        synchronized(guard) { saved[PREFIX + "closed"] = true; mutable.value = uiState.value.copy(closed = true, isRunning = false); checkpoint() }
+        stop()
     }
+    suspend fun flush() {
+        val record = synchronized(guard) { taskId?.let { AutoTaskDebugRecord(it, uiState.value.output, hasRun, uiState.value.isRunning, revision) } }
+        record?.let { repository.write(session, it) }
+    }
+    private fun failed(error: Exception) { if (error is CancellationException) throw error; synchronized(guard) { if (!stopped) mutable.value = uiState.value.copy(error = error.localizedMessage ?: "Error") } }
+    internal fun stop() { synchronized(guard) { stopped = true; generation.incrementAndGet() }; loadJob?.cancel(); debugJob?.cancel(); owner?.close(); owner = null; writer.cancel(); records.close() }
+    override fun onCleared() { stop(); super.onCleared() }
 }
 
 /** Bound the displayed log while preserving the newest output. */
