@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.util.Base64
 import android.util.LruCache
 import android.util.TypedValue
+import android.view.LayoutInflater
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -27,6 +28,11 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.annotation.Keep
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.addCallback
@@ -43,7 +49,6 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
-import io.legado.app.databinding.DialogWebViewBinding
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
@@ -67,7 +72,6 @@ import io.legado.app.utils.runOnUI
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.launch
 import androidx.core.view.size
@@ -263,7 +267,7 @@ internal data class BrowserDialogRequest(
     val config: String?,
 )
 
-class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view), WebJsExtensions.Callback {
+class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callback {
 
     private data class SheetSizeSnapshot(
         val layoutHeight: Int,
@@ -290,7 +294,12 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
 
-    private val binding by viewBinding(DialogWebViewBinding::bind)
+    // These containers belong to the platform WebView/video surface, not to the UI layout.
+    // Keep their IDs for native browser callers and accessibility inspection.
+    private var webViewSurface: FrameLayout? = null
+    private var videoSurface: FrameLayout? = null
+    private val webViewContainer: FrameLayout get() = checkNotNull(webViewSurface)
+    private val customWebView: FrameLayout get() = checkNotNull(videoSurface)
     private val bottomSheet: View?
         get() = dialog?.findViewById(com.google.android.material.R.id.design_bottom_sheet)
     private val behavior: BottomSheetBehavior<View>?
@@ -307,7 +316,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         get() = checkNotNull(pooledWebView).realWebView
     private var source: BaseSource? = null
     private var preloadJs: String? = null
-    private var isFullScreen = false
+    private var isFullScreen by mutableStateOf(false)
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var originOrientation: Int? = null
     private var needClearHistory = true
@@ -515,7 +524,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                                 }
                             }
                         currentWebView.clipToOutline = true
-                        binding.customWebView.outlineProvider =
+                        customWebView.outlineProvider =
                             object : android.view.ViewOutlineProvider() {
                                 override fun getOutline(
                                     view: View,
@@ -524,7 +533,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                                     outline.setRoundRect(0, 0, view.width, view.height, radius)
                                 }
                             }
-                        binding.customWebView.clipToOutline = true
+                        customWebView.clipToOutline = true
                     }
                 } else { //取消圆角
                     sheet.backgroundTintList = null
@@ -533,8 +542,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
                         currentWebView.outlineProvider = null
                         currentWebView.clipToOutline = false
-                        binding.customWebView.outlineProvider = null
-                        binding.customWebView.clipToOutline = false
+                        customWebView.outlineProvider = null
+                        customWebView.clipToOutline = false
                     }
                 }
             }
@@ -798,12 +807,29 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val context = requireContext()
+        webViewSurface = FrameLayout(context).apply { id = R.id.web_view_container }
+        videoSurface = FrameLayout(context).apply { id = R.id.custom_web_view }
+        isFullScreen = false
+        return ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                BottomBrowserRoute(webViewContainer, customWebView, isFullScreen)
+            }
+        }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         pooledWebView = WebViewPool.acquire(requireContext())
         needClearHistory = true
         view.setBackgroundColor(0)
-        binding.webViewContainer.addView(currentWebView)
+        webViewContainer.addView(currentWebView)
         val args = arguments
         if (args == null) {
             dismiss()
@@ -899,7 +925,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
     }
 
     private fun navigateBack() {
-        if (binding.customWebView.size > 0) { //网页全屏
+        if (customWebView.size > 0) { //网页全屏
             customWebViewCallback?.onCustomViewHidden()
             return
         }
@@ -1010,8 +1036,14 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
     override fun onDestroyView() {
         bottomSheet?.removeOnLayoutChangeListener(sheetLayoutListener)
         customWebViewCallback?.onCustomViewHidden()
+        (view as? ComposeView)?.disposeComposition()
+        customWebView.removeAllViews()
+        customWebViewCallback = null
+        isFullScreen = false
         pooledWebView?.let(WebViewPool::release)
         pooledWebView = null
+        webViewSurface = null
+        videoSurface = null
         originOrientation?.let {
             activity?.requestedOrientation = it
         }
@@ -1140,8 +1172,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             originOrientation = activity?.requestedOrientation //先记录原始方向，避免被js控制的影响
             isFullScreen = true
-            binding.webViewContainer.invisible()
-            binding.customWebView.addView(view)
+            webViewContainer.invisible()
+            customWebView.addView(view)
             customWebViewCallback = callback
             dialog?.keepScreenOn(true)
             expandSheetForFullScreen()
@@ -1154,8 +1186,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                 activity?.requestedOrientation = it
                 originOrientation = null
             }
-            binding.webViewContainer.visible()
-            binding.customWebView.removeAllViews()
+            webViewContainer.visible()
+            customWebView.removeAllViews()
             customWebViewCallback = null
             dialog?.keepScreenOn(false)
         }
@@ -1221,7 +1253,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                 }
 
                 else -> {
-                    binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                    requireView().longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
                         activity?.openUrl(url)
                     }
                     true

@@ -853,3 +853,7 @@ Added an IO repository for immutable file metadata and a SavedStateHandle ViewMo
 ### Shared local book preview Compose dialog
 
 Replaced ImportLocalBookDialog with a stateless Compose Screen and lifecycle-aware Route while preserving FileAssociation selection, directory chooser and import calls. Revalidates selected IDs against the current batch before consuming action tickets; rotation retains selection and scroll without changing imported files. Added seven Compose and two real host tests; updated only shared import preview interactions. Shared recycler/import-book resources remain in use elsewhere. Validated with the full JVM suite and Android test compilation.
+
+### Bottom browser Compose shell
+
+Replaced BottomWebViewDialog XML/ViewBinding with a Compose Route and stateless Screen. AndroidView contains only the original native WebView and fullscreen-video surfaces; existing browser configuration, requests, JavaScript, download, back navigation, sheet sizing and pool ownership remain in the kernel. The fullscreen slot mounts only while active and composition is disposed before the pool lease is released. Removed one exclusive layout and replaced eight source-string assertions with five actual interop/host tests. Existing browser show, sizing, request and shared image-decoder tests remain. Validated with the full JVM suite and Android test compilation.
