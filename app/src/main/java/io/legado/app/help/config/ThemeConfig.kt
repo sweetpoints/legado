@@ -1,6 +1,12 @@
 package io.legado.app.help.config
 
 import android.content.Context
+import android.util.AtomicFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.util.DisplayMetrics
@@ -56,6 +62,8 @@ object ThemeConfig {
     }
 
     private var needClearImg = true
+    private val applyLock = Any()
+    private val asyncApplyLock = Mutex()
 
     fun getTheme() = when {
         AppConfig.isEInkMode -> Theme.EInk
@@ -146,17 +154,32 @@ object ThemeConfig {
         addConfigs(getConfigs())
     }
 
-    fun save() {
-        val json = GSON.toJson(configList)
-        FileUtils.delete(configFilePath)
-        FileUtils.createFileIfNotExist(configFilePath).writeText(json)
+    @Synchronized
+    fun snapshotConfigs(): List<Config> = configList.map { it.copy() }
+
+    @Synchronized
+    fun deleteMatchingConfig(json: String, occurrence: Int): Boolean {
+        val index = configList.withIndex().filter { GSON.toJson(it.value) == json }.getOrNull(occurrence)?.index ?: return false
+        delConfig(index)
+        return true
     }
 
+    @Synchronized
+    fun save() {
+        val atomic = AtomicFile(File(configFilePath))
+        atomic.baseFile.parentFile?.mkdirs()
+        val stream = atomic.startWrite()
+        try { stream.write(GSON.toJson(configList).toByteArray(Charsets.UTF_8)); atomic.finishWrite(stream) }
+        catch (error: Throwable) { atomic.failWrite(stream); throw error }
+    }
+
+    @Synchronized
     fun delConfig(index: Int) {
         configList.removeAt(index)
         save()
     }
 
+    @Synchronized
     fun addConfig(json: String): Boolean {
         GSON.fromJsonObject<Config>(json.trim { it < ' ' }).getOrNull()
             ?.let {
@@ -168,6 +191,7 @@ object ThemeConfig {
         return false
     }
 
+    @Synchronized
     fun addConfig(newConfig: Config) {
         if (!validateConfig(newConfig)) {
             return
@@ -186,6 +210,7 @@ object ThemeConfig {
         save()
     }
 
+    @Synchronized
     fun addConfigs(newConfigs: List<Config>?) {
         val newConfigs = newConfigs?.filter{
             validateConfig(it)
@@ -216,11 +241,12 @@ object ThemeConfig {
         }
     }
 
+    @Synchronized
     private fun getConfigs(): List<Config>? {
         val configFile = File(configFilePath)
-        if (configFile.exists()) {
+        if (configFile.exists() || File(configFile.path + ".bak").exists()) {
             kotlin.runCatching {
-                val json = configFile.readText()
+                val json = AtomicFile(configFile).openRead().bufferedReader().use { it.readText() }
                 return GSON.fromJsonArray<Config>(json).getOrThrow()
             }.onFailure {
                 it.printOnDebug()
@@ -229,8 +255,7 @@ object ThemeConfig {
         return null
     }
 
-    fun applyConfig(context: Context, config: Config) {
-        try {
+    private fun prepareConfig(context: Context, config: Config): Boolean = synchronized(applyLock) {
             if (needClearImg) {
                 needClearImg = false
                 clearBg(context)
@@ -273,7 +298,7 @@ object ThemeConfig {
                             appCtx.toastOnUi(it.localizedMessage)
                         }
                     }
-                    return
+                    return@synchronized false
                 }
             }
             val backgroundBlur = config.backgroundImgBlur
@@ -297,9 +322,31 @@ object ThemeConfig {
                 context.putPrefInt(PreferKey.bgImageBlurring, backgroundBlur)
             }
             AppConfig.isNightTheme = isNightTheme
-            applyDayNight(context)
-        } catch (e: Exception) {
-            AppLog.put("设置主题出错\n$e", e, true)
+            true
+    }
+
+    fun applyConfig(context: Context, config: Config) {
+        try { if (prepareConfig(context, config.copy())) applyDayNight(context) }
+        catch (e: Exception) { AppLog.put("设置主题出错\n$e", e, true) }
+    }
+
+    /** File/image/preferences work finishes off Main before the synchronous UI theme transition. */
+    suspend fun applyConfigAsync(context: Context, config: Config) {
+        val application = context.applicationContext
+        val requested = config.copy()
+        asyncApplyLock.withLock {
+            withContext(NonCancellable) {
+                val ready = withContext(Dispatchers.IO) {
+                    val prepared = prepareConfig(application, requested)
+                    if (prepared) BookCover.upDefaultCover()
+                    prepared
+                }
+                if (ready) withContext(Dispatchers.Main.immediate) {
+                    applyTheme(application)
+                    initNightMode()
+                    postEvent(EventBus.RECREATE, "")
+                }
+            }
         }
     }
 
@@ -456,7 +503,7 @@ object ThemeConfig {
     }
 
     fun clearBg(context: Context) {
-        val (nightConfigs, dayConfigs) = configList.partition { it.isNightTheme }
+        val (nightConfigs, dayConfigs) = snapshotConfigs().partition { it.isNightTheme }
         val fileRoot = context.externalFiles
         val nightBackgroundImgPaths = nightConfigs.mapNotNull {
             val path = it.backgroundImgPath ?: return@mapNotNull null
@@ -476,12 +523,12 @@ object ThemeConfig {
                 path
             }
         }
-        appCtx.externalFiles.getFile(PreferKey.bgImage).listFiles()?.forEach {
+        context.externalFiles.getFile(PreferKey.bgImage).listFiles()?.forEach {
             if (!dayBackgroundImgPaths.contains(it.absolutePath)) {
                 it.delete()
             }
         }
-        appCtx.externalFiles.getFile(PreferKey.bgImageN).listFiles()?.forEach {
+        context.externalFiles.getFile(PreferKey.bgImageN).listFiles()?.forEach {
             if (!nightBackgroundImgPaths.contains(it.absolutePath)) {
                 it.delete()
             }

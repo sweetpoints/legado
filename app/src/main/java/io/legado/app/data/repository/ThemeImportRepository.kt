@@ -47,7 +47,7 @@ class AppThemeImportRepository(context: Context) : ThemeImportRepository {
         })
     override suspend fun read(source: String): List<ThemeImportItem> = withContext(Dispatchers.IO) {
         val incoming = parse(source.trim(), 0)
-        val existing = ThemeConfig.configList.toList().map { it.copy() }
+        val existing = ThemeConfig.snapshotConfigs()
         incoming.mapIndexed { index, item -> candidate(index.toString(), item, existing) }
     }
     private suspend fun parse(text: String, depth: Int): List<ThemeConfig.Config> {
@@ -69,7 +69,7 @@ class AppThemeImportRepository(context: Context) : ThemeImportRepository {
         }
     }
     override suspend fun edit(key: String, code: String): ThemeImportItem = withContext(Dispatchers.IO) {
-        candidate(key, GSON.fromJsonObject<ThemeConfig.Config>(code).getOrThrow(), ThemeConfig.configList.toList().map { it.copy() })
+        candidate(key, GSON.fromJsonObject<ThemeConfig.Config>(code).getOrThrow(), ThemeConfig.snapshotConfigs())
     }
     override suspend fun restore(session: String): ThemeImportSession? = withContext(Dispatchers.IO) {
         val target = file(session)
