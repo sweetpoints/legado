@@ -124,7 +124,6 @@ class ImportBookSourceStateTest {
         val importDialogs = listOf(
             "ImportBookSourceDialog.kt",
             "ImportRssSourceDialog.kt",
-            "ImportThemeDialog.kt",
         )
 
         importDialogs.forEach { fileName ->
