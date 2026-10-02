@@ -34,7 +34,6 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -51,6 +50,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.EffectiveReplacesDialog
 import io.legado.app.ui.book.read.EffectiveReplacementViewModel
 import io.legado.app.ui.book.read.ManualReplaceRulesDialog
+import io.legado.app.ui.book.read.ManualReplacementViewModel
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.widget.dialog.CodeDialog
@@ -246,11 +246,11 @@ class SourceManualReplacementUiTest {
             host.menu(R.id.menu_manual_replace_rule)
             var manual = host.child<ManualReplaceRulesDialog>()
             assertEquals(rules.take(4).map { it.id }, main { ruleIds(manual) })
-            main { manual.requireView().findViewById<View>(R.id.tv_footer_left).performClick() }
+            compose.onNodeWithTag("manual-all").performClick()
             host.scenario.recreate()
             host.findParent()
             manual = host.child()
-            main { manual.requireView().findViewById<View>(R.id.tv_ok).performClick() }
+            compose.onNodeWithTag("manual-confirm").performClick()
             host.ready()
             host.names("Seed++0", "Seed+1") // Hidden, unchecked candidate is also replaced.
             main {
@@ -269,12 +269,10 @@ class SourceManualReplacementUiTest {
             }
             host.menu(R.id.menu_manual_replace_rule, code)
             manual = host.child()
-            main {
-                // Clear inherited global selection, then choose the mixed-scope rule only.
-                manual.requireView().findViewById<View>(R.id.tv_footer_left).performClick()
-            }
+            // Clear inherited global selection, then choose the mixed-scope rule only.
+            compose.onNodeWithTag("manual-all").performClick()
             clickRule(manual, 0)
-            main { manual.requireView().findViewById<View>(R.id.tv_ok).performClick() }
+            compose.onNodeWithTag("manual-confirm").performClick()
             host.ready(code)
             host.names("Edited Seed+0", "Seed+1")
             host.menu(R.id.menu_effective_replaces, code)
@@ -284,7 +282,7 @@ class SourceManualReplacementUiTest {
             // Reopening and confirming must not apply the non-idempotent rule twice.
             host.menu(R.id.menu_manual_replace_rule, code)
             manual = host.child()
-            main { manual.requireView().findViewById<View>(R.id.tv_ok).performClick() }
+            compose.onNodeWithTag("manual-confirm").performClick()
             host.ready(code)
             host.names("Edited Seed+0", "Seed+1")
             host.scenario.recreate()
@@ -354,7 +352,7 @@ class SourceManualReplacementUiTest {
             host.menu(R.id.menu_manual_replace_rule)
             val manual = host.child<ManualReplaceRulesDialog>()
             clickRule(manual, 0)
-            main { manual.requireView().findViewById<View>(R.id.tv_ok).performClick() }
+            compose.onNodeWithTag("manual-confirm").performClick()
             host.ready()
             host.names("Seed+0", "Seed+1")
             assertFalse(AppConfig.importReplaceSource)
@@ -388,7 +386,7 @@ class SourceManualReplacementUiTest {
             host.menu(R.id.menu_manual_replace_rule)
             val manual = host.child<ManualReplaceRulesDialog>()
             clickRule(manual, 0)
-            main { manual.requireView().findViewById<View>(R.id.tv_ok).performClick() }
+            compose.onNodeWithTag("manual-confirm").performClick()
             host.ready()
             host.names("Seed+0", "Seed+1")
             withBlockedSourceRules(fail = true) { entered, release ->
@@ -511,7 +509,8 @@ class SourceManualReplacementUiTest {
                 main {
                     result = parent.childFragmentManager.fragments.filterIsInstance<T>().lastOrNull()
                     result?.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                        (result !is EffectiveReplacesDialog || ViewModelProvider(checkNotNull(result))[EffectiveReplacementViewModel::class.java].state.value.loading == false)
+                        (result !is EffectiveReplacesDialog || ViewModelProvider(checkNotNull(result))[EffectiveReplacementViewModel::class.java].state.value.loading == false) &&
+                        (result !is ManualReplaceRulesDialog || ViewModelProvider(checkNotNull(result))[ManualReplacementViewModel::class.java].state.value.loading == false)
                 }
             }
             return checkNotNull(result)
@@ -600,14 +599,11 @@ class SourceManualReplacementUiTest {
 
     private fun ruleIds(dialog: DialogFragment) = if (dialog is EffectiveReplacesDialog)
         ViewModelProvider(dialog)[EffectiveReplacementViewModel::class.java].state.value.rows.filterNot { it.conversion }.map { it.id }
-    else (dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>)
-        .getItems().map { (it as ReplaceRule).id }
+    else ViewModelProvider(dialog)[ManualReplacementViewModel::class.java].state.value.rows.map { it.id }
 
     private fun clickRule(dialog: DialogFragment, index: Int) {
-        await("Rule row missing") { main { dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view)
-            .findViewHolderForAdapterPosition(index) != null } }
-        main { dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view)
-            .findViewHolderForAdapterPosition(index)!!.itemView.performClick() }
+        val id = main { ViewModelProvider(dialog)[ManualReplacementViewModel::class.java].state.value.rows[index].id }
+        compose.onNodeWithTag("manual-rule-$id").performScrollTo().performClick()
     }
     private fun <T> main(action: () -> T): T {
         var result: T? = null

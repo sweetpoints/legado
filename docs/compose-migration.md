@@ -617,3 +617,7 @@ Switched BgTextConfigDialog and its color, restoration, underline-mode, SVG, and
 ### Manual replacement picker data and state foundation
 
 Added an I/O candidates repository and saved manual replacement ViewModel. Reader candidates retain disabled rules and exclude source-only rules; source candidates keep the original enabled source-scoped query. Selection filters missing IDs and confirms in candidate order. Confirmation is consumed once; cancellation leaves persistence to the host without writing. Range selection uses a baseline so reversed/canceled gestures restore prior choices and unfinished selection does not leak into saved state. Added 8 JVM state/recovery/gesture tests. The legacy dialog remains for separate Compose integration; Android device execution is unavailable.
+
+### Manual replacement picker Compose page
+
+Replaced ManualReplaceRulesDialog with a stable-ID Compose checkbox list, select-all controls, side-region range selection, reversal/cancellation, edge scrolling, and accessibility actions. Source selection preserves requestId and its callback; reader selection captures the original book URL before applying IDs, saving reader state, and refreshing. Resumed confirmation consumes once and cancellation writes nothing or changes no global replacement preference. Added compilation of 6 Compose gesture/lifecycle tests and 2 real Room candidate/order tests; migrated only Manual branches of the existing source-import tests. Shared recycler/item XML remains for other consumers; Android device execution is unavailable.

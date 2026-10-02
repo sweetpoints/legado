@@ -1,164 +1,55 @@
 package io.legado.app.ui.book.read
 
+import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
+import androidx.compose.runtime.Composable
 import androidx.fragment.app.activityViewModels
-import androidx.recyclerview.widget.LinearLayoutManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemCheckBoxBinding
-import io.legado.app.lib.theme.primaryColor
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.repository.AppManualReplacementRepository
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 
 /** Selects replacement rules for the current book or a source import preview. */
-class ManualReplaceRulesDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
+class ManualReplaceRulesDialog() : BaseComposeDialogFragment() {
     constructor(ids: List<Long>, requestId: String?) : this() {
-        arguments = Bundle().apply {
-            putBoolean("sourceReplacement", true)
-            putLongArray("selectedIds", ids.toLongArray())
-            putString("requestId", requestId)
-        }
+        arguments = Bundle().apply { putBoolean("sourceReplacement", true); putLongArray("selectedIds", ids.toLongArray()); putString("requestId", requestId) }
     }
-
-    interface Callback {
-        fun onManualSourceRulesSelected(ids: List<Long>, requestId: String?)
-    }
-
+    interface Callback { fun onManualSourceRulesSelected(ids: List<Long>, requestId: String?) }
     private val sourceReplacement get() = arguments?.getBoolean("sourceReplacement") == true
-
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val viewModel by activityViewModels<ReadBookViewModel>()
-    private val adapter by lazy { RulesAdapter(requireContext()) }
-    private var candidates: List<ReplaceRule> = emptyList()
-
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.9f, 0.9f)
+    private val reader by activityViewModels<ReadBookViewModel>()
+    private val model by viewModels<ManualReplacementViewModel> {
+        viewModelFactory { initializer { ManualReplacementViewModel(AppManualReplacementRepository(), createSavedStateHandle(), sourceReplacement,
+            arguments?.getLongArray("selectedIds")?.toList().orEmpty()) } }
     }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        val book = ReadBook.book
-        if (!sourceReplacement && book == null) {
-            dismissAllowingStateLoss()
-            return
-        }
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setTitle(R.string.manual_replace_rule)
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        candidates = if (sourceReplacement) appDb.replaceRuleDao.findEnabledBySourceScope()
-            else appDb.replaceRuleDao.findManualCandidates()
-        val selected = savedInstanceState?.getLongArray("selectedIds")?.toList()
-            ?: if (sourceReplacement) arguments?.getLongArray("selectedIds")?.toList().orEmpty()
-            else book!!.config.manualReplaceRuleIds
-        adapter.selectedIds.addAll(selected)
-        adapter.selectedIds.retainAll(candidates.mapTo(hashSetOf(), ReplaceRule::id))
-        adapter.setItems(candidates)
-
-        binding.tvCancel.visible()
-        binding.tvCancel.setOnClickListener { dismissAllowingStateLoss() }
-        binding.tvOk.visible()
-        binding.tvOk.setOnClickListener {
-            val ids = candidates.filter { it.id in adapter.selectedIds }.map { it.id }
-            if (sourceReplacement) {
-                (parentFragment as? Callback)?.onManualSourceRulesSelected(ids, arguments?.getString("requestId"))
-            } else {
-                book!!.config.manualReplaceRuleIds = ids
-                ReadBook.saveRead()
-                viewModel.replaceRuleChanged()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (!sourceReplacement && arguments?.containsKey("readerBookUrl") != true) {
+            arguments = (arguments ?: Bundle()).apply {
+                putString("readerBookUrl", ReadBook.book?.bookUrl)
+                putLongArray("selectedIds", ReadBook.book?.config?.manualReplaceRuleIds.orEmpty().toLongArray())
             }
-            dismissAllowingStateLoss()
         }
-        binding.tvFooterLeft.visible()
-        binding.tvFooterLeft.setOnClickListener {
-            if (adapter.selectedIds.size == candidates.size) {
-                adapter.selectedIds.clear()
-            } else {
-                adapter.selectedIds.addAll(candidates.map(ReplaceRule::id))
-            }
-            adapter.notifyDataSetChanged()
-            updateFooter()
-        }
-        updateFooter()
-
-        val dragSelectTouchHelper = DragSelectTouchHelper(adapter.dragSelectCallback)
-            .setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
-        dragSelectTouchHelper.activeSlideSelect()
     }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putLongArray("selectedIds", adapter.selectedIds.toLongArray())
-        super.onSaveInstanceState(outState)
+    override fun onStart() { super.onStart(); setLayout(.9f, .9f) }
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        if (!sourceReplacement && (ReadBook.book == null || ReadBook.book?.bookUrl != arguments?.getString("readerBookUrl"))) model.cancel()
     }
-
-    private fun updateFooter() {
-        val selected = adapter.selectedIds.size
-        val all = selected == candidates.size
-        binding.tvFooterLeft.text = getString(
-            if (all) R.string.select_cancel_count else R.string.select_all_count,
-            selected,
-            candidates.size,
-        )
+    @Composable override fun Content() {
+        ManualReplacementRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::applySelection, ::dismissAllowingStateLoss)
     }
-
-    private inner class RulesAdapter(context: android.content.Context) :
-        RecyclerAdapter<ReplaceRule, ItemCheckBoxBinding>(context) {
-
-        val selectedIds = linkedSetOf<Long>()
-
-        override fun getViewBinding(parent: ViewGroup): ItemCheckBoxBinding {
-            return ItemCheckBoxBinding.inflate(inflater, parent, false)
+    private fun applySelection(ids: List<Long>) {
+        if (sourceReplacement) (parentFragment as? Callback)?.onManualSourceRulesSelected(ids, arguments?.getString("requestId"))
+        else ReadBook.book?.takeIf { it.bookUrl == arguments?.getString("readerBookUrl") }?.let { book ->
+            book.config.manualReplaceRuleIds = ids; ReadBook.saveRead(); reader.replaceRuleChanged()
         }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemCheckBoxBinding,
-            item: ReplaceRule,
-            payloads: MutableList<Any>,
-        ) {
-            binding.checkBox.text = item.getDisplayNameGroup()
-            binding.checkBox.isChecked = item.id in selectedIds
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemCheckBoxBinding) {
-            binding.checkBox.setOnUserCheckedChangeListener { isChecked ->
-                getItem(holder.layoutPosition)?.let { item ->
-                    if (isChecked) selectedIds.add(item.id) else selectedIds.remove(item.id)
-                    notifyItemChanged(holder.layoutPosition)
-                    updateFooter()
-                }
-            }
-            binding.root.setOnClickListener { binding.checkBox.performClick() }
-        }
-
-        val dragSelectCallback =
-            object : DragSelectTouchHelper.AdvanceCallback<ReplaceRule>(Mode.ToggleAndReverse) {
-                override fun currentSelectedId(): MutableSet<ReplaceRule> {
-                    return getItems().filter { it.id in selectedIds }.toMutableSet()
-                }
-
-                override fun getItemId(position: Int): ReplaceRule {
-                    return getItem(position)!!
-                }
-
-                override fun updateSelectState(position: Int, isSelected: Boolean): Boolean {
-                    val item = getItem(position) ?: return false
-                    if (isSelected) selectedIds.add(item.id) else selectedIds.remove(item.id)
-                    notifyItemChanged(position)
-                    updateFooter()
-                    return true
-                }
-            }
+    }
+    override fun onCancel(dialog: DialogInterface) { model.cancel(); super.onCancel(dialog) }
+    override fun onDismiss(dialog: DialogInterface) {
+        if (activity?.isChangingConfigurations != true) model.cancel()
+        super.onDismiss(dialog)
     }
 }
