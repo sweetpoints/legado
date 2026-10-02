@@ -885,3 +885,7 @@ Replaced RSS source edit Activity, native field adapter and exclusive XML with a
 ### Replacement rule editor data and state
 
 Added immutable eight-field drafts, per-field undo/redo, preview state, small saved identities and private file editor transfers. Durable pre-save journals recover Room/sample/draft failures using fixed receipts and reject concurrent rule changes; native editor results persist before transfer cleanup and support explicit retry/discard. Preserved metadata, sample normalization, paste identity and original preview algorithms, moving the engine to model/replace with compatible UI delegates. Added fourteen JVM and seven actual Room/disk tests; original engine tests remain. Validated with all JVM tests and Android test compilation.
+
+### RSS source debug sessions
+
+Added an immutable Room source/sort repository and owned Debug execution lease, retaining shared engine behavior and callback identity. Reruns join previous parser children before acquiring a successor; stop releases only the current owner. ViewModel state restores queries, selection and bounded logs from private disk records without automatically rerunning interrupted work; list/content HTML stay out of saved state. Added ten JVM session tests and five actual Room/Rhino/local-HTTP/disk tests. Validated with all JVM tests and Android test compilation.
