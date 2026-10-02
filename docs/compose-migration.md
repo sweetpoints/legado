@@ -326,6 +326,11 @@ migration, numeric bounds, release-time persistence, draft flushing and settings
 backup remain compatible. Preference observation follows the resumed lifecycle and
 reader visibility counters release once per view. The preference XML is removed.
 
+URL-option editing now uses a Compose form with restorable drafts, free-form method
+and charset suggestions, WebView selection and all request/script fields. Existing
+AnalyzeUrl setters retain JSON and retry/DNS parsing behavior. Confirm returns once;
+cancel/backdrop returns no result. The exclusive URL-option layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
