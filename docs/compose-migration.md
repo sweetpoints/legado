@@ -701,3 +701,7 @@ Replaced the reader action popup content with Compose primary/more partitions an
 ### Automatic task import Compose page
 
 Replaced the import dialog with a stable-key Compose list, selection counts, import status, code editing, progress and retry controls. Parent-first CodeDialog callbacks retain request receipts across recreation and accept successive editor saves. Resumed navigation consumes the request before opening its child; busy work protects cancellation and confirmation. Added compilation of 4 Compose and 2 real Fragment restore tests, retaining unrelated storage/routing contracts. Shared import tests now address Compose row actions directly instead of removed layout IDs. Removed the old import ViewModel implementation and the last exclusive source-import item layout; shared recycler resources remain. Android device execution is unavailable.
+
+### Search scope data foundation
+
+Added an I/O repository and immutable source-name/URL projection for the search scope picker. Group choices retain enabled-source filtering; the source tab retains all sources, DAO ordering and name/group/URL/comment queries, including disabled sources. Added 4 JVM snapshot/flow/thread tests plus compilation of 1 actual Room filtering test. Legacy scope UI remains for separate Compose integration; Android device execution is unavailable.
