@@ -214,11 +214,7 @@ class SourceCompatibilityTest {
         assertTrue(HttpTTS(loginUi = "[]").shouldOpenLoginOnSelection())
         assertFalse(HttpTTS().shouldOpenLoginOnSelection())
 
-        val source = File(
-            "src/main/java/io/legado/app/ui/book/read/config/SpeakEngineDialog.kt"
-        ).readText()
-        assertTrue(source.contains("if (httpTTS.shouldOpenLoginOnSelection())"))
-        assertFalse(source.contains("&& httpTTS.getLoginInfo().isNullOrBlank()"))
+
     }
 
     @Test

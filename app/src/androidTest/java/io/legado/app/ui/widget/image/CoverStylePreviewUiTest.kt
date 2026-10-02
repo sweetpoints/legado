@@ -1,5 +1,13 @@
 package io.legado.app.ui.widget.image
 
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performClick
+import org.junit.Rule
+
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -35,6 +43,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class CoverStylePreviewUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
@@ -145,17 +154,12 @@ class CoverStylePreviewUiTest {
                 background.forEach { assertEquals("current custom background is rendered", color, it[0]) }
                 scroll(settings, PreferKey.coverFont)
                 onView(withText(R.string.cover_font_select)).perform(click())
-                waitUntil {
-                    var found = false
-                    settings.onActivity { activity ->
-                        val matches = arrayListOf<View>()
-                        fragment(activity).childFragmentManager.fragments.firstOrNull()?.view
-                            ?.findViewsWithText(matches, font.name, View.FIND_VIEWS_WITH_TEXT)
-                        found = matches.isNotEmpty()
-                    }
-                    found
+                compose.waitUntil(5_000) {
+                    compose.onAllNodesWithTag("font-list").fetchSemanticsNodes().isNotEmpty() &&
+                        compose.onAllNodesWithTag("font-progress").fetchSemanticsNodes().isEmpty()
                 }
-                onView(withText(context.getString(R.string.font_item_private, font.name))).perform(click())
+                compose.onNodeWithTag("font-list").performScrollToNode(hasTestTag("font-entry-${font.path}"))
+                compose.onNodeWithTag("font-entry-${font.path}").performClick()
                 waitUntil { preferences.getString(PreferKey.coverFont, "") == font.path }
                 assertNotNull(BookCover.fontTypeface)
                 assertEquals(readerFont, ReadBookConfig.textFont)
@@ -168,7 +172,8 @@ class CoverStylePreviewUiTest {
                 assertEquals(font.path, preferences.getString(PreferKey.coverFont, ""))
                 scroll(settings, PreferKey.coverFont)
                 onView(withText(R.string.cover_font_select)).perform(click())
-                onView(withId(R.id.menu_default)).perform(click())
+                compose.onNodeWithTag("font-actions").performClick()
+                compose.onNodeWithTag("font-default").performClick()
                 assertEquals("", preferences.getString(PreferKey.coverFont, ""))
                 assertNull(BookCover.fontTypeface)
                 assertEquals(systemFont, AppConfig.systemTypefaces)

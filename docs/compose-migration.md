@@ -358,6 +358,13 @@ Reader-menu and text-selection-menu preference serialization/migration now belon
 to the data layer. Remaining View entry points delegate to that implementation;
 Compose repositories do not depend on UI helpers.
 
+Speech-engine selection now uses Compose lists, system/HTTP choices, scoped apply,
+login, import/export, deletion confirmation and share controls. Stable IDs and
+restorable drafts preserve selection and editor contracts. Room/cache/file work runs
+on IO; export preparation is cancellable and resumed platform actions consume their
+queue entry before delivery. Cache deletion belongs to the ViewModel scope and its
+completion toast does not replay service reset. Exclusive item/menu XML is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
