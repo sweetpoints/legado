@@ -20,7 +20,8 @@ class UpdateDialogLifecycleTest {
 
         assertGuardBeforeDialog(main, "supportFragmentManager.isStateSaved")
         assertGuardBeforeDialog(shared, "isAdded && !childFragmentManager.isStateSaved")
-        for (path in listOf("ui/about/AboutFragment.kt", "ui/main/my/MyFragment.kt")) {
+        // About 页已迁移为 Compose：更新入口从 AboutFragment 移到 AboutActivity
+        for (path in listOf("ui/about/AboutActivity.kt", "ui/main/my/MyFragment.kt")) {
             val caller = projectFile("src/main/java/io/legado/app/$path").readText()
             assertTrue(caller.contains("\"check_update\" -> checkAppUpdate()"))
             assertTrue(caller.contains("\"check_beta_update\" -> checkAppUpdate(beta = true)"))
