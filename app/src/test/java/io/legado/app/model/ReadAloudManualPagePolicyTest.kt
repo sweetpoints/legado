@@ -77,15 +77,10 @@ class ReadAloudManualPagePolicyTest {
 
     @Test
     fun `preference remains opt in and is wired to page navigation`() {
-        val preference = readProjectFile("src/main/res/xml/pref_config_aloud.xml")
         val appConfig = readProjectFile("src/main/java/io/legado/app/help/config/AppConfig.kt")
         val readBook = readProjectFile("src/main/java/io/legado/app/model/ReadBook.kt")
-        val keyMarker = "android:key=\"readAloudFollowManualPage\""
-        val preferenceSection = preference.substringBefore(keyMarker)
-            .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference") +
-            keyMarker + preference.substringAfter(keyMarker).substringBefore("/>")
-
-        assertTrue(preferenceSection.contains("android:defaultValue=\"false\""))
+        assertFalse(io.legado.app.data.preferences.ReadAloudPreferences(emptyMap())[
+            io.legado.app.data.preferences.ReadAloudSwitch.FollowManualPage])
         assertTrue(appConfig.contains("PreferKey.readAloudFollowManualPage, false"))
         assertTrue(readBook.contains("prepareReadAloudPageNavigation"))
         assertTrue(

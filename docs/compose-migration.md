@@ -303,6 +303,12 @@ with collision-safe item identity, selectable text and existing web-link behavio
 Selection, scrolling and close remain available without a View adapter. Shared legacy
 recycler/item resources remain until their other consumers migrate.
 
+Read-aloud preferences now use Compose switches, a restorable start-mode picker and
+navigation rows. Existing keys/defaults, focus-dependent call pausing, engine summary
+and system settings navigation remain intact. Preference listeners live only while
+resumed and running playback receives the original configuration-change event.
+The exclusive preference XML is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,

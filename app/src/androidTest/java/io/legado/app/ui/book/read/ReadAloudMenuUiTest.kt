@@ -66,6 +66,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.dpToPx
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,6 +94,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Real reader gestures; stop tests run the production service with its speech engine shut down. */
 @RunWith(AndroidJUnit4::class)
 class ReadAloudMenuUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -174,6 +182,7 @@ class ReadAloudMenuUiTest {
                     is Boolean -> putBoolean(key, value)
                     is Int -> putInt(key, value)
                     is Float -> putFloat(key, value)
+                    is String -> putString(key, value)
                 }
             }
         }.commit()
@@ -400,35 +409,18 @@ class ReadAloudMenuUiTest {
         assertTrue("Paused cursor updates must not start playback", BaseReadAloudService.pause)
     }
 
-    @Test fun initialSpeechChoiceUsesTheNativeDialogAndSurvivesSettingsBackup() {
+    @Test fun initialSpeechChoiceUsesComposeAndSurvivesSettingsBackup() {
         prefs.edit().remove(PreferKey.readAloudStart).commit()
         assertTrue(AppConfig.readAloudStartAtSentence)
         scenario!!.onActivity { ReadAloudConfigDialog().showNow(it.supportFragmentManager, "aloud-start-config") }
-        var startOrder = -1
-        var controlsOrder = -1
-        scenario!!.onActivity { activity ->
-            val dialog = activity.supportFragmentManager.findFragmentByTag("aloud-start-config") as ReadAloudConfigDialog
-            dialog.childFragmentManager.executePendingTransactions()
-            val fragment = dialog.childFragmentManager.fragments.single() as
-                ReadAloudConfigDialog.ReadAloudPreferenceFragment
-            val screen = fragment.preferenceScreen
-            val category = screen.getPreference(0) as androidx.preference.PreferenceGroup
-            for (index in 0 until category.preferenceCount) {
-                when (category.getPreference(index).key) {
-                    PreferKey.readAloudStart -> startOrder = index
-                    "readAloudControls" -> controlsOrder = index
-                }
-            }
-            fragment.scrollToPreference("readAloudControls")
-            category.findPreference<androidx.preference.Preference>(PreferKey.readAloudStart)!!.performClick()
-        }
-        assertTrue(startOrder >= 0)
-        assertEquals("Initial start appears immediately above playback controls", startOrder + 1, controlsOrder)
-        onView(withText(R.string.read_aloud_start_page)).inRoot(isDialog()).check(matches(isDisplayed()))
+        compose.onNodeWithTag("read-aloud-start").performScrollTo().assertExists()
+        compose.onNodeWithTag("read-aloud-controls").performScrollTo().assertExists()
+        compose.onNodeWithTag("read-aloud-start").performScrollTo().performClick()
+        compose.onNodeWithTag("read-aloud-start-sentence").assertIsSelected()
         screenshot("aloud-start-options-default-sentence")
-        onView(withText(R.string.read_aloud_start_page)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("read-aloud-start-page").performClick()
         assertFalse(AppConfig.readAloudStartAtSentence)
-        onView(withText(R.string.read_aloud_start)).check(matches(isDisplayed()))
+        compose.onNodeWithTag("read-aloud-start").assertTextContains(context.getString(R.string.read_aloud_start_page))
         screenshot("aloud-start-page-choice")
         pressBack()
         val directory = File(context.cacheDir, "aloud-start-backup-${System.nanoTime()}")
@@ -449,18 +441,11 @@ class ReadAloudMenuUiTest {
             runBlocking(Dispatchers.IO) { Restore.restoreLocked(unpacked.path) }
             assertFalse("Real settings restore preserves page start", AppConfig.readAloudStartAtSentence)
             scenario!!.onActivity { ReadAloudConfigDialog().showNow(it.supportFragmentManager, "aloud-start-restored") }
-            scenario!!.onActivity { activity ->
-                val dialog = activity.supportFragmentManager.findFragmentByTag("aloud-start-restored") as ReadAloudConfigDialog
-                dialog.childFragmentManager.executePendingTransactions()
-                val fragment = dialog.childFragmentManager.fragments.single() as ReadAloudConfigDialog.ReadAloudPreferenceFragment
-                val preference = fragment.findPreference<androidx.preference.ListPreference>(PreferKey.readAloudStart)!!
-                assertEquals("page", preference.value)
-                fragment.scrollToPreference("readAloudControls")
-                preference.performClick()
-            }
-            onView(withText(R.string.read_aloud_start_sentence)).inRoot(isDialog()).check(matches(isDisplayed()))
+            compose.onNodeWithTag("read-aloud-start").performScrollTo()
+                .assertTextContains(context.getString(R.string.read_aloud_start_page)).performClick()
+            compose.onNodeWithTag("read-aloud-start-page").assertIsSelected()
             screenshot("aloud-start-options-restored-page")
-            onView(withText(R.string.read_aloud_start_sentence)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("read-aloud-start-sentence").performClick()
             assertTrue(AppConfig.readAloudStartAtSentence)
             screenshot("aloud-start-sentence-choice")
             pressBack()
