@@ -869,3 +869,7 @@ Added a ViewModel for the four tabs, focus, all field text/selection, editor opt
 ### Chapter source search repository
 
 Moved pure result-order/filter policy to the model layer with the former package API retained as a compatibility delegate. Added IO search/store boundaries for cached results, source groups, bounded concurrent searches, word-count measurement, scores and current-source pinning. Results persist and publish sequentially per source; a later source failure retains earlier successful rows and never cancels other sources. Added ten JVM tests and two actual Room store tests. Validated with all JVM tests and Android test compilation.
+
+### Chapter source content and recoverable cache commits
+
+Added private immutable chapter sessions and disk receipts for fetched content, merged chapter caches and source-change actions. Cache journals precede body writes; an atomic BookHelp fence verifies the previous body hash before recovery and prevents stale receipts overwriting a newer body or chapter metadata. An explicit retry action may abandon only uncommitted cache intents. Added nine JVM tests and four actual Room/cache tests, including concurrent writer rejection and already-written receipt recovery. Existing BookHelp save behavior remains unchanged. Validated with all JVM tests and Android test compilation.

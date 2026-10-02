@@ -302,6 +302,20 @@ object BookHelp {
         }
     }
 
+    /** Atomically reject a journal recovery when another writer has replaced the original body. */
+    internal fun saveTextIfUnchanged(
+        book: Book,
+        bookChapter: BookChapter,
+        content: String,
+        expectedPreviousHash: String,
+        saveChapterMetadata: Boolean = false,
+    ): Boolean = contentSaveFence.exclusive {
+        val previous = getContent(book, bookChapter)
+        if (io.legado.app.model.book.ChapterSourceCacheDigest.of(previous) != expectedPreviousHash) return@exclusive false
+        saveText(book, bookChapter, content, saveChapterMetadata)
+        true
+    }
+
     fun isContentReversed(book: Book, chapter: BookChapter): Boolean {
         val fileName = contentSaveFileName(book, chapter) ?: chapter.getFileName()
         val file = downloadDir.getFile(cacheFolderName, book.getFolderName(), fileName)
