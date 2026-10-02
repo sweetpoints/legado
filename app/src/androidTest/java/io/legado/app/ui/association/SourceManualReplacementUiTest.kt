@@ -49,6 +49,7 @@ import io.legado.app.help.storage.BackupConfig
 import io.legado.app.help.storage.Restore
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.EffectiveReplacesDialog
+import io.legado.app.ui.book.read.EffectiveReplacementViewModel
 import io.legado.app.ui.book.read.ManualReplaceRulesDialog
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.code.CodeEditActivity
@@ -509,7 +510,8 @@ class SourceManualReplacementUiTest {
             await("Missing ${T::class.simpleName}") {
                 main {
                     result = parent.childFragmentManager.fragments.filterIsInstance<T>().lastOrNull()
-                    result?.dialog?.window?.decorView?.hasWindowFocus() == true
+                    result?.dialog?.window?.decorView?.hasWindowFocus() == true &&
+                        (result !is EffectiveReplacesDialog || ViewModelProvider(checkNotNull(result))[EffectiveReplacementViewModel::class.java].state.value.loading == false)
                 }
             }
             return checkNotNull(result)
@@ -596,9 +598,10 @@ class SourceManualReplacementUiTest {
         }
     }
 
-    private fun ruleIds(dialog: DialogFragment) =
-        (dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>)
-            .getItems().map { (it as ReplaceRule).id }
+    private fun ruleIds(dialog: DialogFragment) = if (dialog is EffectiveReplacesDialog)
+        ViewModelProvider(dialog)[EffectiveReplacementViewModel::class.java].state.value.rows.filterNot { it.conversion }.map { it.id }
+    else (dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>)
+        .getItems().map { (it as ReplaceRule).id }
 
     private fun clickRule(dialog: DialogFragment, index: Int) {
         await("Rule row missing") { main { dialog.requireView().findViewById<RecyclerView>(R.id.recycler_view)

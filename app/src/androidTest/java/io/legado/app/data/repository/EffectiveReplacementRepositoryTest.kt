@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.config.AppConfig
+import io.legado.app.utils.GSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -28,7 +29,7 @@ class EffectiveReplacementRepositoryTest {
         assertEquals(listOf(2L, 1L), repository.load(listOf(1, 2, 1, 99), emptyList()).rows.map { it.id })
         repository.disable(1)
         withContext(Dispatchers.IO) {
-            assertEquals(before.copy(isEnabled = false), database.replaceRuleDao.findById(1)); assertTrue(checkNotNull(database.replaceRuleDao.findById(2)).isEnabled)
+            assertEquals(GSON.toJsonTree(before.copy(isEnabled = false)), GSON.toJsonTree(database.replaceRuleDao.findById(1))); assertTrue(checkNotNull(database.replaceRuleDao.findById(2)).isEnabled)
             database.replaceRuleDao.delete(checkNotNull(database.replaceRuleDao.findById(1)))
         }
         repository.disable(1)

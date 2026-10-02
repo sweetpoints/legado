@@ -1,145 +1,51 @@
 package io.legado.app.ui.book.read
 
-import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.*
 import androidx.fragment.app.activityViewModels
-import androidx.recyclerview.widget.LinearLayoutManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.Item1lineTextAndCloseBinding
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.repository.AppEffectiveReplacementRepository
+import io.legado.app.data.repository.EffectiveReplacementRow
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-/**
- * 起效的替换规则
- */
-class EffectiveReplacesDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
-    constructor(ids: List<Long>) : this() {
-        arguments = Bundle().apply { putLongArray("sourceRuleIds", ids.toLongArray()) }
-    }
-
-    interface Callback {
-        fun onEffectiveSourceRulesChanged()
-    }
-
+class EffectiveReplacesDialog() : BaseComposeDialogFragment() {
+    constructor(ids: List<Long>) : this() { arguments = Bundle().apply { putLongArray("sourceRuleIds", ids.toLongArray()) } }
+    interface Callback { fun onEffectiveSourceRulesChanged() }
     private val sourceReplacement get() = arguments?.containsKey("sourceRuleIds") == true
-
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val viewModel by activityViewModels<ReadBookViewModel>()
-    private val adapter by lazy { ReplaceAdapter(requireContext()) }
-    private val chineseConvert by lazy { ReplaceRule(0, "繁简转换") }
-
-    private var isEdit = false
-
-    private val editActivity =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            if (it.resultCode == AppCompatActivity.RESULT_OK) {
-                isEdit = true
-            }
-        }
-
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private val reader by activityViewModels<ReadBookViewModel>()
+    private val model by viewModels<EffectiveReplacementViewModel> {
+        viewModelFactory { initializer { EffectiveReplacementViewModel(AppEffectiveReplacementRepository(), createSavedStateHandle(),
+            arguments?.getLongArray("sourceRuleIds")?.toList(),
+            ReadBook.curTextChapter?.effectiveReplaceRules.orEmpty().map { EffectiveReplacementRow(it.id, it.name) }, "繁简转换") } }
     }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        isEdit = savedInstanceState?.getBoolean("isEdit") == true
-        binding.run {
-            toolBar.setBackgroundColor(primaryColor)
-            toolBar.setTitle(R.string.effective_replaces)
-            recyclerView.layoutManager = LinearLayoutManager(requireContext())
-            recyclerView.adapter = adapter
-        }
-        val effectiveReplaceRules = if (sourceReplacement) {
-            appDb.replaceRuleDao.findByIds(*arguments!!.getLongArray("sourceRuleIds")!!)
-        } else ReadBook.curTextChapter?.effectiveReplaceRules ?: emptyList()
-        if (!sourceReplacement && AppConfig.chineseConverterType > 0) {
-            adapter.setItems(effectiveReplaceRules + chineseConvert)
-        } else {
-            adapter.setItems(effectiveReplaceRules)
-        }
+    private val edit = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == AppCompatActivity.RESULT_OK) model.edited()
     }
-
+    override fun onStart() { super.onStart(); setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
+    @Composable override fun Content() {
+        val state by model.state.collectAsStateWithLifecycle()
+        SideEffect { isCancelable = !state.busy }
+        EffectiveReplacementRoute(model, { isAdded && !parentFragmentManager.isStateSaved },
+            { edit.launch(ReplaceEditActivity.startIntent(requireContext(), it)) }, ::refresh, ::dismissAllowingStateLoss)
+    }
+    private fun refresh() {
+        if (sourceReplacement) (parentFragment as? Callback)?.onEffectiveSourceRulesChanged()
+        else reader.replaceRuleChanged()
+    }
+    override fun dismiss() { model.close() }
     override fun onDismiss(dialog: DialogInterface) {
+        if (activity?.isChangingConfigurations != true) { model.close(); if (model.consumeRefresh()) refresh() }
         super.onDismiss(dialog)
-        if (isEdit) {
-            if (sourceReplacement) (parentFragment as? Callback)?.onEffectiveSourceRulesChanged()
-            else viewModel.replaceRuleChanged()
-        }
     }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("isEdit", isEdit)
-        super.onSaveInstanceState(outState)
-    }
-    
-    private fun showChineseConvertAlert() {
-        alert(titleResource = R.string.chinese_converter) {
-            items(resources.getStringArray(R.array.chinese_mode).toList()) { _, i ->
-                if (AppConfig.chineseConverterType != i) {
-                    AppConfig.chineseConverterType = i
-                    isEdit = true
-                }
-            }
-        }
-    }
-
-    private inner class ReplaceAdapter(context: Context) :
-        RecyclerAdapter<ReplaceRule, Item1lineTextAndCloseBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): Item1lineTextAndCloseBinding {
-            return Item1lineTextAndCloseBinding.inflate(inflater, parent, false)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: Item1lineTextAndCloseBinding) {
-            binding.root.setOnClickListener {
-                getItem(holder.layoutPosition)?.let { item ->
-                    if (item == chineseConvert) {
-                        showChineseConvertAlert()
-                        return@let
-                    }
-                    editActivity.launch(ReplaceEditActivity.startIntent(requireContext(), item.id))
-                }
-            }
-            binding.icClose.setOnClickListener {
-                getItem(holder.layoutPosition)?.let { item ->
-                    isEdit = true
-                    removeItem(holder.layoutPosition)
-                    if (item == chineseConvert) {
-                        AppConfig.chineseConverterType = 0
-                        return@let
-                    }
-                    item.isEnabled = false
-                    appDb.replaceRuleDao.enable(item.id, false)
-                }
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: Item1lineTextAndCloseBinding,
-            item: ReplaceRule,
-            payloads: MutableList<Any>
-        ) {
-            binding.textView.text = item.name
-        }
-
-    }
-
 }
