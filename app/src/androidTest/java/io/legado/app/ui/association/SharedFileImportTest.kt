@@ -444,9 +444,8 @@ class SharedFileImportTest {
             val source = File(directory, "menu-share-$id.txt").apply { writeText("MENU SHARED BOOK") }
             launchShare(source, "text/plain").use { scenario ->
                 awaitLocalPreview(scenario)
-                onView(withContentDescription(androidx.appcompat.R.string.abc_action_menu_overflow_description))
-                    .inRoot(isDialog()).perform(click())
-                onView(withText(R.string.local_book_save_path)).inRoot(isPlatformPopup()).perform(click())
+                compose.onNodeWithTag("shared-local-menu").performClick()
+                compose.onNodeWithTag("shared-local-directory").performClick()
                 screenshot("share-local-preview-save-folder-menu")
                 onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
                 await { AppConfig.defaultBookTreeUri == Uri.fromFile(finalDirectory).toString() }
@@ -531,14 +530,11 @@ class SharedFileImportTest {
             assertTrue(previewCover.length() > 0)
             assertTrue(omittedCover.length() > 0)
             coverBytes = previewCover.readBytes()
-            scenario.onActivity { activity ->
-                activity.supportFragmentManager.findFragmentByTag("sharedLocalBooks")!!.requireView()
-                    .findViewById<RecyclerView>(R.id.recycler_view).scrollToPosition(omitted)
-            }
+            compose.onNodeWithTag("shared-local-list").performScrollToIndex(omitted)
             val omittedBook = items[omitted].preview!!
             val label = if (omittedBook.author.isBlank()) omittedBook.name
                 else "${omittedBook.name} / ${omittedBook.author}"
-            onView(withText(label)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithText(label).performClick()
             assertEquals(4, model.selectedLocalBooks.size)
             scenario.recreate()
             awaitLocalPreview(scenario)
@@ -780,14 +776,14 @@ class SharedFileImportTest {
                 var ready = false
                 scenario.onActivity { activity ->
                     val model = ViewModelProvider(activity)[FileAssociationViewModel::class.java]
-                    val fragment = activity.supportFragmentManager.findFragmentByTag("sharedLocalBooks") as? DialogFragment
-                    val recycler = fragment?.view?.findViewById<RecyclerView>(R.id.recycler_view)
+                    val fragment = activity.supportFragmentManager.findFragmentByTag("sharedLocalBooks") as? ImportLocalBookDialog
+                    val preview = fragment?.model?.state?.value
                     state = "batch=${model.localBookBatch.value?.size}; selected=${model.selectedLocalBooks.size}; " +
                         "pending=${model.pendingLocalBooks.size}; destination=${model.localBookDestination.value}; " +
                         "error=${model.errorLive.value}; fragments=${activity.supportFragmentManager.fragments.map { it.javaClass.simpleName to it.tag }}; " +
-                        "view=${fragment?.view}; adapter=${recycler?.adapter}; count=${recycler?.adapter?.itemCount}; " +
+                        "view=${fragment?.view}; loaded=${preview?.loaded}; count=${preview?.rows?.size}; " +
                         "focus=${fragment?.dialog?.window?.decorView?.hasWindowFocus()}"
-                    ready = (recycler?.adapter?.itemCount ?: 0) > 0 && recycler?.isShown == true &&
+                    ready = preview?.loaded == true && preview.rows.isNotEmpty() && fragment?.view?.isShown == true &&
                         fragment?.dialog?.window?.decorView?.hasWindowFocus() == true
                 }
                 ready
@@ -800,7 +796,7 @@ class SharedFileImportTest {
 
     private fun confirmLocalPreview(scenario: ActivityScenario<FileAssociationActivity>) {
         awaitLocalPreview(scenario)
-        onView(withId(R.id.tv_ok)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("shared-local-confirm").performClick()
     }
 
     private fun openReader(book: Book) {

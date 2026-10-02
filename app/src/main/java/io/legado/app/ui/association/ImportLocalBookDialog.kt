@@ -1,87 +1,54 @@
 package io.legado.app.ui.association
 
 import android.content.DialogInterface
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
-import android.view.MenuItem
+import androidx.compose.runtime.Composable
 import androidx.fragment.app.activityViewModels
-import androidx.recyclerview.widget.LinearLayoutManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.book.import.local.ImportBookAdapter
-import io.legado.app.utils.FileDoc
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.repository.FileSharedLocalBookPreviewRepository
+import io.legado.app.data.repository.SharedLocalBookPreviewSeed
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 
-/** Reuse the local importer rows, including their supported-format label and selection. */
-class ImportLocalBookDialog : BaseDialogFragment(R.layout.dialog_recycler_view), ImportBookAdapter.CallBack {
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val viewModel by activityViewModels<FileAssociationViewModel>()
-    private val adapter by lazy { ImportBookAdapter(requireContext(), this) }
-
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+/** Pure Compose preview over the existing shared-book staging, copy and parser pipeline. */
+class ImportLocalBookDialog : BaseComposeDialogFragment() {
+    private val pipeline by activityViewModels<FileAssociationViewModel>()
+    internal val model by viewModels<SharedLocalBookPreviewViewModel> {
+        viewModelFactory { initializer { SharedLocalBookPreviewViewModel(FileSharedLocalBookPreviewRepository(), createSavedStateHandle()) } }
     }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setTitle(R.string.local_book)
-        binding.toolBar.menu.add(0, R.id.menu_local_book_save_path, 0, R.string.local_book_save_path)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        binding.toolBar.setOnMenuItemClickListener {
-            if (it.itemId == R.id.menu_local_book_save_path) {
-                viewModel.requestLocalBookDirectory(false)
-                true
-            } else false
+    override fun onStart() { super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        pipeline.localBookBatch.observe(viewLifecycleOwner) { batch ->
+            model.batch(batch.orEmpty().map { item ->
+                val title = item.preview?.let { if (it.author.isBlank()) it.name else "${it.name} / ${it.author}" }
+                SharedLocalBookPreviewSeed(item.file.uri.toString(), title, item.isOnBookShelf, item.isDir)
+            }, pipeline.selectedLocalBooks.map { it.toString() })
         }
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        val items = viewModel.localBookBatch.value.orEmpty()
-        adapter.selected.addAll(items.filter { it.file.uri in viewModel.selectedLocalBooks })
-        adapter.setItems(items)
-        binding.tvCancel.visible()
-        binding.tvCancel.setOnClickListener { dismiss() }
-        binding.tvOk.visible()
-        binding.tvOk.setText(R.string.add_to_bookshelf)
-        binding.tvOk.setOnClickListener { viewModel.confirmLocalBooks() }
-        binding.tvFooterLeft.visible()
-        binding.tvFooterLeft.setOnClickListener { adapter.selectAll(adapter.selected.size != items.size) }
-        viewModel.importingLocalBooks.observe(viewLifecycleOwner) { importing ->
-            isCancelable = !importing
-            binding.recyclerView.isEnabled = !importing
-            binding.tvCancel.isEnabled = !importing
-            binding.toolBar.menu.findItem(R.id.menu_local_book_save_path).isEnabled = !importing
-            binding.rotateLoading.visibility = if (importing) View.VISIBLE else View.GONE
-            upCountView()
+        pipeline.importingLocalBooks.observe(viewLifecycleOwner) { sourceState() }
+        pipeline.localBookDestination.observe(viewLifecycleOwner) { sourceState() }
+    }
+    private fun sourceState() = model.source(pipeline.importingLocalBooks.value == true, pipeline.localBookDestination.value == true)
+    private fun currentUris() = pipeline.localBookBatch.value.orEmpty().filter { !it.isDir && !it.isOnBookShelf }
+        .associate { FileSharedLocalBookPreviewRepository.id(it.file.uri.toString()) to it.file.uri.toString() }
+    private fun selection(uris: List<String>) { pipeline.updateLocalSelection(uris.map(Uri::parse)) }
+    private fun effect(action: SharedLocalBookPreviewAction, uris: List<String>) {
+        selection(uris)
+        when (action) {
+            SharedLocalBookPreviewAction.Import -> pipeline.confirmLocalBooks()
+            SharedLocalBookPreviewAction.Directory -> pipeline.requestLocalBookDirectory(false)
         }
-        viewModel.localBookDestination.observe(viewLifecycleOwner) { upCountView() }
-        upCountView()
+        sourceState()
     }
-
-    override fun upCountView() {
-        viewModel.updateLocalSelection(adapter.selected.map { it.file.uri })
-        val items = viewModel.localBookBatch.value.orEmpty()
-        val busy = viewModel.importingLocalBooks.value == true || viewModel.localBookDestination.value == true
-        binding.tvOk.isEnabled = adapter.selected.isNotEmpty() && !busy
-        binding.tvFooterLeft.isEnabled = !busy
-        binding.tvFooterLeft.text = getString(
-            if (adapter.selected.size == items.size) R.string.select_cancel_count else R.string.select_all_count,
-            adapter.selected.size, items.size)
+    @Composable override fun Content() {
+        SharedLocalBookPreviewRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::currentUris,
+            ::selection, ::effect, ::dismissAllowingStateLoss, { isCancelable = it })
     }
-
-    override fun nextDoc(fileDoc: FileDoc) = Unit
-    override fun startRead(fileDoc: FileDoc) = Unit
-
-    override fun onCancel(dialog: DialogInterface) {
-        super.onCancel(dialog)
-        activity?.finish()
-    }
-
+    override fun onCancel(dialog: DialogInterface) { model.cancel(); super.onCancel(dialog) }
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (activity?.isChangingConfigurations != true) activity?.finish()

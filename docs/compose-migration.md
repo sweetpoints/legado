@@ -849,3 +849,7 @@ Migrated FilePickerDialog to a lifecycle-aware Compose Route and stateless Scree
 ### Shared local book preview data and state
 
 Added an IO repository for immutable file metadata and a SavedStateHandle ViewModel for shared local-book preview selection, scrolling, busy state and one-time action tickets. Full Book objects, copy/parsing and final import remain owned by the existing FileAssociation pipeline. Added seven JVM tests and two actual FileDoc Android tests. Validated with all JVM tests and Android test compilation.
+
+### Shared local book preview Compose dialog
+
+Replaced ImportLocalBookDialog with a stateless Compose Screen and lifecycle-aware Route while preserving FileAssociation selection, directory chooser and import calls. Revalidates selected IDs against the current batch before consuming action tickets; rotation retains selection and scroll without changing imported files. Added seven Compose and two real host tests; updated only shared import preview interactions. Shared recycler/import-book resources remain in use elsewhere. Validated with the full JVM suite and Android test compilation.
