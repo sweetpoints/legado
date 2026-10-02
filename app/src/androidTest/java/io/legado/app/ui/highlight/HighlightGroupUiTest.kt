@@ -1,6 +1,7 @@
 package io.legado.app.ui.highlight
 
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -111,16 +112,12 @@ class HighlightGroupUiTest {
     @Test fun fontSizeAndNegativeSpacingPersistAndResetThroughTheActualStyleDialog() {
         fun openStyle() {
             onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice")))).perform(click())
-            await {
-                var loaded = false
-                instrumentation.runOnMainSync {
-                    loaded = WindowInspector.getGlobalWindowViews().any {
-                        it.hasWindowFocus() && it.findViewById<View>(R.id.btn_ok)?.isEnabled == true
-                    }
+            compose.waitUntil {
+                compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
+                    !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
                 }
-                loaded
             }
-            onView(withId(R.id.btn_style)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-rule-style").performScrollTo().performClick()
             instrumentation.runOnMainSync {
                 val sheet = WindowInspector.getGlobalWindowViews().single { it.hasWindowFocus() }
                     .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -148,7 +145,7 @@ class HighlightGroupUiTest {
         }
         fun save() {
             pressBack()
-            onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-rule-save").performClick()
         }
         openStyle()
         edit("highlight-style-font-size", 42)
@@ -172,20 +169,16 @@ class HighlightGroupUiTest {
         fun openStyle() {
             onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice"))))
                 .perform(click())
-            await {
-                var loaded = false
-                instrumentation.runOnMainSync {
-                    loaded = WindowInspector.getGlobalWindowViews().any {
-                        it.hasWindowFocus() && it.findViewById<View>(R.id.btn_ok)?.isEnabled == true
-                    }
+            compose.waitUntil {
+                compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
+                    !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
                 }
-                loaded
             }
-            onView(withId(R.id.btn_style)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-rule-style").performScrollTo().performClick()
         }
         fun saveStyle() {
             pressBack()
-            onView(withId(R.id.btn_ok)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-rule-save").performClick()
         }
         openStyle()
         compose.onNodeWithTag("highlight-style-tune-Fill").performScrollTo().assertTextContains(margin(125)).performClick()

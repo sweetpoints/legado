@@ -36,19 +36,6 @@ class HighlightRuleUiContractTest {
     }
 
     @Test
-    fun `rule editor reuses the current style host`() {
-        val editor = projectFile(
-            "src/main/java/io/legado/app/ui/highlight/edit/HighlightRuleEditDialog.kt"
-        ).readText()
-        val layout = parseXml("src/main/res/layout/dialog_highlight_rule_edit.xml")
-
-        assertTrue(editor.contains("HighlightStyleDialog.StyleHost"))
-        assertTrue(editor.contains("setColorPickerDialogListener(this)"))
-        assertEquals(1, layout.elementsWithAndroidId("@+id/cb_apply_to_body"))
-        assertEquals(1, layout.elementsWithAndroidId("@+id/cb_apply_to_title"))
-    }
-
-    @Test
     fun `rule list has empty state and row actions`() {
         val activity = parseXml("src/main/res/layout/activity_highlight_rule.xml")
         val item = parseXml("src/main/res/layout/item_highlight_rule.xml")
