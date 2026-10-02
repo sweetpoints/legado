@@ -1,25 +1,23 @@
 package io.legado.app.ui.book.read
 
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogHighlightUnderlineBinding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.help.HighlightStyle.Kind
 import io.legado.app.help.HighlightStyle.Underline
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import java.util.Locale
-import kotlin.math.roundToInt
 
-class UnderlineEditDialog : BaseDialogFragment(R.layout.dialog_highlight_underline) {
+class UnderlineEditDialog : BaseComposeDialogFragment() {
 
     interface Callback {
         fun onUnderlineChanged(underline: Underline)
     }
 
-    private val binding by viewBinding(DialogHighlightUnderlineBinding::bind)
     private val initialUnderline: Underline
         get() = Underline(
             kind = arguments?.getString(ARG_KIND)?.let { runCatching { Kind.valueOf(it) }.getOrNull() }
@@ -34,36 +32,11 @@ class UnderlineEditDialog : BaseDialogFragment(R.layout.dialog_highlight_underli
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        val underline = initialUnderline
-        binding.dsbWidth.valueFormat = ::formatHalf
-        binding.dsbDistance.valueFormat = ::formatHalf
-        binding.dsbWidth.progress = progressOf(underline.width, Underline.MIN_WIDTH, Underline.MAX_WIDTH)
-        binding.dsbDistance.progress = progressOf(
-            underline.distance,
-            Underline.MIN_DISTANCE,
-            Underline.MAX_DISTANCE
-        )
-
-        binding.btnCancel.setOnClickListener { dismiss() }
-        binding.btnOk.setOnClickListener {
-            (parentFragment as? Callback)?.onUnderlineChanged(
-                underline.copy(
-                    width = binding.dsbWidth.progress / 2f,
-                    distance = binding.dsbDistance.progress / 2f
-                ).normalized()
-            )
+    @Composable override fun Content() {
+        UnderlineEditRoute(initialUnderline, {
+            (parentFragment as? Callback)?.onUnderlineChanged(it)
             dismiss()
-        }
-    }
-
-    private fun progressOf(value: Float, min: Float, max: Float): Int {
-        val safeValue = value.takeIf { it.isFinite() } ?: min
-        return ((safeValue.coerceIn(min, max) - min) * 2).roundToInt()
-    }
-
-    private fun formatHalf(progress: Int): String {
-        return String.format(Locale.getDefault(), "%.1f", progress / 2f)
+        }, { dismiss() }, Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
     }
 
     companion object {

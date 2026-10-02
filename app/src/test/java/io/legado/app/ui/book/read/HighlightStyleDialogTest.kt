@@ -73,19 +73,22 @@ class HighlightStyleDialogTest {
     }
 
     @Test
-    fun `underline tuning entry uses the shared half dp controls`() {
-        val row = projectFile("src/main/res/layout/item_highlight_channel.xml").readText()
-        val dialog = projectFile("src/main/res/layout/dialog_highlight_underline.xml").readText()
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/HighlightStyleDialog.kt"
-        ).readText()
+    fun underlineControlsUseHalfDpStepsAcrossFullRange() {
+        assertEquals(0, halfStepProgress(0f, 0f, 10f))
+        assertEquals(1, halfStepProgress(.5f, 0f, 10f))
+        assertEquals(20, halfStepProgress(99f, 0f, 10f))
+        assertEquals(60, halfStepProgress(30f, 0f, 30f))
+        assertEquals(0, halfStepProgress(Float.NaN, 0f, 10f))
+        assertEquals(0, halfStepProgress(Float.POSITIVE_INFINITY, 0f, 10f))
+    }
 
-        assertTrue(row.contains("@+id/tv_tune"))
-        assertTrue(source.contains("highlight_underline_adjust"))
-        assertTrue(dialog.contains("@+id/dsb_width"))
-        assertTrue(dialog.contains("@+id/dsb_distance"))
-        assertTrue(dialog.contains("app:max=\"20\""))
-        assertTrue(dialog.contains("app:max=\"60\""))
+    @Test
+    fun shadowOffsetsRepresentNegativeAndPositiveHalfDpSteps() {
+        assertEquals(0, halfStepProgress(-99f, -10f, 10f))
+        assertEquals(19, halfStepProgress(-.5f, -10f, 10f))
+        assertEquals(20, halfStepProgress(0f, -10f, 10f))
+        assertEquals(21, halfStepProgress(.5f, -10f, 10f))
+        assertEquals(40, halfStepProgress(99f, -10f, 10f))
     }
 
     @Test

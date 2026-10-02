@@ -65,6 +65,12 @@ ui/
     VideoSettingsRoute.kt
     VideoSettingsScreen.kt    settings and Compose speed-selection dialog
     VideoSettingsViewModel.kt  immediate preferences and separate speed draft
+  book/read/
+    ShadowEditDialog.kt        shadow parameter host, preserving parent callback
+    ShadowEditRoute.kt         saveable half-step draft
+    UnderlineEditDialog.kt     underline parameter host
+    UnderlineEditRoute.kt      saveable width/distance draft
+    HighlightParameterScreen.kt shared stateless parameter controls
   book/read/config/
     AutoReadDialog.kt          bottom-window host and idempotent dialog-count lease
     AutoReadRoute.kt           lifecycle-aware TTS update delivery
@@ -218,6 +224,12 @@ range. Dragging updates a restorable draft; finishing persists and schedules TTS
 rate updates only for a resumed host. A View-scoped, idempotent count lease avoids
 double decrements, rejected-dialog decrements and stale host references across
 recreation. Its dedicated XML layout is removed.
+
+Highlight shadow and underline tuning now use Compose with saveable drafts and
+shared half-step parameter controls. Radius, signed offsets, width and distance
+retain their existing limits, formatting and 0.5 increments. Confirmation preserves
+color and underline kind and delivers the parent callback once; cancellation does
+not apply edits. Both dedicated XML layouts are removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
