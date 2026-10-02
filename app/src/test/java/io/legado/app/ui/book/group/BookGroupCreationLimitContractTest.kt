@@ -1,6 +1,13 @@
 package io.legado.app.ui.book.group
 
-import org.junit.Assert.assertTrue
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.repository.BookGroupEditorRepository
+import io.legado.app.data.repository.BookGroupEditorSnapshot
+import io.legado.app.ui.book.group.BookGroupEditorViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.*
+import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
 
@@ -13,9 +20,7 @@ class BookGroupCreationLimitContractTest {
         val manageSource = projectFile(
             "src/main/java/io/legado/app/ui/book/group/GroupManageDialog.kt"
         ).readText()
-        val editSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/group/GroupEditDialog.kt"
-        ).readText()
+
 
         assertTrue(
             daoSource.contains(
@@ -23,10 +28,25 @@ class BookGroupCreationLimitContractTest {
             )
         )
         assertTrue(manageSource.contains("分组已达上限(63个)"))
-        assertTrue(
-            editSource.contains("bookGroup == null && !appDb.bookGroupDao.canAddGroup")
-        )
-        assertTrue(editSource.contains("分组已达上限(63个)"))
+
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun editorAtGroupLimitRetainsDraftAndDoesNotClose() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val repository = object : BookGroupEditorRepository {
+                override suspend fun load(id: Long): BookGroupEditorSnapshot? = null
+                override suspend fun save(draft: BookGroupEditorSnapshot, existing: Boolean): BookGroupEditorSnapshot = error("分组已达上限(63个)")
+                override suspend fun delete(id: Long) = Unit
+                override suspend fun importCover(uri: String) = uri
+            }
+            val model = BookGroupEditorViewModel(repository, SavedStateHandle())
+            model.name("draft"); model.sort(5); model.save(); runCurrent()
+            assertEquals("分组已达上限(63个)", model.state.value.error)
+            assertEquals("draft", model.state.value.draft.name); assertEquals(5, model.state.value.draft.bookSort)
+            assertFalse(model.state.value.finished); assertFalse(model.state.value.saving)
+        } finally { Dispatchers.resetMain() }
     }
 
     private fun projectFile(pathInApp: String): File =
