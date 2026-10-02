@@ -9,7 +9,6 @@ class BookshelfItemAnimatorTest {
     @Test
     fun `bookshelf variants disable animations for frequent item updates`() {
         val bookshelfSources = listOf(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BooksFragment.kt",
             "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt"
         )
 
@@ -20,6 +19,13 @@ class BookshelfItemAnimatorTest {
                 source.contains(Regex("rvBookshelf\\.itemAnimator\\s*=\\s*null"))
             )
         }
+    }
+
+    @Test fun composeBookSnapshotChangesMetadataWithoutChangingItsStableScrollKey() {
+        val before = io.legado.app.ui.main.bookshelf.components.BookshelfBookCardModel("url", "Name", "Author", "Old", "Latest")
+        val after = before.copy(currentChapter = "New")
+        org.junit.Assert.assertEquals(before.key, after.key)
+        org.junit.Assert.assertNotEquals(before, after)
     }
 
     private fun readProjectFile(pathInApp: String): String {

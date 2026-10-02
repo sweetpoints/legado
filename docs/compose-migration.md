@@ -444,3 +444,9 @@ drafts for every field, code-editor cursor and pending field target. Save/login
 preserve the record identity and consume platform effects before dispatch. Empty
 name drafts still receive dirty-exit protection, and failed initial reads block
 writes until retry succeeds. The exclusive editor layout and menu are removed.
+
+Style-1 book pages now use Compose lazy lists/grids, shared cover/cards, enabled-aware
+pull refresh, stable book keys and an optional accessible fast-scroll rail. Saved
+scroll positions survive the initial empty Room-loading phase. Fragment pager APIs
+remain compatible, including group-only-update-read changes. Four old adapters and
+the exclusive book-page layout are removed; style-2 shared item layouts remain.
