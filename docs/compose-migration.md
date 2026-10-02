@@ -457,3 +457,8 @@ commands. An observable source-initialization state protects restored dialogs fr
 reading partially loaded data, with visible failure and retry. Actual closure
 persists legacy drafts and finishes the host; recreation does neither. Exclusive
 login layout/menu XML and the old v2 View delegate are removed.
+
+Remote-server configuration now uses a Compose WebDAV form with restorable field
+selection and an IO repository. Saving preserves server identity and ordering with
+one atomic Room replacement; failed loads block writes and support retry, while
+failed saves retain the draft. The exclusive server-editor layout/menu are removed.
