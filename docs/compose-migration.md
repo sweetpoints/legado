@@ -298,6 +298,11 @@ selectable comments with keyboard insets. Restorable drafts preserve key/title a
 parent-first callbacks; only Save delivers a result, and restored completed dialogs
 close without replaying it. The exclusive variable layout is removed.
 
+Text-list dialogs now render immutable argument snapshots in a Compose LazyColumn
+with collision-safe item identity, selectable text and existing web-link behavior.
+Selection, scrolling and close remain available without a View adapter. Shared legacy
+recycler/item resources remain until their other consumers migrate.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
