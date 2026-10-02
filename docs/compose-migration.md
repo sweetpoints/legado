@@ -649,3 +649,7 @@ Added independent immutable style operations for all nine channels, color defaul
 ### Highlight style Compose page
 
 Replaced all highlight style content with Compose while retaining the existing bottom-sheet window and public StyleHost/color/font/editor contracts. Nine channels, presets, metrics, decoration tuning and number drafts use immutable state and resumed consumed effects. External host refresh updates state without creating callback loops; font invalidation remains on the main host. Added 9 JVM state tests and compilation of 8 actual Compose/host tests. Removed the exclusive style and channel XML; Android device execution remains unavailable.
+
+### Code preview data and state foundation
+
+Added revisioned private AtomicFile code drafts and saved preview state. Original and derived code remain separate; read-only previews and pending replacement/editor operations block writes, and source editor results publish the original once without closing the preview. Literal search runs on an injected compute dispatcher and ignores stale results. Saved state contains session IDs, cursors and small effects rather than large code. Added 12 JVM state tests and compilation of 3 real disk/backup tests. Legacy code dialog remains for separate Compose integration; Android device execution is unavailable.
