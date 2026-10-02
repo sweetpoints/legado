@@ -2,7 +2,7 @@ plugins {
     //d 'com.android.library'
     //id 'org.jetbrains.kotlin.android'
     alias libs.plugins.android.library
-    alias libs.plugins.kotlin.android
+    // AGP 9 起内置 Kotlin 支持，不再需要 org.jetbrains.kotlin.android
 }
 
 android {

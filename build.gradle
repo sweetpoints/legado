@@ -2,7 +2,8 @@
 
 buildscript {
     ext{
-        compile_sdk_version = 36
+        // 37：Compose 1.12.x 要求 compileSdk >= 37（SDK 37 采用次版本号，37.0 为基版本）
+        compile_sdk_version = 37
 //        build_tool_version = '34.0.0'
 //        kotlin_version = '1.9.22'
 //        ksp_version = "1.0.17"
@@ -24,7 +25,7 @@ plugins {
 
     alias libs.plugins.android.application apply false
     alias libs.plugins.android.library apply false
-    alias libs.plugins.kotlin.android apply false
+    // AGP 9 起内置 Kotlin 支持，kotlin-android 插件已移除
     alias libs.plugins.kotlin.parcelize apply false
     alias libs.plugins.ksp apply false
     alias libs.plugins.google.services apply false

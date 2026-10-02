@@ -7,7 +7,8 @@ plugins {
 //    id "com.google.gms.google-services"
 
     alias libs.plugins.android.application
-    alias libs.plugins.kotlin.android
+    // AGP 9 起内置 Kotlin 支持，不再需要 org.jetbrains.kotlin.android
+    alias libs.plugins.kotlin.compose
     alias libs.plugins.kotlin.parcelize
     alias libs.plugins.room
     alias libs.plugins.ksp
@@ -64,7 +65,10 @@ android {
     }
     defaultConfig {
         applicationId "com.legado.app"
-        minSdk 23
+        // 26：未裁剪的 HtmlUnit(Rhino fork) 含 MethodHandle.invoke 调用，D8 要求 --min-api 26。
+        // 原先仅在 .github/scripts/source-browser-test.init.gradle 里为测试变体绕过，
+        // 导致 assembleAppDebug 一直是坏的（release 因 R8 只告警而正常）。
+        minSdk 26
         targetSdk 36
         versionCode = versionCodeValue
         versionName version
@@ -106,6 +110,18 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+        // 与 viewBinding 并存：老 View 页面不受影响，新页面可逐步改用 Compose
+        compose = true
+    }
+    testOptions {
+        unitTests {
+            // 本项目的单元测试是纯 JVM 测试、未使用 Robolectric，但部分被测代码会经由
+            // Debug.log 间接走到 android.util.Log，默认会抛 "Method d in android.util.Log not mocked"。
+            // 让未实现的 framework 方法返回默认值即可；否则每次跑全量单测都会有 9 个固定失败，
+            // 无法从中分辨新引入的回归。
+            // 注意：Groovy DSL 下属性名是 returnDefaultValues（Kotlin DSL 才是 isReturnDefaultValues）。
+            returnDefaultValues = true
+        }
     }
     buildTypes {
         release {
@@ -241,6 +257,20 @@ dependencies {
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
+
+    //Compose（渐进式迁移脚手架：老 View 页面保持不变，新页面按需使用）
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    // 互操作：Compose 内复用 ViewBinding / View 树，以及 LiveData 直接转 State
+    implementation(libs.compose.ui.viewbinding)
+    implementation(libs.compose.runtime.livedata)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    debugImplementation(libs.compose.ui.tooling)
 
     //google
     implementation(libs.material)
