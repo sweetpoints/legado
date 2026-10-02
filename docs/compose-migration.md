@@ -629,3 +629,7 @@ Replaced the full-screen content editor with Compose text editing, search contro
 ### Book memo data and state foundation
 
 Added a Room repository and saved memo editor ViewModel. Memo observation remains independent of the editing draft; persistence waits for success before leaving edit mode, and failures retain input. Large drafts use revisioned AtomicFile storage with only an ID and cursors in SavedState. Completed/canceled edits checkpoint an empty inactive draft instead of retaining duplicate large content. Discard and clear are explicit confirmations; clear retains a monotonically dated empty memo so older backups cannot restore the text. Added 9 JVM behavior tests and compilation of 3 real Room/disk tests. Legacy Markdown UI remains for separate Compose integration; Android device execution is unavailable.
+
+### Review detail Compose page
+
+Replaced the review detail recycler with Compose comment/reply rows, resizing, embedded replies, paged loading, badges, source-aware images and photo navigation. Audio keeps a main-thread platform controller with released resources; media preparation and disk sessions remain in the captured-target repository. Saved effects wait for disk restoration and resumed delivery before consumption; concurrent reply caches serialize to retain all parents. Added 11 ViewModel behavior tests, 3 actual row-format tests, and compilation of 14 Compose/platform/host tests. Removed obsolete source-only assertions and the exclusive comment XML. Android device execution remains unavailable.

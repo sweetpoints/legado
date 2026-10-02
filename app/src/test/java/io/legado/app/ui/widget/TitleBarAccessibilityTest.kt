@@ -26,13 +26,6 @@ class TitleBarAccessibilityTest {
             .substringBefore("\n    private fun")
         assertTrue(changeSourceNavigation.contains("R.string.back"))
         assertFalse(changeSourceNavigation.contains("abc_action_bar_up_description"))
-
-        val reviewDetail = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReviewDetailDialog.kt"
-        ).readText()
-        assertTrue(
-            reviewDetail.contains("setNavigationContentDescription(R.string.close)")
-        )
     }
 
     private fun projectFile(path: String): File {

@@ -40,49 +40,6 @@ class JsSourceReviewDispatchSourceTest {
     }
 
     @Test
-    fun `JavaScript detail uses captured source chapter and pagination state`() {
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReviewDetailDialog.kt"
-        ).readText().normalizeLines()
-        val loadBlock = dialog.substringAfter("private fun loadDetailPage(")
-            .substringBefore("private fun buildDetailItemKey(")
-
-        assertTrue(loadBlock.contains("if (source.mainJs.hashCode() != ruleHash)"))
-        assertTrue(loadBlock.contains("if (book.bookUrl != bookUrl)"))
-        assertTrue(loadBlock.contains("getChapter(book.bookUrl, chapterIndex)"))
-        assertTrue(loadBlock.contains("paragraphData = paragraphData"))
-        assertTrue(loadBlock.contains("hasNextPageRule = true"))
-        assertTrue(loadBlock.contains("hasReplyUrl = JsSourceReview.hasReviewRepliesCapability(source)"))
-        val jsBlock = loadBlock.substringAfter("if (source.isJsSource())")
-            .substringBefore("val rule = source.ruleReview")
-        assertTrue(!jsBlock.contains("ReadBook.durChapterIndex"))
-        assertTrue(
-            loadBlock.contains(
-                "if (nextUrlFromRule.isNullOrBlank()) {\n                    hasMore = false"
-            )
-        )
-    }
-
-    @Test
-    fun `JavaScript replies use captured context and incremented page`() {
-        val dialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReviewDetailDialog.kt"
-        ).readText().normalizeLines()
-        val replyBlock = dialog.substringAfter("private fun loadReplies(parentKey: String)")
-            .substringBefore("private fun buildDetailItemKey(")
-        val jsBlock = replyBlock.substringAfter("if (source.isJsSource())")
-            .substringBefore("val rule = source.ruleReview")
-
-        assertTrue(jsBlock.contains("if (source.mainJs.hashCode() != ruleHash)"))
-        assertTrue(jsBlock.contains("JsSourceReview.getReviewRepliesAwait("))
-        assertTrue(jsBlock.contains("paragraphIndex = paragraphNum"))
-        assertTrue(jsBlock.contains("paragraphData = paragraphData"))
-        assertTrue(jsBlock.contains("reviewId = reviewId"))
-        assertTrue(jsBlock.contains("page = page"))
-        assertTrue(replyBlock.contains("replies.size == current.replies.size"))
-    }
-
-    @Test
     fun `review summary refresh preserves read aloud position on the main thread`() {
         val activity = projectFile(
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
