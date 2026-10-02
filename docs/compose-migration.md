@@ -462,3 +462,9 @@ Remote-server configuration now uses a Compose WebDAV form with restorable field
 selection and an IO repository. Saving preserves server identity and ordering with
 one atomic Room replacement; failed loads block writes and support retry, while
 failed saves retain the draft. The exclusive server-editor layout/menu are removed.
+
+Remote-server selection now uses a keyed Compose list and lifecycle-aware Room
+flow. Selection remains a SavedState draft until Apply or Default; cancellation
+does not write preferences. Delete confirmation survives restoration, failures
+remain visible, and editor/default/cancel callbacks preserve their host contracts.
+The exclusive server-list item layout and menu are removed.
