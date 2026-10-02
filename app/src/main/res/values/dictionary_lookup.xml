@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dictionary_no_enabled_rule">No enabled dictionary rules</string>
+</resources>
