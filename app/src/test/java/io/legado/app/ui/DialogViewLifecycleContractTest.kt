@@ -13,12 +13,7 @@ class DialogViewLifecycleContractTest {
 
     @Test
     fun `dialog data loaders are cancelled with their views`() {
-        val cover = source("config/CoverRuleConfigDialog.kt")
-            .section("private fun initData()", "\n    }")
         val search = source("book/search/SearchScopeDialog.kt")
-
-        assertTrue(cover.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertFalse(cover.contains("\n        lifecycleScope.launch"))
 
         val initData = search.section("private fun initData()", "@SuppressLint")
         val upBookSource = search.section("private fun upBookSource", "inner class RecyclerAdapter")

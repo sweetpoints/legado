@@ -43,6 +43,11 @@ ui/
     AutoTaskDebugRoute.kt
     AutoTaskDebugScreen.kt
     AutoTaskDebugViewModel.kt
+  config/
+    CoverRuleConfigDialog.kt   Compose host for cover-rule editing
+    CoverRuleRoute.kt
+    CoverRuleScreen.kt         form, validation and operation feedback
+    CoverRuleViewModel.kt      restorable draft and cancellable operations
   widget/dialog/
     WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
     WaitDialogContent.kt       stateless Compose progress/message content
@@ -60,6 +65,7 @@ ui/
 data/repository/
   CrashLogsRepository.kt       local/backup crash-log I/O on Dispatchers.IO
   AppLogsRepository.kt         application/HTTP log details and export snapshots
+  CoverRuleRepository.kt       cover-rule load/save/delete on Dispatchers.IO
 ```
 
 These are project conventions, not a package hierarchy mandated by Compose. Keep
@@ -117,6 +123,11 @@ selection and web links use Compose APIs. App-log details still use shared TextD
 WaitDialog now renders Compose progress and text without a layout or ViewBinding.
 Its existing show/dismiss/setText API remains valid. Reusing the same dialog installs
 a fresh Compose host for the new ComponentDialog lifecycle.
+
+Cover-rule editing now uses Compose. Draft fields survive recreation independently
+of persisted configuration. Cancellation and late loading results cannot overwrite
+a draft or write after closing. Save/delete failures preserve the open draft; Cancel
+does not persist it.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining

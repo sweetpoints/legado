@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cover_rule_required_fields">搜索 URL 和封面规则不能为空</string>
+</resources>
