@@ -1,5 +1,6 @@
 package io.legado.app.ui.font
 
+import io.legado.app.data.file.installFontFile
 import io.legado.app.data.repository.FontEntry
 import io.legado.app.data.repository.mergeFontEntries
 import org.junit.Assert.assertArrayEquals

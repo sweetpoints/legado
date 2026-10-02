@@ -53,7 +53,7 @@ import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.service.AutoTaskScheduler
-import io.legado.app.ui.font.installFontFile
+import io.legado.app.data.file.installFontFile
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON

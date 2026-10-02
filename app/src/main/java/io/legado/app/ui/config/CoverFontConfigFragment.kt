@@ -12,7 +12,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.model.BookCover
 import io.legado.app.ui.font.FontSelectDialog
-import io.legado.app.ui.font.installFontFile
+import io.legado.app.data.file.installFontFile
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString

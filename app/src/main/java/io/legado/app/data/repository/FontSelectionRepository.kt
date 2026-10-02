@@ -8,7 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.font.installFontFile
+import io.legado.app.data.file.installFontFile
 import io.legado.app.utils.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

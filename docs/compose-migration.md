@@ -677,3 +677,7 @@ Replaced the full-screen picker with a stable-URL Compose list, live enabled-sou
 ### Curl conversion Compose page
 
 Replaced the converter with Compose input/output, direction controls, conversion/copy/insert actions, selection/composition and a scrollable compact layout. Conversion ignores late results after edits, output remains selectable and read-only, and native insertion retains the parent-first asynchronous result contract. Captured side effects use disk payloads and resumed consumed delivery; restored delivered insertions are not automatically repeated. Added 10 JVM state tests plus compilation of 8 actual Compose/Fragment tests. Removed the exclusive converter layout/menu; Android device execution is unavailable.
+
+### Font installation layer cleanup
+
+Moved the shared file installer from the UI package into data/file and updated repository, cover-font, backup-restore and test imports. File validation, deduplication, conflict naming and synchronized installation behavior are unchanged. Existing 5 real installer/merge JVM tests and full Android test compilation validate the dependency change; data repositories no longer import UI helpers.
