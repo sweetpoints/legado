@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="open_url_confirm_title">跳转确认</string>
+    <string name="open_url_confirm_message">正在请求跳转链接/应用，是否跳转？</string>
+</resources>

@@ -43,6 +43,12 @@ ui/
     AutoTaskDebugRoute.kt
     AutoTaskDebugScreen.kt
     AutoTaskDebugViewModel.kt
+  association/
+    OpenUrlConfirmActivity.kt  transparent Compose host, reuses restored dialog
+    OpenUrlConfirmDialog.kt
+    OpenUrlConfirmRoute.kt
+    OpenUrlConfirmScreen.kt    external-link confirmation and source actions
+    OpenUrlConfirmViewModel.kt restorable source-action confirmation and completion
   config/
     CoverRuleConfigDialog.kt   Compose host for cover-rule editing
     CoverRuleRoute.kt
@@ -66,6 +72,7 @@ data/repository/
   CrashLogsRepository.kt       local/backup crash-log I/O on Dispatchers.IO
   AppLogsRepository.kt         application/HTTP log details and export snapshots
   CoverRuleRepository.kt       cover-rule load/save/delete on Dispatchers.IO
+  OpenUrlSourceRepository.kt   source disable/delete operations off the UI thread
 ```
 
 These are project conventions, not a package hierarchy mandated by Compose. Keep
@@ -128,6 +135,11 @@ Cover-rule editing now uses Compose. Draft fields survive recreation independent
 of persisted configuration. Cancellation and late loading results cannot overwrite
 a draft or write after closing. Save/delete failures preserve the open draft; Cancel
 does not persist it.
+
+External-link confirmation and its transparent Activity now use Compose without
+ViewBinding. The public URI, MIME and source arguments remain compatible. Source
+mutations do not retain a Fragment callback. Recreation keeps one dialog and does
+not finish the host; normal dismissal still finishes it.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
