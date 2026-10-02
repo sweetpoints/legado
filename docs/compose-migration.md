@@ -415,3 +415,9 @@ Compilation or JVM tests alone do not establish those runtime results.
 Architecture references:
 [Android architecture recommendations](https://developer.android.com/topic/architecture/recommendations),
 [Compose migration strategy](https://developer.android.com/develop/ui/compose/migrate/strategy).
+
+Cover loading now uses an application-scoped repository with immutable source-aware
+requests and configuration snapshots. Static images retain independent bitmap
+ownership after Glide cleanup; animations retain explicit leases. Cover title
+rasterization preserves horizontal/vertical typography, custom fonts, Unicode
+characters, adaptive sizes and author labels without depending on a View.
