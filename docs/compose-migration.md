@@ -613,3 +613,7 @@ Added a captured chapter-target repository and saved editing ViewModel. Large te
 ### Reader background/text Compose page
 
 Switched BgTextConfigDialog and its color, restoration, underline-mode, SVG, and template editors to Compose Intent/Route/Screen. Preserved day/night/e-ink backgrounds, five public color IDs and exact event payloads, shared preset behavior, native file pickers, alpha completion, and all underline controls. Host effects deliver while resumed; detached background and SVG previews avoid changing reader resource ownership. Added compilation of 8 Compose interaction/pixel tests and 4 real preferences/event/parser tests. Replaced obsolete BG-specific source/XML assertions with actual data and behavior checks. Removed the two obsolete adapters and exclusive page/item XML; Android device execution is unavailable.
+
+### Manual replacement picker data and state foundation
+
+Added an I/O candidates repository and saved manual replacement ViewModel. Reader candidates retain disabled rules and exclude source-only rules; source candidates keep the original enabled source-scoped query. Selection filters missing IDs and confirms in candidate order. Confirmation is consumed once; cancellation leaves persistence to the host without writing. Range selection uses a baseline so reversed/canceled gestures restore prior choices and unfinished selection does not leak into saved state. Added 8 JVM state/recovery/gesture tests. The legacy dialog remains for separate Compose integration; Android device execution is unavailable.
