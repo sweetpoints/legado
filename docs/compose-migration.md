@@ -293,6 +293,11 @@ retain 150ms trailing windows with final/cancel/destroy flushing; reader refresh
 payloads and shared/local style isolation remain intact. Window fading and the
 view-scoped reader visibility lease are retained. The exclusive layout is removed.
 
+Variable editing now uses a fullscreen Compose backdrop, multiline draft editor and
+selectable comments with keyboard insets. Restorable drafts preserve key/title and
+parent-first callbacks; only Save delivers a result, and restored completed dialogs
+close without replaying it. The exclusive variable layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
