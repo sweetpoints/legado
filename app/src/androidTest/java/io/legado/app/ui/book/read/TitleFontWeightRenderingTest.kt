@@ -76,6 +76,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertTextContains
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -95,6 +102,7 @@ import kotlin.math.floor
 
 @RunWith(AndroidJUnit4::class)
 class TitleFontWeightRenderingTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val savedConfigs = ReadBookConfig.configList.map { it.copy() }
@@ -1408,13 +1416,12 @@ class TitleFontWeightRenderingTest {
         launchReader()
         scenario!!.onActivity { ReadStyleDialog().showNow(it.supportFragmentManager, "battery-style") }
         onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.ll_header_left)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.edit_template)).inRoot(isDialog()).perform(replaceText(""), closeSoftKeyboard())
-        onView(withText(ReaderInfoTemplate.BATTERY_NUMBER_ICON)).inRoot(isDialog()).perform(scrollTo(), click())
-        onView(withId(R.id.edit_template)).inRoot(isDialog())
-            .check(matches(withText(ReaderInfoTemplate.BATTERY_NUMBER_ICON)))
+        compose.onNodeWithTag("tip-template-HeaderLeft").performScrollTo().performClick()
+        compose.onNodeWithTag("tip-template-editor").performTextReplacement("")
+        compose.onNodeWithTag("tip-placeholder-${ReaderInfoTemplate.BATTERY_NUMBER_ICON}").performScrollTo().performClick()
+        compose.onNodeWithTag("tip-template-editor").assertTextContains(ReaderInfoTemplate.BATTERY_NUMBER_ICON)
         screenshot("battery-number-template-choice")
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("tip-template-confirm").performClick()
         dismissSettings()
         awaitReader { it.bottomDialog == 0 && ReadTipConfig.tipHeaderLeftTemplate == ReaderInfoTemplate.BATTERY_NUMBER_ICON }
         scenario!!.onActivity { activity ->
@@ -1485,7 +1492,7 @@ class TitleFontWeightRenderingTest {
         onView(withId(R.id.tv_tip)).inRoot(isDialog()).check(matches(isCompletelyDisplayed()))
         screenshot("title-weight-information-entry")
         onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(click())
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).check(matches(isDisplayed()))
+        compose.onNodeWithTag("tip-title-weight").performScrollTo().assertExists()
         val weights = context.resources.getStringArray(R.array.text_font_weight)
         chooseTitleWeight(weights[0], 0, 400)
         screenshot("title-weight-settings-normal")
@@ -1508,14 +1515,14 @@ class TitleFontWeightRenderingTest {
         onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(scrollTo())
         onView(withId(R.id.tv_tip)).inRoot(isDialog())
             .check(matches(isCompletelyDisplayed())).perform(click())
-        onView(withId(R.id.tv_title_font_weight)).inRoot(isDialog()).check(matches(withText(weights[0])))
+        compose.onNodeWithTag("tip-title-weight").performScrollTo().assertTextContains(weights[0])
         screenshot("title-weight-settings-restored")
         dismissSettings()
     }
 
     private fun chooseTitleWeight(label: String, setting: Int, weight: Int) {
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).perform(click())
-        onView(withText(label)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("tip-title-weight").performScrollTo().performClick()
+        compose.onNodeWithTag("tip-select-${setting + 1}").performClick()
         awaitReader { ReadBookConfig.titleBold == setting && ChapterProvider.titlePaint.typeface.let {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.weight == weight
             else it.isBold == (weight >= 700)
@@ -1550,7 +1557,7 @@ class TitleFontWeightRenderingTest {
     }
 
     private fun dismissSettings() {
-        onView(withId(R.id.ll_title_font_weight)).inRoot(isDialog()).perform(scrollTo(), pressBack())
+        androidx.test.espresso.Espresso.pressBack()
         onView(withId(R.id.tv_tip)).inRoot(isDialog()).perform(pressBack())
     }
 

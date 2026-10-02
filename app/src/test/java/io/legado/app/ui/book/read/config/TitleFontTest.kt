@@ -1,14 +1,15 @@
 package io.legado.app.ui.book.read.config
 
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.TipSetting
+
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class TitleFontTest {
 
@@ -37,22 +38,15 @@ class TitleFontTest {
     }
 
     @Test
-    fun `title settings reuse the font selector with inheritance as default`() {
-        val dialog = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt"
-        )
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val rows = document.getElementsByTagName("LinearLayout")
-        val titleFont = (0 until rows.length)
-            .map { rows.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/ll_title_font" }
-
-        assertEquals("48dp", titleFont.getAttribute("android:minHeight"))
-        assertTrue(dialog.contains("FontSelectDialog.CallBack"))
-        assertTrue(dialog.contains("override val selectSystemTypefaceOnDefault = false"))
-        assertTrue(dialog.contains("ReadBookConfig.titleFont = path"))
+    fun `title settings restore font inheritance without changing body selection`() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.setFont("title.ttf")
+        assertEquals("title.ttf", model.state.value.settings.titleFont)
+        model.setFont("")
+        assertEquals("", model.state.value.settings.titleFont)
+        assertEquals(listOf("title.ttf", ""), repository.fontsWritten)
+        assertEquals(emptyList<Pair<TipSetting, Int>>(), repository.settingsWritten)
     }
 
     @Test

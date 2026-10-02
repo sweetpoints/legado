@@ -1,14 +1,15 @@
 package io.legado.app.ui.book.read.config
 
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.TipSetting
+
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class TipTextSizeTest {
 
@@ -58,18 +59,15 @@ class TipTextSizeTest {
     }
 
     @Test
-    fun `text size seek bar exposes the mapped range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val textSize = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_tip_text_size" }
-
-        assertEquals("45", textSize.getAttribute("app:max"))
+    fun `text size control persists its actual sp range`() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.set(TipSetting.TipSize, 4)
+        assertEquals(5, repository.snapshot[TipSetting.TipSize])
+        model.set(TipSetting.TipSize, 12)
+        assertEquals(12, repository.snapshot[TipSetting.TipSize])
+        model.set(TipSetting.TipSize, 51)
+        assertEquals(50, repository.snapshot[TipSetting.TipSize])
     }
 
     private fun readProjectFile(pathInApp: String): String {

@@ -76,6 +76,10 @@ ui/
     AutoReadRoute.kt           lifecycle-aware TTS update delivery
     AutoReadScreen.kt          speed and reader controls
     AutoReadViewModel.kt       restorable speed draft and pending TTS effect
+    TipConfigDialog.kt         reader-info settings host and font callback
+    TipSettingsRoute.kt
+    TipSettingsScreen.kt       settings, templates, selectors and RGB/HEX editors
+    TipSettingsViewModel.kt    immediate setting writes and restorable editor drafts
   book/manga/config/
     MangaEpaperDialog.kt       thin Compose host and reader preview callback
     MangaEpaperRoute.kt
@@ -230,6 +234,14 @@ shared half-step parameter controls. Radius, signed offsets, width and distance
 retain their existing limits, formatting and 0.5 increments. Confirmation preserves
 color and underline kind and delivers the parent callback once; cancellation does
 not apply edits. Both dedicated XML layouts are removed.
+
+Reader information settings now use Compose for title layout/font/weight/color,
+chapter numbers, spacing, header/footer modes, six templates, text size and divider
+colors. Selectors and RGB/HEX color and template editors are Compose. Placeholder
+insertion preserves selection and IME composition; editor drafts survive recreation
+without writes on cancellation. Immediate setting writes retain existing UP_CONFIG
+payloads and external TIP_COLOR refresh does not overwrite open editor drafts.
+Both dedicated layouts are removed; FontSelectDialog is migrated independently.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
