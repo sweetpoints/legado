@@ -597,3 +597,7 @@ Replaced AddToBookshelfDialog with an I/O pipeline, saved immutable navigation r
 ### Effective replacement data and state foundation
 
 Added an I/O repository and saved ViewModel for the effective replacement list before switching its host. Real rule identity is separate from the synthetic Chinese-conversion item, so duplicate names and rule ID zero remain unambiguous. Disable waits for persistence, keeps rows on failure, avoids recreating concurrently deleted rules, and preserves removed chapter rows across restoration. Edit navigation and final refresh are consumed once; unfinished writes prevent dismissal. Added 8 JVM state tests and compilation of 2 real Room/preferences tests. The legacy dialog remains for separate Compose integration; Android device execution is unavailable.
+
+### Review detail request and data foundation
+
+Added a captured-context review repository and application store before switching the legacy dialog. Detail/reply requests use the captured book, chapter, source, paragraph data, page, and review ID, and reject late results after book/source/rule changes. JS review functions remain ahead of declarative rule checks. Immutable comment projections deduplicate main and reply rows while preserving original comment bodies and merging reply counts. Source-aware media resolution and fingerprinted AtomicFile snapshots run off the main thread. Added 10 JVM pipeline/merge/cancellation tests and compilation of a real JS/Room/media/cache Android test. Compose UI follows separately; Android device execution is unavailable.
