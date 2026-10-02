@@ -65,6 +65,11 @@ ui/
     VideoSettingsRoute.kt
     VideoSettingsScreen.kt    settings and Compose speed-selection dialog
     VideoSettingsViewModel.kt  immediate preferences and separate speed draft
+  book/read/config/
+    AutoReadDialog.kt          bottom-window host and idempotent dialog-count lease
+    AutoReadRoute.kt           lifecycle-aware TTS update delivery
+    AutoReadScreen.kt          speed and reader controls
+    AutoReadViewModel.kt       restorable speed draft and pending TTS effect
   book/manga/config/
     MangaEpaperDialog.kt       thin Compose host and reader preview callback
     MangaEpaperRoute.kt
@@ -206,6 +211,13 @@ retain immediate writes to existing preference keys. The speed picker retains
 its uncommitted draft survives recreation. Fullscreen-on-start visibility follows
 autoplay from the first composition. The DialogFragment has a no-argument
 constructor and no retained Context. Its dedicated XML layout is removed.
+
+Automatic reading controls now use Compose with the existing bottom-bar colors,
+window behavior, catalog/menu/stop/page-animation actions and 1–120 second speed
+range. Dragging updates a restorable draft; finishing persists and schedules TTS
+rate updates only for a resumed host. A View-scoped, idempotent count lease avoids
+double decrements, rejected-dialog decrements and stale host references across
+recreation. Its dedicated XML layout is removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
