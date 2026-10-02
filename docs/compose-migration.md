@@ -881,3 +881,7 @@ Added immutable search, TOC, selection and automation state with private disk se
 ### RSS source editor Compose page
 
 Replaced RSS source edit Activity, native field adapter and exclusive XML with a stateless Compose Screen and lifecycle-aware Route. All four tabs, 33 fields, options, independent scrolling, custom keyboard assists, syntax display, native full-screen editor, unsaved-exit confirmation and save-before-debug/login/variable actions remain. Added IO repositories for assist preferences and QR sharing. Added sixteen Android Compose/host/repository tests; migrated only obsolete RSS editor source assertions in shared suites. Book editor resources and behavior tests remain. Validated with all JVM tests and Android test compilation.
+
+### Replacement rule editor data and state
+
+Added immutable eight-field drafts, per-field undo/redo, preview state, small saved identities and private file editor transfers. Durable pre-save journals recover Room/sample/draft failures using fixed receipts and reject concurrent rule changes; native editor results persist before transfer cleanup and support explicit retry/discard. Preserved metadata, sample normalization, paste identity and original preview algorithms, moving the engine to model/replace with compatible UI delegates. Added fourteen JVM and seven actual Room/disk tests; original engine tests remain. Validated with all JVM tests and Android test compilation.
