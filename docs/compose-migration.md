@@ -12,6 +12,7 @@ Keep features together under `io.legado.app.ui`, with shared UI in explicit pack
 base/
   BaseThemedActivity.kt         locale, window, background and platform behavior
   BaseComposeActivity.kt        Activity.setContent + app theme; no ViewBinding
+  BaseComposeDialogFragment.kt  XML-free content, view-lifecycle disposal and existing window behavior
   BaseActivity.kt               legacy View host, removed at end of migration
 ui/
   theme/LegadoComposeTheme.kt   app colors and Material 3 theme
@@ -45,6 +46,12 @@ ui/
   about/
     AboutActivity.kt           Android effects and existing application operations
     AboutScreen.kt             stateless screen using common settings components
+    CrashLogsDialog.kt         thin Compose dialog host and text-viewer navigation
+    CrashLogsRoute.kt
+    CrashLogsScreen.kt         stateless lazy list and loading/error/empty feedback
+    CrashLogsViewModel.kt      cancellable operations and pending log navigation
+data/repository/
+  CrashLogsRepository.kt       local/backup crash-log I/O on Dispatchers.IO
 ```
 
 These are project conventions, not a package hierarchy mandated by Compose. Keep
@@ -82,6 +89,13 @@ The customization draft is saved separately from committed settings; Cancel does
 not persist it or change services. Service observers run only while the destination
 is resumed, and runtime status synchronization does not restart services. The existing About screen now shares theme, top bar and
 settings components. The Compose host no longer inherits the ViewBinding host.
+
+Crash-log listing and clearing now use Compose with a repository and StateFlow.
+Local logs retain precedence over backup logs with the same filename. Clearing
+refreshes the list even after partial failure; cancelled reads cannot open deleted
+logs. Pending text-viewer navigation is acknowledged only after the resumed host
+can show it. The shared TextDialog used to read log contents remains a legacy
+consumer and will be migrated separately.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining

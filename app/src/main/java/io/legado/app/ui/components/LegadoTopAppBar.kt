@@ -1,6 +1,7 @@
 package io.legado.app.ui.components
 
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +21,8 @@ fun LegadoTopAppBar(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
+    backLabel: String = stringResource(R.string.back),
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val colors = LocalLegadoColors.current
@@ -28,10 +31,11 @@ fun LegadoTopAppBar(
         modifier = modifier,
         navigationIcon = {
             IconButton(onClick = onBack) {
-                Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.back))
+                Icon(painterResource(R.drawable.ic_arrow_back), backLabel)
             }
         },
         actions = actions,
+        windowInsets = windowInsets,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = colors.primary,
             titleContentColor = colors.onPrimary,

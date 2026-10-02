@@ -481,6 +481,7 @@ android {
 dependencies {
     coreLibraryDesugaring(libs.desugar)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.bundles.androidTest)
     //kotlin
     implementation(libs.kotlin.stdlib)

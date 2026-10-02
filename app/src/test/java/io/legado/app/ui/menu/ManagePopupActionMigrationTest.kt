@@ -103,7 +103,6 @@ class ManagePopupActionMigrationTest {
     fun `dialog overflow menus use the shared vertical bridge`() {
         listOf(
             "src/main/java/io/legado/app/ui/about/AppLogDialog.kt",
-            "src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt",
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         ).forEach { path ->
             val source = readProjectFile(path)
@@ -121,7 +120,6 @@ class ManagePopupActionMigrationTest {
     fun `dialog menu actions provide icons for the vertical menu`() {
         val menus = mapOf(
             "app_log.xml" to listOf("menu_clear", "menu_export"),
-            "crash_log.xml" to listOf("menu_clear"),
             "rss_read_record.xml" to listOf("menu_clear"),
             "source_login.xml" to listOf(
                 "menu_ok",
@@ -149,8 +147,6 @@ class ManagePopupActionMigrationTest {
         mapOf(
             "src/main/java/io/legado/app/ui/about/AppLogDialog.kt" to
                 "toolBar.menu.applyTint(requireContext())",
-            "src/main/java/io/legado/app/ui/about/CrashLogsDialog.kt" to
-                "binding.toolBar.menu.applyTint(requireContext())",
             "src/main/java/io/legado/app/ui/rss/article/ReadRecordDialog.kt" to
                 "toolBar.menu.applyTint(requireContext())",
         ).forEach { (path, expected) ->
