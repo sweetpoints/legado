@@ -31,7 +31,7 @@ internal data class ContentEditorState(
     val regex: Boolean = false, val matchCase: Boolean = false,
     val matches: List<IntRange> = emptyList(), val matchIndex: Int = -1,
     val searchInvalid: Boolean = false, val scrollRequest: Long = 0,
-    val titleEditor: Boolean = false, val titleInput: String = "", val error: String? = null,
+    val titleEditor: Boolean = false, val titleInput: String = "", val titleReady: Boolean = false, val error: String? = null,
 ) { val busy get() = saving || finished }
 
 /** Large chapter text stays in an atomic disk checkpoint, never in SavedStateHandle. */
@@ -53,6 +53,7 @@ internal class ContentEditorViewModel(
         scrollY = saved["contentEditor.scrollY"], searchVisible = value("searchVisible", false),
         query = value("query", ""), regex = value("regex", false), matchCase = value("matchCase", false),
         titleEditor = value("titleEditor", false), titleInput = value("titleInput", ""),
+        titleReady = value("titleReady", false), saving = value("titleLoading", false),
     ))
     val state = mutable.asStateFlow()
     private val checkpointMutex = Mutex()
@@ -70,7 +71,9 @@ internal class ContentEditorViewModel(
     private inline fun update(block: ContentEditorState.() -> ContentEditorState) { mutable.value = mutable.value.block() }
     init {
         if (state.value.finished) update { copy(loading = false) }
-        else viewModelScope.launch {
+        else {
+            if (value("titleLoading", false) && state.value.titleEditor) fetchTitle()
+            viewModelScope.launch {
             try {
                 val plain = repository.plainText()
                 val draft = repository.readDraft(draftId)
@@ -82,6 +85,7 @@ internal class ContentEditorViewModel(
                     render(draft.text, draft.hasChanges); update { copy(loading = false) }; search(false)
                 } else load(false)
             } catch (error: Exception) { if (error is CancellationException) throw error; update { copy(loading = false, error = error.message ?: "无法读取草稿") } }
+            }
         }
     }
     private fun render(raw: String, dirty: Boolean) {
@@ -94,7 +98,12 @@ internal class ContentEditorViewModel(
     private fun draft() = ContentEditorDraft(target, state.value.raw, state.value.hasChanges, revision)
     private fun checkpoint() { if (state.value.hasDraft && !state.value.finished) checkpoints.trySend(draft()) }
     suspend fun flushDraft() {
-        if (state.value.hasDraft && !state.value.finished) checkpointMutex.withLock { repository.writeDraft(draftId, draft()) }
+        if (state.value.hasDraft && !state.value.finished) try {
+            checkpointMutex.withLock { repository.writeDraft(draftId, draft()) }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            update { copy(error = error.message ?: "无法保存草稿") }
+        }
     }
     fun edit(text: String, selectionStart: Int, selectionEnd: Int) {
         val current = state.value
@@ -167,17 +176,29 @@ internal class ContentEditorViewModel(
     }
     fun openTitle() {
         if (state.value.busy || state.value.titleEditor) return
-        put("titleEditor", true); update { copy(titleEditor = true, saving = true, error = null) }
+        put("titleEditor", true); put("titleReady", false)
+        update { copy(titleEditor = true, titleReady = false) }; fetchTitle()
+    }
+    private fun fetchTitle() {
+        put("titleLoading", true); update { copy(saving = true, error = null) }
         viewModelScope.launch {
-            try { val title = repository.title(target); put("titleInput", title); update { copy(titleInput = title) } }
-            catch (error: Exception) { if (error is CancellationException) throw error; update { copy(error = error.message) } }
-            finally { update { copy(saving = false) } }
+            try {
+                val title = repository.title(target)
+                put("titleInput", title); put("titleReady", true)
+                update { copy(titleInput = title, titleReady = true) }
+            } catch (error: Exception) { if (error is CancellationException) throw error; update { copy(error = error.message) } }
+            finally { put("titleLoading", false); update { copy(saving = false) } }
         }
     }
-    fun editTitle(title: String) { if (!state.value.busy) { put("titleInput", title); update { copy(titleInput = title) } } }
+    fun editTitle(title: String) {
+        if (!state.value.busy) {
+            put("titleInput", title); put("titleReady", true)
+            update { copy(titleInput = title, titleReady = true) }
+        }
+    }
     fun dismissTitle() { if (!state.value.busy) { put("titleEditor", false); update { copy(titleEditor = false) } } }
     fun saveTitle() {
-        if (state.value.busy || !state.value.titleEditor) return
+        if (state.value.busy || !state.value.titleEditor || !state.value.titleReady) return
         val title = state.value.titleInput; update { copy(saving = true, error = null) }
         viewModelScope.launch {
             try { val label = repository.saveTitle(target, title); put("title", label); put("titleEditor", false); put("reload", true); update { copy(title = label, titleEditor = false) } }

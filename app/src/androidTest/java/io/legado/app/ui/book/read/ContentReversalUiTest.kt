@@ -7,6 +7,10 @@ import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performClick
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -62,6 +66,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -82,6 +87,8 @@ import kotlinx.coroutines.withTimeout
 /** Exercises the real reader with cached chapters, controlled HTTP responses and menu gestures. */
 @RunWith(AndroidJUnit4::class)
 class ContentReversalUiTest {
+    @get:Rule val contentCompose = createEmptyComposeRule()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -612,13 +619,12 @@ class ContentReversalUiTest {
         onView(withText(R.string.edit_content)).inRoot(isPlatformPopup()).perform(click())
         await("content editor loaded") { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ContentEditDialog>()
-                .any { it.view != null && it.viewModel.hasDraft }
+                .any { it.view != null && it.viewModel.state.value.hasDraft }
         }
         val edited = "Saved by the visible content editor. 😀"
         val beforeEdit = ReadBook.curTextChapter
-        onView(withId(R.id.content_view)).inRoot(isDialog())
-            .perform(replaceText(edited), closeSoftKeyboard())
-        onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+        contentCompose.onNodeWithTag("content-body").performTextReplacement(edited)
+        contentCompose.onNodeWithTag("content-save").performClick()
         await("editor saved exact text") { BookHelp.getContent(book, chapters[0]) == edited }
         awaitReader(0, beforeEdit)
         openOverflow()

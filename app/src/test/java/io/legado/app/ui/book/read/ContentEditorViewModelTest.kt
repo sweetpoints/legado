@@ -86,18 +86,39 @@ class ContentEditorViewModelTest {
         val repo = Fake().apply { loadFailure = true }; val model = model(repo); advanceUntilIdle(); assertFalse(model.state.value.hasDraft); assertNotNull(model.state.value.error)
         repo.loadFailure = false; model.retryLoad(); advanceUntilIdle(); assertTrue(model.state.value.hasDraft); assertEquals(repo.body, model.state.value.raw)
     }
+    @Test fun unfinishedTitleLoadRestoresAndCannotSaveDefaultEmptyInput() = runTest(dispatcher) {
+        val repo = Fake(); val saved = SavedStateHandle(); val first = model(repo, saved); advanceUntilIdle()
+        repo.titleGate = CompletableDeferred(); first.openTitle(); runCurrent()
+        assertTrue(first.state.value.saving); val restored = model(repo, snapshot(saved)); runCurrent()
+        restored.saveTitle(); assertTrue(restored.state.value.saving); assertFalse(restored.state.value.titleReady)
+        repo.titleGate!!.complete("actual database title"); advanceUntilIdle()
+        assertEquals("actual database title", restored.state.value.titleInput); assertTrue(restored.state.value.titleReady)
+        restored.saveTitle(); advanceUntilIdle(); assertEquals("display:actual database title", restored.state.value.title)
+    }
+    @Test fun loadedTitleDraftRestoresWithoutReadingOverUserInput() = runTest(dispatcher) {
+        val repo = Fake(); val saved = SavedStateHandle(); val first = model(repo, saved); advanceUntilIdle(); first.openTitle(); advanceUntilIdle(); first.editTitle("typed title")
+        repo.titleGate = CompletableDeferred(); val restored = model(repo, snapshot(saved)); advanceUntilIdle()
+        assertFalse(restored.state.value.saving); assertTrue(restored.state.value.titleReady); assertEquals("typed title", restored.state.value.titleInput)
+    }
+    @Test fun lifecycleCheckpointFailureReportsErrorWithoutThrowingOrLosingDraft() = runTest(dispatcher) {
+        val repo = Fake(); val model = model(repo); advanceUntilIdle(); model.edit("unsaved", 4, 4); advanceUntilIdle()
+        repo.draftFailure = true; model.flushDraft()
+        assertEquals("draft disk full", model.state.value.error); assertEquals("unsaved", model.state.value.raw); assertTrue(model.state.value.hasChanges); assertFalse(model.state.value.finished)
+    }
     private class Fake : ContentEditorRepository {
+        var draftFailure = false
         var body = "A<img src=\"image\">B"; var plain = false; var loadFailure = false; var titleFailure = false
+        var titleGate: CompletableDeferred<String>? = null
         var resetGate: CompletableDeferred<ContentEditorLoaded>? = null; var saveGate: CompletableDeferred<Unit>? = null
         val drafts = mutableMapOf<String, ContentEditorDraft>(); val saves = mutableListOf<Pair<ContentEditorTarget, String>>(); val loads = mutableListOf<Pair<ContentEditorTarget, Boolean>>()
         override suspend fun load(target: ContentEditorTarget, reset: Boolean): ContentEditorLoaded { loads += target to reset; if (loadFailure) error("missing book"); return if (reset && resetGate != null) resetGate!!.await() else ContentEditorLoaded(body, "DB title") }
         override suspend fun save(target: ContentEditorTarget, text: String) { saveGate?.await(); saves += target to text }
-        override suspend fun title(target: ContentEditorTarget) = "DB title"
+        override suspend fun title(target: ContentEditorTarget) = titleGate?.await() ?: "DB title"
         override suspend fun saveTitle(target: ContentEditorTarget, title: String): String { if (titleFailure) error("title failure"); return "display:$title" }
         override suspend fun plainText() = plain
         override suspend fun setPlainText(value: Boolean) { plain = value }
         override suspend fun readDraft(id: String) = drafts[id]
-        override suspend fun writeDraft(id: String, draft: ContentEditorDraft) { if ((drafts[id]?.revision ?: -1) <= draft.revision) drafts[id] = draft }
+        override suspend fun writeDraft(id: String, draft: ContentEditorDraft) { if (draftFailure) error("draft disk full"); if ((drafts[id]?.revision ?: -1) <= draft.revision) drafts[id] = draft }
         override suspend fun deleteDraft(id: String) { drafts.remove(id) }
     }
 }
