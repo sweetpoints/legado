@@ -220,7 +220,7 @@ class HighlightGroupUiTest {
         screenshot("highlight-group-filter")
 
         menu(R.id.menu_highlight_group_manage)
-        groupAction("Characters", R.id.tv_edit)
+        groupAction("Characters", editing = true)
         compose.onNodeWithTag("highlight-group-name").performTextReplacement("People")
         compose.onNodeWithTag("highlight-group-rename-confirm").performClick()
         awaitGroup("People")
@@ -232,7 +232,7 @@ class HighlightGroupUiTest {
         filter("[People]")
         awaitRules(dao.all.filter { it.group == "People" })
         menu(R.id.menu_highlight_group_manage)
-        groupAction("People", R.id.tv_del)
+        groupAction("People")
         compose.onNodeWithTag("highlight-group-choose-move").performClick()
         // This is a real group named like the special ungrouped option.
         compose.onNodeWithTag("highlight-group-move-$namedUngrouped").performClick()
@@ -245,7 +245,7 @@ class HighlightGroupUiTest {
         filter("[$namedUngrouped]")
         awaitRules(dao.all.filter { it.group == namedUngrouped })
         menu(R.id.menu_highlight_group_manage)
-        groupAction(namedUngrouped, R.id.tv_del)
+        groupAction(namedUngrouped)
         compose.onNodeWithTag("highlight-group-choose-move").performClick()
         compose.onNodeWithTag("highlight-group-move-none").performClick()
         await { dao.all.count { it.group == null } == 4 }
@@ -257,7 +257,7 @@ class HighlightGroupUiTest {
         filter("[Quotes]")
         awaitRules(dao.all.filter { it.group == "Quotes" })
         menu(R.id.menu_highlight_group_manage)
-        groupAction("Quotes", R.id.tv_del)
+        groupAction("Quotes")
         compose.onNodeWithTag("highlight-group-delete-confirm").performClick()
         await { dao.all.size == 4 }
         assertEquals(fixtures.filter { it.group != "Quotes" }.map { it.uuid }.toSet(),
@@ -416,9 +416,9 @@ class HighlightGroupUiTest {
         onView(withText(label)).inRoot(isDialog()).perform(click())
     }
 
-    private fun groupAction(group: String, action: Int) {
+    private fun groupAction(group: String, editing: Boolean = false) {
         awaitGroup(group)
-        val tag = if (action == R.id.tv_edit) "highlight-group-edit-$group" else "highlight-group-delete-$group"
+        val tag = if (editing) "highlight-group-edit-$group" else "highlight-group-delete-$group"
         compose.onNodeWithTag(tag).performClick()
     }
 
