@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class HttpTtsCookieJarTest {
 
@@ -27,17 +26,5 @@ class HttpTtsCookieJarTest {
         assertEquals(jsLib, roundTrip.jsLib)
         assertTrue(roundTrip.enabledCookieJar == true)
 
-        val source = appFile("src/main/java/io/legado/app/ui/book/read/config/HttpTtsEditDialog.kt")
-            .readText()
-        val layout = appFile("src/main/res/layout/dialog_http_tts_edit.xml").readText()
-        assertTrue(source.contains("tvJsLib.setText(httpTTS.jsLib)"))
-        assertTrue(source.contains("jsLib = binding.tvJsLib.text?.toString()"))
-        assertTrue(source.contains("cbIsEnableCookie.isChecked = httpTTS.enabledCookieJar == true"))
-        assertTrue(source.contains("enabledCookieJar = binding.cbIsEnableCookie.isChecked"))
-        assertTrue(layout.contains("android:id=\"@+id/tv_jsLib\""))
-        assertTrue(layout.contains("android:id=\"@+id/cb_is_enable_cookie\""))
     }
-
-    private fun appFile(path: String): File =
-        listOf(File(path), File("app/$path")).first { it.isFile }
 }

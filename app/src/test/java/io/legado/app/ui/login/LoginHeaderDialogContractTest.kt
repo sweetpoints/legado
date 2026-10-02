@@ -11,15 +11,10 @@ class LoginHeaderDialogContractTest {
         val sourceLogin = readProjectFile(
             "src/main/java/io/legado/app/ui/login/SourceLoginDialog.kt"
         )
-        val httpTts = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/HttpTtsEditDialog.kt"
-        )
 
         val sourceLoginAction = loginHeaderAction(sourceLogin)
-        val httpTtsAction = loginHeaderAction(httpTts)
 
         assertEmptyHeaderFallback(sourceLoginAction)
-        assertEmptyHeaderFallback(httpTtsAction)
         val populatedHeaderBranch = sourceLoginAction.substringAfter(
             "?.let { loginHeader ->",
             missingDelimiterValue = ""

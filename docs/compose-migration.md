@@ -438,3 +438,9 @@ and full-code-editor target. Room reads and atomic rename/save transactions run
 through a data repository. Failed loads block writes and offer retry; dirty exits
 require confirmation, and stale paste/editor results cannot overwrite later edits.
 The exclusive editor layout and menu XML are removed.
+
+HTTP TTS editing now uses a Compose form backed by an IO repository and SavedState
+drafts for every field, code-editor cursor and pending field target. Save/login
+preserve the record identity and consume platform effects before dispatch. Empty
+name drafts still receive dirty-exit protection, and failed initial reads block
+writes until retry succeeds. The exclusive editor layout and menu are removed.
