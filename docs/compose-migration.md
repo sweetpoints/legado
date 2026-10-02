@@ -749,3 +749,7 @@ Replaced the full-screen cover picker with a stable-ID three-column Compose grid
 ### Automatic task management data and state
 
 Added immutable task rows and an I/O management repository for field-preserving enable/cron updates, batched deletion, filtered-slot ordering, logs, URL history and export tickets. Existing initialization and scheduler refresh remain; runtime fields are excluded from exported tasks. Private revisioned drafts keep large import text outside Bundle state. Saved state retains visible-scope batch targets, hidden selections, reversible slide-selection baselines, confirmation drafts and consumed host effects. Added 13 JVM state tests and compilation of 6 real Room/batch/export/history/disk tests. Legacy management UI remains for separate Compose integration; Android device execution is unavailable.
+
+### Audio speed and timer Compose popup
+
+Replaced the audio slider popup content with Compose and accessible discrete controls. Speed preserves 0.5..3.0 in tenths, timer preserves 0..180 whole minutes, and programmatic refresh leaves playback unchanged. User changes retain the existing playback APIs, whose persistence/service behavior remains owned by AudioPlay. Native positioning and popup styling remain; view-tree owners and composition disposal cover dismissal, reopening and host destruction. Added 3 JVM normalization/dispatch tests and compilation of 2 Compose plus 1 actual native popup lifecycle test. Removed the exclusive slider layout; Android device execution is unavailable.

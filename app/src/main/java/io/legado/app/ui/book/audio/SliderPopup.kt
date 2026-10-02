@@ -1,93 +1,62 @@
 package io.legado.app.ui.book.audio
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Build
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
-import android.widget.SeekBar
-import io.legado.app.R
-import io.legado.app.databinding.PopupSeekBarBinding
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.findViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.model.AudioPlay
 import io.legado.app.service.AudioPlayService
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.applyMd3PopupStyle
-import kotlin.math.roundToInt
 
 class SliderPopup(private val context: Context, private val name: Int) :
     PopupWindow(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
-    companion object {
-        const val TIMER = 1
-        const val SPEED = 2
+    companion object { const val TIMER = 1; const val SPEED = 2 }
+    private val controller = AudioSliderController(if (name == TIMER) AudioSliderMode.Timer else AudioSliderMode.Speed) {
+        if (name == TIMER) AudioPlay.setTimer(it.toInt()) else AudioPlay.setSpeed(it)
     }
-
-    private val binding = PopupSeekBarBinding.inflate(LayoutInflater.from(context))
+    private val compose = ComposeView(context).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
+        setContent { LegadoComposeTheme {
+            val state by controller.state.collectAsStateWithLifecycle()
+            AudioSliderScreen(state, controller::user)
+        } }
+    }
+    private var owner: LifecycleOwner? = null
+    private val observer: LifecycleEventObserver = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_DESTROY) {
+        dismiss(); compose.disposeComposition(); owner?.lifecycle?.removeObserver(observer); owner = null
+    } }
     init {
-        contentView = binding.root
-        applyMd3PopupStyle()
-        isTouchable = true
-        isOutsideTouchable = false
-        isFocusable = true
-        setProcess()
-        binding.seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (name == TIMER) {
-                    setProcessTimerText(progress)
-                    if (fromUser) {
-                        AudioPlay.setTimer(progress)
-                    }
-                    return
-                }
-                val speed = (progress / 10f).roundToInt() / 10f
-                setProcessSpeedText(speed)
-                if (fromUser) {
-                    // 设置播放速度 (转换为0.5-3.0范围)
-                    AudioPlay.setSpeed(speed)
-                }
-            }
-        })
+        contentView = compose; applyMd3PopupStyle()
+        isTouchable = true; isOutsideTouchable = false; isFocusable = true
+        setOnDismissListener { compose.disposeComposition() }
+        (context as? LifecycleOwner)?.let { owner = it; it.lifecycle.addObserver(observer) }
+        refresh()
     }
-
+    private fun refresh() { controller.refresh(if (name == TIMER) AudioPlayService.timeMinute.toFloat() else AudioPlayService.playSpeed) }
+    private fun prepare(anchor: View?) {
+        val host = requireNotNull(anchor?.findViewTreeLifecycleOwner() ?: context as? LifecycleOwner)
+        if (owner !== host) { owner?.lifecycle?.removeObserver(observer); owner = host; host.lifecycle.addObserver(observer) }
+        compose.setViewTreeLifecycleOwner(host)
+        compose.setViewTreeSavedStateRegistryOwner(anchor?.findViewTreeSavedStateRegistryOwner() ?: context as? SavedStateRegistryOwner)
+        refresh()
+    }
     override fun showAsDropDown(anchor: View?, xoff: Int, yoff: Int, gravity: Int) {
-        super.showAsDropDown(anchor, xoff, yoff, gravity)
-        if (name == TIMER) {
-            binding.seekBar.progress = AudioPlayService.timeMinute
-        } else {
-            binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
-        }
+        prepare(anchor); super.showAsDropDown(anchor, xoff, yoff, gravity)
     }
-
     override fun showAtLocation(parent: View?, gravity: Int, x: Int, y: Int) {
-        super.showAtLocation(parent, gravity, x, y)
-        if (name == TIMER) {
-            binding.seekBar.progress = AudioPlayService.timeMinute
-        } else {
-            binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
-        }
-    }
-
-    private fun setProcessTimerText(process: Int) {
-        binding.tvSeekValue.text = context.getString(R.string.timer_m, process)
-    }
-
-    @SuppressLint("SetTextI18n")
-    private fun setProcessSpeedText(speed: Float) {
-        binding.tvSeekValue.text = "%.1fX".format(speed)
-    }
-
-    private fun setProcess() {
-        if (name == TIMER) {
-            binding.seekBar.max = 180
-            setProcessTimerText(0)
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            binding.seekBar.min = 50
-        }
-        binding.seekBar.max = 300
-        binding.seekBar.progress = (AudioPlayService.playSpeed * 100).toInt()
-        setProcessSpeedText(AudioPlayService.playSpeed)
+        prepare(parent); super.showAtLocation(parent, gravity, x, y)
     }
 }
