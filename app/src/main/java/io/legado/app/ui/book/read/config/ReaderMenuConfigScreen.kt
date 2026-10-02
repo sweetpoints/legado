@@ -149,7 +149,12 @@ internal fun ReaderMenuConfigScreen(
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                    if (!change.pressed) { change.consume(); completed = true; break }
+                                    if (!change.pressed) {
+                                        // Compose synthesizes an already-consumed release when input is canceled.
+                                        completed = !change.isConsumed
+                                        change.consume()
+                                        break
+                                    }
                                     if (change.isConsumed) break
                                     change.consume()
                                     dragY = change.position.y

@@ -14,6 +14,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.legado.app.data.preferences.ReaderMenuSettingsRepository
 import io.legado.app.help.ReaderMenuConfig
 import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Assert.*
@@ -96,4 +99,39 @@ class ReaderMenuConfigScreenTest {
         compose.onNodeWithTag("reader-menu-retry").performClick()
         compose.runOnIdle { assertEquals(listOf(ReaderMenuEditAction.RetrySave), actions) }
     }
+    @Test fun canceledSelectionAndReorderRestoreBaselineWithoutPersisting() {
+        val base = ReaderMenuConfig(ReaderMenuConfig.ALL_KEYS, emptyList())
+        var writes = 0
+        val repository = object : ReaderMenuSettingsRepository {
+            override fun load() = base
+            override fun save(config: ReaderMenuConfig) { writes++ }
+        }
+        val model = ReaderMenuConfigViewModel(repository, SavedStateHandle())
+        val baseline = model.state.value.entries
+        val actions = mutableListOf<ReaderMenuEditAction>()
+        compose.setContent {
+            val state by model.state.collectAsStateWithLifecycle()
+            LegadoComposeTheme { ReaderMenuConfigScreen(state, { actions += it; model.edit(it) }, {}, Modifier.heightIn(max = 650.dp)) }
+        }
+        listOf(false, true).forEach { reorder ->
+            val list = compose.onNodeWithTag("reader-menu-list").fetchSemanticsNode().boundsInRoot
+            val first = compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().boundsInRoot
+            val second = compose.onNodeWithTag("reader-menu-item-highlightRule").fetchSemanticsNode().boundsInRoot
+            val x = if (reorder) compose.onNodeWithTag("reader-menu-drag-bookmark", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot.center.x - list.left else 8f
+            compose.onNodeWithTag("reader-menu-list").performTouchInput {
+                down(Offset(x, first.center.y - list.top))
+                moveTo(Offset(x, second.center.y - list.top))
+                cancel()
+            }
+            compose.runOnIdle {
+                assertEquals(ReaderMenuEditAction.FinishGesture(false), actions.last())
+                assertEquals(baseline, model.state.value.entries)
+                assertEquals(0, writes)
+                assertEquals(0, model.state.value.refreshRequest)
+                assertTrue(actions.none { it is ReaderMenuEditAction.Toggle })
+            }
+        }
+    }
+
 }
