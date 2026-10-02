@@ -481,3 +481,9 @@ Range selection preserves ToggleAndReverse semantics. Drag cancellation, pause a
 restoration revert unfinished selection/order changes; only completed reorders
 write atomically. The old adapters/ViewModel and exclusive page/item/menu XML are
 removed. Imports, export, complete JSON sharing and online history remain available.
+
+HTTP TTS import now uses Compose selection and comparison lists, an IO parser and
+AtomicFile sessions for complete JSON drafts. SavedState retains stable keys and
+selection without large payloads. Code-edit requests are consumed in RESUMED, and
+failed inserts retain drafts for retry; completion markers prevent replay after
+restoration. Shared importer layouts remain for other consumers.

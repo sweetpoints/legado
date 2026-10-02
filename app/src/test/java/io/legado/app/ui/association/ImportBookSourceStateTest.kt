@@ -125,7 +125,6 @@ class ImportBookSourceStateTest {
         val importDialogs = listOf(
             "ImportBookSourceDialog.kt",
             "ImportDictRuleDialog.kt",
-            "ImportHttpTtsDialog.kt",
             "ImportReplaceRuleDialog.kt",
             "ImportRssSourceDialog.kt",
             "ImportThemeDialog.kt",
