@@ -1,50 +1,46 @@
 package io.legado.app.ui.book.manga.config
 
 import android.content.DialogInterface
-import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogMangaEpaperBinding
-import io.legado.app.help.config.AppConfig
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.preferences.AppMangaEpaperPreferences
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class MangaEpaperDialog : BaseDialogFragment(R.layout.dialog_manga_epaper) {
-    private val binding by viewBinding(DialogMangaEpaperBinding::bind)
-    private val callback get() = activity as? Callback
-    private var mMangaEInkThreshold = 150
+class MangaEpaperDialog : BaseComposeDialogFragment() {
+    private val viewModel by viewModels<MangaEpaperViewModel> {
+        viewModelFactory {
+            initializer { MangaEpaperViewModel(AppMangaEpaperPreferences(), createSavedStateHandle()) }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initData()
-        initView()
-    }
-
-    private fun initData() {
-        binding.dsbEpaper.progress = AppConfig.mangaEInkThreshold
-    }
-
-    private fun initView() {
-        binding.dsbEpaper.onChanged = {
-            mMangaEInkThreshold = it
-            callback?.updateEepaper(it)
-        }
+    @Composable
+    override fun Content() {
+        MangaEpaperRoute(viewModel, { (activity as? Callback)?.updateEepaper(it) },
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f))
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        viewModel.onDismiss(activity?.isChangingConfigurations == true)
         super.onDismiss(dialog)
-        AppConfig.mangaEInkThreshold = mMangaEInkThreshold
     }
 
     interface Callback {
         fun updateEepaper(value: Int)
     }
-
 }

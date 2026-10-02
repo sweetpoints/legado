@@ -60,6 +60,11 @@ ui/
     CoverRuleRoute.kt
     CoverRuleScreen.kt         form, validation and operation feedback
     CoverRuleViewModel.kt      restorable draft and cancellable operations
+  book/manga/config/
+    MangaEpaperDialog.kt       thin Compose host and reader preview callback
+    MangaEpaperRoute.kt
+    MangaEpaperScreen.kt       threshold slider and step controls
+    MangaEpaperViewModel.kt    restorable threshold and dismissal persistence
   widget/dialog/
     WaitDialog.kt              lifecycle-aware ComponentDialog, preserves existing call API
     WaitDialogContent.kt       stateless Compose progress/message content
@@ -155,6 +160,12 @@ cancel the request or finish the host. Glide waits and preview-file writes run o
 IO with cancellation cleanup. Each enlarged preview uses an independent cache
 file, so reloading cannot recycle a bitmap held by a restored PhotoDialog. The shared
 PhotoDialog remains a legacy consumer and will be migrated separately.
+
+Manga e-ink threshold settings now use Compose with a preferences boundary,
+immutable StateFlow, lifecycle-aware reader previews and SavedStateHandle drafts.
+Closing without an edit preserves the stored threshold rather than writing the
+old default of 150. Rotation does not persist the draft; delayed reads cannot
+overwrite edits or write after dismissal. The dedicated XML layout is removed.
 
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
