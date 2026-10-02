@@ -343,6 +343,11 @@ flags once; configuration destruction preserves the draft without committing it.
 Preferences stay behind a repository and previews are delivered only when resumed.
 The exclusive editor-settings layout is removed.
 
+Editor-theme selection now uses Compose radio choices for all eight existing
+indices and automatic mode. Light/dark preferences retain their separate keys;
+resumed hosts reapply the selected theme after recreation without extra writes.
+The exclusive theme-picker layout is removed.
+
 The main shell still hosts bookshelf, discovery and RSS View fragments and the
 Compose-content My fragment inside `LegacyMainPager`. The majority of the app is still unmigrated. Remaining
 work includes these destinations, settings/preferences, search and book details,
