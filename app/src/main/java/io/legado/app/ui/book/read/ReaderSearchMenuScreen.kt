@@ -6,9 +6,30 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -50,15 +71,15 @@ internal fun ReaderSearchMenuRoute(
             }
     }
     ReaderSearchMenuScreen(
-        state,
-        background,
-        foreground,
-        { visible, id -> completion = visible to id },
-        close,
-        navigate,
-        results,
-        main,
-        exit,
+        state = state,
+        background = background,
+        foreground = foreground,
+        settled = { visible, id -> completion = visible to id },
+        close = close,
+        navigate = navigate,
+        results = results,
+        main = main,
+        exit = exit,
     )
 }
 
@@ -93,11 +114,12 @@ internal fun ReaderSearchMenuScreen(
             Box(Modifier.fillMaxSize().testTag("reader-search-dismiss").clickable(onClick = close))
         if (state.navigationVisible && hasResults) {
             FloatingActionButton(
-                { navigate(-1) },
-                Modifier.align(Alignment.CenterStart)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .testTag("reader-search-left"),
+                onClick = { navigate(-1) },
+                modifier =
+                    Modifier.align(Alignment.CenterStart)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .testTag("reader-search-left"),
                 containerColor = background,
                 contentColor = foreground,
             ) {
@@ -108,11 +130,12 @@ internal fun ReaderSearchMenuScreen(
                 )
             }
             FloatingActionButton(
-                { navigate(1) },
-                Modifier.align(Alignment.CenterEnd)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .testTag("reader-search-right"),
+                onClick = { navigate(1) },
+                modifier =
+                    Modifier.align(Alignment.CenterEnd)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .testTag("reader-search-right"),
                 containerColor = background,
                 contentColor = foreground,
             ) {
@@ -123,8 +146,8 @@ internal fun ReaderSearchMenuScreen(
             }
         }
         AnimatedVisibility(
-            transition,
-            Modifier.align(Alignment.BottomCenter),
+            visibleState = transition,
+            modifier = Modifier.align(Alignment.BottomCenter),
             enter = slideInVertically(tween(150)) { it },
             exit = slideOutVertically(tween(200)) { it },
         ) {
@@ -136,7 +159,7 @@ internal fun ReaderSearchMenuScreen(
                 Column(Modifier.navigationBarsPadding()) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
-                            { navigate(-1) },
+                            onClick = { navigate(-1) },
                             enabled = hasResults,
                             modifier = Modifier.testTag("reader-search-previous"),
                         ) {
@@ -146,7 +169,7 @@ internal fun ReaderSearchMenuScreen(
                             )
                         }
                         IconButton(
-                            { navigate(1) },
+                            onClick = { navigate(1) },
                             enabled = hasResults,
                             modifier = Modifier.testTag("reader-search-next"),
                         ) {
@@ -164,22 +187,23 @@ internal fun ReaderSearchMenuScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         TextButton(
-                            results,
-                            Modifier.heightIn(min = 48.dp).testTag("reader-search-results"),
+                            onClick = results,
+                            modifier =
+                                Modifier.heightIn(min = 48.dp).testTag("reader-search-results"),
                             colors = buttonColors,
                         ) {
                             Text(stringResource(R.string.search_content_size))
                         }
                         TextButton(
-                            main,
-                            Modifier.heightIn(min = 48.dp).testTag("reader-search-main"),
+                            onClick = main,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("reader-search-main"),
                             colors = buttonColors,
                         ) {
                             Text(stringResource(R.string.main_menu))
                         }
                         TextButton(
-                            exit,
-                            Modifier.heightIn(min = 48.dp).testTag("reader-search-exit"),
+                            onClick = exit,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("reader-search-exit"),
                             colors = buttonColors,
                         ) {
                             Text(stringResource(R.string.exit))
