@@ -18,11 +18,17 @@ import io.legado.app.utils.setLayout
 
 /** Configure the first-level actions and keep unchecked actions reachable in More. */
 class ReaderMenuConfigDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<ReaderMenuConfigViewModel> {
-        viewModelFactory { initializer {
-            ReaderMenuConfigViewModel(PreferenceReaderMenuSettingsRepository(requireContext()), createSavedStateHandle())
-        } }
-    }
+    private val viewModel by
+        viewModels<ReaderMenuConfigViewModel> {
+            viewModelFactory {
+                initializer {
+                    ReaderMenuConfigViewModel(
+                        PreferenceReaderMenuSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
@@ -31,8 +37,12 @@ class ReaderMenuConfigDialog : BaseComposeDialogFragment() {
 
     @Composable
     override fun Content() {
-        ReaderMenuConfigRoute(viewModel, ::dismiss,
+        ReaderMenuConfigRoute(
+            viewModel,
+            ::dismiss,
             { (activity as? ReadBookActivity)?.refreshReaderMenu() },
-            Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f))
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f),
+        )
     }
 }

@@ -28,14 +28,21 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.utils.ColorUtils
 
 class AutoReadDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<AutoReadViewModel> {
-        viewModelFactory { initializer {
-            AutoReadViewModel(PreferenceAutoReadSettingsRepository(), createSavedStateHandle())
-        } }
-    }
+    private val viewModel by
+        viewModels<AutoReadViewModel> {
+            viewModelFactory {
+                initializer {
+                    AutoReadViewModel(
+                        PreferenceAutoReadSettingsRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
     private val lease = AutoReadDialogLease()
     private var countOwner: ReadBookActivity? = null
-    private val callBack get() = activity as? CallBack
+    private val callBack
+        get() = activity as? CallBack
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         val host = activity as? ReadBookActivity ?: return
@@ -53,7 +60,10 @@ class AutoReadDialog : BaseComposeDialogFragment() {
             clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setBackgroundDrawableResource(R.color.background)
             decorView.setPadding(0, 0, 0, 0)
-            attributes = attributes.apply { dimAmount = 0f; gravity = Gravity.BOTTOM }
+            attributes = attributes.apply {
+                dimAmount = 0f
+                gravity = Gravity.BOTTOM
+            }
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
@@ -62,13 +72,31 @@ class AutoReadDialog : BaseComposeDialogFragment() {
     override fun Content() {
         val background = requireContext().bottomBackground
         val foreground = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(background))
-        AutoReadRoute(viewModel, Color(background), Color(foreground), ::updateTts,
+        AutoReadRoute(
+            viewModel,
+            Color(background),
+            Color(foreground),
+            ::updateTts,
             { callBack?.openChapterList() },
-            { callBack?.showMenuBar(); dismissAllowingStateLoss() },
-            { callBack?.autoPageStop(); dismissAllowingStateLoss() },
-            { (activity as? ReadBookActivity)?.let { host ->
-                host.showPageAnimConfig { host.upPageAnim(); ReadBook.loadContent(false) }
-            } }, Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f))
+            {
+                callBack?.showMenuBar()
+                dismissAllowingStateLoss()
+            },
+            {
+                callBack?.autoPageStop()
+                dismissAllowingStateLoss()
+            },
+            {
+                (activity as? ReadBookActivity)?.let { host ->
+                    host.showPageAnimConfig {
+                        host.upPageAnim()
+                        ReadBook.loadContent(false)
+                    }
+                }
+            },
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 
     private fun updateTts() {
@@ -98,7 +126,9 @@ class AutoReadDialog : BaseComposeDialogFragment() {
 
     interface CallBack {
         fun showMenuBar()
+
         fun openChapterList()
+
         fun autoPageStop()
     }
 }

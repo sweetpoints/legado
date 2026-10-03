@@ -9,8 +9,12 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun ReadAloudControlsSettingsRoute(viewModel: ReadAloudControlsSettingsViewModel, background: Color,
-    onAction: (ReadAloudControlsAction) -> Boolean, modifier: Modifier = Modifier) {
+fun ReadAloudControlsSettingsRoute(
+    viewModel: ReadAloudControlsSettingsViewModel,
+    background: Color,
+    onAction: (ReadAloudControlsAction) -> Boolean,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.startObserving()
@@ -18,9 +22,17 @@ fun ReadAloudControlsSettingsRoute(viewModel: ReadAloudControlsSettingsViewModel
     }
     LifecycleResumeEffect(state.action) {
         state.action?.let { if (onAction(it)) viewModel.actionHandled(it) }
-        onPauseOrDispose { }
+        onPauseOrDispose {}
     }
     DisposableEffect(viewModel) { onDispose { viewModel.flush() } }
-    ReadAloudControlsSettingsScreen(state, background, viewModel::setToggle, viewModel::drag, viewModel::finish,
-        viewModel::step, viewModel::requestAction, modifier)
+    ReadAloudControlsSettingsScreen(
+        state,
+        background,
+        viewModel::setToggle,
+        viewModel::drag,
+        viewModel::finish,
+        viewModel::step,
+        viewModel::requestAction,
+        modifier,
+    )
 }

@@ -19,18 +19,34 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 
 class ReadAloudConfigDialog : BaseComposeDialogFragment(), SpeakEngineDialog.CallBack {
-    private val viewModel by viewModels<ReadAloudSettingsViewModel> {
-        viewModelFactory { initializer { ReadAloudSettingsViewModel(PreferenceReadAloudSettingsRepository(requireContext()), createSavedStateHandle()) } }
-    }
+    private val viewModel by
+        viewModels<ReadAloudSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    ReadAloudSettingsViewModel(
+                        PreferenceReadAloudSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    @Composable override fun Content() {
-        ReadAloudSettingsRoute(viewModel, Color(requireContext().backgroundColor), ::navigate,
-            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp))
+
+    @Composable
+    override fun Content() {
+        ReadAloudSettingsRoute(
+            viewModel,
+            Color(requireContext().backgroundColor),
+            ::navigate,
+            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp),
+        )
     }
+
     private fun navigate(destination: ReadAloudSettingsDestination): Boolean {
         if (!isAdded || childFragmentManager.isStateSaved) return false
         when (destination) {
@@ -40,5 +56,8 @@ class ReadAloudConfigDialog : BaseComposeDialogFragment(), SpeakEngineDialog.Cal
         }
         return true
     }
-    override fun upSpeakEngineSummary() { viewModel.refreshEngine() }
+
+    override fun upSpeakEngineSummary() {
+        viewModel.refreshEngine()
+    }
 }

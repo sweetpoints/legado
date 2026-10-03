@@ -36,6 +36,16 @@ internal fun AutoReadRoute(
             }
         }
     }
-    AutoReadScreen(state, background, foreground, viewModel::changeSpeed,
-        viewModel::finishChangingSpeed, onCatalog, onMenu, onStop, onSettings, modifier)
+    AutoReadScreen(
+        state,
+        background,
+        foreground,
+        viewModel::changeSpeed,
+        viewModel::finishChangingSpeed,
+        onCatalog,
+        onMenu,
+        onStop,
+        onSettings,
+        modifier,
+    )
 }

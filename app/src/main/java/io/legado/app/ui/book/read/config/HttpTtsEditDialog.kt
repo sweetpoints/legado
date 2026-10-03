@@ -28,16 +28,37 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 
 class HttpTtsEditDialog() : BaseComposeDialogFragment() {
-    constructor(id: Long) : this() { arguments = Bundle().apply { putLong("id", id) } }
-    private val viewModel by viewModels<HttpTtsEditViewModel> {
-        viewModelFactory { initializer { HttpTtsEditViewModel(AppHttpTtsEditorRepository(), createSavedStateHandle(),
-            arguments?.getLong("id")?.takeUnless { it == 0L }) } }
+    constructor(id: Long) : this() {
+        arguments = Bundle().apply { putLong("id", id) }
     }
-    private val editor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) viewModel.codeResult(result.data?.getStringExtra("text"),
-            result.data?.getIntExtra("cursorPosition", -1)) else viewModel.codeCancelled()
+
+    private val viewModel by
+        viewModels<HttpTtsEditViewModel> {
+            viewModelFactory {
+                initializer {
+                    HttpTtsEditViewModel(
+                        AppHttpTtsEditorRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getLong("id")?.takeUnless { it == 0L },
+                    )
+                }
+            }
+        }
+    private val editor =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK)
+                viewModel.codeResult(
+                    result.data?.getStringExtra("text"),
+                    result.data?.getIntExtra("cursorPosition", -1),
+                )
+            else viewModel.codeCancelled()
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        isCancelable = false
     }
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); isCancelable = false }
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.run {
@@ -45,21 +66,37 @@ class HttpTtsEditDialog() : BaseComposeDialogFragment() {
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
     }
-    @Composable override fun Content() {
-        HttpTtsEditRoute(viewModel, { isAdded && !childFragmentManager.isStateSaved }, ::handle,
-            { dismissAllowingStateLoss() }, Modifier.fillMaxSize())
+
+    @Composable
+    override fun Content() {
+        HttpTtsEditRoute(
+            viewModel,
+            { isAdded && !childFragmentManager.isStateSaved },
+            ::handle,
+            { dismissAllowingStateLoss() },
+            Modifier.fillMaxSize(),
+        )
     }
+
     private fun handle(event: HttpTtsEditorEffect) {
         when (event.action) {
             HttpTtsEditorAction.Code -> {
                 val field = event.field ?: HttpTtsEditorField.Name
                 val title = httpTtsFieldLabel(field)?.let(::getString) ?: httpTtsLiteralLabel(field)
-                editor.launch(Intent(requireContext(), CodeEditActivity::class.java).apply {
-                    putExtra("text", event.text); putExtra("title", title); putExtra("cursorPosition", event.cursor)
-                })
+                editor.launch(
+                    Intent(requireContext(), CodeEditActivity::class.java).apply {
+                        putExtra("text", event.text)
+                        putExtra("title", title)
+                        putExtra("cursorPosition", event.cursor)
+                    }
+                )
             }
             HttpTtsEditorAction.Saved -> toastOnUi("保存成功")
-            HttpTtsEditorAction.Login -> startActivity<SourceLoginActivity> { putExtra("type", "httpTts"); putExtra("key", event.text) }
+            HttpTtsEditorAction.Login ->
+                startActivity<SourceLoginActivity> {
+                    putExtra("type", "httpTts")
+                    putExtra("key", event.text)
+                }
             HttpTtsEditorAction.Copy -> requireContext().sendToClip(event.text)
             HttpTtsEditorAction.Paste -> viewModel.paste(requireContext().getClipText())
             HttpTtsEditorAction.Log -> showDialogFragment(AppLogDialog())
@@ -67,5 +104,8 @@ class HttpTtsEditDialog() : BaseComposeDialogFragment() {
             HttpTtsEditorAction.Rebuild -> ReadAloud.upReadAloudClass()
         }
     }
-    override fun dismiss() { viewModel.requestExit() }
+
+    override fun dismiss() {
+        viewModel.requestExit()
+    }
 }

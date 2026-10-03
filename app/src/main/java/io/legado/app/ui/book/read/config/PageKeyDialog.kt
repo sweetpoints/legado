@@ -54,16 +54,27 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
         val model = viewModel
         handledKeys.clear()
         // ComponentDialog recreates its lifecycle on each show; give Compose a fresh host.
-        setContentView(ComposeView(context).apply {
-            setViewTreeViewModelStoreOwner(this@PageKeyDialog)
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                LegadoComposeTheme {
-                    PageKeyRoute(model, Color(context.backgroundColor), ::dismiss,
-                        Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.85f))
+        setContentView(
+            ComposeView(context).apply {
+                setViewTreeViewModelStoreOwner(this@PageKeyDialog)
+                setViewCompositionStrategy(
+                    ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+                )
+                setContent {
+                    LegadoComposeTheme {
+                        PageKeyRoute(
+                            model,
+                            Color(context.backgroundColor),
+                            ::dismiss,
+                            Modifier.fillMaxWidth()
+                                .heightIn(
+                                    max = LocalConfiguration.current.screenHeightDp.dp * 0.85f
+                                ),
+                        )
+                    }
                 }
             }
-        })
+        )
         window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
@@ -78,21 +89,26 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
         return super.dispatchKeyEvent(event)
     }
 
-    override fun onSaveInstanceState(): Bundle = super.onSaveInstanceState().apply {
-        putString("pageKey.previous", viewModel.state.value.values.previous)
-        putString("pageKey.next", viewModel.state.value.values.next)
-        putString("pageKey.focus", viewModel.state.value.focused?.name)
-    }
+    override fun onSaveInstanceState(): Bundle =
+        super.onSaveInstanceState().apply {
+            putString("pageKey.previous", viewModel.state.value.values.previous)
+            putString("pageKey.next", viewModel.state.value.values.next)
+            putString("pageKey.focus", viewModel.state.value.focused?.name)
+        }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         // Dialog restoration can call show(), so restore the editor before invoking super.
         viewModelStore.clear()
-        savedState = SavedStateHandle(mapOf(
-            "pageKey.initialized" to true,
-            "pageKey.previous" to savedInstanceState.getString("pageKey.previous").orEmpty(),
-            "pageKey.next" to savedInstanceState.getString("pageKey.next").orEmpty(),
-            "pageKey.focus" to savedInstanceState.getString("pageKey.focus"),
-        ))
+        savedState =
+            SavedStateHandle(
+                mapOf(
+                    "pageKey.initialized" to true,
+                    "pageKey.previous" to
+                        savedInstanceState.getString("pageKey.previous").orEmpty(),
+                    "pageKey.next" to savedInstanceState.getString("pageKey.next").orEmpty(),
+                    "pageKey.focus" to savedInstanceState.getString("pageKey.focus"),
+                )
+            )
         viewModel = PageKeyViewModel(repository, savedState)
         viewModelStore.put("page-key", viewModel)
         registered = true

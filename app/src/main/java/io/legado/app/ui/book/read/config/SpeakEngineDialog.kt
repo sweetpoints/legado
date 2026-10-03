@@ -25,47 +25,92 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 
 internal fun HttpTTS.hasLoginCapability() = !loginUrl.isNullOrBlank() || !loginUi.isNullOrBlank()
+
 internal fun HttpTTS.shouldOpenLoginOnSelection() = hasLoginCapability()
 
 class SpeakEngineDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<SpeakEngineViewModel> {
-        viewModelFactory { initializer { SpeakEngineViewModel(AppSpeakEngineRepository(requireContext()), createSavedStateHandle()) } }
-    }
-    private val importResult = registerForActivityResult(HandleFileContract()) { result ->
-        result.uri?.let { viewModel.importResult(it.toString()) }
-    }
-    private val exportResult = registerForActivityResult(HandleFileContract()) { result ->
-        result.uri?.let { viewModel.exported(it.toString()) }
-    }
+    private val viewModel by
+        viewModels<SpeakEngineViewModel> {
+            viewModelFactory {
+                initializer {
+                    SpeakEngineViewModel(
+                        AppSpeakEngineRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    private val importResult =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { viewModel.importResult(it.toString()) }
+        }
+    private val exportResult =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { viewModel.exported(it.toString()) }
+        }
+
     override fun onStart() {
         super.onStart()
-        dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog
+            ?.window
+            ?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    @Composable override fun Content() {
-        SpeakEngineRoute(viewModel, { isAdded && !childFragmentManager.isStateSaved }, ::handle,
-            { dismissAllowingStateLoss() }, { requireContext().sendToClip(it) },
-            Modifier.fillMaxWidth().height(LocalConfiguration.current.screenHeightDp.dp * 0.9f))
+
+    @Composable
+    override fun Content() {
+        SpeakEngineRoute(
+            viewModel,
+            { isAdded && !childFragmentManager.isStateSaved },
+            ::handle,
+            { dismissAllowingStateLoss() },
+            { requireContext().sendToClip(it) },
+            Modifier.fillMaxWidth().height(LocalConfiguration.current.screenHeightDp.dp * 0.9f),
+        )
     }
+
     private fun handle(effect: SpeakEngineEffect) {
         when (effect.action) {
-            SpeakEngineAction.Login -> startActivity<SourceLoginActivity> {
-                putExtra("type", "httpTts"); putExtra("key", effect.argument)
-            }
-            SpeakEngineAction.Edit -> showDialogFragment(effect.argument.toLongOrNull()?.let { HttpTtsEditDialog(it) } ?: HttpTtsEditDialog())
-            SpeakEngineAction.ImportLocal -> importResult.launch { mode = HandleFileContract.FILE; allowExtensions = arrayOf("txt", "json") }
+            SpeakEngineAction.Login ->
+                startActivity<SourceLoginActivity> {
+                    putExtra("type", "httpTts")
+                    putExtra("key", effect.argument)
+                }
+            SpeakEngineAction.Edit ->
+                showDialogFragment(
+                    effect.argument.toLongOrNull()?.let { HttpTtsEditDialog(it) }
+                        ?: HttpTtsEditDialog()
+                )
+            SpeakEngineAction.ImportLocal ->
+                importResult.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("txt", "json")
+                }
             SpeakEngineAction.Import -> showDialogFragment(ImportHttpTtsDialog(effect.argument))
-            SpeakEngineAction.Export -> effect.export?.let { data ->
-                exportResult.launch { mode = HandleFileContract.EXPORT; fileData = HandleFileContract.FileData(data.name, data.bytes, "application/json") }
-            }
+            SpeakEngineAction.Export ->
+                effect.export?.let { data ->
+                    exportResult.launch {
+                        mode = HandleFileContract.EXPORT
+                        fileData =
+                            HandleFileContract.FileData(data.name, data.bytes, "application/json")
+                    }
+                }
             SpeakEngineAction.Applied -> {
                 (parentFragment as? CallBack)?.upSpeakEngineSummary()
-                ReadAloud.upReadAloudClass(); dismissAllowingStateLoss()
+                ReadAloud.upReadAloudClass()
+                dismissAllowingStateLoss()
             }
-            SpeakEngineAction.ClearCache -> { ReadAloud.upReadAloudClass(); viewModel.clearCacheData() }
+            SpeakEngineAction.ClearCache -> {
+                ReadAloud.upReadAloudClass()
+                viewModel.clearCacheData()
+            }
             SpeakEngineAction.CacheCleared -> toastOnUi(R.string.clear_cache_success)
             SpeakEngineAction.SystemExport -> toastOnUi(R.string.is_system_tts_no_export)
         }
     }
+
     fun clearCache() = viewModel.clearCache()
-    interface CallBack { fun upSpeakEngineSummary() }
+
+    interface CallBack {
+        fun upSpeakEngineSummary()
+    }
 }

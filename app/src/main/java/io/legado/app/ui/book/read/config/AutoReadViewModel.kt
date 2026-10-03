@@ -17,10 +17,17 @@ class AutoReadViewModel(
     private val repository: AutoReadSettingsRepository,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(AutoReadUiState(
-        speed = (savedState.get<Int>("autoRead.speed") ?: repository.readSpeed()).coerceIn(1, 120),
-        ttsUpdate = savedState["autoRead.ttsUpdate"] ?: 0,
-    ))
+    private val mutableState =
+        MutableStateFlow(
+            AutoReadUiState(
+                speed =
+                    (savedState.get<Int>("autoRead.speed") ?: repository.readSpeed()).coerceIn(
+                        1,
+                        120,
+                    ),
+                ttsUpdate = savedState["autoRead.ttsUpdate"] ?: 0,
+            )
+        )
     val state = mutableState.asStateFlow()
 
     fun changeSpeed(speed: Int) {

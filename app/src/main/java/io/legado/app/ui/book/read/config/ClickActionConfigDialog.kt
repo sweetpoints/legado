@@ -14,12 +14,19 @@ import io.legado.app.ui.book.read.ReadBookActivity
 
 /** Full-screen nine-region reader click configuration. */
 class ClickActionConfigDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<ClickActionSettingsViewModel> {
-        viewModelFactory { initializer {
-            ClickActionSettingsViewModel(PreferenceClickActionSettingsRepository(requireContext()), createSavedStateHandle())
-        } }
-    }
+    private val viewModel by
+        viewModels<ClickActionSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    ClickActionSettingsViewModel(
+                        PreferenceClickActionSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
     private var countedActivity: ReadBookActivity? = null
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.run {
@@ -27,21 +34,36 @@ class ClickActionConfigDialog : BaseComposeDialogFragment() {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
     }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         releaseCounter()
-        (activity as? ReadBookActivity)?.let { it.bottomDialog++; countedActivity = it }
+        (activity as? ReadBookActivity)?.let {
+            it.bottomDialog++
+            countedActivity = it
+        }
     }
-    @Composable override fun Content() { ClickActionSettingsRoute(viewModel, ::dismissAllowingStateLoss) }
+
+    @Composable
+    override fun Content() {
+        ClickActionSettingsRoute(viewModel, ::dismissAllowingStateLoss)
+    }
+
     override fun onDismiss(dialog: DialogInterface) {
         if (activity?.isChangingConfigurations != true) viewModel.close()
         releaseCounter()
         super.onDismiss(dialog)
     }
-    override fun onDestroyView() { releaseCounter(); super.onDestroyView() }
+
+    override fun onDestroyView() {
+        releaseCounter()
+        super.onDestroyView()
+    }
+
     override fun onDestroy() {
         if (activity?.isChangingConfigurations != true) viewModel.close()
         super.onDestroy()
     }
+
     private fun releaseCounter() {
         val owner = countedActivity ?: return
         countedActivity = null

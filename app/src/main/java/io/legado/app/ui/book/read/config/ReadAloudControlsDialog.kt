@@ -15,29 +15,62 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.utils.setLayout
 
 class ReadAloudControlsDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<ReadAloudControlsSettingsViewModel> {
-        viewModelFactory { initializer { ReadAloudControlsSettingsViewModel(PreferenceReadAloudControlsSettingsRepository(requireContext()), createSavedStateHandle()) } }
-    }
+    private val viewModel by
+        viewModels<ReadAloudControlsSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    ReadAloudControlsSettingsViewModel(
+                        PreferenceReadAloudControlsSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
     private var countedActivity: ReadBookActivity? = null
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         setLayout(.9f, .8f)
     }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         releaseCounter()
-        (activity as? ReadBookActivity)?.let { host -> host.bottomDialog++; countedActivity = host }
+        (activity as? ReadBookActivity)?.let { host ->
+            host.bottomDialog++
+            countedActivity = host
+        }
     }
-    @Composable override fun Content() {
-        ReadAloudControlsSettingsRoute(viewModel, Color(requireContext().backgroundColor), ::handleAction)
+
+    @Composable
+    override fun Content() {
+        ReadAloudControlsSettingsRoute(
+            viewModel,
+            Color(requireContext().backgroundColor),
+            ::handleAction,
+        )
     }
+
     private fun handleAction(action: ReadAloudControlsAction): Boolean {
         if (!isAdded || parentFragmentManager.isStateSaved) return false
-        (activity as? ReadBookActivity)?.showReadAloudControls(resetPosition = action == ReadAloudControlsAction.ResetPosition)
+        (activity as? ReadBookActivity)?.showReadAloudControls(
+            resetPosition = action == ReadAloudControlsAction.ResetPosition
+        )
         return true
     }
-    override fun onDestroyView() { viewModel.flush(); releaseCounter(); super.onDestroyView() }
-    override fun onDismiss(dialog: DialogInterface) { viewModel.flush(); releaseCounter(); super.onDismiss(dialog) }
+
+    override fun onDestroyView() {
+        viewModel.flush()
+        releaseCounter()
+        super.onDestroyView()
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        viewModel.flush()
+        releaseCounter()
+        super.onDismiss(dialog)
+    }
+
     private fun releaseCounter() {
         val owner = countedActivity ?: return
         countedActivity = null

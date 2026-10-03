@@ -13,9 +13,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-internal fun ReadAloudRoute(viewModel: ReadAloudViewModel, background: Color, foreground: Color,
-    canHandle: (ReadAloudControl) -> Boolean, onEffect: (ReadAloudEffect) -> Unit,
-    onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ReadAloudRoute(
+    viewModel: ReadAloudViewModel,
+    background: Color,
+    foreground: Color,
+    canHandle: (ReadAloudControl) -> Boolean,
+    onEffect: (ReadAloudEffect) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val handle by rememberUpdatedState(onEffect)
     val canDeliver by rememberUpdatedState(canHandle)
@@ -24,20 +30,32 @@ internal fun ReadAloudRoute(viewModel: ReadAloudViewModel, background: Color, fo
     LifecycleResumeEffect(viewModel) {
         viewModel.refreshRuntime()
         viewModel.reloadEngine()
-        onPauseOrDispose { }
+        onPauseOrDispose {}
     }
     LaunchedEffect(viewModel, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             viewModel.state.collect { current ->
                 if (current.finished) close()
-                else current.pending.firstOrNull()?.let { effect ->
-                    if (canDeliver(effect.control)) viewModel.consumeEffect(effect.id)?.let(handle)
-                }
+                else
+                    current.pending.firstOrNull()?.let { effect ->
+                        if (canDeliver(effect.control))
+                            viewModel.consumeEffect(effect.id)?.let(handle)
+                    }
             }
         }
     }
-    ReadAloudScreen(state, background, foreground, { viewModel.request(it) },
-        viewModel::changeRate, viewModel::finishRate, viewModel::stepRate,
-        viewModel::setFollowSystem, viewModel::changeTimer, viewModel::finishTimer,
-        viewModel::saveDefaultTimer, modifier)
+    ReadAloudScreen(
+        state,
+        background,
+        foreground,
+        { viewModel.request(it) },
+        viewModel::changeRate,
+        viewModel::finishRate,
+        viewModel::stepRate,
+        viewModel::setFollowSystem,
+        viewModel::changeTimer,
+        viewModel::finishTimer,
+        viewModel::saveDefaultTimer,
+        modifier,
+    )
 }

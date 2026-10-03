@@ -40,24 +40,66 @@ internal fun PageKeyScreen(
     val nextFocus = remember { FocusRequester() }
     val initialFocus = remember { state.focused ?: PageKeyField.PREVIOUS }
     LaunchedEffect(Unit) {
-        if (initialFocus == PageKeyField.PREVIOUS) previousFocus.requestFocus() else nextFocus.requestFocus()
+        if (initialFocus == PageKeyField.PREVIOUS) previousFocus.requestFocus()
+        else nextFocus.requestFocus()
     }
     Surface(modifier.imePadding(), color = background) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.custom_page_key), style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(state.values.previous, { onEdit(PageKeyField.PREVIOUS, it) },
-                Modifier.fillMaxWidth().testTag("page-key-previous").focusRequester(previousFocus)
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.custom_page_key),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            OutlinedTextField(
+                state.values.previous,
+                { onEdit(PageKeyField.PREVIOUS, it) },
+                Modifier.fillMaxWidth()
+                    .testTag("page-key-previous")
+                    .focusRequester(previousFocus)
                     .onFocusChanged { onFocus(PageKeyField.PREVIOUS, it.isFocused) },
-                enabled = !state.finished, singleLine = true, label = { Text(stringResource(R.string.prev_page_key)) })
-            OutlinedTextField(state.values.next, { onEdit(PageKeyField.NEXT, it) },
-                Modifier.fillMaxWidth().testTag("page-key-next").focusRequester(nextFocus)
+                enabled = !state.finished,
+                singleLine = true,
+                label = { Text(stringResource(R.string.prev_page_key)) },
+            )
+            OutlinedTextField(
+                state.values.next,
+                { onEdit(PageKeyField.NEXT, it) },
+                Modifier.fillMaxWidth()
+                    .testTag("page-key-next")
+                    .focusRequester(nextFocus)
                     .onFocusChanged { onFocus(PageKeyField.NEXT, it.isFocused) },
-                enabled = !state.finished, singleLine = true, label = { Text(stringResource(R.string.next_page_key)) })
-            Text(stringResource(R.string.page_key_set_help), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            state.error?.let { Text(it, Modifier.testTag("page-key-error"), color = MaterialTheme.colorScheme.error) }
+                enabled = !state.finished,
+                singleLine = true,
+                label = { Text(stringResource(R.string.next_page_key)) },
+            )
+            Text(
+                stringResource(R.string.page_key_set_help),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            state.error?.let {
+                Text(
+                    it,
+                    Modifier.testTag("page-key-error"),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onReset, Modifier.weight(1f).testTag("page-key-reset"), enabled = !state.finished) { Text(stringResource(R.string.reset)) }
-                TextButton(onConfirm, Modifier.weight(1f).testTag("page-key-confirm"), enabled = !state.finished) { Text(stringResource(R.string.ok)) }
+                TextButton(
+                    onReset,
+                    Modifier.weight(1f).testTag("page-key-reset"),
+                    enabled = !state.finished,
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+                TextButton(
+                    onConfirm,
+                    Modifier.weight(1f).testTag("page-key-confirm"),
+                    enabled = !state.finished,
+                ) {
+                    Text(stringResource(R.string.ok))
+                }
             }
         }
     }

@@ -27,23 +27,40 @@ class TipConfigDialog : BaseComposeDialogFragment(), FontSelectDialog.CallBack {
         const val TITLE_NUMBER_COLOR = 7899
         const val TITLE_COLOR = 7900
     }
-    private val viewModel by viewModels<TipSettingsViewModel> {
-        viewModelFactory { initializer { TipSettingsViewModel(AppTipSettingsRepository(), createSavedStateHandle()) } }
-    }
+
+    private val viewModel by
+        viewModels<TipSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    TipSettingsViewModel(AppTipSettingsRepository(), createSavedStateHandle())
+                }
+            }
+        }
+
     override fun onStart() {
         super.onStart()
         viewModel.refresh()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         observeEvent<String>(EventBus.TIP_COLOR) { viewModel.refresh() }
     }
-    @Composable override fun Content() {
-        TipSettingsRoute(viewModel, { showDialogFragment<FontSelectDialog>() },
-            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .8f).dp))
+
+    @Composable
+    override fun Content() {
+        TipSettingsRoute(
+            viewModel,
+            { showDialogFragment<FontSelectDialog>() },
+            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .8f).dp),
+        )
     }
-    override val curFontPath get() = viewModel.state.value.settings.titleFont
+
+    override val curFontPath
+        get() = viewModel.state.value.settings.titleFont
+
     override val selectSystemTypefaceOnDefault = false
+
     override fun selectFont(path: String) = viewModel.setFont(path)
 }
 
@@ -56,8 +73,10 @@ internal fun titleLineSpacingToProgress(spacing: Int): Int {
 }
 
 internal fun titleLineSpacingFromProgress(progress: Int): Int {
-    return (progress + TITLE_LINE_SPACING_MIN)
-        .coerceIn(TITLE_LINE_SPACING_MIN, TITLE_LINE_SPACING_MAX)
+    return (progress + TITLE_LINE_SPACING_MIN).coerceIn(
+        TITLE_LINE_SPACING_MIN,
+        TITLE_LINE_SPACING_MAX,
+    )
 }
 
 internal fun titleLineSpacingDisplayValue(progress: Int): String {
@@ -73,8 +92,10 @@ internal fun titleNumberSpacingToProgress(spacing: Int): Int {
 }
 
 internal fun titleNumberSpacingFromProgress(progress: Int): Int {
-    return (progress + TITLE_NUMBER_SPACING_MIN)
-        .coerceIn(TITLE_NUMBER_SPACING_MIN, TITLE_NUMBER_SPACING_MAX)
+    return (progress + TITLE_NUMBER_SPACING_MIN).coerceIn(
+        TITLE_NUMBER_SPACING_MIN,
+        TITLE_NUMBER_SPACING_MAX,
+    )
 }
 
 internal fun tipTextSizeToProgress(textSize: Int): Int {
@@ -83,6 +104,8 @@ internal fun tipTextSizeToProgress(textSize: Int): Int {
 }
 
 internal fun tipTextSizeFromProgress(progress: Int): Int {
-    return (progress + ReadTipConfig.minTextSize)
-        .coerceIn(ReadTipConfig.minTextSize, ReadTipConfig.maxTextSize)
+    return (progress + ReadTipConfig.minTextSize).coerceIn(
+        ReadTipConfig.minTextSize,
+        ReadTipConfig.maxTextSize,
+    )
 }

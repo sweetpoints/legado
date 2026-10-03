@@ -24,66 +24,126 @@ import io.legado.app.ui.components.SettingsRow
 import kotlin.math.roundToInt
 
 @Composable
-fun ReadAloudControlsSettingsScreen(state: ReadAloudControlsSettingsUiState, background: Color,
+fun ReadAloudControlsSettingsScreen(
+    state: ReadAloudControlsSettingsUiState,
+    background: Color,
     onToggle: (ReadAloudControlsToggle, Boolean) -> Unit,
     onNumber: (ReadAloudControlsNumber, Int) -> Unit,
     onFinish: (ReadAloudControlsNumber) -> Unit,
     onStep: (ReadAloudControlsNumber, Int) -> Unit,
-    onAction: (ReadAloudControlsAction) -> Unit, modifier: Modifier = Modifier) {
+    onAction: (ReadAloudControlsAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(modifier.fillMaxSize(), color = background) {
         LazyColumn(Modifier.fillMaxSize().testTag("aloud-controls-settings-list")) {
             item { SettingsCategoryHeader(stringResource(R.string.read_aloud_controls)) }
             items(ReadAloudControlsToggle.entries.toList(), key = { it.key }) { setting ->
-                val title = stringResource(when (setting) {
-                    ReadAloudControlsToggle.Realtime -> R.string.read_aloud_controls_realtime
-                    ReadAloudControlsToggle.Pause -> R.string.read_aloud_controls_pause
-                    ReadAloudControlsToggle.Position -> R.string.read_aloud_controls_position
-                    ReadAloudControlsToggle.AutoHide -> R.string.read_aloud_controls_auto_hide
-                    ReadAloudControlsToggle.Drag -> R.string.read_aloud_controls_drag
-                    ReadAloudControlsToggle.Dock -> R.string.read_aloud_controls_dock
-                })
-                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag("aloud-controls-switch-${setting.key}")
-                    .toggleable(state.settings[setting], role = Role.Switch) { onToggle(setting, it) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val title =
+                    stringResource(
+                        when (setting) {
+                            ReadAloudControlsToggle.Realtime ->
+                                R.string.read_aloud_controls_realtime
+                            ReadAloudControlsToggle.Pause -> R.string.read_aloud_controls_pause
+                            ReadAloudControlsToggle.Position ->
+                                R.string.read_aloud_controls_position
+                            ReadAloudControlsToggle.AutoHide ->
+                                R.string.read_aloud_controls_auto_hide
+                            ReadAloudControlsToggle.Drag -> R.string.read_aloud_controls_drag
+                            ReadAloudControlsToggle.Dock -> R.string.read_aloud_controls_dock
+                        }
+                    )
+                Row(
+                    Modifier.fillMaxWidth()
+                        .heightIn(min = 60.dp)
+                        .testTag("aloud-controls-switch-${setting.key}")
+                        .toggleable(state.settings[setting], role = Role.Switch) {
+                            onToggle(setting, it)
+                        }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                    Switch(state.settings[setting], onCheckedChange = null, modifier = Modifier.padding(start = 12.dp))
+                    Switch(
+                        state.settings[setting],
+                        onCheckedChange = null,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
                 }
             }
             items(ReadAloudControlsNumber.entries.toList(), key = { it.key }) { setting ->
-                val labels = when (setting) {
-                    ReadAloudControlsNumber.Width -> R.string.read_aloud_controls_size to R.string.read_aloud_controls_size_summary
-                    ReadAloudControlsNumber.Opacity -> R.string.read_aloud_controls_opacity to R.string.read_aloud_controls_opacity_summary
-                    ReadAloudControlsNumber.Threshold -> R.string.read_aloud_controls_threshold to R.string.read_aloud_controls_threshold_summary
-                }
+                val labels =
+                    when (setting) {
+                        ReadAloudControlsNumber.Width ->
+                            R.string.read_aloud_controls_size to
+                                R.string.read_aloud_controls_size_summary
+                        ReadAloudControlsNumber.Opacity ->
+                            R.string.read_aloud_controls_opacity to
+                                R.string.read_aloud_controls_opacity_summary
+                        ReadAloudControlsNumber.Threshold ->
+                            R.string.read_aloud_controls_threshold to
+                                R.string.read_aloud_controls_threshold_summary
+                    }
                 val title = stringResource(labels.first)
                 val plus = "$title ${stringResource(R.string.plus)}"
                 val minus = "$title ${stringResource(R.string.reduce)}"
                 val value = state.settings[setting]
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row { Text(title, Modifier.weight(1f)); Text(value.toString(), Modifier.testTag("aloud-controls-value-${setting.name}")) }
-                    Text(stringResource(labels.second), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Row {
+                        Text(title, Modifier.weight(1f))
+                        Text(
+                            value.toString(),
+                            Modifier.testTag("aloud-controls-value-${setting.name}"),
+                        )
+                    }
+                    Text(
+                        stringResource(labels.second),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton({ onStep(setting, -1) }, Modifier.testTag("aloud-controls-minus-${setting.name}"), enabled = value > setting.minimum) {
+                        IconButton(
+                            { onStep(setting, -1) },
+                            Modifier.testTag("aloud-controls-minus-${setting.name}"),
+                            enabled = value > setting.minimum,
+                        ) {
                             Icon(painterResource(R.drawable.ic_reduce), minus)
                         }
-                        Slider(value.toFloat(), { onNumber(setting, it.roundToInt()) },
-                            Modifier.weight(1f).testTag("aloud-controls-slider-${setting.name}").semantics { contentDescription = title },
-                            valueRange = setting.minimum.toFloat()..setting.maximum.toFloat(), steps = setting.maximum - setting.minimum - 1,
-                            onValueChangeFinished = { onFinish(setting) })
-                        IconButton({ onStep(setting, 1) }, Modifier.testTag("aloud-controls-plus-${setting.name}"), enabled = value < setting.maximum) {
+                        Slider(
+                            value.toFloat(),
+                            { onNumber(setting, it.roundToInt()) },
+                            Modifier.weight(1f)
+                                .testTag("aloud-controls-slider-${setting.name}")
+                                .semantics { contentDescription = title },
+                            valueRange = setting.minimum.toFloat()..setting.maximum.toFloat(),
+                            steps = setting.maximum - setting.minimum - 1,
+                            onValueChangeFinished = { onFinish(setting) },
+                        )
+                        IconButton(
+                            { onStep(setting, 1) },
+                            Modifier.testTag("aloud-controls-plus-${setting.name}"),
+                            enabled = value < setting.maximum,
+                        ) {
                             Icon(painterResource(R.drawable.ic_add), plus)
                         }
                     }
                 }
             }
             item {
-                SettingsRow(stringResource(R.string.read_aloud_controls_reveal), stringResource(R.string.read_aloud_controls_reveal_summary),
-                    { onAction(ReadAloudControlsAction.Reveal) }, Modifier.testTag("aloud-controls-reveal"))
+                SettingsRow(
+                    stringResource(R.string.read_aloud_controls_reveal),
+                    stringResource(R.string.read_aloud_controls_reveal_summary),
+                    { onAction(ReadAloudControlsAction.Reveal) },
+                    Modifier.testTag("aloud-controls-reveal"),
+                )
             }
             item {
-                SettingsRow(stringResource(R.string.read_aloud_controls_reset), stringResource(R.string.read_aloud_controls_reset_summary),
-                    { onAction(ReadAloudControlsAction.ResetPosition) }, Modifier.testTag("aloud-controls-reset-position"))
+                SettingsRow(
+                    stringResource(R.string.read_aloud_controls_reset),
+                    stringResource(R.string.read_aloud_controls_reset_summary),
+                    { onAction(ReadAloudControlsAction.ResetPosition) },
+                    Modifier.testTag("aloud-controls-reset-position"),
+                )
             }
         }
     }

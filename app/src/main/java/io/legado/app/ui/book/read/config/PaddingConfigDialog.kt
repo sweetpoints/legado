@@ -25,9 +25,17 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.setLayout
 
 class PaddingConfigDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<PaddingSettingsViewModel> {
-        viewModelFactory { initializer { PaddingSettingsViewModel(AppPaddingSettingsRepository(), createSavedStateHandle()) } }
-    }
+    private val viewModel by
+        viewModels<PaddingSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    PaddingSettingsViewModel(
+                        AppPaddingSettingsRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
     private val visibility = PaddingPanelVisibility()
     private var alphaAnimator: ValueAnimator? = null
 
@@ -37,45 +45,68 @@ class PaddingConfigDialog : BaseComposeDialogFragment() {
             clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setBackgroundDrawableResource(android.R.color.transparent)
             decorView.setPadding(0, 0, 0, 0)
-            attributes = attributes.apply { dimAmount = 0f; gravity = Gravity.CENTER }
+            attributes = attributes.apply {
+                dimAmount = 0f
+                gravity = Gravity.CENTER
+            }
         }
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         val host = activity as? ReadBookActivity ?: return
-        visibility.acquire(object : PaddingPanelVisibility.Owner {
-            override var bottomDialog: Int
-                get() = host.bottomDialog
-                set(value) { host.bottomDialog = value }
-        })
+        visibility.acquire(
+            object : PaddingPanelVisibility.Owner {
+                override var bottomDialog: Int
+                    get() = host.bottomDialog
+                    set(value) {
+                        host.bottomDialog = value
+                    }
+            }
+        )
     }
-    @Composable override fun Content() {
+
+    @Composable
+    override fun Content() {
         val background = requireContext().bottomBackground
         val foreground = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(background))
-        PaddingSettingsRoute(viewModel, Color(background), Color(foreground), ::ghostWindow,
-            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .8f).dp))
+        PaddingSettingsRoute(
+            viewModel,
+            Color(background),
+            Color(foreground),
+            ::ghostWindow,
+            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .8f).dp),
+        )
     }
+
     override fun onDestroyView() {
         viewModel.viewDestroyed()
         visibility.release()
         super.onDestroyView()
         restoreWindow()
     }
+
     override fun onDismiss(dialog: DialogInterface) {
         viewModel.dismissed(activity?.isChangingConfigurations == true)
         visibility.release()
         restoreWindow()
         super.onDismiss(dialog)
     }
+
     private fun ghostWindow(ghost: Boolean) {
         val window = dialog?.window ?: return
         alphaAnimator?.cancel()
-        alphaAnimator = ValueAnimator.ofFloat(window.attributes.alpha, if (ghost) .25f else 1f).apply {
-            duration = 120
-            addUpdateListener { value -> window.attributes = window.attributes.apply { alpha = value.animatedValue as Float } }
-            start()
-        }
+        alphaAnimator =
+            ValueAnimator.ofFloat(window.attributes.alpha, if (ghost) .25f else 1f).apply {
+                duration = 120
+                addUpdateListener { value ->
+                    window.attributes =
+                        window.attributes.apply { alpha = value.animatedValue as Float }
+                }
+                start()
+            }
     }
+
     private fun restoreWindow() {
         alphaAnimator?.cancel()
         alphaAnimator = null

@@ -16,14 +16,30 @@ import io.legado.app.data.preferences.PreferenceTextSelectMenuSettingsRepository
 import io.legado.app.utils.setLayout
 
 class TextSelectMenuConfigDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<TextSelectMenuSettingsViewModel> {
-        viewModelFactory { initializer {
-            TextSelectMenuSettingsViewModel(PreferenceTextSelectMenuSettingsRepository(requireContext()), createSavedStateHandle())
-        } }
+    private val viewModel by
+        viewModels<TextSelectMenuSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    TextSelectMenuSettingsViewModel(
+                        PreferenceTextSelectMenuSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    override fun onStart() { super.onStart(); setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        TextSelectMenuSettingsRoute(viewModel, ::dismiss, Modifier.fillMaxWidth()
-            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .9f))
+
+    @Composable
+    override fun Content() {
+        TextSelectMenuSettingsRoute(
+            viewModel,
+            ::dismiss,
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .9f),
+        )
     }
 }

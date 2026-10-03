@@ -8,8 +8,12 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun ReadAloudSettingsRoute(viewModel: ReadAloudSettingsViewModel, background: Color,
-    onNavigate: (ReadAloudSettingsDestination) -> Boolean, modifier: Modifier = Modifier) {
+fun ReadAloudSettingsRoute(
+    viewModel: ReadAloudSettingsViewModel,
+    background: Color,
+    onNavigate: (ReadAloudSettingsDestination) -> Boolean,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.startObserving()
@@ -17,8 +21,17 @@ fun ReadAloudSettingsRoute(viewModel: ReadAloudSettingsViewModel, background: Co
     }
     LifecycleResumeEffect(state.navigation) {
         state.navigation?.let { if (onNavigate(it)) viewModel.navigated(it) }
-        onPauseOrDispose { }
+        onPauseOrDispose {}
     }
-    ReadAloudSettingsScreen(state, background, viewModel::setSwitch, viewModel::openStartPicker,
-        viewModel::setStart, viewModel::dismissStartPicker, viewModel::navigate, viewModel::refreshEngine, modifier)
+    ReadAloudSettingsScreen(
+        state,
+        background,
+        viewModel::setSwitch,
+        viewModel::openStartPicker,
+        viewModel::setStart,
+        viewModel::dismissStartPicker,
+        viewModel::navigate,
+        viewModel::refreshEngine,
+        modifier,
+    )
 }
