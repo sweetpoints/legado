@@ -115,19 +115,15 @@ private class CustomToastSession(
         )
     private var closed = false
     private val cleanup = Runnable { close() }
-    private val toastCallback =
-        object : Toast.Callback() {
-            override fun onToastHidden() {
-                close()
-            }
-        }
+    private var toastCallbackRegistration: AutoCloseable? = null
 
     init {
         @Suppress("DEPRECATION") run { toast.view = presentation.view }
         toast.duration = duration
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            toast.addCallback(toastCallback)
-        }
+        toastCallbackRegistration =
+            runToastCallbackOnApi30(Build.VERSION.SDK_INT) {
+                ToastCallbackApi30.registerHiddenCallback(toast, ::close)
+            }
     }
 
     fun show() {
@@ -138,16 +134,23 @@ private class CustomToastSession(
     }
 
     fun cancel() {
-        toast.cancel()
-        close()
+        try {
+            toast.cancel()
+        } finally {
+            close()
+        }
     }
 
     private fun close() {
         if (closed) return
         closed = true
         handler.removeCallbacks(cleanup)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) toast.removeCallback(toastCallback)
+        runCatching { toastCallbackRegistration?.close() }
+        toastCallbackRegistration = null
         presentation.close()
         onClosed(this)
     }
 }
+
+internal fun <T> runToastCallbackOnApi30(sdkInt: Int, register: () -> T): T? =
+    if (sdkInt >= 30) register() else null

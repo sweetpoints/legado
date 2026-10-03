@@ -26,9 +26,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.utils.runToastCallbackOnApi30
 import io.legado.app.utils.toToastMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -145,6 +147,31 @@ class ToastComposeContentTest {
             presentation.close()
             presentation.close()
         }
+    }
+
+    @Test
+    fun preApi30ToastCallbackPathNeverInvokesCallbackFactory() {
+        var callbackFactories = 0
+        (26..29).forEach { sdkInt ->
+            val registration =
+                runToastCallbackOnApi30(sdkInt) {
+                    callbackFactories++
+                    AutoCloseable {}
+                }
+            assertNull("API $sdkInt must not create Toast.Callback", registration)
+        }
+        assertEquals(0, callbackFactories)
+
+        var leaseClosed = false
+        val registration =
+            runToastCallbackOnApi30(30) {
+                callbackFactories++
+                AutoCloseable { leaseClosed = true }
+            }
+        assertNotNull(registration)
+        assertEquals(1, callbackFactories)
+        requireNotNull(registration).close()
+        assertTrue(leaseClosed)
     }
 
     private class TestReplacementSpan : ReplacementSpan() {
