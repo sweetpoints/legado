@@ -665,7 +665,7 @@ open class AssociationImportViewModel(
             )
         }
         val staging = checkNotNull(result.staging)
-        check(!staging.mixedTypes) { "不能同时导入不同类型的文件" }
+        if (staging.mixedTypes) return session.copy(phase = AssociationPhase.MixedTypes)
         staging.importType?.let { type ->
             return importDialog(session, type, checkNotNull(staging.importSource))
         }

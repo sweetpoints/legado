@@ -49,6 +49,7 @@ enum class AssociationPhase {
     Preview,
     Directory,
     Unsupported,
+    MixedTypes,
     ReadConfig,
     Finished,
     Failed,
