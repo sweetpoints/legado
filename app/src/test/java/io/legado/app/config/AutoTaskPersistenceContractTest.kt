@@ -156,7 +156,9 @@ class AutoTaskPersistenceContractTest {
         assertTrue(cancelJob > stopMarker)
         assertTrue(releaseSlot > cancelJob)
         assertTrue(cancelScope > releaseSlot)
-        assertTrue(preferences.contains("MySettingItem(\"autoTaskService\""))
+        assertTrue(
+            Regex("MySettingItem\\s*\\(\\s*\"autoTaskService\"").containsMatchIn(preferences)
+        )
         assertTrue(myViewModel.contains("PreferKey.autoTaskService ->"))
         assertTrue(myViewModel.contains("viewModelScope.launch(Dispatchers.IO)"))
         assertTrue(myViewModel.contains("AutoTaskScheduler.refresh(context)"))

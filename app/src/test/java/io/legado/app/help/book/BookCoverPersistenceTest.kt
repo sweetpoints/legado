@@ -145,7 +145,10 @@ class BookCoverPersistenceTest {
         assertTrue(dao.contains("fun clearCoverOverridesIfUnchanged("))
         // Both management restore levels and concurrent edits have real repository/Room tests.
         assertTrue(restore.contains("book.normalizeLegacyPersistedCover()"))
-        assertTrue(restore.contains("book.persistedCoverUrl = book.persistedCoverUrl?.let"))
+        assertTrue(
+            Regex("book\\.persistedCoverUrl\\s*=\\s*book\\.persistedCoverUrl\\?\\.let")
+                .containsMatchIn(restore)
+        )
     }
 
     private fun readAppSource(path: String): String =

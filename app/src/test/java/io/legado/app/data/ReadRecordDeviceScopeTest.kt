@@ -42,9 +42,11 @@ class ReadRecordDeviceScopeTest {
         assertTrue(restore.contains("readRecord.copy(deviceId = androidId)"))
         assertTrue(restore.contains("restoredRecord.deviceId == androidId"))
         assertTrue(
-            restore.contains(
-                "getRecord(restoredRecord.deviceId, restoredRecord.bookName, restoredRecord.author)"
-            )
+            Regex(
+                    "getRecord\\s*\\(\\s*restoredRecord\\.deviceId\\s*,\\s*" +
+                        "restoredRecord\\.bookName\\s*,\\s*restoredRecord\\.author\\s*,?\\s*\\)"
+                )
+                .containsMatchIn(restore)
         )
     }
 

@@ -170,7 +170,10 @@ class RssWebResourceProxyTest {
                 .substringAfter("private suspend fun getProxiedResource")
                 .substringBefore("private suspend fun getModifiedContentWithJs")
 
-        assertTrue(source.contains("@Volatile\n    private var currentPageUrl: String? = null"))
+        assertTrue(
+            Regex("@Volatile\\s+private\\s+var\\s+currentPageUrl\\s*:\\s*String\\?\\s*=\\s*null")
+                .containsMatchIn(source)
+        )
         assertTrue(source.contains("currentPageUrl = url"))
         assertTrue(interceptor.contains("currentPageUrl"))
         assertFalse(interceptor.contains("currentWebView.url"))
