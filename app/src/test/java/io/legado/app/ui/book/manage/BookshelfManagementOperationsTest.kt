@@ -54,7 +54,7 @@ class BookshelfManagementOperationsTest {
     }
     @Test fun preparedDeleteIsDurableBeforeItsIoMutationAndBusyBlocksChangingSelection() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>(); val f = Fixture(maintenance = Maintenance().apply { this.gate = gate })
-        try { runCurrent(); f.vm.toggle("a"); runCurrent(); f.vm.confirmAction(ShelfManagementAction.Delete); f.vm.deleteOriginal(true); f.vm.executeConfirmed(); runCurrent()
+        try { runCurrent(); f.vm.toggle("a"); runCurrent(); f.vm.confirmAction(ShelfManagementAction.Delete); runCurrent(); f.vm.deleteOriginal(true); f.vm.executeConfirmed(); runCurrent()
             assertEquals(listOf("a"), f.drafts.value.operation!!.ids); assertTrue(f.drafts.value.operation!!.deleteOriginal); assertTrue(f.vm.state.value.busy)
             f.vm.toggle("b"); assertEquals(listOf("a"), f.vm.state.value.visibleSelection); gate.complete(Unit); runCurrent()
             assertNull(f.drafts.value.operation); assertEquals(1, f.maintenance.deletes); assertFalse(f.vm.state.value.busy)
@@ -147,6 +147,32 @@ class BookshelfManagementOperationsTest {
                 assertTrue(export.exists()); assertEquals(1, maintenance.exports); assertFalse(restored.vm.state.value.interrupted)
             } finally { restored.close() }
         } finally { gate.countDown(); f.close(); directory.deleteRecursively() }
+    }
+
+    @Test fun canceledGroupTicketRestoresWithoutOpeningDialogAndStaleCancelKeepsNewTicket() = runTest(dispatcher) {
+        val old = ShelfGroupRequest("old", listOf("a"), 1, ShelfGroupMutation.Replace)
+        val f = Fixture(drafts = Drafts().apply { value = BookshelfManagementDraft(8, groupRequest = old) })
+        try { runCurrent(); f.vm.cancelGroup("stale"); assertEquals("old", f.vm.state.value.draft!!.groupRequest!!.id)
+            f.vm.cancelGroup("old")
+            val restored = Fixture(drafts = Drafts().apply { value = BookshelfManagementDraft(8, groupRequest = old) }, saved = SavedStateHandle(mapOf("shelfGroupConsumed" to "old")))
+            try { runCurrent(); assertNull(restored.vm.state.value.draft!!.groupRequest); restored.vm.groupPicked("old", 8); runCurrent(); assertTrue(restored.repo.groups.isEmpty()) } finally { restored.close() }
+        } finally { f.close() }
+    }
+    @Test fun earlyExportResultWaitsForLoadRejectsStaleTicketAndKeepsLargeUriOutOfSavedState() = runTest(dispatcher) {
+        val drafts = Drafts().apply { failOpen = true; value = BookshelfManagementDraft(8, exportTicket = "owned") }; val f = Fixture(drafts = drafts)
+        val uri = "content://synthetic/" + "large".repeat(100000)
+        try { f.vm.exportResult("owned", uri); runCurrent(); assertTrue(f.vm.state.value.failed)
+            drafts.failOpen = false; f.vm.retry(); runCurrent(); assertEquals(uri, f.drafts.value.exportResult); assertNull(f.drafts.value.exportTicket)
+            f.vm.exportResult("old", "content://stale"); runCurrent(); assertEquals(uri, f.drafts.value.exportResult)
+            f.saved.keys().forEach { assertFalse(f.saved.get<Any>(it).toString().contains(uri)) }; f.vm.closeExportResult(); runCurrent(); assertNull(f.drafts.value.exportResult)
+        } finally { f.close() }
+    }
+    @Test fun rowDeleteConfirmationPreservesLocalOnlyControlAndReadsCurrentPreference() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.vm.confirmAction(ShelfManagementAction.Delete, listOf("a"), showOriginal = false); runCurrent()
+            assertFalse(f.vm.state.value.draft!!.confirmation!!.showOriginal); f.vm.dismissConfirmation(); runCurrent()
+            f.vm.confirmAction(ShelfManagementAction.Delete, listOf("a")); runCurrent(); assertTrue(f.vm.state.value.draft!!.confirmation!!.showOriginal)
+        } finally { f.close() }
     }
 
 }

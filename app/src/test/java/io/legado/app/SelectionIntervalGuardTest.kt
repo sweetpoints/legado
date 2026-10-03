@@ -20,16 +20,7 @@ class SelectionIntervalGuardTest {
         }
     }
 
-    @Test
-    fun `book selection uses stable book urls`() {
-        val source = File(
-            sourceRoot,
-            "io/legado/app/ui/book/manage/BookAdapter.kt"
-        ).readText()
-        assertTrue(source.contains("HashSet<String>"))
-        assertTrue(source.contains("AdvanceCallback<String>"))
-        assertTrue(source.contains("selectedBookUrls.contains(it.bookUrl)"))
-    }
+    // Compose shelf interval and stable-ID behavior: BookshelfManagementViewModelTest.
 
     private val sourceRoot: File by lazy {
         sequenceOf(File("src/main/java"), File("app/src/main/java"))
@@ -38,7 +29,6 @@ class SelectionIntervalGuardTest {
 
     private companion object {
         val sources = listOf(
-            "io/legado/app/ui/book/manage/BookAdapter.kt",
             "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
         )
     }

@@ -57,11 +57,11 @@ internal class DefaultBookshelfCoverRepository(private val store: BookshelfCover
         currentCoroutineContext().ensureActive(); emit(ShelfCoverEvent.Completed(ShelfCoverSummary(saved, skipped, failed)))
     }.flowOn(io).buffer(0)
 }
-internal class AppBookshelfCoverStore(context: Context, private val database: AppDatabase = appDb) : BookshelfCoverStore {
+internal class AppBookshelfCoverStore(context: Context, private val database: AppDatabase = appDb, private val loadOnlyWifi: () -> Boolean = { AppConfig.loadCoverOnlyWifi }) : BookshelfCoverStore {
     private val application = context.applicationContext
     override fun read(id: String) = database.bookDao.getBook(id)
     override suspend fun download(book: Book, url: String): String {
-        var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, AppConfig.loadCoverOnlyWifi)
+        var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi())
         book.networkCoverSourceOrigin()?.let { options = options.set(OkHttpModelLoader.sourceOriginOption, it) }
         val target = ImageLoader.loadFile(application, url).apply(options).submit()
         try {

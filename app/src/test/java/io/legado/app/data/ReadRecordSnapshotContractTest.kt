@@ -45,10 +45,8 @@ class ReadRecordSnapshotContractTest {
 
         val book = projectFile("src/main/java/io/legado/app/data/entities/Book.kt")
         assertTrue(book.contains("saveReadRecordSnapshot()"))
-        val bookshelf = projectFile(
-            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
-        )
-        assertTrue(bookshelf.contains("books.forEach { it.saveReadRecordSnapshot() }"))
+        // BookshelfMaintenanceRepositoryTest checks fresh-row snapshots precede actual deletion;
+        // this class retains the shared reader/history/restore contracts.
         val main = projectFile("src/main/java/io/legado/app/ui/main/MainViewModel.kt")
         assertTrue(main.contains("appDb.bookDao.getNotShelfBooks().forEach { it.saveReadRecordSnapshot() }"))
         assertTrue(main.contains("appDb.bookDao.deleteNotShelfBook()"))

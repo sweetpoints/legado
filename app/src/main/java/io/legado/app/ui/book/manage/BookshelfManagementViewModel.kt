@@ -13,11 +13,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.io.File
+import io.legado.app.utils.isAbsUrl
 
 internal data class BookshelfManagementState(val loading: Boolean = true, val failed: Boolean = false,
     val snapshot: ManagedShelfSnapshot? = null, val draft: BookshelfManagementDraft? = null, val error: String? = null,
     val writeFailed: Boolean = false, val selecting: Boolean = false, val busy: Boolean = false,
-    val progress: String? = null, val pendingCommit: Boolean = false, val interrupted: Boolean = false, val invalidCron: Boolean = false) {
+    val progress: String? = null, val pendingCommit: Boolean = false, val interrupted: Boolean = false, val invalidCron: Boolean = false, val reordering: Boolean = false) {
     val visibleSelection: List<String> get() {
         val selected = draft?.selected.orEmpty().toHashSet()
         return snapshot?.books.orEmpty().map { it.id }.filter { it in selected }
@@ -33,7 +34,8 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
     private var current = BookshelfManagementDraft(); private var initialized = false; private var stopped = false
     private var revision = 0L; private var generation = 0; private var loading: Job? = null; private var observing: Job? = null
     private var operation: Job? = null; private var pendingAccepted: BookshelfManagementDraft? = null; private var uncommittedExport: File? = null
-    private var earlyGroup: Pair<String, Long>? = null; private var earlySource: Pair<String, String>? = null
+    private var earlyGroup: Pair<String, Long>? = null; private var earlySource: Pair<String, String>? = null; private var earlyExport: Pair<String, String?>? = null
+    private var dragOriginal: List<ManagedShelfBook>? = null; private var dragChanged = false; private var dragReset = false
     private var gesture: Set<String>? = null; private var gestureIds: List<String> = emptyList()
     private val gate = Mutex(); private val updates = MutableStateFlow<BookshelfManagementDraft?>(null)
     private val writer = viewModelScope.launch { updates.filterNotNull().collect { value ->
@@ -60,10 +62,14 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
                     current = if (restored.revision == 0L) restored.copy(groupId = initialGroup, revision = nextRevision()) else restored
                     initialized = true
                 }
-                persist(current); currentCoroutineContext().ensureActive()
+                val groupConsumed = saved.get<String>("shelfGroupConsumed")
+                val sourceConsumed = saved.get<String>("shelfSourceConsumed")
+                if (groupConsumed != null && current.groupRequest?.id == groupConsumed) current = current.copy(revision = nextRevision(), groupRequest = null)
+                if (sourceConsumed != null && current.sourceTicket == sourceConsumed) current = current.copy(revision = nextRevision(), sourceTicket = null, sourceIds = emptyList())
                 val consumed = saved.get<String>("shelfManageConsumed")
                 val consumedIndex = current.effects.indexOfFirst { it.id == consumed }
-                if (consumedIndex >= 0) { current = current.copy(revision = nextRevision(), effects = current.effects.drop(consumedIndex + 1)); persist(current); currentCoroutineContext().ensureActive() }
+                if (consumedIndex >= 0) current = current.copy(revision = nextRevision(), effects = current.effects.drop(consumedIndex + 1))
+                persist(current); currentCoroutineContext().ensureActive()
                 if (!stopped && generation == token) { mutable.value = state.value.copy(draft = current, interrupted = current.operation != null); observe() }
             } catch (canceled: CancellationException) { throw canceled }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && generation == token) mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) }
@@ -76,32 +82,34 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
             try { repository.observe(group, query).collect { value ->
                 currentCoroutineContext().ensureActive()
                 if (!stopped && generation == token) {
+                    if (dragOriginal != null) finishReorder(cancel = true)
                     if (gesture != null && gestureIds != value.books.map { it.id }) endSelectionGesture(cancel = true)
                     mutable.value = state.value.copy(loading = false, failed = false, snapshot = value, draft = current)
                     if (usable()) earlyGroup?.let { earlyGroup = null; groupPicked(it.first, it.second) }
                     if (usable()) earlySource?.let { earlySource = null; sourcePicked(it.first, it.second) }
+                    if (usable()) earlyExport?.let { earlyExport = null; exportResult(it.first, it.second) }
                 }
             } } catch (canceled: CancellationException) { throw canceled }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && generation == token) mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) }
         }
     }
-    fun query(value: String) { if (usable() && gesture == null) { update(current.copy(query = value)); observe() } }
-    fun group(id: Long) { if (usable() && gesture == null) { update(current.copy(groupId = id)); observe() } }
-    fun toggle(id: String) { if (usable() && gesture == null && state.value.snapshot?.books?.any { it.id == id } == true) {
+    fun query(value: String) { if (usable() && gesture == null && dragOriginal == null) { update(current.copy(query = value)); observe() } }
+    fun group(id: Long) { if (usable() && gesture == null && dragOriginal == null) { update(current.copy(groupId = id)); observe() } }
+    fun toggle(id: String) { if (usable() && gesture == null && dragOriginal == null && state.value.snapshot?.books?.any { it.id == id } == true) {
         update(current.copy(selected = current.selected.toMutableSet().apply { if (!remove(id)) add(id) }.toList()))
     } }
-    fun selectAll(selected: Boolean) { if (usable() && gesture == null) update(current.copy(selected = if (selected)
+    fun selectAll(selected: Boolean) { if (usable() && gesture == null && dragOriginal == null) update(current.copy(selected = if (selected)
         (current.selected + state.value.snapshot?.books.orEmpty().map { it.id }).distinct() else emptyList())) }
-    fun inverse() { if (usable() && gesture == null) {
+    fun inverse() { if (usable() && gesture == null && dragOriginal == null) {
         val selected = current.selected.toMutableSet(); state.value.snapshot?.books.orEmpty().forEach { if (!selected.remove(it.id)) selected.add(it.id) }
         update(current.copy(selected = selected.toList()))
     } }
-    fun selectInterval() { if (usable() && gesture == null) {
+    fun selectInterval() { if (usable() && gesture == null && dragOriginal == null) {
         val ids = state.value.snapshot?.books.orEmpty().map { it.id }; val selected = ids.indices.filter { ids[it] in current.selected }
         if (selected.isNotEmpty()) update(current.copy(selected = (current.selected + ids.subList(selected.first(), selected.last() + 1)).distinct()))
     } }
     fun beginSelectionGesture(): Boolean {
-        if (!usable() || gesture != null) return false
+        if (!usable() || gesture != null || dragOriginal != null) return false
         gesture = current.selected.toSet(); gestureIds = state.value.snapshot?.books.orEmpty().map { it.id }
         mutable.value = state.value.copy(selecting = true); return true
     }
@@ -119,9 +127,43 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
         val next = if (cancel) current.copy(selected = original.toList()) else current
         update(next); mutable.value = state.value.copy(selecting = false)
     }
-    fun confirmAction(action: ShelfManagementAction, ids: List<String> = state.value.visibleSelection) {
-        if (!usable() || gesture != null) return
-        update(current.copy(confirmation = ShelfManagementConfirmation(action, ids.toList())))
+    fun beginReorder(id: String): Boolean {
+        if (!usable() || gesture != null || dragOriginal != null || state.value.snapshot?.sort != 3) return false
+        val rows = state.value.snapshot?.books.orEmpty()
+        if (rows.none { it.id == id }) return false
+        dragOriginal = rows; dragChanged = false; dragReset = false; mutable.value = state.value.copy(reordering = true); return true
+    }
+    fun reorder(id: String, target: String) {
+        if (dragOriginal == null) return
+        val snapshot = state.value.snapshot ?: return
+        val rows = snapshot.books.toMutableList(); val from = rows.indexOfFirst { it.id == id }; val to = rows.indexOfFirst { it.id == target }
+        if (from < 0 || to < 0 || from == to) return
+        val first = rows[from]; val last = rows[to]
+        if (first.order == last.order) dragReset = true
+        rows[from] = last.copy(order = first.order); rows[to] = first.copy(order = last.order)
+        dragChanged = true; mutable.value = state.value.copy(snapshot = snapshot.copy(books = rows))
+    }
+    fun finishReorder(cancel: Boolean = false) {
+        val original = dragOriginal ?: return
+        dragOriginal = null; mutable.value = state.value.copy(reordering = false)
+        if (cancel) { mutable.value = state.value.copy(snapshot = state.value.snapshot?.copy(books = original)); dragChanged = false; dragReset = false; return }
+        if (!dragChanged) return
+        val order = state.value.snapshot?.books.orEmpty().map { ShelfOrderAssignment(it.id, it.order) }
+        startOperation(ShelfManagementOperation(UUID.randomUUID().toString(), ShelfManagementAction.Reorder, order.map { it.id }, order = order, resetAll = dragReset))
+        dragChanged = false; dragReset = false
+    }
+    fun confirmAction(action: ShelfManagementAction, ids: List<String> = state.value.visibleSelection, showOriginal: Boolean = true) {
+        if (!usable() || gesture != null || dragOriginal != null) return
+        if (action == ShelfManagementAction.Delete) {
+            mutable.value = state.value.copy(busy = true, error = null)
+            operation = viewModelScope.launch {
+                try { val original = requireNotNull(maintenance).deleteOriginalPreference(); currentCoroutineContext().ensureActive()
+                    if (!stopped) update(current.copy(confirmation = ShelfManagementConfirmation(action, ids.toList(), deleteOriginal = original, showOriginal = showOriginal)))
+                } catch (canceled: CancellationException) { throw canceled }
+                catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) }
+                finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+            }
+        } else update(current.copy(confirmation = ShelfManagementConfirmation(action, ids.toList())))
     }
     fun confirmationText(value: String, start: Int = value.length, end: Int = start) {
         if (!usable()) return
@@ -137,7 +179,7 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
     }
     fun execute(action: ShelfManagementAction, ids: List<String> = state.value.visibleSelection, original: Boolean = false,
         cron: String = "", sourceId: String = "", group: Long = 0L, enabled: Boolean = false) {
-        if (!usable() || gesture != null) return
+        if (!usable() || gesture != null || dragOriginal != null) return
         startOperation(ShelfManagementOperation(UUID.randomUUID().toString(), action, ids.toList(), original, cron, sourceId, group, enabled))
     }
     private fun toast(resource: Int, vararg args: Int) = ShelfManagementReceipt(UUID.randomUUID().toString(), ShelfManagementEffect.Toast, resource, args.toList())
@@ -153,6 +195,7 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
                     ShelfManagementAction.GroupReplace, ShelfManagementAction.GroupAdd, ShelfManagementAction.GroupRemove -> {
                         repository.group(value.ids, value.group, when (value.action) { ShelfManagementAction.GroupAdd -> ShelfGroupMutation.Add; ShelfManagementAction.GroupRemove -> ShelfGroupMutation.Remove; else -> ShelfGroupMutation.Replace }); emptyList()
                     }
+                    ShelfManagementAction.Reorder -> { repository.order(value.order, value.resetAll); emptyList() }
                     ShelfManagementAction.ToggleTitle -> { repository.openTitle(value.enabled); emptyList() }
                     ShelfManagementAction.ClearCache -> { requireNotNull(maintenance).clearCache(value.ids); listOf(toast(R.string.clear_cache_success)) }
                     ShelfManagementAction.CreateTasks -> {
@@ -182,7 +225,7 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
                     }
                 }
                 currentCoroutineContext().ensureActive()
-                val completed = current.copy(revision = nextRevision(), operation = null, effects = current.effects + receipts, exports = (current.exports + receipts.mapNotNull { it.file }).distinct())
+                val completed = current.copy(revision = nextRevision(), operation = null, effects = current.effects + receipts, exports = (current.exports + receipts.mapNotNull { it.file }).distinct(), exportTicket = receipts.firstOrNull { it.effect == ShelfManagementEffect.ExportSources }?.id ?: current.exportTicket)
                 pendingAccepted = completed; mutable.value = state.value.copy(pendingCommit = true)
                 completeAccepted(completed)
                 if (!stopped) observe()
@@ -212,7 +255,7 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
         operation?.cancel(); update(current.copy(operation = null)); mutable.value = state.value.copy(busy = false, progress = null, interrupted = false)
     }
     private fun queue(receipt: ShelfManagementReceipt, transform: (BookshelfManagementDraft) -> BookshelfManagementDraft = { it }) {
-        if (!usable() || gesture != null) return
+        if (!usable() || gesture != null || dragOriginal != null) return
         mutable.value = state.value.copy(busy = true, error = null)
         operation = viewModelScope.launch {
             try {
@@ -234,12 +277,12 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
         val id = UUID.randomUUID().toString()
         queue(ShelfManagementReceipt(id, ShelfManagementEffect.PickGroup)) { it.copy(groupRequest = ShelfGroupRequest(id, ids.toList(), group, mode)) }
     }
-    fun cancelGroup(id: String) { if (usable() && current.groupRequest?.id == id) update(current.copy(groupRequest = null)) }
+    fun cancelGroup(id: String) { if (!stopped && (!initialized || current.groupRequest?.id == id)) saved["shelfGroupConsumed"] = id; if (usable() && current.groupRequest?.id == id) update(current.copy(groupRequest = null)) }
     fun groupPicked(id: String, group: Long) {
         if (!initialized || state.value.loading || state.value.failed) { if (!stopped && earlyGroup == null) earlyGroup = id to group; return }
         if (!usable()) return
         val request = current.groupRequest?.takeIf { it.id == id } ?: return
-        update(current.copy(groupRequest = null))
+        saved["shelfGroupConsumed"] = id; update(current.copy(groupRequest = null))
         execute(when (request.mode) { ShelfGroupMutation.Add -> ShelfManagementAction.GroupAdd; ShelfGroupMutation.Remove -> ShelfManagementAction.GroupRemove; ShelfGroupMutation.Replace -> ShelfManagementAction.GroupReplace }, request.ids, group = group)
     }
     fun pickSource() {
@@ -247,17 +290,34 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
         val id = UUID.randomUUID().toString(); val ids = state.value.visibleSelection
         queue(ShelfManagementReceipt(id, ShelfManagementEffect.PickSource)) { it.copy(sourceTicket = id, sourceIds = ids) }
     }
-    fun cancelSource(id: String) { if (usable() && current.sourceTicket == id) update(current.copy(sourceTicket = null, sourceIds = emptyList())) }
+    fun cancelSource(id: String) { if (!stopped && (!initialized || current.sourceTicket == id)) saved["shelfSourceConsumed"] = id; if (usable() && current.sourceTicket == id) update(current.copy(sourceTicket = null, sourceIds = emptyList())) }
     fun sourcePicked(id: String, source: String) {
         if (!initialized || state.value.loading || state.value.failed) { if (!stopped && earlySource == null) earlySource = id to source; return }
         if (!usable() || current.sourceTicket != id) return
-        val ids = current.sourceIds; update(current.copy(sourceTicket = null, sourceIds = emptyList()))
+        saved["shelfSourceConsumed"] = id; val ids = current.sourceIds; update(current.copy(sourceTicket = null, sourceIds = emptyList()))
         execute(ShelfManagementAction.ChangeSource, ids, sourceId = source)
     }
+    fun exportResult(id: String, uri: String?) {
+        if (!initialized || state.value.loading || state.value.failed) { if (!stopped && earlyExport == null) earlyExport = id to uri; return }
+        if (!usable() || current.exportTicket != id) return
+        update(current.copy(exportTicket = null, exportResult = uri, exportSummary = null))
+        if (uri == null) return
+        mutable.value = state.value.copy(busy = true, error = null)
+        operation = viewModelScope.launch {
+            try {
+                val summary = if (uri.isAbsUrl()) requireNotNull(maintenance).exportSummary() else null
+                currentCoroutineContext().ensureActive(); if (!stopped) update(current.copy(exportResult = uri, exportSummary = summary))
+            } catch (canceled: CancellationException) { throw canceled }
+            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) update(current.copy(exportResult = uri, exportSummary = null)) }
+            finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+        }
+    }
+    fun closeExportResult() { if (usable()) update(current.copy(exportResult = null, exportSummary = null)) }
     fun consumeEffect(id: String): Boolean {
         if (!usable() || current.effects.firstOrNull()?.id != id) return false
         saved["shelfManageConsumed"] = id; update(current.copy(effects = current.effects.drop(1))); return true
     }
+    fun preparationFailed(error: Exception) { if (!stopped) mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) }
     suspend fun prepareBooks(receipt: ShelfManagementReceipt): List<Book> {
         return if (receipt.effect == ShelfManagementEffect.UpdateToc) requireNotNull(maintenance).updateCandidates(receipt.ids)
         else requireNotNull(maintenance).books(receipt.ids)
@@ -272,7 +332,7 @@ internal class BookshelfManagementViewModel(private val repository: BookshelfMan
                 finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
             }
         }
-        else if (state.value.failed) initialize()
+        else if (state.value.failed || state.value.error != null && current.operation == null && !state.value.writeFailed) initialize()
         else if (state.value.writeFailed) update(current)
     }
     suspend fun flush() { if (initialized) persist(current.copy(selected = gesture?.toList() ?: current.selected)) }

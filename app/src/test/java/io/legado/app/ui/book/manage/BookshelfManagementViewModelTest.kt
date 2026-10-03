@@ -20,13 +20,14 @@ class BookshelfManagementViewModelTest {
     private class Repo : BookshelfManagementRepository {
         val books = MutableStateFlow(listOf("a", "b", "c", "d").mapIndexed { index, id -> ManagedShelfBook(id, id, "", "", false, 1, "Group", index, true) })
         val requests = mutableListOf<Pair<Long, String>>()
+        val orders = mutableListOf<Pair<List<ShelfOrderAssignment>, Boolean>>()
         override fun observe(groupId: Long, query: String): Flow<ManagedShelfSnapshot> {
             requests += groupId to query
             return books.map { rows -> ManagedShelfSnapshot(rows.filter { query.isEmpty() || it.name.contains(query) }, listOf(ManagedShelfGroup(1, "Group", 1)), groupId, "Group", 3, false) }
         }
         override suspend fun group(ids: List<String>, group: Long, mode: ShelfGroupMutation) = Unit
         override suspend fun canUpdate(ids: List<String>, enabled: Boolean) = Unit
-        override suspend fun order(assignments: List<ShelfOrderAssignment>, resetAll: Boolean) = Unit
+        override suspend fun order(assignments: List<ShelfOrderAssignment>, resetAll: Boolean) { orders += assignments to resetAll }
         override suspend fun openTitle(value: Boolean) = Unit
     }
     private class Drafts : BookshelfManagementDraftRepository {
@@ -90,4 +91,29 @@ class BookshelfManagementViewModelTest {
             drafts.failWrite = false; f.vm.retry(); runCurrent(); assertFalse(f.vm.state.value.writeFailed); assertEquals(listOf("a"), drafts.current.selected)
         } finally { f.close() }
     }
+    @Test fun emptyIntervalAndSameIdMetadataRefreshKeepStableSelection() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.vm.selectInterval(); runCurrent(); assertTrue(f.vm.state.value.visibleSelection.isEmpty())
+            f.vm.toggle("b"); runCurrent(); f.repo.books.value = f.repo.books.value.map { if (it.id == "b") it.copy(name = "new metadata") else it }
+            runCurrent(); assertEquals(listOf("b"), f.vm.state.value.visibleSelection); assertEquals("new metadata", f.vm.state.value.snapshot!!.books[1].name)
+        } finally { f.close() }
+    }
+    @Test fun dragSwapsStableIdsAndOrderValuesAndEqualOrderRequestsFullResetOnlyAfterRelease() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.repo.books.value = f.repo.books.value.map { it.copy(order = 0) }; runCurrent()
+            assertTrue(f.vm.beginReorder("a")); f.vm.reorder("a", "c"); runCurrent()
+            assertEquals(listOf("c", "b", "a", "d"), f.vm.state.value.snapshot!!.books.map { it.id }); assertTrue(f.repo.orders.isEmpty())
+            f.vm.finishReorder(); runCurrent(); assertEquals(listOf("c", "b", "a", "d"), f.repo.orders.single().first.map { it.id }); assertTrue(f.repo.orders.single().second)
+        } finally { f.close() }
+    }
+    @Test fun canceledDragAndProcessRestoreCannotCommitPartialReorderOrToggleSelection() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.vm.toggle("b"); runCurrent(); assertTrue(f.vm.beginReorder("a")); f.vm.reorder("a", "d"); f.vm.toggle("a"); f.vm.flush()
+            assertEquals(listOf("b"), f.drafts.current.selected); assertTrue(f.repo.orders.isEmpty())
+            val restored = Fixture(drafts = f.drafts, saved = SavedStateHandle(mapOf("shelfManageSession" to f.vm.session)))
+            try { runCurrent(); assertFalse(restored.vm.state.value.reordering); assertEquals(listOf("a", "b", "c", "d"), restored.vm.state.value.snapshot!!.books.map { it.id }) } finally { restored.close() }
+            f.vm.finishReorder(cancel = true); runCurrent(); assertEquals(listOf("a", "b", "c", "d"), f.vm.state.value.snapshot!!.books.map { it.id }); assertTrue(f.repo.orders.isEmpty())
+        } finally { f.close() }
+    }
+
 }

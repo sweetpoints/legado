@@ -107,21 +107,7 @@ class SelectActionBarPopupActionMigrationTest {
 
         val expectedMenuIds = mapOf(
             "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
-            "bookshelf_menage_sel.xml" to listOf(
-                "@+id/menu_del_selection",
-                "@+id/menu_update_enable",
-                "@+id/menu_update_disable",
-                "@+id/menu_add_to_group",
-                "@+id/menu_remove_to_group",
-                "@+id/menu_change_source",
-                "@+id/menu_clear_cache",
-                "@+id/menu_persist_covers",
-                "@+id/menu_restore_network_covers",
-                "@+id/menu_restore_source_covers",
-                "@+id/menu_check_selected_interval",
-                "@+id/menu_update_toc",
-                "@+id/menu_create_book_update_tasks"
-            ),
+            // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
             "book_source_sel.xml" to listOf(
                 "@+id/menu_enable_selection",
                 "@+id/menu_disable_selection",

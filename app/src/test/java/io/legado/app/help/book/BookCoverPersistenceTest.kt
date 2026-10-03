@@ -108,20 +108,8 @@ class BookCoverPersistenceTest {
         }
     }
 
-    @Test
-    fun `batch download validates before database update`() {
-        val source = readAppSource(
-            "io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
-        )
-        val cancellationIndex = source.indexOf("currentCoroutineContext().ensureActive()")
-        val validationIndex = source.indexOf(".submit(1, 1)")
-        val updateIndex = source.indexOf("updatePersistedCoverUrlIfUnchanged(")
-
-        assertTrue(source.contains("runInterruptible { target.get() }"))
-        assertTrue(cancellationIndex >= 0)
-        assertTrue(validationIndex > cancellationIndex)
-        assertTrue(updateIndex > validationIndex)
-    }
+    // Management download validation, cancellation and conditional commits are exercised by
+    // BookshelfCoverRepositoryTest and BookshelfCoverRoomTest against actual pipeline/DAO behavior.
 
     @Test
     fun `book updates preserve concurrent cover changes`() {
@@ -152,15 +140,11 @@ class BookCoverPersistenceTest {
     @Test
     fun `management exposes both restore levels without copying persisted paths into edits`() {
         val dao = readAppSource("io/legado/app/data/dao/BookDao.kt")
-        val manage = readAppSource("io/legado/app/ui/book/manage/BookshelfManageViewModel.kt")
         val restore = readAppSource("io/legado/app/help/storage/Restore.kt")
 
         assertTrue(dao.contains("fun clearPersistedCoverUrlIfUnchanged("))
         assertTrue(dao.contains("fun clearCoverOverridesIfUnchanged("))
-        assertTrue(manage.contains("fun restoreNetworkCovers("))
-        assertTrue(manage.contains("fun restoreSourceCovers("))
-        assertTrue(manage.contains("val currentBook = appDb.bookDao.getBook(book.bookUrl)"))
-        assertTrue(manage.contains("val operationId = beginCoverOperation()"))
+        // Both management restore levels and concurrent edits have real repository/Room tests.
         assertTrue(restore.contains("book.normalizeLegacyPersistedCover()"))
         assertTrue(restore.contains("book.persistedCoverUrl = book.persistedCoverUrl?.let"))
     }

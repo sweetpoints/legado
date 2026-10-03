@@ -5,8 +5,10 @@ import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.saveReadRecordSnapshot
+import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.AutoTask
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.localBook.LocalBook
@@ -19,17 +21,22 @@ import java.util.UUID
 
 internal interface BookshelfMaintenanceStore {
     fun read(id: String): Book?
+    fun deleteOriginalPreference(): Boolean = false
+    fun setDeleteOriginalPreference(value: Boolean) = Unit
     fun transaction(block: () -> Unit)
     fun snapshot(book: Book)
     fun delete(books: List<Book>)
     fun deleteResources(book: Book, original: Boolean)
     fun clearCache(book: Book)
+    fun exportSummary(): String = ""
     fun exportSources(): File
     fun createTasks(books: List<Book>, cron: String): Int
 }
 internal interface BookshelfMaintenanceRepository {
+    suspend fun deleteOriginalPreference(): Boolean = false
     suspend fun delete(ids: List<String>, original: Boolean): Int
     suspend fun clearCache(ids: List<String>): Int
+    suspend fun exportSummary(): String = ""
     suspend fun exportSources(): File
     suspend fun books(ids: List<String>): List<Book>
     suspend fun updateCandidates(ids: List<String>): List<Book>
@@ -38,9 +45,11 @@ internal interface BookshelfMaintenanceRepository {
 /** IDs are resolved on IO at the time the user's confirmed operation is accepted. */
 internal class DefaultBookshelfMaintenanceRepository(private val store: BookshelfMaintenanceStore,
     private val io: CoroutineDispatcher = Dispatchers.IO) : BookshelfMaintenanceRepository {
+    override suspend fun deleteOriginalPreference() = withContext(io) { store.deleteOriginalPreference() }
     override suspend fun delete(ids: List<String>, original: Boolean): Int = withContext(io) {
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
+            store.setDeleteOriginalPreference(original)
             var deleted = emptyList<Book>()
             store.transaction {
                 deleted = ids.distinct().mapNotNull(store::read)
@@ -56,6 +65,7 @@ internal class DefaultBookshelfMaintenanceRepository(private val store: Bookshel
         ids.distinct().forEach { id -> currentCoroutineContext().ensureActive(); store.read(id)?.let { store.clearCache(it); cleared++ } }
         cleared
     }
+    override suspend fun exportSummary() = withContext(io) { store.exportSummary() }
     override suspend fun exportSources(): File {
         var owned: File? = null
         try {
@@ -86,6 +96,8 @@ internal class DefaultBookshelfMaintenanceRepository(private val store: Bookshel
 internal class AppBookshelfMaintenanceStore(context: Context) : BookshelfMaintenanceStore {
     private val application = context.applicationContext
     override fun read(id: String) = appDb.bookDao.getBook(id)
+    override fun deleteOriginalPreference() = LocalConfig.deleteBookOriginal
+    override fun setDeleteOriginalPreference(value: Boolean) { LocalConfig.deleteBookOriginal = value }
     override fun transaction(block: () -> Unit) = appDb.runInTransaction(block)
     override fun snapshot(book: Book) = book.saveReadRecordSnapshot()
     override fun delete(books: List<Book>) { if (books.isNotEmpty()) appDb.bookDao.delete(*books.toTypedArray()) }
@@ -94,6 +106,7 @@ internal class AppBookshelfMaintenanceStore(context: Context) : BookshelfMainten
         else SourceCallBack.callBackBook(SourceCallBack.DEL_BOOK_SHELF, appDb.bookSourceDao.getBookSource(book.origin), book)
     }
     override fun clearCache(book: Book) = BookHelp.clearCache(book)
+    override fun exportSummary() = DirectLinkUpload.getSummary()
     override fun exportSources(): File {
         val directory = File(application.filesDir, "bookshelf-management-exports").apply { check(isDirectory || mkdirs()) }
         val file = File(directory, "${UUID.randomUUID()}.json")
