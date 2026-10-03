@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -18,11 +19,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 class BookDetailNoSource:IllegalStateException("Book source no longer exists")
+@Keep
 data class BookDetailWebFile(val url:String,val name:String) {
     val suffix:String get()=UrlUtil.getSuffix(name)
     val supported:Boolean get()=AppPattern.bookFileRegex.matches(name)
     val archive:Boolean get()=AppPattern.archiveFileRegex.matches(name)
 }
+@Keep
 data class BookDetailNetworkResult(val book:BookDetailBook,val chapters:List<BookDetailChapter>,val webFiles:List<BookDetailWebFile>)
 
 /** Engine bridge owns fresh mutable inputs; immutable requests/results never retain UI owners. */

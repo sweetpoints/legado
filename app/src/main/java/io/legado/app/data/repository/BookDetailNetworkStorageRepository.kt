@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import io.legado.app.constant.BookType
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
+@Keep
 data class BookDetailNetworkWritePlan(val beforeJson:String,val targetJson:String,val beforeChaptersJson:List<String>,
     val chaptersJson:List<String>,val moveCache:Boolean,val sourceChanged:Boolean)
 data class BookDetailNetworkStorageResult(val book:BookDetailBook,val inBookshelf:Boolean)

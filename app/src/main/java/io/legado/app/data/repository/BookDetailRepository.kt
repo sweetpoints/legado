@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -17,9 +18,11 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /** Intent identity is privately persisted by the session layer, never as large SavedState arguments. */
+@Keep
 data class BookDetailIdentity(val name:String="",val author:String="",val bookUrl:String="")
 
 /** Full JSON preserves opaque rule variables and reader configuration without exposing mutable entities to UI state. */
+@Keep
 data class BookDetailBook(val json:String,val bookUrl:String,val name:String,val author:String,val realAuthor:String,
     val origin:String,val originName:String,val cover:CoverRequest,val intro:String?,val kinds:List<String>,
     val latestChapterTitle:String?,val chapterTitle:String?,val chapterIndex:Int,val chapterPos:Int,
@@ -34,12 +37,15 @@ data class BookDetailBook(val json:String,val bookUrl:String,val name:String,val
             book.canUpdate,book.getSplitLongChapter(),if(book.totalChapterNum<=1)null else book.readProgress()?.let{(it*100).roundToInt()})
     }
 }
+@Keep
 data class BookDetailChapter(val json:String,val index:Int,val url:String,val title:String,val isVolume:Boolean) {
     companion object {fun from(chapter:BookChapter)=BookDetailChapter(GSON.toJson(chapter),chapter.index,chapter.url,chapter.getDisplayTitle(chineseConvert=false),chapter.isVolume)}
 }
+@Keep
 data class BookDetailSource(val json:String,val url:String,val name:String,val hasLogin:Boolean,val customButton:Boolean) {
     companion object {fun from(source:BookSource)=BookDetailSource(GSON.toJson(source),source.bookSourceUrl,source.bookSourceName,source.hasLogin(),source.customButton)}
 }
+@Keep
 data class BookDetailData(val book:BookDetailBook,val source:BookDetailSource?,val chapters:List<BookDetailChapter>,
     val groupNames:List<String>,val kinds:List<String>,val inBookshelf:Boolean)
 

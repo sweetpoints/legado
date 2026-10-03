@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.util.AtomicFile
 import io.legado.app.utils.GSON
@@ -13,12 +14,16 @@ import java.io.File
 import java.util.UUID
 
 /** Native child owners and their potentially large results never enter the saved-state Bundle. */
+@Keep
 enum class BookDetailChildKind { Toc,Reader,InfoEditor,SourceEditor,Folder,Cover,Group,Variable,Source }
+@Keep
 data class BookDetailChildOwner(val token:String,val kind:BookDetailChildKind,val bookUrl:String,val sourceUrl:String?=null)
+@Keep
 data class BookDetailChildResult(val owner:BookDetailChildOwner,val canceled:Boolean=false,val resultCode:Int=0,
     val value:String?=null,val number:Long=0,val position:BookDetailPosition?=null,val chapterChanged:Boolean=false,
     val highlightTitleLength:Int?=null,val highlightAnchor:String?=null,val source:BookDetailSource?=null,
     val network:BookDetailNetworkResult?=null)
+@Keep
 data class BookDetailChildren(val owners:List<BookDetailChildOwner> = emptyList(),val pending:List<BookDetailChildResult> = emptyList(),
     val completed:List<String> = emptyList()) {
     fun owner(value:BookDetailChildOwner):BookDetailChildren {

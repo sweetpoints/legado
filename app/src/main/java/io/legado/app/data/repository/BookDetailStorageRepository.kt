@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import io.legado.app.constant.BookType
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
@@ -12,12 +13,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
+@Keep
 enum class BookDetailMutationKind { Cover,Group,CanUpdate,SplitLong,CustomVariable,Top,JoinShelf,PrepareRead,PrepareToc }
+@Keep
 data class BookDetailPosition(val index:Int,val pos:Int,val volume:Int,val chapterInVolume:Int)
+@Keep
 data class BookDetailMutation(val kind:BookDetailMutationKind,val text:String?=null,val flag:Boolean=false,
     val group:Long=0,val position:BookDetailPosition?=null,val onlyIfCoverMissing:Boolean=false)
 data class BookDetailStorageResult(val book:BookDetailBook,val inBookshelf:Boolean)
 /** Canonical Room entities omit transient HTML. The session writes this plan before the transaction mutates Room. */
+@Keep
 data class BookDetailWritePlan(val beforeJson:String?,val targetJson:String,val chaptersJson:List<String>,val beforeChaptersJson:List<String> = emptyList())
 class BookDetailMissing:IllegalStateException("Book no longer exists")
 class BookDetailConflict:IllegalStateException("Book changed outside this operation; reload before retrying")

@@ -1,15 +1,20 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import kotlinx.coroutines.*
 import io.legado.app.exception.NoBooksDirException
 
+@Keep
 enum class BookDetailServiceKind { Refresh,ClearCache,Delete,UploadCheck,Upload,Download,ArchiveList,ArchiveImport }
+@Keep
 data class BookDetailServiceRequest(val token:String,val kind:BookDetailServiceKind,val book:BookDetailBook,
     val source:BookDetailSource?=null,val file:BookDetailWebFile?=null,val uri:String?=null,val entry:String?=null,
     val deleteOriginal:Boolean=false,val deleteRemote:Boolean=false,val overwrite:Boolean=false,
     val readAfter:Boolean=false,val uploadImported:Boolean=false)
+@Keep
 data class BookDetailServiceResult(val book:BookDetailBook?=null,val uri:String?=null,val entries:List<String> = emptyList(),
     val exists:Boolean=false,val warning:String?=null)
+@Keep
 data class BookDetailPendingService(val request:BookDetailServiceRequest,val result:BookDetailServiceResult?=null)
 interface BookDetailServiceSessionRepository {
     suspend fun execute(ticket:String,record:BookDetailSession,request:BookDetailServiceRequest):BookDetailSession

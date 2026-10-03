@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.*
 import java.io.File
 
 /** Snapshot caller entities so mutable Book instances cannot change an in-flight request. */
+@Keep
 data class CoverRequest(val path: String? = null, val name: String? = null, val author: String? = null,
     val loadOnlyWifi: Boolean = false, val sourceOrigin: String? = null) {
     val normalizedPath get() = path?.takeIf { it.isNotBlank() }

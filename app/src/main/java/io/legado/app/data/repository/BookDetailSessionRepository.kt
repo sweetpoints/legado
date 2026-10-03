@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.util.AtomicFile
 import io.legado.app.utils.GSON
@@ -12,6 +13,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+@Keep
 enum class BookDetailNativeKind {
     EditInfo,
     EditSource,
@@ -47,6 +49,7 @@ enum class BookDetailNativeKind {
     IntroLink,
 }
 
+@Keep
 data class BookDetailNativeEffect(
     val token: String,
     val kind: BookDetailNativeKind,
@@ -61,6 +64,7 @@ data class BookDetailNativeEffect(
     val expectedBookUrl: String? = null,
 )
 
+@Keep
 data class BookDetailOperation(
     val token: String,
     val change: BookDetailMutation,
@@ -69,12 +73,14 @@ data class BookDetailOperation(
     val highlightAnchor: String? = null,
 )
 
+@Keep
 data class BookDetailPendingMutation(
     val operation: BookDetailOperation,
     val plan: BookDetailWritePlan,
     val inBookshelf: Boolean,
 )
 
+@Keep
 data class BookDetailPendingNetwork(
     val token: String,
     val request: BookDetailData,
@@ -83,6 +89,7 @@ data class BookDetailPendingNetwork(
     val plan: BookDetailNetworkWritePlan? = null,
 )
 
+@Keep
 enum class BookDetailPromptKind {
     Delete,
     WebFiles,
@@ -93,6 +100,7 @@ enum class BookDetailPromptKind {
     ExternalLink,
 }
 
+@Keep
 data class BookDetailPrompt(
     val kind: BookDetailPromptKind,
     val value: String? = null,
@@ -103,6 +111,7 @@ data class BookDetailPrompt(
     val readAfter: Boolean = false,
 )
 
+@Keep
 data class BookDetailSession(
     val identity: BookDetailIdentity,
     val data: BookDetailData? = null,
