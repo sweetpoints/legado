@@ -39,6 +39,7 @@ internal data class ExploreHomeState(
     val deleteUrl: String? = null,
     val errorText: String? = null,
     val showFastScroller: Boolean = false,
+    val eInkMode: Boolean = false,
     val scrollRequest: Long = 0,
     val scrollTarget: Int = 0,
     val effect: ExploreHomeEffect? = null,

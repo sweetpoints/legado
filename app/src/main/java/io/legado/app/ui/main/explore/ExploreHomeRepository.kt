@@ -46,6 +46,8 @@ internal interface ExploreHomeRepository {
 
     suspend fun searchSource(url: String): BookSourcePart?
 
+    suspend fun eInkMode(): Boolean
+
     suspend fun showFastScroller(): Boolean
 }
 
@@ -74,6 +76,8 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
 
     override suspend fun showFastScroller(): Boolean =
         withContext(Dispatchers.IO) { AppConfig.showDiscoveryFastScroller }
+
+    override suspend fun eInkMode(): Boolean = withContext(Dispatchers.IO) { AppConfig.isEInkMode }
 
     private fun infoMap(url: String): InfoMap =
         exploreInfoMapList[url] ?: InfoMap(url).also { exploreInfoMapList.put(url, it) }

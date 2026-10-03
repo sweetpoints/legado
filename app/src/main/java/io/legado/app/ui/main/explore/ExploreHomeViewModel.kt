@@ -94,7 +94,10 @@ internal class ExploreHomeViewModel(
     private suspend fun refreshPreferences() {
         try {
             val showFastScroller = repository.showFastScroller()
-            mutableState.update { it.copy(showFastScroller = showFastScroller) }
+            val eInkMode = repository.eInkMode()
+            mutableState.update {
+                it.copy(showFastScroller = showFastScroller, eInkMode = eInkMode)
+            }
         } catch (failure: Exception) {
             fail(failure)
         }
@@ -132,6 +135,8 @@ internal class ExploreHomeViewModel(
         generation++
         viewModelScope.launch { runCatching { repository.savePendingValues() }.onFailure(::fail) }
     }
+
+    fun hostFailure(failure: Throwable) = fail(failure)
 
     private fun fail(failure: Throwable) {
         if (failure is CancellationException) throw failure
@@ -363,6 +368,7 @@ internal class ExploreHomeViewModel(
             return@withLock false
         withContext(NonCancellable) {
             val previous = session
+            var launched = false
             try {
                 session = session.copy(receipts = session.receipts + effect.id)
                 mutableState.update { it.copy(effect = null, busy = true) }
@@ -373,9 +379,17 @@ internal class ExploreHomeViewModel(
                     persist()
                     false
                 } else {
+                    launched = true
                     launch()
                     true
                 }
+            } catch (failure: Exception) {
+                if (!launched) {
+                    session = previous
+                    mutableState.update { it.copy(effect = effect) }
+                    persist()
+                }
+                throw failure
             } finally {
                 mutableState.update { it.copy(busy = false) }
             }

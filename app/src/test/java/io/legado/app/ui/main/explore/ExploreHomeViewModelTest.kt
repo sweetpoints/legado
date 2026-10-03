@@ -240,6 +240,8 @@ class ExploreHomeViewModelTest {
 
         override suspend fun searchSource(url: String) = BookSourcePart(bookSourceUrl = url)
 
+        override suspend fun eInkMode() = false
+
         override suspend fun showFastScroller() = true
 
         private fun control(
