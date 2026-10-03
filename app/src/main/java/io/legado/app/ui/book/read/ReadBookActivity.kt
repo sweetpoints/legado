@@ -89,6 +89,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.paramPattern
 import io.legado.app.model.analyzeRule.ReviewRuleParser
+import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.model.jsSource.JsSourceReview
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.MobiFile
@@ -128,7 +129,7 @@ import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.book.toc.rule.TxtTocRuleDialog
-import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.dict.DictDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
@@ -2107,6 +2108,7 @@ class ReadBookActivity :
     override fun payAction() {
         val book = ReadBook.book ?: return
         if (book.isLocal) return
+        val sourceOwner = ReadBook.bookSource
         val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
         if (chapter == null) {
             toastOnUi("no chapter")
@@ -2116,8 +2118,13 @@ class ReadBookActivity :
             setMessage(chapter.title)
             yesButton {
                 Coroutine.async(lifecycleScope) {
-                        val source =
-                            ReadBook.bookSource ?: throw NoStackTraceException("no book source")
+                        val source = sourceOwner ?: throw NoStackTraceException("no book source")
+                        if (
+                            ReadBook.book !== book ||
+                                ReadBook.bookSource !== sourceOwner ||
+                                ReadBook.durChapterIndex != chapter.index
+                        )
+                            throw CancellationException("阅读位置已变化，已取消购买网页")
                         val payAction = source.getContentRule().payAction
                         if (payAction.isNullOrBlank()) {
                             throw NoStackTraceException("no pay action")
@@ -2138,17 +2145,49 @@ class ReadBookActivity :
                                 .toString()
                         }
                     }
-                    .onSuccess(IO) {
-                        if (it.isAbsUrl()) {
-                            startActivity<WebViewActivity> {
-                                val bookSource = ReadBook.bookSource
-                                putExtra("title", getString(R.string.chapter_pay))
-                                putExtra("url", it)
-                                putExtra("sourceOrigin", bookSource?.bookSourceUrl)
-                                putExtra("sourceName", bookSource?.bookSourceName)
-                                putExtra("sourceType", bookSource?.getSourceType())
+                    .onSuccess { result ->
+                        if (result.isAbsUrl()) {
+                            val source = checkNotNull(sourceOwner)
+                            var ticket: String? = null
+                            try {
+                                ticket =
+                                    BrowserNavigation.prepare(
+                                        applicationContext,
+                                        BrowserRequest(
+                                            url = result,
+                                            title = getString(R.string.chapter_pay),
+                                            sourceOrigin = source.bookSourceUrl,
+                                            sourceName = source.bookSourceName,
+                                            sourceType = source.getSourceType(),
+                                        ),
+                                    )
+                                currentCoroutineContext().ensureActive()
+                                if (
+                                    isFinishing ||
+                                        isDestroyed ||
+                                        !lifecycle.currentState.isAtLeast(
+                                            Lifecycle.State.RESUMED
+                                        ) ||
+                                        ReadBook.book !== book ||
+                                        ReadBook.bookSource !== sourceOwner ||
+                                        ReadBook.durChapterIndex != chapter.index
+                                )
+                                    return@onSuccess
+                                BrowserNavigation.startPrepared(
+                                    this@ReadBookActivity,
+                                    checkNotNull(ticket),
+                                )
+                                ticket = null
+                            } catch (canceled: CancellationException) {
+                                throw canceled
+                            } finally {
+                                ticket?.let { prepared ->
+                                    withContext(NonCancellable) {
+                                        BrowserNavigation.abandon(applicationContext, prepared)
+                                    }
+                                }
                             }
-                        } else if (it.isTrue()) {
+                        } else if (result.isTrue()) {
                             // 购买成功后刷新目录
                             ReadBook.book?.let {
                                 ReadBook.curTextChapter = null

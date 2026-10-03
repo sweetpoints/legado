@@ -22,7 +22,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
@@ -30,16 +29,19 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
+import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.service.BaseReadAloudService
-import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
-import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -318,19 +320,54 @@ class ReaderMenuController(
 
     private fun openChapterUrl() {
         if (ReadBook.isLocalBook) return
+        val book = ReadBook.book ?: return
+        val source = ReadBook.bookSource
+        val chapterIndex = ReadBook.durChapterIndex
         val url = topState.chapterUrl
-        if (AppConfig.readUrlInBrowser) context.openUrl(url.substringBefore(",{"))
-        else
-            Coroutine.async {
-                context.startActivity<WebViewActivity> {
-                    val source = ReadBook.bookSource
-                    putExtra("title", topState.chapterName)
-                    putExtra("url", url)
-                    putExtra("sourceOrigin", source?.bookSourceUrl)
-                    putExtra("sourceName", source?.bookSourceName)
-                    putExtra("sourceType", source?.getSourceType())
+        val title = topState.chapterName
+        if (AppConfig.readUrlInBrowser) {
+            context.openUrl(url.substringBefore(",{"))
+            return
+        }
+        val request =
+            BrowserRequest(
+                url = url,
+                title = title,
+                sourceName = source?.bookSourceName.orEmpty(),
+                sourceOrigin = source?.bookSourceUrl.orEmpty(),
+                sourceType = source?.getSourceType() ?: 0,
+            )
+        activity.lifecycleScope.launch {
+            var ticket: String? = null
+            try {
+                ticket = BrowserNavigation.prepare(activity.applicationContext, request)
+                currentCoroutineContext().ensureActive()
+                if (
+                    disposed ||
+                        activity.isFinishing ||
+                        activity.isDestroyed ||
+                        !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+                        ReadBook.book !== book ||
+                        ReadBook.bookSource !== source ||
+                        ReadBook.durChapterIndex != chapterIndex ||
+                        topState.chapterUrl != url ||
+                        topState.chapterName != title
+                )
+                    return@launch
+                BrowserNavigation.startPrepared(activity, checkNotNull(ticket))
+                ticket = null
+            } catch (canceled: kotlinx.coroutines.CancellationException) {
+                throw canceled
+            } catch (error: Exception) {
+                io.legado.app.constant.AppLog.put("打开章节网页失败", error)
+            } finally {
+                ticket?.let { prepared ->
+                    withContext(NonCancellable) {
+                        BrowserNavigation.abandon(activity.applicationContext, prepared)
+                    }
                 }
             }
+        }
     }
 
     private fun customButton(longPress: Boolean) {
