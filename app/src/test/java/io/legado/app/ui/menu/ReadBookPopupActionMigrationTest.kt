@@ -8,79 +8,57 @@ import org.junit.Test
 class ReadBookPopupActionMigrationTest {
 
     @Test
-    fun `reader source actions use the shared vertical popup menu`() {
-        val source = readProjectFile(READ_MENU)
-
-        assertFalse(source.contains("import androidx.appcompat.widget.PopupMenu"))
+    fun `reader source actions use Compose without losing capability gates`() {
+        val source = readProjectFile(READ_MENU).replace(Regex("\\s+"), " ")
+        val screen = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenuScreen.kt")
+        assertFalse(source.contains("ViewReadMenuBinding"))
+        assertTrue(screen.contains("DropdownMenu("))
         assertOrdered(
             source,
             "val hasLogin = ReadBook.bookSource?.hasLogin() == true",
-            "val canPay = hasLogin",
-            "&& ReadBook.curTextChapter?.isVip == true",
-            "&& ReadBook.curTextChapter?.isPay != true",
-            "item(context.getString(R.string.login), \"login\", hasLogin)",
-            "item(context.getString(R.string.chapter_pay), \"chapterPay\", canPay)",
-            "item(context.getString(R.string.edit_book_source), \"editSource\")",
-            "item(context.getString(R.string.disable_book_source), \"disableSource\")",
+            "val canPay =",
+            "hasLogin && ReadBook.curTextChapter?.isVip == true && ReadBook.curTextChapter?.isPay != true",
+            "if (hasLogin)",
+            "R.string.login",
+            "if (canPay)",
+            "R.string.chapter_pay",
+            "R.string.edit_book_source",
+            "R.string.disable_book_source",
             "\"login\" -> callBack.showLogin()",
             "\"chapterPay\" -> callBack.payAction()",
             "\"editSource\" -> callBack.openSourceEditActivity()",
             "\"disableSource\" -> callBack.disableSource()",
         )
-        assertFalse(
-            "legacy reader source menu should be removed",
-            sequenceOf(File(SOURCE_MENU), File("app/$SOURCE_MENU")).any(File::isFile),
-        )
+        assertFalse(sequenceOf(File(SOURCE_MENU), File("app/$SOURCE_MENU")).any(File::isFile))
     }
 
     @Test
-    fun `reader long press menus use the shared vertical popup action menu`() {
-        val source = readProjectFile(READ_BOOK_ACTIVITY)
-        val changeMenu =
-            section(
-                source,
-                "private fun showChangeSourceMenu(anchor: View)",
-                "private fun showRefreshMenu(anchor: View)",
-            )
-        val refreshMenu =
-            section(
-                source,
-                "private fun showRefreshMenu(anchor: View)",
-                "private fun showBookChangeSource()",
-            )
-
-        assertFalse(source.contains("import androidx.appcompat.widget.PopupMenu"))
-        assertFalse(source.contains("PopupMenu.OnMenuItemClickListener"))
-        assertFalse(source.contains("PopupMenu(this, it)"))
-        assertFalse(source.contains("applyOpenTint"))
-        assertFalse(source.contains("inflate(R.menu.book_read_change_source)"))
-        assertFalse(source.contains("inflate(R.menu.book_read_refresh)"))
-        listOf(CHANGE_SOURCE_MENU, REFRESH_MENU).forEach { path ->
-            assertFalse(
-                "$path should be removed",
-                sequenceOf(File(path), File("app/$path")).any(File::isFile),
-            )
-        }
-        assertContains(source, "showChangeSourceMenu(it)")
-        assertContains(source, "showRefreshMenu(it)")
+    fun `reader long press menus preserve all change and refresh actions in Compose`() {
+        val source = readProjectFile(READ_BOOK_ACTIVITY).replace(Regex("\\s+"), " ")
+        assertFalse(source.contains("private fun showChangeSourceMenu"))
+        assertFalse(source.contains("private fun showRefreshMenu"))
         assertOrdered(
-            changeMenu,
-            "item(getString(R.string.chapter_change_source), \"chapter\")",
-            "item(getString(R.string.batch_chapter_change_source), \"batchChapter\")",
-            "item(getString(R.string.book_change_source), \"book\")",
+            source,
+            "ReaderPopup.ChangeSource -> listOf(",
+            "R.string.chapter_change_source",
+            "R.string.batch_chapter_change_source",
+            "R.string.book_change_source",
+            "ReaderPopup.Refresh -> listOf(",
+            "R.string.menu_refresh_dur",
+            "R.string.menu_refresh_after",
+            "R.string.menu_refresh_all",
+            "R.string.menu_refresh_resources",
+            "override fun readerPopupAction",
             "\"chapter\" -> showChapterChangeSource()",
             "\"batchChapter\" -> showChapterChangeSource(batchMode = true)",
             "\"book\" -> showBookChangeSource()",
-        )
-        assertOrdered(
-            refreshMenu,
-            "item(getString(R.string.menu_refresh_dur), \"dur\")",
-            "item(getString(R.string.menu_refresh_after), \"after\")",
-            "item(getString(R.string.menu_refresh_all), \"all\")",
             "\"dur\" -> refreshDurChapter()",
             "\"after\" -> refreshAfterChapters()",
             "\"all\" -> refreshAllChapters()",
         )
+        listOf(CHANGE_SOURCE_MENU, REFRESH_MENU).forEach { path ->
+            assertFalse(sequenceOf(File(path), File("app/$path")).any(File::isFile))
+        }
     }
 
     @Test

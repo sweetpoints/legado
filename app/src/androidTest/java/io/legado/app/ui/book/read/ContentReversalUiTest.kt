@@ -6,11 +6,16 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
-import android.view.ViewGroup
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.longClick as composeLongClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -20,12 +25,7 @@ import androidx.test.espresso.action.GeneralSwipeAction
 import androidx.test.espresso.action.Press
 import androidx.test.espresso.action.Swipe
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.longClick
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.iki.elonen.NanoHTTPD
@@ -68,7 +68,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.hamcrest.Matchers.allOf
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -293,8 +292,9 @@ class ContentReversalUiTest {
                 }
             fun refresh() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed()))
-                    .perform(click())
+                contentCompose
+                    .onNodeWithContentDescription(context.getString(R.string.refresh))
+                    .performClick()
             }
             fun pixel(index: Int): Int {
                 val bitmap =
@@ -308,11 +308,10 @@ class ContentReversalUiTest {
             }
             fun refreshAllResources() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed()))
-                    .perform(longClick())
-                onView(withText(R.string.menu_refresh_resources))
-                    .inRoot(isPlatformPopup())
-                    .perform(click())
+                contentCompose
+                    .onNodeWithContentDescription(context.getString(R.string.refresh))
+                    .performTouchInput { composeLongClick() }
+                contentCompose.onNodeWithTag("reader-menu-item-resources").performClick()
             }
             fun showsLoading(activity: ReadBookActivity): Boolean {
                 val page = activity.findViewById<ReadView>(R.id.read_view).curPage.textPage
@@ -637,38 +636,27 @@ class ContentReversalUiTest {
             expectResourceFailure { refreshAllResources() }
             failImage.set(-1)
             showReaderMenu()
-            onView(allOf(withContentDescription(R.string.refresh), isDisplayed()))
-                .perform(longClick())
+            contentCompose
+                .onNodeWithContentDescription(context.getString(R.string.refresh))
+                .performTouchInput { composeLongClick() }
             screenshot("resource-refresh-menu")
-            var resourceY = 0
-            onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).check {
-                view,
-                error ->
-                if (error != null) throw error
-                val location = IntArray(2)
-                view.getLocationOnScreen(location)
-                resourceY = location[1]
+            val resourceY =
+                contentCompose
+                    .onNodeWithTag("reader-menu-item-resources")
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+                    .top
+            listOf("dur", "after", "all").forEach { action ->
+                val top =
+                    contentCompose
+                        .onNodeWithTag("reader-menu-item-$action")
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                        .top
+                assertTrue("Refresh all data must be below the existing actions", top < resourceY)
             }
-            listOf(
-                    R.string.menu_refresh_dur,
-                    R.string.menu_refresh_after,
-                    R.string.menu_refresh_all,
-                )
-                .forEach {
-                    onView(withText(it)).inRoot(isPlatformPopup()).check { view, error ->
-                        if (error != null) throw error
-                        val location = IntArray(2)
-                        view.getLocationOnScreen(location)
-                        assertTrue(
-                            "Refresh all data must be below the existing actions",
-                            location[1] < resourceY,
-                        )
-                    }
-                }
             val beforeAll = ReadBook.curTextChapter
-            onView(withText(R.string.menu_refresh_resources))
-                .inRoot(isPlatformPopup())
-                .perform(click())
+            contentCompose.onNodeWithTag("reader-menu-item-resources").performClick()
             ready(beforeAll)
             await("all five target chapters and image responses") {
                 (1..5).all { index ->
@@ -857,7 +845,10 @@ class ContentReversalUiTest {
     fun savingInContentEditorAndReplacingRefreshedCacheClearCheckedState() {
         reverseFromMenu(false, reversed)
         openOverflow()
-        onView(withText(R.string.edit_content)).inRoot(isPlatformPopup()).perform(click())
+        contentCompose
+            .onNodeWithTag("reader-menu-item-editContent")
+            .performScrollTo()
+            .performClick()
         await("content editor loaded") { activity ->
             activity.supportFragmentManager.fragments.filterIsInstance<ContentEditDialog>().any {
                 it.view != null && it.viewModel.state.value.hasDraft
@@ -892,7 +883,10 @@ class ContentReversalUiTest {
         val previous = ReadBook.curTextChapter
         openOverflow()
         assertReverseCheck(wasChecked)
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).perform(click())
+        contentCompose
+            .onNodeWithTag("reader-menu-item-reverseContent")
+            .performScrollTo()
+            .performClick()
         await("chapter $index reverse state changed") {
             BookHelp.isContentReversed(book, chapters[index]) != wasChecked &&
                 (expectedRaw == null || BookHelp.getContent(book, chapters[index]) == expectedRaw)
@@ -923,34 +917,20 @@ class ContentReversalUiTest {
     private fun closeReaderMenu() {
         var visible = false
         scenario!!.onActivity { visible = it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
-        if (visible) onView(allOf(withId(R.id.vw_menu_bg), isDisplayed())).perform(click())
+        if (visible)
+            scenario!!.onActivity { it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(false) }
         await("reader menu hidden") { !it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
     }
 
     private fun openOverflow() {
         showReaderMenu()
-        val description =
-            context.getString(androidx.appcompat.R.string.abc_action_menu_overflow_description)
-        onView(allOf(withContentDescription(description), isDisplayed())).perform(click())
+        contentCompose.onNodeWithTag("reader-overflow").performClick()
     }
 
     private fun assertReverseCheck(expected: Boolean) {
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).check { view, error ->
-            if (error != null) throw error
-            val row = view.parent as ViewGroup
-            val info = row.createAccessibilityNodeInfo()
-            assertTrue("The real popup row must expose a checkable action", info.isCheckable)
-            assertEquals(
-                "The popup accessibility state follows this chapter",
-                expected,
-                info.isChecked,
-            )
-            assertEquals(
-                "The visible check mark follows this chapter",
-                expected,
-                row.findViewById<View>(R.id.iv_check_end).isVisible,
-            )
-        }
+        val action =
+            contentCompose.onNodeWithTag("reader-menu-item-reverseContent").performScrollTo()
+        if (expected) action.assertIsOn() else action.assertIsOff()
     }
 
     private fun assertRenderedImages() {

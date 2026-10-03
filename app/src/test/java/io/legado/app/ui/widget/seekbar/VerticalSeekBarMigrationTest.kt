@@ -8,14 +8,14 @@ import org.junit.Test
 class VerticalSeekBarMigrationTest {
 
     @Test
-    fun brightnessControlUsesRotatedAppCompatSeekBar() {
-        val layout = projectFile("src/main/res/layout/view_read_menu.xml").readText()
-
-        assertTrue(layout.contains("VerticalSeekBarWrapper"))
-        assertTrue(layout.contains("androidx.appcompat.widget.AppCompatSeekBar"))
-        assertTrue(layout.contains("android:id=\"@+id/seek_brightness\""))
-        assertTrue(layout.contains("android:max=\"255\""))
-        assertTrue(layout.contains("android:rotation=\"-90\""))
+    fun brightnessControlUsesComposeWithTheOriginalRangeAndAutoGate() {
+        val screen =
+            projectFile("src/main/java/io/legado/app/ui/book/read/ReadMenuScreen.kt").readText()
+        assertTrue(screen.contains("LocalLayoutDirection provides LayoutDirection.Ltr"))
+        assertTrue(screen.contains("enabled = !top.brightnessAutomatic"))
+        assertTrue(screen.contains("valueRange = 0f..255f"))
+        assertTrue(screen.contains(".verticalSlider()"))
+        assertFalse(projectFile("src/main/res/layout/view_read_menu.xml").exists())
     }
 
     @Test
@@ -39,7 +39,7 @@ class VerticalSeekBarMigrationTest {
         assertTrue(source.contains("ViewCompat.LAYOUT_DIRECTION_LTR"))
         assertTrue(source.contains("MeasureSpec.makeMeasureSpec(contentHeight"))
         assertTrue(source.contains("child.measuredHeight + paddingLeft + paddingRight"))
-        assertTrue(readMenu.contains("seekBrightness.applyTint(context.accentColor)"))
+        assertTrue(readMenu.contains("setScreenBrightness(it.toFloat())"))
     }
 
     private fun projectFile(pathInApp: String): File {

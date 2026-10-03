@@ -3,7 +3,6 @@ package io.legado.app.ui.book.read
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.View
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -14,20 +13,11 @@ import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.UiController
-import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -56,7 +46,6 @@ import io.legado.app.ui.association.BookImportViewModel
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.book.read.config.ReaderMenuConfigDialog
 import io.legado.app.ui.book.read.page.ReadView
-import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
@@ -69,8 +58,6 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.hamcrest.Matcher
-import org.hamcrest.Matchers.allOf
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -486,9 +473,7 @@ class ReaderSourceReimportUiTest {
     @Test
     fun menuConfigurationAndSettingsBackupPreserveReimportAction() {
         openOverflow()
-        onView(withText(R.string.reader_menu_all_features))
-            .inRoot(isPlatformPopup())
-            .perform(click())
+        compose.onNodeWithTag("reader-menu-item-_config").performScrollTo().performClick()
         await("native reader menu configuration") {
             it.supportFragmentManager.fragments.filterIsInstance<ReaderMenuConfigDialog>().any { f
                 ->
@@ -505,34 +490,10 @@ class ReaderSourceReimportUiTest {
         scenario.recreate()
         awaitReader(0)
         openOverflow()
-        onView(withText(R.string.reimport_book_source)).check(doesNotExist())
-        onView(withText(R.string.reader_menu_more)).inRoot(isPlatformPopup()).perform(click())
-        // Moving an action to More appends it after the other actions, below this popup's viewport.
-        onView(withId(R.id.recycler_view))
-            .inRoot(isPlatformPopup())
-            .perform(
-                object : ViewAction {
-                    override fun getConstraints(): Matcher<View> =
-                        isAssignableFrom(RecyclerView::class.java)
-
-                    override fun getDescription() = "scroll More to its reimport action"
-
-                    override fun perform(uiController: UiController, view: View) {
-                        val recycler = view as RecyclerView
-                        val items = (recycler.adapter as PopupAction.Adapter).getItems()
-                        val target = items.indexOfFirst {
-                            it.title == context.getString(R.string.reimport_book_source)
-                        }
-                        assertTrue(
-                            "More must contain the configured reimport action: $items",
-                            target >= 0,
-                        )
-                        recycler.scrollToPosition(target)
-                        uiController.loopMainThreadUntilIdle()
-                    }
-                }
-            )
-        onView(withText(R.string.reimport_book_source)).inRoot(isPlatformPopup()).perform(click())
+        compose.onNodeWithTag("reader-menu-item-reimportSource").assertDoesNotExist()
+        compose.onNodeWithTag("reader-menu-item-_more").performScrollTo().performClick()
+        // More keeps configured order; scroll the real Compose dropdown to the appended action.
+        compose.onNodeWithTag("reader-menu-item-reimportSource").performScrollTo().performClick()
         awaitImporter()
         compose.onNodeWithTag("book-import-cancel").performClick()
         scenario.close()
@@ -558,7 +519,7 @@ class ReaderSourceReimportUiTest {
     fun deletedSourceDoesNotOpenAnEmptyImporterAndLocalBookHasNoAction() {
         appDb.bookSourceDao.delete(source)
         openOverflow()
-        onView(withText(R.string.reimport_book_source)).inRoot(isPlatformPopup()).perform(click())
+        compose.onNodeWithTag("reader-menu-item-reimportSource").performScrollTo().performClick()
         // Wait for the actual Room read rather than accepting an absent dialog before it completes.
         await("missing-source lookup completes") {
             !ViewModelProvider(it)[ReadBookViewModel::class.java].sourceReimportLoading
@@ -574,7 +535,7 @@ class ReaderSourceReimportUiTest {
             it.refreshReaderMenu()
         }
         openOverflow()
-        onView(withText(R.string.reimport_book_source)).check(doesNotExist())
+        compose.onNodeWithTag("reader-menu-item-reimportSource").assertDoesNotExist()
         pressBack()
         main { ReadBook.book = book }
     }
@@ -605,7 +566,7 @@ class ReaderSourceReimportUiTest {
 
     private fun openReimport() {
         openOverflow()
-        onView(withText(R.string.reimport_book_source)).inRoot(isPlatformPopup()).perform(click())
+        compose.onNodeWithTag("reader-menu-item-reimportSource").performScrollTo().performClick()
         awaitImporter()
     }
 
@@ -656,17 +617,7 @@ class ReaderSourceReimportUiTest {
 
     private fun openOverflow() {
         showMenu()
-        onView(
-                allOf(
-                    withContentDescription(
-                        context.getString(
-                            androidx.appcompat.R.string.abc_action_menu_overflow_description
-                        )
-                    ),
-                    isDisplayed(),
-                )
-            )
-            .perform(click())
+        compose.onNodeWithTag("reader-overflow").performClick()
     }
 
     private fun awaitReader(index: Int) =

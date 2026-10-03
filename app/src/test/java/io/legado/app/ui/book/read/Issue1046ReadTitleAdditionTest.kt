@@ -42,16 +42,14 @@ class Issue1046ReadTitleAdditionTest {
         val readMenu = source("app/src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
 
         assertTrue(moreConfig.contains("PreferKey.showReadTitleChapterNameOnly"))
-        assertTrue(
-            readMenu.contains(
-                "tvChapterUrl.alpha = if (chapterNameOnly && hasChapterUrl) 0f else 1f"
-            )
-        )
-        assertTrue(readMenu.contains("titleBarAddition.doOnLayout"))
-        assertTrue(readMenu.contains("tvChapterName.translationY"))
-        assertTrue(readMenu.contains("R.id.tv_source_action, ConstraintSet.BOTTOM"))
-        assertTrue(readMenu.contains("val bottomTarget = if (tvChapterUrl.isGone)"))
-        assertTrue(readMenu.contains("tvChapterName.setOnClickListener(chapterViewClickListener)"))
+        val screen = source("app/src/main/java/io/legado/app/ui/book/read/ReadMenuScreen.kt")
+        assertTrue(screen.contains("alpha = if (top.chapterNameOnly) 0f else 1f"))
+        assertTrue(screen.contains("Alignment.CenterStart"))
+        assertTrue(screen.contains("reader-chapter-name"))
+        assertTrue(screen.contains("reader-chapter-url"))
+        assertTrue(screen.contains("onClick = chapterClick"))
+        assertTrue(screen.contains("onLongClick = chapterLongClick"))
+        assertTrue(readMenu.contains("chapterNameOnly = AppConfig.showReadTitleChapterNameOnly"))
     }
 
     @Test
