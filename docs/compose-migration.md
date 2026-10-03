@@ -1631,3 +1631,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
   migrated Android coverage is compiled only; no device test or this candidate's R8 run is claimed.
 - Production/tests remained frozen throughout final validation. This record-only commit changes
   no Kotlin or resources; the dedicated worktree is clean and ready for exact review/integration.
+
+视频播放 Activity 章节控制：分卷与选集横向列表、选中项滚动和目录入口迁为独立 Compose Screen；保留标题、尺寸、选中态、切卷/切集顺序及目录结果回调，并为迟到索引校验当前列表范围。Activity 仅在章节区域使用生命周期释放的 ComposeView，GSY VideoPlayer surface 与复杂简介渲染仍走各自原生宿主；删除 ChapterAdapter 和两份专属 item XML。新增 Compose 行为测试覆盖切卷、切集、目录及无分卷列表。完整 JVM/AndroidTest Kotlin 编译待运行。
