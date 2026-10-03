@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 /** Complete metadata and URI values stay in the private session, never in saved instance state. */
 data class AssociationFileInspection(
     val staging: AssociationStagingResult? = null,
+    val finished: Boolean = false,
     val openSingleBook: Boolean = false,
     val importType: String? = null,
     val source: String? = null,
@@ -67,8 +68,11 @@ class LocalAssociationFileRepository(
                     uri.inputStream(applicationContext).getOrThrow().use {}
                     inspectUri(ticket, uri, shared = true)
                 }
-                AssociationInputKind.View ->
-                    inspectUri(ticket, Uri.parse(input.uris.single()), shared = false)
+                AssociationInputKind.View -> {
+                    val uri = input.uris.singleOrNull()
+                    if (uri == null) AssociationFileInspection(finished = true)
+                    else inspectUri(ticket, Uri.parse(uri), shared = false)
+                }
                 AssociationInputKind.Invalid -> error("格式不对")
             }
         }

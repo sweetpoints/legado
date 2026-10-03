@@ -206,6 +206,7 @@ class AssociationImportViewModel(
         session: AssociationSession,
         result: AssociationFileInspection,
     ): AssociationSession {
+        if (result.finished) return finish(session)
         result.onlineUri?.let { uri ->
             return session.copy(
                 phase = AssociationPhase.Finished,
