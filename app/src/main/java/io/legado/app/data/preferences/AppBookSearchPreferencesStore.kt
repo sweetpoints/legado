@@ -58,6 +58,7 @@ internal class AppBookSearchPreferencesStore(context: Context) : BookSearchPrefe
                 PreferKey.precisionSearch,
                 PreferKey.showSearchReadRecord,
                 PreferKey.searchResultFilter,
+                PreferKey.loadCoverOnlyWifi,
                 scopeKey,
             )
     }

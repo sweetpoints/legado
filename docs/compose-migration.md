@@ -1251,3 +1251,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 搜索引擎与元数据基础及其既有回归完成第二批可读性整理：显式 imports、描述性名字、展开条件和分步断言，回调抽成小函数但行为不变。两个整理批的14项Kotlin文件统一应用固定ktfmt0.64 Kotlinlang样式，formatter --check 与 git diff --check通过；完整验证在精确tip按统一构建slot执行。
 
 搜索偏好新增独立IO仓库与只读快照，保留精准搜索、阅读记录标记、filter/scope默认值与仅WiFi封面策略；通知只发送变更信号，读取在IO，接受写入段取消后仍完成。新增3个JVM行为回归，固定formatter/check通过；本批独立提交后按统一构建队列执行完整验证，当前尚未单独运行Gradle。
+
+搜索偏好监听补齐仅WiFi封面策略键，外部修改可刷新已发布快照；不改变写入策略。formatter/check通过，完整回归随当前基础整合验证。
