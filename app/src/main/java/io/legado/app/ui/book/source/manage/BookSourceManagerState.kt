@@ -105,6 +105,10 @@ internal fun sortSourceManagerRows(
                 .thenBy { it.host }
                 .thenByDescending { it.updated }
         )
+    // DAO manual order is authoritative, including ties. Reversing the sequence preserves
+    // the old descending behavior for duplicated customOrder values; a reversed comparator
+    // would keep equal-order rows stable instead and visibly change their relative order.
+    if (sort == BookSourceSort.Default) return if (ascending) rows else rows.reversed()
     val comparator =
         when (sort) {
             BookSourceSort.Weight -> compareBy<SourceManagerRow> { it.weight }
