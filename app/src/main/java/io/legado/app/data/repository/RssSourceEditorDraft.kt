@@ -36,25 +36,53 @@ enum class RssSourceEditorField(val key: String, val tab: Int) {
     InjectJs("injectJs", 3),
     ContentWhitelist("contentWhitelist", 3),
     ContentBlacklist("contentBlacklist", 3),
-    ShouldOverrideUrlLoading("shouldOverrideUrlLoading", 3)
+    ShouldOverrideUrlLoading("shouldOverrideUrlLoading", 3),
 }
+
 data class RssSourceEditorText(val text: String = "", val start: Int = 0, val end: Int = start) {
     fun bounded() = copy(start = start.coerceIn(0, text.length), end = end.coerceIn(0, text.length))
 }
-enum class RssSourceEditorSaveAction { Close, Debug, Login, Variable }
+
+enum class RssSourceEditorSaveAction {
+    Close,
+    Debug,
+    Login,
+    Variable,
+}
+
 data class RssSourceEditorDraft(
-    val fields: Map<RssSourceEditorField, RssSourceEditorText> = RssSourceEditorField.entries.associateWith { RssSourceEditorText() },
-    val enabled: Boolean = true, val singleUrl: Boolean = false, val cookieJar: Boolean = true, val preload: Boolean = false,
-    val enableJs: Boolean = true, val loadWithBaseUrl: Boolean = true, val showWebLog: Boolean = false, val cacheFirst: Boolean = false,
-    val type: Int = 0, val articleStyle: Int = 0,
+    val fields: Map<RssSourceEditorField, RssSourceEditorText> =
+        RssSourceEditorField.entries.associateWith { RssSourceEditorText() },
+    val enabled: Boolean = true,
+    val singleUrl: Boolean = false,
+    val cookieJar: Boolean = true,
+    val preload: Boolean = false,
+    val enableJs: Boolean = true,
+    val loadWithBaseUrl: Boolean = true,
+    val showWebLog: Boolean = false,
+    val cacheFirst: Boolean = false,
+    val type: Int = 0,
+    val articleStyle: Int = 0,
 ) {
     operator fun get(field: RssSourceEditorField) = fields[field] ?: RssSourceEditorText()
-    fun with(field: RssSourceEditorField, value: RssSourceEditorText) = copy(fields = fields + (field to value.bounded()))
-    fun valid() = get(RssSourceEditorField.SourceName).text.isNotBlank() && get(RssSourceEditorField.SourceUrl).text.isNotBlank()
-    /** Empty nullable fields match the native editor; nonblank source text is preserved verbatim. */
+
+    fun with(field: RssSourceEditorField, value: RssSourceEditorText) =
+        copy(fields = fields + (field to value.bounded()))
+
+    fun valid() =
+        get(RssSourceEditorField.SourceName).text.isNotBlank() &&
+            get(RssSourceEditorField.SourceUrl).text.isNotBlank()
+
+    /**
+     * Empty nullable fields match the native editor; nonblank source text is preserved verbatim.
+     */
     fun entity(base: RssSource = RssSource(), autoComplete: Boolean = false): RssSource {
         fun text(field: RssSourceEditorField) = get(field).text.takeIf { it.isNotBlank() }
-        fun rule(field: RssSourceEditorField, preRule: String? = text(RssSourceEditorField.RuleArticles), type: Int = 1): String? =
+        fun rule(
+            field: RssSourceEditorField,
+            preRule: String? = text(RssSourceEditorField.RuleArticles),
+            type: Int = 1,
+        ): String? =
             if (autoComplete) RuleComplete.autoComplete(text(field), preRule, type) else text(field)
         return base.copy(
             sourceName = text(RssSourceEditorField.SourceName) ?: "",
@@ -90,60 +118,136 @@ data class RssSourceEditorDraft(
             contentWhitelist = text(RssSourceEditorField.ContentWhitelist),
             contentBlacklist = text(RssSourceEditorField.ContentBlacklist),
             shouldOverrideUrlLoading = text(RssSourceEditorField.ShouldOverrideUrlLoading),
-            enabled = enabled, singleUrl = singleUrl, enabledCookieJar = cookieJar, preload = preload,
-            enableJs = enableJs, loadWithBaseUrl = loadWithBaseUrl, showWebLog = showWebLog, cacheFirst = cacheFirst,
-            type = type.takeIf { it in 0..2 } ?: 0, articleStyle = articleStyle.takeIf { it in 0..4 } ?: 0,
+            enabled = enabled,
+            singleUrl = singleUrl,
+            enabledCookieJar = cookieJar,
+            preload = preload,
+            enableJs = enableJs,
+            loadWithBaseUrl = loadWithBaseUrl,
+            showWebLog = showWebLog,
+            cacheFirst = cacheFirst,
+            type = type.takeIf { it in 0..2 } ?: 0,
+            articleStyle = articleStyle.takeIf { it in 0..4 } ?: 0,
         )
     }
-    fun sameContent(other: RssSourceEditorDraft): Boolean = entity().let { current ->
-        val previous = other.entity()
-        val currentFields = from(current).fields; val previousFields = from(previous).fields
-        // RssSource.equals compares only URL. Compare every edited field instead.
-        RssSourceEditorField.entries.all { currentFields.getValue(it).text == previousFields.getValue(it).text } &&
-            copy(fields = emptyMap(), type = current.type, articleStyle = current.articleStyle) ==
-            other.copy(fields = emptyMap(), type = previous.type, articleStyle = previous.articleStyle)
-    }
+
+    fun sameContent(other: RssSourceEditorDraft): Boolean =
+        entity().let { current ->
+            val previous = other.entity()
+            val currentFields = from(current).fields
+            val previousFields = from(previous).fields
+            // RssSource.equals compares only URL. Compare every edited field instead.
+            RssSourceEditorField.entries.all {
+                currentFields.getValue(it).text == previousFields.getValue(it).text
+            } &&
+                copy(
+                    fields = emptyMap(),
+                    type = current.type,
+                    articleStyle = current.articleStyle,
+                ) ==
+                    other.copy(
+                        fields = emptyMap(),
+                        type = previous.type,
+                        articleStyle = previous.articleStyle,
+                    )
+        }
+
     companion object {
-        fun from(source: RssSource) = RssSourceEditorDraft(fields = mapOf(
-            RssSourceEditorField.SourceName to RssSourceEditorText(source.sourceName.orEmpty()),
-            RssSourceEditorField.SourceUrl to RssSourceEditorText(source.sourceUrl.orEmpty()),
-            RssSourceEditorField.SourceIcon to RssSourceEditorText(source.sourceIcon.orEmpty()),
-            RssSourceEditorField.SourceGroup to RssSourceEditorText(source.sourceGroup.orEmpty()),
-            RssSourceEditorField.SourceComment to RssSourceEditorText(source.sourceComment.orEmpty()),
-            RssSourceEditorField.SearchUrl to RssSourceEditorText(source.searchUrl.orEmpty()),
-            RssSourceEditorField.SortUrl to RssSourceEditorText(source.sortUrl.orEmpty()),
-            RssSourceEditorField.LoginUrl to RssSourceEditorText(source.loginUrl.orEmpty()),
-            RssSourceEditorField.LoginUi to RssSourceEditorText(source.loginUi.orEmpty()),
-            RssSourceEditorField.LoginCheckJs to RssSourceEditorText(source.loginCheckJs.orEmpty()),
-            RssSourceEditorField.CoverDecodeJs to RssSourceEditorText(source.coverDecodeJs.orEmpty()),
-            RssSourceEditorField.Header to RssSourceEditorText(source.header.orEmpty()),
-            RssSourceEditorField.VariableComment to RssSourceEditorText(source.variableComment.orEmpty()),
-            RssSourceEditorField.ConcurrentRate to RssSourceEditorText(source.concurrentRate.orEmpty()),
-            RssSourceEditorField.JsLib to RssSourceEditorText(source.jsLib.orEmpty()),
-            RssSourceEditorField.StartHtml to RssSourceEditorText(source.startHtml.orEmpty()),
-            RssSourceEditorField.StartStyle to RssSourceEditorText(source.startStyle.orEmpty()),
-            RssSourceEditorField.StartJs to RssSourceEditorText(source.startJs.orEmpty()),
-            RssSourceEditorField.PreloadJs to RssSourceEditorText(source.preloadJs.orEmpty()),
-            RssSourceEditorField.RuleArticles to RssSourceEditorText(source.ruleArticles.orEmpty()),
-            RssSourceEditorField.RuleNextPage to RssSourceEditorText(source.ruleNextPage.orEmpty()),
-            RssSourceEditorField.RuleTitle to RssSourceEditorText(source.ruleTitle.orEmpty()),
-            RssSourceEditorField.RulePubDate to RssSourceEditorText(source.rulePubDate.orEmpty()),
-            RssSourceEditorField.RuleDescription to RssSourceEditorText(source.ruleDescription.orEmpty()),
-            RssSourceEditorField.RuleImage to RssSourceEditorText(source.ruleImage.orEmpty()),
-            RssSourceEditorField.RuleLink to RssSourceEditorText(source.ruleLink.orEmpty()),
-            RssSourceEditorField.RuleContent to RssSourceEditorText(source.ruleContent.orEmpty()),
-            RssSourceEditorField.NextContentUrl to RssSourceEditorText(source.nextContentUrl.orEmpty()),
-            RssSourceEditorField.Style to RssSourceEditorText(source.style.orEmpty()),
-            RssSourceEditorField.InjectJs to RssSourceEditorText(source.injectJs.orEmpty()),
-            RssSourceEditorField.ContentWhitelist to RssSourceEditorText(source.contentWhitelist.orEmpty()),
-            RssSourceEditorField.ContentBlacklist to RssSourceEditorText(source.contentBlacklist.orEmpty()),
-            RssSourceEditorField.ShouldOverrideUrlLoading to RssSourceEditorText(source.shouldOverrideUrlLoading.orEmpty())
-        ), enabled = source.enabled, singleUrl = source.singleUrl, cookieJar = source.enabledCookieJar == true, preload = source.preload,
-            enableJs = source.enableJs, loadWithBaseUrl = source.loadWithBaseUrl, showWebLog = source.showWebLog, cacheFirst = source.cacheFirst,
-            type = source.type.takeIf { it in 0..2 } ?: 0, articleStyle = source.articleStyle.takeIf { it in 0..4 } ?: 0)
+        fun from(source: RssSource) =
+            RssSourceEditorDraft(
+                fields =
+                    mapOf(
+                        RssSourceEditorField.SourceName to
+                            RssSourceEditorText(source.sourceName.orEmpty()),
+                        RssSourceEditorField.SourceUrl to
+                            RssSourceEditorText(source.sourceUrl.orEmpty()),
+                        RssSourceEditorField.SourceIcon to
+                            RssSourceEditorText(source.sourceIcon.orEmpty()),
+                        RssSourceEditorField.SourceGroup to
+                            RssSourceEditorText(source.sourceGroup.orEmpty()),
+                        RssSourceEditorField.SourceComment to
+                            RssSourceEditorText(source.sourceComment.orEmpty()),
+                        RssSourceEditorField.SearchUrl to
+                            RssSourceEditorText(source.searchUrl.orEmpty()),
+                        RssSourceEditorField.SortUrl to
+                            RssSourceEditorText(source.sortUrl.orEmpty()),
+                        RssSourceEditorField.LoginUrl to
+                            RssSourceEditorText(source.loginUrl.orEmpty()),
+                        RssSourceEditorField.LoginUi to
+                            RssSourceEditorText(source.loginUi.orEmpty()),
+                        RssSourceEditorField.LoginCheckJs to
+                            RssSourceEditorText(source.loginCheckJs.orEmpty()),
+                        RssSourceEditorField.CoverDecodeJs to
+                            RssSourceEditorText(source.coverDecodeJs.orEmpty()),
+                        RssSourceEditorField.Header to RssSourceEditorText(source.header.orEmpty()),
+                        RssSourceEditorField.VariableComment to
+                            RssSourceEditorText(source.variableComment.orEmpty()),
+                        RssSourceEditorField.ConcurrentRate to
+                            RssSourceEditorText(source.concurrentRate.orEmpty()),
+                        RssSourceEditorField.JsLib to RssSourceEditorText(source.jsLib.orEmpty()),
+                        RssSourceEditorField.StartHtml to
+                            RssSourceEditorText(source.startHtml.orEmpty()),
+                        RssSourceEditorField.StartStyle to
+                            RssSourceEditorText(source.startStyle.orEmpty()),
+                        RssSourceEditorField.StartJs to
+                            RssSourceEditorText(source.startJs.orEmpty()),
+                        RssSourceEditorField.PreloadJs to
+                            RssSourceEditorText(source.preloadJs.orEmpty()),
+                        RssSourceEditorField.RuleArticles to
+                            RssSourceEditorText(source.ruleArticles.orEmpty()),
+                        RssSourceEditorField.RuleNextPage to
+                            RssSourceEditorText(source.ruleNextPage.orEmpty()),
+                        RssSourceEditorField.RuleTitle to
+                            RssSourceEditorText(source.ruleTitle.orEmpty()),
+                        RssSourceEditorField.RulePubDate to
+                            RssSourceEditorText(source.rulePubDate.orEmpty()),
+                        RssSourceEditorField.RuleDescription to
+                            RssSourceEditorText(source.ruleDescription.orEmpty()),
+                        RssSourceEditorField.RuleImage to
+                            RssSourceEditorText(source.ruleImage.orEmpty()),
+                        RssSourceEditorField.RuleLink to
+                            RssSourceEditorText(source.ruleLink.orEmpty()),
+                        RssSourceEditorField.RuleContent to
+                            RssSourceEditorText(source.ruleContent.orEmpty()),
+                        RssSourceEditorField.NextContentUrl to
+                            RssSourceEditorText(source.nextContentUrl.orEmpty()),
+                        RssSourceEditorField.Style to RssSourceEditorText(source.style.orEmpty()),
+                        RssSourceEditorField.InjectJs to
+                            RssSourceEditorText(source.injectJs.orEmpty()),
+                        RssSourceEditorField.ContentWhitelist to
+                            RssSourceEditorText(source.contentWhitelist.orEmpty()),
+                        RssSourceEditorField.ContentBlacklist to
+                            RssSourceEditorText(source.contentBlacklist.orEmpty()),
+                        RssSourceEditorField.ShouldOverrideUrlLoading to
+                            RssSourceEditorText(source.shouldOverrideUrlLoading.orEmpty()),
+                    ),
+                enabled = source.enabled,
+                singleUrl = source.singleUrl,
+                cookieJar = source.enabledCookieJar == true,
+                preload = source.preload,
+                enableJs = source.enableJs,
+                loadWithBaseUrl = source.loadWithBaseUrl,
+                showWebLog = source.showWebLog,
+                cacheFirst = source.cacheFirst,
+                type = source.type.takeIf { it in 0..2 } ?: 0,
+                articleStyle = source.articleStyle.takeIf { it in 0..4 } ?: 0,
+            )
     }
 }
-data class RssSourceEditorDelivery(val token: String, val action: RssSourceEditorSaveAction, val sourceUrl: String, val loginAvailable: Boolean)
-data class RssSourceEditorDocument(val originalKey: String?, val draft: RssSourceEditorDraft,
-    val baseline: RssSourceEditorDraft = draft, val lastUpdateTime: Long = 0, val customOrder: Int = 0,
-    val revision: Long = 0, val delivery: RssSourceEditorDelivery? = null)
+
+data class RssSourceEditorDelivery(
+    val token: String,
+    val action: RssSourceEditorSaveAction,
+    val sourceUrl: String,
+    val loginAvailable: Boolean,
+)
+
+data class RssSourceEditorDocument(
+    val originalKey: String?,
+    val draft: RssSourceEditorDraft,
+    val baseline: RssSourceEditorDraft = draft,
+    val lastUpdateTime: Long = 0,
+    val customOrder: Int = 0,
+    val revision: Long = 0,
+    val delivery: RssSourceEditorDelivery? = null,
+)
