@@ -45,7 +45,7 @@ class BookDetailNativeHost(
     private val launchers: BookDetailNativeLaunchers,
     private val compatibilityBook: (Book?) -> Unit,
     private val closeDeleted: () -> Unit,
-    private val clearCache: () -> Unit,
+    private val clearCache: (BookDetailNativePayload) -> Unit,
 ) {
     fun deliver(payload: BookDetailNativePayload) {
         val effect = payload.effect
@@ -70,7 +70,7 @@ class BookDetailNativeHost(
                 closeDeleted()
             }
             BookDetailNativeKind.ClearCacheRequest ->
-                callback(payload, SourceCallBack.CLICK_CLEAR_CACHE, fallback = clearCache)
+                callback(payload, SourceCallBack.CLICK_CLEAR_CACHE) { clearCache(payload) }
             BookDetailNativeKind.CacheCleared -> {
                 if (book != null && ReadBook.book?.bookUrl == book.bookUrl)
                     ReadBook.clearTextChapter()

@@ -171,6 +171,41 @@ class BookDetailCommandsTest {
     }
 
     @Test
+    fun sourceScriptFallbackDoesNotClearReplacedSourceAndCurrentClickStillWorks() =
+        runTest(dispatcher) {
+            val fixture = Fixture(this)
+            try {
+                runCurrent()
+                fixture.commands.action(BookDetailAction.ClearCache)
+                runCurrent()
+                val oldClick = fixture.model.state.value.session!!.effects.single()
+                fixture.data =
+                    fixture.data.copy(
+                        source =
+                            BookDetailSource.from(
+                                BookSource(
+                                    bookSourceUrl = "new-source",
+                                    bookSourceName = "New source",
+                                )
+                            )
+                    )
+                fixture.model.reload()
+                runCurrent()
+                fixture.commands.clearCache(oldClick)
+                runCurrent()
+                assertTrue(fixture.services.isEmpty())
+                fixture.commands.action(BookDetailAction.ClearCache)
+                runCurrent()
+                fixture.commands.clearCache(fixture.model.state.value.session!!.effects.last())
+                runCurrent()
+                assertEquals(BookDetailServiceKind.ClearCache, fixture.services.single().kind)
+            } finally {
+                fixture.stop()
+                runCurrent()
+            }
+        }
+
+    @Test
     fun tocUsesSettledNavigationAndEmptyChapterListDoesNotOpenReader() =
         runTest(dispatcher) {
             val empty = Fixture(this, chapters = false)

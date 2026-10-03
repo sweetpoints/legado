@@ -1350,3 +1350,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 书籍详情数据基础与嵌套封面仓库独立执行统一 Kotlin formatter，展开原单行类型和分支，并将通配导入改为显式导入；保持 Room/网络桥、私有 session、子页面账本、服务 accepted receipt 和资源释放算法。@Keep 保名与 prepared/Host 功能分别提交，本批 formatter check 与 diff check 通过，完整验证统一排队。
 
 书籍详情新增 private prepared 入口：BookInfoNavigation.prepare 将完整 immutable identity 写入现有 fenced 会话并返回 UUID，intent 仅携带 UUID，startPrepared 在 Main 接受启动后不会因 dispatcher return 取消而释放新宿主所有的会话；未交付准备失败清理仅自身 ticket。identity-only 会话恢复保留原首次 info/toc 获取。新增 2 个 JVM 与 2 个真实 Atomic/Intent Android 编译用例（大字段、取消接受写入、邻居保留），最终编译/回归排队；新入口的页面接入在 Host 后续提交完成，旧 API 保持兼容。
+
+书籍详情清缓存来源脚本 fallback 保留原点击的不可变 native effect；异步脚本结束后，仅当前书籍 URL/来源/书名/作者与书源快照仍匹配且可交互时执行，Host 以 RESUMED 生命周期等待交付。新增实际 ViewModel 回归覆盖脚本等待期间换源后旧 fallback 丢弃、新点击仍可清理。交互边界与 Host 接入分开提交，最终全页回归统一验证。

@@ -2,6 +2,7 @@ package io.legado.app.ui.book.info.detail
 
 import io.legado.app.data.repository.BookDetailMutation
 import io.legado.app.data.repository.BookDetailMutationKind
+import io.legado.app.data.repository.BookDetailNativeEffect
 import io.legado.app.data.repository.BookDetailNativeKind
 import io.legado.app.data.repository.BookDetailPreference
 import io.legado.app.data.repository.BookDetailPreferences
@@ -63,6 +64,23 @@ class BookDetailCommands(
                 ensureActive()
                 if (!viewModel.state.value.closed) showMessage(error.message ?: error.toString())
             }
+        }
+    }
+
+    /** A source script may return after the user selected another book or source. */
+    fun clearCache(expected: BookDetailNativeEffect) {
+        val currentState = viewModel.state.value
+        val currentData = currentState.data ?: return
+        val expectedBook = expected.book ?: return
+        if (
+            currentState.canInteract &&
+                currentData.book.bookUrl == expectedBook.bookUrl &&
+                currentData.book.origin == expectedBook.origin &&
+                currentData.book.name == expectedBook.name &&
+                currentData.book.author == expectedBook.author &&
+                currentData.source == expected.source
+        ) {
+            viewModel.service(BookDetailServiceKind.ClearCache)
         }
     }
 
