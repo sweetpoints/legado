@@ -62,10 +62,11 @@ class BookshelfTransferRepository(private val context: Context) {
             val baseUrl = NetworkUtils.getBaseUrl(bookUrl) ?: continue
             var source: BookSource? = null
             val urlMatcher = AnalyzeUrl.paramPattern.matcher(bookUrl)
-            if (urlMatcher.find()) { //指定书源
-                val origin = GSON.fromJsonObject<AnalyzeUrl.UrlOption>(
-                    bookUrl.substring(urlMatcher.end())
-                ).getOrNull()?.getOrigin()
+            if (urlMatcher.find()) { // 指定书源
+                val origin =
+                    GSON.fromJsonObject<AnalyzeUrl.UrlOption>(bookUrl.substring(urlMatcher.end()))
+                        .getOrNull()
+                        ?.getOrigin()
                 try {
                     origin?.let {
                         appDb.bookSourceDao.getBookSource(it)?.let { bs ->
@@ -74,61 +75,83 @@ class BookshelfTransferRepository(private val context: Context) {
                             }
                         }
                     }
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
             }
-            if (source == null) { //根据域名找书源
+            if (source == null) { // 根据域名找书源
                 source = appDb.bookSourceDao.getBookSourceAddBook(baseUrl)
             }
             if (source == null) {
-                for (bookSource in hasBookUrlPattern) { //在所有启用的书源中查找
+                for (bookSource in hasBookUrlPattern) { // 在所有启用的书源中查找
                     try {
                         val bs = bookSource.getBookSource()!!
                         if (bookUrl.matches(bs.bookUrlPattern!!.toRegex())) {
                             source = bs
                             break
                         }
-                    } catch (_: Exception) {
-                    }
+                    } catch (_: Exception) {}
                 }
             }
             val bookSource = source ?: continue
-            val book = Book(
-                bookUrl = bookUrl,
-                origin = bookSource.bookSourceUrl,
-                originName = bookSource.bookSourceName
-            )
-            kotlin.runCatching {
-                WebBook.getBookInfoAwait(bookSource, book)
-            }.onFailure { currentCoroutineContext().ensureActive() }.onSuccess {
-                val dbBook = appDb.bookDao.getBook(it.name, it.author)
-                if (dbBook != null) {
-                    val toc = WebBook.getChapterListAwait(bookSource, it).getOrThrow()
-                    val migratedBook = migrateBookForUrlAdd(dbBook, it, toc, groupId)
-                    replaceBookAfterSourceChange(dbBook, migratedBook, toc, clearActiveReader = false)
-                } else {
-                    it.group = mergeBookGroupForUrlAdd(it.group, groupId)
-                    it.order = appDb.bookDao.minOrder - 1
-                    it.savePreservingCustomCoverUrl()
+            val book =
+                Book(
+                    bookUrl = bookUrl,
+                    origin = bookSource.bookSourceUrl,
+                    originName = bookSource.bookSourceName,
+                )
+            kotlin
+                .runCatching {
+                    WebBook.getBookInfoAwait(bookSource, book)
                 }
-                successCount++
-                onProgress(successCount)
-            }
+                .onFailure { currentCoroutineContext().ensureActive() }
+                .onSuccess {
+                    val dbBook = appDb.bookDao.getBook(it.name, it.author)
+                    if (dbBook != null) {
+                        val toc = WebBook.getChapterListAwait(bookSource, it).getOrThrow()
+                        val migratedBook = migrateBookForUrlAdd(dbBook, it, toc, groupId)
+                        replaceBookAfterSourceChange(
+                            dbBook,
+                            migratedBook,
+                            toc,
+                            clearActiveReader = false,
+                        )
+                    } else {
+                        it.group = mergeBookGroupForUrlAdd(it.group, groupId)
+                        it.order = appDb.bookDao.minOrder - 1
+                        it.savePreservingCustomCoverUrl()
+                    }
+                    successCount++
+                    onProgress(successCount)
+                }
         }
         return successCount
     }
+
     suspend fun exportBooks(books: List<Book>?): File {
         requireNotNull(books) { "书籍不能为空" }
         val file = File.createTempFile("bookshelf-", ".json", context.cacheDir)
-        try { FileOutputStream(file).use { writeBookshelfExport(books, OutputStreamWriter(it, "UTF-8")) } }
-        catch (error: Throwable) { file.delete(); throw error }
+        try {
+            FileOutputStream(file).use {
+                writeBookshelfExport(books, OutputStreamWriter(it, "UTF-8"))
+            }
+        } catch (error: Throwable) {
+            file.delete()
+            throw error
+        }
         return file
     }
-    suspend fun importFile(uri: String, groupId: Long) { importBooks(Uri.parse(uri).readText(context), groupId) }
+
+    suspend fun importFile(uri: String, groupId: Long) {
+        importBooks(Uri.parse(uri).readText(context), groupId)
+    }
+
     suspend fun importBooks(str: String, groupId: Long) {
         val text = str.trim()
         when {
-            text.isAbsUrl() -> importBooks(okHttpClient.newCallResponseBody { url(text) }.decompressed().text(), groupId)
+            text.isAbsUrl() ->
+                importBooks(
+                    okHttpClient.newCallResponseBody { url(text) }.decompressed().text(),
+                    groupId,
+                )
             text.isJsonArray() -> importBookshelfJson(text, groupId)
             else -> throw NoStackTraceException("格式不对")
         }
@@ -140,20 +163,29 @@ internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutin
     val books = parseBookshelfImport(json)
     val sources = appDb.bookSourceDao.allEnabledPart
     val semaphore = Semaphore(AppConfig.threadCount)
-    val failures = books.map { (name, author) ->
-        async {
-            runCatching {
-                semaphore.withPermit {
-                    if (appDb.bookDao.has(name, author)) return@withPermit
-                    val book = sources.firstNotNullOfOrNull { part ->
-                        part.getBookSource()?.let { WebBook.preciseSearchAwait(it, name, author).getOrNull() }
-                    } ?: throw NoStackTraceException("没有搜索到<$name>$author")
-                    if (groupId > 0) book.group = groupId
-                    book.savePreservingCustomCoverUrl()
+    val failures =
+        books
+            .map { (name, author) ->
+                async {
+                    runCatching {
+                        semaphore.withPermit {
+                            if (appDb.bookDao.has(name, author)) return@withPermit
+                            val book =
+                                sources.firstNotNullOfOrNull { part ->
+                                    part.getBookSource()?.let {
+                                        WebBook.preciseSearchAwait(it, name, author).getOrNull()
+                                    }
+                                } ?: throw NoStackTraceException("没有搜索到<$name>$author")
+                            if (groupId > 0) book.group = groupId
+                            book.savePreservingCustomCoverUrl()
+                        }
+                    }
+                        .onFailure { currentCoroutineContext().ensureActive() }
+                        .exceptionOrNull()
                 }
-            }.onFailure { currentCoroutineContext().ensureActive() }.exceptionOrNull()
-        }
-    }.awaitAll().filterNotNull()
+            }
+            .awaitAll()
+            .filterNotNull()
     if (failures.isNotEmpty()) {
         throw NoStackTraceException(failures.joinToString("\n") { it.localizedMessage.orEmpty() })
     }
@@ -161,23 +193,35 @@ internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutin
 }
 
 internal fun parseBookshelfImport(json: String): List<Pair<String, String>> {
-    return GSON.fromJsonArray<JsonObject>(json).getOrThrow().map { book ->
-        val name = book.get("name")
-        val author = book.get("author")
-        require(name != null && name.isJsonPrimitive && name.asJsonPrimitive.isString)
-        require(author == null || author.isJsonNull ||
-            author.isJsonPrimitive && author.asJsonPrimitive.isString)
-        name.asString.also { require(it.isNotBlank()) } to
-            author?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-    }.distinct()
+    return GSON.fromJsonArray<JsonObject>(json)
+        .getOrThrow()
+        .map { book ->
+            val name = book.get("name")
+            val author = book.get("author")
+            require(name != null && name.isJsonPrimitive && name.asJsonPrimitive.isString)
+            require(
+                author == null ||
+                    author.isJsonNull ||
+                    author.isJsonPrimitive && author.asJsonPrimitive.isString
+            )
+            name.asString.also { require(it.isNotBlank()) } to
+                author?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+        }
+        .distinct()
 }
 
 internal suspend fun writeBookshelfExport(books: List<Book>, output: java.io.Writer) {
     JsonWriter(output).use { writer ->
-        writer.setIndent("  "); writer.beginArray()
+        writer.setIndent("  ")
+        writer.beginArray()
         books.forEach { book ->
             currentCoroutineContext().ensureActive()
-            val values = hashMapOf("name" to book.name, "author" to book.author, "intro" to book.getDisplayIntro())
+            val values =
+                hashMapOf(
+                    "name" to book.name,
+                    "author" to book.author,
+                    "intro" to book.getDisplayIntro(),
+                )
             GSON.toJson(values, values::class.java, writer)
         }
         writer.endArray()
