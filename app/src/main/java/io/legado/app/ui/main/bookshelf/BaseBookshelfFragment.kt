@@ -3,8 +3,11 @@ package io.legado.app.ui.main.bookshelf
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.data.entities.Book
@@ -39,7 +42,18 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
         get() = arguments?.getInt("position")
 
     val activityViewModel by activityViewModels<MainViewModel>()
-    override val viewModel by viewModels<BookshelfViewModel>()
+    override val viewModel by
+        viewModels<BookshelfViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookshelfViewModel(
+                        requireActivity().application,
+                        createSavedStateHandle(),
+                        resumePendingFileImport = !restoreWithoutPageView,
+                    )
+                }
+            }
+        }
 
     private val importBookshelf =
         registerForActivityResult(HandleFileContract()) { result ->
@@ -76,8 +90,22 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
     internal var resultBridgeOnly: Boolean = false
         private set
 
+    internal var pendingResultBridge: Boolean = false
+        private set
+
+    internal var restoreWithoutPageView: Boolean = false
+
     internal fun retainForPendingResult() {
         resultBridgeOnly = true
+        pendingResultBridge = true
+    }
+
+    internal fun retainForPendingTransfer() {
+        resultBridgeOnly = true
+    }
+
+    internal fun finishPendingResultBridge() {
+        pendingResultBridge = false
     }
 
     abstract val groupId: Long
@@ -140,25 +168,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                 launch {
                     viewModel.transfer.pendingExport.collect { path ->
                         if (path == null) return@collect
-                        val requestId = viewModel.transfer.pendingExportRequestId ?: return@collect
-                        if (viewModel.transfer.exportPickerInFlight) return@collect
-                        val file = java.io.File(path)
-                        if (file.exists()) {
-                            exportRequestId = requestId
-                            viewModel.transfer.exportLaunched(path, requestId)
-                            exportResult.launch {
-                                mode = HandleFileContract.EXPORT
-                                fileData =
-                                    HandleFileContract.FileData(
-                                        "bookshelf.json",
-                                        file,
-                                        "application/json",
-                                    )
-                            }
-                        } else {
-                            toastOnUi(getString(R.string.error))
-                            viewModel.transfer.exportReturned(path, requestId)
-                        }
+                        launchPendingExportPicker(path)
                     }
                 }
             }
@@ -190,6 +200,26 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
         importBookshelf.launch {
             mode = HandleFileContract.FILE
             allowExtensions = arrayOf("txt", "json")
+        }
+    }
+
+    internal fun launchPendingExportPicker(path: String) {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (parentFragmentManager.isStateSaved) return
+        val transfer = viewModel.transfer
+        val requestId = transfer.pendingExportRequestId ?: return
+        if (transfer.exportPickerInFlight) return
+        val file = java.io.File(path)
+        transfer.exportLaunched(path, requestId)
+        if (file.exists()) {
+            exportRequestId = requestId
+            exportResult.launch {
+                mode = HandleFileContract.EXPORT
+                fileData = HandleFileContract.FileData("bookshelf.json", file, "application/json")
+            }
+        } else {
+            toastOnUi(getString(R.string.error))
+            transfer.exportReturned(path, requestId)
         }
     }
 
