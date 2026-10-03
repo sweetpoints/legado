@@ -18,6 +18,7 @@ import io.legado.app.ui.book.import.local.ImportBook
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -32,6 +33,75 @@ import org.junit.Test
 class FileAssociationCompatibilityModelTest {
     private val application = ApplicationProvider.getApplicationContext<Application>()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    @Test
+    fun failedDurableSelectionCannotAuthorizeImportUsingPreviousSelection() = runBlocking {
+        val failWrites = AtomicBoolean(false)
+        val directory = File(application.cacheDir, "association-proof-${UUID.randomUUID()}")
+        val sessions =
+            FileAssociationSessionRepository(
+                application,
+                directory,
+                beforeWrite = { if (failWrites.get()) error("Selection write failed") },
+            )
+        val ticket =
+            sessions.create(
+                AssociationInput(AssociationHostKind.File, AssociationInputKind.SharedUri)
+            )
+        val initial = sessions.read(ticket)
+        sessions.write(
+            ticket,
+            initial.copy(
+                revision = 1,
+                phase = AssociationPhase.Preview,
+                previews =
+                    listOf(
+                        AssociationBookPreview(
+                            "book",
+                            "file:///private/book",
+                            "book.txt",
+                            GSON.toJson(Book(bookUrl = "private", name = "Book")),
+                        )
+                    ),
+                selectedIds = listOf("book"),
+            ),
+        )
+        lateinit var model: FileAssociationCompatibilityModel
+        instrumentation.runOnMainSync {
+            model =
+                FileAssociationCompatibilityModel(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to ticket)),
+                    AssociationDependencies(application, sessions),
+                )
+        }
+        try {
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) { while (!model.state.value.loaded) delay(10) }
+            }
+            failWrites.set(true)
+            instrumentation.runOnMainSync {
+                model.updateLocalSelection(emptyList())
+                model.confirmLocalBooks()
+            }
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) { while (model.state.value.restoreError == null) delay(10) }
+            }
+            withContext(Dispatchers.Main) { model.awaitCommands() }
+            assertEquals(listOf("book"), sessions.read(ticket).selectedIds)
+            assertEquals(null, sessions.read(ticket).operation)
+            assertEquals(AssociationPhase.Preview, sessions.read(ticket).phase)
+        } finally {
+            failWrites.set(false)
+            instrumentation.runOnMainSync {
+                ViewModelStore().apply {
+                    put("model", model)
+                    clear()
+                }
+            }
+            sessions.release(ticket)
+            directory.deleteRecursively()
+        }
+    }
 
     @Test
     fun originalChildDtoPreservesFullMetadataAndSelectionWithoutSavingUriOrJson() = runBlocking {

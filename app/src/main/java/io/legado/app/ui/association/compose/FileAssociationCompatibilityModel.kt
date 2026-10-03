@@ -14,8 +14,11 @@ import io.legado.app.ui.book.import.local.ImportBook
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -28,7 +31,7 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 open class FileAssociationCompatibilityModel
-private constructor(
+internal constructor(
     savedState: SavedStateHandle,
     dependencies: AssociationDependencies,
 ) :
@@ -48,20 +51,33 @@ private constructor(
         AssociationDependencies(application),
     )
 
+    private var selectionProof: Deferred<Boolean>? = null
+
     val localBookBatch: LiveData<List<ImportBook>?> =
         state
             .mapLatest { current ->
                 val previews = current.session?.previews.orEmpty()
                 if (previews.isEmpty()) null
                 else
-                    withContext(Dispatchers.IO) {
-                        previews.map { preview ->
-                            ImportBook(
-                                file = FileDoc.fromUri(Uri.parse(preview.fileUri), false),
-                                isOnBookShelf = preview.onBookshelf,
-                                preview = GSON.fromJsonObject<Book>(preview.bookJson).getOrThrow(),
-                            )
+                    try {
+                        withContext(Dispatchers.IO) {
+                            previews.map { preview ->
+                                ImportBook(
+                                    file = FileDoc.fromUri(Uri.parse(preview.fileUri), false),
+                                    isOnBookShelf = preview.onBookshelf,
+                                    preview =
+                                        GSON.fromJsonObject<Book>(preview.bookJson).getOrThrow(),
+                                )
+                            }
                         }
+                    } catch (failure: Throwable) {
+                        currentCoroutineContext().ensureActive()
+                        reportProjectionFailure(
+                            current.ticket,
+                            current.session?.generation,
+                            failure,
+                        )
+                        null
                     }
             }
             .asLiveData()
@@ -124,22 +140,31 @@ private constructor(
 
     fun updateLocalSelection(uris: Collection<Uri>) {
         val selected = uris.map(Uri::toString).toSet()
-        updateSelection(
-            state.value.session
-                ?.previews
-                .orEmpty()
-                .filter { it.fileUri in selected }
-                .map { it.id }
-                .toSet()
-        )
+        selectionProof =
+            updateSelectionWithProof(
+                state.value.session
+                    ?.previews
+                    .orEmpty()
+                    .filter { it.fileUri in selected }
+                    .map { it.id }
+                    .toSet()
+            )
     }
 
     fun confirmLocalBooks() {
+        val proof = selectionProof ?: return
+        val owner = state.value
         viewModelScope.launch {
+            if (!proof.await() || selectionProof !== proof) return@launch
             // The child issues selection and confirmation in the same callback. Wait for the
             // durable selection command before choosing a folder or accepting the import.
             awaitCommands()
             val configured = withContext(Dispatchers.IO) { AppConfig.defaultBookTreeUri }
+            if (
+                !acceptsCallback(owner.ticket, owner.session?.generation) ||
+                    selectionProof !== proof
+            )
+                return@launch
             if (configured.isNullOrBlank()) requestDirectory()
             else confirmOperation("local-import", configured)
         }

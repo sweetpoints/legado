@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -104,6 +105,48 @@ class OnlineAssociationCompatibilityModelTest {
             release.countDown()
             fixture.close()
             server.stop()
+        }
+    }
+
+    @Test
+    fun closedOwnerWithoutStoreClearRejectsLateHttpSuccessAndDecodeFailure() = runBlocking {
+        for (invalidGzip in listOf(false, true)) {
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val server =
+                object : NanoHTTPD(0) {
+                    override fun serve(session: IHTTPSession): Response {
+                        entered.countDown()
+                        release.await(5, TimeUnit.SECONDS)
+                        return newFixedLengthResponse("late response").also {
+                            if (invalidGzip) it.addHeader("Content-Encoding", "gzip")
+                        }
+                    }
+                }
+            server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+            val fixture = fixture()
+            val deliveries = AtomicInteger()
+            try {
+                instrumentation.runOnMainSync {
+                    fixture.model.getText("http://127.0.0.1:${server.listeningPort}/late") {
+                        deliveries.incrementAndGet()
+                    }
+                }
+                assertTrue(withContext(Dispatchers.Default) { entered.await(5, TimeUnit.SECONDS) })
+                val requests = fixture.model.viewModelScope.coroutineContext.job.children.toList()
+                withContext(Dispatchers.Main) { fixture.model.closeOwnedSession() }
+                release.countDown()
+                withContext(Dispatchers.Default) {
+                    withTimeout(5_000) { requests.joinAll() }
+                }
+                instrumentation.waitForIdleSync()
+                assertEquals(0, deliveries.get())
+                instrumentation.runOnMainSync { assertEquals(null, fixture.model.errorLive.value) }
+            } finally {
+                release.countDown()
+                fixture.close()
+                server.stop()
+            }
         }
     }
 

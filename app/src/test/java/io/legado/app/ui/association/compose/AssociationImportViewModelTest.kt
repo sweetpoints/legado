@@ -563,6 +563,73 @@ class AssociationImportViewModelTest {
         }
     }
 
+    @Test
+    fun selectionProofRejectsFailedPersistenceAndBusyInitialInput() =
+        runTest(dispatcher) {
+            val sessions =
+                MemorySessions().apply {
+                    current =
+                        AssociationSession(
+                            input,
+                            phase = AssociationPhase.Preview,
+                            previews = listOf(preview),
+                            selectedIds = listOf(preview.id),
+                        )
+                    readGate = CompletableDeferred()
+                }
+            val model =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                )
+            try {
+                runCurrent()
+                assertFalse(model.updateSelectionWithProof(emptySet()).await())
+                sessions.readGate!!.complete(Unit)
+                runCurrent()
+                sessions.writeFailure = IllegalStateException("Atomic write failed")
+                val proof = model.updateSelectionWithProof(emptySet())
+                runCurrent()
+                assertFalse(proof.await())
+                assertEquals(listOf(preview.id), sessions.current!!.selectedIds)
+                assertEquals("Atomic write failed", model.state.value.restoreError)
+                assertFalse(model.state.value.busy)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun callbackRequiresLoadedLiveOwnerAndRejectsCloseWithoutStoreClear() =
+        runTest(dispatcher) {
+            val sessions =
+                MemorySessions().apply {
+                    current = AssociationSession(input, phase = AssociationPhase.Preview)
+                    readGate = CompletableDeferred()
+                }
+            val model =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                )
+            try {
+                runCurrent()
+                assertFalse(model.acceptsCallback(null, null))
+                assertFalse(model.acceptsCallback("ticket", 0))
+                sessions.readGate!!.complete(Unit)
+                runCurrent()
+                assertTrue(model.acceptsCallback("ticket", 0))
+                model.closeOwnedSession()
+                assertFalse(model.acceptsCallback("ticket", 0))
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
     private fun model(
         saved: SavedStateHandle,
         sessions: MemorySessions,
@@ -618,6 +685,7 @@ class AssociationImportViewModelTest {
         var current: AssociationSession? = null
         var creations = 0
         var writes = 0
+        var writeFailure: Throwable? = null
         var readFailure: Throwable? = null
         var readGate: CompletableDeferred<Unit>? = null
 
@@ -634,6 +702,7 @@ class AssociationImportViewModelTest {
         }
 
         override suspend fun write(ticket: String, value: AssociationSession): Boolean {
+            writeFailure?.let { throw it }
             if (value.revision <= checkNotNull(current).revision) return false
             writes++
             current = value

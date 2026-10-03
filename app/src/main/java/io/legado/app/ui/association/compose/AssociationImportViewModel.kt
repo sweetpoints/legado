@@ -23,8 +23,11 @@ import io.legado.app.data.association.AssociationSessionController
 import io.legado.app.data.association.AssociationSessionRepository
 import io.legado.app.data.association.associationOnlineRoute
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -259,6 +262,66 @@ open class AssociationImportViewModel(
         state.value.ticket?.let { ticket ->
             withContext(NonCancellable) { sessions.release(ticket) }
         }
+    }
+
+    /** Public async callbacks require a live, loaded nonterminal owner, not UUID equality alone. */
+    fun acceptsCallback(ticket: String?, generation: Long?): Boolean {
+        val current = state.value
+        return !closed &&
+            ticket != null &&
+            generation != null &&
+            current.loaded &&
+            current.ticket == ticket &&
+            current.session?.generation == generation &&
+            current.session?.phase != AssociationPhase.Finished
+    }
+
+    fun reportProjectionFailure(ticket: String?, generation: Long?, failure: Throwable) {
+        if (acceptsCallback(ticket, generation)) {
+            mutableState.value =
+                state.value.copy(restoreError = failure.message ?: "Unable to restore preview")
+        }
+    }
+
+    fun updateSelectionWithProof(ids: Set<String>): Deferred<Boolean> {
+        val current = state.value
+        val ticket = current.ticket
+        val session = current.session
+        if (
+            ticket == null ||
+                session == null ||
+                closed ||
+                current.busy ||
+                current.nativeResultPending ||
+                operation?.isActive == true
+        ) {
+            return CompletableDeferred(false)
+        }
+        mutableState.value = current.copy(busy = true)
+        val proof = viewModelScope.async {
+            try {
+                val accepted =
+                    controller(ticket).update(session.generation) {
+                        it.copy(
+                            selectedIds =
+                                it.previews.map { preview -> preview.id }.filter { it in ids }
+                        )
+                    } ?: return@async false
+                publish(ticket, accepted, busy = false)
+                acceptsCallback(ticket, session.generation) && accepted.selectedIds.toSet() == ids
+            } catch (failure: Throwable) {
+                currentCoroutineContext().ensureActive()
+                if (!closed)
+                    mutableState.value =
+                        state.value.copy(
+                            busy = false,
+                            restoreError = failure.message ?: "Unable to save selection",
+                        )
+                false
+            }
+        }
+        operation = proof
+        return proof
     }
 
     fun updateSelection(ids: Set<String>) = command { session ->

@@ -52,6 +52,7 @@ private constructor(
     fun getText(url: String, success: (text: String) -> Unit) {
         val requestTicket = state.value.ticket
         val requestGeneration = state.value.session?.generation
+        if (!acceptsCallback(requestTicket, requestGeneration)) return
         viewModelScope.launch {
             try {
                 val text = dependencies.online.text(url)
@@ -87,7 +88,6 @@ private constructor(
     }
 
     private fun sameOwner(ticket: String?, generation: Long?): Boolean {
-        val current = state.value
-        return current.ticket == ticket && current.session?.generation == generation
+        return acceptsCallback(ticket, generation)
     }
 }
