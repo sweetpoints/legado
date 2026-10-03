@@ -893,3 +893,7 @@ Added an immutable Room source/sort repository and owned Debug execution lease, 
 ### Unused legacy layout cleanup
 
 Removed fourteen orphan layouts after checking committed production, test and module sources for layout names, generated Binding names and XML references. These include obsolete donate/group shells, loading templates, login rows and unused single-selection/video/tab templates. Active chapter-source and replacement-editor migration resources are excluded. Validated through complete production/Android-test compilation and JVM tests to detect missing generated resources.
+
+### Replacement rule editor Compose page
+
+Replaced ReplaceEditActivity XML/ViewBinding and the legacy ViewModel with a Compose Route and stateless Screen. Preserved all eight fields, four flags, selectable preview, original paste/copy/save APIs, unsafe-text editor entry, cursor-only returns and unsaved-exit decisions. Custom keyboard assist keys and row preferences update live; failed native results expose retry/discard. Removed the exclusive layout/menu and replaced the old cursor wiring assertion with actual host coverage. Added eight Compose, three host and two Room/preference tests. Validated with all JVM tests and Android test compilation.
