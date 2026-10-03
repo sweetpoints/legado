@@ -232,7 +232,11 @@ open class AssociationImportViewModel(
                                     session.operation == null ||
                                         session.operation.kind == "local-import"
                                 )
-                                confirmOperation("local-import", result.directory)
+                                startConfirmedOperation(
+                                    "local-import",
+                                    result.directory,
+                                    currentCoroutineContext()[Job],
+                                )
                             }
                             awaitCommands()
                             val completed = controller(ticket).read()
@@ -396,12 +400,22 @@ open class AssociationImportViewModel(
         publish(ticket, controller(ticket).read(), busy = state.value.busy)
     }
 
-    fun confirmOperation(kind: String, payload: String? = null) {
+    fun confirmOperation(kind: String, payload: String? = null) =
+        startConfirmedOperation(kind, payload)
+
+    private fun startConfirmedOperation(
+        kind: String,
+        payload: String?,
+        restoringJob: Job? = null,
+    ) {
         val current = state.value
         val ticket = current.ticket ?: return
         val session = current.session ?: return
         val executor = actions ?: return
-        if (closed || current.busy || operation?.isActive == true) return
+        // Reconciliation is itself the initial restore Job. It may hand ownership to a confirmed
+        // import; another active command still cannot authorize a second accepted mutation.
+        if (closed || current.busy || (operation?.isActive == true && operation != restoringJob))
+            return
         mutableState.value = current.copy(busy = true)
         operation = viewModelScope.launch {
             try {
@@ -509,7 +523,7 @@ open class AssociationImportViewModel(
         if (!accepted) return
         publish(ticket, persisted, busy = false)
         if (directory != null && persisted.importAfterDirectory)
-            confirmOperation("local-import", directory)
+            startConfirmedOperation("local-import", directory, currentCoroutineContext()[Job])
     }
 
     private suspend fun inspect(ticket: String, original: AssociationSession) {
