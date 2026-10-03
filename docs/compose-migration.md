@@ -1298,3 +1298,7 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 - The remaining export-success native XML dialog is replaced by a Compose prompt with the original upload summary, BOOK_SOURCE share passphrase and original-payload copy semantics. Complete feedback/drafts restore from the UUID session and never enter SavedStateHandle. Session/feedback classes and persisted enums carry precise @Keep annotations for Gson field identity; release R8 packaging has not been run.
 
 - Source manager preferences now initialize through IO rather than constructor disk getters. Toggles publish immediately on Main, capture a complete immutable preference snapshot, and serialize accepted IO writes under the operation mutex. A unit regression checks zero constructor reads and the final snapshot after queued rapid toggles. All review-fix Kotlin files were formatted with pinned ktfmt 0.64 and checked; final full-tip Gradle validation is queued separately.
+### Audio controller ownership
+
+- `AudioPlay.unregister` now releases its coroutine children only when the retiring Activity is still the registered owner. An old Activity destroyed after a replacement registers no longer cancels the replacement's pending playback requests.
+- `AudioControllerOwnershipTest` exercises both retired-owner and current-owner release against an actual coroutine Job. The shared audio engine's other cancellation paths are preserved.

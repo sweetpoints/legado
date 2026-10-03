@@ -959,11 +959,12 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun unregister(context: Context) {
-        if (activityContext === context) {
+        releaseAudioController(activityContext, context) {
             activityContext = null
             callback = null
+            // A retired Activity must not cancel requests owned by its replacement.
+            coroutineContext.cancelChildren()
         }
-        coroutineContext.cancelChildren()
     }
 
     fun registerService(context: Context) {
