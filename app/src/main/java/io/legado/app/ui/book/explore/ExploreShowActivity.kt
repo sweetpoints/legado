@@ -29,10 +29,9 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-/**
- * 发现列表
- */
-class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreShowViewModel>(),
+/** 发现列表 */
+class ExploreShowActivity :
+    VMBaseActivity<ActivityExploreShowBinding, ExploreShowViewModel>(),
     ExploreShowAdapter.CallBack {
     override val binding by viewBinding(ActivityExploreShowBinding::inflate)
     override val viewModel by viewModels<ExploreShowViewModel>()
@@ -49,48 +48,57 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private var menuPage: MenuItem? = null
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuCategories = menu.add(Menu.NONE, R.id.menu_show_explore_categories, Menu.NONE,
-            R.string.show_explore_categories).apply {
-            isCheckable = true
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-            setOnMenuItemClickListener {
-                AppConfig.showExploreCategories = !AppConfig.showExploreCategories
-                updateCategories()
-                true
-            }
-        }
-        menuAddLoadedBooks = menu.add(R.string.add_loaded_books_to_bookshelf).apply {
-            isEnabled = viewModel.addBooksBusy.value != true
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-            setOnMenuItemClickListener {
-                alertAddLoadedBooksToShelf()
-                true
-            }
-        }
-        menuPage = menu.add(getString(R.string.menu_page, viewModel.pageLiveData.value ?: 1)).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setOnMenuItemClickListener {
-                val page = viewModel.pageLiveData.value ?: 1
-                NumberPickerDialog(this@ExploreShowActivity)
-                    .setTitle(getString(R.string.change_page))
-                    .setMaxValue(999)
-                    .setMinValue(1)
-                    .setValue(page)
-                    .show {
-                        if (page != it) {
-                            updateTopHeader(it)
-                            oldPage = it
-                            viewModel.skipPage(it)
-                            loadMoreViewTop.stopLoad()
-                            loadMoreView.hasMore()
-                            isClearAll = true
-                            adapter.clearItems()
-                            viewModel.explore()
-                        }
+        menuCategories =
+            menu
+                .add(
+                    Menu.NONE,
+                    R.id.menu_show_explore_categories,
+                    Menu.NONE,
+                    R.string.show_explore_categories,
+                )
+                .apply {
+                    isCheckable = true
+                    setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                    setOnMenuItemClickListener {
+                        AppConfig.showExploreCategories = !AppConfig.showExploreCategories
+                        updateCategories()
+                        true
                     }
-                true
+                }
+        menuAddLoadedBooks =
+            menu.add(R.string.add_loaded_books_to_bookshelf).apply {
+                isEnabled = viewModel.addBooksBusy.value != true
+                setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                setOnMenuItemClickListener {
+                    alertAddLoadedBooksToShelf()
+                    true
+                }
             }
-        }
+        menuPage =
+            menu.add(getString(R.string.menu_page, viewModel.pageLiveData.value ?: 1)).apply {
+                setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                setOnMenuItemClickListener {
+                    val page = viewModel.pageLiveData.value ?: 1
+                    NumberPickerDialog(this@ExploreShowActivity)
+                        .setTitle(getString(R.string.change_page))
+                        .setMaxValue(999)
+                        .setMinValue(1)
+                        .setValue(page)
+                        .show {
+                            if (page != it) {
+                                updateTopHeader(it)
+                                oldPage = it
+                                viewModel.skipPage(it)
+                                loadMoreViewTop.stopLoad()
+                                loadMoreView.hasMore()
+                                isClearAll = true
+                                adapter.clearItems()
+                                viewModel.explore()
+                            }
+                        }
+                    true
+                }
+            }
         updateCategories()
         return true
     }
@@ -112,9 +120,13 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
             if (it != null) loadMoreViewTop.error(it)
         }
         viewModel.upAdapterLiveData.observe(this) {
-            adapter.notifyItemRangeChanged(0, adapter.itemCount, Bundle().apply {
-                putString(it, null)
-            })
+            adapter.notifyItemRangeChanged(
+                0,
+                adapter.itemCount,
+                Bundle().apply {
+                    putString(it, null)
+                },
+            )
         }
         viewModel.pageLiveData.observe(this) {
             menuPage?.title = getString(R.string.menu_page, it)
@@ -138,24 +150,26 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         val show = AppConfig.showExploreCategories
         menuCategories?.isChecked = show
         if (show) viewModel.loadCategories()
-        val categories = viewModel.categoriesData.value.orEmpty().map {
-            ExploreCategory(it.title, it.url.orEmpty())
-        }
+        val categories =
+            viewModel.categoriesData.value.orEmpty().map {
+                ExploreCategory(it.title, it.url.orEmpty())
+            }
         binding.categoriesContainer.isVisible = show && categories.isNotEmpty()
         if (!show || categories == renderedCategories) return
         renderedCategories = categories
         binding.categoriesContainer.removeAllViews()
         categoryTabs.clear()
         splitExploreCategoryRows(categories).forEach { row ->
-            val tabs = TabLayout(this).apply {
-                tabMode = TabLayout.MODE_SCROLLABLE
-                tabGravity = TabLayout.GRAVITY_START
-                minimumHeight = 40.dpToPx()
-                setPadding(0, 0, 0, 0)
-                setTabTextColors(getCompatColor(R.color.primaryText), accentColor)
-                setSelectedTabIndicatorColor(accentColor)
-                setTabIndicatorFullWidth(false)
-            }
+            val tabs =
+                TabLayout(this).apply {
+                    tabMode = TabLayout.MODE_SCROLLABLE
+                    tabGravity = TabLayout.GRAVITY_START
+                    minimumHeight = 40.dpToPx()
+                    setPadding(0, 0, 0, 0)
+                    setTabTextColors(getCompatColor(R.color.primaryText), accentColor)
+                    setSelectedTabIndicatorColor(accentColor)
+                    setTabIndicatorFullWidth(false)
+                }
             row.forEach { category ->
                 val tab = tabs.newTab().setText(category.title).setTag(category)
                 tabs.addTab(tab, false)
@@ -169,22 +183,29 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
                     }
                 }
             }
-            tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab) {
-                    val category = tab.tag as ExploreCategory
-                    if (category != viewModel.categoryData.value) {
-                        isClearAll = false
-                        binding.recyclerView.scrollToPosition(0)
-                        viewModel.switchCategory(category)
+            tabs.addOnTabSelectedListener(
+                object : TabLayout.OnTabSelectedListener {
+                    override fun onTabSelected(tab: TabLayout.Tab) {
+                        val category = tab.tag as ExploreCategory
+                        if (category != viewModel.categoryData.value) {
+                            isClearAll = false
+                            binding.recyclerView.scrollToPosition(0)
+                            viewModel.switchCategory(category)
+                        }
                     }
-                }
 
-                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-                override fun onTabReselected(tab: TabLayout.Tab) = Unit
-            })
-            binding.categoriesContainer.addView(tabs, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
+                    override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+
+                    override fun onTabReselected(tab: TabLayout.Tab) = Unit
+                }
+            )
+            binding.categoriesContainer.addView(
+                tabs,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
         }
         updateCategorySelection()
     }
@@ -217,9 +238,7 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
             return
         }
         alert(titleResource = R.string.add_loaded_books_to_bookshelf) {
-            setMessage(
-                getString(R.string.add_loaded_books_to_bookshelf_message, loadedBooks.size)
-            )
+            setMessage(getString(R.string.add_loaded_books_to_bookshelf_message, loadedBooks.size))
             yesButton {
                 val started = viewModel.addLoadedBooksToShelf(loadedBooks)
                 if (!started) {
@@ -243,20 +262,25 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
                 scrollToBottom(true)
             }
         }
-        binding.recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                super.onScrolled(recyclerView, dx, dy)
-                if (!recyclerView.canScrollVertically(1)) {
-                    scrollToBottom()
-                } else if (!recyclerView.canScrollVertically(-1) && dy < 0) {
-                    scrollToTop()
+        binding.recyclerView.addOnScrollListener(
+            object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    super.onScrolled(recyclerView, dx, dy)
+                    if (!recyclerView.canScrollVertically(1)) {
+                        scrollToBottom()
+                    } else if (!recyclerView.canScrollVertically(-1) && dy < 0) {
+                        scrollToTop()
+                    }
                 }
             }
-        })
+        )
     }
 
     private fun scrollToBottom(forceLoad: Boolean = false) {
-        if ((loadMoreView.hasMore && !loadMoreView.isLoading && !loadMoreViewTop.isLoading) || forceLoad) {
+        if (
+            (loadMoreView.hasMore && !loadMoreView.isLoading && !loadMoreViewTop.isLoading) ||
+                forceLoad
+        ) {
             loadMoreView.hasMore()
             viewModel.explore()
         }
@@ -292,8 +316,11 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
             loadMoreView.stopLoad()
         }
         if (hadBooks && state.prependCount != null && position >= 0) {
-            val target = anchor?.let { state.books.indexOf(it) }?.takeIf { it >= 0 }
-                ?.plus(adapter.getHeaderCount()) ?: (position + state.prependCount)
+            val target =
+                anchor
+                    ?.let { state.books.indexOf(it) }
+                    ?.takeIf { it >= 0 }
+                    ?.plus(adapter.getHeaderCount()) ?: (position + state.prependCount)
             layoutManager.scrollToPositionWithOffset(target, offset)
         } else if (!state.loading && isClearAll) {
             layoutManager.scrollToPositionWithOffset(adapter.getHeaderCount(), 0)

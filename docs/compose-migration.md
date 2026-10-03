@@ -1547,3 +1547,5 @@ Final native/IO review compilation exposed the missing constructor field for the
 ### Manga reviewed Host final verification
 
 After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code candidate c54e6aaec5d6fbccfc8eff3c6349575ae4c21097 passed the standard offline AndroidTest Kotlin compilation and full JVM test pair in 55 seconds. XML results: 639 suites, 3869 tests, zero failures/errors/skips. Log: /private/tmp/compose-manga-host-final-06.log. This includes the reviewed cancellable download/bounded accepted copy boundary, trusted per-request registry UUID returns, restored pending results and source-dialog owner detach. New Android registry and real FileDoc gated export regressions compiled; no Android device or new-Host R8 execution is claimed. The following document-only final record preserves the same tested code tree.
+
+发现结果页迁移前将 ExploreShowActivity/Adapter/ViewModel 三个独占 Kotlin 文件按固定 ktfmt 0.64（4 空格、100 列）实际格式化，行为与原分页/类别/加入书架引擎保持。本批 formatter/check 与 diffcheck 通过，功能与完整测试另批验证。

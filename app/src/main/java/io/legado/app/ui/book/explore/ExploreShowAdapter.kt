@@ -13,7 +13,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.gone
 import io.legado.app.utils.visible
 
-
 class ExploreShowAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<SearchBook, ItemSearchBinding>(context) {
 
@@ -25,7 +24,7 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
         holder: ItemViewHolder,
         binding: ItemSearchBinding,
         item: SearchBook,
-        payloads: MutableList<Any>
+        payloads: MutableList<Any>,
     ) {
         if (payloads.isEmpty()) {
             bind(binding, item)
@@ -35,7 +34,6 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
                 bindChange(binding, item, bundle)
             }
         }
-
     }
 
     private fun bind(binding: ItemSearchBinding, item: SearchBook) {
@@ -59,7 +57,7 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
             }
             ivCover.load(
                 item,
-                AppConfig.loadCoverOnlyWifi
+                AppConfig.loadCoverOnlyWifi,
             )
         }
     }
@@ -68,8 +66,7 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
         binding.run {
             bundle.keySet().forEach {
                 when (it) {
-                    "isInBookshelf" -> ivInBookshelf.isVisible =
-                        callBack.isInBookshelf(item)
+                    "isInBookshelf" -> ivInBookshelf.isVisible = callBack.isInBookshelf(item)
                 }
             }
         }
@@ -84,9 +81,7 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
     }
 
     interface CallBack {
-        /**
-         * 是否已经加入书架
-         */
+        /** 是否已经加入书架 */
         fun isInBookshelf(book: SearchBook): Boolean
 
         fun showBookInfo(book: SearchBook)

@@ -17,8 +17,8 @@ import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.help.book.SearchBookShelfHelp
 import io.legado.app.help.book.isNotShelf
 import io.legado.app.help.book.mergeActiveShelfBook
-import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ReadBook
@@ -29,15 +29,14 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.Dispatchers.Main
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
-
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExploreShowViewModel(application: Application) : BaseViewModel(application) {
@@ -62,45 +61,56 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
 
     init {
         execute {
-            appDb.bookDao.flowAll().mapLatest { books ->
-                val keys = arrayListOf<String>()
-                books.filterNot { it.isNotShelf }
-                    .forEach {
-                        keys.add("${it.name}-${it.author}")
-                        keys.add(it.name)
-                        keys.add(it.bookUrl)
-                    }
-                keys
-            }.catch {
-                AppLog.put("发现列表界面获取书籍数据失败\n${it.localizedMessage}", it)
-            }.collect {
-                bookshelf.clear()
-                bookshelf.addAll(it)
-                upAdapterLiveData.postValue("isInBookshelf")
-            }
-        }.onError {
-            AppLog.put("加载书架数据失败", it)
+            appDb.bookDao
+                .flowAll()
+                .mapLatest { books ->
+                    val keys = arrayListOf<String>()
+                    books
+                        .filterNot { it.isNotShelf }
+                        .forEach {
+                            keys.add("${it.name}-${it.author}")
+                            keys.add(it.name)
+                            keys.add(it.bookUrl)
+                        }
+                    keys
+                }
+                .catch {
+                    AppLog.put("发现列表界面获取书籍数据失败\n${it.localizedMessage}", it)
+                }
+                .collect {
+                    bookshelf.clear()
+                    bookshelf.addAll(it)
+                    upAdapterLiveData.postValue("isInBookshelf")
+                }
         }
+            .onError {
+                AppLog.put("加载书架数据失败", it)
+            }
     }
 
     fun initData(intent: Intent, savedState: Bundle? = null) {
         if (initialized) return
         initialized = true
-        categoryData.value = ExploreCategory(
-            savedState?.getString("exploreName") ?: intent.getStringExtra("exploreName").orEmpty(),
-            savedState?.getString("exploreUrl") ?: intent.getStringExtra("exploreUrl").orEmpty(),
-        )
+        categoryData.value =
+            ExploreCategory(
+                savedState?.getString("exploreName")
+                    ?: intent.getStringExtra("exploreName").orEmpty(),
+                savedState?.getString("exploreUrl")
+                    ?: intent.getStringExtra("exploreUrl").orEmpty(),
+            )
         skipPage((savedState?.getInt("explorePage", 1) ?: 1).coerceAtLeast(1))
         execute {
             intent.getStringExtra("sourceUrl")?.let { appDb.bookSourceDao.getBookSource(it) }
                 ?: error(context.getString(R.string.error_no_source))
-        }.onSuccess {
-            bookSource = it
-            explore()
-            if (AppConfig.showExploreCategories) loadCategories()
-        }.onError {
-            errorLiveData.value = it.stackTraceStr
         }
+            .onSuccess {
+                bookSource = it
+                explore()
+                if (AppConfig.showExploreCategories) loadCategories()
+            }
+            .onError {
+                errorLiveData.value = it.stackTraceStr
+            }
     }
 
     fun saveState(outState: Bundle) {
@@ -115,14 +125,18 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         val source = bookSource ?: return
         if (categoriesLoading || categoriesData.value != null) return
         categoriesLoading = true
-        execute { source.exploreKinds() }.onSuccess { kinds ->
-            categoriesData.value = kinds.filter {
-                it.type == ExploreKind.Type.url && !it.url.isNullOrBlank() &&
+        execute { source.exploreKinds() }
+            .onSuccess { kinds ->
+                categoriesData.value = kinds.filter {
+                    it.type == ExploreKind.Type.url &&
+                        !it.url.isNullOrBlank() &&
                         !it.title.startsWith("ERROR:")
+                }
             }
-        }.onError {
-            context.toastOnUi(it.localizedMessage)
-        }.onFinally { categoriesLoading = false }
+            .onError {
+                context.toastOnUi(it.localizedMessage)
+            }
+            .onFinally { categoriesLoading = false }
     }
 
     internal fun switchCategory(category: ExploreCategory) {
@@ -134,9 +148,7 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         explore()
     }
 
-    /**
-     * 上滑触发的增量更新
-     */
+    /** 上滑触发的增量更新 */
     fun explore(page: Int) {
         val source = bookSource
         val url = categoryData.value?.url
@@ -151,23 +163,26 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
                 withContext(Main) {
                     if (!paginationState.complete(request)) return@withContext
                     val previousCount = synchronized(booksLock) { books.size }
-                    val loadedBooks = synchronized(booksLock) {
-                        val newBooks = linkedSetOf<SearchBook>()
-                        newBooks.addAll(searchBooks)
-                        newBooks.addAll(books)
-                        books = newBooks
-                        books.toList()
-                    }
+                    val loadedBooks =
+                        synchronized(booksLock) {
+                            val newBooks = linkedSetOf<SearchBook>()
+                            newBooks.addAll(searchBooks)
+                            newBooks.addAll(books)
+                            books = newBooks
+                            books.toList()
+                        }
                     firstLoadedPage = request.page
-                    booksData.value = ExploreListState(
-                        loadedBooks,
-                        firstLoadedPage,
-                        hasMore = booksData.value?.hasMore ?: true,
-                        prependCount = loadedBooks.size - previousCount,
-                    )
+                    booksData.value =
+                        ExploreListState(
+                            loadedBooks,
+                            firstLoadedPage,
+                            hasMore = booksData.value?.hasMore ?: true,
+                            prependCount = loadedBooks.size - previousCount,
+                        )
                     pageLiveData.value = request.page
                 }
-            }.onError {
+            }
+            .onError {
                 if (!paginationState.fail(request)) return@onError
                 it.printOnDebug()
                 errorTopLiveData.value = it.stackTraceStr
@@ -203,18 +218,21 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
                 withContext(Main) {
                     if (!paginationState.complete(request)) return@withContext
                     val previousCount = synchronized(booksLock) { books.size }
-                    val loadedBooks = synchronized(booksLock) {
-                        books.addAll(searchBooks)
-                        books.toList()
-                    }
-                    booksData.value = ExploreListState(
-                        loadedBooks,
-                        firstLoadedPage,
-                        hasMore = loadedBooks.size > previousCount,
-                    )
+                    val loadedBooks =
+                        synchronized(booksLock) {
+                            books.addAll(searchBooks)
+                            books.toList()
+                        }
+                    booksData.value =
+                        ExploreListState(
+                            loadedBooks,
+                            firstLoadedPage,
+                            hasMore = loadedBooks.size > previousCount,
+                        )
                     pageLiveData.value = request.page
                 }
-            }.onError {
+            }
+            .onError {
                 if (!paginationState.fail(request)) return@onError
                 it.printOnDebug()
                 errorLiveData.value = it.stackTraceStr
@@ -225,68 +243,72 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         return synchronized(booksLock) { books.toList() }
     }
 
-    fun addLoadedBooksToShelf(
-        loadedBooks: List<SearchBook>,
-    ): Boolean {
+    fun addLoadedBooksToShelf(loadedBooks: List<SearchBook>): Boolean {
         val snapshot = loadedBooks.toList()
         if (snapshot.isEmpty()) return false
-        val task = synchronized(addBooksLock) {
-            if (addBooksCoroutine != null) return false
-            executeLazy {
-                val result = SearchBookShelfHelp.addLoadedBooksToShelf(snapshot)
-                val callBackBooks = result.addedBooks.map { book ->
-                    kotlin.runCatching {
-                        appDb.bookSourceDao.getBookSource(book.origin)
-                    }.getOrNull() to book
-                }
-                withContext(NonCancellable + Main.immediate) {
-                    val activeBooks = result.addedBooks
-                        .flatMap(::syncActiveBook)
-                        .distinctBy { it.bookUrl }
-                    val shelfStates = activeBooks.map {
-                        ShelfState(it.bookUrl, it.type, it.order)
-                    }
-                    if (shelfStates.isNotEmpty()) {
-                        withContext(IO) {
-                            shelfStates.forEach {
-                                appDb.bookDao.updateShelfState(it.bookUrl, it.type, it.order)
+        val task =
+            synchronized(addBooksLock) {
+                if (addBooksCoroutine != null) return false
+                executeLazy {
+                    val result = SearchBookShelfHelp.addLoadedBooksToShelf(snapshot)
+                    val callBackBooks =
+                        result.addedBooks.map { book ->
+                            kotlin
+                                .runCatching {
+                                    appDb.bookSourceDao.getBookSource(book.origin)
+                                }
+                                .getOrNull() to book
+                        }
+                    withContext(NonCancellable + Main.immediate) {
+                        val activeBooks =
+                            result.addedBooks.flatMap(::syncActiveBook).distinctBy { it.bookUrl }
+                        val shelfStates = activeBooks.map {
+                            ShelfState(it.bookUrl, it.type, it.order)
+                        }
+                        if (shelfStates.isNotEmpty()) {
+                            withContext(IO) {
+                                shelfStates.forEach {
+                                    appDb.bookDao.updateShelfState(it.bookUrl, it.type, it.order)
+                                }
                             }
                         }
+                        val activeBooksByUrl = activeBooks.associateBy { it.bookUrl }
+                        val mergedCallBackBooks = callBackBooks.map { (source, book) ->
+                            source to (activeBooksByUrl[book.bookUrl] ?: book)
+                        }
+                        SourceCallBack.callBackBooks(
+                            SourceCallBack.ADD_BOOK_SHELF,
+                            mergedCallBackBooks,
+                        )
                     }
-                    val activeBooksByUrl = activeBooks.associateBy { it.bookUrl }
-                    val mergedCallBackBooks = callBackBooks.map { (source, book) ->
-                        source to (activeBooksByUrl[book.bookUrl] ?: book)
+                    result
+                }
+                    .also {
+                        addBooksCoroutine = it
                     }
-                    SourceCallBack.callBackBooks(
-                        SourceCallBack.ADD_BOOK_SHELF,
-                        mergedCallBackBooks,
+            }
+        addBooksBusy.value = true
+        task
+            .onSuccess { result ->
+                context.toastOnUi(
+                    context.getString(
+                        R.string.add_loaded_books_to_bookshelf_result,
+                        result.added,
+                        result.skipped,
+                    )
+                )
+            }
+            .onError {
+                AppLog.put("发现列表批量加入书架失败\n${it.localizedMessage}", it)
+                val message = it.localizedMessage
+                if (message.isNullOrBlank()) {
+                    context.toastOnUi(R.string.add_loaded_books_to_bookshelf_failed)
+                } else {
+                    context.toastOnUi(
+                        "${context.getString(R.string.add_loaded_books_to_bookshelf_failed)}\n$message"
                     )
                 }
-                result
-            }.also {
-                addBooksCoroutine = it
             }
-        }
-        addBooksBusy.value = true
-        task.onSuccess { result ->
-            context.toastOnUi(
-                context.getString(
-                    R.string.add_loaded_books_to_bookshelf_result,
-                    result.added,
-                    result.skipped,
-                )
-            )
-        }.onError {
-            AppLog.put("发现列表批量加入书架失败\n${it.localizedMessage}", it)
-            val message = it.localizedMessage
-            if (message.isNullOrBlank()) {
-                context.toastOnUi(R.string.add_loaded_books_to_bookshelf_failed)
-            } else {
-                context.toastOnUi(
-                    "${context.getString(R.string.add_loaded_books_to_bookshelf_failed)}\n$message"
-                )
-            }
-        }
         task.invokeOnCompletion {
             synchronized(addBooksLock) {
                 if (addBooksCoroutine === task) {
@@ -337,7 +359,6 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         val type: Int,
         val order: Int,
     )
-
 }
 
 internal data class ExplorePageRequest(
