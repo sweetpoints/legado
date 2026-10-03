@@ -1667,3 +1667,5 @@ Code首轮完整验证：生产Kotlin/Java通过，Android/JVM测试编译分别
 Code第二轮完整验证：AndroidTest Kotlin编译通过，全量646 suites/3920 JVM实际运行，1失败为PredictiveBackTest旧Code Activity callback源码合同，其余3919/零error/skipped；精准仅Code分支核对Route真实BackHandler、先dismissActions再requestExit以及Host guarded finish/platformclose，其余Audio/Manga/Replace断言保持。独立实际format/check/diff通过，此轮未全通过，不计成功，最终共同基线复验pending。日志/private/tmp/legado-compose-source-editor-code-full-02.log。
 
 Code formatter输入归属独立修复：原固定web_format_code key改每次UUID key，同样beautify原选项与BackstageWebView5000ms/取消路径，原JS/Rhino引擎不变；finally只清本owner key，重叠格式化不读取或清另一份载荷，raw代码仅memory/private session，不放SavedState。3 JVM回归以实际Default线程gated重叠/取消/失败验证owned输入，1设备用例使用真实CacheManager双owner；实际统一format/check与diff check通过，运行/编译随最后共同基线一次full验证，设备未执行。
+
+Code第三轮共同基线验证：12beb Video/Reader移除其它title_bar布局后，Code最后XML删除使公共BaseFragment/BaseThemedActivity兼容findViewById的title_bar ID无定义，生产Kotlin编译失败（full03/29秒）；精准ids.xml补兼容ID，不改共享Base或重引旧布局。该轮不记成功，独立保存并待SavedState审查修复后标准full。
