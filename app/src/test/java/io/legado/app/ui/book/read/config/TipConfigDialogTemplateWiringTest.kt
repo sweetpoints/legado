@@ -12,17 +12,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 internal class FakeTipSettingsRepository : TipSettingsRepository {
-    var snapshot = TipSettingsSnapshot(TipSetting.entries.associateWith { if (it == TipSetting.TipSize) 12 else 0 },
-        templates = TipTemplateSlot.entries.associateWith { "prefix-${it.name}" })
+    var snapshot =
+        TipSettingsSnapshot(
+            TipSetting.entries.associateWith { if (it == TipSetting.TipSize) 12 else 0 },
+            templates = TipTemplateSlot.entries.associateWith { "prefix-${it.name}" },
+        )
     val settingsWritten = mutableListOf<Pair<TipSetting, Int>>()
     val templatesWritten = mutableListOf<Pair<TipTemplateSlot, String>>()
     val fontsWritten = mutableListOf<String>()
+
     override fun load() = snapshot
+
     override fun set(setting: TipSetting, value: Int) {
         settingsWritten += setting to value
         snapshot = snapshot.copy(values = snapshot.values + (setting to value))
     }
-    override fun setFont(path: String) { fontsWritten += path; snapshot = snapshot.copy(titleFont = path) }
+
+    override fun setFont(path: String) {
+        fontsWritten += path
+        snapshot = snapshot.copy(titleFont = path)
+    }
+
     override fun setTemplate(slot: TipTemplateSlot, value: String) {
         templatesWritten += slot to value
         snapshot = snapshot.copy(templates = snapshot.templates + (slot to value))
@@ -30,7 +40,8 @@ internal class FakeTipSettingsRepository : TipSettingsRepository {
 }
 
 class TipConfigDialogTemplateWiringTest {
-    @Test fun eachOfSixSlotsOpensExactCurrentTemplateAndConfirmsOnlyItsOwnField() {
+    @Test
+    fun eachOfSixSlotsOpensExactCurrentTemplateAndConfirmsOnlyItsOwnField() {
         val repository = FakeTipSettingsRepository()
         val model = TipSettingsViewModel(repository, SavedStateHandle())
         TipTemplateSlot.entries.forEach { slot ->
@@ -46,7 +57,8 @@ class TipConfigDialogTemplateWiringTest {
         assertEquals(arrayListOf(2, 6), tipTemplateEvents())
     }
 
-    @Test fun insertionReplacesReversedSelectionAndPlacesCursorAfterPlaceholder() {
+    @Test
+    fun insertionReplacesReversedSelectionAndPlacesCursorAfterPlaceholder() {
         val model = TipSettingsViewModel(FakeTipSettingsRepository(), SavedStateHandle())
         model.openTemplate(TipTemplateSlot.HeaderLeft)
         model.editTemplate("abcdef", 5, 2)
@@ -57,7 +69,8 @@ class TipConfigDialogTemplateWiringTest {
         assertEquals(cursor, model.state.value.template?.selectionEnd)
     }
 
-    @Test fun outOfBoundsSelectionIsClampedAndEmptyTemplateCanBeSaved() {
+    @Test
+    fun outOfBoundsSelectionIsClampedAndEmptyTemplateCanBeSaved() {
         val repository = FakeTipSettingsRepository()
         val model = TipSettingsViewModel(repository, SavedStateHandle())
         model.openTemplate(TipTemplateSlot.FooterRight)
@@ -69,21 +82,30 @@ class TipConfigDialogTemplateWiringTest {
         assertEquals(TipTemplateSlot.FooterRight to "", repository.templatesWritten.single())
     }
 
-    @Test fun recreationRetainsUnsavedTextSelectionAndSlotWithoutWriting() {
+    @Test
+    fun recreationRetainsUnsavedTextSelectionAndSlotWithoutWriting() {
         val repository = FakeTipSettingsRepository()
         val handle = SavedStateHandle()
         val model = TipSettingsViewModel(repository, handle)
         model.openTemplate(TipTemplateSlot.FooterMiddle)
         model.editTemplate("unsaved draft", 7, 2)
-        val restored = TipSettingsViewModel(repository, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            TipSettingsViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(model.state.value.template, restored.state.value.template)
         assertTrue(repository.templatesWritten.isEmpty())
         restored.insertPlaceholder(ReaderInfoTemplate.BATTERY)
         restored.confirmTemplate()
-        assertEquals(TipTemplateSlot.FooterMiddle to "un${ReaderInfoTemplate.BATTERY} draft", repository.templatesWritten.single())
+        assertEquals(
+            TipTemplateSlot.FooterMiddle to "un${ReaderInfoTemplate.BATTERY} draft",
+            repository.templatesWritten.single(),
+        )
     }
 
-    @Test fun cancelDiscardsDraftAndReopeningLoadsStoredValue() {
+    @Test
+    fun cancelDiscardsDraftAndReopeningLoadsStoredValue() {
         val repository = FakeTipSettingsRepository()
         val model = TipSettingsViewModel(repository, SavedStateHandle())
         model.openTemplate(TipTemplateSlot.HeaderRight)
@@ -95,27 +117,46 @@ class TipConfigDialogTemplateWiringTest {
         assertEquals("prefix-HeaderRight", model.state.value.template?.text)
     }
 
-    @Test fun externalColorRefreshNeverOverwritesTemplateDraftOrSelection() {
+    @Test
+    fun externalColorRefreshNeverOverwritesTemplateDraftOrSelection() {
         val repository = FakeTipSettingsRepository()
         val model = TipSettingsViewModel(repository, SavedStateHandle())
         model.openTemplate(TipTemplateSlot.HeaderMiddle)
         model.editTemplate("draft", 1, 4)
         val draft = model.state.value.template
-        repository.snapshot = repository.snapshot.copy(values = repository.snapshot.values + (TipSetting.TitleColor to 0xff112233.toInt()))
+        repository.snapshot =
+            repository.snapshot.copy(
+                values = repository.snapshot.values + (TipSetting.TitleColor to 0xff112233.toInt())
+            )
         model.refresh()
         assertEquals(draft, model.state.value.template)
         assertEquals(0xff112233.toInt(), model.state.value.settings[TipSetting.TitleColor])
     }
 
-    @Test fun eventPayloadsMatchTitleAndInfoBarContracts() {
+    @Test
+    fun eventPayloadsMatchTitleAndInfoBarContracts() {
         listOf(TipSetting.TitleMode, TipSetting.SplitTitle, TipSetting.TitleNumberSpacing).forEach {
             assertEquals(arrayListOf(5), tipSettingEvents(it))
         }
-        listOf(TipSetting.TitleSize, TipSetting.TitleLineSpacing, TipSetting.TitleBold,
-            TipSetting.TitleColor, TipSetting.TitleNumberSize, TipSetting.TitleNumberColor,
-            TipSetting.TitleTop, TipSetting.TitleBottom).forEach { assertEquals(arrayListOf(8, 5), tipSettingEvents(it)) }
-        listOf(TipSetting.HeaderMode, TipSetting.FooterMode, TipSetting.TipSize, TipSetting.TipColor,
-            TipSetting.DividerColor).forEach { assertEquals(arrayListOf(2), tipSettingEvents(it)) }
+        listOf(
+                TipSetting.TitleSize,
+                TipSetting.TitleLineSpacing,
+                TipSetting.TitleBold,
+                TipSetting.TitleColor,
+                TipSetting.TitleNumberSize,
+                TipSetting.TitleNumberColor,
+                TipSetting.TitleTop,
+                TipSetting.TitleBottom,
+            )
+            .forEach { assertEquals(arrayListOf(8, 5), tipSettingEvents(it)) }
+        listOf(
+                TipSetting.HeaderMode,
+                TipSetting.FooterMode,
+                TipSetting.TipSize,
+                TipSetting.TipColor,
+                TipSetting.DividerColor,
+            )
+            .forEach { assertEquals(arrayListOf(2), tipSettingEvents(it)) }
         val first = tipTemplateEvents()
         first.clear()
         assertEquals(arrayListOf(2, 6), tipTemplateEvents())

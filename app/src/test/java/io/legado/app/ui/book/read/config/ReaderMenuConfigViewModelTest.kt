@@ -8,9 +8,11 @@ import org.junit.Test
 
 class ReaderMenuConfigViewModelTest {
     private val keys = ReaderMenuConfig.ALL_KEYS
+
     private fun base() = ReaderMenuConfig(keys.take(3), keys.drop(3))
 
-    @Test fun toggleMovesEntryToEndOfDestinationWithoutHidingActions() {
+    @Test
+    fun toggleMovesEntryToEndOfDestinationWithoutHidingActions() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.Toggle(keys[1], false))
@@ -21,7 +23,8 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(keys.toSet(), model.state.value.entries.map { it.key }.toSet())
     }
 
-    @Test fun selectingAllAndNoneKeepCurrentOrderAndResetRestoresDefault() {
+    @Test
+    fun selectingAllAndNoneKeepCurrentOrderAndResetRestoresDefault() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.Toggle(keys[0], false))
@@ -36,21 +39,26 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(ReaderMenuConfig.default(), repo.saved.last())
     }
 
-    @Test fun reorderCannotCrossGroupAndOnlyGestureEndPersists() {
+    @Test
+    fun reorderCannotCrossGroupAndOnlyGestureEndPersists() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.StartReorder(keys[0]))
         model.edit(ReaderMenuEditAction.Move(keys[0], keys[3]))
         assertEquals(keys, model.state.value.entries.map { it.key })
         model.edit(ReaderMenuEditAction.Move(keys[0], keys[2]))
-        assertEquals(listOf(keys[2], keys[1], keys[0]), model.state.value.entries.take(3).map { it.key })
+        assertEquals(
+            listOf(keys[2], keys[1], keys[0]),
+            model.state.value.entries.take(3).map { it.key },
+        )
         assertTrue(repo.saved.isEmpty())
         model.edit(ReaderMenuEditAction.FinishGesture(true))
         assertEquals(listOf(keys[2], keys[1], keys[0]), repo.saved.single().primary)
         assertEquals(keys.drop(3), repo.saved.single().more)
     }
 
-    @Test fun cancelledReorderRestoresSnapshotWithoutSavingOrRefresh() {
+    @Test
+    fun cancelledReorderRestoresSnapshotWithoutSavingOrRefresh() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.StartReorder(keys[0]))
@@ -61,7 +69,8 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(0, model.state.value.refreshRequest)
     }
 
-    @Test fun slideSelectionExtendsReversesAndGroupsOnceAtEnd() {
+    @Test
+    fun slideSelectionExtendsReversesAndGroupsOnceAtEnd() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.StartSelection(keys[0]))
@@ -77,7 +86,8 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(keys.take(2) + keys.drop(5), repo.saved.single().more)
     }
 
-    @Test fun slideStartingInMoreSelectsRangeAndCancellationRestoresGrouping() {
+    @Test
+    fun slideStartingInMoreSelectsRangeAndCancellationRestoresGrouping() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.StartSelection(keys[4]))
@@ -88,7 +98,8 @@ class ReaderMenuConfigViewModelTest {
         assertTrue(repo.saved.isEmpty())
     }
 
-    @Test fun accessibilityStepOnlySwapsWithinGroupAndPersistsImmediately() {
+    @Test
+    fun accessibilityStepOnlySwapsWithinGroupAndPersistsImmediately() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.Step(keys[2], 1))
@@ -97,20 +108,26 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(listOf(keys[1], keys[0], keys[2]), repo.saved.single().primary)
     }
 
-    @Test fun restoredDraftKeepsExactGroupOrdersWithoutReloadOrUnintendedSave() {
+    @Test
+    fun restoredDraftKeepsExactGroupOrdersWithoutReloadOrUnintendedSave() {
         val repo = FakeRepository(base())
         val handle = SavedStateHandle()
         val model = ReaderMenuConfigViewModel(repo, handle)
         model.edit(ReaderMenuEditAction.Toggle(keys[0], false))
         model.edit(ReaderMenuEditAction.Step(keys[2], -1))
-        val restored = ReaderMenuConfigViewModel(repo, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            ReaderMenuConfigViewModel(
+                repo,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(model.state.value.entries, restored.state.value.entries)
         assertEquals(1, repo.loads)
         assertEquals(2, repo.saved.size)
         assertEquals(model.state.value.refreshRequest, restored.state.value.refreshRequest)
     }
 
-    @Test fun saveFailureRetainsDraftAndRetryUsesSamePayloadBeforeRequestingRefresh() {
+    @Test
+    fun saveFailureRetainsDraftAndRetryUsesSamePayloadBeforeRequestingRefresh() {
         val repo = FakeRepository(base()).apply { failSave = true }
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.Toggle(keys[0], false))
@@ -125,7 +142,8 @@ class ReaderMenuConfigViewModelTest {
         assertEquals(1, model.state.value.refreshRequest)
     }
 
-    @Test fun invalidActionsAndRepeatedGestureEndDoNotWritePreferences() {
+    @Test
+    fun invalidActionsAndRepeatedGestureEndDoNotWritePreferences() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.Toggle("missing", false))
@@ -136,36 +154,56 @@ class ReaderMenuConfigViewModelTest {
         assertTrue(repo.saved.isEmpty())
     }
 
-    @Test fun processRestorationDuringReorderUsesPreGestureSnapshot() {
+    @Test
+    fun processRestorationDuringReorderUsesPreGestureSnapshot() {
         val repo = FakeRepository(base())
         val handle = SavedStateHandle()
         val model = ReaderMenuConfigViewModel(repo, handle)
         model.edit(ReaderMenuEditAction.StartReorder(keys[0]))
         model.edit(ReaderMenuEditAction.Move(keys[0], keys[2]))
         assertNotEquals(keys, model.state.value.entries.map { it.key })
-        val restored = ReaderMenuConfigViewModel(repo, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            ReaderMenuConfigViewModel(
+                repo,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(keys, restored.state.value.entries.map { it.key })
-        assertEquals(base().primary, restored.state.value.entries.filter { it.primary }.map { it.key })
+        assertEquals(
+            base().primary,
+            restored.state.value.entries.filter { it.primary }.map { it.key },
+        )
         assertEquals(0, restored.state.value.refreshRequest)
         assertTrue(repo.saved.isEmpty())
         assertEquals(1, repo.loads)
     }
 
-    @Test fun processRestorationDuringSlideDropsUnfinishedSelection() {
+    @Test
+    fun processRestorationDuringSlideDropsUnfinishedSelection() {
         val repo = FakeRepository(base())
         val handle = SavedStateHandle()
         val model = ReaderMenuConfigViewModel(repo, handle)
         model.edit(ReaderMenuEditAction.StartSelection(keys[0]))
         model.edit(ReaderMenuEditAction.SelectionTo(keys[4]))
         assertFalse(model.state.value.entries[0].primary)
-        val restored = ReaderMenuConfigViewModel(repo, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
-        assertEquals(base().primary, restored.state.value.entries.filter { it.primary }.map { it.key })
-        assertEquals(base().more, restored.state.value.entries.filterNot { it.primary }.map { it.key })
+        val restored =
+            ReaderMenuConfigViewModel(
+                repo,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
+        assertEquals(
+            base().primary,
+            restored.state.value.entries.filter { it.primary }.map { it.key },
+        )
+        assertEquals(
+            base().more,
+            restored.state.value.entries.filterNot { it.primary }.map { it.key },
+        )
         assertEquals(0, restored.state.value.refreshRequest)
         assertTrue(repo.saved.isEmpty())
     }
 
-    @Test fun staleRefreshAcknowledgementDoesNotConsumeNewSave() {
+    @Test
+    fun staleRefreshAcknowledgementDoesNotConsumeNewSave() {
         val repo = FakeRepository(base())
         val model = ReaderMenuConfigViewModel(repo, SavedStateHandle())
         model.edit(ReaderMenuEditAction.SetAll(false))
@@ -180,7 +218,12 @@ class ReaderMenuConfigViewModelTest {
         var loads = 0
         var failSave = false
         val saved = mutableListOf<ReaderMenuConfig>()
-        override fun load(): ReaderMenuConfig { loads++; return config }
+
+        override fun load(): ReaderMenuConfig {
+            loads++
+            return config
+        }
+
         override fun save(config: ReaderMenuConfig) {
             if (failSave) error("save failed")
             saved += config

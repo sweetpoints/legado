@@ -2,10 +2,9 @@ package io.legado.app.ui.book.read.config
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.preferences.TipSetting
-
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 class TitleNumberSpacingTest {
 
@@ -44,7 +43,6 @@ class TitleNumberSpacingTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .first { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
     }
 }

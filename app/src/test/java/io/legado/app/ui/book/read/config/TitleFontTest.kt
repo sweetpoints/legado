@@ -2,22 +2,20 @@ package io.legado.app.ui.book.read.config
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.preferences.TipSetting
-
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class TitleFontTest {
 
     @Test
     fun `legacy config inherits the text font`() {
-        val config = GSON.fromJsonObject<ReadBookConfig.Config>(
-            """{"textFont":"body.ttf"}"""
-        ).getOrThrow()
+        val config =
+            GSON.fromJsonObject<ReadBookConfig.Config>("""{"textFont":"body.ttf"}""").getOrThrow()
 
         assertEquals("", config.titleFont)
         assertEquals("", config.toMap()["titleFont"])
@@ -25,13 +23,12 @@ class TitleFontTest {
 
     @Test
     fun `title font survives json round trip`() {
-        val config = ReadBookConfig.Config(
-            textFont = "body.ttf",
-            titleFont = "title.ttf",
-        )
-        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(
-            GSON.toJson(config)
-        ).getOrThrow()
+        val config =
+            ReadBookConfig.Config(
+                textFont = "body.ttf",
+                titleFont = "title.ttf",
+            )
+        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(GSON.toJson(config)).getOrThrow()
 
         assertEquals("title.ttf", restored.titleFont)
         assertEquals("title.ttf", restored.toMap()["titleFont"])
@@ -51,13 +48,11 @@ class TitleFontTest {
 
     @Test
     fun `renderer and config transfer keep title and body fonts separate`() {
-        val config = readProjectFile(
-            "src/main/java/io/legado/app/help/config/ReadBookConfig.kt"
-        )
-        val provider = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        )
-
+        val config = readProjectFile("src/main/java/io/legado/app/help/config/ReadBookConfig.kt")
+        val provider =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
+            )
 
         assertTrue(config.contains("config.titleFont.ifEmpty { config.textFont }"))
         assertTrue(config.contains("exportConfig.titleFont = shareConfig.titleFont"))

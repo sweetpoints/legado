@@ -7,28 +7,45 @@ import org.junit.Test
 
 class ReadAloudControlsSettingsViewModelTest {
     private class Repository : ReadAloudControlsSettingsRepository {
-        var settings = ReadAloudControlsSettings(ReadAloudControlsToggle.entries.associateWith { it.defaultValue },
-            ReadAloudControlsNumber.entries.associateWith { it.defaultValue })
+        var settings =
+            ReadAloudControlsSettings(
+                ReadAloudControlsToggle.entries.associateWith { it.defaultValue },
+                ReadAloudControlsNumber.entries.associateWith { it.defaultValue },
+            )
         var listener: (() -> Unit)? = null
         val listeners = mutableListOf<() -> Unit>()
         val numberWrites = mutableListOf<Pair<ReadAloudControlsNumber, Int>>()
         var toggleWrites = 0
         var subscriptions = 0
         var closed = 0
+
         override fun load() = settings
+
         override fun setToggle(setting: ReadAloudControlsToggle, enabled: Boolean) {
-            toggleWrites++; settings = settings.copy(toggles = settings.toggles + (setting to enabled)); listener?.invoke()
+            toggleWrites++
+            settings = settings.copy(toggles = settings.toggles + (setting to enabled))
+            listener?.invoke()
         }
+
         override fun setNumber(setting: ReadAloudControlsNumber, value: Int) {
             numberWrites += setting to value
-            settings = settings.copy(numbers = settings.numbers + (setting to value)); listener?.invoke()
+            settings = settings.copy(numbers = settings.numbers + (setting to value))
+            listener?.invoke()
         }
+
         override fun observe(onChange: () -> Unit): AutoCloseable {
-            subscriptions++; listener = onChange; listeners += onChange
-            return AutoCloseable { closed++; if (listener === onChange) listener = null }
+            subscriptions++
+            listener = onChange
+            listeners += onChange
+            return AutoCloseable {
+                closed++
+                if (listener === onChange) listener = null
+            }
         }
     }
-    @Test fun initialIndependentVisibilitySwitchesMatchLegacyDefaults() {
+
+    @Test
+    fun initialIndependentVisibilitySwitchesMatchLegacyDefaults() {
         val model = ReadAloudControlsSettingsViewModel(Repository(), SavedStateHandle())
         assertTrue(model.state.value.settings[ReadAloudControlsToggle.Realtime])
         assertTrue(model.state.value.settings[ReadAloudControlsToggle.Pause])
@@ -37,7 +54,9 @@ class ReadAloudControlsSettingsViewModelTest {
         assertFalse(model.state.value.settings[ReadAloudControlsToggle.Drag])
         assertFalse(model.state.value.settings[ReadAloudControlsToggle.Dock])
     }
-    @Test fun togglesPersistOnceAndOnlyRealtimeRequestsReveal() {
+
+    @Test
+    fun togglesPersistOnceAndOnlyRealtimeRequestsReveal() {
         val repository = Repository()
         val model = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle())
         model.setToggle(ReadAloudControlsToggle.Pause, false)
@@ -48,7 +67,9 @@ class ReadAloudControlsSettingsViewModelTest {
         model.setToggle(ReadAloudControlsToggle.Realtime, false)
         assertEquals(ReadAloudControlsAction.Reveal, model.state.value.action)
     }
-    @Test fun draggingUpdatesDraftAndOnlyFinishPersistsTheLatestValue() {
+
+    @Test
+    fun draggingUpdatesDraftAndOnlyFinishPersistsTheLatestValue() {
         val repository = Repository()
         val model = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle())
         model.drag(ReadAloudControlsNumber.Width, 100)
@@ -59,7 +80,9 @@ class ReadAloudControlsSettingsViewModelTest {
         model.finish(ReadAloudControlsNumber.Width)
         assertEquals(listOf(ReadAloudControlsNumber.Width to 200), repository.numberWrites)
     }
-    @Test fun everyNumericControlClampsAndMicroAdjustmentsRetainTheirIncrement() {
+
+    @Test
+    fun everyNumericControlClampsAndMicroAdjustmentsRetainTheirIncrement() {
         val repository = Repository()
         val model = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle())
         model.step(ReadAloudControlsNumber.Opacity, 1)
@@ -69,36 +92,54 @@ class ReadAloudControlsSettingsViewModelTest {
         assertEquals(110, repository.settings[ReadAloudControlsNumber.Threshold])
         assertEquals(287, repository.settings[ReadAloudControlsNumber.Width])
         ReadAloudControlsNumber.entries.forEach {
-            model.drag(it, 999); model.finish(it)
+            model.drag(it, 999)
+            model.finish(it)
             assertEquals(it.maximum, repository.settings[it])
-            model.drag(it, -999); model.finish(it)
+            model.drag(it, -999)
+            model.finish(it)
             assertEquals(it.minimum, repository.settings[it])
         }
     }
-    @Test fun processRestoreKeepsPendingDraftAndObserverRefreshNeverOverwritesIt() {
+
+    @Test
+    fun processRestoreKeepsPendingDraftAndObserverRefreshNeverOverwritesIt() {
         val repository = Repository()
         val handle = SavedStateHandle()
         val model = ReadAloudControlsSettingsViewModel(repository, handle)
         model.drag(ReadAloudControlsNumber.Opacity, 37)
-        val restored = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            ReadAloudControlsSettingsViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         restored.startObserving()
-        repository.settings = repository.settings.copy(numbers = repository.settings.numbers + (ReadAloudControlsNumber.Width to 85))
+        repository.settings =
+            repository.settings.copy(
+                numbers = repository.settings.numbers + (ReadAloudControlsNumber.Width to 85)
+            )
         repository.listener?.invoke()
         assertEquals(37, restored.state.value.settings[ReadAloudControlsNumber.Opacity])
         assertEquals(85, restored.state.value.settings[ReadAloudControlsNumber.Width])
         assertTrue(repository.numberWrites.isEmpty())
-        restored.flush(); restored.flush()
+        restored.flush()
+        restored.flush()
         assertEquals(listOf(ReadAloudControlsNumber.Opacity to 37), repository.numberWrites)
         restored.stopObserving()
     }
-    @Test fun pendingResetTakesPriorityOverRevealAndConsumesOnlyMatchingAction() {
+
+    @Test
+    fun pendingResetTakesPriorityOverRevealAndConsumesOnlyMatchingAction() {
         val repository = Repository()
         val handle = SavedStateHandle()
         val model = ReadAloudControlsSettingsViewModel(repository, handle)
         model.requestAction(ReadAloudControlsAction.Reveal)
         model.requestAction(ReadAloudControlsAction.ResetPosition)
         model.requestAction(ReadAloudControlsAction.Reveal)
-        val restored = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            ReadAloudControlsSettingsViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(ReadAloudControlsAction.ResetPosition, restored.state.value.action)
         restored.actionHandled(ReadAloudControlsAction.Reveal)
         assertEquals(ReadAloudControlsAction.ResetPosition, restored.state.value.action)
@@ -107,16 +148,23 @@ class ReadAloudControlsSettingsViewModelTest {
         restored.requestAction(ReadAloudControlsAction.Reveal)
         assertEquals(ReadAloudControlsAction.Reveal, restored.state.value.action)
     }
-    @Test fun observingIsIdempotentAndQueuedOldCallbacksAreIgnoredAfterResume() {
+
+    @Test
+    fun observingIsIdempotentAndQueuedOldCallbacksAreIgnoredAfterResume() {
         val repository = Repository()
         val model = ReadAloudControlsSettingsViewModel(repository, SavedStateHandle())
-        model.startObserving(); model.startObserving()
+        model.startObserving()
+        model.startObserving()
         assertEquals(1, repository.subscriptions)
         val old = repository.listeners.single()
-        model.stopObserving(); model.stopObserving()
+        model.stopObserving()
+        model.stopObserving()
         assertEquals(1, repository.closed)
         model.startObserving()
-        repository.settings = repository.settings.copy(numbers = repository.settings.numbers + (ReadAloudControlsNumber.Width to 123))
+        repository.settings =
+            repository.settings.copy(
+                numbers = repository.settings.numbers + (ReadAloudControlsNumber.Width to 123)
+            )
         old()
         assertEquals(288, model.state.value.settings[ReadAloudControlsNumber.Width])
         repository.listener?.invoke()

@@ -16,27 +16,58 @@ import org.junit.Test
 class TextSelectMenuSettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private val actions = mutableListOf<TextSelectMenuSettingsAction>()
+
     private fun show() {
         val config = TextSelectMenuConfig.default()
-        val state = TextSelectMenuSettingsUiState(listOf(TextSelectMenuSettingsViewModel.ZONE_BAR) + config.bar + TextSelectMenuSettingsViewModel.ZONE_MORE + config.more)
-        compose.setContent { LegadoComposeTheme {
-            TextSelectMenuSettingsScreen(state, { actions += it }, {}, Modifier.heightIn(max = 650.dp))
-        } }
+        val state =
+            TextSelectMenuSettingsUiState(
+                listOf(TextSelectMenuSettingsViewModel.ZONE_BAR) +
+                    config.bar +
+                    TextSelectMenuSettingsViewModel.ZONE_MORE +
+                    config.more
+            )
+        compose.setContent {
+            LegadoComposeTheme {
+                TextSelectMenuSettingsScreen(
+                    state,
+                    { actions += it },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
+        }
     }
-    @Test fun transferButtonsAndResetKeepTheirExactActionsAndTouchTargets() {
+
+    @Test
+    fun transferButtonsAndResetKeepTheirExactActionsAndTouchTargets() {
         show()
-        compose.onNodeWithTag("text-select-menu-transfer-copy").assertHeightIsAtLeast(48.dp).performClick()
+        compose
+            .onNodeWithTag("text-select-menu-transfer-copy")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
         compose.onNodeWithTag("text-select-menu-transfer-dict").performScrollTo().performClick()
         compose.onNodeWithTag("text-select-menu-actions").performClick()
         compose.onNodeWithTag("text-select-menu-reset").performClick()
-        compose.runOnIdle { assertEquals(listOf(TextSelectMenuSettingsAction.Transfer("copy"),
-            TextSelectMenuSettingsAction.Transfer("dict"), TextSelectMenuSettingsAction.Reset), actions) }
+        compose.runOnIdle {
+            assertEquals(
+                listOf(
+                    TextSelectMenuSettingsAction.Transfer("copy"),
+                    TextSelectMenuSettingsAction.Transfer("dict"),
+                    TextSelectMenuSettingsAction.Reset,
+                ),
+                actions,
+            )
+        }
     }
-    @Test fun dragCanCrossDividerAndConsumesReleaseWithoutTransfer() {
+
+    @Test
+    fun dragCanCrossDividerAndConsumesReleaseWithoutTransfer() {
         show()
         val list = compose.onNodeWithTag("text-select-menu-list").fetchSemanticsNode().boundsInRoot
-        val source = compose.onNodeWithTag("text-select-menu-drag-aloud").fetchSemanticsNode().boundsInRoot
-        val target = compose.onNodeWithTag("text-select-menu-item-dict").fetchSemanticsNode().boundsInRoot
+        val source =
+            compose.onNodeWithTag("text-select-menu-drag-aloud").fetchSemanticsNode().boundsInRoot
+        val target =
+            compose.onNodeWithTag("text-select-menu-item-dict").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("text-select-menu-list").performTouchInput {
             down(Offset(source.center.x - list.left, source.center.y - list.top))
             moveTo(Offset(source.center.x - list.left, target.center.y - list.top))
@@ -49,26 +80,40 @@ class TextSelectMenuSettingsScreenTest {
             assertFalse(actions.any { it is TextSelectMenuSettingsAction.Transfer })
         }
     }
-    @Test fun cancellingPointerEndsGestureWithoutCommit() {
+
+    @Test
+    fun cancellingPointerEndsGestureWithoutCommit() {
         show()
         val list = compose.onNodeWithTag("text-select-menu-list").fetchSemanticsNode().boundsInRoot
-        val source = compose.onNodeWithTag("text-select-menu-drag-copy").fetchSemanticsNode().boundsInRoot
+        val source =
+            compose.onNodeWithTag("text-select-menu-drag-copy").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("text-select-menu-list").performTouchInput {
             down(Offset(source.center.x - list.left, source.center.y - list.top))
             moveTo(Offset(source.center.x - list.left, source.center.y - list.top + 60f))
             cancel()
         }
-        compose.runOnIdle { assertEquals(TextSelectMenuSettingsAction.FinishDrag(false), actions.last()) }
+        compose.runOnIdle {
+            assertEquals(TextSelectMenuSettingsAction.FinishDrag(false), actions.last())
+        }
     }
-    @Test fun accessibilityOffersBothReorderAndZoneTransfer() {
+
+    @Test
+    fun accessibilityOffersBothReorderAndZoneTransfer() {
         show()
-        val semantics = compose.onNodeWithTag("text-select-menu-item-dict").fetchSemanticsNode().config
+        val semantics =
+            compose.onNodeWithTag("text-select-menu-item-dict").fetchSemanticsNode().config
         compose.runOnIdle {
             val custom = semantics[SemanticsActions.CustomActions]
             assertEquals(3, custom.size)
             custom.forEach { assertTrue(it.action()) }
-            assertEquals(listOf(TextSelectMenuSettingsAction.Step("dict", -1),
-                TextSelectMenuSettingsAction.Step("dict", 1), TextSelectMenuSettingsAction.Transfer("dict")), actions)
+            assertEquals(
+                listOf(
+                    TextSelectMenuSettingsAction.Step("dict", -1),
+                    TextSelectMenuSettingsAction.Step("dict", 1),
+                    TextSelectMenuSettingsAction.Transfer("dict"),
+                ),
+                actions,
+            )
         }
     }
 }

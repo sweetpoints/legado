@@ -1,10 +1,10 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.data.preferences.ReadStyleSlider
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import io.legado.app.data.preferences.ReadStyleSlider
-import java.io.File
 
 class ReadStyleLineSpacingTest {
 
@@ -12,7 +12,10 @@ class ReadStyleLineSpacingTest {
     fun `Compose slider exposes the requested range`() {
         assertEquals(50, ReadStyleSlider.LineSpacing.maximum)
         assertEquals("-2.0", ReadStyleSlider.LineSpacing.display(0))
-        assertEquals("3.0", ReadStyleSlider.LineSpacing.display(ReadStyleSlider.LineSpacing.maximum))
+        assertEquals(
+            "3.0",
+            ReadStyleSlider.LineSpacing.display(ReadStyleSlider.LineSpacing.maximum),
+        )
     }
 
     @Test
@@ -42,12 +45,14 @@ class ReadStyleLineSpacingTest {
 
     @Test
     fun `pagination still consumes the stored multiplier`() {
-        val provider = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        ).readText()
-        val layout = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
-        ).readText()
+        val provider =
+            projectFile("src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt")
+                .readText()
+        val layout =
+            projectFile(
+                    "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
+                )
+                .readText()
 
         assertTrue(provider.contains("lineSpacingExtra = ReadBookConfig.lineSpacingExtra / 10f"))
         assertTrue(layout.contains("durY += lineHeight * lineSpacingExtra"))
@@ -56,7 +61,6 @@ class ReadStyleLineSpacingTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .first { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
     }
 }

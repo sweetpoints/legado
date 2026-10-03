@@ -12,19 +12,36 @@ import org.junit.Test
 class HttpTtsEditDialogTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    @Test fun unconfirmedDraftSurvivesActivityRecreationAndBackAsksBeforeDiscard() {
+
+    @Test
+    fun unconfirmedDraftSurvivesActivityRecreationAndBackAsksBeforeDiscard() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
-            scenario.onActivity { HttpTtsEditDialog().show(it.supportFragmentManager, "http-editor") }
-            compose.onNodeWithTag("http-tts-field:Name").performTextReplacement("Unconfirmed engine")
-            compose.onNodeWithTag("http-tts-field:JsLib").performScrollTo().performTextReplacement("function sign() {}")
+            scenario.onActivity {
+                HttpTtsEditDialog().show(it.supportFragmentManager, "http-editor")
+            }
+            compose
+                .onNodeWithTag("http-tts-field:Name")
+                .performTextReplacement("Unconfirmed engine")
+            compose
+                .onNodeWithTag("http-tts-field:JsLib")
+                .performScrollTo()
+                .performTextReplacement("function sign() {}")
             compose.onNodeWithTag("http-tts-cookie").performScrollTo().performClick()
             scenario.recreate()
-            compose.onNodeWithTag("http-tts-field:Name").performScrollTo().assertTextContains("Unconfirmed engine")
-            compose.onNodeWithTag("http-tts-field:JsLib").performScrollTo().assertTextContains("function sign() {}")
+            compose
+                .onNodeWithTag("http-tts-field:Name")
+                .performScrollTo()
+                .assertTextContains("Unconfirmed engine")
+            compose
+                .onNodeWithTag("http-tts-field:JsLib")
+                .performScrollTo()
+                .assertTextContains("function sign() {}")
             compose.onNodeWithTag("http-tts-cookie").performScrollTo().assertIsOn()
             scenario.onActivity {
                 @Suppress("DEPRECATION")
-                (it.supportFragmentManager.findFragmentByTag("http-editor") as HttpTtsEditDialog).dialog!!.onBackPressed()
+                (it.supportFragmentManager.findFragmentByTag("http-editor") as HttpTtsEditDialog)
+                    .dialog!!
+                    .onBackPressed()
             }
             compose.onNodeWithText(context.getString(R.string.exit_no_save)).assertExists()
             compose.onNodeWithText(context.getString(R.string.yes)).performClick()

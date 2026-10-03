@@ -1,23 +1,23 @@
 package io.legado.app.ui.book.read.config
 
-import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.DEFAULT_UNDERLINE_WIDTH
 import io.legado.app.help.config.MAX_UNDERLINE_WIDTH
 import io.legado.app.help.config.MIN_UNDERLINE_WIDTH
+import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.UNDERLINE_MODE_DOUBLE
+import io.legado.app.help.config.UNDERLINE_MODE_SOLID
+import io.legado.app.help.config.UNDERLINE_MODE_WAVY
 import io.legado.app.help.config.normalizeUnderlineConfigs
 import io.legado.app.help.config.parseReadConfigArray
 import io.legado.app.help.config.parseReadConfigObject
 import io.legado.app.help.config.underlineConfigReferencesChanged
-import io.legado.app.help.config.UNDERLINE_MODE_DOUBLE
-import io.legado.app.help.config.UNDERLINE_MODE_SOLID
-import io.legado.app.help.config.UNDERLINE_MODE_WAVY
 import io.legado.app.ui.book.read.page.entities.underlineRenderBottom
 import io.legado.app.utils.GSON
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class UnderlineConfigTest {
 
@@ -39,16 +39,17 @@ class UnderlineConfigTest {
 
     @Test
     fun `new underline fields round trip and stay in map export`() {
-        val config = ReadBookConfig.Config(
-            underlineMode = 5,
-            underlineColor = 0x00112233,
-            underlineColorSet = true,
-            underlineWidth = 4.5f,
-            underlineDistance = 12.5f,
-            underlineBodyEnabled = false,
-            underlineTitleEnabled = true,
-            underlineConfigVersion = 1
-        )
+        val config =
+            ReadBookConfig.Config(
+                underlineMode = 5,
+                underlineColor = 0x00112233,
+                underlineColorSet = true,
+                underlineWidth = 4.5f,
+                underlineDistance = 12.5f,
+                underlineBodyEnabled = false,
+                underlineTitleEnabled = true,
+                underlineConfigVersion = 1,
+            )
         val restored = parseReadConfigObject(GSON.toJson(config)).getOrThrow()
 
         assertEquals(config.underlineMode, restored.underlineMode)
@@ -79,14 +80,15 @@ class UnderlineConfigTest {
 
     @Test
     fun `new values are clamped while preserving transparent color`() {
-        val first = ReadBookConfig.Config(
-            underlineColor = 0,
-            underlineColorSet = true,
-            underlineWidth = 99f,
-            underlineDistance = -4f,
-            underlineBodyEnabled = false,
-            underlineConfigVersion = 1
-        )
+        val first =
+            ReadBookConfig.Config(
+                underlineColor = 0,
+                underlineColorSet = true,
+                underlineWidth = 99f,
+                underlineDistance = -4f,
+                underlineBodyEnabled = false,
+                underlineConfigVersion = 1,
+            )
         val second = ReadBookConfig.Config()
 
         normalizeUnderlineConfigs(listOf(first, second))
@@ -100,11 +102,12 @@ class UnderlineConfigTest {
 
     @Test
     fun `zero underline width is preserved for normalized new configs`() {
-        val config = ReadBookConfig.Config(
-            underlineMode = UNDERLINE_MODE_SOLID,
-            underlineWidth = 0f,
-            underlineConfigVersion = 1
-        )
+        val config =
+            ReadBookConfig.Config(
+                underlineMode = UNDERLINE_MODE_SOLID,
+                underlineWidth = 0f,
+                underlineConfigVersion = 1,
+            )
 
         normalizeUnderlineConfigs(listOf(config))
 
@@ -113,16 +116,18 @@ class UnderlineConfigTest {
 
     @Test
     fun `selected imported style is the global source`() {
-        val existing = ReadBookConfig.Config(
-            underlineMode = 1,
-            underlineWidth = 2f,
-            underlineConfigVersion = 1
-        )
-        val imported = ReadBookConfig.Config(
-            underlineMode = 5,
-            underlineWidth = 6f,
-            underlineConfigVersion = 1
-        )
+        val existing =
+            ReadBookConfig.Config(
+                underlineMode = 1,
+                underlineWidth = 2f,
+                underlineConfigVersion = 1,
+            )
+        val imported =
+            ReadBookConfig.Config(
+                underlineMode = 5,
+                underlineWidth = 6f,
+                underlineConfigVersion = 1,
+            )
 
         normalizeUnderlineConfigs(listOf(existing, imported), legacyIndex = 1)
 
@@ -152,7 +157,7 @@ class UnderlineConfigTest {
                 oneDpPx = 1f,
                 waveAmplitudePx = 2f,
             ),
-            0.001f
+            0.001f,
         )
         assertEquals(
             23f,
@@ -164,7 +169,7 @@ class UnderlineConfigTest {
                 oneDpPx = 1f,
                 waveAmplitudePx = 2f,
             ),
-            0.001f
+            0.001f,
         )
         assertEquals(
             29f,
@@ -176,7 +181,7 @@ class UnderlineConfigTest {
                 oneDpPx = 1f,
                 waveAmplitudePx = 6f,
             ),
-            0.001f
+            0.001f,
         )
     }
 
@@ -188,18 +193,26 @@ class UnderlineConfigTest {
         assertEquals("10.0dp", BgTextSlider.Width.display(20))
         assertEquals("30.0dp", BgTextSlider.Distance.display(60))
 
-        val renderer = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt"
-        ).readText()
-        assertTrue(renderer.contains("(lineBase - lineTop) + ReadBookConfig.underlineDistance.dpToPx()"))
+        val renderer =
+            projectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
+                .readText()
+        assertTrue(
+            renderer.contains("(lineBase - lineTop) + ReadBookConfig.underlineDistance.dpToPx()")
+        )
         assertFalse(renderer.contains("ChapterProvider.lineSpacingExtra * 10 - 11"))
         assertTrue(renderer.contains("ReadBookConfig.underlineTitleEnabled"))
         assertTrue(renderer.contains("ReadBookConfig.underlineBodyEnabled"))
         assertTrue(renderer.contains("ReadBookConfig.underlineWidth > 0f"))
-        assertTrue(renderer.contains("canvasRecorder.recordIfNeededThenDraw(canvas, view.width, renderedHeight())"))
+        assertTrue(
+            renderer.contains(
+                "canvasRecorder.recordIfNeededThenDraw(canvas, view.width, renderedHeight())"
+            )
+        )
         assertTrue(renderer.contains("fun renderBottom(): Float = lineTop + renderedHeight()"))
         assertTrue(renderer.contains("waveAmplitudePx = ReadBookConfig.underlineWidth.dpToPx()"))
-        val page = projectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt").readText()
+        val page =
+            projectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt")
+                .readText()
         assertTrue(page.contains("lines.maxOf { it.renderBottom() }"))
         assertTrue(page.contains("renderBottom + overflow"))
     }

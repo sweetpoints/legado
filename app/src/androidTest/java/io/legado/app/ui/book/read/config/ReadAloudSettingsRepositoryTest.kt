@@ -10,7 +10,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReadAloudSettingsRepositoryTest {
-    @Test fun legacyBooleanValuesAndStartModeRetainExistingBackupKeys() {
+    @Test
+    fun legacyBooleanValuesAndStartModeRetainExistingBackupKeys() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = context.defaultSharedPreferences
         val keys = ReadAloudSwitch.entries.map { it.key } + PreferKey.readAloudStart
@@ -20,8 +21,11 @@ class ReadAloudSettingsRepositoryTest {
             val repository = PreferenceReadAloudSettingsRepository(context)
             assertFalse(repository.load().switches.values.any { it })
             assertEquals("sentence", repository.load().start)
-            preferences.edit().putString(PreferKey.ignoreAudioFocus, "true")
-                .putString(PreferKey.readAloudByPage, "false").commit()
+            preferences
+                .edit()
+                .putString(PreferKey.ignoreAudioFocus, "true")
+                .putString(PreferKey.readAloudByPage, "false")
+                .commit()
             assertTrue(repository.load()[ReadAloudSwitch.IgnoreAudioFocus])
             assertFalse(repository.load()[ReadAloudSwitch.ByPage])
             repository.setSwitch(ReadAloudSwitch.StreamAudio, true)
@@ -32,9 +36,18 @@ class ReadAloudSettingsRepositoryTest {
             preferences.edit().putString(PreferKey.readAloudStart, "future-mode").commit()
             assertEquals("sentence", repository.load().start)
         } finally {
-            preferences.edit().apply { previous.forEach { (key, value) ->
-                when (value) { null -> remove(key); is Boolean -> putBoolean(key, value); is String -> putString(key, value) }
-            } }.commit()
+            preferences
+                .edit()
+                .apply {
+                    previous.forEach { (key, value) ->
+                        when (value) {
+                            null -> remove(key)
+                            is Boolean -> putBoolean(key, value)
+                            is String -> putString(key, value)
+                        }
+                    }
+                }
+                .commit()
         }
     }
 }

@@ -8,7 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TipConfigDialogThemeTest {
-    @Test fun everyPlaceholderCanBeInsertedWithoutAnAndroidViewContext() {
+    @Test
+    fun everyPlaceholderCanBeInsertedWithoutAnAndroidViewContext() {
         val repository = FakeTipSettingsRepository()
         val model = TipSettingsViewModel(repository, SavedStateHandle())
         ReaderInfoTemplate.placeholders.forEach { placeholder ->

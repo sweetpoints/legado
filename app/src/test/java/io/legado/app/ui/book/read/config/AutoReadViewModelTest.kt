@@ -6,7 +6,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutoReadViewModelTest {
-    @Test fun initialAndEditedSpeedStayWithinSliderRange() {
+    @Test
+    fun initialAndEditedSpeedStayWithinSliderRange() {
         val repository = FakeRepository(-5)
         val model = AutoReadViewModel(repository, SavedStateHandle())
         assertEquals(1, model.state.value.speed)
@@ -18,7 +19,8 @@ class AutoReadViewModelTest {
         assertEquals(0, model.state.value.ttsUpdate)
     }
 
-    @Test fun editingOnlyUpdatesDraftAndGestureCompletionPersistsBeforeTtsRequest() {
+    @Test
+    fun editingOnlyUpdatesDraftAndGestureCompletionPersistsBeforeTtsRequest() {
         val repository = FakeRepository(10)
         val model = AutoReadViewModel(repository, SavedStateHandle())
         model.changeSpeed(15)
@@ -32,25 +34,35 @@ class AutoReadViewModelTest {
         assertEquals(listOf(30), repository.saved)
     }
 
-    @Test fun restorationKeepsUncommittedDraftWithoutWritingOrRequestingTts() {
+    @Test
+    fun restorationKeepsUncommittedDraftWithoutWritingOrRequestingTts() {
         val repository = FakeRepository(10)
         val handle = SavedStateHandle()
         val original = AutoReadViewModel(repository, handle)
         original.changeSpeed(99)
-        val restored = AutoReadViewModel(repository, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            AutoReadViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(99, restored.state.value.speed)
         assertEquals(0, restored.state.value.ttsUpdate)
         assertEquals(1, repository.reads)
         assertTrue(repository.saved.isEmpty())
     }
 
-    @Test fun pendingTtsSurvivesRecreationAndAcknowledgementIsNotRepeated() {
+    @Test
+    fun pendingTtsSurvivesRecreationAndAcknowledgementIsNotRepeated() {
         val repository = FakeRepository(10)
         val handle = SavedStateHandle()
         val original = AutoReadViewModel(repository, handle)
         original.changeSpeed(40)
         original.finishChangingSpeed()
-        val restored = AutoReadViewModel(repository, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            AutoReadViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(1, restored.state.value.ttsUpdate)
         restored.ttsUpdated(1)
         restored.ttsUpdated(1)
@@ -58,7 +70,8 @@ class AutoReadViewModelTest {
         assertEquals(listOf(40), repository.saved)
     }
 
-    @Test fun staleTtsAcknowledgementDoesNotConsumeNewSpeedChange() {
+    @Test
+    fun staleTtsAcknowledgementDoesNotConsumeNewSpeedChange() {
         val repository = FakeRepository(10)
         val model = AutoReadViewModel(repository, SavedStateHandle())
         model.finishChangingSpeed()
@@ -70,7 +83,8 @@ class AutoReadViewModelTest {
         assertEquals(0, model.state.value.ttsUpdate)
     }
 
-    @Test fun saveFailureKeepsDraftAndDoesNotRequestTtsAndCanRetry() {
+    @Test
+    fun saveFailureKeepsDraftAndDoesNotRequestTtsAndCanRetry() {
         val repository = FakeRepository(10).apply { failSaving = true }
         val model = AutoReadViewModel(repository, SavedStateHandle())
         model.changeSpeed(37)
@@ -85,7 +99,8 @@ class AutoReadViewModelTest {
         assertEquals(1, model.state.value.ttsUpdate)
     }
 
-    @Test fun counterLeaseDismissAndDestroyReleaseExactlyOnce() {
+    @Test
+    fun counterLeaseDismissAndDestroyReleaseExactlyOnce() {
         val lease = AutoReadDialogLease()
         var count = 0
         if (lease.acquire(count)) count++
@@ -96,7 +111,8 @@ class AutoReadViewModelTest {
         assertFalse(lease.isAcquired)
     }
 
-    @Test fun rejectedDialogNeverChangesExistingCount() {
+    @Test
+    fun rejectedDialogNeverChangesExistingCount() {
         val lease = AutoReadDialogLease()
         var count = 1
         if (lease.acquire(count)) count++
@@ -105,7 +121,8 @@ class AutoReadViewModelTest {
         assertFalse(lease.isAcquired)
     }
 
-    @Test fun viewRecreationReleasesOldHostAndAcquiresNewHost() {
+    @Test
+    fun viewRecreationReleasesOldHostAndAcquiresNewHost() {
         val lease = AutoReadDialogLease()
         var oldHost = 0
         var newHost = 0
@@ -122,7 +139,12 @@ class AutoReadViewModelTest {
         var reads = 0
         var failSaving = false
         val saved = mutableListOf<Int>()
-        override fun readSpeed(): Int { reads++; return initial }
+
+        override fun readSpeed(): Int {
+            reads++
+            return initial
+        }
+
         override fun saveSpeed(speed: Int) {
             if (failSaving) error("save failed")
             saved += speed

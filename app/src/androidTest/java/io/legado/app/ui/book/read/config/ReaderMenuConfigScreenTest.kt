@@ -25,12 +25,22 @@ import org.junit.Test
 
 class ReaderMenuConfigScreenTest {
     @get:Rule val compose = createComposeRule()
-    private fun state() = ReaderMenuConfigUiState(ReaderMenuConfig.ALL_KEYS.map { ReaderMenuEntry(it, true) })
 
-    @Test fun togglingAndMenuActionsEmitExactIntents() {
+    private fun state() =
+        ReaderMenuConfigUiState(ReaderMenuConfig.ALL_KEYS.map { ReaderMenuEntry(it, true) })
+
+    @Test
+    fun togglingAndMenuActionsEmitExactIntents() {
         val actions = mutableListOf<ReaderMenuEditAction>()
         compose.setContent {
-            LegadoComposeTheme { ReaderMenuConfigScreen(state(), { actions += it }, {}, Modifier.heightIn(max = 650.dp)) }
+            LegadoComposeTheme {
+                ReaderMenuConfigScreen(
+                    state(),
+                    { actions += it },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
         }
         compose.onNodeWithTag("reader-menu-item-bookmark").assertIsOn().performClick()
         compose.onNodeWithTag("reader-menu-actions").performClick()
@@ -39,18 +49,40 @@ class ReaderMenuConfigScreenTest {
         compose.onNodeWithTag("reader-menu-select-all").performClick()
         compose.onNodeWithTag("reader-menu-actions").performClick()
         compose.onNodeWithTag("reader-menu-reset").performClick()
-        compose.runOnIdle { assertEquals(listOf(ReaderMenuEditAction.Toggle("bookmark", false),
-            ReaderMenuEditAction.SetAll(false), ReaderMenuEditAction.SetAll(true), ReaderMenuEditAction.Reset), actions) }
+        compose.runOnIdle {
+            assertEquals(
+                listOf(
+                    ReaderMenuEditAction.Toggle("bookmark", false),
+                    ReaderMenuEditAction.SetAll(false),
+                    ReaderMenuEditAction.SetAll(true),
+                    ReaderMenuEditAction.Reset,
+                ),
+                actions,
+            )
+        }
     }
 
-    @Test fun leftStripSlidesSelectionAndFinishesGesture() {
+    @Test
+    fun leftStripSlidesSelectionAndFinishesGesture() {
         val actions = mutableListOf<ReaderMenuEditAction>()
         compose.setContent {
-            LegadoComposeTheme { ReaderMenuConfigScreen(state(), { actions += it }, {}, Modifier.heightIn(max = 650.dp)) }
+            LegadoComposeTheme {
+                ReaderMenuConfigScreen(
+                    state(),
+                    { actions += it },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
         }
         val list = compose.onNodeWithTag("reader-menu-list").fetchSemanticsNode().boundsInRoot
-        val first = compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().boundsInRoot
-        val second = compose.onNodeWithTag("reader-menu-item-highlightRule").fetchSemanticsNode().boundsInRoot
+        val first =
+            compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().boundsInRoot
+        val second =
+            compose
+                .onNodeWithTag("reader-menu-item-highlightRule")
+                .fetchSemanticsNode()
+                .boundsInRoot
         compose.onNodeWithTag("reader-menu-list").performTouchInput {
             down(Offset(8f, first.center.y - list.top))
             moveTo(Offset(8f, second.center.y - list.top))
@@ -64,14 +96,30 @@ class ReaderMenuConfigScreenTest {
         }
     }
 
-    @Test fun rightHandleDragsAndAccessibilityCanReorderWithoutTouch() {
+    @Test
+    fun rightHandleDragsAndAccessibilityCanReorderWithoutTouch() {
         val actions = mutableListOf<ReaderMenuEditAction>()
         compose.setContent {
-            LegadoComposeTheme { ReaderMenuConfigScreen(state(), { actions += it }, {}, Modifier.heightIn(max = 650.dp)) }
+            LegadoComposeTheme {
+                ReaderMenuConfigScreen(
+                    state(),
+                    { actions += it },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
         }
         val list = compose.onNodeWithTag("reader-menu-list").fetchSemanticsNode().boundsInRoot
-        val first = compose.onNodeWithTag("reader-menu-drag-bookmark", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val second = compose.onNodeWithTag("reader-menu-item-highlightRule").fetchSemanticsNode().boundsInRoot
+        val first =
+            compose
+                .onNodeWithTag("reader-menu-drag-bookmark", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val second =
+            compose
+                .onNodeWithTag("reader-menu-item-highlightRule")
+                .fetchSemanticsNode()
+                .boundsInRoot
         compose.onNodeWithTag("reader-menu-list").performTouchInput {
             down(Offset(first.center.x - list.left, first.center.y - list.top))
             moveTo(Offset(first.center.x - list.left, second.center.y - list.top))
@@ -82,43 +130,86 @@ class ReaderMenuConfigScreenTest {
             assertTrue(actions.contains(ReaderMenuEditAction.Move("bookmark", "highlightRule")))
             assertTrue(actions.none { it is ReaderMenuEditAction.Toggle })
         }
-        val semantics = compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().config
+        val semantics =
+            compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().config
         compose.runOnIdle {
             semantics[SemanticsActions.CustomActions].first().action()
             assertEquals(ReaderMenuEditAction.Step("bookmark", 1), actions.last())
         }
     }
 
-    @Test fun moreCheckboxAndFailureRetryRemainReachable() {
+    @Test
+    fun moreCheckboxAndFailureRetryRemainReachable() {
         val actions = mutableListOf<ReaderMenuEditAction>()
-        var state by mutableStateOf(ReaderMenuConfigUiState(listOf(ReaderMenuEntry("bookmark", false)), error = "save failed"))
+        var state by
+            mutableStateOf(
+                ReaderMenuConfigUiState(
+                    listOf(ReaderMenuEntry("bookmark", false)),
+                    error = "save failed",
+                )
+            )
         compose.setContent {
-            LegadoComposeTheme { ReaderMenuConfigScreen(state, { actions += it }, {}, Modifier.heightIn(max = 650.dp)) }
+            LegadoComposeTheme {
+                ReaderMenuConfigScreen(
+                    state,
+                    { actions += it },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
         }
         compose.onNodeWithTag("reader-menu-item-bookmark").assertIsOff()
         compose.onNodeWithTag("reader-menu-retry").performClick()
         compose.runOnIdle { assertEquals(listOf(ReaderMenuEditAction.RetrySave), actions) }
     }
-    @Test fun canceledSelectionAndReorderRestoreBaselineWithoutPersisting() {
+
+    @Test
+    fun canceledSelectionAndReorderRestoreBaselineWithoutPersisting() {
         val base = ReaderMenuConfig(ReaderMenuConfig.ALL_KEYS, emptyList())
         var writes = 0
-        val repository = object : ReaderMenuSettingsRepository {
-            override fun load() = base
-            override fun save(config: ReaderMenuConfig) { writes++ }
-        }
+        val repository =
+            object : ReaderMenuSettingsRepository {
+                override fun load() = base
+
+                override fun save(config: ReaderMenuConfig) {
+                    writes++
+                }
+            }
         val model = ReaderMenuConfigViewModel(repository, SavedStateHandle())
         val baseline = model.state.value.entries
         val actions = mutableListOf<ReaderMenuEditAction>()
         compose.setContent {
             val state by model.state.collectAsStateWithLifecycle()
-            LegadoComposeTheme { ReaderMenuConfigScreen(state, { actions += it; model.edit(it) }, {}, Modifier.heightIn(max = 650.dp)) }
+            LegadoComposeTheme {
+                ReaderMenuConfigScreen(
+                    state,
+                    {
+                        actions += it
+                        model.edit(it)
+                    },
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
+            }
         }
         listOf(false, true).forEach { reorder ->
             val list = compose.onNodeWithTag("reader-menu-list").fetchSemanticsNode().boundsInRoot
-            val first = compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().boundsInRoot
-            val second = compose.onNodeWithTag("reader-menu-item-highlightRule").fetchSemanticsNode().boundsInRoot
-            val x = if (reorder) compose.onNodeWithTag("reader-menu-drag-bookmark", useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot.center.x - list.left else 8f
+            val first =
+                compose.onNodeWithTag("reader-menu-item-bookmark").fetchSemanticsNode().boundsInRoot
+            val second =
+                compose
+                    .onNodeWithTag("reader-menu-item-highlightRule")
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            val x =
+                if (reorder)
+                    compose
+                        .onNodeWithTag("reader-menu-drag-bookmark", useUnmergedTree = true)
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                        .center
+                        .x - list.left
+                else 8f
             compose.onNodeWithTag("reader-menu-list").performTouchInput {
                 down(Offset(x, first.center.y - list.top))
                 moveTo(Offset(x, second.center.y - list.top))
@@ -133,5 +224,4 @@ class ReaderMenuConfigScreenTest {
             }
         }
     }
-
 }

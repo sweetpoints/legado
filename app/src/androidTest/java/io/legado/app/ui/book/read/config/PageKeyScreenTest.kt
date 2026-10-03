@@ -18,15 +18,22 @@ import org.junit.Test
 class PageKeyScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun textEditingResetAndConfirmEmitCallbacks() {
+    @Test
+    fun textEditingResetAndConfirmEmitCallbacks() {
         val edits = mutableListOf<Pair<PageKeyField, String>>()
         var resets = 0
         var confirms = 0
         compose.setContent {
             LegadoComposeTheme {
-                PageKeyScreen(PageKeyUiState(PageKeyValues("19", "20")), Color.White,
-                    { field, value -> edits += field to value }, { _, _ -> }, { resets++ }, { confirms++ },
-                    Modifier.heightIn(max = 650.dp))
+                PageKeyScreen(
+                    PageKeyUiState(PageKeyValues("19", "20")),
+                    Color.White,
+                    { field, value -> edits += field to value },
+                    { _, _ -> },
+                    { resets++ },
+                    { confirms++ },
+                    Modifier.heightIn(max = 650.dp),
+                )
             }
         }
         compose.onNodeWithTag("page-key-previous").performTextReplacement("19,24")
@@ -34,17 +41,28 @@ class PageKeyScreenTest {
         compose.onNodeWithTag("page-key-reset").performClick()
         compose.onNodeWithTag("page-key-confirm").performClick()
         compose.runOnIdle {
-            assertEquals(listOf(PageKeyField.PREVIOUS to "19,24", PageKeyField.NEXT to "20,25"), edits)
+            assertEquals(
+                listOf(PageKeyField.PREVIOUS to "19,24", PageKeyField.NEXT to "20,25"),
+                edits,
+            )
             assertEquals(1, resets)
             assertEquals(1, confirms)
         }
     }
 
-    @Test fun finishedDisablesEditingAndButtons() {
+    @Test
+    fun finishedDisablesEditingAndButtons() {
         compose.setContent {
             LegadoComposeTheme {
-                PageKeyScreen(PageKeyUiState(finished = true), Color.Black, { _, _ -> }, { _, _ -> }, {}, {},
-                    Modifier.heightIn(max = 650.dp))
+                PageKeyScreen(
+                    PageKeyUiState(finished = true),
+                    Color.Black,
+                    { _, _ -> },
+                    { _, _ -> },
+                    {},
+                    {},
+                    Modifier.heightIn(max = 650.dp),
+                )
             }
         }
         compose.onNodeWithTag("page-key-previous").assertIsNotEnabled()

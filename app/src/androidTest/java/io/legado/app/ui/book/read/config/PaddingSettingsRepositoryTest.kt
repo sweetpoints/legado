@@ -9,7 +9,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PaddingSettingsRepositoryTest {
-    @Test fun paddingWritesFollowActiveLocalOrSharedStyleAndResetUsesConfigDefaults() {
+    @Test
+    fun paddingWritesFollowActiveLocalOrSharedStyleAndResetUsesConfigDefaults() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val configs = ReadBookConfig.configList.map { it.copy() }
             val shared = ReadBookConfig.shareConfig.copy()
@@ -18,8 +19,19 @@ class PaddingSettingsRepositoryTest {
             try {
                 ReadBookConfig.shareLayout = false
                 ReadBookConfig.readStyleSelect = 0
-                ReadBookConfig.configList[0] = ReadBookConfig.Config(paddingLeft = 10, paddingRight = 20, headerPaddingTop = 11)
-                ReadBookConfig.shareConfig = ReadBookConfig.Config(paddingLeft = 30, paddingRight = 40, headerPaddingTop = 33, showHeaderLine = true)
+                ReadBookConfig.configList[0] =
+                    ReadBookConfig.Config(
+                        paddingLeft = 10,
+                        paddingRight = 20,
+                        headerPaddingTop = 11,
+                    )
+                ReadBookConfig.shareConfig =
+                    ReadBookConfig.Config(
+                        paddingLeft = 30,
+                        paddingRight = 40,
+                        headerPaddingTop = 33,
+                        showHeaderLine = true,
+                    )
                 val repository = AppPaddingSettingsRepository()
                 repository.apply(PaddingRegion.BODY, PaddingSide.LEFT, 90, true)
                 assertEquals(90, ReadBookConfig.configList[0].paddingLeft)
@@ -32,7 +44,10 @@ class PaddingSettingsRepositoryTest {
                 repository.reset(PaddingRegion.HEADER)
                 val defaults = ReadBookConfig.Config()
                 assertEquals(defaults.headerPaddingTop, ReadBookConfig.shareConfig.headerPaddingTop)
-                assertEquals(defaults.headerPaddingLeft, ReadBookConfig.shareConfig.headerPaddingLeft)
+                assertEquals(
+                    defaults.headerPaddingLeft,
+                    ReadBookConfig.shareConfig.headerPaddingLeft,
+                )
                 assertTrue(ReadBookConfig.shareConfig.showHeaderLine)
                 assertEquals(11, ReadBookConfig.configList[0].headerPaddingTop)
             } finally {

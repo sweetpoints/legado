@@ -22,28 +22,50 @@ import org.junit.Test
 
 class PageKeyDialogTest {
     @get:Rule val compose = createEmptyComposeRule()
-    private val prefs = InstrumentationRegistry.getInstrumentation().targetContext.defaultSharedPreferences
+    private val prefs =
+        InstrumentationRegistry.getInstrumentation().targetContext.defaultSharedPreferences
     private var previous: String? = null
     private var next: String? = null
 
-    @Before fun setUp() {
+    @Before
+    fun setUp() {
         previous = prefs.getString(PreferKey.prevKeys, null)
         next = prefs.getString(PreferKey.nextKeys, null)
-        prefs.edit { putString(PreferKey.prevKeys, "19"); putString(PreferKey.nextKeys, "20") }
-    }
-    @After fun tearDown() {
-        prefs.edit { putString(PreferKey.prevKeys, previous); putString(PreferKey.nextKeys, next) }
+        prefs.edit {
+            putString(PreferKey.prevKeys, "19")
+            putString(PreferKey.nextKeys, "20")
+        }
     }
 
-    @Test fun hardwareKeysTargetCurrentFocusAndOnlyConfirmationSaves() {
+    @After
+    fun tearDown() {
+        prefs.edit {
+            putString(PreferKey.prevKeys, previous)
+            putString(PreferKey.nextKeys, next)
+        }
+    }
+
+    @Test
+    fun hardwareKeysTargetCurrentFocusAndOnlyConfirmationSaves() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
             lateinit var dialog: PageKeyDialog
-            scenario.onActivity { dialog = PageKeyDialog(it); dialog.show() }
+            scenario.onActivity {
+                dialog = PageKeyDialog(it)
+                dialog.show()
+            }
             compose.onNodeWithTag("page-key-previous").performTextReplacement("19,")
             compose.onNodeWithTag("page-key-next").performClick()
             scenario.onActivity {
-                assertTrue(dialog.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)))
-                assertTrue(dialog.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_DOWN)))
+                assertTrue(
+                    dialog.dispatchKeyEvent(
+                        KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)
+                    )
+                )
+                assertTrue(
+                    dialog.dispatchKeyEvent(
+                        KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_DOWN)
+                    )
+                )
             }
             compose.onNodeWithTag("page-key-next").assertTextContains("20,25")
             assertEquals("20", prefs.getString(PreferKey.nextKeys, null))
@@ -57,19 +79,31 @@ class PageKeyDialogTest {
         }
     }
 
-    @Test fun dialogBundleRestoresUncommittedDraftAndFocusedFieldWithoutPersisting() {
+    @Test
+    fun dialogBundleRestoresUncommittedDraftAndFocusedFieldWithoutPersisting() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
             lateinit var dialog: PageKeyDialog
             lateinit var bundle: Bundle
-            scenario.onActivity { dialog = PageKeyDialog(it); dialog.show() }
+            scenario.onActivity {
+                dialog = PageKeyDialog(it)
+                dialog.show()
+            }
             compose.onNodeWithTag("page-key-previous").performTextReplacement("19,24")
             compose.onNodeWithTag("page-key-next").performTextReplacement("20,")
-            scenario.onActivity { bundle = dialog.onSaveInstanceState(); dialog.dismiss() }
-            scenario.onActivity { dialog = PageKeyDialog(it); dialog.onRestoreInstanceState(bundle) }
+            scenario.onActivity {
+                bundle = dialog.onSaveInstanceState()
+                dialog.dismiss()
+            }
+            scenario.onActivity {
+                dialog = PageKeyDialog(it)
+                dialog.onRestoreInstanceState(bundle)
+            }
             compose.onNodeWithTag("page-key-previous").assertTextContains("19,24")
             compose.onNodeWithTag("page-key-next").assertTextContains("20,")
             scenario.onActivity {
-                dialog.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
+                dialog.dispatchKeyEvent(
+                    KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)
+                )
                 dialog.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_DOWN))
             }
             compose.onNodeWithTag("page-key-next").assertTextContains("20,25")
@@ -79,14 +113,25 @@ class PageKeyDialogTest {
         }
     }
 
-    @Test fun sameInstanceShowsWithFreshLifecycleAndRetainsUncommittedDraft() {
+    @Test
+    fun sameInstanceShowsWithFreshLifecycleAndRetainsUncommittedDraft() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
             lateinit var dialog: PageKeyDialog
             lateinit var oldLifecycle: Lifecycle
-            scenario.onActivity { dialog = PageKeyDialog(it); dialog.show(); oldLifecycle = dialog.lifecycle }
+            scenario.onActivity {
+                dialog = PageKeyDialog(it)
+                dialog.show()
+                oldLifecycle = dialog.lifecycle
+            }
             compose.onNodeWithTag("page-key-previous").performTextReplacement("19,24")
-            scenario.onActivity { dialog.dismiss(); assertEquals(Lifecycle.State.DESTROYED, oldLifecycle.currentState) }
-            scenario.onActivity { dialog.show(); assertNotSame(oldLifecycle, dialog.lifecycle) }
+            scenario.onActivity {
+                dialog.dismiss()
+                assertEquals(Lifecycle.State.DESTROYED, oldLifecycle.currentState)
+            }
+            scenario.onActivity {
+                dialog.show()
+                assertNotSame(oldLifecycle, dialog.lifecycle)
+            }
             compose.onNodeWithTag("page-key-previous").assertTextContains("19,24")
             assertEquals("19", prefs.getString(PreferKey.prevKeys, null))
             scenario.onActivity { dialog.dismiss() }

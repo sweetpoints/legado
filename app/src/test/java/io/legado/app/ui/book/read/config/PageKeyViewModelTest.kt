@@ -8,7 +8,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PageKeyViewModelTest {
-    @Test fun loadingAndTextEditingDoNotPersistUntilConfirmation() {
+    @Test
+    fun loadingAndTextEditingDoNotPersistUntilConfirmation() {
         val repo = FakeRepository(PageKeyValues("19", "20"))
         val model = PageKeyViewModel(repo, SavedStateHandle())
         assertEquals(repo.stored, model.state.value.values)
@@ -20,7 +21,8 @@ class PageKeyViewModelTest {
         assertTrue(model.state.value.finished)
     }
 
-    @Test fun resetOnlyChangesDraftAndConfirmCanPersistBothEmptyStrings() {
+    @Test
+    fun resetOnlyChangesDraftAndConfirmCanPersistBothEmptyStrings() {
         val repo = FakeRepository(PageKeyValues("19", "20"))
         val model = PageKeyViewModel(repo, SavedStateHandle())
         model.reset()
@@ -30,7 +32,8 @@ class PageKeyViewModelTest {
         assertEquals(listOf(PageKeyValues()), repo.saved)
     }
 
-    @Test fun hardwareCodesAppendToFocusedFieldAndRespectExistingTrailingComma() {
+    @Test
+    fun hardwareCodesAppendToFocusedFieldAndRespectExistingTrailingComma() {
         val repo = FakeRepository(PageKeyValues("19,", ""))
         val model = PageKeyViewModel(repo, SavedStateHandle())
         model.focus(PageKeyField.PREVIOUS, true)
@@ -43,7 +46,8 @@ class PageKeyViewModelTest {
         assertTrue(repo.saved.isEmpty())
     }
 
-    @Test fun backDeleteAndMissingFocusRemainUnhandled() {
+    @Test
+    fun backDeleteAndMissingFocusRemainUnhandled() {
         val model = PageKeyViewModel(FakeRepository(), SavedStateHandle())
         assertFalse(model.keyDown(KeyEvent.KEYCODE_VOLUME_UP))
         model.focus(PageKeyField.PREVIOUS, true)
@@ -52,7 +56,8 @@ class PageKeyViewModelTest {
         assertEquals(PageKeyValues(), model.state.value.values)
     }
 
-    @Test fun losingPreviousFocusDoesNotClearAlreadyFocusedNextField() {
+    @Test
+    fun losingPreviousFocusDoesNotClearAlreadyFocusedNextField() {
         val model = PageKeyViewModel(FakeRepository(), SavedStateHandle())
         model.focus(PageKeyField.PREVIOUS, true)
         model.focus(PageKeyField.NEXT, true)
@@ -62,21 +67,27 @@ class PageKeyViewModelTest {
         assertNull(model.state.value.focused)
     }
 
-    @Test fun restoredDraftAndFocusAvoidReloadAndNeverWritePreferences() {
+    @Test
+    fun restoredDraftAndFocusAvoidReloadAndNeverWritePreferences() {
         val repo = FakeRepository(PageKeyValues("19", "20"))
         val handle = SavedStateHandle()
         val model = PageKeyViewModel(repo, handle)
         model.edit(PageKeyField.PREVIOUS, "19,")
         model.edit(PageKeyField.NEXT, "25,26")
         model.focus(PageKeyField.NEXT, true)
-        val restored = PageKeyViewModel(repo, SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            PageKeyViewModel(
+                repo,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertEquals(model.state.value.values, restored.state.value.values)
         assertEquals(PageKeyField.NEXT, restored.state.value.focused)
         assertEquals(1, repo.loads)
         assertTrue(repo.saved.isEmpty())
     }
 
-    @Test fun repeatedConfirmationAndChangesAfterConfirmationCannotWriteAgain() {
+    @Test
+    fun repeatedConfirmationAndChangesAfterConfirmationCannotWriteAgain() {
         val repo = FakeRepository()
         val model = PageKeyViewModel(repo, SavedStateHandle())
         model.edit(PageKeyField.PREVIOUS, "19")
@@ -90,7 +101,8 @@ class PageKeyViewModelTest {
         assertEquals(PageKeyValues("19", ""), model.state.value.values)
     }
 
-    @Test fun failedConfirmationKeepsDraftAndCanRetry() {
+    @Test
+    fun failedConfirmationKeepsDraftAndCanRetry() {
         val repo = FakeRepository().apply { failSave = true }
         val model = PageKeyViewModel(repo, SavedStateHandle())
         model.edit(PageKeyField.NEXT, "20")
@@ -104,11 +116,20 @@ class PageKeyViewModelTest {
         assertEquals(listOf(PageKeyValues("", "20")), repo.saved)
     }
 
-    private class FakeRepository(val stored: PageKeyValues = PageKeyValues()) : PageKeySettingsRepository {
+    private class FakeRepository(val stored: PageKeyValues = PageKeyValues()) :
+        PageKeySettingsRepository {
         var loads = 0
         var failSave = false
         val saved = mutableListOf<PageKeyValues>()
-        override fun load(): PageKeyValues { loads++; return stored }
-        override fun save(values: PageKeyValues) { if (failSave) error("save failed"); saved += values }
+
+        override fun load(): PageKeyValues {
+            loads++
+            return stored
+        }
+
+        override fun save(values: PageKeyValues) {
+            if (failSave) error("save failed")
+            saved += values
+        }
     }
 }

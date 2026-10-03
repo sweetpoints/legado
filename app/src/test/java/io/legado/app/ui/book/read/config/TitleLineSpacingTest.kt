@@ -2,14 +2,13 @@ package io.legado.app.ui.book.read.config
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.preferences.TipSetting
-
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class TitleLineSpacingTest {
 
@@ -24,9 +23,7 @@ class TitleLineSpacingTest {
     @Test
     fun spacingSurvivesJsonRoundTrip() {
         val config = ReadBookConfig.Config(titleLineSpacingExtra = 20)
-        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(
-            GSON.toJson(config)
-        ).getOrThrow()
+        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(GSON.toJson(config)).getOrThrow()
 
         assertEquals(20, restored.titleLineSpacingExtra)
     }
@@ -64,18 +61,17 @@ class TitleLineSpacingTest {
 
     @Test
     fun paginationAppliesTitleSpacingOnlyToChapterNames() {
-        val provider = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        )
-        val layout = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
-        )
-        val page = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt"
-        )
-        val config = readProjectFile(
-            "src/main/java/io/legado/app/help/config/ReadBookConfig.kt"
-        )
+        val provider =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
+            )
+        val layout =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
+            )
+        val page =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt")
+        val config = readProjectFile("src/main/java/io/legado/app/help/config/ReadBookConfig.kt")
 
         assertTrue(provider.contains("titleLineSpacingExtra"))
         assertTrue(provider.contains("line.isTitle && !line.isTitleNumber"))
@@ -92,7 +88,11 @@ class TitleLineSpacingTest {
         assertTrue(layout.contains("durY += lineHeight * lineSpacing"))
         assertTrue(page.contains("lastLine.isTitle && !lastLine.isTitleNumber"))
         assertTrue(page.contains("ChapterProvider.lineSpacingFor(lastLine)"))
-        assertTrue(config.contains("exportConfig.titleLineSpacingExtra = shareConfig.titleLineSpacingExtra"))
+        assertTrue(
+            config.contains(
+                "exportConfig.titleLineSpacingExtra = shareConfig.titleLineSpacingExtra"
+            )
+        )
     }
 
     private fun readProjectFile(pathInApp: String): String {
