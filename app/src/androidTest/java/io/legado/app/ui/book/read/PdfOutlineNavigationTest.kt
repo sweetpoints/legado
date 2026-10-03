@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -34,9 +33,7 @@ import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.recyclerview.MangaAdapter
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.ui.widget.TitleBar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.*
@@ -103,30 +100,16 @@ class PdfOutlineNavigationTest {
                 clickOutline("第一部分")
                 waitUntil { outlineRows() == listOf("第一部分", "前言") }
                 screenshot("pdf-outline-collapsed")
-                tocScenario.onActivity { activity ->
-                    val search = activity.findViewById<TitleBar>(R.id.title_bar).menu
-                        .findItem(R.id.menu_search).actionView as SearchView
-                    assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_button).performClick())
-                    search.setQuery("同页", false)
-                    val input = search.findViewById<SearchView.SearchAutoComplete>(androidx.appcompat.R.id.search_src_text)
-                    assertTrue(input.isShown)
-                    assertEquals("同页", input.text.toString())
-                }
+                compose.onNodeWithTag("toc-host-search").performClick()
+                compose.onNodeWithTag("toc-host-query").performTextReplacement("同页")
+                compose.onNodeWithTag("toc-host-query").assertTextContains("同页")
                 waitUntil { outlineRows() == listOf("第一部分", "目标十三页", "同页小节") }
                 screenshot("pdf-outline-search")
-                tocScenario.onActivity { activity ->
-                    val search = activity.findViewById<TitleBar>(R.id.title_bar).menu
-                        .findItem(R.id.menu_search).actionView as SearchView
-                    search.setQuery("", false)
-                    assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_close_btn).performClick())
-                    assertTrue(search.isIconified)
-                }
+                compose.onNodeWithTag("toc-host-close-search").performClick()
                 waitUntil { outlineRows() == listOf("第一部分", "前言") }
                 clickOutline("第一部分")
-                tocScenario.onActivity { activity ->
-                    val menu = PopupMenu(activity, activity.window.decorView).menu
-                    activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "反转目录"))
-                }
+                compose.onNodeWithTag("toc-host-menu").performClick()
+                compose.onNodeWithTag("toc-host-reverse").performClick()
                 waitUntil { outlineRows() == listOf("前言", "第一部分", "目标十三页", "同页小节") }
                 screenshot("pdf-outline-reversed")
                 assertEquals(3, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
@@ -207,7 +190,7 @@ class PdfOutlineNavigationTest {
                 waitUntil {
                     var fallback = false
                     instrumentation.runOnMainSync {
-                        val state = chapterHost()?.model?.state?.value
+                        val state = chapterHost()?.chapterModel?.state?.value
                         fallback = state?.loaded == true && !state.pdf && state.rows.map { it.index } == listOf(1, 0)
                     }
                     fallback
@@ -256,7 +239,7 @@ class PdfOutlineNavigationTest {
     private fun clickOutline(title: String) {
         waitUntil { outlineRows()?.contains(title) == true }
         var position = -1; var key = ""
-        instrumentation.runOnMainSync { val rows = chapterHost()!!.model.state.value.rows; position = rows.indexOfFirst { it.title == title }; key = rows[position].key }
+        instrumentation.runOnMainSync { val rows = chapterHost()!!.chapterModel.state.value.rows; position = rows.indexOfFirst { it.title == title }; key = rows[position].key }
         compose.onNodeWithTag("toc-chapter-list").performScrollToIndex(position)
         compose.onNodeWithTag("toc-chapter-row-$key").performClick()
     }
@@ -271,14 +254,14 @@ class PdfOutlineNavigationTest {
         } finally { bitmap.recycle() }
     }
 
-    private fun chapterHost(): ChapterListFragment? {
+    private fun chapterHost(): TocActivity? {
         val toc = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
             .filterIsInstance<TocActivity>().firstOrNull() ?: return null
-        return toc.supportFragmentManager.fragments.filterIsInstance<ChapterListFragment>().firstOrNull()
+        return toc
     }
     private fun outlineRows(): List<String>? {
         var rows: List<String>? = null
-        instrumentation.runOnMainSync { rows = chapterHost()?.model?.state?.value?.takeIf { it.loaded && it.pdf }?.rows?.map { it.title } }
+        instrumentation.runOnMainSync { rows = chapterHost()?.chapterModel?.state?.value?.takeIf { it.loaded && it.pdf }?.rows?.map { it.title } }
         return rows
     }
 

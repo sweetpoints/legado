@@ -17,7 +17,7 @@ import java.util.UUID
 
 enum class TocHostEffectKind { Regex, Log, PickJson, PickMarkdown, ExportSuccess, ExportFailure }
 data class TocHostEffect(val kind: TocHostEffectKind, val nonce: String = UUID.randomUUID().toString(), val requestCode: Int = 0)
-data class TocHostState(val loaded: Boolean = false, val busy: Boolean = false, val error: String? = null,
+data class TocHostState(val loaded: Boolean = false, val noBook: Boolean = false, val busy: Boolean = false, val error: String? = null,
     val localText: Boolean = false, val reverse: Boolean = false, val expanded: Boolean = true, val split: Boolean = false,
     val useReplace: Boolean = false, val countWords: Boolean = false, val chapterRevision: Long = 0,
     val resetCollapse: Boolean = false, val replaceAll: Boolean = false, val pending: TocHostEffect? = null)
@@ -39,12 +39,12 @@ class TocHostViewModel(private val repository: TocHostRepository, private val sa
         }
         saved["tocHost.owner"] = owner
         requestedUrl = url; val current = ++generation; loading?.cancel(); book = null
-        mutable.value = state.value.copy(loaded = false, busy = false, error = null)
+        mutable.value = state.value.copy(loaded = false, noBook = false, busy = false, error = null)
         loading = viewModelScope.launch {
             try {
                 val value = repository.load(url); currentCoroutineContext().ensureActive()
                 if (generation != current) return@launch
-                if (value == null) { failed("No book"); return@launch }
+                if (value == null) { mutable.value = state.value.copy(noBook = true); return@launch }
                 book = ownedTocBook(value); project(loaded = true, refresh = true)
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (current == generation) failed(error.localizedMessage ?: "Error") }

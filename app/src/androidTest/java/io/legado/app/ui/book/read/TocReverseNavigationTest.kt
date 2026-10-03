@@ -5,10 +5,8 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -24,7 +22,6 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
 import io.legado.app.ui.book.toc.TocChapterRow
 import org.junit.Assert.*
@@ -58,7 +55,7 @@ class TocReverseNavigationTest {
                     assertFalse("The source parser order must not change", stored.getReverseToc())
                     scenario.recreate()
                     await { visibleTitles() == expected }
-                    openActionBarOverflowOrOptionsMenu(context)
+                    compose.onNodeWithTag("toc-host-menu").performClick()
                     screenshot("toc-menu-reversed-$reversed")
                     pressBack()
                 }
@@ -133,8 +130,8 @@ class TocReverseNavigationTest {
                         snapshot.appendLine("readChapter=" + ReadBook.curTextChapter?.chapter?.bookUrl)
                         snapshot.appendLine("readerTotal=" + ReadBook.book?.totalChapterNum)
                         snapshot.appendLine("fragments=" + activity?.supportFragmentManager?.fragments?.map { it.javaClass.simpleName + ":" + it.lifecycle.currentState })
-                        snapshot.appendLine("composeLoaded=" + chapterHost()?.model?.state?.value?.loaded)
-                        snapshot.appendLine("rows=" + chapterHost()?.model?.state?.value?.rows?.map { it.index to it.title })
+                        snapshot.appendLine("composeLoaded=" + chapterHost()?.chapterModel?.state?.value?.loaded)
+                        snapshot.appendLine("rows=" + chapterHost()?.chapterModel?.state?.value?.rows?.map { it.index to it.title })
                     }
                     File(context.getExternalFilesDir("ui-regression"), "toc-reader-open-state.txt").writeText(snapshot.toString())
                     screenshot("toc-reader-open-state")
@@ -230,19 +227,18 @@ class TocReverseNavigationTest {
     private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
     private fun toc() = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
         .filterIsInstance<TocActivity>().firstOrNull()
-    private fun chapterHost() = toc()?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()?.firstOrNull()
+    private fun chapterHost() = toc()
     private fun rows(): List<TocChapterRow>? {
         var result: List<TocChapterRow>? = null
-        instrumentation.runOnMainSync { result = chapterHost()?.model?.state?.value?.takeIf { it.loaded }?.rows }
+        instrumentation.runOnMainSync { result = chapterHost()?.chapterModel?.state?.value?.takeIf { it.loaded }?.rows }
         return result
     }
     private fun visibleTitles(): List<String>? = compose.onAllNodes(SemanticsMatcher("chapter titles") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("toc-chapter-title-") == true
     }, useUnmergedTree = true).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }.takeIf { it.isNotEmpty() }
-    private fun reverse() = instrumentation.runOnMainSync {
-        val activity = checkNotNull(toc())
-        val menu = PopupMenu(activity, activity.window.decorView).menu
-        activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "Reverse"))
+    private fun reverse() {
+        compose.onNodeWithTag("toc-host-menu").performClick()
+        compose.onNodeWithTag("toc-host-reverse").performClick()
     }
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()

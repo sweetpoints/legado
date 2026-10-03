@@ -18,10 +18,8 @@ class TocReverseNoDiffTest {
 
     @Test
     fun `only explicit table reorder selects no diff path`() {
-        val activity = source("app/src/main/java/io/legado/app/ui/book/toc/TocActivity.kt")
         val viewModel = source("app/src/main/java/io/legado/app/ui/book/toc/TocViewModel.kt")
 
-        assertTrue(activity.contains("replaceAll = true"))
         val chapters = (0..3).map { io.legado.app.data.entities.BookChapter(index = it, title = "Chapter $it") }
         val state = io.legado.app.model.book.toc.TocListState()
         state.setFullChapters(chapters, false); org.junit.Assert.assertEquals(listOf("chapter:0", "chapter:1", "chapter:2", "chapter:3"), state.showNormal(1).map { it.key })

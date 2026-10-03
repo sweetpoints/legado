@@ -18,11 +18,11 @@ import io.legado.app.R
 class TocChapterActions(val open: (String, Boolean, String?) -> Unit = { _, _, _ -> }, val toggle: (String, String?) -> Unit = { _, _ -> },
     val scrolled: (Long) -> Unit = {}, val current: () -> Unit = {}, val top: () -> Unit = {}, val bottom: () -> Unit = {}, val retry: () -> Unit = {})
 @OptIn(ExperimentalFoundationApi::class)
-@Composable fun TocChapterScreen(state: TocChapterState, actions: TocChapterActions) {
+@Composable fun TocChapterScreen(state: TocChapterState, actions: TocChapterActions, active: Boolean = true) {
     val list = rememberLazyListState()
     fun firstKey(): String? = list.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String
-    LaunchedEffect(state.scrollRequest, state.loaded) {
-        if (state.loaded && state.scrollRequest != 0L) {
+    LaunchedEffect(state.scrollRequest, state.loaded, active) {
+        if (active && state.loaded && state.scrollRequest != 0L) {
             withFrameNanos { }; list.scrollToItem(state.scrollTarget.coerceIn(0, (state.rows.size - 1).coerceAtLeast(0)))
             actions.scrolled(state.scrollRequest)
         }

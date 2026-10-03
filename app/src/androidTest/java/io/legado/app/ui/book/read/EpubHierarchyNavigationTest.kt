@@ -4,8 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,10 +21,8 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
 import io.legado.app.ui.book.toc.TocChapterRow
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.HtmlFormatter
 import org.junit.Assert.*
@@ -264,12 +260,11 @@ class EpubHierarchyNavigationTest {
     private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
     private fun readerIntent(book: Book) = Intent(context, ReadBookActivity::class.java).putExtra("bookUrl", book.bookUrl)
 
-    private fun chapterHost(): ChapterListFragment? = ActivityLifecycleMonitorRegistry.getInstance()
+    private fun chapterHost(): TocActivity? = ActivityLifecycleMonitorRegistry.getInstance()
         .getActivitiesInStage(Stage.RESUMED).filterIsInstance<TocActivity>().firstOrNull()
-        ?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()?.firstOrNull()
     private fun rows(): List<TocChapterRow>? {
         var items: List<TocChapterRow>? = null
-        instrumentation.runOnMainSync { items = chapterHost()?.model?.state?.value?.takeIf { it.loaded }?.rows }
+        instrumentation.runOnMainSync { items = chapterHost()?.chapterModel?.state?.value?.takeIf { it.loaded }?.rows }
         return items
     }
     private fun clickNode(index: Int, arrow: Boolean = false) {
@@ -286,20 +281,16 @@ class EpubHierarchyNavigationTest {
         assertEquals((12.dpToPx() + depth * 10.dpToPx()).toFloat(), titleLeft - left, 1f)
     }
     private fun scrollToTop() = compose.onNodeWithTag("toc-chapter-top").performClick()
-    private fun reverse(scenario: ActivityScenario<TocActivity>) = scenario.onActivity { activity ->
-        val menu = PopupMenu(activity, activity.window.decorView).menu
-        activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "Reverse"))
+    private fun reverse(scenario: ActivityScenario<TocActivity>) {
+        compose.onNodeWithTag("toc-host-menu").performClick()
+        compose.onNodeWithTag("toc-host-reverse").performClick()
     }
-    private fun search(scenario: ActivityScenario<TocActivity>, query: String) = scenario.onActivity { activity ->
-        val search = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(R.id.menu_search).actionView as SearchView
-        assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_button).performClick())
-        search.setQuery(query, false)
-        assertFalse(search.isIconified)
+    private fun search(scenario: ActivityScenario<TocActivity>, query: String) {
+        compose.onNodeWithTag("toc-host-search").performClick()
+        compose.onNodeWithTag("toc-host-query").performTextReplacement(query)
     }
-    private fun closeSearch(scenario: ActivityScenario<TocActivity>) = scenario.onActivity { activity ->
-        val search = activity.findViewById<TitleBar>(R.id.title_bar).menu.findItem(R.id.menu_search).actionView as SearchView
-        search.setQuery("", false)
-        assertTrue(search.findViewById<View>(androidx.appcompat.R.id.search_close_btn).performClick())
+    private fun closeSearch(scenario: ActivityScenario<TocActivity>) {
+        compose.onNodeWithTag("toc-host-close-search").performClick()
     }
     private fun dismissFirstRun(reader: ActivityScenario<ReadBookActivity>) = reader.onActivity { activity ->
         activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()

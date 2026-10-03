@@ -35,6 +35,13 @@ class TocHostViewModelTest {
     private fun model(repo: Fake, saved: SavedStateHandle = SavedStateHandle()) = TocHostViewModel(repo, saved).also { models += it }
     private fun copy(saved: SavedStateHandle) = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
     private fun test(block: suspend TestScope.() -> Unit) = runTest(dispatcher) { try { block() } finally { models.forEach { it.stop() }; repos.forEach { it.loadGate?.complete(Unit); it.mutationGate?.complete(Unit); it.expandGate?.complete(Unit) }; runCurrent() } }
+    @Test fun missingBookIsTypedAndRetryClearsItWhenOwnerAppears() = test {
+        val repo = fake(); val original = repo.book; repo.book = null
+        val model = model(repo); model.load("book"); runCurrent()
+        assertTrue(model.state.value.noBook); assertNull(model.state.value.error); assertFalse(model.state.value.loaded)
+        repo.book = original; model.retry(); runCurrent()
+        assertFalse(model.state.value.noBook); assertTrue(model.state.value.loaded)
+    }
     @Test fun loadPublishesImmutableFlagsAndOwnedSnapshotAndIgnoresDuplicateLoads() = test {
         val repo = fake(); val model = model(repo); model.load("book"); runCurrent()
         assertTrue(model.state.value.loaded); assertTrue(model.state.value.localText); val snapshot = model.snapshot()!!

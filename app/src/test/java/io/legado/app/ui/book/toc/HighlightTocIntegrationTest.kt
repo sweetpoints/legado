@@ -5,9 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class HighlightTocIntegrationTest {
 
@@ -37,28 +35,6 @@ class HighlightTocIntegrationTest {
         assertEquals(4, highlightBodyPosition(withTitle))
         assertEquals(8, highlightBodyPosition(withoutTitle))
         assertTrue(highlightBodyPosition(withTitle) < highlightBodyPosition(withoutTitle))
-    }
-
-    @Test
-    fun `toc hosts and searches the highlight page`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/TocActivity.kt"
-        ).readText()
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/TocViewModel.kt"
-        ).readText()
-        val activityLayout = parseLayout("activity_chapter_list.xml")
-
-        assertEquals(
-            1,
-            activityLayout.getElementsByTagName("androidx.viewpager.widget.ViewPager").length
-        )
-        assertTrue(activity.contains("FragmentPagerAdapter"))
-        assertTrue(activity.contains("tabLayout.setupWithViewPager(binding.viewPager)"))
-        assertTrue(activity.contains("2 -> HighlightFragment()"))
-        assertTrue(activity.contains("return 3"))
-        assertTrue(activity.contains("viewModel.startHighlightSearch(searchKey)"))
-        assertTrue(viewModel.contains("interface HighlightCallBack"))
     }
 
     @Test
@@ -132,29 +108,12 @@ class HighlightTocIntegrationTest {
         assertTrue(dao.contains("fun flowSearch(bookUrl: String, key: String)"))
     }
 
-    private fun parseLayout(name: String): Element =
-        DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/$name"))
-            .documentElement
-
     private fun projectFile(pathInApp: String): File =
         listOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
 
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(androidNamespace, name)
-
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(appNamespace, name)
-
     private fun String.countMatches(value: String): Int =
         windowed(value.length).count { it == value }
 
-    private companion object {
-        const val androidNamespace = "http://schemas.android.com/apk/res/android"
-        const val appNamespace = "http://schemas.android.com/apk/res-auto"
-    }
 }

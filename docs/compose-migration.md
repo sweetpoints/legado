@@ -1001,3 +1001,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 规则订阅宿主、列表、菜单与编辑弹窗迁入 Compose，移除旧 Adapter、3 个布局 XML 和菜单 XML。保留类型导入、自动/静默更新与零间隔联动；拖拽只预览，释放提交，取消恢复，支持无障碍移动操作。导入回执持久化认领并校验 RESUMED，暂停取消恢复待交付项，关闭释放私有草稿。新增 7 个 Compose 交互、5 个 Route 和实际 Room 宿主回归，JVM 状态增加至 18 个；Android 测试仅编译。
 
 通用浏览器宿主、工具栏、菜单、进度、图片操作与视频覆盖层迁入 Compose，删除旧 WebViewModel、布局及菜单 XML。WebView/视频仅保留原生渲染核心；网页安装前在 IO 读取 Cookie、后台解析来源，RESUMED 校验后交付。验证回执优先于网页重装，配置变化保留会话，真正退出释放私有数据，旧宿主拒绝迟到回调。新增 1 个 JVM 菜单测试、9 个 Compose/Route 和 3 个实际宿主测试；Android 测试仅编译。
+
+目录宿主改为直接组合三个 Compose Route 的分页页面，搜索、菜单、排序、展开与导出均由状态驱动，删除宿主布局和菜单 XML。只有当前页可交付导航和消费滚动回执，非当前页继续接收数据并保留列表状态；页面生命周期释放时进入 DESTROYED。恢复外部目录选择的小请求票据，清除五个 SavedStateHandle 的 Intent 大型 URL 默认参数。新增 8 个真实 Compose/Route、3 个实际宿主回归，相关阅读器测试转为实际 Compose 宿主操作；JVM 宿主状态共 13 个，Android 测试仅编译。

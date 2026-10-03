@@ -19,10 +19,10 @@ import io.legado.app.R
 class TocHighlightsActions(val open: (Long, Boolean) -> Unit = { _, _ -> }, val scrolled: (Long) -> Unit = {},
     val retry: () -> Unit = {}, val clearError: () -> Unit = {})
 @OptIn(ExperimentalFoundationApi::class)
-@Composable fun TocHighlightsScreen(state: TocHighlightsState, actions: TocHighlightsActions) {
+@Composable fun TocHighlightsScreen(state: TocHighlightsState, actions: TocHighlightsActions, active: Boolean = true) {
     val list = rememberLazyListState()
-    LaunchedEffect(state.scrollRequest, state.loaded) {
-        if (state.loaded && state.scrollRequest != 0L) {
+    LaunchedEffect(state.scrollRequest, state.loaded, active) {
+        if (active && state.loaded && state.scrollRequest != 0L) {
             withFrameNanos { }; list.scrollToItem(state.scrollTarget.coerceAtMost((state.rows.size - 1).coerceAtLeast(0)), 0)
             actions.scrolled(state.scrollRequest)
         }
