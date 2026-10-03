@@ -32,37 +32,15 @@ internal fun ExploreHomeRoute(
     val currentNative by rememberUpdatedState(onNative)
     val focus = LocalFocusManager.current
     LaunchedEffect(model, owner) {
-        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            try {
-                model.observeResumed()
-                model.state.collect { current ->
-                    val effect = current.effect
-                    if (effect != null && !current.busy && current.error == null) {
-                        try {
-                            val prepared = ExploreHomePrepared(effect, model.prepareSearch(effect))
-                            currentCoroutineContext().ensureActive()
-                            model.deliver(
-                                effect,
-                                {
-                                    owner.lifecycle.currentState == Lifecycle.State.RESUMED &&
-                                        currentReady()
-                                },
-                            ) {
-                                currentNative(prepared)
-                            }
-                        } catch (failure: CancellationException) {
-                            throw failure
-                        } catch (failure: Exception) {
-                            model.hostFailure(failure)
-                        }
-                    }
-                }
-            } finally {
-                model.pause()
-                focus.clearFocus()
-            }
-        }
+        dispatchExploreHomeEffects(
+            model,
+            owner.lifecycle,
+            { currentReady() },
+            { currentNative(it) },
+            { focus.clearFocus() },
+        )
     }
+
     val actions =
         remember(model) {
             ExploreHomeActions(
@@ -84,4 +62,42 @@ internal fun ExploreHomeRoute(
             )
         }
     ExploreHomeScreen(state, actions)
+}
+
+internal suspend fun dispatchExploreHomeEffects(
+    model: ExploreHomeViewModel,
+    lifecycle: Lifecycle,
+    ready: () -> Boolean,
+    onNative: (ExploreHomePrepared) -> Unit,
+    onPause: () -> Unit = {},
+) {
+    lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+        try {
+            model.observeResumed()
+            model.state.collect { current ->
+                val effect = current.effect
+                if (effect != null && !current.busy && current.error == null) {
+                    try {
+                        val prepared = ExploreHomePrepared(effect, model.prepareSearch(effect))
+                        currentCoroutineContext().ensureActive()
+                        model.deliver(
+                            effect,
+                            {
+                                lifecycle.currentState == Lifecycle.State.RESUMED && ready()
+                            },
+                        ) {
+                            onNative(prepared)
+                        }
+                    } catch (failure: CancellationException) {
+                        throw failure
+                    } catch (failure: Exception) {
+                        model.hostFailure(failure)
+                    }
+                }
+            }
+        } finally {
+            model.pause()
+            onPause()
+        }
+    }
 }
