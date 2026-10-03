@@ -3,13 +3,19 @@ package io.legado.app.ui.association.compose
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
@@ -56,7 +62,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Uninstalled shared implementation; the original public Hosts remain until normal review. */
+/** Shared transparent Compose host for the public file and online import entries. */
 abstract class AssociationComposeActivity :
     BaseComposeActivity(transparent = true, imageBg = false) {
     protected abstract val hostKind: AssociationHostKind
@@ -72,6 +78,8 @@ abstract class AssociationComposeActivity :
     private val dependencies by lazy { AssociationDependencies(application) }
     private var configuredDirectory by mutableStateOf<String?>(null)
     private var pickerOwner: String? = null
+    private var privateOwnerVerified by mutableStateOf(false)
+    private var privateOwnerAccepted = false
     private val directoryPicker =
         registerForActivityResult(HandleFileContract()) { result ->
             val owner = result.value ?: pickerOwner ?: return@registerForActivityResult
@@ -137,9 +145,12 @@ abstract class AssociationComposeActivity :
                 if (isFinishing || isDestroyed) return@launch
                 // Transfer complete launch ownership before clearing Android's default extras.
                 model.attachPrepared(ticket)
-                intent =
-                    Intent(this@AssociationComposeActivity, javaClass)
-                        .putExtra(AssociationImportViewModel.TICKET_KEY, ticket)
+                // A freshly allocated ticket is ours even if destruction interrupts inspection.
+                // Restored/external tickets acquire cleanup ownership only after host validation.
+                privateOwnerAccepted = model.ownedTicket == ticket
+                check(privateOwnerAccepted) { "Import session adoption was rejected" }
+                // UUID adoption is durable, but a restored ticket is verified by the common
+                // state collector before either launch path clears the original Intent body.
                 prepared = null
             } catch (failure: Throwable) {
                 currentCoroutineContext().ensureActive()
@@ -155,7 +166,21 @@ abstract class AssociationComposeActivity :
                     if (!current.loaded || current.busy || current.nativeResultPending)
                         return@collectLatest
                     val session = current.session ?: return@collectLatest
-                    if (hostKind == AssociationHostKind.File && session.error != null) {
+                    if (current.ticket != model.ownedTicket || session.input.host != hostKind) {
+                        toastOnUi("导入会话与当前入口不匹配")
+                        finish()
+                        return@collectLatest
+                    }
+                    privateOwnerAccepted = true
+                    privateOwnerVerified = true
+                    normalizeOwnedIntent(checkNotNull(current.ticket))
+                    if (
+                        session.phase == AssociationPhase.Finished &&
+                            session.completionMessage == null &&
+                            session.effects.isEmpty()
+                    ) {
+                        finish()
+                    } else if (hostKind == AssociationHostKind.File && session.error != null) {
                         toastOnUi(session.error)
                         delay(2_000)
                         finish()
@@ -182,11 +207,23 @@ abstract class AssociationComposeActivity :
 
     @Composable
     override fun Content(savedInstanceState: Bundle?) {
+        val state by importModel.state.collectAsStateWithLifecycle()
+        if (!privateOwnerVerified && state.restoreError == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return
+        }
         AssociationImportRoute(
             model = importModel,
             configuredDirectory = configuredDirectory,
             privateDirectory = Uri.fromFile(File(filesDir, "books")).toString(),
-            canDeliver = { !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved },
+            canDeliver = {
+                privateOwnerVerified &&
+                    !isFinishing &&
+                    !isDestroyed &&
+                    !supportFragmentManager.isStateSaved
+            },
             prepare = ::prepareDelivery,
             onDeliveryError = { toastOnUi(it.localizedMessage) },
             onChoosePrivateDirectory = {
@@ -202,6 +239,20 @@ abstract class AssociationComposeActivity :
             onClose = ::finish,
             showSessionErrors = hostKind == AssociationHostKind.Online,
         )
+    }
+
+    private fun normalizeOwnedIntent(ticket: String) {
+        if (
+            intent.data == null &&
+                intent.clipData == null &&
+                intent.extras?.keySet() == setOf(AssociationImportViewModel.TICKET_KEY) &&
+                intent.getStringExtra(AssociationImportViewModel.TICKET_KEY) == ticket
+        )
+            return
+        intent =
+            Intent(this, javaClass)
+                .addFlags(intent.flags)
+                .putExtra(AssociationImportViewModel.TICKET_KEY, ticket)
     }
 
     private suspend fun prepareDelivery(
@@ -322,7 +373,7 @@ abstract class AssociationComposeActivity :
     }
 
     override fun onDestroy() {
-        if (isFinishing && !isChangingConfigurations) {
+        if (isFinishing && !isChangingConfigurations && privateOwnerAccepted) {
             val model = importModel
             cleanupScope.launch { runCatching { model.closeOwnedSession() } }
         }

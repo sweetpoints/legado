@@ -8,16 +8,17 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
+import io.legado.app.ui.association.FileAssociationViewModel
 
-/** Debug-only Activity exercises the uninstalled factory without replacing either legacy Host. */
+/** Exercises child-first access to the installed concrete wrapper and its saved-state factory. */
 class AssociationFactoryFixtureActivity : FragmentActivity() {
     var createdHandle: SavedStateHandle? = null
         private set
 
-    val model: FileAssociationCompatibilityModel
-        get() = ViewModelProvider(this)[FileAssociationCompatibilityModel::class.java]
+    val model: FileAssociationViewModel
+        get() = ViewModelProvider(this)[FileAssociationViewModel::class.java]
 
-    val childModel: FileAssociationCompatibilityModel
+    val childModel: FileAssociationViewModel
         get() =
             (supportFragmentManager.findFragmentByTag("factory-child")
                     as AssociationFactoryFixtureFragment)
@@ -30,11 +31,11 @@ class AssociationFactoryFixtureActivity : FragmentActivity() {
         get() =
             AssociationViewModelFactory(
                 super.defaultViewModelProviderFactory,
-                FileAssociationCompatibilityModel::class.java,
+                FileAssociationViewModel::class.java,
                 { intent.getStringExtra("prepared") },
             ) { handle ->
                 createdHandle = handle
-                FileAssociationCompatibilityModel(application, handle)
+                FileAssociationViewModel(application, handle)
             }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +57,7 @@ class AssociationFactoryFixtureActivity : FragmentActivity() {
 }
 
 class AssociationFactoryFixtureFragment : Fragment() {
-    val model by activityViewModels<FileAssociationCompatibilityModel>()
+    val model by activityViewModels<FileAssociationViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
