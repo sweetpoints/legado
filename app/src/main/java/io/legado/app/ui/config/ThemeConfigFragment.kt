@@ -9,7 +9,6 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import android.widget.SeekBar
 import androidx.core.view.MenuProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
@@ -19,7 +18,6 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogImageBlurringBinding
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
@@ -36,7 +34,6 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
@@ -144,6 +141,9 @@ class ThemeConfigFragment : PreferenceFragment(),
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        parentFragmentManager.setFragmentResultListener(BackgroundBlurDialog.RESULT, viewLifecycleOwner) { _, result ->
+            upTheme(result.getBoolean(BackgroundBlurDialog.NIGHT))
+        }
         activity?.setTitle(R.string.theme_setting)
         listView.setEdgeEffectColor(primaryColor)
         activity?.addMenuProvider(this, viewLifecycleOwner)
@@ -296,7 +296,6 @@ class ThemeConfigFragment : PreferenceFragment(),
 
     private fun selectBgAction(isNight: Boolean) {
         val bgKey = if (isNight) PreferKey.bgImageN else PreferKey.bgImage
-        val blurringKey = if (isNight) PreferKey.bgImageNBlurring else PreferKey.bgImageBlurring
         val actions = arrayListOf(
             getString(R.string.background_image_blurring),
             getString(R.string.select_image)
@@ -306,9 +305,7 @@ class ThemeConfigFragment : PreferenceFragment(),
         }
         context?.selector(items = actions) { _, i ->
             when (i) {
-                0 -> alertImageBlurring(blurringKey) {
-                    upTheme(isNight)
-                }
+                0 -> BackgroundBlurDialog.newInstance(isNight).show(parentFragmentManager, "background-blur")
 
                 1 -> {
                     if (isNight) {
@@ -329,34 +326,6 @@ class ThemeConfigFragment : PreferenceFragment(),
                     upTheme(isNight)
                 }
             }
-        }
-    }
-
-    private fun alertImageBlurring(preferKey: String, success: () -> Unit) {
-        alert(R.string.background_image_blurring) {
-            val alertBinding = DialogImageBlurringBinding.inflate(layoutInflater).apply {
-                getPrefInt(preferKey, 0).let {
-                    seekBar.progress = it
-                    textViewValue.text = it.toString()
-                }
-                seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-                    override fun onProgressChanged(
-                        seekBar: SeekBar,
-                        progress: Int,
-                        fromUser: Boolean
-                    ) {
-                        textViewValue.text = progress.toString()
-                    }
-                })
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.seekBar.progress.let {
-                    putPrefInt(preferKey, it)
-                    success.invoke()
-                }
-            }
-            cancelButton()
         }
     }
 

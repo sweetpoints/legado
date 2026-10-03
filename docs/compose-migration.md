@@ -995,3 +995,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 规则订阅状态层将完整编辑草稿、导入地址和事务回执保存在私有文件，SavedState 只保存会话票据。Room 写入前先记录回执，恢复时核对完整行内容，避免重复创建或覆盖外部修改；关闭栅栏同时识别 AtomicFile 备份，阻止迟到写入。新增 16 个 JVM 状态测试和 7 个 Android 文件/Room 测试；JVM 测试执行，Android 测试仅编译。
 
 目录宿主数据与行为层迁入 Repository/ViewModel：书籍、反转、展开设置、TXT 重建和书签导出沿用原合同，重建保留最新自定义封面，恢复的目录选择结果等待书籍加载后交付。完整书籍留内存，SavedState 保存小型效果票据与请求编号；12 个 JVM 行为回归执行，7 个 Android Room/文件回归仅编译。
+
+背景模糊弹窗改为 Compose Slider、ViewModel 与偏好 Repository，移除专用 XML/ViewBinding；半径仍为 0..25，只有确认才持久化对应日/夜主题并发送刷新结果。取消不写入，旋转保留未确认半径，写入失败允许重试，提交期间禁止重复确认和退出。新增 5 个 JVM 状态测试、2 个 Compose 交互测试和 1 个实际偏好回归；Android 测试仅编译。
