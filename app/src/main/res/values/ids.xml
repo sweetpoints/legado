@@ -23,7 +23,6 @@
     <item name="editText" type="id" />
     <item name="title_bar" type="id" />
 
-    <item name="view_pager_main" type="id" />
     <item name="compose_dialog_content" type="id" />
     <item name="custom_web_view" type="id" />
 

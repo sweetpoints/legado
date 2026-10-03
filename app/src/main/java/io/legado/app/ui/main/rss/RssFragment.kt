@@ -30,6 +30,8 @@ import io.legado.app.utils.startActivity
 
 /** Keep Main's Fragment/position entry point while the entire destination is Compose. */
 class RssFragment() : Fragment(), MainFragmentInterface {
+    internal var restoreWithoutPageView: Boolean = false
+
     constructor(position: Int) : this() {
         arguments = Bundle().apply { putInt("position", position) }
     }
@@ -58,8 +60,9 @@ class RssFragment() : Fragment(), MainFragmentInterface {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View =
-        ComposeView(requireContext()).apply {
+    ): View? {
+        if (restoreWithoutPageView) return null
+        return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoComposeTheme {
@@ -69,6 +72,7 @@ class RssFragment() : Fragment(), MainFragmentInterface {
                 }
             }
         }
+    }
 
     private fun ready() =
         isAdded &&

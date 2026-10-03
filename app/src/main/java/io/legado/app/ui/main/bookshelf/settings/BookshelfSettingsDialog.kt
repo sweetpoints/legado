@@ -14,15 +14,39 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.preferences.PreferenceBookshelfSettingsRepository
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.MainBookshelfHost
 import io.legado.app.utils.setLayout
 
 class BookshelfSettingsDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<BookshelfSettingsViewModel> {
-        viewModelFactory { initializer { BookshelfSettingsViewModel(PreferenceBookshelfSettingsRepository(requireContext()), createSavedStateHandle()) } }
+    private val viewModel by
+        viewModels<BookshelfSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookshelfSettingsViewModel(
+                        PreferenceBookshelfSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    override fun onStart() { super.onStart(); setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        BookshelfSettingsRoute(viewModel, { effects -> (parentFragment as? BaseBookshelfFragment)?.applySettingsEffects(effects) },
-            ::dismiss, Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .85f))
+
+    @Composable
+    override fun Content() {
+        BookshelfSettingsRoute(
+            viewModel,
+            { effects ->
+                val host = activity as? MainBookshelfHost
+                if (host != null) host.applySettingsEffects(effects)
+                else (parentFragment as? BaseBookshelfFragment)?.applySettingsEffects(effects)
+            },
+            ::dismiss,
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .85f),
+        )
     }
 }

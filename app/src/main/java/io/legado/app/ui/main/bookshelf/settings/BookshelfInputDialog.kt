@@ -9,23 +9,52 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.MainBookshelfHost
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 
 class BookshelfInputDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<BookshelfInputViewModel> {
-        viewModelFactory { initializer { BookshelfInputViewModel(createSavedStateHandle()) } }
-    }
-    override fun onStart() { super.onStart(); setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        BookshelfInputRoute(viewModel, { kind, result ->
-            if (kind == 2) requireContext().sendToClip(result.text)
-            else (parentFragment as? BaseBookshelfFragment)?.submitShelfInput(kind, result)
-        }, { group -> (parentFragment as? BaseBookshelfFragment)?.selectBookshelfImportFile(group) }, ::dismiss)
-    }
-    companion object {
-        fun create(kind: Int, groupId: Long = -1L, value: String = "", summary: String = "") = BookshelfInputDialog().apply {
-            arguments = Bundle().apply { putInt("kind", kind); putLong("groupId", groupId); putString("value", value); putString("summary", summary) }
+    private val viewModel by
+        viewModels<BookshelfInputViewModel> {
+            viewModelFactory { initializer { BookshelfInputViewModel(createSavedStateHandle()) } }
         }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    @Composable
+    override fun Content() {
+        BookshelfInputRoute(
+            viewModel,
+            { kind, result ->
+                if (kind == 2) requireContext().sendToClip(result.text)
+                else {
+                    val host = activity as? MainBookshelfHost
+                    if (host != null) host.submitShelfInput(kind, result)
+                    else (parentFragment as? BaseBookshelfFragment)?.submitShelfInput(kind, result)
+                }
+            },
+            { group ->
+                val host = activity as? MainBookshelfHost
+                if (host != null) host.selectBookshelfImportFile(group)
+                else (parentFragment as? BaseBookshelfFragment)?.selectBookshelfImportFile(group)
+            },
+            ::dismiss,
+        )
+    }
+
+    companion object {
+        fun create(kind: Int, groupId: Long = -1L, value: String = "", summary: String = "") =
+            BookshelfInputDialog().apply {
+                arguments =
+                    Bundle().apply {
+                        putInt("kind", kind)
+                        putLong("groupId", groupId)
+                        putString("value", value)
+                        putString("summary", summary)
+                    }
+            }
     }
 }

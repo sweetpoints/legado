@@ -23,6 +23,8 @@ import io.legado.app.utils.startActivity
 
 /** Main's public fragment/position and repeated-tab collapse entry points remain stable. */
 class ExploreFragment() : Fragment(), MainFragmentInterface {
+    internal var restoreWithoutPageView: Boolean = false
+
     constructor(position: Int) : this() {
         arguments = Bundle().apply { putInt("position", position) }
     }
@@ -52,11 +54,13 @@ class ExploreFragment() : Fragment(), MainFragmentInterface {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View =
-        ComposeView(requireContext()).apply {
+    ): View? {
+        if (restoreWithoutPageView) return null
+        return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent { LegadoComposeTheme { ExploreHomeRoute(homeModel, ::ready, ::native) } }
         }
+    }
 
     private fun ready(): Boolean =
         isAdded &&

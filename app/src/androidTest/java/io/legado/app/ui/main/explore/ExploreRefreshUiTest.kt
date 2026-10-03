@@ -133,16 +133,12 @@ class ExploreRefreshUiTest {
             .commit()
         appDb.bookSourceDao.insert(*sources.toTypedArray())
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        await("discovery fragment") {
-            it.supportFragmentManager.fragments.any { fragment ->
-                fragment is ExploreFragment && fragment.isResumed
-            }
-        }
-        scenario!!.onActivity { it.explore.homeModel.query("group:$group") }
-        await("fixture sources") { it.explore.homeModel.state.value.sources.size == sources.size }
+        await("main destination migration") { it.hostMigration.value.ready }
+        scenario!!.onActivity { it.explore.query("group:$group") }
+        await("fixture sources") { it.explore.state.value.sources.size == sources.size }
         compose.onNodeWithText(source.bookSourceName).performClick()
         await("initial categories") {
-            it.explore.homeModel.state.value.controls.any { row ->
+            it.explore.state.value.controls.any { row ->
                 row.label == "Rendered + Short list"
             }
         }
@@ -152,7 +148,7 @@ class ExploreRefreshUiTest {
     fun cleanUp() {
         scenario?.onActivity { activity ->
             preDraw?.let {
-                activity.explore.requireView().viewTreeObserver.removeOnPreDrawListener(it)
+                activity.window.decorView.viewTreeObserver.removeOnPreDrawListener(it)
             }
         }
         scenario?.close()
@@ -278,14 +274,14 @@ class ExploreRefreshUiTest {
         scenario!!.onActivity { activity ->
             preDraw =
                 ViewTreeObserver.OnPreDrawListener {
-                        val state = activity.explore.homeModel.state.value
+                        val state = activity.explore.state.value
                         frames.add(
                             "expanded=${state.expandedUrl}, controls=${state.controls.size}, loading=${state.panelLoading}"
                         )
                         true
                     }
                     .also {
-                        activity.explore.requireView().viewTreeObserver.addOnPreDrawListener(it)
+                        activity.window.decorView.viewTreeObserver.addOnPreDrawListener(it)
                     }
         }
     }
@@ -302,14 +298,14 @@ class ExploreRefreshUiTest {
         val beforeBounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
         var beforeCount = 0
         scenario!!.onActivity {
-            beforeCount = it.explore.homeModel.state.value.controls.size
+            beforeCount = it.explore.state.value.controls.size
             frames.clear()
         }
         screenshot("$name-before")
         try {
             action()
             await(rendered) {
-                it.explore.homeModel.state.value.controls.any { control ->
+                it.explore.state.value.controls.any { control ->
                     control.label == rendered
                 }
             }
@@ -323,7 +319,7 @@ class ExploreRefreshUiTest {
                     2f * context.resources.displayMetrics.density,
             )
             scenario!!.onActivity { activity ->
-                val state = activity.explore.homeModel.state.value
+                val state = activity.explore.state.value
                 assertEquals(
                     "Following sources must not replace expanded owner",
                     source.bookSourceUrl,
@@ -347,8 +343,8 @@ class ExploreRefreshUiTest {
         }
     }
 
-    private val MainActivity.explore: ExploreFragment
-        get() = supportFragmentManager.fragments.filterIsInstance<ExploreFragment>().single()
+    private val MainActivity.explore: ExploreHomeViewModel
+        get() = exploreHomeModel
 
     private fun await(description: String, condition: (MainActivity) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15_000

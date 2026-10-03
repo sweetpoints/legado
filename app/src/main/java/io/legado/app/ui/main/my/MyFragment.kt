@@ -17,6 +17,8 @@ import io.legado.app.utils.showHelp
 
 /** Temporary Fragment entry point; the destination's content is entirely Compose. */
 class MyFragment() : Fragment(), MainFragmentInterface {
+    internal var restoreWithoutPageView: Boolean = false
+
     constructor(position: Int) : this() {
         arguments = Bundle().apply { putInt("position", position) }
     }
@@ -33,8 +35,9 @@ class MyFragment() : Fragment(), MainFragmentInterface {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View =
-        ComposeView(requireContext()).apply {
+    ): View? {
+        if (restoreWithoutPageView) return null
+        return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoComposeTheme {
@@ -51,6 +54,7 @@ class MyFragment() : Fragment(), MainFragmentInterface {
                 }
             }
         }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

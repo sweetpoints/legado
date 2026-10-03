@@ -37,6 +37,9 @@ class BookshelfFragment2() : BaseBookshelfFragment(0) {
                 initializer { BookshelfFolderViewModel(repository, createSavedStateHandle()) }
             }
         }
+
+    internal fun captureHostNavigation() = folderModel.captureHostNavigation()
+
     override var groupId: Long
         get() = folderModel.state.value.groupId
         set(value) {
@@ -56,8 +59,9 @@ class BookshelfFragment2() : BaseBookshelfFragment(0) {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View =
-        ComposeView(requireContext()).apply {
+    ): View? {
+        if (restoreWithoutPageView) return null
+        return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoComposeTheme {
@@ -95,6 +99,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(0) {
                 }
             }
         }
+    }
 
     private fun openRecent(info: Boolean) {
         val key = folderModel.state.value.header.recent?.key ?: return
