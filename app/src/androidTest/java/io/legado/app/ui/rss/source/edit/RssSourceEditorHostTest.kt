@@ -16,10 +16,7 @@ import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
-import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
@@ -34,6 +31,7 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -225,7 +223,9 @@ class RssSourceEditorHostTest {
                 .performTextInputSelection(androidx.compose.ui.text.TextRange(4))
             scenario.recreate()
             waitLoaded(scenario)
-            compose.onNodeWithTag("rss-editor-fullscreen").performClick()
+            val launch = recordCodeLaunch {
+                compose.onNodeWithTag("rss-editor-fullscreen").performClick()
+            }
             var child: CodeEditActivity? = null
             compose.waitUntil(10000) {
                 instrumentation.runOnMainSync {
@@ -238,17 +238,15 @@ class RssSourceEditorHostTest {
                 child != null
             }
             val editor = requireNotNull(child)
-            assertTrue(editor.intent.getBooleanExtra("useTextFile", false))
-            assertEquals(4, editor.intent.getIntExtra("cursorPosition", -1))
-            val path = editor.intent.getStringExtra("textFile")!!
+            assertTrue(launch.getBooleanExtra("useTextFile", false))
+            assertEquals(4, launch.getIntExtra("cursorPosition", -1))
+            val path = launch.getStringExtra("textFile")!!
             compose.waitUntil(10000) {
                 var ready = false
                 instrumentation.runOnMainSync {
-                    ready =
-                        editor
-                            .findViewById<io.github.rosemoe.sora.widget.CodeEditor>(R.id.editText)
-                            .text
-                            .toString() == "initial body"
+                    val native =
+                        editor.findViewById<io.github.rosemoe.sora.widget.CodeEditor>(R.id.editText)
+                    ready = native?.text?.toString() == "initial body" && native?.isEditable == true
                 }
                 ready
             }
@@ -261,7 +259,7 @@ class RssSourceEditorHostTest {
                     .setSelection(0, 7)
             }
             closeSoftKeyboard()
-            onView(withId(R.id.menu_save)).perform(click())
+            compose.onNodeWithTag("code-save").performClick()
             compose.waitUntil(10000) {
                 var returned = false
                 scenario.onActivity {
@@ -307,6 +305,29 @@ class RssSourceEditorHostTest {
             }
         } finally {
             runBlocking(Dispatchers.IO) { appDb.rssSourceDao.delete(key) }
+        }
+    }
+
+    private fun recordCodeLaunch(launch: () -> Unit): Intent {
+        val captured = AtomicReference<Intent>()
+        val monitor =
+            object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.component?.className == CodeEditActivity::class.java.name) {
+                        // The child clears its carrier after accepting the private draft. Assert
+                        // the actual launcher contract before that cleanup, never stale extras.
+                        captured.set(Intent(intent))
+                    }
+                    return null
+                }
+            }
+        instrumentation.addMonitor(monitor)
+        return try {
+            launch()
+            compose.waitUntil(10_000) { captured.get() != null }
+            requireNotNull(captured.get())
+        } finally {
+            instrumentation.removeMonitor(monitor)
         }
     }
 }

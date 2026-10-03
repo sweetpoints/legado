@@ -28,7 +28,6 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -510,7 +509,7 @@ class SourceManualReplacementUiTest {
                 val index = text.toString().indexOf("Edited Seed0")
                 text.replace(index, index + "Edited".length, "Editor")
             }
-            onView(withId(R.id.menu_save)).perform(click())
+            compose.onNodeWithTag("code-save").performClick()
             host.ready(code)
             host.names("Editor Seed+0", "Seed+1")
             main { assertTrue(code.currentOriginalCode().contains("Editor Seed0")) }
