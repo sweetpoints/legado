@@ -5,8 +5,33 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.utils.postEvent
 
-enum class TipSetting { TitleMode, TitleSize, TitleLineSpacing, TitleBold, TitleColor, TitleNumberSize, TitleNumberSpacing, TitleNumberColor, TitleTop, TitleBottom, HeaderMode, FooterMode, TipSize, TipColor, DividerColor, SplitTitle }
-enum class TipTemplateSlot { HeaderLeft, HeaderMiddle, HeaderRight, FooterLeft, FooterMiddle, FooterRight }
+enum class TipSetting {
+    TitleMode,
+    TitleSize,
+    TitleLineSpacing,
+    TitleBold,
+    TitleColor,
+    TitleNumberSize,
+    TitleNumberSpacing,
+    TitleNumberColor,
+    TitleTop,
+    TitleBottom,
+    HeaderMode,
+    FooterMode,
+    TipSize,
+    TipColor,
+    DividerColor,
+    SplitTitle,
+}
+
+enum class TipTemplateSlot {
+    HeaderLeft,
+    HeaderMiddle,
+    HeaderRight,
+    FooterLeft,
+    FooterMiddle,
+    FooterRight,
+}
 
 data class TipSettingsSnapshot(
     val values: Map<TipSetting, Int>,
@@ -20,48 +45,89 @@ data class TipSettingsSnapshot(
 
 interface TipSettingsRepository {
     fun load(): TipSettingsSnapshot
+
     fun set(setting: TipSetting, value: Int)
+
     fun setFont(path: String)
+
     fun setTemplate(slot: TipTemplateSlot, value: String)
 }
 
-internal fun tipSettingEvents(setting: TipSetting): ArrayList<Int> = when (setting) {
-    TipSetting.TitleMode, TipSetting.SplitTitle, TipSetting.TitleNumberSpacing -> arrayListOf(5)
-    TipSetting.HeaderMode, TipSetting.FooterMode, TipSetting.TipSize, TipSetting.TipColor, TipSetting.DividerColor -> arrayListOf(2)
-    else -> arrayListOf(8, 5)
-}
+internal fun tipSettingEvents(setting: TipSetting): ArrayList<Int> =
+    when (setting) {
+        TipSetting.TitleMode,
+        TipSetting.SplitTitle,
+        TipSetting.TitleNumberSpacing -> arrayListOf(5)
+        TipSetting.HeaderMode,
+        TipSetting.FooterMode,
+        TipSetting.TipSize,
+        TipSetting.TipColor,
+        TipSetting.DividerColor -> arrayListOf(2)
+        else -> arrayListOf(8, 5)
+    }
 
 internal fun tipTemplateEvents(): ArrayList<Int> = arrayListOf(2, 6)
 
 class AppTipSettingsRepository : TipSettingsRepository {
     override fun load(): TipSettingsSnapshot {
         if (ReadBookConfig.titleMode !in 0..3) ReadBookConfig.titleMode = 0
-        return TipSettingsSnapshot(mapOf(
-            TipSetting.TitleMode to ReadBookConfig.titleMode,
-            TipSetting.TitleSize to ReadBookConfig.titleSize,
-            TipSetting.TitleLineSpacing to ReadBookConfig.titleLineSpacingExtra,
-            TipSetting.TitleBold to ReadBookConfig.titleBold,
-            TipSetting.TitleColor to ReadBookConfig.titleColor,
-            TipSetting.TitleNumberSize to ReadBookConfig.titleNumberSize,
-            TipSetting.TitleNumberSpacing to ReadBookConfig.titleNumberSpacing,
-            TipSetting.TitleNumberColor to ReadBookConfig.titleNumberColor,
-            TipSetting.TitleTop to ReadBookConfig.titleTopSpacing,
-            TipSetting.TitleBottom to ReadBookConfig.titleBottomSpacing,
-            TipSetting.HeaderMode to ReadTipConfig.headerMode,
-            TipSetting.FooterMode to ReadTipConfig.footerMode,
-            TipSetting.TipSize to ReadTipConfig.tipTextSize,
-            TipSetting.TipColor to ReadTipConfig.tipColor,
-            TipSetting.DividerColor to ReadTipConfig.tipDividerColor,
-            TipSetting.SplitTitle to if (ReadBookConfig.splitChapterTitle) 1 else 0,
-        ), ReadBookConfig.titleFont, mapOf(
-            TipTemplateSlot.HeaderLeft to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipHeaderLeftTemplate, ReadTipConfig.tipHeaderLeft),
-            TipTemplateSlot.HeaderMiddle to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipHeaderMiddleTemplate, ReadTipConfig.tipHeaderMiddle),
-            TipTemplateSlot.HeaderRight to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipHeaderRightTemplate, ReadTipConfig.tipHeaderRight),
-            TipTemplateSlot.FooterLeft to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipFooterLeftTemplate, ReadTipConfig.tipFooterLeft),
-            TipTemplateSlot.FooterMiddle to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipFooterMiddleTemplate, ReadTipConfig.tipFooterMiddle),
-            TipTemplateSlot.FooterRight to ReadTipConfig.effectiveTemplate(ReadTipConfig.tipFooterRightTemplate, ReadTipConfig.tipFooterRight),
-        ), ReadBookConfig.titleTextColor, ReadBookConfig.titleNumberTextColor)
+        return TipSettingsSnapshot(
+            mapOf(
+                TipSetting.TitleMode to ReadBookConfig.titleMode,
+                TipSetting.TitleSize to ReadBookConfig.titleSize,
+                TipSetting.TitleLineSpacing to ReadBookConfig.titleLineSpacingExtra,
+                TipSetting.TitleBold to ReadBookConfig.titleBold,
+                TipSetting.TitleColor to ReadBookConfig.titleColor,
+                TipSetting.TitleNumberSize to ReadBookConfig.titleNumberSize,
+                TipSetting.TitleNumberSpacing to ReadBookConfig.titleNumberSpacing,
+                TipSetting.TitleNumberColor to ReadBookConfig.titleNumberColor,
+                TipSetting.TitleTop to ReadBookConfig.titleTopSpacing,
+                TipSetting.TitleBottom to ReadBookConfig.titleBottomSpacing,
+                TipSetting.HeaderMode to ReadTipConfig.headerMode,
+                TipSetting.FooterMode to ReadTipConfig.footerMode,
+                TipSetting.TipSize to ReadTipConfig.tipTextSize,
+                TipSetting.TipColor to ReadTipConfig.tipColor,
+                TipSetting.DividerColor to ReadTipConfig.tipDividerColor,
+                TipSetting.SplitTitle to if (ReadBookConfig.splitChapterTitle) 1 else 0,
+            ),
+            ReadBookConfig.titleFont,
+            mapOf(
+                TipTemplateSlot.HeaderLeft to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipHeaderLeftTemplate,
+                        ReadTipConfig.tipHeaderLeft,
+                    ),
+                TipTemplateSlot.HeaderMiddle to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipHeaderMiddleTemplate,
+                        ReadTipConfig.tipHeaderMiddle,
+                    ),
+                TipTemplateSlot.HeaderRight to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipHeaderRightTemplate,
+                        ReadTipConfig.tipHeaderRight,
+                    ),
+                TipTemplateSlot.FooterLeft to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipFooterLeftTemplate,
+                        ReadTipConfig.tipFooterLeft,
+                    ),
+                TipTemplateSlot.FooterMiddle to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipFooterMiddleTemplate,
+                        ReadTipConfig.tipFooterMiddle,
+                    ),
+                TipTemplateSlot.FooterRight to
+                    ReadTipConfig.effectiveTemplate(
+                        ReadTipConfig.tipFooterRightTemplate,
+                        ReadTipConfig.tipFooterRight,
+                    ),
+            ),
+            ReadBookConfig.titleTextColor,
+            ReadBookConfig.titleNumberTextColor,
+        )
     }
+
     override fun set(setting: TipSetting, value: Int) {
         when (setting) {
             TipSetting.TitleMode -> ReadBookConfig.titleMode = value
@@ -83,10 +149,12 @@ class AppTipSettingsRepository : TipSettingsRepository {
         }
         postEvent(EventBus.UP_CONFIG, tipSettingEvents(setting))
     }
+
     override fun setFont(path: String) {
         ReadBookConfig.titleFont = path
         postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
     }
+
     override fun setTemplate(slot: TipTemplateSlot, value: String) {
         when (slot) {
             TipTemplateSlot.HeaderLeft -> ReadTipConfig.tipHeaderLeftTemplate = value

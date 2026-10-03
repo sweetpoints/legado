@@ -19,20 +19,31 @@ data class MyPreferences(
 class MySettingsRepository(context: Context) {
     private val preferences = context.applicationContext.defaultSharedPreferences
 
-    fun read(): MyPreferences = MyPreferences(
-        moreItems = preferences.getStringSet(PreferKey.myMoreItems, setOf("check_update", "check_beta_update")).orEmpty().toSet(),
-        themeMode = preferences.getString(PreferKey.themeMode, "0") ?: "0",
-        autoTaskEnabled = preferences.getBooleanCompat(PreferKey.autoTaskService, false),
-        webEnabled = preferences.getBooleanCompat(PreferKey.webService, false),
-        mcpEnabled = preferences.getBooleanCompat(PreferKey.mcpService, false),
-    )
+    fun read(): MyPreferences =
+        MyPreferences(
+            moreItems =
+                preferences
+                    .getStringSet(PreferKey.myMoreItems, setOf("check_update", "check_beta_update"))
+                    .orEmpty()
+                    .toSet(),
+            themeMode = preferences.getString(PreferKey.themeMode, "0") ?: "0",
+            autoTaskEnabled = preferences.getBooleanCompat(PreferKey.autoTaskService, false),
+            webEnabled = preferences.getBooleanCompat(PreferKey.webService, false),
+            mcpEnabled = preferences.getBooleanCompat(PreferKey.mcpService, false),
+        )
 
-    fun setMoreItems(keys: Set<String>) = preferences.edit { putStringSet(PreferKey.myMoreItems, keys.toSet()) }
+    fun setMoreItems(keys: Set<String>) = preferences.edit {
+        putStringSet(PreferKey.myMoreItems, keys.toSet())
+    }
+
     fun setThemeMode(value: String) = preferences.edit { putString(PreferKey.themeMode, value) }
+
     fun setSwitch(key: String, enabled: Boolean) = preferences.edit { putBoolean(key, enabled) }
 
     fun observeChanges(onChange: (String?) -> Unit): AutoCloseable {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> onChange(key) }
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            onChange(key)
+        }
         preferences.registerOnSharedPreferenceChangeListener(listener)
         return AutoCloseable { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
     }

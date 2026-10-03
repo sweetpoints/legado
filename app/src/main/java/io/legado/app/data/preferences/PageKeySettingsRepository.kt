@@ -9,13 +9,19 @@ data class PageKeyValues(val previous: String = "", val next: String = "")
 
 interface PageKeySettingsRepository {
     fun load(): PageKeyValues
+
     fun save(values: PageKeyValues)
 }
 
 class PreferencePageKeySettingsRepository(context: Context) : PageKeySettingsRepository {
     private val preferences = context.applicationContext.defaultSharedPreferences
-    override fun load() = PageKeyValues(preferences.getString(PreferKey.prevKeys, "").orEmpty(),
-        preferences.getString(PreferKey.nextKeys, "").orEmpty())
+
+    override fun load() =
+        PageKeyValues(
+            preferences.getString(PreferKey.prevKeys, "").orEmpty(),
+            preferences.getString(PreferKey.nextKeys, "").orEmpty(),
+        )
+
     override fun save(values: PageKeyValues) {
         preferences.edit {
             putString(PreferKey.prevKeys, values.previous)

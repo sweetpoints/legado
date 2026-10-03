@@ -15,24 +15,37 @@ data class MangaColorFilterValues(
     val blue: Int = 0,
     val alpha: Int = 0,
 ) {
-    fun bounded() = MangaColorFilterValues(brightness.coerceIn(0, 255), red.coerceIn(0, 255),
-        green.coerceIn(0, 255), blue.coerceIn(0, 255), alpha.coerceIn(0, 255))
+    fun bounded() =
+        MangaColorFilterValues(
+            brightness.coerceIn(0, 255),
+            red.coerceIn(0, 255),
+            green.coerceIn(0, 255),
+            blue.coerceIn(0, 255),
+            alpha.coerceIn(0, 255),
+        )
 
-    fun toReaderConfig() = MangaColorFilterConfig(r = red, g = green, b = blue, a = alpha, l = brightness)
+    fun toReaderConfig() =
+        MangaColorFilterConfig(r = red, g = green, b = blue, a = alpha, l = brightness)
 }
 
 interface MangaColorFilterRepository {
     suspend fun load(): MangaColorFilterValues
-    /** SharedPreferences.apply enqueues disk persistence; safe to finish before the ViewModel clears. */
+
+    /**
+     * SharedPreferences.apply enqueues disk persistence; safe to finish before the ViewModel
+     * clears.
+     */
     fun save(values: MangaColorFilterValues)
 }
 
 class PreferenceMangaColorFilterRepository : MangaColorFilterRepository {
-    override suspend fun load(): MangaColorFilterValues = withContext(Dispatchers.IO) {
-        val value = GSON.fromJsonObject<MangaColorFilterConfig>(AppConfig.mangaColorFilter).getOrNull()
-            ?: MangaColorFilterConfig()
-        MangaColorFilterValues(value.l, value.r, value.g, value.b, value.a).bounded()
-    }
+    override suspend fun load(): MangaColorFilterValues =
+        withContext(Dispatchers.IO) {
+            val value =
+                GSON.fromJsonObject<MangaColorFilterConfig>(AppConfig.mangaColorFilter).getOrNull()
+                    ?: MangaColorFilterConfig()
+            MangaColorFilterValues(value.l, value.r, value.g, value.b, value.a).bounded()
+        }
 
     override fun save(values: MangaColorFilterValues) {
         AppConfig.mangaColorFilter = values.toReaderConfig().toJson()

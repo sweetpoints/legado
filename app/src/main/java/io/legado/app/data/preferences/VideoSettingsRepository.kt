@@ -10,17 +10,31 @@ data class VideoSettings(
     val pressSpeed: Int = 30,
 )
 
-enum class VideoSetting { AutoPlay, DefaultFloatWindow, StartFull, FullBottomProgress }
+enum class VideoSetting {
+    AutoPlay,
+    DefaultFloatWindow,
+    StartFull,
+    FullBottomProgress,
+}
 
 interface VideoSettingsRepository {
     fun load(): VideoSettings
+
     fun setEnabled(setting: VideoSetting, enabled: Boolean)
+
     fun setPressSpeed(value: Int)
 }
 
 class AppVideoSettingsRepository : VideoSettingsRepository {
-    override fun load() = VideoSettings(VideoPlay.autoPlay, VideoPlay.defaultFloatWindow,
-        VideoPlay.startFull, VideoPlay.fullBottomProgressBar, VideoPlay.longPressSpeed.coerceIn(5, 60))
+    override fun load() =
+        VideoSettings(
+            VideoPlay.autoPlay,
+            VideoPlay.defaultFloatWindow,
+            VideoPlay.startFull,
+            VideoPlay.fullBottomProgressBar,
+            VideoPlay.longPressSpeed.coerceIn(5, 60),
+        )
+
     override fun setEnabled(setting: VideoSetting, enabled: Boolean) {
         when (setting) {
             VideoSetting.AutoPlay -> VideoPlay.autoPlay = enabled
@@ -29,5 +43,8 @@ class AppVideoSettingsRepository : VideoSettingsRepository {
             VideoSetting.FullBottomProgress -> VideoPlay.fullBottomProgressBar = enabled
         }
     }
-    override fun setPressSpeed(value: Int) { VideoPlay.longPressSpeed = value.coerceIn(5, 60) }
+
+    override fun setPressSpeed(value: Int) {
+        VideoPlay.longPressSpeed = value.coerceIn(5, 60)
+    }
 }
