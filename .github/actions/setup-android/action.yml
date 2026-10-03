@@ -1,0 +1,27 @@
+name: Setup Android build
+description: Configure the project's Java toolchain, Android SDK and bounded CI memory.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: 21
+    - uses: android-actions/setup-android@v3
+      with:
+        # Gradle installs the compileSdk/build-tools required by the version catalog.
+        packages: platform-tools
+    - uses: gradle/actions/setup-gradle@v6.3.0
+    - name: Configure CI memory
+      shell: bash
+      run: |
+        set -euo pipefail
+        memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+        heap=4g
+        if (( memory_kib >= 14 * 1024 * 1024 )); then
+          heap=8g
+        fi
+        # Leave room for Android tools, unit-test JVMs and the emulator.
+        sed -i "s|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-XX:+UseParallelGC -Xmx${heap} -Xms256m -XX:MaxMetaspaceSize=1536m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8|" gradle.properties
+        echo "CI Gradle heap: $heap; max workers: 2"
+        chmod +x gradlew

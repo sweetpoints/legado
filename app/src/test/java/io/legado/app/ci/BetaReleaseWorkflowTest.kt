@@ -1,5 +1,6 @@
 package io.legado.app.ci
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,10 +30,11 @@ class BetaReleaseWorkflowTest {
     }
 
     @Test
-    fun `beta release keeps the merge commit guard`() {
-        val expected = "if: " + "$" +
-                "{{ !startsWith(github.event.head_commit.message, 'Merge pull request') }}"
-
-        assertTrue(workflowText.contains(expected))
+    fun `beta publication is independent of optional distribution jobs`() {
+        val releaseJob = workflowText.substringAfter("  release:").substringBefore("  CDN:")
+        assertTrue(releaseJob.contains("needs: [prepare, build]"))
+        assertFalse(releaseJob.contains("LegadoTeam/legado"))
+        assertFalse(workflowText.contains("github.event.head_commit"))
+        assertFalse(workflowText.contains("LANZOU_"))
     }
 }
