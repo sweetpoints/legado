@@ -281,16 +281,41 @@ class BookSourceManagerViewModelTest {
             assertEquals(0, store.writesAfterDeletion)
         }
 
+    @Test
+    fun durableReceiptRechecksCurrentOwnerBeforeSynchronousNativeLaunch() =
+        runTest(dispatcher) {
+            val store = MemoryStore()
+            val manager = model(FakeRepository(), store)
+            runCurrent()
+            manager.effect("search", "a")
+            runCurrent()
+            val effect = manager.state.value.effect!!
+            var resumed = true
+            var launches = 0
+            store.onWrite = { snapshot -> if (effect.id in snapshot.receipts) resumed = false }
+            assertFalse(manager.deliverEffect(effect.id, { resumed }, { launches++ }))
+            assertEquals(0, launches)
+            assertEquals(effect.id, manager.state.value.effect!!.id)
+            assertFalse(effect.id in store.session.receipts)
+            resumed = true
+            store.onWrite = null
+            assertTrue(manager.deliverEffect(effect.id, { resumed }, { launches++ }))
+            assertEquals(1, launches)
+            assertFalse(manager.deliverEffect(effect.id, { resumed }, { launches++ }))
+        }
+
     private class MemoryStore : SourceManagerSessionStorage {
         var session = SourceManagerSession()
         var deletions = 0
         var writesAfterDeletion = 0
+        var onWrite: ((SourceManagerSession) -> Unit)? = null
 
         override fun read() = session
 
         override fun write(session: SourceManagerSession) {
             if (deletions > 0) writesAfterDeletion++
             this.session = session
+            onWrite?.invoke(session)
         }
 
         override fun delete() {

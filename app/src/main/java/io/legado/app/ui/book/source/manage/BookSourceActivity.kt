@@ -38,11 +38,9 @@ import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** Native launchers and the existing check service are the only activity-owned effects. */
 class BookSourceActivity : BaseComposeActivity() {
@@ -117,11 +115,14 @@ class BookSourceActivity : BaseComposeActivity() {
         BookSourceManagerRoute(
             model = managerModel,
             onEffect = ::handleEffect,
-            canHandleEffect = { !supportFragmentManager.isStateSaved },
+            canHandleEffect = {
+                !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
+            },
         )
     }
 
-    private suspend fun handleEffect(effect: SourceManagerEffect) {
+    private fun handleEffect(prepared: PreparedSourceManagerEffect) {
+        val effect = prepared.effect
         when (effect.action) {
             "back" -> finish()
             "add" -> startActivity<BookSourceEditActivity>()
@@ -143,12 +144,9 @@ class BookSourceActivity : BaseComposeActivity() {
                     putExtra("type", "bookSource")
                     putExtra("key", effect.key)
                 }
-            "search" ->
-                managerModel.checkSources(listOf(effect.key)).singleOrNull()?.let {
-                    SearchActivity.start(this, it)
-                }
+            "search" -> prepared.searchSource?.let { SearchActivity.start(this, it) }
             "cancel-check" -> checkSessionId?.let { CheckSource.stop(this, it) }
-            "check" -> startCheck(effect)
+            "check" -> startCheck(prepared)
             "export" ->
                 effect.export?.let { output ->
                     exportDirectory.launch {
@@ -167,21 +165,12 @@ class BookSourceActivity : BaseComposeActivity() {
         }
     }
 
-    private suspend fun startCheck(effect: SourceManagerEffect) {
-        val sources = managerModel.checkSources(effect.keys)
-        if (sources.isEmpty()) return
-        val sessionId = Debug.tryStartCheckSession()
-        if (sessionId == null) {
-            managerModel.hostError("书源调试通道占用中，请稍后重试")
-            return
-        }
-        if (effect.key.isNotEmpty()) CheckSource.keyword = effect.key
-        // Once accepted, finishing the service handoff must survive lifecycle cancellation.
-        withContext(NonCancellable) {
-            CheckSource.start(this@BookSourceActivity, sources, sessionId)
-            checkSessionId = sessionId
-            keepScreenOn(true)
-        }
+    private fun startCheck(prepared: PreparedSourceManagerEffect) {
+        val check = prepared.check ?: return
+        if (prepared.effect.key.isNotEmpty()) CheckSource.keyword = prepared.effect.key
+        CheckSource.launch(this, check)
+        checkSessionId = check.sessionId
+        keepScreenOn(true)
     }
 
     override fun observeLiveBus() {

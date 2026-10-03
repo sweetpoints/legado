@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.help.config.AppConfig
+import io.legado.app.model.CheckSource
+import io.legado.app.model.Debug
 import io.legado.app.utils.moveRelativeTo
 import java.io.File
 import java.util.UUID
@@ -15,6 +17,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,7 +73,7 @@ internal class BookSourceManagerViewModel(
 
     init {
         viewModelScope.launch {
-            restoreSession()
+            operationMutex.withLock { restoreSession() }
             watchQuery()
             launch {
                 runCatching { repository.importHistory() }
@@ -482,25 +486,75 @@ internal class BookSourceManagerViewModel(
             )
     }
 
-    suspend fun acceptEffect(id: String): Boolean = operationMutex.withLock {
-        if (id in session.receipts || state.value.effect?.id != id) return@withLock false
-        withContext(NonCancellable) {
-            val previousSession = session
-            val previousEffect = state.value.effect
-            try {
-                session = session.copy(receipts = session.receipts + id)
-                mutableState.update { it.copy(effect = null) }
-                persist()
-            } catch (failure: Exception) {
-                session = previousSession
-                mutableState.update { it.copy(effect = previousEffect) }
-                throw failure
+    suspend fun prepareEffect(effect: SourceManagerEffect): PreparedSourceManagerEffect {
+        currentCoroutineContext().ensureActive()
+        return when (effect.action) {
+            "search" -> {
+                val source = repository.resolve(listOf(effect.key)).singleOrNull() ?: error("书源不存在")
+                currentCoroutineContext().ensureActive()
+                PreparedSourceManagerEffect(effect, searchSource = source)
             }
+            "check" -> {
+                val sources = repository.resolve(effect.keys)
+                currentCoroutineContext().ensureActive()
+                if (sources.isEmpty()) error("没有可检验的书源")
+                val sessionId = Debug.tryStartCheckSession() ?: error("书源调试通道占用中，请稍后重试")
+                var check: CheckSource.PreparedCheck? = null
+                try {
+                    check = CheckSource.prepare(sources, sessionId)
+                    currentCoroutineContext().ensureActive()
+                    PreparedSourceManagerEffect(effect, check = check)
+                } catch (failure: Exception) {
+                    check?.let(CheckSource::release)
+                    throw failure
+                }
+            }
+            else -> PreparedSourceManagerEffect(effect)
         }
-        true
     }
 
-    suspend fun checkSources(keys: List<String>) = repository.resolve(keys)
+    fun releasePreparedEffect(prepared: PreparedSourceManagerEffect) {
+        prepared.check?.let(CheckSource::release)
+    }
+
+    suspend fun deliverEffect(id: String, ready: () -> Boolean, deliver: () -> Unit): Boolean =
+        operationMutex.withLock {
+            if (terminated || id in session.receipts || state.value.effect?.id != id)
+                return@withLock false
+            withContext(NonCancellable) {
+                val previousSession = session
+                val previousEffect = state.value.effect
+                var deliveryStarted = false
+                mutableState.update { it.copy(busy = true) }
+                try {
+                    session = session.copy(receipts = session.receipts + id)
+                    mutableState.update { it.copy(effect = null) }
+                    persist()
+                    // Disk acceptance may suspend. Recheck the current owner after it completes,
+                    // then launch synchronously on Main with no suspension in the gate/launch gap.
+                    if (terminated || !ready()) {
+                        session = previousSession
+                        mutableState.update { it.copy(effect = previousEffect) }
+                        persist()
+                        return@withContext false
+                    }
+                    deliveryStarted = true
+                    deliver()
+                    true
+                } catch (failure: Exception) {
+                    if (!deliveryStarted) {
+                        session = previousSession
+                        mutableState.update { it.copy(effect = previousEffect) }
+                        persist()
+                    }
+                    throw failure
+                } finally {
+                    mutableState.update { it.copy(busy = false) }
+                }
+            }
+        }
+
+    suspend fun acceptEffect(id: String): Boolean = deliverEffect(id, { true }, {})
 
     fun checkProgress(message: String?) {
         mutableState.update { it.copy(checkMessage = message) }

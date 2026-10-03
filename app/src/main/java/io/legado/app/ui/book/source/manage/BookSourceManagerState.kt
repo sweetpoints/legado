@@ -2,6 +2,7 @@ package io.legado.app.ui.book.source.manage
 
 import androidx.annotation.Keep
 import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.model.CheckSource
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.cnCompare
 
@@ -147,3 +148,9 @@ internal val sourceManagerBulkMutations =
         SourceMutation.BOTTOM,
     )
 internal val sourceManagerBulkActions = listOf("export", "share", "check", "interval")
+
+internal data class PreparedSourceManagerEffect(
+    val effect: SourceManagerEffect,
+    val searchSource: BookSourcePart? = null,
+    val check: CheckSource.PreparedCheck? = null,
+)
