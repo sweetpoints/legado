@@ -477,8 +477,9 @@ object SourceVerificationHelp {
 
     fun clearResult(verificationResultKey: String?) {
         verificationResultKey ?: return
-        val attempt = verificationAttempts.remove(verificationResultKey) ?: return
+        val attempt = verificationAttempts[verificationResultKey] ?: return
         synchronized(attempt) {
+            if (!verificationAttempts.remove(verificationResultKey, attempt)) return
             attempt.browserLaunch?.cancel()
             attempt.browserLaunch = null
             attempt.closeUi = null
