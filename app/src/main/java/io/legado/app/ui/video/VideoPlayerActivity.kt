@@ -9,23 +9,24 @@ import android.view.WindowManager
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.CoverRequest
-import io.legado.app.databinding.ActivityVideoPlayerBinding
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.gsyVideo.VideoPlayer
@@ -41,12 +42,9 @@ import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
-import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
@@ -56,24 +54,22 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.toggleSystemBar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 
 class VideoPlayerActivity :
-    VMBaseActivity<ActivityVideoPlayerBinding, VideoPlayerViewModel>(),
-    SettingsDialog.CallBack,
-    RssFavoritesDialog.Callback {
-    override val binding by viewBinding(ActivityVideoPlayerBinding::inflate)
-    override val viewModel by viewModels<VideoPlayerViewModel>()
-    private val playerView: VideoPlayer by lazy { binding.playerView }
+    BaseComposeActivity(), SettingsDialog.CallBack, RssFavoritesDialog.Callback {
+    private val viewModel by viewModels<VideoPlayerViewModel>()
+    private lateinit var playerView: VideoPlayer
     private var chapterRailState by mutableStateOf(VideoChapterRailState())
     private var bookHeaderState by mutableStateOf(VideoBookHeaderState())
     private var coverRequest by mutableStateOf(CoverRequest())
     private var bookIntroState by mutableStateOf(VideoBookIntroState())
     private var toolbarState by mutableStateOf(VideoPlayerToolbarState())
+    private var playerHeightPx by mutableIntStateOf(0)
+    private var playerAspectRatio by mutableStateOf(9f / 16f)
+    private var shouldRenderPlayer by mutableStateOf(false)
     private var isNew = true
     private var forwardedToFloatingWindow = false
-    private var isFullScreen = false
+    private var isFullScreen by mutableStateOf(false)
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private val bookSourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
@@ -106,7 +102,7 @@ class VideoPlayerActivity :
         }
 
     @OptIn(UnstableApi::class)
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
         isNew = intent.getBooleanExtra("isNew", true)
         if (
             isNew &&
@@ -116,7 +112,6 @@ class VideoPlayerActivity :
         ) {
             forwardedToFloatingWindow = true
             intent.putExtra("forwardedToFloatingWindow", true)
-            playerView.needDestroy = false
             ContextCompat.startForegroundService(
                 this,
                 Intent(intent).setClass(this, VideoPlayService::class.java),
@@ -124,7 +119,6 @@ class VideoPlayerActivity :
             super.finish()
             return
         }
-        playerView.enlargeImageRes = R.drawable.ic_fullscreen
         if (isNew) {
             intent.getStringExtra("videoUrl")?.let {
                 VideoPlay.videoUrl = it
@@ -142,20 +136,13 @@ class VideoPlayerActivity :
                 finish()
                 return
             }
-            VideoPlay.startPlay(playerView)
-            VideoPlay.saveRead()
-        } else {
-            VideoPlay.clonePlayState(playerView)
-            playerView.setSurfaceToPlay()
-            playerView.startAfterPrepared()
         }
+        if (isFinishing) return
+        shouldRenderPlayer = true
+        updatePlayerHeight()
         toolbarState = toolbarState.copy(title = VideoPlay.videoTitle.orEmpty())
         updateToolbarSourceActions()
         updateToolbarFavoriteAction()
-        setupVideoToolbar()
-        setupPlayerView()
-        setupChapterRail()
-        setupBookInfo()
         initView()
         upView()
         onBackPressedDispatcher.addCallback(this) {
@@ -169,14 +156,10 @@ class VideoPlayerActivity :
 
     private fun initView() {
         viewModel.upStarMenuData.observe(this) { updateToolbarFavoriteAction() }
-        binding.root.setBackgroundColor(backgroundColor)
         val book = VideoPlay.book
-        if (book == null) {
-            binding.dataCompose.invisible()
-            binding.chaptersContainer.invisible()
-            return
+        if (book != null) {
+            showBook(book)
         }
-        showBook(book)
         updateChapterRail()
     }
 
@@ -195,74 +178,69 @@ class VideoPlayerActivity :
         coverRequest = CoverRequest.from(book)
     }
 
-    private fun setupChapterRail() {
-        binding.chaptersCompose.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.chaptersCompose.setContent {
-            LegadoComposeTheme {
-                VideoChapterScreen(
-                    state = chapterRailState,
-                    onVolumeSelected = ::selectVolume,
-                    onEpisodeSelected = ::selectEpisode,
-                    onOpenCatalog = {
-                        if (!VideoPlay.episodes.isNullOrEmpty()) {
-                            VideoPlay.book?.bookUrl?.let { tocActivityResult.launch(it) }
-                        }
-                    },
-                )
-            }
-        }
+    private fun updatePlayerHeight() {
+        val displayMetrics = resources.displayMetrics
+        playerHeightPx =
+            minOf(
+                (displayMetrics.widthPixels * playerAspectRatio).toInt(),
+                displayMetrics.heightPixels / 2,
+            )
     }
 
-    private fun setupBookInfo() {
-        binding.dataCompose.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        if (!shouldRenderPlayer) return
+        VideoPlayerRoute(
+            toolbarState = toolbarState,
+            chapterState = chapterRailState,
+            coverRequest = coverRequest,
+            coverDescription = getString(R.string.img_cover),
+            headerState = bookHeaderState,
+            introState = bookIntroState,
+            playerHeight = with(LocalDensity.current) { playerHeightPx.toDp() },
+            backgroundColor = backgroundColor,
+            showBookContent = VideoPlay.book != null,
+            fullscreen = isFullScreen,
+            onPlayerCreated = ::initializePlayer,
+            onBack = { onBackPressedDispatcher.onBackPressed() },
+            onCustomButton = ::onCustomToolbarButton,
+            onFavorite = ::onFavoriteToolbarAction,
+            onFloatingWindow = ::startFloatingWindow,
+            onMenuExpandedChange = { expanded ->
+                updateToolbarSourceActions()
+                toolbarState = toolbarState.copy(menuExpanded = expanded)
+            },
+            onMenuAction = ::handleToolbarMenuAction,
+            onVolumeSelected = ::selectVolume,
+            onEpisodeSelected = ::selectEpisode,
+            onOpenCatalog = {
+                if (!VideoPlay.episodes.isNullOrEmpty()) {
+                    VideoPlay.book?.bookUrl?.let { tocActivityResult.launch(it) }
+                }
+            },
+            onIntroAction = { action ->
+                val name = if (action.name == "image") "info image" else "info ${action.name}"
+                viewModel.onButtonClick(this@VideoPlayerActivity, name, action.script)
+            },
+            onIntroLink = ::handleIntroLink,
+            onIntroImage = { image ->
+                showDialogFragment(PhotoDialog(image, bookIntroState.source?.getKey()))
+            },
         )
-        binding.dataCompose.setContent {
-            LegadoComposeTheme {
-                VideoBookInfoScreen(
-                    coverRequest = coverRequest,
-                    coverDescription = getString(R.string.img_cover),
-                    headerState = bookHeaderState,
-                    introState = bookIntroState,
-                    onIntroAction = { action ->
-                        val name =
-                            if (action.name == "image") {
-                                "info image"
-                            } else {
-                                "info ${action.name}"
-                            }
-                        viewModel.onButtonClick(this@VideoPlayerActivity, name, action.script)
-                    },
-                    onIntroLink = ::handleIntroLink,
-                    onIntroImage = { image ->
-                        showDialogFragment(PhotoDialog(image, bookIntroState.source?.getKey()))
-                    },
-                )
-            }
-        }
     }
 
-    private fun setupVideoToolbar() {
-        binding.toolbarCompose.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.toolbarCompose.setContent {
-            LegadoComposeTheme {
-                VideoPlayerToolbar(
-                    state = toolbarState,
-                    onBack = { onBackPressedDispatcher.onBackPressed() },
-                    onCustomButton = ::onCustomToolbarButton,
-                    onFavorite = ::onFavoriteToolbarAction,
-                    onFloatingWindow = ::startFloatingWindow,
-                    onMenuExpandedChange = { expanded ->
-                        updateToolbarSourceActions()
-                        toolbarState = toolbarState.copy(menuExpanded = expanded)
-                    },
-                    onMenuAction = ::handleToolbarMenuAction,
-                )
-            }
+    private fun initializePlayer(player: VideoPlayer) {
+        playerView = player
+        playerView.enlargeImageRes = R.drawable.ic_fullscreen
+        setupPlayerView()
+        playerView.updateOverlayTitle(toolbarState.title)
+        if (isNew) {
+            VideoPlay.startPlay(playerView)
+            VideoPlay.saveRead()
+        } else {
+            VideoPlay.clonePlayState(playerView)
+            playerView.setSurfaceToPlay()
+            playerView.startAfterPrepared()
         }
     }
 
@@ -391,7 +369,7 @@ class VideoPlayerActivity :
             }
 
             else -> {
-                binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                window.decorView.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
                     openUrl(uri)
                 }
             }
@@ -447,17 +425,9 @@ class VideoPlayerActivity :
                 } else {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE // 横屏
                 }
-            supportActionBar?.hide()
-            binding.chaptersContainer.gone()
-            binding.dataCompose.gone()
             playerView.startWindowFullscreen(this, false, false)
         } else {
             requestedOrientation = orientation
-            supportActionBar?.show()
-            if (VideoPlay.book != null) {
-                binding.chaptersContainer.visible()
-                binding.dataCompose.visible()
-            }
             playerView.postDelayed(
                 {
                     playerView.backFromFull(this)
@@ -472,6 +442,7 @@ class VideoPlayerActivity :
     @SuppressLint("SwitchIntDef")
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        updatePlayerHeight()
         if (isFullScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -494,19 +465,6 @@ class VideoPlayerActivity :
     }
 
     private fun setupPlayerView() {
-        val displayMetrics = resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-        val layoutParams = playerView.layoutParams
-        layoutParams.width = screenWidth
-        val videoWidth = playerView.currentVideoWidth
-        val videoHeight = playerView.currentVideoHeight
-        val height =
-            if (videoWidth > 0 && videoHeight > 0) (screenWidth * videoHeight / videoWidth)
-            else (screenWidth * 9 / 16) // 默认16:9
-        // 高度不超过一半屏幕
-        layoutParams.height = if (height < screenHeight / 2) height else screenHeight / 2
-        playerView.layoutParams = layoutParams
         playerView.isNeedOrientationUtils = false // 关闭自带的屏幕方向控制
         playerView.setBackFromFullScreenListener { toggleFullScreen() }
         playerView.setVideoAllCallBack(
@@ -520,10 +478,9 @@ class VideoPlayerActivity :
                             player.lockTouchLogic()
                         }
                         // 根据实际视频比例再次调整
-                        val videoWidth = playerView.currentVideoWidth
-                        val videoHeight = playerView.currentVideoHeight
+                        val videoWidth = player.currentVideoWidth
+                        val videoHeight = player.currentVideoHeight
                         if (videoWidth > 0 && videoHeight > 0) {
-                            val layoutParams = playerView.layoutParams
                             val parentWidth = playerView.width
                             val aspectRatio = videoHeight.toFloat() / videoWidth.toFloat()
                             val isPortraitVideo = if (aspectRatio > 1.2) true else false
@@ -538,13 +495,11 @@ class VideoPlayerActivity :
                                 toggleFullScreen()
                                 return@post
                             }
-                            val height = (parentWidth * aspectRatio).toInt()
-                            val displayMetrics = resources.displayMetrics
-                            val screenHeight = displayMetrics.heightPixels
                             // 高度不超过一半屏幕
-                            layoutParams.height =
-                                if (height < screenHeight / 2) height else screenHeight / 2
-                            playerView.layoutParams = layoutParams
+                            if (parentWidth > 0) {
+                                playerAspectRatio = aspectRatio
+                                updatePlayerHeight()
+                            }
                         }
                     }
                 }
@@ -568,7 +523,9 @@ class VideoPlayerActivity :
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             toolbarState = toolbarState.copy(title = it)
-            playerView.updateOverlayTitle(it)
+            if (::playerView.isInitialized) {
+                playerView.updateOverlayTitle(it)
+            }
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
@@ -628,7 +585,9 @@ class VideoPlayerActivity :
         if (!forwardedToFloatingWindow) {
             VideoPlay.saveRead()
             VideoPlay.stopLoading()
-            playerView.getCurrentPlayer().release()
+            if (::playerView.isInitialized) {
+                playerView.getCurrentPlayer().release()
+            }
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
