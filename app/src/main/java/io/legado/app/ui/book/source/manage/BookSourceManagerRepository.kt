@@ -72,6 +72,7 @@ internal class AppBookSourceManagerRepository(private val context: Context) :
             ACache.get(cacheDir = false)
                 .getAsString("bookSourceRecordKey")
                 ?.splitNotBlank(",")
+                ?.toList()
                 .orEmpty()
         }
 

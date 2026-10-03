@@ -179,8 +179,7 @@ internal fun BookSourceManagerScreen(
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         message,
-                        Modifier.weight(1f),
-                        modifier = Modifier.testTag("source-manager-check-progress"),
+                        modifier = Modifier.weight(1f).testTag("source-manager-check-progress"),
                     )
                     TextButton({ actions.action("cancel-check", "") }) {
                         Text(stringResource(R.string.cancel))
