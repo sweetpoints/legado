@@ -285,6 +285,19 @@ class FileAssociationSessionRepository(
             }
         }
 
+    /**
+     * Local staging shares the close fence gate. An accepted release cannot race a still-running
+     * extractor and allow it to recreate this UUID directory. The operation stays cancellable;
+     * network requests and checkpoint writes must run outside this non-reentrant lease.
+     */
+    suspend fun <T> withOwnedDirectory(ticket: String, operation: suspend (File) -> T): T =
+        withContext(dispatcher) {
+            gate(ticket).withLock {
+                readBody(ticket)
+                operation(folder(ticket))
+            }
+        }
+
     override suspend fun release(ticket: String) {
         withContext(dispatcher + NonCancellable) {
             gate(ticket).withLock {
