@@ -1444,3 +1444,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 搜索范围弹窗兼容新增小request UUID回调与dismiss通知，旧单参数Callback保留默认委托；来自旧弹窗的确认/关闭不能误消费新请求，不增加scope大文本到Fragment arguments。新增实际VM旧请求→新请求迟到结果回归，统一formatter/check通过；完整编译/JVM仍随最终搜索宿主统一pending。
 
 搜索原生交付隔离成可测控制器：准备仅持有目的地UUID，离开RESUMED/取消/消费拒绝时清理未交付票据，消费与同步平台调用之间不挂起；平台失败不重播已消费动作。新增3个实际暂停/取消/失败回归，准备错误保留队列并显式retry，统一formatter/check通过，实际BookInfo接线及最终完整验证另批收口。
+
+SearchActivity整页切换为BaseComposeActivity/Screen/Route，保留三种public start、legacy incoming extras兼容和ScopeCallback；新公开start先IO准备完整query/scope再携UUID，内部BookInfo调用正式IO prepare API并在RESUMED消费后同步启动小Intent。Scope确认/取消由原request UUID可信回调，手动/自动继续、历史/标记/分组/过滤UI保持原合同。删除Search专属Activity布局/menu、3个Adapter与旧VM；仍保留item_search（ExploreShowAdapter在当前基线消费）、item_find_book/item_fillet_text共享资源。本批纯SearchCommandGate移动model并保留UI alias/helper，原actual fence/filter tests保持；SearchReadRecordContract仅3旧接线镜像分支迁实际membership，原reader snapshot断言不改（before /private/tmp/legado-search-readrecord-before.kt）。新增2实际Host旋转/大草稿/释放用例和1真实ComposeRoute暂停准备/恢复/重建不重复交付用例。统一formatter/check通过，完整JVM/AndroidTest编译待获slot最终验证；设备未运行，release/R8未打包。
