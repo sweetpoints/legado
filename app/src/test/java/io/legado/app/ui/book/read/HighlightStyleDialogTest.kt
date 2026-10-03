@@ -54,9 +54,10 @@ class HighlightStyleDialogTest {
 
     @Test
     fun fillPresetsHaveDistinctSwatches() {
-        val colors = HighlightStyles.presets.mapNotNull { style ->
-            style.fill.takeIf { it != 0 }
-        }
+        val colors =
+            HighlightStyles.presets.mapNotNull { style ->
+                style.fill.takeIf { it != 0 }
+            }
 
         assertEquals(colors.size, colors.distinct().size)
     }
@@ -92,14 +93,15 @@ class HighlightStyleDialogTest {
 
     @Test
     fun highlightDefaultFontDoesNotChangeTheGlobalSystemTypeface() {
-        fun callback(selectSystemTypeface: Boolean) = object : FontSelectDialog.CallBack {
-            override val curFontPath = ""
-            override val selectSystemTypefaceOnDefault = selectSystemTypeface
-            override fun selectFont(path: String) = Unit
-        }
+        fun callback(selectSystemTypeface: Boolean) =
+            object : FontSelectDialog.CallBack {
+                override val curFontPath = ""
+                override val selectSystemTypefaceOnDefault = selectSystemTypeface
+
+                override fun selectFont(path: String) = Unit
+            }
 
         assertTrue(FontSelectDialog.shouldSelectSystemTypeface(callback(true)))
         assertFalse(FontSelectDialog.shouldSelectSystemTypeface(callback(false)))
     }
-
 }

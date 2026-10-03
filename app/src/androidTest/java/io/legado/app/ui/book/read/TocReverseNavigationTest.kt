@@ -3,16 +3,16 @@ package io.legado.app.ui.book.read
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.View
-import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import io.legado.app.R
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.appDb
@@ -24,15 +24,11 @@ import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.toc.TocActivity
 import io.legado.app.ui.book.toc.TocChapterRow
+import java.io.File
 import org.junit.Assert.*
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class TocReverseNavigationTest {
@@ -40,8 +36,10 @@ class TocReverseNavigationTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
-    @Test fun visibleTitlesReverseImmediatelyAndSurviveReopening() {
-        fixture(listOf("Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5")).use { fixture ->
+    @Test
+    fun visibleTitlesReverseImmediatelyAndSurviveReopening() {
+        fixture(listOf("Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5")).use {
+            fixture ->
             ActivityScenario.launch<TocActivity>(tocIntent(fixture.book)).use { scenario ->
                 await { visibleTitles() == fixture.titles }
                 for (reversed in listOf(true, false)) {
@@ -50,7 +48,11 @@ class TocReverseNavigationTest {
                     await { rows()?.map { it.title } == expected }
                     instrumentation.waitForIdleSync()
                     screenshot("toc-flat-reversed-$reversed")
-                    assertEquals("Displayed titles must match the new row identities without reopening", expected, visibleTitles())
+                    assertEquals(
+                        "Displayed titles must match the new row identities without reopening",
+                        expected,
+                        visibleTitles(),
+                    )
                     val stored = appDb.bookDao.getBook(fixture.book.bookUrl)!!
                     assertFalse("The source parser order must not change", stored.getReverseToc())
                     scenario.recreate()
@@ -63,114 +65,221 @@ class TocReverseNavigationTest {
         }
     }
 
-    @Test fun reverseRetainsVolumeMembershipProloguesAndCurrentVolume() {
-        val titles = listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "A1", "A2", "Volume B", "B1", "B2")
+    @Test
+    fun reverseRetainsVolumeMembershipProloguesAndCurrentVolume() {
+        val titles =
+            listOf(
+                "Prologue 1",
+                "Prologue 2",
+                "Prologue 3",
+                "Volume A",
+                "A1",
+                "A2",
+                "Volume B",
+                "B1",
+                "B2",
+            )
         fixture(titles, setOf(3, 6), current = 7, expanded = false).use { fixture ->
             ActivityScenario.launch<TocActivity>(tocIntent(fixture.book)).use { scenario ->
-                await { rows()?.map { it.title } == listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "Volume B", "B1", "B2") }
+                await {
+                    rows()?.map { it.title } ==
+                        listOf(
+                            "Prologue 1",
+                            "Prologue 2",
+                            "Prologue 3",
+                            "Volume A",
+                            "Volume B",
+                            "B1",
+                            "B2",
+                        )
+                }
                 reverse()
                 await { rows()?.firstOrNull()?.title == "Volume B" }
                 screenshot("toc-current-volume-reversed")
                 val current = appDb.bookDao.getBook(fixture.book.bookUrl)!!
-                assertEquals("Current chapter identity must survive reversal", "B1",
-                    appDb.bookChapterDao.getChapter(current.bookUrl, current.durChapterIndex)!!.title)
+                assertEquals(
+                    "Current chapter identity must survive reversal",
+                    "B1",
+                    appDb.bookChapterDao
+                        .getChapter(current.bookUrl, current.durChapterIndex)!!
+                        .title,
+                )
                 assertEquals(147, current.durChapterPos)
-                val expected = listOf("Volume B", "B2", "B1", "Volume A", "Prologue 3", "Prologue 2", "Prologue 1")
+                val expected =
+                    listOf(
+                        "Volume B",
+                        "B2",
+                        "B1",
+                        "Volume A",
+                        "Prologue 3",
+                        "Prologue 2",
+                        "Prologue 1",
+                    )
                 assertEquals(expected, rows()!!.map { it.title })
                 val items = rows()!!
                 val volumeB = items.filter { it.volume }.single { it.title == "Volume B" }
                 assertTrue(volumeB.current)
                 assertFalse(volumeB.collapsed)
-                items.filter { !it.volume }.forEach { item ->
-                    assertEquals(item.title,
-                        if (item.title.startsWith("Prologue")) null else volumeB.index,
-                        item.parentVolumeIndex)
-                }
+                items
+                    .filter { !it.volume }
+                    .forEach { item ->
+                        assertEquals(
+                            item.title,
+                            if (item.title.startsWith("Prologue")) null else volumeB.index,
+                            item.parentVolumeIndex,
+                        )
+                    }
                 scenario.recreate()
                 await { rows()?.map { it.title } == expected }
                 reverse()
                 await { rows()?.firstOrNull()?.title == "Prologue 1" }
                 val restored = appDb.bookDao.getBook(current.bookUrl)!!
-                assertEquals("B1", appDb.bookChapterDao.getChapter(restored.bookUrl, restored.durChapterIndex)!!.title)
+                assertEquals(
+                    "B1",
+                    appDb.bookChapterDao
+                        .getChapter(restored.bookUrl, restored.durChapterIndex)!!
+                        .title,
+                )
                 assertEquals(147, restored.durChapterPos)
             }
         }
     }
 
-    @Test fun returningToReaderKeepsActualChapterAndPositionAndBookmarkTarget() {
+    @Test
+    fun returningToReaderKeepsActualChapterAndPositionAndBookmarkTarget() {
         fixture((1..5).map { "Chapter $it" }, current = 3).use { fixture ->
             fixture.book.durChapterPos = 1470
             appDb.bookDao.update(fixture.book)
-            ActivityScenario.launch<ReadBookActivity>(Intent(context, ReadBookActivity::class.java)
-                .putExtra("bookUrl", fixture.book.bookUrl)).use { reader ->
-                reader.onActivity { activity ->
-                    activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
-                        .forEach { it.dismiss() }
-                }
-                await {
-                    ReadBook.book?.bookUrl == fixture.book.bookUrl &&
-                        ReadBook.curTextChapter?.chapter?.bookUrl == fixture.book.bookUrl &&
-                        ReadBook.curTextChapter?.isCompleted == true
-                }
-                val originalUrl = ReadBook.curTextChapter!!.chapter.url
-                val originalPosition = ReadBook.durChapterPos
-                assertTrue("Fixture must open within the chapter, actual offset $originalPosition", originalPosition > 0)
-                reader.onActivity { it.openChapterList() }
-                try {
-                    await { rows()?.size == 5 }
-                } finally {
-                    val snapshot = StringBuilder()
-                    val stored = appDb.bookDao.getBook(fixture.book.bookUrl)
-                    snapshot.appendLine("storedTotal=" + stored?.totalChapterNum)
-                    snapshot.appendLine("databaseChapters=" + appDb.bookChapterDao.getChapterList(fixture.book.bookUrl).map { it.index to it.title })
-                    instrumentation.runOnMainSync {
-                        val activity = toc()
-                        snapshot.appendLine("tocBook=" + activity?.intent?.getStringExtra("bookUrl"))
-                        snapshot.appendLine("readBook=" + ReadBook.book?.bookUrl)
-                        snapshot.appendLine("readChapter=" + ReadBook.curTextChapter?.chapter?.bookUrl)
-                        snapshot.appendLine("readerTotal=" + ReadBook.book?.totalChapterNum)
-                        snapshot.appendLine("fragments=" + activity?.supportFragmentManager?.fragments?.map { it.javaClass.simpleName + ":" + it.lifecycle.currentState })
-                        snapshot.appendLine("composeLoaded=" + chapterHost()?.chapterModel?.state?.value?.loaded)
-                        snapshot.appendLine("rows=" + chapterHost()?.chapterModel?.state?.value?.rows?.map { it.index to it.title })
+            ActivityScenario.launch<ReadBookActivity>(
+                    Intent(context, ReadBookActivity::class.java)
+                        .putExtra("bookUrl", fixture.book.bookUrl)
+                )
+                .use { reader ->
+                    reader.onActivity { activity ->
+                        activity.supportFragmentManager.fragments
+                            .filterIsInstance<ClickActionConfigDialog>()
+                            .forEach { it.dismiss() }
                     }
-                    File(context.getExternalFilesDir("ui-regression"), "toc-reader-open-state.txt").writeText(snapshot.toString())
-                    screenshot("toc-reader-open-state")
-                }
-                reverse()
-                await { rows()?.firstOrNull()?.title == "Chapter 5" }
-                instrumentation.runOnMainSync { toc()!!.onBackPressedDispatcher.onBackPressed() }
-                await {
-                    var readerResumed = false
-                    instrumentation.runOnMainSync {
-                        readerResumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                            .any { it is ReadBookActivity }
+                    await {
+                        ReadBook.book?.bookUrl == fixture.book.bookUrl &&
+                            ReadBook.curTextChapter?.chapter?.bookUrl == fixture.book.bookUrl &&
+                            ReadBook.curTextChapter?.isCompleted == true
                     }
-                    readerResumed && ReadBook.curTextChapter?.isCompleted == true
+                    val originalUrl = ReadBook.curTextChapter!!.chapter.url
+                    val originalPosition = ReadBook.durChapterPos
+                    assertTrue(
+                        "Fixture must open within the chapter, actual offset $originalPosition",
+                        originalPosition > 0,
+                    )
+                    reader.onActivity { it.openChapterList() }
+                    try {
+                        await { rows()?.size == 5 }
+                    } finally {
+                        val snapshot = StringBuilder()
+                        val stored = appDb.bookDao.getBook(fixture.book.bookUrl)
+                        snapshot.appendLine("storedTotal=" + stored?.totalChapterNum)
+                        snapshot.appendLine(
+                            "databaseChapters=" +
+                                appDb.bookChapterDao.getChapterList(fixture.book.bookUrl).map {
+                                    it.index to it.title
+                                }
+                        )
+                        instrumentation.runOnMainSync {
+                            val activity = toc()
+                            snapshot.appendLine(
+                                "tocBook=" + activity?.intent?.getStringExtra("bookUrl")
+                            )
+                            snapshot.appendLine("readBook=" + ReadBook.book?.bookUrl)
+                            snapshot.appendLine(
+                                "readChapter=" + ReadBook.curTextChapter?.chapter?.bookUrl
+                            )
+                            snapshot.appendLine("readerTotal=" + ReadBook.book?.totalChapterNum)
+                            snapshot.appendLine(
+                                "fragments=" +
+                                    activity?.supportFragmentManager?.fragments?.map {
+                                        it.javaClass.simpleName + ":" + it.lifecycle.currentState
+                                    }
+                            )
+                            snapshot.appendLine(
+                                "composeLoaded=" + chapterHost()?.chapterModel?.state?.value?.loaded
+                            )
+                            snapshot.appendLine(
+                                "rows=" +
+                                    chapterHost()?.chapterModel?.state?.value?.rows?.map {
+                                        it.index to it.title
+                                    }
+                            )
+                        }
+                        File(
+                                context.getExternalFilesDir("ui-regression"),
+                                "toc-reader-open-state.txt",
+                            )
+                            .writeText(snapshot.toString())
+                        screenshot("toc-reader-open-state")
+                    }
+                    reverse()
+                    await { rows()?.firstOrNull()?.title == "Chapter 5" }
+                    instrumentation.runOnMainSync {
+                        toc()!!.onBackPressedDispatcher.onBackPressed()
+                    }
+                    await {
+                        var readerResumed = false
+                        instrumentation.runOnMainSync {
+                            readerResumed =
+                                ActivityLifecycleMonitorRegistry.getInstance()
+                                    .getActivitiesInStage(Stage.RESUMED)
+                                    .any { it is ReadBookActivity }
+                        }
+                        readerResumed && ReadBook.curTextChapter?.isCompleted == true
+                    }
+                    instrumentation.waitForIdleSync()
+                    screenshot("toc-reverse-return-to-reader")
+                    File(context.getExternalFilesDir("ui-regression"), "toc-reader-position.txt")
+                        .writeText(
+                            "before=$originalUrl:$originalPosition\nafter=${ReadBook.curTextChapter!!.chapter.url}:${ReadBook.durChapterPos}\n"
+                        )
+                    assertEquals(
+                        "Returning from reversed TOC must keep actual text chapter",
+                        originalUrl,
+                        ReadBook.curTextChapter!!.chapter.url,
+                    )
+                    assertEquals(
+                        "Reversal must not reset reading offset",
+                        originalPosition,
+                        ReadBook.durChapterPos,
+                    )
+                    val bookmark =
+                        appDb.bookmarkDao.getByBook(fixture.book.name, fixture.book.author).single()
+                    assertEquals(
+                        "Bookmark must still target the same chapter",
+                        "Chapter 4",
+                        appDb.bookChapterDao
+                            .getChapter(fixture.book.bookUrl, bookmark.chapterIndex)!!
+                            .title,
+                    )
                 }
-                instrumentation.waitForIdleSync()
-                screenshot("toc-reverse-return-to-reader")
-                File(context.getExternalFilesDir("ui-regression"), "toc-reader-position.txt").writeText(
-                    "before=$originalUrl:$originalPosition\nafter=${ReadBook.curTextChapter!!.chapter.url}:${ReadBook.durChapterPos}\n")
-                assertEquals("Returning from reversed TOC must keep actual text chapter", originalUrl, ReadBook.curTextChapter!!.chapter.url)
-                assertEquals("Reversal must not reset reading offset", originalPosition, ReadBook.durChapterPos)
-                val bookmark = appDb.bookmarkDao.getByBook(fixture.book.name, fixture.book.author).single()
-                assertEquals("Bookmark must still target the same chapter", "Chapter 4",
-                    appDb.bookChapterDao.getChapter(fixture.book.bookUrl, bookmark.chapterIndex)!!.title)
-            }
         }
     }
 
-    @Test fun legacyStoredReverseOrderKeepsItsChapterIndexesAndParserPreference() {
+    @Test
+    fun legacyStoredReverseOrderKeepsItsChapterIndexesAndParserPreference() {
         fixture((1..5).map { "Chapter $it" }).use { fixture ->
             val book = fixture.book
-            val reversed = appDb.bookChapterDao.getChapterList(book.bookUrl).reversed()
-                .mapIndexed { index, chapter -> chapter.copy(index = index) }
+            val reversed =
+                appDb.bookChapterDao.getChapterList(book.bookUrl).reversed().mapIndexed {
+                    index,
+                    chapter ->
+                    chapter.copy(index = index)
+                }
             appDb.bookChapterDao.delByBook(book.bookUrl)
             appDb.bookChapterDao.insert(*reversed.toTypedArray())
             book.setReverseToc(true)
             book.durChapterIndex = 3
             appDb.bookDao.update(book)
-            fun identities() = appDb.bookChapterDao.getChapterList(book.bookUrl).map { listOf(it.index, it.url, it.title) }
+            fun identities() =
+                appDb.bookChapterDao.getChapterList(book.bookUrl).map {
+                    listOf(it.index, it.url, it.title)
+                }
             val original = identities()
             ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
                 await { visibleTitles() == fixture.titles.reversed() }
@@ -188,34 +297,72 @@ class TocReverseNavigationTest {
         }
     }
 
-    private fun fixture(titles: List<String>, volumes: Set<Int> = emptySet(), current: Int = 1,
-                        expanded: Boolean = true): Fixture {
+    private fun fixture(
+        titles: List<String>,
+        volumes: Set<Int> = emptySet(),
+        current: Int = 1,
+        expanded: Boolean = true,
+    ): Fixture {
         val file = File.createTempFile("toc-reverse-", ".txt", context.cacheDir)
-        val book = Book(bookUrl = file.absolutePath, originName = file.name, name = file.name,
-            charset = "UTF-8", type = BookType.local or BookType.text, totalChapterNum = titles.size,
-            durChapterIndex = current, durChapterPos = 147, durChapterTitle = titles[current]).apply {
-            setPageAnim(PageAnim.noAnim)
-            setTocExpanded(expanded)
-        }
+        val book =
+            Book(
+                    bookUrl = file.absolutePath,
+                    originName = file.name,
+                    name = file.name,
+                    charset = "UTF-8",
+                    type = BookType.local or BookType.text,
+                    totalChapterNum = titles.size,
+                    durChapterIndex = current,
+                    durChapterPos = 147,
+                    durChapterTitle = titles[current],
+                )
+                .apply {
+                    setPageAnim(PageAnim.noAnim)
+                    setTocExpanded(expanded)
+                }
         var offset = 0L
         val chapters = titles.mapIndexed { index, title ->
-            val text = (1..40).joinToString("\n", postfix = "\n") { "$title content line $it preserves its original chapter identity." }
+            val text =
+                (1..40).joinToString("\n", postfix = "\n") {
+                    "$title content line $it preserves its original chapter identity."
+                }
             val bytes = text.toByteArray(Charsets.UTF_8)
             file.appendBytes(bytes)
-            BookChapter(bookUrl = book.bookUrl, url = "chapter-$index", index = index, title = title,
-                isVolume = index in volumes, start = offset, end = offset + bytes.size).also { offset += bytes.size }
+            BookChapter(
+                    bookUrl = book.bookUrl,
+                    url = "chapter-$index",
+                    index = index,
+                    title = title,
+                    isVolume = index in volumes,
+                    start = offset,
+                    end = offset + bytes.size,
+                )
+                .also { offset += bytes.size }
         }
-        // These chapters describe the completed file; opening it must not trigger a fresh TXT parse.
+        // These chapters describe the completed file; opening it must not trigger a fresh TXT
+        // parse.
         book.latestChapterTime = file.lastModified()
         appDb.bookDao.insert(book)
         appDb.bookChapterDao.insert(*chapters.toTypedArray())
-        val bookmark = Bookmark(bookName = book.name, bookAuthor = book.author,
-            chapterIndex = current, chapterPos = 147, chapterName = titles[current], bookText = "original location")
+        val bookmark =
+            Bookmark(
+                bookName = book.name,
+                bookAuthor = book.author,
+                chapterIndex = current,
+                chapterPos = 147,
+                chapterName = titles[current],
+                bookText = "original location",
+            )
         appDb.bookmarkDao.insert(bookmark)
         return Fixture(file, book, bookmark, titles)
     }
 
-    private class Fixture(val file: File, val book: Book, val bookmark: Bookmark, val titles: List<String>) : AutoCloseable {
+    private class Fixture(
+        val file: File,
+        val book: Book,
+        val bookmark: Bookmark,
+        val titles: List<String>,
+    ) : AutoCloseable {
         override fun close() {
             appDb.bookmarkDao.delete(bookmark)
             appDb.bookDao.delete(book)
@@ -224,31 +371,57 @@ class TocReverseNavigationTest {
         }
     }
 
-    private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
-    private fun toc() = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-        .filterIsInstance<TocActivity>().firstOrNull()
+    private fun tocIntent(book: Book) =
+        Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
+
+    private fun toc() =
+        ActivityLifecycleMonitorRegistry.getInstance()
+            .getActivitiesInStage(Stage.RESUMED)
+            .filterIsInstance<TocActivity>()
+            .firstOrNull()
+
     private fun chapterHost() = toc()
+
     private fun rows(): List<TocChapterRow>? {
         var result: List<TocChapterRow>? = null
-        instrumentation.runOnMainSync { result = chapterHost()?.chapterModel?.state?.value?.takeIf { it.loaded }?.rows }
+        instrumentation.runOnMainSync {
+            result = chapterHost()?.chapterModel?.state?.value?.takeIf { it.loaded }?.rows
+        }
         return result
     }
-    private fun visibleTitles(): List<String>? = compose.onAllNodes(SemanticsMatcher("chapter titles") {
-        it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("toc-chapter-title-") == true
-    }, useUnmergedTree = true).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }.takeIf { it.isNotEmpty() }
+
+    private fun visibleTitles(): List<String>? =
+        compose
+            .onAllNodes(
+                SemanticsMatcher("chapter titles") {
+                    it.config
+                        .getOrNull(SemanticsProperties.TestTag)
+                        ?.startsWith("toc-chapter-title-") == true
+                },
+                useUnmergedTree = true,
+            )
+            .fetchSemanticsNodes()
+            .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
+            .takeIf { it.isNotEmpty() }
+
     private fun reverse() {
         compose.onNodeWithTag("toc-host-menu").performClick()
         compose.onNodeWithTag("toc-host-reverse").performClick()
     }
+
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
         SystemClock.sleep(150)
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream()
-                .use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally { bitmap.recycle() }
+            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally {
+            bitmap.recycle()
+        }
     }
+
     private fun await(condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 30000
         while (SystemClock.uptimeMillis() < deadline) {

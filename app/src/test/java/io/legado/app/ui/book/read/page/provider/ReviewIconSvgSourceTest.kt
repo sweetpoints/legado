@@ -2,25 +2,24 @@ package io.legado.app.ui.book.read.page.provider
 
 import io.legado.app.data.preferences.BgTextSetting
 import io.legado.app.data.preferences.bgTextUpdate
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReviewIconSvgSourceTest {
 
     @Test
     fun `svg icon settings are persisted and exported`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/help/config/ReadBookConfig.kt"
-        ).readText().normalizeLines()
+        val source =
+            projectFile("src/main/java/io/legado/app/help/config/ReadBookConfig.kt")
+                .readText()
+                .normalizeLines()
 
         assertTrue(source.contains("var reviewIconSvg: String = \"\""))
         assertTrue(
-            source.contains(
-                "var reviewIconSvgTemplates: List<ReviewIconSvgTemplate> = emptyList()"
-            )
+            source.contains("var reviewIconSvgTemplates: List<ReviewIconSvgTemplate> = emptyList()")
         )
         assertTrue(source.contains("var reviewIconScale: Int = 100"))
         assertTrue(source.contains("config.reviewIconScale = value.coerceIn(50, 200)"))
@@ -38,12 +37,16 @@ class ReviewIconSvgSourceTest {
 
     @Test
     fun `provider caches rendered svg and keeps the built in fallback`() {
-        val provider = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        ).readText().normalizeLines()
-        val column = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/ReviewColumn.kt"
-        ).readText().normalizeLines()
+        val provider =
+            projectFile("src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt")
+                .readText()
+                .normalizeLines()
+        val column =
+            projectFile(
+                    "src/main/java/io/legado/app/ui/book/read/page/entities/column/ReviewColumn.kt"
+                )
+                .readText()
+                .normalizeLines()
 
         assertTrue(provider.contains("private const val reviewIconPlaceholder = \"{{count}}\""))
         assertTrue(provider.contains("reviewIconCacheMaxBytes = 1024 * 1024"))
@@ -59,23 +62,22 @@ class ReviewIconSvgSourceTest {
         assertTrue(column.contains("ReviewColumnGeometry.centeredTop(it, drawHeight)"))
         assertTrue(column.contains("?: baseLine - drawHeight"))
         assertTrue(
-            column.contains(
-                "containerHeight = if (textLine.isImage) null else textLine.height"
-            )
+            column.contains("containerHeight = if (textLine.isImage) null else textLine.height")
         )
         assertTrue(
-            column.contains(
-                "minOf(ChapterProvider.getReviewHeight(false), textLine.height) * 0.9f"
-            )
+            column.contains("minOf(ChapterProvider.getReviewHeight(false), textLine.height) * 0.9f")
         )
         assertTrue(column.contains("path.reset()"))
     }
 
     @Test
     fun `legacy image reviews reuse the native renderer and keep image fallback`() {
-        val column = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/ImageColumn.kt"
-        ).readText().normalizeLines()
+        val column =
+            projectFile(
+                    "src/main/java/io/legado/app/ui/book/read/page/entities/column/ImageColumn.kt"
+                )
+                .readText()
+                .normalizeLines()
 
         assertTrue(column.contains("parseImageReviewOption(src, click)"))
         assertTrue(column.contains("takeUnless { textLine.isImage }"))
@@ -96,9 +98,8 @@ class ReviewIconSvgSourceTest {
 
     @Test
     fun `svg text parsing keeps the existing bitmap limits`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/utils/SvgUtils.kt"
-        ).readText().normalizeLines()
+        val source =
+            projectFile("src/main/java/io/legado/app/utils/SvgUtils.kt").readText().normalizeLines()
 
         assertTrue(source.contains("MAX_SVG_TEXT_LENGTH = 512 * 1024"))
         assertTrue(source.contains("fun createBitmapFromSvgText("))
@@ -109,8 +110,7 @@ class ReviewIconSvgSourceTest {
     private fun String.normalizeLines(): String = replace("\r\n", "\n")
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }
