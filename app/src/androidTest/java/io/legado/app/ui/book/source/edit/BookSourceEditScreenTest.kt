@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.source.edit
 
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -161,8 +160,8 @@ class BookSourceEditScreenTest {
         show()
         val input = compose.onNodeWithTag("source-field-0-bookSourceUrl").getUnclippedBoundsInRoot()
         val header = compose.onNodeWithTag("source-options-toggle").getUnclippedBoundsInRoot()
-        assertTrue(input.height >= 48.dp)
-        assertTrue(header.height >= 48.dp)
+        assertTrue(input.bottom - input.top >= 48.dp)
+        assertTrue(header.bottom - header.top >= 48.dp)
     }
 
     @Test
