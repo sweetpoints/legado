@@ -3,6 +3,7 @@ package io.legado.app.model.browser
 internal data class BrowserRequest(val url: String, val title: String = "", val sourceName: String = "",
     val sourceOrigin: String = "", val sourceType: Int = 0, val html: String? = null,
     val verificationEnabled: Boolean = false, val refetchAfterSuccess: Boolean = true, val verificationKey: String? = null)
+internal data class BrowserWebCookies(val baseUrl: String, val values: List<String>)
 internal data class BrowserSource(val type: Int, val json: String)
 internal data class BrowserPage(val request: BrowserRequest, val baseUrl: String, val html: String?,
     val localHtml: Boolean, val headers: Map<String, String>, val userAgent: String, val source: BrowserSource?)

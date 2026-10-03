@@ -18,6 +18,7 @@ class BrowserRepositoryTest {
         assertEquals(BrowserVerification("body", prepared.baseUrl), repo.refetch(prepared))
         assertEquals(BrowserVerification("captured", "navigated"), repo.captured("captured", "navigated"))
         repo.imageDirectory("folder"); assertEquals("folder", repo.imageDirectory()); repo.saveImage("data:image/base64", "folder")
+        assertEquals(BrowserWebCookies("base", listOf("a=1", "b=2")), repo.webCookies("url"))
         repo.forgetImageDirectory("folder"); repo.disableSource("source", 1); repo.deleteSource("source", 0); repo.cookie("url", "cookie")
         assertEquals(listOf("save:data:image/base64:folder", "forget:folder", "disable:source:1", "delete:source:0", "cookie:url:cookie"), data.actions)
         assertTrue(data.threads.isNotEmpty()); assertTrue(data.threads.all { it !== caller })
@@ -60,6 +61,7 @@ class BrowserRepositoryTest {
         override suspend fun forgetImageDirectory(expected: String) { touch(); actions += "forget:$expected"; if (directory == expected) directory = null }
         override suspend fun disableSource(origin: String, type: Int) { touch(); actions += "disable:$origin:$type" }
         override suspend fun deleteSource(origin: String, type: Int) { touch(); actions += "delete:$origin:$type" }
+        override suspend fun webCookies(url: String): BrowserWebCookies { touch(); return BrowserWebCookies("base", listOf("a=1", "b=2")) }
         override suspend fun cookie(url: String, value: String?) { touch(); actions += "cookie:$url:$value" }
     }
     private class Sessions : BrowserSessionStore {

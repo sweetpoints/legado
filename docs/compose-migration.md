@@ -989,3 +989,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 目录宿主会话层独立迁移：完整书籍 URL 与搜索词放 UUID 私有 AtomicFile，SavedState 只保存标签、搜索/菜单展开和选区等小状态；首次落盘前禁用编辑，换书清查询，磁盘修订基线和围栏阻止迟到覆盖/复活，失败重试保留可编辑草稿。新增 9 个 JVM 与 4 个实际文件回归；隔离全量 JVM 与 Android 测试编译通过。
 
 补齐书源调试已关闭会话的恢复边界：初始化即清除 loading，Route 在 RESUMED 清理并退出一次，不重新加载或执行。新增实际 Compose Route 回归；隔离全量 JVM 与 Android 测试编译通过。
+
+通用网页状态层迁入专属 ViewModel，完整 HTML/source/image 留私有会话，SavedState 只保留小票据与全屏状态。准备成功但落盘失败的响应保留供重试，不重复 POST；验证、图片和来源操作先产生持久化回执，认领后交付一次。审查补齐回执保存失败时保留原结果重写，避免重复验证/保存图片，排队关闭等待原成功通知消费。Cookie 冷缓存读取移至 IO；新增 13 个 JVM 行为回归，隔离全量 JVM 与 Android 测试编译通过。

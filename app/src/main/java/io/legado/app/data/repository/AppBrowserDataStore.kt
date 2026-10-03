@@ -53,6 +53,9 @@ internal class AppBrowserDataStore : BrowserDataStore {
     } }
     override suspend fun disableSource(origin: String, type: Int) { SourceHelp.enableSource(origin, type, false) }
     override suspend fun deleteSource(origin: String, type: Int) { SourceHelp.deleteSource(origin, type) }
+    override suspend fun webCookies(url: String) = NetworkUtils.getBaseUrl(url)?.let {
+        BrowserWebCookies(it, CookieStore.getCookie(url).splitNotBlank(";").toList())
+    }
     override suspend fun cookie(url: String, value: String?) { CookieStore.setCookie(url, value) }
     private companion object { val imageDirectoryLock = Any() }
 }

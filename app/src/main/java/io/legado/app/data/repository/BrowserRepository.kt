@@ -14,6 +14,7 @@ internal interface BrowserDataStore {
     suspend fun forgetImageDirectory(expected: String)
     suspend fun disableSource(origin: String, type: Int)
     suspend fun deleteSource(origin: String, type: Int)
+    suspend fun webCookies(url: String): BrowserWebCookies?
     suspend fun cookie(url: String, value: String?)
 }
 internal interface BrowserSessionStore {
@@ -34,6 +35,7 @@ internal class DefaultBrowserRepository(private val data: BrowserDataStore, priv
     override suspend fun forgetImageDirectory(expected: String) = withContext(io) { data.forgetImageDirectory(expected) }
     override suspend fun disableSource(origin: String, type: Int) = withContext(io) { data.disableSource(origin, type) }
     override suspend fun deleteSource(origin: String, type: Int) = withContext(io) { data.deleteSource(origin, type) }
+    override suspend fun webCookies(url: String) = withContext(io) { data.webCookies(url).also { currentCoroutineContext().ensureActive() } }
     override suspend fun cookie(url: String, value: String?) = withContext(io) { data.cookie(url, value) }
     override suspend fun read(session: String) = withContext(io) { sessions.read(session) }
     override suspend fun create(session: String, seed: BrowserSession) = withContext(io + NonCancellable) { sessions.create(session, seed) }
