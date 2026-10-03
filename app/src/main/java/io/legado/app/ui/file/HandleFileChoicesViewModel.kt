@@ -158,29 +158,37 @@ class HandleFileChoicesViewModel(
 
     suspend fun nativeDeferred(nonce: String) =
         withContext(NonCancellable) {
-            if (stopped) return@withContext
-            val durable = sessionRepository.read(sessionId) ?: return@withContext
-            val pending = durable.pending ?: return@withContext
-            if (
-                durable.finished ||
-                    durable.phase != "Native" ||
-                    pending.nonce != nonce ||
-                    !pending.delivered
-            )
+            if (!ready() || state.value.phase != "Native" || state.value.pending?.nonce != nonce)
                 return@withContext
-            // A canceled claim may have reached AtomicFile without publishing its revision to Main.
-            // Read that accepted version before writing a strictly newer rollback for this owner
-            // only.
-            val rollback =
-                durable.copy(
-                    revision = maxOf(checkpoint.revision, durable.revision) + 1,
-                    pending = pending.copy(delivered = false),
+            // Receiving a URI already owns busy. Never compete with that acceptance's next
+            // revision.
+            // Otherwise own busy through rollback so a registry callback waits in the matching
+            // buffer.
+            mutableState.value = state.value.copy(busy = true)
+            try {
+                val durable = sessionRepository.read(sessionId) ?: return@withContext
+                val pending = durable.pending ?: return@withContext
+                if (
+                    durable.finished ||
+                        durable.phase != "Native" ||
+                        pending.nonce != nonce ||
+                        !pending.delivered
                 )
-            sessionRepository.write(sessionId, rollback)
-            if (!stopped && state.value.phase == "Native" && state.value.pending?.nonce == nonce) {
-                publish(rollback)
-                mutableState.value = state.value.copy(busy = false)
-                drainResult()
+                    return@withContext
+                val rollback =
+                    durable.copy(
+                        revision = maxOf(checkpoint.revision, durable.revision) + 1,
+                        pending = pending.copy(delivered = false),
+                    )
+                sessionRepository.write(sessionId, rollback)
+                if (!stopped) publish(rollback)
+            } catch (error: Throwable) {
+                if (!stopped) failure(error, keepBusy = true)
+            } finally {
+                if (!stopped) {
+                    mutableState.value = state.value.copy(busy = false)
+                    drainResult()
+                }
             }
         }
 

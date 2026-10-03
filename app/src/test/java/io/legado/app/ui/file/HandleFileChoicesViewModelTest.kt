@@ -280,6 +280,28 @@ class HandleFileChoicesViewModelTest {
         assertNull(restored.state.value.result)
     }
 
+    @Test
+    fun missedHandoffRollbackDoesNotCompeteWithBusyResultAcceptance() = test {
+        val disk = Disk()
+        val model = model(disk = disk)
+        model.load(HandleFileSeed(HandleFileInput(mode = 1)))
+        runCurrent()
+        model.choose(1)
+        runCurrent()
+        val nonce = model.state.value.pending!!.nonce
+        assertTrue(model.nativeDelivered(nonce))
+        disk.writeGate = CompletableDeferred()
+        model.returned(nonce, "content://accepted")
+        runCurrent()
+        assertTrue(model.state.value.busy)
+        model.nativeDeferred(nonce)
+        assertTrue(disk.value!!.pending!!.delivered)
+        disk.writeGate!!.complete(Unit)
+        runCurrent()
+        assertEquals("Result", disk.value!!.phase)
+        assertEquals("content://accepted", model.state.value.result)
+    }
+
     private class Files : HandleFileChoicesRepository {
 
         var uploads = 0
