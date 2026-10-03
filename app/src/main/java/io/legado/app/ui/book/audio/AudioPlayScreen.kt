@@ -271,6 +271,21 @@ private fun AudioPlayTopBar(state: AudioPlayUiState, back: () -> Unit, menu: (In
             }
         },
         actions = {
+            if (state.customButton) {
+                IconButton({ menu(R.id.menu_custom_btn) }) {
+                    Icon(
+                        painterResource(R.drawable.ic_custom),
+                        stringResource(R.string.custom_button),
+                    )
+                }
+            }
+            IconButton({ menu(R.id.menu_change_source) }) {
+                Icon(
+                    painterResource(R.drawable.ic_exchange),
+                    stringResource(R.string.change_origin),
+                )
+            }
+
             Box {
                 IconButton({ menuOpen = true }) {
                     Icon(
@@ -281,8 +296,6 @@ private fun AudioPlayTopBar(state: AudioPlayUiState, back: () -> Unit, menu: (In
                 DropdownMenu(menuOpen, { menuOpen = false }) {
                     val entries =
                         listOf(
-                            R.id.menu_custom_btn to R.string.custom_button,
-                            R.id.menu_change_source to R.string.change_origin,
                             R.id.menu_login to R.string.login,
                             R.id.menu_copy_audio_url to R.string.copy_play_url,
                             R.id.menu_audio_cache_folder to R.string.audio_cache_select_folder,
@@ -296,8 +309,7 @@ private fun AudioPlayTopBar(state: AudioPlayUiState, back: () -> Unit, menu: (In
                         )
                     entries
                         .filter { (id, _) ->
-                            (id != R.id.menu_custom_btn || state.customButton) &&
-                                (id != R.id.menu_login || state.hasLogin)
+                            id != R.id.menu_login || state.hasLogin
                         }
                         .forEach { (id, label) ->
                             DropdownMenuItem(

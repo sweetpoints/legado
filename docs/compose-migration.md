@@ -1311,3 +1311,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 - Cache selection and cross-type navigation retain large data only in private ViewModel sessions. Native chooser/navigation/result/finish effects are claimed once when the host is RESUMED. The original `bookUrl` activity and notification entry contract remains intact.
 - Removed this page's exclusive portrait/landscape XML and menu XML. Shared widget classes remain for the integration owner's consumer audit. Replaced obsolete XML/lyric-View tests with LRC behavior and Compose user-action tests; unrelated source/shelf/read-time contracts remain checked against the repository.
 - Validation at this commit: pinned ktfmt 0.64 actual format/check and `git diff --check` pass. The standard full Kotlin/unit/Android-test compilation is queued with the integration owner; no device execution is claimed.
+
+- Audio follow-up: restored the always-visible source-switch toolbar action and the conditional source custom button; cache-directory transition and initialization contracts now tolerate formatter whitespace while still asserting operation order and state preservation. Full Gradle validation remains queued.

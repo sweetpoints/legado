@@ -89,11 +89,11 @@ class AudioPlayBookResolverTest {
         val cacheService =
             projectFile("src/main/java/io/legado/app/service/AudioCacheService.kt").readText()
 
-        assertTrue(playService.contains("putExtra(\"bookUrl\", it.bookUrl)"))
-        assertFalse(playService.contains("putExtra(\"inBookshelf\""))
-        assertTrue(cacheService.contains("putExtra(\"bookUrl\", bookUrl)"))
-        assertTrue(cacheService.contains("notificationBuilder.setContentIntent(contentIntent)"))
-        assertTrue(cacheService.contains("currentBookUrl.takeIf { it.isNotBlank() }"))
+        assertTrue(playService.containsCode("putExtra(\"bookUrl\", it.bookUrl)"))
+        assertFalse(playService.containsCode("putExtra(\"inBookshelf\""))
+        assertTrue(cacheService.containsCode("putExtra(\"bookUrl\", bookUrl)"))
+        assertTrue(cacheService.containsCode("notificationBuilder.setContentIntent(contentIntent)"))
+        assertTrue(cacheService.containsCode("currentBookUrl.takeIf { it.isNotBlank() }"))
     }
 
     @Test
@@ -106,10 +106,10 @@ class AudioPlayBookResolverTest {
                 .substringBefore("private fun menuAction")
         val beforeInit = onNewIntent.substringBefore("viewModel.initialize(")
 
-        assertTrue(onNewIntent.contains("setIntent(intent)"))
-        assertTrue(beforeInit.contains("shouldReuseCurrentAudioPlay("))
-        assertTrue(onNewIntent.contains("viewModel.initialize("))
-        assertTrue(onNewIntent.contains("viewModel.initialize(requestedBookUrl)"))
+        assertTrue(onNewIntent.containsCode("setIntent(intent)"))
+        assertTrue(beforeInit.containsCode("shouldReuseCurrentAudioPlay("))
+        assertTrue(onNewIntent.containsCode("viewModel.initialize("))
+        assertTrue(onNewIntent.containsCode("viewModel.initialize(requestedBookUrl)"))
     }
 
     @Test
@@ -118,37 +118,37 @@ class AudioPlayBookResolverTest {
             projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
                 .readText()
 
-        assertTrue(viewModel.contains("private val engineWrites = Mutex()"))
+        assertTrue(viewModel.containsCode("private val engineWrites = Mutex()"))
         assertTrue(
             projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt")
                 .readText()
-                .contains("initTask?.cancel()")
+                .containsCode("initTask?.cancel()")
         )
-        assertTrue(viewModel.contains("engineWrites.withLock"))
-        assertTrue(viewModel.contains("val cachedBook = AudioPlay.book"))
-        assertFalse(viewModel.contains("cachedBook.takeUnless"))
-        assertFalse(viewModel.contains("getBooleanExtra(\"inBookshelf\""))
-        assertTrue(viewModel.contains("val resolvedBook = resolveAudioPlayBook("))
-        assertFalse(viewModel.contains("cachedChapterIndex"))
-        assertFalse(viewModel.contains("cachedChapterPos"))
-        assertTrue(viewModel.contains("val temporaryBook = targetBook.copy().apply"))
-        assertTrue(viewModel.contains("appDb.bookDao.insertIgnore(temporaryBook)"))
-        assertTrue(viewModel.contains("databaseBook = appDb.bookDao.getBook(requestedBookUrl)"))
-        assertTrue(viewModel.contains("targetBook = checkNotNull(databaseBook)"))
-        assertTrue(viewModel.contains("else !(databaseBook ?: targetBook).isNotShelf"))
+        assertTrue(viewModel.containsCode("engineWrites.withLock"))
+        assertTrue(viewModel.containsCode("val cachedBook = AudioPlay.book"))
+        assertFalse(viewModel.containsCode("cachedBook.takeUnless"))
+        assertFalse(viewModel.containsCode("getBooleanExtra(\"inBookshelf\""))
+        assertTrue(viewModel.containsCode("val resolvedBook = resolveAudioPlayBook("))
+        assertFalse(viewModel.containsCode("cachedChapterIndex"))
+        assertFalse(viewModel.containsCode("cachedChapterPos"))
+        assertTrue(viewModel.containsCode("val temporaryBook = targetBook.copy().apply"))
+        assertTrue(viewModel.containsCode("appDb.bookDao.insertIgnore(temporaryBook)"))
+        assertTrue(viewModel.containsCode("databaseBook = appDb.bookDao.getBook(requestedBookUrl)"))
+        assertTrue(viewModel.containsCode("targetBook = checkNotNull(databaseBook)"))
+        assertTrue(viewModel.containsCode("else !(databaseBook ?: targetBook).isNotShelf"))
 
         val audioPlay = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt").readText()
         val upData =
             audioPlay
                 .substringAfter("fun upData(book: Book, preserveProgress: Boolean)")
                 .substringBefore("fun resetData(book: Book)")
-        assertTrue(upData.contains("val playbackChanged = synchronized(this)"))
-        assertTrue(upData.contains("if (preserveProgress &&"))
-        assertTrue(upData.contains("book.durChapterIndex = durChapterIndex"))
-        assertTrue(upData.contains("book.durChapterPos = durChapterPos"))
-        assertTrue(upData.contains("AudioPlay.book = book"))
-        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = true)"))
-        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = false)"))
+        assertTrue(upData.containsCode("val playbackChanged = synchronized(this)"))
+        assertTrue(upData.containsCode("if (preserveProgress &&"))
+        assertTrue(upData.containsCode("book.durChapterIndex = durChapterIndex"))
+        assertTrue(upData.containsCode("book.durChapterPos = durChapterPos"))
+        assertTrue(upData.containsCode("AudioPlay.book = book"))
+        assertTrue(viewModel.containsCode("AudioPlay.upData(book, preserveProgress = true)"))
+        assertTrue(viewModel.containsCode("AudioPlay.upData(book, preserveProgress = false)"))
     }
 
     @Test
@@ -163,12 +163,12 @@ class AudioPlayBookResolverTest {
                 .substringAfter("ACTION_UPDATE_NOTIFICATION ->")
                 .substringBefore("IntentAction.stop ->")
 
-        assertTrue(viewModel.contains("AudioPlayService.updateNotification(context)"))
-        assertTrue(updateAction.contains("upMediaMetadata()"))
-        assertTrue(updateAction.contains("upAudioPlayNotification()"))
-        assertTrue(viewModel.contains("appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true"))
-        assertTrue(viewModel.contains("if (wasNotShelf) book.addType(BookType.notShelf)"))
-        assertTrue(viewModel.contains("AudioPlay.inBookshelf = !wasNotShelf"))
+        assertTrue(viewModel.containsCode("AudioPlayService.updateNotification(context)"))
+        assertTrue(updateAction.containsCode("upMediaMetadata()"))
+        assertTrue(updateAction.containsCode("upAudioPlayNotification()"))
+        assertTrue(viewModel.containsCode("appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true"))
+        assertTrue(viewModel.containsCode("if (wasNotShelf) book.addType(BookType.notShelf)"))
+        assertTrue(viewModel.containsCode("AudioPlay.inBookshelf = !wasNotShelf"))
     }
 
     @Test
@@ -177,16 +177,21 @@ class AudioPlayBookResolverTest {
             projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
                 .readText()
 
-        assertTrue(viewModel.contains("private suspend fun initBook(book: Book): Boolean"))
+        assertTrue(viewModel.containsCode("private suspend fun initBook(book: Book): Boolean"))
         assertTrue(
-            viewModel.contains(
+            viewModel.containsCode(
                 "if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book))"
             )
         )
-        assertTrue(viewModel.contains("if (AudioPlay.chapterSize == 0 && !loadChapterList(book))"))
-        assertTrue(viewModel.contains("if (cList.isEmpty()) return false"))
-        assertTrue(viewModel.contains("return false"))
+        assertTrue(
+            viewModel.containsCode("if (AudioPlay.chapterSize == 0 && !loadChapterList(book))")
+        )
+        assertTrue(viewModel.containsCode("if (cList.isEmpty()) return false"))
+        assertTrue(viewModel.containsCode("return false"))
     }
+
+    private fun String.containsCode(expected: String): Boolean =
+        filterNot(Char::isWhitespace).contains(expected.filterNot(Char::isWhitespace))
 
     private fun projectFile(pathInApp: String): File {
         return sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)
