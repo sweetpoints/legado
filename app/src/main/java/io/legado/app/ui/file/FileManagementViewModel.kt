@@ -7,6 +7,8 @@ import io.legado.app.data.repository.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 data class FileManagementState(val root:String?=null,val directory:String?=null,val crumbs:List<ManagedFileCrumb> = emptyList(),
@@ -23,6 +25,7 @@ class FileManagementViewModel(private val files:FileManagementRepository,private
     private val cleanup=cleanupScope ?: CoroutineScope(SupervisorJob()+viewModelScope.coroutineContext.minusKey(Job))
     private var record=FileManagementDraft();private var stopped=false
     private var entries=emptyList<ManagedFile>();private var generation=0L;private var scan:Job?=null
+    private val navigationGate=Mutex()
     private var initialized=false
     private var loadFailed=false
     private val writes=Channel<FileManagementDraft>(Channel.CONFLATED)
@@ -102,6 +105,33 @@ class FileManagementViewModel(private val files:FileManagementRepository,private
             try { flush();currentCoroutineContext().ensureActive() }
             catch(error:Exception) { currentCoroutineContext().ensureActive();failure(error) }
             finally { if(!stopped) mutable.value=state.value.copy(busy=false) }
+        }
+    }
+    fun openFailure(error:Exception) { failure(error) }
+    suspend fun consumeOpen(token:String,canDeliver:()->Boolean):ManagedFileOpen? = navigationGate.withLock {
+        currentCoroutineContext().ensureActive()
+        val navigation=record.navigation?.takeIf { it.token==token } ?: return@withLock null
+        if(stopped || !canDeliver()) return@withLock null
+        flush();currentCoroutineContext().ensureActive()
+        if(stopped || !canDeliver() || record.navigation?.token!=token) return@withLock null
+        val before=record;val claimed=before.copy(navigation=null,revision=before.revision+1)
+        var committed=false
+        try {
+            drafts.write(ticket,claimed);committed=true;currentCoroutineContext().ensureActive()
+            if(stopped || !canDeliver()) {
+                val rollback=before.copy(revision=claimed.revision+1)
+                withContext(NonCancellable) { drafts.write(ticket,rollback) }
+                if(!stopped) { record=rollback;mutable.value=state.value.copy(navigation=navigation) }
+                return@withLock null
+            }
+            record=claimed;mutable.value=state.value.copy(navigation=null);navigation
+        } catch(error:Exception) {
+            if(committed || error is CancellationException) {
+                val rollback=before.copy(revision=claimed.revision+1)
+                withContext(NonCancellable) { runCatching { drafts.write(ticket,rollback) } }
+                if(!stopped) { record=rollback;mutable.value=state.value.copy(navigation=navigation) }
+            }
+            throw error
         }
     }
     private fun failure(error:Exception) { if(error is CancellationException) throw error;if(!stopped) mutable.value=state.value.copy(error=error.localizedMessage ?: "Error") }

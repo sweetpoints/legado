@@ -65,6 +65,15 @@ class FileManagementViewModelTest {
     @Test fun closedReceiptRestorationReleasesSessionWithoutScanningOrOpeningFile()=runTest(dispatcher) {
         val files=FilesRepo();val store=Store();store.records["ticket"]=FileManagementDraft(query="private");val vm=model(files,store,SavedStateHandle(mapOf("file.management.ticket" to "ticket","file.management.closed" to true)));runCurrent();assertTrue(vm.state.value.closed);assertFalse(vm.state.value.loading);assertTrue(store.records.isEmpty());assertEquals(0,files.scans)
     }
+    @Test fun nativeFileOpenIsConsumedDurablyOnceAndCannotRepeatAfterDiskRestore()=runTest(dispatcher) {
+        val files=FilesRepo();val store=Store();val saved=SavedStateHandle();val vm=model(files,store,saved);runCurrent();vm.click("/root/root.txt");runCurrent();val pending=vm.state.value.navigation!!
+        assertEquals(pending,vm.consumeOpen(pending.token){true});assertNull(vm.consumeOpen(pending.token){true});vm.stop();val restored=model(files,store,snapshot(saved));runCurrent();assertNull(restored.state.value.navigation);assertEquals(1,files.opens)
+    }
+    @Test fun canceledNonCooperativeClaimRollsBackFullPendingUriWithoutDelivering()=runTest(dispatcher) {
+        val files=FilesRepo();val store=Store();val vm=model(files,store);runCurrent();vm.click("/root/root.txt");runCurrent();val pending=vm.state.value.navigation!!
+        val gate=CompletableDeferred<Unit>();store.claimGate=gate;val job=launch { vm.consumeOpen(pending.token){true};error("Canceled claim delivered") };runCurrent();job.cancel();gate.complete(Unit);runCurrent()
+        assertTrue(job.isCancelled);assertEquals(pending,vm.state.value.navigation);assertEquals(pending,store.records.values.single().navigation);assertNull(vm.consumeOpen(pending.token){false});assertEquals(pending,vm.consumeOpen(pending.token){true})
+    }
     private class FilesRepo:FileManagementRepository {
         val deleted=mutableListOf<String>();var deleteResult=true;var scans=0;var opens=0;var uri="content://provider/root.txt";var failList:String?=null;var failOpen=false
         val gates=mutableMapOf<String,CompletableDeferred<Unit>>();var openGate:CompletableDeferred<Unit>?=null
@@ -76,9 +85,11 @@ class FileManagementViewModelTest {
         override suspend fun open(path:String):String { opens++;openGate?.let { withContext(NonCancellable) { it.await() } };if(failOpen) error("open failed");return uri }
     }
     private class Store:FileManagementDraftRepository {
-        val records=mutableMapOf<String,FileManagementDraft>();val released=mutableSetOf<String>();var failRead=false;var failWrite=false
+        val records=mutableMapOf<String,FileManagementDraft>();val released=mutableSetOf<String>();var failRead=false;var failWrite=false;var claimGate:CompletableDeferred<Unit>?=null
         override suspend fun read(ticket:String):FileManagementDraft? { if(failRead) error("read failed");return records[ticket] }
-        override suspend fun write(ticket:String,draft:FileManagementDraft) { check(ticket !in released);if(failWrite) error("write failed");if((records[ticket]?.revision ?: -1)<=draft.revision) records[ticket]=draft }
+        override suspend fun write(ticket:String,draft:FileManagementDraft) {
+            if(draft.navigation==null && records[ticket]?.navigation!=null) { val gate=claimGate;claimGate=null;gate?.let { withContext(NonCancellable) { it.await() } } }
+            check(ticket !in released);if(failWrite) error("write failed");if((records[ticket]?.revision ?: -1)<=draft.revision) records[ticket]=draft }
         override suspend fun release(ticket:String) { released+=ticket;records.remove(ticket) }
     }
 }
