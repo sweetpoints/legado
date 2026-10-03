@@ -11,7 +11,9 @@ import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.ExploreInfoMapStore.exploreInfoMapList
 import io.legado.app.ui.login.SourceLoginJsExtensions
+import io.legado.app.utils.GSON
 import io.legado.app.utils.InfoMap
+import io.legado.app.utils.MD5Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
@@ -64,7 +66,14 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
             }
         return sources
             .map { rows ->
-                rows.map { ExploreHomeSource(it.bookSourceUrl, it.bookSourceName, it.hasLoginUrl) }
+                rows.map {
+                    ExploreHomeSource(
+                        it.bookSourceUrl,
+                        it.bookSourceName,
+                        it.hasLoginUrl,
+                        MD5Utils.md5Encode(GSON.toJson(it)),
+                    )
+                }
             }
             .flowOn(Dispatchers.IO)
     }

@@ -178,6 +178,37 @@ class ExploreHomeViewModelTest {
             assertTrue(repository.deleted.isEmpty())
         }
 
+    @Test
+    fun expandedMetadataRefreshKeepsControlsUntilReplacementAndEmptyResultClearsThem() =
+        runTest(dispatcher) {
+            val repository = Repository()
+            val manager = model(repository)
+            runCurrent()
+            manager.expand("a")
+            runCurrent()
+            val scrollRequest = manager.state.value.scrollRequest
+            val gate = CompletableDeferred<Unit>()
+            repository.panelGate = gate
+            repository.label = "updated label"
+            repository.rows.value =
+                repository.rows.value.map {
+                    if (it.url == "a") it.copy(revision = "updated") else it
+                }
+            runCurrent()
+            assertTrue(manager.state.value.panelLoading)
+            assertEquals("a label", manager.state.value.controls.first().label)
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals("updated label", manager.state.value.controls.first().label)
+            assertEquals(scrollRequest, manager.state.value.scrollRequest)
+            repository.panelGate = null
+            repository.emptyPanel = true
+            manager.refresh()
+            runCurrent()
+            assertTrue(manager.state.value.controls.isEmpty())
+            assertEquals("a", manager.state.value.expandedUrl)
+        }
+
     private class Storage : ExploreHomeSessionStorage {
         var snapshot = ExploreHomeSession()
         var onWrite: ((ExploreHomeSession) -> Unit)? = null
@@ -199,6 +230,8 @@ class ExploreHomeViewModelTest {
             )
         val groupRows = MutableStateFlow(listOf("novel"))
         var panelGate: CompletableDeferred<Unit>? = null
+        var label: String? = null
+        var emptyPanel = false
         val deleted = mutableListOf<String>()
 
         override fun sources(query: String) = rows.map {
@@ -210,9 +243,10 @@ class ExploreHomeViewModelTest {
 
         override suspend fun panel(url: String, refresh: Boolean): ExploreHomePanel {
             withContext(NonCancellable) { panelGate?.await() }
+            if (emptyPanel) return ExploreHomePanel(emptyList())
             return ExploreHomePanel(
                 listOf(
-                    control(0, "url", "original title", "$url label", "https://category"),
+                    control(0, "url", "original title", label ?: "$url label", "https://category"),
                     control(1, "button", "button"),
                     control(2, "text", "text"),
                     control(3, "toggle", "toggle", value = "on"),

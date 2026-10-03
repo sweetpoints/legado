@@ -2,7 +2,12 @@ package io.legado.app.ui.main.explore
 
 import androidx.annotation.Keep
 
-internal data class ExploreHomeSource(val url: String, val name: String, val hasLogin: Boolean)
+internal data class ExploreHomeSource(
+    val url: String,
+    val name: String,
+    val hasLogin: Boolean,
+    val revision: String = "",
+)
 
 internal data class ExploreControlStyle(
     val grow: Float = 0f,

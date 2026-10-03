@@ -112,6 +112,7 @@ internal class ExploreHomeViewModel(
                 .catch { fail(it) }
                 .collect { sources ->
                     val expanded = state.value.expandedUrl
+                    val previousRevision = state.value.sources.find { it.url == expanded }?.revision
                     mutableState.update { it.copy(sources = sources.toList(), loading = false) }
                     if (expanded != null && sources.none { it.url == expanded }) {
                         panelJob?.cancel()
@@ -123,6 +124,12 @@ internal class ExploreHomeViewModel(
                                 panelLoading = false,
                             )
                         }
+                    } else if (
+                        expanded != null &&
+                            previousRevision != null &&
+                            sources.find { it.url == expanded }?.revision != previousRevision
+                    ) {
+                        loadPanel(expanded, false)
                     }
                 }
         }
