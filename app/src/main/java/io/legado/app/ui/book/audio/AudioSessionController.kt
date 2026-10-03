@@ -27,7 +27,12 @@ internal class AudioSessionController(
                 val changed = change(current)
                 if (changed == current) return@withLock current.also { checkpoint = it }
                 val next = changed.copy(revision = current.revision + 1)
-                sessions.write(ticket, next)
+                // Another restored controller may already have accepted a newer receipt. A
+                // rejected write must not become cached state or authorize a native effect.
+                if (!sessions.write(ticket, next)) {
+                    checkpoint = null
+                    error("Audio session receipt was superseded")
+                }
                 checkpoint = next
                 next
             }

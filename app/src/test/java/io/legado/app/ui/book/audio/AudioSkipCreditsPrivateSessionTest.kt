@@ -15,8 +15,9 @@ class AudioSkipCreditsPrivateSessionTest {
 
         override suspend fun read(ticket: String) = payload
 
-        override suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint) {
+        override suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint): Boolean {
             payload = checkpoint
+            return true
         }
 
         override suspend fun release(ticket: String) {

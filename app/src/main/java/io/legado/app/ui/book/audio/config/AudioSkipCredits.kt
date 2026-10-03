@@ -47,14 +47,13 @@ class AudioSkipCredits : BaseComposeDialogFragment() {
         val payload = files.read(ticket) ?: return false
         val navigation = payload.navigation ?: return false
         if (navigation.claimed) return false
-        files.write(
+        return files.write(
             ticket,
             payload.copy(
                 revision = payload.revision + 1,
                 navigation = navigation.copy(claimed = true),
             ),
         )
-        return true
     }
 
     override fun onStart() {

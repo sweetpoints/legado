@@ -88,7 +88,7 @@ internal fun AudioPlaybackCheckpoint.recoveryProjection(): AudioPlayUiState =
 internal interface AudioPlaybackSessions {
     suspend fun read(ticket: String): AudioPlaybackCheckpoint?
 
-    suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint)
+    suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint): Boolean
 
     suspend fun release(ticket: String)
 }
@@ -122,13 +122,14 @@ internal class FileAudioPlaybackSessions(private val directory: File) : AudioPla
         withContext(Dispatchers.IO + NonCancellable) {
             gate(ticket).withLock {
                 check(!closed(ticket)) { "Audio session is closed" }
-                if ((readBody(ticket)?.revision ?: -1) > checkpoint.revision) return@withLock
+                if ((readBody(ticket)?.revision ?: -1) >= checkpoint.revision) return@withLock false
                 check(directory.isDirectory || directory.mkdirs())
                 val file = body(ticket)
                 val output = file.startWrite()
                 try {
                     output.write(GSON.toJson(checkpoint).toByteArray())
                     file.finishWrite(output)
+                    true
                 } catch (error: Throwable) {
                     file.failWrite(output)
                     throw error

@@ -18,11 +18,13 @@ class AudioSessionControllerTest {
 
         override suspend fun read(ticket: String) = if (closed) null else value
 
-        override suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint) {
+        override suspend fun write(ticket: String, checkpoint: AudioPlaybackCheckpoint): Boolean {
             accepted?.complete(Unit)
             continueWrite?.await()
             check(!closed)
+            if ((value?.revision ?: -1) >= checkpoint.revision) return false
             value = checkpoint
+            return true
         }
 
         override suspend fun release(ticket: String) {
@@ -98,5 +100,39 @@ class AudioSessionControllerTest {
             .exceptionOrNull()
         assertTrue(failure is IllegalStateException)
         assertNull(disk.value)
+    }
+
+    @Test
+    fun supersededControllerCannotPublishARejectedReceipt() = runBlocking {
+        val disk = MemorySessions()
+        val old = AudioSessionController("ticket", disk)
+        old.update { it.copy(bookUrl = "original") }
+        val accepted = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        disk.accepted = accepted
+        disk.continueWrite = finish
+        var receiptDelivered = false
+        var rejected = false
+        val claim =
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    old.update { it.copy(closeToken = "late", closeClaimed = true) }
+                    receiptDelivered = true
+                } catch (error: IllegalStateException) {
+                    rejected = true
+                }
+            }
+        accepted.await()
+        disk.accepted = null
+        disk.continueWrite = null
+        val replacement = AudioSessionController("ticket", disk, allowCreate = false)
+        replacement.update { it.copy(bookUrl = "replacement") }
+        val newest = replacement.update { it.copy(shelfToken = "accepted-shelf") }
+        finish.complete(Unit)
+        claim.join()
+        assertTrue(rejected)
+        assertTrue(!receiptDelivered)
+        assertEquals(newest, old.load())
+        assertNull(old.load().closeToken)
     }
 }
