@@ -1,8 +1,10 @@
 package io.legado.app.model.webBook
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.SearchBook
 
 /** Complete result metadata; callers persist this payload privately rather than in a Bundle. */
+@Keep
 data class BookSearchResult(
     val bookUrl: String,
     val origin: String,

@@ -1,8 +1,11 @@
 package io.legado.app.model.webBook
 
+import androidx.annotation.Keep
+
 /**
  * Complete editable/search payload stays in private storage; SavedState owns only the session UUID.
  */
+@Keep
 data class BookSearchDraft(
     val revision: Long = 0,
     val query: String = "",
@@ -25,6 +28,7 @@ data class BookSearchDraft(
     val effects: List<BookSearchReceipt> = emptyList(),
 )
 
+@Keep
 enum class BookSearchEffect {
     BookInfo,
     Scope,
@@ -33,6 +37,7 @@ enum class BookSearchEffect {
     Toast,
 }
 
+@Keep
 data class BookSearchReceipt(
     val id: String,
     val effect: BookSearchEffect,
