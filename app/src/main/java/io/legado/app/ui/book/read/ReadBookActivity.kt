@@ -477,6 +477,9 @@ class ReadBookActivity :
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        dismissContextMenu()
+        textActionMenu.dismiss()
+        readView.cancelSelect()
         editingHighlight = null
         resetBookmarkObserver()
         resetReviewSummaryState()

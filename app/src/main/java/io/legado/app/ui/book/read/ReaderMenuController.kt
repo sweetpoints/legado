@@ -71,6 +71,7 @@ class ReaderMenuController(
     private val handler = buildMainHandler()
     private var animationComplete: Runnable? = null
     private var disposed = false
+    private var popupOwner: Pair<String, String>? = null
     private val immersiveMenu
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
 
@@ -233,6 +234,7 @@ class ReaderMenuController(
     }
 
     fun upBookView() {
+        if (popupOwner != currentBookOwner()) dismissPopup()
         val chapter = ReadBook.curTextChapter
         topState =
             topState.copy(
@@ -260,6 +262,7 @@ class ReaderMenuController(
     }
 
     fun openPopup(popup: ReaderPopup) {
+        popupOwner = currentBookOwner()
         val entries =
             if (popup == ReaderPopup.Source) sourceEntries() else callBack.readerPopupEntries(popup)
         topState = topState.copy(popup = popup, popupEntries = entries)
@@ -279,13 +282,24 @@ class ReaderMenuController(
         }
     }
 
+    private fun currentBookOwner(): Pair<String, String>? =
+        ReadBook.book?.let { it.bookUrl to it.origin }
+
     private fun dismissPopup() {
+        popupOwner = null
         topState = topState.copy(popup = null, popupEntries = emptyList())
     }
 
     private fun popupAction(value: String) {
         val popup = topState.popup ?: return
+        val stillCurrent = popupOwner == currentBookOwner()
         dismissPopup()
+        if (
+            !stillCurrent ||
+                disposed ||
+                !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        )
+            return
         if (popup == ReaderPopup.Source)
             when (value) {
                 "login" -> callBack.showLogin()
