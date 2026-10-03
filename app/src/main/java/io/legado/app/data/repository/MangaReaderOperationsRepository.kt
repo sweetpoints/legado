@@ -51,7 +51,8 @@ interface MangaReaderOperationsRepository {
 }
 
 class DefaultMangaReaderOperationsRepository(
-    private val imageDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val imageDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val preparationDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : MangaReaderOperationsRepository {
     override suspend fun saveImage(request: MangaImageSaveRequest) {
         currentCoroutineContext().ensureActive()
