@@ -27,7 +27,15 @@ open class AssociationDataImportDialog() : BaseComposeDialogFragment() {
 
     constructor(type: String, source: String) : this() {
         // Compatibility input is transient until the owner accepts it. Never place source in args.
+        initializeLegacyRequest(type, source)
+    }
+
+    protected fun initializeLegacyRequest(type: String, source: String) {
         legacyRequest = type to source
+    }
+
+    protected fun initializeSession(ticket: String) {
+        arguments = Bundle().apply { putString(TICKET_KEY, ticket) }
     }
 
     private val model: AssociationImportViewModel

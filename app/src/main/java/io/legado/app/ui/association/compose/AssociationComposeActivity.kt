@@ -27,6 +27,7 @@ import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.ui.association.AddToBookshelfDialog
 import io.legado.app.ui.association.ImportBookSourceDialog
+import io.legado.app.ui.association.ImportDataDialog
 import io.legado.app.ui.association.ImportDictRuleDialog
 import io.legado.app.ui.association.ImportHttpTtsDialog
 import io.legado.app.ui.association.ImportLocalBookDialog
@@ -304,7 +305,7 @@ abstract class AssociationComposeActivity :
             "bookshelf",
             "backup" ->
                 showDialogFragment(
-                    AssociationDataImportDialog.fromSession(checkNotNull(importModel.ownedTicket))
+                    ImportDataDialog.fromSession(checkNotNull(importModel.ownedTicket))
                 )
             else -> error("Unsupported import type")
         }
