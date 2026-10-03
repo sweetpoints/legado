@@ -17,6 +17,9 @@ class AppBrowserSessionStoreTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val session = UUID.randomUUID().toString()
             val other = UUID.randomUUID().toString()
+            val oldOwner = UUID.randomUUID().toString()
+            val owner = UUID.randomUUID().toString()
+            val otherOwner = UUID.randomUUID().toString()
             val directory = File(context.filesDir, "browser-sessions")
             val first = AppBrowserSessionStore(context)
             val recreated = AppBrowserSessionStore(context)
@@ -51,49 +54,82 @@ class AppBrowserSessionStoreTest {
                                 ),
                             revision = 100,
                         )
-                    first.create(session, original)
-                    first.create(other, original.copy(title = "other"))
-                    recreated.write(session, original.copy(revision = 99, page = null))
-                    assertEquals(original, recreated.read(session))
+                    first.claim(session, oldOwner)
+                    first.create(session, oldOwner, original)
+                    recreated.claim(session, owner)
+                    first.release(session, oldOwner)
+                    assertFalse(first.write(session, oldOwner, original.copy(revision = 101)))
+                    assertEquals(original, recreated.read(session, owner))
+                    recreated.claim(other, otherOwner)
+                    first.create(other, otherOwner, original.copy(title = "other"))
+                    assertFalse(
+                        recreated.write(session, owner, original.copy(revision = 99, page = null))
+                    )
+                    assertTrue(recreated.write(session, owner, original))
+                    assertFalse(
+                        recreated.write(
+                            session,
+                            owner,
+                            original.copy(title = "different same revision"),
+                        )
+                    )
+                    assertEquals(original, recreated.read(session, owner))
                     coroutineScope {
                         (101L..120L)
                             .map { revision ->
                                 async {
-                                    recreated.write(session, original.copy(revision = revision))
+                                    recreated.write(
+                                        session,
+                                        owner,
+                                        original.copy(revision = revision),
+                                    )
                                 }
                             }
                             .awaitAll()
                     }
-                    assertEquals(120L, first.read(session)!!.revision)
+                    assertEquals(120L, first.read(session, owner)!!.revision)
                     val file = File(directory, "$session.json")
                     assertTrue(file.renameTo(File(file.path + ".bak")))
-                    assertEquals(1200000, recreated.read(session)!!.page!!.html!!.length)
-                    assertEquals("key", recreated.read(session)!!.request.verificationKey)
+                    assertEquals(1200000, recreated.read(session, owner)!!.page!!.html!!.length)
+                    assertEquals("key", recreated.read(session, owner)!!.request.verificationKey)
                     File(file.path + ".new").writeText("leftover large partial body")
-                    recreated.release(session)
+                    recreated.release(session, owner)
                     listOf("", ".bak", ".new").forEach {
                         assertFalse(File(file.path + it).exists())
                     }
-                    assertEquals("other", first.read(other)!!.title)
+                    listOf("owner", "owner.bak", "owner.new").forEach {
+                        assertFalse(File(directory, "$session.$it").exists())
+                    }
+                    assertEquals("other", first.read(other, otherOwner)!!.title)
                     try {
-                        first.write(session, original.copy(revision = Long.MAX_VALUE))
+                        first.write(session, owner, original.copy(revision = Long.MAX_VALUE))
                         fail("closed writer")
                     } catch (_: BrowserSessionClosedException) {}
                     try {
-                        first.create(session, original)
+                        first.create(session, owner, original)
                         fail("closed owner")
                     } catch (_: BrowserSessionClosedException) {}
                     try {
-                        first.read(session)
+                        first.read(session, owner)
                         fail("closed reader")
                     } catch (_: BrowserSessionClosedException) {}
-                    first.release(session)
-                    first.release(other)
+                    first.release(session, owner)
+                    first.release(other, otherOwner)
                 }
             } finally {
                 withContext(Dispatchers.IO) {
                     listOf(session, other).forEach { key ->
-                        listOf("json", "json.bak", "json.new", "closed", "closed.bak", "closed.new")
+                        listOf(
+                                "json",
+                                "json.bak",
+                                "json.new",
+                                "closed",
+                                "closed.bak",
+                                "closed.new",
+                                "owner",
+                                "owner.bak",
+                                "owner.new",
+                            )
                             .forEach { File(directory, "$key.$it").delete() }
                     }
                 }

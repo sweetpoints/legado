@@ -11,10 +11,17 @@ import android.view.View
 import android.webkit.*
 import android.widget.FrameLayout
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -49,6 +56,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import splitties.systemservices.powerManager
 
 /** Compose owns the page; these two frames contain only native WebView/video rendering cores. */
@@ -66,6 +74,10 @@ class WebViewActivity : BaseComposeActivity() {
     private var retired = false
     private var installed = false
     private var modelCreated = false
+    private var navigationRequest: BrowserRequest? = null
+    private var navigationTicket: String? = null
+    private var startupLoading by mutableStateOf(true)
+    private var startupError by mutableStateOf<String?>(null)
     private var source: BaseSource? = null
     private var documentReady by mutableStateOf(false)
     private var videoShown by mutableStateOf(false)
@@ -75,22 +87,11 @@ class WebViewActivity : BaseComposeActivity() {
     private var fullscreenApplied: Boolean? = null
     private var wasScreenOff = false
     private var needClearHistory = true
+    private val imageResults by lazy { BrowserNativeResultRegistry(activityResultRegistry) }
     internal val model by
         viewModels<BrowserViewModel> {
             viewModelFactory {
                 initializer {
-                    val request =
-                        BrowserRequest(
-                            intent.getStringExtra("url").orEmpty(),
-                            intent.getStringExtra("title").orEmpty(),
-                            intent.getStringExtra("sourceName").orEmpty(),
-                            intent.getStringExtra("sourceOrigin").orEmpty(),
-                            intent.getIntExtra("sourceType", 0),
-                            intent.getStringExtra("html"),
-                            intent.getBooleanExtra("sourceVerificationEnable", false),
-                            intent.getBooleanExtra("refetchAfterSuccess", true),
-                            intent.getStringExtra("verificationResultKey"),
-                        )
                     val saved =
                         createSavedStateHandle().apply {
                             listOf(
@@ -103,6 +104,7 @@ class WebViewActivity : BaseComposeActivity() {
                                     "sourceVerificationEnable",
                                     "refetchAfterSuccess",
                                     "verificationResultKey",
+                                    BrowserNavigation.PREPARED_TICKET,
                                 )
                                 .forEach { remove<Any?>(it) }
                         }
@@ -113,28 +115,81 @@ class WebViewActivity : BaseComposeActivity() {
                         ),
                         saved,
                     ) {
-                        request
+                        requireNotNull(navigationRequest) { "网页请求尚未恢复" }
                     }
                 }
             }
-        }
-    private val saveImage =
-        registerForActivityResult(HandleFileContract()) { result ->
-            result.uri?.let { if (ready()) model.saveImage(it.toString(), remember = true) }
         }
 
     private fun ready() = !retired && !isFinishing && !isDestroyed
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
-        if (
-            !SourceVerificationHelp.attachVerificationUi(
-                intent.getStringExtra("verificationResultKey"),
-                ::finishVerificationUi,
+        navigationTicket = intent.getStringExtra(BrowserNavigation.PREPARED_TICKET)
+        if (navigationTicket == null) {
+            navigationRequest = readLegacyRequest()
+            eraseLegacyRequestExtras()
+            requestReady()
+        } else {
+            loadPreparedNavigation()
+        }
+    }
+
+    private fun readLegacyRequest() =
+        BrowserRequest(
+            intent.getStringExtra("url").orEmpty(),
+            intent.getStringExtra("title").orEmpty(),
+            intent.getStringExtra("sourceName").orEmpty(),
+            intent.getStringExtra("sourceOrigin").orEmpty(),
+            intent.getIntExtra("sourceType", 0),
+            intent.getStringExtra("html"),
+            intent.getBooleanExtra("sourceVerificationEnable", false),
+            intent.getBooleanExtra("refetchAfterSuccess", true),
+            intent.getStringExtra("verificationResultKey"),
+        )
+
+    private fun eraseLegacyRequestExtras() {
+        listOf(
+                "url",
+                "title",
+                "sourceName",
+                "sourceOrigin",
+                "sourceType",
+                "html",
+                "sourceVerificationEnable",
+                "refetchAfterSuccess",
+                "verificationResultKey",
             )
-        ) {
+            .forEach(intent::removeExtra)
+    }
+
+    private fun loadPreparedNavigation() {
+        val ticket = navigationTicket ?: return
+        startupLoading = true
+        startupError = null
+        lifecycleScope.launch {
+            try {
+                navigationRequest =
+                    withContext(Dispatchers.IO) {
+                        AppBrowserNavigationStore(applicationContext).read(ticket)
+                    }
+                requestReady()
+            } catch (canceled: kotlinx.coroutines.CancellationException) {
+                throw canceled
+            } catch (error: Exception) {
+                startupLoading = false
+                startupError = error.localizedMessage.orEmpty()
+            }
+        }
+    }
+
+    private fun requestReady() {
+        val verificationKey = requireNotNull(navigationRequest).verificationKey
+        if (!SourceVerificationHelp.attachVerificationUi(verificationKey, ::finishVerificationUi)) {
             finish()
             return
         }
+        startupLoading = false
+        startupError = null
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
         webCore =
@@ -148,6 +203,17 @@ class WebViewActivity : BaseComposeActivity() {
 
     @Composable
     override fun Content(savedInstanceState: Bundle?) {
+        if (startupLoading || startupError != null) {
+            Column(Modifier.fillMaxSize().padding(16.dp)) {
+                Text(startupError ?: getString(R.string.loading))
+                if (startupError != null) {
+                    TextButton(onClick = ::loadPreparedNavigation) {
+                        Text(getString(R.string.retry))
+                    }
+                }
+            }
+            return
+        }
         if (!::currentWebView.isInitialized || !ready()) return
         BrowserRoute(
             model,
@@ -157,6 +223,7 @@ class WebViewActivity : BaseComposeActivity() {
                 ::install,
                 ::capture,
                 ::receipt,
+                ::registerImageFolder,
                 ::selectSaveFolder,
                 ::back,
                 ::finish,
@@ -247,7 +314,7 @@ class WebViewActivity : BaseComposeActivity() {
             BrowserReceiptKind.Verified ->
                 value.verification?.let {
                     SourceVerificationHelp.setResult(
-                        intent.getStringExtra("verificationResultKey"),
+                        navigationRequest?.verificationKey,
                         it.html,
                         it.url,
                     )
@@ -274,12 +341,27 @@ class WebViewActivity : BaseComposeActivity() {
         }
     }
 
-    private fun selectSaveFolder(path: String?) {
-        saveImage.launch {
+    private fun registerImageFolder(ticket: String) {
+        imageResults.launcher(ticket, HandleFileContract()) { captured, result ->
+            if (!ready()) return@launcher
+            model.completeImageRequest(captured)
+            result.uri?.let { model.saveImage(captured, it.toString(), remember = true) }
+        }
+    }
+
+    private fun selectSaveFolder(ticket: String, path: String?) {
+        val launcher =
+            imageResults.launcher(ticket, HandleFileContract()) { captured, result ->
+                if (!ready()) return@launcher
+                model.completeImageRequest(captured)
+                result.uri?.let { model.saveImage(captured, it.toString(), remember = true) }
+            }
+        launcher.launch {
             otherActions =
                 arrayListOf<SelectItem<Int>>().apply {
                     if (!path.isNullOrEmpty()) add(SelectItem(path, -1))
                 }
+            value = ticket
         }
     }
 
@@ -343,7 +425,7 @@ class WebViewActivity : BaseComposeActivity() {
     }
 
     override fun finish() {
-        SourceVerificationHelp.checkResult(intent.getStringExtra("verificationResultKey"))
+        SourceVerificationHelp.checkResult(navigationRequest?.verificationKey)
         super.finish()
     }
 
@@ -393,6 +475,13 @@ class WebViewActivity : BaseComposeActivity() {
             Coroutine.async(context = Dispatchers.Main.immediate) { captured.releaseOwnedSession() }
                 .onError { AppLog.put("清理网页会话失败", it) }
         }
+        if (isFinishing)
+            navigationTicket?.let { ticket ->
+                Coroutine.async(context = Dispatchers.IO) {
+                        AppBrowserNavigationStore(applicationContext).abandon(ticket)
+                    }
+                    .onError { AppLog.put("清理网页导航失败", it) }
+            }
         if (::pooledWebView.isInitialized) {
             customCallback?.onCustomViewHidden()
             hideVideo()
@@ -402,6 +491,7 @@ class WebViewActivity : BaseComposeActivity() {
             videoCore.removeAllViews()
             WebViewPool.release(pooledWebView)
         }
+        imageResults.close()
         super.onDestroy()
     }
 
@@ -513,7 +603,7 @@ class WebViewActivity : BaseComposeActivity() {
             view.title?.let { title ->
                 model.title(
                     if (title != url && title != view.url && title.isNotBlank()) title
-                    else intent.getStringExtra("title").orEmpty()
+                    else navigationRequest?.title.orEmpty()
                 )
                 view.evaluateJavascript("!!window._cf_chl_opt") {
                     if (ready()) model.challenge(it == "true")

@@ -273,6 +273,7 @@ class BrowserComposeTest {
                 {},
                 {},
                 {},
+                {},
                 { finishes++ },
                 {},
                 {},
@@ -343,6 +344,7 @@ class BrowserComposeTest {
                 },
                 {},
                 {},
+                {},
                 { closed++ },
                 {},
                 {},
@@ -399,6 +401,7 @@ class BrowserComposeTest {
                 {},
                 {},
                 {},
+                {},
             )
         compose.setContent {
             LegadoComposeTheme {
@@ -428,19 +431,35 @@ class BrowserComposeTest {
 
     private class Repo(page: BrowserPage) : BrowserRepository {
         var value = BrowserSession(page.request, page = page)
+        private var owner: String? = null
         var cookieReads = 0
         var cookieFailure = false
         var cookieGate: CompletableDeferred<Unit>? = null
 
-        override suspend fun read(session: String) = value
-
-        override suspend fun create(session: String, seed: BrowserSession) = value
-
-        override suspend fun write(session: String, snapshot: BrowserSession) {
-            if (snapshot.revision >= value.revision) value = snapshot
+        override suspend fun claim(session: String, owner: String) {
+            this.owner = owner
         }
 
-        override suspend fun release(session: String) = Unit
+        override suspend fun read(session: String, owner: String): BrowserSession? =
+            if (this.owner == owner) value else throw BrowserSessionClosedException()
+
+        override suspend fun create(session: String, owner: String, seed: BrowserSession) =
+            if (this.owner == owner) value else throw BrowserSessionClosedException()
+
+        override suspend fun write(
+            session: String,
+            owner: String,
+            snapshot: BrowserSession,
+        ): Boolean {
+            if (this.owner != owner) return false
+            if (snapshot.revision > value.revision) {
+                value = snapshot
+                return true
+            }
+            return snapshot.revision == value.revision && snapshot == value
+        }
+
+        override suspend fun release(session: String, owner: String) = Unit
 
         override suspend fun prepare(request: BrowserRequest) = value.page!!
 

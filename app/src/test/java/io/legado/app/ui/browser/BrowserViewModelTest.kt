@@ -265,12 +265,39 @@ class BrowserViewModelTest {
                 assertFalse(vm.consumeImageRequest(key))
                 repo.imageFailure = true
                 repo.directory = "new-folder"
-                vm.saveImage("old-folder")
+                vm.saveImage(key, "old-folder")
                 vm.state.first { it.receipt != null }
                 val receipt = vm.prepareReceipt(vm.state.value.receipt!!)
                 assertEquals(BrowserReceiptKind.ImageFailed, receipt.kind)
                 assertEquals("new-folder", repo.directory)
                 assertEquals(listOf("image:old-folder", "forget:old-folder"), repo.actions)
+            } finally {
+                owner.clear()
+            }
+        }
+
+    @Test
+    fun lateImageSaveForOldUuidCannotSaveTheNewerImage() =
+        runTest(dispatcher) {
+            val repo = Fake()
+            val vm = model(repo)
+            val owner = own(vm)
+            try {
+                ready(vm)
+                vm.image("image A")
+                vm.requestImageDirectory(false)
+                val ticketA = vm.state.value.imageRequest!!
+                vm.image("image B")
+                vm.requestImageDirectory(false)
+                val ticketB = vm.state.value.imageRequest!!
+
+                vm.saveImage(ticketA, "folder A")
+                runCurrent()
+                assertTrue(repo.actions.isEmpty())
+
+                vm.saveImage(ticketB, "folder B")
+                vm.state.first { it.receipt != null }
+                assertEquals(listOf("image:folder B"), repo.actions)
             } finally {
                 owner.clear()
             }
@@ -366,7 +393,8 @@ class BrowserViewModelTest {
             try {
                 ready(vm)
                 vm.image("data:image")
-                vm.saveImage("folder")
+                vm.requestImageDirectory(false)
+                vm.saveImage(vm.state.value.imageRequest!!, "folder")
                 runCurrent()
                 vm.windowClose()
                 assertEquals(0, repo.refetched)
@@ -440,7 +468,8 @@ class BrowserViewModelTest {
                 ready(vm)
                 vm.image("data:image")
                 vm.flush()
-                vm.saveImage("folder")
+                vm.requestImageDirectory(false)
+                vm.saveImage(vm.state.value.imageRequest!!, "folder")
                 runCurrent()
                 vm.windowClose()
                 repo.failWrites = true
@@ -479,6 +508,7 @@ class BrowserViewModelTest {
         var captured = 0
         var writes = 0
         var closed = false
+        private var owner: String? = null
         var failWrites = false
         var sourceFailure = false
         var imageFailure = false
@@ -550,25 +580,46 @@ class BrowserViewModelTest {
             actions += "cookie:$url:$value"
         }
 
-        override suspend fun read(session: String): BrowserSession? {
+        override suspend fun claim(session: String, owner: String) {
+            this.owner = owner
+        }
+
+        override suspend fun read(session: String, owner: String): BrowserSession? {
             if (closed) throw BrowserSessionClosedException()
+            if (this.owner != owner) throw BrowserSessionClosedException()
             return value
         }
 
-        override suspend fun create(session: String, seed: BrowserSession): BrowserSession {
+        override suspend fun create(
+            session: String,
+            owner: String,
+            seed: BrowserSession,
+        ): BrowserSession {
             if (closed) throw BrowserSessionClosedException()
+            if (this.owner != owner) throw BrowserSessionClosedException()
             return value ?: seed.also { value = it }
         }
 
-        override suspend fun write(session: String, snapshot: BrowserSession) {
+        override suspend fun write(
+            session: String,
+            owner: String,
+            snapshot: BrowserSession,
+        ): Boolean {
             gate?.await()
             if (closed) throw BrowserSessionClosedException()
             if (failWrites) error("write failed")
             writes++
-            if (snapshot.revision >= (value?.revision ?: 0)) value = snapshot
+            if (this.owner != owner) return false
+            val previous = value ?: return false
+            if (snapshot.revision > previous.revision) {
+                value = snapshot
+                return true
+            }
+            return snapshot.revision == previous.revision && snapshot == previous
         }
 
-        override suspend fun release(session: String) {
+        override suspend fun release(session: String, owner: String) {
+            if (this.owner != owner) return
             closed = true
             value = null
         }

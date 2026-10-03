@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import io.legado.app.model.browser.*
+import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
@@ -76,17 +77,21 @@ class BrowserRepositoryTest {
             val sessions = Sessions()
             val repo = DefaultBrowserRepository(Data(), sessions)
             val snapshot = BrowserSession(request(), page(), revision = 20)
-            assertNull(repo.read("owner"))
-            assertEquals(snapshot, repo.create("owner", snapshot))
-            repo.write("owner", snapshot.copy(revision = 19, page = null))
-            assertEquals(snapshot, repo.read("owner"))
-            repo.write("owner", snapshot.copy(revision = 21))
-            assertEquals(21L, repo.read("owner")!!.revision)
-            repo.create("other", snapshot)
-            repo.release("owner")
-            assertEquals(snapshot, repo.read("other"))
+            val firstOwner = UUID.randomUUID().toString()
+            val otherOwner = UUID.randomUUID().toString()
+            repo.claim("owner", firstOwner)
+            assertNull(repo.read("owner", firstOwner))
+            assertEquals(snapshot, repo.create("owner", firstOwner, snapshot))
+            assertFalse(repo.write("owner", firstOwner, snapshot.copy(revision = 19, page = null)))
+            assertEquals(snapshot, repo.read("owner", firstOwner))
+            assertTrue(repo.write("owner", firstOwner, snapshot.copy(revision = 21)))
+            assertEquals(21L, repo.read("owner", firstOwner)!!.revision)
+            repo.claim("other", otherOwner)
+            repo.create("other", otherOwner, snapshot)
+            repo.release("owner", firstOwner)
+            assertEquals(snapshot, repo.read("other", otherOwner))
             try {
-                repo.write("owner", snapshot.copy(revision = 100))
+                repo.write("owner", firstOwner, snapshot.copy(revision = 100))
                 fail("Closed session")
             } catch (_: BrowserSessionClosedException) {}
             assertTrue(sessions.threads.all { it !== caller })
@@ -114,16 +119,18 @@ class BrowserRepositoryTest {
         val sessions = Sessions()
         val repo = DefaultBrowserRepository(Data(), sessions, StandardTestDispatcher(testScheduler))
         val snapshot = BrowserSession(request(), revision = 1)
-        repo.create("owner", snapshot)
+        val owner = UUID.randomUUID().toString()
+        repo.claim("owner", owner)
+        repo.create("owner", owner, snapshot)
         sessions.gate = CompletableDeferred()
-        val writer = launch { repo.write("owner", snapshot.copy(revision = 2)) }
+        val writer = launch { repo.write("owner", owner, snapshot.copy(revision = 2)) }
         runCurrent()
         writer.cancel()
         sessions.gate!!.complete(Unit)
         writer.join()
         assertEquals(2L, sessions.values["owner"]!!.revision)
         sessions.gate = CompletableDeferred()
-        val cleanup = launch { repo.release("owner") }
+        val cleanup = launch { repo.release("owner", owner) }
         runCurrent()
         cleanup.cancel()
         sessions.gate!!.complete(Unit)
@@ -210,6 +217,7 @@ class BrowserRepositoryTest {
 
     private class Sessions : BrowserSessionStore {
         val values = mutableMapOf<String, BrowserSession>()
+        val owners = mutableMapOf<String, String>()
         val closed = mutableSetOf<String>()
         val threads = CopyOnWriteArrayList<Thread>()
         var gate: CompletableDeferred<Unit>? = null
@@ -219,26 +227,47 @@ class BrowserRepositoryTest {
             if (session in closed) throw BrowserSessionClosedException()
         }
 
-        override suspend fun read(session: String): BrowserSession? {
+        override suspend fun claim(session: String, owner: String) {
             touch(session)
+            owners[session] = owner
+        }
+
+        override suspend fun read(session: String, owner: String): BrowserSession? {
+            touch(session)
+            if (owners[session] != owner) throw BrowserSessionClosedException()
             return values[session]
         }
 
-        override suspend fun create(session: String, seed: BrowserSession): BrowserSession {
+        override suspend fun create(
+            session: String,
+            owner: String,
+            seed: BrowserSession,
+        ): BrowserSession {
             touch(session)
+            if (owners[session] != owner) throw BrowserSessionClosedException()
             return values.getOrPut(session) { seed }
         }
 
-        override suspend fun write(session: String, snapshot: BrowserSession) {
+        override suspend fun write(
+            session: String,
+            owner: String,
+            snapshot: BrowserSession,
+        ): Boolean {
             touch(session)
             gate?.await()
-            if (snapshot.revision >= (values[session]?.revision ?: error("Missing owner")))
+            if (owners[session] != owner) return false
+            val previous = values[session] ?: error("Missing owner")
+            if (snapshot.revision > previous.revision) {
                 values[session] = snapshot
+                return true
+            }
+            return snapshot.revision == previous.revision && snapshot == previous
         }
 
-        override suspend fun release(session: String) {
+        override suspend fun release(session: String, owner: String) {
             threads += Thread.currentThread()
             gate?.await()
+            if (owners[session] != owner) return
             closed += session
             values.remove(session)
         }

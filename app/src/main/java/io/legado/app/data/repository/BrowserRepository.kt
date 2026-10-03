@@ -30,13 +30,15 @@ internal interface BrowserDataStore {
 }
 
 internal interface BrowserSessionStore {
-    suspend fun read(session: String): BrowserSession?
+    suspend fun claim(session: String, owner: String)
 
-    suspend fun create(session: String, seed: BrowserSession): BrowserSession
+    suspend fun read(session: String, owner: String): BrowserSession?
 
-    suspend fun write(session: String, snapshot: BrowserSession)
+    suspend fun create(session: String, owner: String, seed: BrowserSession): BrowserSession
 
-    suspend fun release(session: String)
+    suspend fun write(session: String, owner: String, snapshot: BrowserSession): Boolean
+
+    suspend fun release(session: String, owner: String)
 }
 
 internal interface BrowserRepository : BrowserDataStore, BrowserSessionStore
@@ -78,14 +80,18 @@ internal class DefaultBrowserRepository(
     override suspend fun cookie(url: String, value: String?) =
         withContext(io) { data.cookie(url, value) }
 
-    override suspend fun read(session: String) = withContext(io) { sessions.read(session) }
+    override suspend fun claim(session: String, owner: String) =
+        withContext(io + NonCancellable) { sessions.claim(session, owner) }
 
-    override suspend fun create(session: String, seed: BrowserSession) =
-        withContext(io + NonCancellable) { sessions.create(session, seed) }
+    override suspend fun read(session: String, owner: String) =
+        withContext(io) { sessions.read(session, owner) }
 
-    override suspend fun write(session: String, snapshot: BrowserSession) =
-        withContext(io + NonCancellable) { sessions.write(session, snapshot) }
+    override suspend fun create(session: String, owner: String, seed: BrowserSession) =
+        withContext(io + NonCancellable) { sessions.create(session, owner, seed) }
 
-    override suspend fun release(session: String) =
-        withContext(io + NonCancellable) { sessions.release(session) }
+    override suspend fun write(session: String, owner: String, snapshot: BrowserSession) =
+        withContext(io + NonCancellable) { sessions.write(session, owner, snapshot) }
+
+    override suspend fun release(session: String, owner: String) =
+        withContext(io + NonCancellable) { sessions.release(session, owner) }
 }

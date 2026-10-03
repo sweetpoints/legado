@@ -1,5 +1,8 @@
 package io.legado.app.model.browser
 
+import androidx.annotation.Keep
+
+@Keep
 internal data class BrowserRequest(
     val url: String,
     val title: String = "",
@@ -14,8 +17,9 @@ internal data class BrowserRequest(
 
 internal data class BrowserWebCookies(val baseUrl: String, val values: List<String>)
 
-internal data class BrowserSource(val type: Int, val json: String)
+@Keep internal data class BrowserSource(val type: Int, val json: String)
 
+@Keep
 internal data class BrowserPage(
     val request: BrowserRequest,
     val baseUrl: String,
@@ -26,8 +30,9 @@ internal data class BrowserPage(
     val source: BrowserSource?,
 )
 
-internal data class BrowserVerification(val html: String, val url: String)
+@Keep internal data class BrowserVerification(val html: String, val url: String)
 
+@Keep
 internal enum class BrowserReceiptKind {
     Close,
     Verified,
@@ -35,6 +40,7 @@ internal enum class BrowserReceiptKind {
     ImageFailed,
 }
 
+@Keep
 internal data class BrowserReceipt(
     val id: String,
     val kind: BrowserReceiptKind,
@@ -42,11 +48,13 @@ internal data class BrowserReceipt(
     val message: String? = null,
 )
 
+@Keep
 internal data class BrowserSession(
     val request: BrowserRequest,
     val page: BrowserPage? = null,
     val title: String = request.title,
     val image: String? = null,
+    val imageId: String? = null,
     val receipt: BrowserReceipt? = null,
     val finished: Boolean = false,
     val revision: Long = 0,

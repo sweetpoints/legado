@@ -24,6 +24,7 @@ internal data class BrowserState(
     val imageActions: Boolean = false,
     val imageRequest: String? = null,
     val selectImageDirectory: Boolean = false,
+    val imagePickerLaunched: Boolean = false,
     val receipt: String? = null,
     val finished: Boolean = false,
     val error: String? = null,
@@ -37,6 +38,7 @@ internal class BrowserViewModel(
 ) : ViewModel() {
     val session =
         saved.get<String>("session") ?: UUID.randomUUID().toString().also { saved["session"] = it }
+    private val owner = UUID.randomUUID().toString()
     private val mutable =
         MutableStateFlow(BrowserState(fullscreen = saved.get<Boolean>("fullscreen") == true))
     val state = mutable.asStateFlow()
@@ -47,6 +49,8 @@ internal class BrowserViewModel(
     private var revision = 0L
     private var generation = 0L
     private var stopped = false
+    private var claimed = false
+    private var claimJob: Job? = null
     private var load: Job? = null
     private var operation: Job? = null
     private val cookies = Mutex()
@@ -54,8 +58,9 @@ internal class BrowserViewModel(
     private val writer = viewModelScope.launch {
         writes.filterNotNull().collect { value ->
             try {
-                repository.write(session, value)
+                val acknowledged = repository.write(session, owner, value)
                 currentCoroutineContext().ensureActive()
+                if (!acknowledged && current?.revision == value.revision) error("网页会话已被新的内容取代，请重试")
                 if (!stopped && current?.revision == value.revision && pendingReceipt == null) {
                     mutable.value =
                         state.value.copy(
@@ -79,7 +84,33 @@ internal class BrowserViewModel(
     }
 
     init {
-        initialize(false)
+        claimAndInitialize(false)
+    }
+
+    private fun claimAndInitialize(retry: Boolean) {
+        claimJob = viewModelScope.launch {
+            try {
+                repository.claim(session, owner)
+                claimed = true
+                currentCoroutineContext().ensureActive()
+                claimJob = null
+                initialize(retry)
+            } catch (canceled: CancellationException) {
+                throw canceled
+            } catch (_: BrowserSessionClosedException) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped) mutable.value = state.value.copy(loading = false, finished = true)
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped)
+                    mutable.value =
+                        state.value.copy(
+                            loading = false,
+                            loadFailed = true,
+                            error = error.localizedMessage.orEmpty(),
+                        )
+            }
+        }
     }
 
     private fun nextRevision(): Long {
@@ -94,9 +125,10 @@ internal class BrowserViewModel(
         load = viewModelScope.launch {
             try {
                 var snapshot =
-                    repository.read(session)
+                    repository.read(session, owner)
                         ?: repository.create(
                             session,
+                            owner,
                             BrowserSession(seedValue ?: seed().also { seedValue = it }),
                         )
                 revision = maxOf(revision, snapshot.revision)
@@ -111,7 +143,7 @@ internal class BrowserViewModel(
                     currentCoroutineContext().ensureActive()
                     if (stopped) return@launch
                     snapshot = snapshot.copy(page = page, revision = nextRevision())
-                    repository.write(session, snapshot)
+                    check(repository.write(session, owner, snapshot)) { "网页会话已被新的内容取代" }
                     currentCoroutineContext().ensureActive()
                     if (stopped) return@launch
                     prepared = null
@@ -120,7 +152,7 @@ internal class BrowserViewModel(
                 }
                 if (snapshot.receipt?.id == saved.get<String>("consumedReceipt")) {
                     snapshot = snapshot.copy(receipt = null, revision = nextRevision())
-                    repository.write(session, snapshot)
+                    check(repository.write(session, owner, snapshot)) { "网页会话已被新的内容取代" }
                 }
                 currentCoroutineContext().ensureActive()
                 if (stopped) return@launch
@@ -137,6 +169,7 @@ internal class BrowserViewModel(
                         imageActions = saved.get<Boolean>("imageActions") == true,
                         imageRequest = saved.get<String>("imageRequest"),
                         selectImageDirectory = saved.get<Boolean>("selectImageDirectory") == true,
+                        imagePickerLaunched = saved.get<Boolean>("imagePickerLaunched") == true,
                     )
                 drainVerification()
             } catch (canceled: CancellationException) {
@@ -270,7 +303,8 @@ internal class BrowserViewModel(
                 state.value.receipt != null
         )
             return
-        change(snapshot.copy(image = value))
+        val imageId = UUID.randomUUID().toString()
+        change(snapshot.copy(image = value, imageId = imageId))
         saved["imageActions"] = true
         mutable.value = state.value.copy(imageActions = true)
     }
@@ -292,10 +326,16 @@ internal class BrowserViewModel(
         )
             return
         dismissImageActions()
-        val id = UUID.randomUUID().toString()
+        val id = current?.imageId ?: return
         saved["imageRequest"] = id
         saved["selectImageDirectory"] = select
-        mutable.value = state.value.copy(imageRequest = id, selectImageDirectory = select)
+        saved["imagePickerLaunched"] = false
+        mutable.value =
+            state.value.copy(
+                imageRequest = id,
+                selectImageDirectory = select,
+                imagePickerLaunched = false,
+            )
     }
 
     suspend fun imageDirectory(): String? {
@@ -307,13 +347,23 @@ internal class BrowserViewModel(
 
     fun consumeImageRequest(id: String): Boolean {
         if (stopped || state.value.imageRequest != id) return false
-        saved["imageRequest"] = null
-        mutable.value = state.value.copy(imageRequest = null)
+        if (state.value.imagePickerLaunched) return false
+        saved["imagePickerLaunched"] = true
+        mutable.value = state.value.copy(imagePickerLaunched = true)
         return true
     }
 
-    fun saveImage(directory: String, remember: Boolean = false) {
-        val data = current?.image ?: return
+    fun completeImageRequest(id: String) {
+        if (state.value.imageRequest != id) return
+        saved["imageRequest"] = null
+        saved["imagePickerLaunched"] = false
+        mutable.value = state.value.copy(imageRequest = null, imagePickerLaunched = false)
+    }
+
+    fun saveImage(id: String, directory: String, remember: Boolean = false) {
+        val snapshot = current ?: return
+        if (snapshot.imageId != id) return
+        val data = snapshot.image ?: return
         launch {
             if (remember) repository.imageDirectory(directory)
             val receipt =
@@ -402,7 +452,7 @@ internal class BrowserViewModel(
                     receipt.kind == BrowserReceiptKind.Verified
             val value =
                 snapshot.copy(receipt = receipt, finished = finish, revision = nextRevision())
-            repository.write(session, value)
+            check(repository.write(session, owner, value)) { "网页会话已被新的内容取代" }
             currentCoroutineContext().ensureActive()
             if (current?.revision == snapshot.revision) {
                 current = value
@@ -450,7 +500,7 @@ internal class BrowserViewModel(
     fun retry() {
         if (stopped || state.value.busy) return
         if (state.value.loadFailed) {
-            initialize(true)
+            if (claimed) initialize(true) else claimAndInitialize(true)
             return
         }
         val retained = pendingReceipt
@@ -484,18 +534,23 @@ internal class BrowserViewModel(
     }
 
     suspend fun flush() {
-        if (!stopped) current?.let { repository.write(session, it) }
+        if (!stopped)
+            current?.let {
+                check(repository.write(session, owner, it)) { "网页会话已被新的内容取代" }
+            }
     }
 
     suspend fun releaseOwnedSession() {
         stop()
-        repository.release(session)
+        repository.release(session, owner)
     }
 
     fun stop() {
         if (stopped) return
         stopped = true
         ++generation
+        claimJob?.cancel()
+        claimJob = null
         load?.cancel()
         operation?.cancel()
         writer.cancel()

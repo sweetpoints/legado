@@ -32,7 +32,8 @@ internal data class BrowserHostActions(
     val install: (BrowserPageDelivery) -> Unit,
     val capture: (String) -> Unit,
     val receipt: (BrowserReceipt) -> Unit,
-    val folder: (String?) -> Unit,
+    val registerFolder: (String) -> Unit,
+    val folder: (String, String?) -> Unit,
     val back: () -> Unit,
     val close: () -> Unit,
     val menu: (BrowserMenu) -> Unit,
@@ -117,6 +118,8 @@ internal fun BrowserRoute(
                     }
                     val image = value.imageRequest
                     if (image != null) {
+                        if (value.selectImageDirectory || value.imagePickerLaunched)
+                            callbacks.registerFolder(image)
                         val directory = model.imageDirectory()
                         currentCoroutineContext().ensureActive()
                         if (
@@ -125,8 +128,11 @@ internal fun BrowserRoute(
                                 model.consumeImageRequest(image)
                         ) {
                             if (value.selectImageDirectory || directory.isNullOrEmpty())
-                                callbacks.folder(directory)
-                            else model.saveImage(directory)
+                                callbacks.folder(image, directory)
+                            else {
+                                model.completeImageRequest(image)
+                                model.saveImage(image, directory)
+                            }
                         }
                     }
                     val capture = value.capture
