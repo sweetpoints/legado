@@ -15,7 +15,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatSpinner
-import androidx.collection.LruCache
 import androidx.core.view.children
 import com.google.android.flexbox.FlexboxLayout
 import com.script.rhino.runScriptWithContext
@@ -37,6 +36,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.model.ExploreInfoMapStore
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.widget.dialog.TextDialog
@@ -77,7 +77,7 @@ internal fun isExploreBindingCurrent(
 class ExploreAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<BookSourcePart, ItemFindBookBinding>(context) {
     companion object {
-        val exploreInfoMapList = LruCache<String, InfoMap>(99)
+        val exploreInfoMapList = ExploreInfoMapStore.exploreInfoMapList
     }
 
     private val recycler = arrayListOf<TextView>()
