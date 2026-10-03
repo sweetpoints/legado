@@ -1430,3 +1430,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 搜索scope偏好写入补齐旧searchGroup伴随键：单组保留组名，多组/全源/单书源清空，两键同一次commit且保留其它字段。不改共享AppConfig；新增隔离synthetic命名SharedPreferences实际Android合同，只编译待统一验证，不读写真实用户default偏好。
 
 搜索设置/Scope命令接入纯不可变菜单投影：选中组移除不改全局缓存、无可选组菜单显式fallback全源、单书源身份与原逗号分组规则保留；精准搜索重提交、阅读记录只更新marker、过滤仅确认trim保存。失败retry保留原目标且不清除后来新编辑文本，空精准确认保留旧raw查询和不重复历史合同；历史写失败继续实际搜索。新增4设置VM、1历史失败及3纯菜单行为用例，不积累每次查询的完成Job引用，formatter/check通过；统一全量构建仍pending。
+
+搜索原生动作新增私有完整回执与SavedState小sequence消费fence：durable后由RESUMED Host准备并消费再交付，队列移除落盘失败恢复不重播。Scope请求按owned UUID拒绝迟到结果，早到结果跨初始化失败保留，完整结果先私有落盘再更新偏好/清票据；恢复只重放幂等scope配置、不自动重复网络。新增3真实VM回归，相关序列化模型继续@Keep；formatter/check通过，统一编译/JVM仍pending，Host另批接入。

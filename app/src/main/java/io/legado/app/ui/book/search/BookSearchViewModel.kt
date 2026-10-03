@@ -8,6 +8,8 @@ import io.legado.app.data.repository.BookSearchDraftRepository
 import io.legado.app.data.repository.BookSearchEngineRepository
 import io.legado.app.data.repository.BookSearchMetadataRepository
 import io.legado.app.model.webBook.BookSearchDraft
+import io.legado.app.model.webBook.BookSearchEffect
+import io.legado.app.model.webBook.BookSearchReceipt
 import io.legado.app.model.webBook.BookSearchScopeSelection
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +37,7 @@ internal class BookSearchViewModel(
     private val drafts: BookSearchDraftRepository,
     private val preferences: BookSearchPreferencesRepository,
     private val metadata: BookSearchMetadataRepository,
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     engineFactory: ((CoroutineScope) -> BookSearchEngineRepository)? = null,
 ) : ViewModel() {
     val session: String =
@@ -62,6 +64,7 @@ internal class BookSearchViewModel(
     private var lastEngineError: String? = null
     private var settingsJob: Job? = null
     private var pendingSettings: (suspend () -> Unit)? = null
+    private var earlyScopeResult: Pair<String, String>? = null
 
     init {
         jobs += viewModelScope.launch {
@@ -119,9 +122,14 @@ internal class BookSearchViewModel(
                 currentCoroutineContext().ensureActive()
                 if (stopped) return@launch
                 // A process restart may restore a disk revision newer than its last saved Bundle.
-                revision = maxOf(revision, restored.revision)
+                val consumedSequence = savedState.get<Long>("searchConsumedSequence") ?: -1L
+                revision = maxOf(revision, restored.revision, consumedSequence)
+                val retainedReceipts = restored.effects.filter { it.sequence > consumedSequence }
                 val draft =
-                    if (restored.revision == 0L) restored.copy(scope = settings.scope) else restored
+                    restored.copy(
+                        scope = if (restored.revision == 0L) settings.scope else restored.scope,
+                        effects = retainedReceipts,
+                    )
                 mutableState.value =
                     state.value.copy(
                         loading = false,
@@ -131,6 +139,8 @@ internal class BookSearchViewModel(
                     )
                 observeMetadata()
                 observeQuery(draft.query)
+                if (draft.pendingScopeRequest != null) applyScopeResult(restored = true)
+                else acceptEarlyScopeResult()
             } catch (error: Exception) {
                 currentCoroutineContext().ensureActive()
                 if (!stopped)
@@ -493,7 +503,123 @@ internal class BookSearchViewModel(
                     mutableState.value =
                         state.value.copy(settingsError = error.message ?: error.toString())
             } finally {
-                if (!stopped) mutableState.value = state.value.copy(settingsBusy = false)
+                if (!stopped) {
+                    mutableState.value = state.value.copy(settingsBusy = false)
+                    if (state.value.settingsError == null) acceptEarlyScopeResult()
+                }
+            }
+        }
+    }
+
+    fun openBook(resultId: String) {
+        val result = state.value.draft.results.find { it.id == resultId } ?: return
+        enqueueReceipt(
+            BookSearchReceipt(
+                id = UUID.randomUUID().toString(),
+                effect = BookSearchEffect.BookInfo,
+                resultId = result.id,
+                bookId = result.bookUrl,
+                name = result.name,
+                author = result.author,
+            )
+        )
+    }
+
+    fun openSuggestion(bookId: String) {
+        val suggestion = state.value.suggestions.find { it.bookId == bookId } ?: return
+        enqueueReceipt(
+            BookSearchReceipt(
+                id = UUID.randomUUID().toString(),
+                effect = BookSearchEffect.BookInfo,
+                bookId = suggestion.bookId,
+                name = suggestion.name,
+                author = suggestion.author,
+            )
+        )
+    }
+
+    fun openScope() {
+        if (savedState.get<String>("searchScopeRequest") != null) return
+        enqueueReceipt(
+            BookSearchReceipt(
+                id = UUID.randomUUID().toString(),
+                effect = BookSearchEffect.Scope,
+                text = state.value.draft.scope,
+            )
+        )
+    }
+
+    fun openSources() {
+        enqueueReceipt(BookSearchReceipt(UUID.randomUUID().toString(), BookSearchEffect.Sources))
+    }
+
+    fun openLog() {
+        enqueueReceipt(BookSearchReceipt(UUID.randomUUID().toString(), BookSearchEffect.Log))
+    }
+
+    private fun enqueueReceipt(receipt: BookSearchReceipt) {
+        if (!usable() || state.value.draft.effects.isNotEmpty()) return
+        updateDraft { it.copy(effects = listOf(receipt.copy(sequence = revision + 1))) }
+    }
+
+    /** Host invokes this only after RESUMED and any cancellable IO preparation has completed. */
+    fun consumeReceipt(id: String): BookSearchReceipt? {
+        if (!usable() || state.value.durableRevision < state.value.draft.revision) return null
+        val receipt = state.value.draft.effects.firstOrNull()?.takeIf { it.id == id } ?: return null
+        // Persist a small consumption fence before starting a platform action.
+        savedState["searchConsumedSequence"] = receipt.sequence
+        if (receipt.effect == BookSearchEffect.Scope) savedState["searchScopeRequest"] = receipt.id
+        updateDraft { it.copy(effects = emptyList()) }
+        return receipt
+    }
+
+    fun scopeRequest(): String? = savedState["searchScopeRequest"]
+
+    fun scopeDismissed(request: String) {
+        if (earlyScopeResult?.first == request || state.value.draft.pendingScopeRequest == request)
+            return
+        if (scopeRequest() == request) savedState.remove<String>("searchScopeRequest")
+    }
+
+    fun scopeSelected(request: String, scope: String) {
+        if (scopeRequest() != request) return
+        earlyScopeResult = request to scope
+        acceptEarlyScopeResult()
+    }
+
+    private fun acceptEarlyScopeResult() {
+        if (!usable() || state.value.settingsBusy) return
+        val result = earlyScopeResult ?: return
+        if (scopeRequest() != result.first) {
+            earlyScopeResult = null
+            return
+        }
+        earlyScopeResult = null
+        updateDraft {
+            it.copy(pendingScopeRequest = result.first, pendingScopeValue = result.second)
+        }
+        applyScopeResult(restored = false)
+    }
+
+    private fun applyScopeResult(restored: Boolean) {
+        val request = state.value.draft.pendingScopeRequest ?: return
+        val value = state.value.draft.pendingScopeValue ?: return
+        val shouldSearch = !restored && !state.value.draft.inputHelp
+        runSettings {
+            // Accept the full result privately before clearing its small platform request ticket.
+            checkpoint()
+            val settings = preferences.scope(value)
+            currentCoroutineContext().ensureActive()
+            if (stopped) return@runSettings
+            mutableState.value = state.value.copy(preferences = settings)
+            updateDraft {
+                it.copy(scope = value, pendingScopeRequest = null, pendingScopeValue = null)
+            }
+            checkpoint()
+            scopeDismissed(request)
+            if (shouldSearch) {
+                editQuery(state.value.draft.query.trim())
+                submit()
             }
         }
     }
@@ -535,6 +661,9 @@ internal class BookSearchViewModel(
             pendingSettings?.let { operation ->
                 if (!state.value.settingsBusy) launchSettings(operation)
             }
+            if (pendingSettings == null && state.value.draft.pendingScopeRequest != null)
+                applyScopeResult(restored = true)
+            acceptEarlyScopeResult()
             if (state.value.metadataError != null) {
                 mutableState.value = state.value.copy(metadataError = null)
                 observeMetadata()

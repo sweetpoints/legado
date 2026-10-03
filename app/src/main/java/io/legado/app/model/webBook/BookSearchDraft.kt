@@ -25,6 +25,8 @@ data class BookSearchDraft(
     val clearHistoryConfirmation: Boolean = false,
     val emptyScopeConfirmation: Boolean = false,
     val initialEntryAccepted: Boolean = false,
+    val pendingScopeRequest: String? = null,
+    val pendingScopeValue: String? = null,
     val effects: List<BookSearchReceipt> = emptyList(),
 )
 
@@ -46,4 +48,5 @@ data class BookSearchReceipt(
     val name: String? = null,
     val author: String? = null,
     val text: String? = null,
+    val sequence: Long = 0,
 )

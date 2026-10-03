@@ -227,6 +227,91 @@ class BookSearchViewModelTest {
             }
         }
 
+    @Test
+    fun consumedNativeReceiptDoesNotReplayWhenPrivateQueueRemovalFails() =
+        runTest(dispatcher) {
+            val drafts = Drafts()
+            val saved = SavedStateHandle()
+            val viewModel = BookSearchViewModel(drafts, Preferences(), Metadata(), saved)
+            try {
+                runCurrent()
+                viewModel.openLog()
+                assertNull(
+                    viewModel.consumeReceipt(viewModel.state.value.draft.effects.single().id)
+                )
+                runCurrent()
+                val receipt = viewModel.state.value.draft.effects.single()
+                drafts.failWrite = true
+                assertEquals(receipt, viewModel.consumeReceipt(receipt.id))
+                assertNull(viewModel.consumeReceipt(receipt.id))
+                runCurrent()
+                assertEquals(listOf(receipt), drafts.current.effects)
+                val restoredSaved =
+                    SavedStateHandle(saved.keys().associateWith { key -> saved.get<Any?>(key) })
+                val restored = BookSearchViewModel(drafts, Preferences(), Metadata(), restoredSaved)
+                try {
+                    runCurrent()
+                    assertTrue(restored.state.value.draft.effects.isEmpty())
+                    assertEquals(setOf("searchSession", "searchConsumedSequence"), saved.keys())
+                } finally {
+                    restored.stop()
+                }
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun earlyOwnedScopeResultSurvivesLoadFailureDismissAndRejectsStaleRequest() =
+        runTest(dispatcher) {
+            val drafts = Drafts().apply { failOpen = true }
+            val saved = SavedStateHandle(mapOf("searchScopeRequest" to "owned"))
+            val preferences = Preferences()
+            val viewModel = BookSearchViewModel(drafts, preferences, Metadata(), saved)
+            try {
+                viewModel.scopeSelected("old", "ignored")
+                viewModel.scopeSelected("owned", "complete-scope")
+                viewModel.scopeDismissed("owned")
+                runCurrent()
+                assertEquals("owned", viewModel.scopeRequest())
+                drafts.failOpen = false
+                viewModel.retry()
+                runCurrent()
+                assertEquals("complete-scope", viewModel.state.value.draft.scope)
+                assertEquals("complete-scope", preferences.values.value.scope)
+                assertNull(viewModel.scopeRequest())
+                assertNull(drafts.current.pendingScopeRequest)
+                assertEquals(setOf("searchSession"), saved.keys())
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun durableScopeResultRestoresWithoutRequiringCallbackOrRepeatingNetworkRequest() =
+        runTest(dispatcher) {
+            val drafts =
+                Drafts(
+                    BookSearchDraft(
+                        revision = 50,
+                        scope = "old",
+                        pendingScopeRequest = "result",
+                        pendingScopeValue = "accepted",
+                    )
+                )
+            val preferences = Preferences()
+            val viewModel = BookSearchViewModel(drafts, preferences, Metadata(), SavedStateHandle())
+            try {
+                runCurrent()
+                assertEquals("accepted", viewModel.state.value.draft.scope)
+                assertEquals("accepted", preferences.values.value.scope)
+                assertNull(drafts.current.pendingScopeRequest)
+                assertFalse(viewModel.state.value.searching)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
     private class Drafts(var current: BookSearchDraft = BookSearchDraft()) :
         BookSearchDraftRepository {
         var failOpen = false
