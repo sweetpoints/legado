@@ -22,6 +22,15 @@ internal interface CodeEditorSessionRepository {
     suspend fun read(sessionId: String): CodeEditorSession?
 
     suspend fun write(sessionId: String, session: CodeEditorSession): Boolean
+
+    suspend fun returnFile(sessionId: String, receiptId: String): String
+
+    suspend fun prepareOutput(
+        sessionId: String,
+        session: CodeEditorSession,
+    ): CodeEditorResultPayload
+
+    suspend fun releaseOutput(path: String?)
 }
 
 internal class FileCodeEditorSessionRepository(
@@ -103,6 +112,54 @@ internal class FileCodeEditorSessionRepository(
                 }
                 true
             }
+        }
+
+    override suspend fun returnFile(sessionId: String, receiptId: String): String =
+        withContext(Dispatchers.IO) {
+            UUID.fromString(sessionId)
+            UUID.fromString(receiptId)
+            File(context.cacheDir, "code-text-$sessionId-$receiptId.txt").absolutePath
+        }
+
+    override suspend fun prepareOutput(
+        sessionId: String,
+        session: CodeEditorSession,
+    ): CodeEditorResultPayload =
+        withContext(Dispatchers.IO + NonCancellable) {
+            lock(sessionId).withLock {
+                if (readFile(file(sessionId)) != session || session.finished)
+                    throw CodeEditorSessionConflict()
+                val receipt = checkNotNull(session.returnReceipt)
+                if (receipt.includeText && session.useTextFile) {
+                    val path = checkNotNull(receipt.textFile)
+                    check(path == returnFile(sessionId, receipt.id)) {
+                        "Invalid editor result file owner"
+                    }
+                    val outputFile = AtomicFile(File(path))
+                    // Once output IO accepts this fixed owner, finish atomically. Retrying uses the
+                    // same filename and snapshot, never creates a second public transfer file.
+                    val output = outputFile.startWrite()
+                    try {
+                        output.write(session.text.toByteArray(Charsets.UTF_8))
+                        outputFile.finishWrite(output)
+                    } catch (error: Throwable) {
+                        outputFile.failWrite(output)
+                        throw error
+                    }
+                }
+                CodeEditorResultPayload(
+                    cursorPosition = receipt.cursorPosition,
+                    text = session.text.takeIf { receipt.includeText && !session.useTextFile },
+                    textFile =
+                        receipt.textFile.takeIf { receipt.includeText && session.useTextFile },
+                    action = receipt.action,
+                )
+            }
+        }
+
+    override suspend fun releaseOutput(path: String?) =
+        withContext(Dispatchers.IO) {
+            CodeTextTransfer.delete(context, path)
         }
 
     private companion object {

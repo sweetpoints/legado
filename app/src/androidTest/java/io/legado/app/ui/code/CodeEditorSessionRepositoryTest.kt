@@ -98,6 +98,58 @@ class CodeEditorSessionRepositoryTest {
     }
 
     @Test
+    fun realOutputRetriesSameOwnedFileAndSurvivesPrivateCloseForCallerConsumption() = runBlocking {
+        val repository = FileCodeEditorSessionRepository(context, directory)
+        val id = UUID.randomUUID().toString()
+        val receiptId = UUID.randomUUID().toString()
+        val path = repository.returnFile(id, receiptId)
+        val raw = "😀\r\n@js:1+1".repeat(10_000)
+        val receipt = CodeEditorReturnReceipt(receiptId, 3, true, "loginSource", path)
+        val session = CodeEditorSession(raw, useTextFile = true, returnReceipt = receipt)
+        try {
+            assertTrue(repository.write(id, session))
+            val first = repository.prepareOutput(id, session)
+            val second =
+                FileCodeEditorSessionRepository(context, directory).prepareOutput(id, session)
+            assertEquals(first, second)
+            assertEquals(path, first.textFile)
+            assertEquals(null, first.text)
+            assertEquals("loginSource", first.action)
+            assertEquals(raw, withContext(Dispatchers.IO) { CodeTextTransfer.read(context, path) })
+            assertTrue(repository.write(id, session.closed().copy(revision = 1)))
+            assertTrue(
+                runCatching { repository.prepareOutput(id, session) }.exceptionOrNull()
+                    is CodeEditorSessionConflict
+            )
+            assertEquals(raw, withContext(Dispatchers.IO) { CodeTextTransfer.read(context, path) })
+        } finally {
+            repository.releaseOutput(path)
+        }
+        assertFalse(File(path).exists())
+    }
+
+    @Test
+    fun realInlineAndCursorOnlyReturnKeepPublicPayloadContract() = runBlocking {
+        val repository = FileCodeEditorSessionRepository(context, directory)
+        val id = UUID.randomUUID().toString()
+        val raw = "\r\n😀"
+        val inline =
+            CodeEditorSession(
+                raw,
+                returnReceipt = CodeEditorReturnReceipt(UUID.randomUUID().toString(), 2, true),
+            )
+        assertTrue(repository.write(id, inline))
+        assertEquals(CodeEditorResultPayload(2, text = raw), repository.prepareOutput(id, inline))
+        val cursorOnly =
+            inline.copy(
+                revision = 1,
+                returnReceipt = CodeEditorReturnReceipt(UUID.randomUUID().toString(), 1, false),
+            )
+        assertTrue(repository.write(id, cursorOnly))
+        assertEquals(CodeEditorResultPayload(1), repository.prepareOutput(id, cursorOnly))
+    }
+
+    @Test
     fun privateIdentityRejectsTraversalBeforeAnyFileWrite() = runBlocking {
         val repository = FileCodeEditorSessionRepository(context, directory)
         assertTrue(runCatching { repository.write("../other", CodeEditorSession("raw")) }.isFailure)

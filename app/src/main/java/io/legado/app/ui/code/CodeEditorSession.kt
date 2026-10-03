@@ -44,6 +44,7 @@ internal data class CodeEditorReturnReceipt(
     val action: String? = null,
     val textFile: String? = null,
     val claimed: Boolean = false,
+    val prepared: Boolean = false,
 )
 
 @Keep
@@ -87,3 +88,13 @@ internal fun codeEditorLanguage(text: String, requested: String?): String {
     return if (html.containsMatchIn(trimmed) && trimmed.endsWith(">")) "text.html.basic"
     else requested ?: "source.js"
 }
+
+/** Prepared on IO from a durably accepted snapshot, never stored in Android SavedState. */
+internal data class CodeEditorResultPayload(
+    val cursorPosition: Int,
+    val text: String? = null,
+    val textFile: String? = null,
+    val action: String? = null,
+)
+
+internal class CodeEditorSessionConflict : IllegalStateException("代码草稿已由其他编辑会话更新，请点击重试读取已保存的草稿")
