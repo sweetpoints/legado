@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -1234,6 +1235,18 @@ class SharedFileImportTest {
     private fun awaitDialog(scenario: ActivityScenario<FileAssociationActivity>) {
         var dialog: DialogFragment? = null
         await {
+            // The fragment's window can gain focus before Content initializes its private VM.
+            // Confirm real rendered controls before reading that existing VM from its store.
+            val highlightRendered =
+                compose
+                    .onAllNodesWithTag("highlight-import-confirm")
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                    .isNotEmpty()
+            val replacementRendered =
+                compose
+                    .onAllNodesWithTag("replace-import-confirm")
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                    .isNotEmpty()
             var ready = false
             scenario.onActivity { activity ->
                 val owner =
@@ -1248,15 +1261,17 @@ class SharedFileImportTest {
                 val contentReady =
                     when (val current = dialog) {
                         is ImportHighlightRuleDialog ->
-                            ViewModelProvider(current)[ImportHighlightRuleViewModel::class.java]
-                                .state
-                                .value
-                                .let { !it.loading && !it.busy && it.items.isNotEmpty() }
+                            highlightRendered &&
+                                ViewModelProvider(current)[ImportHighlightRuleViewModel::class.java]
+                                    .state
+                                    .value
+                                    .let { !it.loading && !it.busy && it.items.isNotEmpty() }
                         is ImportReplaceRuleDialog ->
-                            ViewModelProvider(current)[ImportReplaceRuleViewModel::class.java]
-                                .state
-                                .value
-                                .let { !it.loading && !it.busy && it.items.isNotEmpty() }
+                            replacementRendered &&
+                                ViewModelProvider(current)[ImportReplaceRuleViewModel::class.java]
+                                    .state
+                                    .value
+                                    .let { !it.loading && !it.busy && it.items.isNotEmpty() }
                         is AssociationDataImportDialog ->
                             owner.session?.importType in setOf("bookshelf", "backup")
                         else -> false
