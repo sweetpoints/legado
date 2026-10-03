@@ -101,6 +101,7 @@ class VideoPlayerActivity :
     override val viewModel by viewModels<VideoPlayerViewModel>()
     private val playerView: VideoPlayer by lazy { binding.playerView }
     private var chapterRailState by mutableStateOf(VideoChapterRailState())
+    private var bookHeaderState by mutableStateOf(VideoBookHeaderState())
     private var starMenuItem: MenuItem? = null
     private var isIntroTextViewAttached = false
     private val introTextView by lazy {
@@ -223,6 +224,7 @@ class VideoPlayerActivity :
         }
         setupPlayerView()
         setupChapterRail()
+        setupBookHeader()
         initView()
         upView()
         onBackPressedDispatcher.addCallback(this) {
@@ -248,15 +250,9 @@ class VideoPlayerActivity :
     }
 
     private fun showBook(book: Book) {
+        bookHeaderState = VideoBookHeaderState(book.name, book.getRealAuthor())
         binding.run {
             showCover(book)
-            tvName.text = book.name
-            book
-                .getRealAuthor()
-                .takeIf { it.isNotEmpty() }
-                ?.let {
-                    tvAuthor.text = it
-                } ?: tvAuthor.gone()
             showBookIntro(book)
         }
     }
@@ -443,6 +439,17 @@ class VideoPlayerActivity :
                         }
                     },
                 )
+            }
+        }
+    }
+
+    private fun setupBookHeader() {
+        binding.bookHeaderCompose.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.bookHeaderCompose.setContent {
+            LegadoComposeTheme {
+                VideoBookHeaderScreen(state = bookHeaderState)
             }
         }
     }
