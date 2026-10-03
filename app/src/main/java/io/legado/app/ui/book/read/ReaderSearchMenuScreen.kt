@@ -23,61 +23,167 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.R
 
-@Composable internal fun ReaderSearchMenuRoute(controller: ReaderSearchMenuController, background: Color, foreground: Color,
-    settled: (Boolean, Long) -> Unit, close: () -> Unit, navigate: (Int) -> Unit,
-    results: () -> Unit, main: () -> Unit, exit: () -> Unit) {
+@Composable
+internal fun ReaderSearchMenuRoute(
+    controller: ReaderSearchMenuController,
+    background: Color,
+    foreground: Color,
+    settled: (Boolean, Long) -> Unit,
+    close: () -> Unit,
+    navigate: (Int) -> Unit,
+    results: () -> Unit,
+    main: () -> Unit,
+    exit: () -> Unit,
+) {
     val state by controller.state.collectAsStateWithLifecycle()
-    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+    val lifecycle by
+        LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle(
+            minActiveState = Lifecycle.State.CREATED
+        )
     var completion by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
     val done by rememberUpdatedState(settled)
     LaunchedEffect(completion, lifecycle) {
-        if (lifecycle == Lifecycle.State.RESUMED) completion?.let {
-            completion = null; done(it.first, it.second)
-        }
+        if (lifecycle == Lifecycle.State.RESUMED)
+            completion?.let {
+                completion = null
+                done(it.first, it.second)
+            }
     }
-    ReaderSearchMenuScreen(state, background, foreground, { visible, id -> completion = visible to id }, close, navigate, results, main, exit)
+    ReaderSearchMenuScreen(
+        state,
+        background,
+        foreground,
+        { visible, id -> completion = visible to id },
+        close,
+        navigate,
+        results,
+        main,
+        exit,
+    )
 }
-@Composable internal fun ReaderSearchMenuScreen(state: ReaderSearchMenuState, background: Color, foreground: Color,
-    settled: (Boolean, Long) -> Unit, close: () -> Unit, navigate: (Int) -> Unit,
-    results: () -> Unit, main: () -> Unit, exit: () -> Unit, modifier: Modifier = Modifier) {
+
+@Composable
+internal fun ReaderSearchMenuScreen(
+    state: ReaderSearchMenuState,
+    background: Color,
+    foreground: Color,
+    settled: (Boolean, Long) -> Unit,
+    close: () -> Unit,
+    navigate: (Int) -> Unit,
+    results: () -> Unit,
+    main: () -> Unit,
+    exit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val transition = remember { MutableTransitionState(false) }
     val done by rememberUpdatedState(settled)
     LaunchedEffect(state.visible) { transition.targetState = state.visible }
     LaunchedEffect(transition.isIdle, transition.currentState, state.visible, state.exitId) {
-        if (transition.isIdle && transition.currentState == state.visible && (state.visible || state.exitId > 0)) done(state.visible, state.exitId)
+        if (
+            transition.isIdle &&
+                transition.currentState == state.visible &&
+                (state.visible || state.exitId > 0)
+        )
+            done(state.visible, state.exitId)
     }
     val hasResults = state.results.isNotEmpty()
     val buttonColors = ButtonDefaults.textButtonColors(contentColor = foreground)
     Box(modifier.fillMaxSize()) {
-        if (transition.currentState || transition.targetState) Box(Modifier.fillMaxSize().testTag("reader-search-dismiss").clickable(onClick = close))
+        if (transition.currentState || transition.targetState)
+            Box(Modifier.fillMaxSize().testTag("reader-search-dismiss").clickable(onClick = close))
         if (state.navigationVisible && hasResults) {
-            FloatingActionButton({ navigate(-1) }, Modifier.align(Alignment.CenterStart).padding(16.dp).size(48.dp).testTag("reader-search-left"),
-                containerColor = background, contentColor = foreground) {
-                Icon(painterResource(R.drawable.ic_arrow_right), stringResource(R.string.help_search_prev), Modifier.rotate(180f))
+            FloatingActionButton(
+                { navigate(-1) },
+                Modifier.align(Alignment.CenterStart)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .testTag("reader-search-left"),
+                containerColor = background,
+                contentColor = foreground,
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_arrow_right),
+                    stringResource(R.string.help_search_prev),
+                    Modifier.rotate(180f),
+                )
             }
-            FloatingActionButton({ navigate(1) }, Modifier.align(Alignment.CenterEnd).padding(16.dp).size(48.dp).testTag("reader-search-right"),
-                containerColor = background, contentColor = foreground) {
-                Icon(painterResource(R.drawable.ic_arrow_right), stringResource(R.string.help_search_next))
+            FloatingActionButton(
+                { navigate(1) },
+                Modifier.align(Alignment.CenterEnd)
+                    .padding(16.dp)
+                    .size(48.dp)
+                    .testTag("reader-search-right"),
+                containerColor = background,
+                contentColor = foreground,
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_arrow_right),
+                    stringResource(R.string.help_search_next),
+                )
             }
         }
-        AnimatedVisibility(transition, Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(150)) { it }, exit = slideOutVertically(tween(200)) { it }) {
-            Surface(color = background, contentColor = foreground, modifier = Modifier.fillMaxWidth().testTag("reader-search-panel")) {
+        AnimatedVisibility(
+            transition,
+            Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(tween(150)) { it },
+            exit = slideOutVertically(tween(200)) { it },
+        ) {
+            Surface(
+                color = background,
+                contentColor = foreground,
+                modifier = Modifier.fillMaxWidth().testTag("reader-search-panel"),
+            ) {
                 Column(Modifier.navigationBarsPadding()) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton({ navigate(-1) }, enabled = hasResults, modifier = Modifier.testTag("reader-search-previous")) {
-                            Icon(painterResource(R.drawable.ic_arrow_drop_up), stringResource(R.string.help_search_prev))
+                        IconButton(
+                            { navigate(-1) },
+                            enabled = hasResults,
+                            modifier = Modifier.testTag("reader-search-previous"),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_arrow_drop_up),
+                                stringResource(R.string.help_search_prev),
+                            )
                         }
-                        IconButton({ navigate(1) }, enabled = hasResults, modifier = Modifier.testTag("reader-search-next")) {
-                            Icon(painterResource(R.drawable.ic_arrow_drop_down), stringResource(R.string.help_search_next))
+                        IconButton(
+                            { navigate(1) },
+                            enabled = hasResults,
+                            modifier = Modifier.testTag("reader-search-next"),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_arrow_drop_down),
+                                stringResource(R.string.help_search_next),
+                            )
                         }
-                        Text("${stringResource(R.string.search_content_size)}: ${state.results.size} / ${state.chapterTitle}",
-                            Modifier.weight(1f).padding(end = 12.dp).testTag("reader-search-info"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${stringResource(R.string.search_content_size)}: ${state.results.size} / ${state.chapterTitle}",
+                            Modifier.weight(1f).padding(end = 12.dp).testTag("reader-search-info"),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        TextButton(results, Modifier.heightIn(min = 48.dp).testTag("reader-search-results"), colors = buttonColors) { Text(stringResource(R.string.search_content_size)) }
-                        TextButton(main, Modifier.heightIn(min = 48.dp).testTag("reader-search-main"), colors = buttonColors) { Text(stringResource(R.string.main_menu)) }
-                        TextButton(exit, Modifier.heightIn(min = 48.dp).testTag("reader-search-exit"), colors = buttonColors) { Text(stringResource(R.string.exit)) }
+                        TextButton(
+                            results,
+                            Modifier.heightIn(min = 48.dp).testTag("reader-search-results"),
+                            colors = buttonColors,
+                        ) {
+                            Text(stringResource(R.string.search_content_size))
+                        }
+                        TextButton(
+                            main,
+                            Modifier.heightIn(min = 48.dp).testTag("reader-search-main"),
+                            colors = buttonColors,
+                        ) {
+                            Text(stringResource(R.string.main_menu))
+                        }
+                        TextButton(
+                            exit,
+                            Modifier.heightIn(min = 48.dp).testTag("reader-search-exit"),
+                            colors = buttonColors,
+                        ) {
+                            Text(stringResource(R.string.exit))
+                        }
                     }
                 }
             }
