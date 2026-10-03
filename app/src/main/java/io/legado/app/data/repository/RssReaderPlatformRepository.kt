@@ -24,6 +24,7 @@ interface RssReaderImageRepository {
     suspend fun directory(): String?
     suspend fun directory(value: String?)
     suspend fun save(image: String, directory: String)
+    suspend fun save(image: String, directory: String, fileName: String) = save(image, directory)
 }
 class AppRssReaderImageRepository(private val context: Context = appCtx,
     private val bytes: suspend (String) -> ByteArray = { value -> okHttpClient.newCallResponseBody { url(value) }.bytes() }) : RssReaderImageRepository {
@@ -31,11 +32,12 @@ class AppRssReaderImageRepository(private val context: Context = appCtx,
     override suspend fun directory(value: String?) = withContext(Dispatchers.IO) {
         if (value == null) { ACache.get().remove(AppConst.imagePathKey); Unit } else ACache.get().put(AppConst.imagePathKey, value)
     }
-    override suspend fun save(image: String, directory: String) = withContext(Dispatchers.IO) {
+    override suspend fun save(image: String, directory: String) = save(image, directory, "${AppConst.fileNameFormat.format(Date())}.jpg")
+    override suspend fun save(image: String, directory: String, fileName: String) = withContext(Dispatchers.IO) {
+        require(fileName.isNotBlank() && fileName == java.io.File(fileName).name && fileName != "." && fileName != "..")
         val value = if (URLUtil.isValidUrl(image)) bytes(image) else Base64.decode(image.split(",")[1], Base64.DEFAULT)
-        val filename = "${AppConst.fileNameFormat.format(Date())}.jpg"
         currentCoroutineContext().ensureActive()
-        check(Uri.parse(directory).writeBytes(context, filename, value))
+        check(Uri.parse(directory).writeBytes(context, fileName, value))
         Unit
     }
 }
