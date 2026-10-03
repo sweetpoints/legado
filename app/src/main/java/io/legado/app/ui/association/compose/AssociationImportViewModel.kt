@@ -166,13 +166,25 @@ open class AssociationImportViewModel(
         operation = viewModelScope.launch { inspect(ticket, session) }
     }
 
+    suspend fun awaitCommands() {
+        operation?.join()
+    }
+
+    suspend fun closeOwnedSession() {
+        closed = true
+        operation?.cancel()
+        state.value.ticket?.let { ticket ->
+            withContext(NonCancellable) { sessions.release(ticket) }
+        }
+    }
+
     fun updateSelection(ids: Set<String>) = command { session ->
         session.copy(selectedIds = session.previews.map { it.id }.filter { it in ids })
     }
 
-    fun requestDirectory() = command { session ->
+    fun requestDirectory(importAfter: Boolean = true) = command { session ->
         check(session.selectedIds.isNotEmpty()) { "No books selected" }
-        session.copy(phase = AssociationPhase.Directory, importAfterDirectory = true)
+        session.copy(phase = AssociationPhase.Directory, importAfterDirectory = importAfter)
     }
 
     fun cancelDirectory() = command { session ->
@@ -342,7 +354,8 @@ open class AssociationImportViewModel(
         currentCoroutineContext().ensureActive()
         if (!accepted) return
         publish(ticket, persisted, busy = false)
-        if (directory != null) confirmOperation("local-import", directory)
+        if (directory != null && persisted.importAfterDirectory)
+            confirmOperation("local-import", directory)
     }
 
     private suspend fun inspect(ticket: String, original: AssociationSession) {
