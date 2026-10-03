@@ -1646,3 +1646,5 @@ GSY 全屏控制栏的下一集、弹幕开关、选集与倍速按钮改为生�
 视频播放器控制宿主进一步改为 Compose：播放/暂停、加载反馈、章节标题、全屏/锁定、时间、缓冲与播放进度、拖动 seek、弹幕/选集/倍速和短提示全部由 Compose 投影与回调驱动；seek 继续走 GSY manager、字幕刷新、进度/隐藏计时器及全屏回调。删除 GSY 全屏/紧凑控制布局，播放器 native layout 仅保留 surface、danmaku renderer 与 Compose 宿主，字幕继续由 GSY 创建。初始化移至子类构造字段完成后，避免 GSY 构造期间虚调用造成 Compose 状态尚未初始化。新增 overlay 行为用例；最终集成构建待排队验证。
 
 视频悬浮窗关闭、全屏、播放/暂停及底部进度迁为 Compose，浮窗服务仍负责原有 WindowManager 拖动/贴边、停止服务、Activity 克隆播放状态和通知/媒体会话回调。服务窗口显式提供跟随 LifecycleService 的 LifecycleOwner 与空 SavedStateRegistryOwner，控制 View 移除/服务销毁时释放组合；删除原悬浮窗控制布局。新增浮窗动作 Compose 用例；最终集成构建待排队验证。
+
+视频 Activity 顶栏与原生选项菜单迁为 Compose；保留状态栏 inset、返回、定制按钮、RSS 收藏、悬浮播放、配置、书源登录、复制/外部打开播放地址、书源编辑及日志入口，并继续按当前书源能力和 RSS 收藏状态显示条件项。标题订阅事件同步 Compose toolbar 与 GSY overlay，删除独占 `video_play.xml` 菜单资源，Activity XML 仅保留 GSY host 与 Compose hosts。

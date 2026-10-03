@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.WindowManager
 import androidx.activity.addCallback
 import androidx.activity.viewModels
@@ -33,7 +31,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.VideoPlayService
@@ -55,7 +52,6 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -74,18 +70,16 @@ class VideoPlayerActivity :
     private var bookHeaderState by mutableStateOf(VideoBookHeaderState())
     private var coverRequest by mutableStateOf(CoverRequest())
     private var bookIntroState by mutableStateOf(VideoBookIntroState())
-    private var starMenuItem: MenuItem? = null
+    private var toolbarState by mutableStateOf(VideoPlayerToolbarState())
     private var isNew = true
     private var forwardedToFloatingWindow = false
     private var isFullScreen = false
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    private var menuCustomBtn: MenuItem? = null
     private val bookSourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
                 viewModel.upSource {
-                    menuCustomBtn?.isVisible =
-                        (VideoPlay.source as? BookSource)?.customButton == true
+                    updateToolbarSourceActions()
                 }
             }
         }
@@ -137,7 +131,6 @@ class VideoPlayerActivity :
                 VideoPlay.singleUrl = true
             }
             intent.getStringExtra("videoTitle")?.let {
-                binding.titleBar.title = it
                 VideoPlay.videoTitle = it
             }
             val sourceKey = intent.getStringExtra("sourceKey")
@@ -155,8 +148,11 @@ class VideoPlayerActivity :
             VideoPlay.clonePlayState(playerView)
             playerView.setSurfaceToPlay()
             playerView.startAfterPrepared()
-            binding.titleBar.title = VideoPlay.videoTitle
         }
+        toolbarState = toolbarState.copy(title = VideoPlay.videoTitle.orEmpty())
+        updateToolbarSourceActions()
+        updateToolbarFavoriteAction()
+        setupVideoToolbar()
         setupPlayerView()
         setupChapterRail()
         setupBookInfo()
@@ -172,7 +168,7 @@ class VideoPlayerActivity :
     }
 
     private fun initView() {
-        viewModel.upStarMenuData.observe(this) { upStarMenu() }
+        viewModel.upStarMenuData.observe(this) { updateToolbarFavoriteAction() }
         binding.root.setBackgroundColor(backgroundColor)
         val book = VideoPlay.book
         if (book == null) {
@@ -244,6 +240,140 @@ class VideoPlayerActivity :
                         showDialogFragment(PhotoDialog(image, bookIntroState.source?.getKey()))
                     },
                 )
+            }
+        }
+    }
+
+    private fun setupVideoToolbar() {
+        binding.toolbarCompose.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.toolbarCompose.setContent {
+            LegadoComposeTheme {
+                VideoPlayerToolbar(
+                    state = toolbarState,
+                    onBack = { onBackPressedDispatcher.onBackPressed() },
+                    onCustomButton = ::onCustomToolbarButton,
+                    onFavorite = ::onFavoriteToolbarAction,
+                    onFloatingWindow = ::startFloatingWindow,
+                    onMenuExpandedChange = { expanded ->
+                        updateToolbarSourceActions()
+                        toolbarState = toolbarState.copy(menuExpanded = expanded)
+                    },
+                    onMenuAction = ::handleToolbarMenuAction,
+                )
+            }
+        }
+    }
+
+    private fun updateToolbarSourceActions() {
+        toolbarState =
+            toolbarState.copy(
+                customButtonVisible = (VideoPlay.source as? BookSource)?.customButton == true,
+                loginActionVisible = VideoPlay.source?.hasLogin() == true,
+            )
+    }
+
+    private fun updateToolbarFavoriteAction() {
+        toolbarState =
+            toolbarState.copy(
+                favoriteActionVisible = VideoPlay.rssStar != null || VideoPlay.rssRecord != null,
+                isFavorite = VideoPlay.rssStar != null,
+            )
+    }
+
+    private fun onCustomToolbarButton() {
+        (VideoPlay.source as? BookSource)?.let { source ->
+            VideoPlay.book?.let { book ->
+                SourceCallBack.callBackBtn(
+                    this,
+                    SourceCallBack.CLICK_CUSTOM_BUTTON,
+                    source,
+                    book,
+                    VideoPlay.chapter,
+                    BookType.video,
+                )
+            }
+        }
+    }
+
+    private fun onFavoriteToolbarAction() {
+        viewModel.addFavorite {
+            VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
+        }
+    }
+
+    private fun handleToolbarMenuAction(action: VideoPlayerToolbarAction) {
+        when (action) {
+            VideoPlayerToolbarAction.Settings -> showDialogFragment(SettingsDialog(this))
+            VideoPlayerToolbarAction.Login ->
+                VideoPlay.source?.let { source ->
+                    when (source) {
+                        is BookSource -> {
+                            startActivity<SourceLoginActivity> {
+                                putExtra("bookType", BookType.video)
+                            }
+                        }
+                        is RssSource -> {
+                            startActivity<SourceLoginActivity> {
+                                putExtra("type", "rssSource")
+                                putExtra("key", source.getKey())
+                            }
+                        }
+                    }
+                }
+            VideoPlayerToolbarAction.CopyVideoUrl -> copyVideoUrl()
+            VideoPlayerToolbarAction.OpenOtherPlayer -> openInOtherVideoPlayer()
+            VideoPlayerToolbarAction.EditSource -> editCurrentSource()
+            VideoPlayerToolbarAction.OpenLog -> showDialogFragment<AppLogDialog>()
+        }
+    }
+
+    private fun copyVideoUrl() {
+        val url = VideoPlay.videoUrl
+        if (url.isNullOrBlank()) {
+            toastOnUi("暂无播放地址")
+            return
+        }
+        VideoPlay.book?.let { book ->
+            SourceCallBack.callBackBtn(
+                this,
+                SourceCallBack.CLICK_COPY_PLAY_URL,
+                VideoPlay.source as? BookSource,
+                book,
+                VideoPlay.chapter,
+                BookType.video,
+                url,
+            ) {
+                sendToClip(url)
+            }
+        }
+    }
+
+    private fun openInOtherVideoPlayer() {
+        val url = VideoPlay.videoUrl
+        if (url.isNullOrBlank()) {
+            toastOnUi("暂无播放地址")
+            return
+        }
+        val intent =
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(url.toUri(), "video/*")
+            }
+        startActivity(intent)
+    }
+
+    private fun editCurrentSource() {
+        VideoPlay.source?.let { source ->
+            when (source) {
+                is BookSource ->
+                    bookSourceEditResult.launch {
+                        putExtra("sourceUrl", source.getKey())
+                    }
+                is RssSource ->
+                    rssSourceEditResult.launch {
+                        putExtra("sourceUrl", source.getKey())
+                    }
             }
         }
     }
@@ -422,132 +552,6 @@ class VideoPlayerActivity :
         )
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.video_play, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menuCustomBtn =
-            menu.findItem(R.id.menu_custom_btn)?.also {
-                it.isVisible = (VideoPlay.source as? BookSource)?.customButton == true
-            }
-        starMenuItem = menu.findItem(R.id.menu_rss_star)
-        upStarMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    private fun upStarMenu() {
-        if (VideoPlay.rssStar != null) {
-            starMenuItem?.isVisible = true
-            starMenuItem?.setIcon(R.drawable.ic_star)
-            starMenuItem?.setTitle(R.string.in_favorites)
-            starMenuItem?.icon?.setTintMutate(primaryTextColor)
-        } else if (VideoPlay.rssRecord != null) {
-            starMenuItem?.isVisible = true
-            starMenuItem?.setIcon(R.drawable.ic_star_border)
-            starMenuItem?.setTitle(R.string.out_favorites)
-            starMenuItem?.icon?.setTintMutate(primaryTextColor)
-        } else {
-            starMenuItem?.isVisible = false
-        }
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = VideoPlay.source?.hasLogin() == true
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_custom_btn -> {
-                (VideoPlay.source as? BookSource)?.let { source ->
-                    VideoPlay.book?.let { book ->
-                        SourceCallBack.callBackBtn(
-                            this,
-                            SourceCallBack.CLICK_CUSTOM_BUTTON,
-                            source,
-                            book,
-                            VideoPlay.chapter,
-                            BookType.video,
-                        )
-                    }
-                }
-            }
-            R.id.menu_rss_star ->
-                viewModel.addFavorite {
-                    VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
-                }
-            R.id.menu_float_window -> startFloatingWindow()
-            R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this))
-            R.id.menu_login ->
-                VideoPlay.source?.let { s ->
-                    when (s) {
-                        is BookSource -> {
-                            startActivity<SourceLoginActivity> {
-                                putExtra("bookType", BookType.video)
-                            }
-                        }
-                        is RssSource -> {
-                            startActivity<SourceLoginActivity> {
-                                putExtra("type", "rssSource")
-                                putExtra("key", s.getKey())
-                            }
-                        }
-                    }
-                }
-
-            R.id.menu_copy_video_url -> {
-                val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()) {
-                    this.toastOnUi("暂无播放地址")
-                    return true
-                }
-                VideoPlay.book?.let {
-                    SourceCallBack.callBackBtn(
-                        this,
-                        SourceCallBack.CLICK_COPY_PLAY_URL,
-                        VideoPlay.source as? BookSource,
-                        it,
-                        VideoPlay.chapter,
-                        BookType.video,
-                        url,
-                    ) {
-                        sendToClip(url)
-                    }
-                }
-            }
-            R.id.menu_open_other_video_player -> {
-                val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()) {
-                    this.toastOnUi("暂无播放地址")
-                    return true
-                }
-                val intent =
-                    Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(url.toUri(), "video/*")
-                    }
-                startActivity(intent)
-            }
-            R.id.menu_edit_source ->
-                VideoPlay.source?.let { s ->
-                    when (s) {
-                        is BookSource ->
-                            bookSourceEditResult.launch {
-                                putExtra("sourceUrl", s.getKey())
-                            }
-                        is RssSource ->
-                            rssSourceEditResult.launch {
-                                putExtra("sourceUrl", s.getKey())
-                            }
-                    }
-                }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
     private fun startFloatingWindow() {
         VideoPlay.savePlayState(playerView)
         // 启动悬浮窗服务
@@ -563,7 +567,7 @@ class VideoPlayerActivity :
     override fun observeLiveBus() {
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
-            binding.titleBar.title = it
+            toolbarState = toolbarState.copy(title = it)
             playerView.updateOverlayTitle(it)
         }
 
