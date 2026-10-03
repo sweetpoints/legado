@@ -4,13 +4,11 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.ui.association.VerificationCodeActivity
-import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.utils.isMainThread
 import io.legado.app.utils.startActivity
-import kotlinx.coroutines.isActive
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import splitties.init.appCtx
 import java.util.UUID
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ConcurrentHashMap
@@ -23,20 +21,32 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import splitties.init.appCtx
 
 internal class VerificationFlightRegistry {
 
-    internal class Lease internal constructor(
+    internal class Lease
+    internal constructor(
         internal val flight: Flight,
-        internal val owner: Boolean
+        internal val owner: Boolean,
     )
 
     internal class Flight {
         val done = CountDownLatch(1)
-        @Volatile
-        var error: Throwable? = null
-        @Volatile
-        var abandoned = false
+        @Volatile var error: Throwable? = null
+        @Volatile var abandoned = false
         var users = 0
     }
 
@@ -44,14 +54,15 @@ internal class VerificationFlightRegistry {
 
     fun acquire(key: String): Lease {
         var owner = false
-        val flight = flights.compute(key) { _, current ->
-            if (current == null || current.done.count == 0L) {
-                owner = true
-                Flight().also { it.users = 1 }
-            } else {
-                current.apply { users++ }
-            }
-        }!!
+        val flight =
+            flights.compute(key) { _, current ->
+                if (current == null || current.done.count == 0L) {
+                    owner = true
+                    Flight().also { it.users = 1 }
+                } else {
+                    current.apply { users++ }
+                }
+            }!!
         return Lease(flight, owner)
     }
 
@@ -117,13 +128,14 @@ internal enum class VerificationFlightWaitResult {
 
 internal sealed class VerificationResult {
     data class Response(val value: Pair<String, String>) : VerificationResult()
+
     object Refetch : VerificationResult()
 }
 
 internal fun canJoinVerificationFlight(
     useBrowser: Boolean,
     refetchAfterSuccess: Boolean,
-    html: String?
+    html: String?,
 ) = useBrowser && refetchAfterSuccess && html == null
 
 internal fun verificationFlightKey(
@@ -135,22 +147,23 @@ internal fun verificationFlightKey(
     val requestUrl = if (matcher.find()) url.substring(0, matcher.start()) else url
     val httpUrl = requestUrl.trim().toHttpUrlOrNull() ?: return null
     return listOf(
-        sourceType.toString(),
-        sourceKey,
-        httpUrl.scheme,
-        httpUrl.host,
-        httpUrl.port.toString(),
-    ).joinToString("\u0000")
+            sourceType.toString(),
+            sourceKey,
+            httpUrl.scheme,
+            httpUrl.host,
+            httpUrl.port.toString(),
+        )
+        .joinToString("\u0000")
 }
 
-/**
- * 源验证
- */
+/** 源验证 */
 object SourceVerificationHelp {
 
     private class VerificationAttempt(val waiter: Thread) {
         val result = AtomicReference<Pair<String, String>?>(null)
         var closeUi: (() -> Unit)? = null
+        var browserLaunch: Job? = null
+        var browserLaunchError: Throwable? = null
     }
 
     private val flightWaitTime = 5.minutes.inWholeNanoseconds
@@ -158,6 +171,7 @@ object SourceVerificationHelp {
     private val verificationFlights = VerificationFlightRegistry()
     private val verificationAttempts = ConcurrentHashMap<String, VerificationAttempt>()
     private val verificationUiLock = ReentrantLock()
+    private val browserLaunchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     internal fun registerVerificationAttempt(waiter: Thread): String {
         val key = UUID.randomUUID().toString()
@@ -178,11 +192,27 @@ object SourceVerificationHelp {
         }
     }
 
-    internal fun cancelVerificationAttempt(verificationResultKey: String) {
-        val attempt = verificationAttempts.remove(verificationResultKey) ?: return
-        val closeUi = synchronized(attempt) {
-            attempt.closeUi.also { attempt.closeUi = null }
+    private fun launchWhileAttemptActive(
+        key: String,
+        action: (VerificationAttempt) -> Unit,
+    ): Boolean {
+        val attempt = verificationAttempts[key] ?: return false
+        synchronized(attempt) {
+            if (verificationAttempts[key] !== attempt) return false
+            action(attempt)
+            return true
         }
+    }
+
+    internal fun cancelVerificationAttempt(verificationResultKey: String) {
+        val attempt = verificationAttempts[verificationResultKey] ?: return
+        val closeUi =
+            synchronized(attempt) {
+                if (!verificationAttempts.remove(verificationResultKey, attempt)) return
+                attempt.browserLaunch?.cancel()
+                attempt.browserLaunch = null
+                attempt.closeUi.also { attempt.closeUi = null }
+            }
         closeUi?.invoke()
     }
 
@@ -195,10 +225,7 @@ object SourceVerificationHelp {
         }
     }
 
-    /**
-     * 获取书源验证结果
-     * 图片验证码 防爬 滑动验证码 点击字符 等等
-     */
+    /** 获取书源验证结果 图片验证码 防爬 滑动验证码 点击字符 等等 */
     internal fun getVerificationResult(
         source: BaseSource?,
         url: String,
@@ -213,11 +240,12 @@ object SourceVerificationHelp {
         require(url.length < 64 * 1024) { "getVerificationResult parameter url too long" }
         check(!isMainThread) { "getVerificationResult must be called on a background thread" }
 
-        val flightKey = if (canJoinVerificationFlight(useBrowser, refetchAfterSuccess, html)) {
-            verificationFlightKey(source.getKey(), source.getSourceType(), url)
-        } else {
-            null
-        }
+        val flightKey =
+            if (canJoinVerificationFlight(useBrowser, refetchAfterSuccess, html)) {
+                verificationFlightKey(source.getKey(), source.getSourceType(), url)
+            } else {
+                null
+            }
         if (flightKey == null) {
             lockVerificationUi(coroutineContext)
             return try {
@@ -240,13 +268,14 @@ object SourceVerificationHelp {
         while (true) {
             val lease = verificationFlights.acquire(flightKey)
             if (!lease.owner) {
-                val waitResult = try {
-                    verificationFlights.await(lease, flightWaitTime) {
-                        coroutineContext?.isActive != false
+                val waitResult =
+                    try {
+                        verificationFlights.await(lease, flightWaitTime) {
+                            coroutineContext?.isActive != false
+                        }
+                    } finally {
+                        verificationFlights.release(flightKey, lease)
                     }
-                } finally {
-                    verificationFlights.release(flightKey, lease)
-                }
                 if (waitResult == VerificationFlightWaitResult.Retry) continue
                 return VerificationResult.Refetch
             }
@@ -254,15 +283,16 @@ object SourceVerificationHelp {
             try {
                 lockVerificationUi(coroutineContext)
                 return try {
-                    val result = waitForVerification(
-                        source,
-                        url,
-                        title,
-                        useBrowser,
-                        refetchAfterSuccess,
-                        html,
-                        coroutineContext,
-                    )
+                    val result =
+                        waitForVerification(
+                            source,
+                            url,
+                            title,
+                            useBrowser,
+                            refetchAfterSuccess,
+                            html,
+                            coroutineContext,
+                        )
                     verificationFlights.complete(lease)
                     VerificationResult.Response(result)
                 } finally {
@@ -315,6 +345,7 @@ object SourceVerificationHelp {
 
             var waitUserInput = false
             while (getResult(verificationResultKey) == null) {
+                verificationLaunchError(verificationResultKey)?.let { throw it }
                 if (coroutineContext?.isActive == false) {
                     throw CancellationException("source verification cancelled")
                 }
@@ -327,8 +358,7 @@ object SourceVerificationHelp {
                 }
                 LockSupport.parkNanos(this, waitPollTime)
             }
-            val result = getResult(verificationResultKey)
-                ?: throw NoStackTraceException("验证结果为空")
+            val result = getResult(verificationResultKey) ?: throw NoStackTraceException("验证结果为空")
             if (result.second.isEmpty()) throw NoStackTraceException("验证结果为空")
             return result
         } catch (error: Throwable) {
@@ -343,6 +373,7 @@ object SourceVerificationHelp {
 
     /**
      * 启动内置浏览器
+     *
      * @param saveResult 保存网页源代码到数据库
      */
     fun startBrowser(
@@ -359,19 +390,73 @@ object SourceVerificationHelp {
         require(saveResult != true || verificationResultKey != null) {
             "verificationResultKey is required when saveResult is enabled"
         }
-        appCtx.startActivity<WebViewActivity> {
-            putExtra("title", title)
-            putExtra("url", url)
-            putExtra("sourceOrigin", source.getKey())
-            putExtra("sourceName", source.getTag())
-            putExtra("sourceType", source.getSourceType())
-            putExtra("sourceVerificationEnable", saveResult)
-            putExtra("refetchAfterSuccess", refetchAfterSuccess)
-            putExtra("html", html)
-            putExtra("verificationResultKey", verificationResultKey)
+        val request =
+            BrowserRequest(
+                url = url,
+                title = title,
+                sourceName = source.getTag(),
+                sourceOrigin = source.getKey(),
+                sourceType = source.getSourceType(),
+                html = html,
+                verificationEnabled = saveResult ?: false,
+                refetchAfterSuccess = refetchAfterSuccess ?: true,
+                verificationKey = verificationResultKey,
+            )
+        val launch =
+            browserLaunchScope.launch(start = CoroutineStart.LAZY) {
+                var ticket: String? = null
+                try {
+                    ticket = BrowserNavigation.prepare(appCtx, request)
+                    currentCoroutineContext().ensureActive()
+                    withContext(Dispatchers.Main.immediate) {
+                        currentCoroutineContext().ensureActive()
+                        if (verificationResultKey == null) {
+                            BrowserNavigation.startPrepared(appCtx, requireNotNull(ticket))
+                        } else {
+                            val handedOff =
+                                launchWhileAttemptActive(verificationResultKey) {
+                                    BrowserNavigation.startPrepared(appCtx, requireNotNull(ticket))
+                                }
+                            if (!handedOff) return@withContext
+                        }
+                        ticket = null
+                    }
+                } catch (canceled: CancellationException) {
+                    throw canceled
+                } catch (error: Exception) {
+                    verificationResultKey?.let { key ->
+                        launchWhileAttemptActive(key) { attempt ->
+                            attempt.browserLaunchError = error
+                            LockSupport.unpark(attempt.waiter)
+                        }
+                    }
+                    AppLog.put("打开网页失败\n${error.localizedMessage}", error)
+                } finally {
+                    ticket?.let { prepared ->
+                        withContext(NonCancellable + Dispatchers.IO) {
+                            BrowserNavigation.abandon(appCtx, prepared)
+                        }
+                    }
+                    verificationResultKey?.let { key ->
+                        launchWhileAttemptActive(key) { attempt ->
+                            if (attempt.browserLaunch === coroutineContext[Job]) {
+                                attempt.browserLaunch = null
+                            }
+                        }
+                    }
+                }
+            }
+        if (verificationResultKey == null) {
+            launch.start()
+        } else {
+            val attached =
+                launchWhileAttemptActive(verificationResultKey) { attempt ->
+                    attempt.browserLaunch = launch
+                    launch.start()
+                }
+            if (!attached) launch.cancel()
         }
     }
-
 
     fun checkResult(verificationResultKey: String?) {
         verificationResultKey ?: return
@@ -394,7 +479,18 @@ object SourceVerificationHelp {
         verificationResultKey ?: return
         val attempt = verificationAttempts.remove(verificationResultKey) ?: return
         synchronized(attempt) {
+            attempt.browserLaunch?.cancel()
+            attempt.browserLaunch = null
             attempt.closeUi = null
+        }
+    }
+
+    private fun verificationLaunchError(verificationResultKey: String): Throwable? {
+        val attempt = verificationAttempts[verificationResultKey] ?: return null
+        return synchronized(attempt) {
+            if (verificationAttempts[verificationResultKey] === attempt) {
+                attempt.browserLaunchError
+            } else null
         }
     }
 }
