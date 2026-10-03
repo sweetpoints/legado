@@ -21,7 +21,7 @@ data class MangaProgressUpdate(
 data class MangaSavedProgress(
     val chapterIndex: Int,
     val pageIndex: Int,
-    val chapterTitle: String,
+    val chapterTitle: String?,
     val chapterTime: Long,
 )
 

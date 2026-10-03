@@ -33,6 +33,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
@@ -155,9 +156,11 @@ internal fun MangaViewportScreen(
         }
     }
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
+        val viewportWidth = maxWidth
+        val viewportHeight = maxHeight
         val density = LocalDensity.current
-        val widthPx = with(density) { maxWidth.toPx() }
-        val heightPx = with(density) { maxHeight.toPx() }
+        val widthPx = with(density) { viewportWidth.toPx() }
+        val heightPx = with(density) { viewportHeight.toPx() }
         val geometry = MangaViewportGeometry(widthPx, heightPx)
         val latestGeometry by rememberUpdatedState(geometry)
         LaunchedEffect(geometry) { transform = geometry.bounded(transform) }
@@ -173,7 +176,8 @@ internal fun MangaViewportScreen(
                 }
             val listState =
                 rememberLazyListState(anchorIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0)))
-            val listHeight = if (transform.scale < 1f) maxHeight / transform.scale else maxHeight
+            val listHeight =
+                if (transform.scale < 1f) viewportHeight / transform.scale else viewportHeight
             LaunchedEffect(listState) {
                 snapshotFlow { listState.centerItemIndex() }
                     .distinctUntilChanged()
@@ -267,7 +271,7 @@ internal fun MangaViewportScreen(
                     }
             Box(gestureModifier, contentAlignment = Alignment.Center) {
                 val listModifier =
-                    Modifier.width(maxWidth)
+                    Modifier.width(viewportWidth)
                         .requiredHeight(listHeight)
                         .graphicsLayer {
                             scaleX = transform.scale
@@ -291,17 +295,17 @@ internal fun MangaViewportScreen(
                                 horizontal = options.horizontal,
                                 isLastImage =
                                     item.imageCount > 0 && item.pageIndex == item.imageCount - 1,
-                                viewportWidth = maxWidth,
-                                viewportHeight = maxHeight,
+                                viewportWidth = viewportWidth,
+                                viewportHeight = viewportHeight,
                                 colorFilter = colorFilter,
                                 isEInk = options.isEInk,
-                                modifier = Modifier.width(maxWidth),
+                                modifier = Modifier.width(viewportWidth),
                             )
                         is MangaReaderItem.Boundary ->
                             Box(
                                 modifier =
-                                    Modifier.width(maxWidth)
-                                        .height(if (item.volume) maxHeight else 96.dp)
+                                    Modifier.width(viewportWidth)
+                                        .height(if (item.volume) viewportHeight else 96.dp)
                                         .background(boundaryColor),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -329,7 +333,7 @@ internal fun MangaViewportScreen(
                                 ->
                                 pageContent(item)
                             }
-                            item(key = "footer") { Box(Modifier.width(maxWidth)) { footer() } }
+                            item(key = "footer") { Box(Modifier.width(viewportWidth)) { footer() } }
                         }
                     } else {
                         LazyColumn(modifier = listModifier, state = listState) {
