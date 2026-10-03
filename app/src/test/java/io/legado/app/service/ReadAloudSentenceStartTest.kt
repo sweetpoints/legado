@@ -57,8 +57,7 @@ class ReadAloudSentenceStartTest {
             activity
                 .substringAfter("override fun onClickReadAloud()")
                 .substringBefore("override fun showHelp()")
-        val readFromHere =
-            activity.substringAfter("llReadFromHere.setOnClickListener").substringBefore("}")
+        val readFromHere = activity.substringAfter("::backToSpeakingPosition,").substringBefore("}")
         val rewind =
             service
                 .substringAfter("if (shouldRewindReadAloudToSentenceStart(")

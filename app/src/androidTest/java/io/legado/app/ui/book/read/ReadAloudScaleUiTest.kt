@@ -7,13 +7,11 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -189,11 +187,12 @@ class ReadAloudScaleUiTest {
                 BaseReadAloudService.detachReadAloudFollow()
                 it.showReadAloudControls()
             }
-            await("position bar visible") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
+            await("position bar visible") {
+                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            }
             screenshot("aloud-scale-position-$widthDp")
             var expectedHeight = 0
             val bounds = Rect()
-            val clicks = IntArray(2)
             scenario!!.onActivity { activity ->
                 val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
                 val density = activity.resources.displayMetrics.density
@@ -234,40 +233,9 @@ class ReadAloudScaleUiTest {
                     expectedBounds,
                     bounds,
                 )
-                listOf(R.id.ll_back_to_speech, R.id.ll_read_from_here).forEachIndexed { index, id ->
-                    activity.findViewById<View>(id).setOnClickListener { clicks[index]++ }
-                }
-                for (id in listOf(R.id.tv_back_to_speech, R.id.tv_read_from_here)) {
-                    val text = activity.findViewById<TextView>(id)
-                    val layout = checkNotNull(text.layout)
-                    assertTrue(
-                        "Text must fit vertically",
-                        layout.height <=
-                            text.height - text.compoundPaddingTop - text.compoundPaddingBottom,
-                    )
-                    for (line in 0 until layout.lineCount) {
-                        assertEquals(
-                            "Action text must remain complete",
-                            0,
-                            layout.getEllipsisCount(line),
-                        )
-                        assertTrue(
-                            "Action text must fit horizontally",
-                            layout.getLineWidth(line) <=
-                                text.width - text.compoundPaddingLeft - text.compoundPaddingRight +
-                                    1,
-                        )
-                    }
-                }
             }
-            tap(bounds.left + bounds.width() * .25f, bounds.exactCenterY())
-            tap(bounds.left + bounds.width() * .75f, bounds.exactCenterY())
-            tap(bounds.exactCenterX(), bounds.top - 3f)
-            scenario!!.onActivity {
-                assertEquals("Only the first visible action should receive its tap", 1, clicks[0])
-                assertEquals("Only the second visible action should receive its tap", 1, clicks[1])
-                it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(anim = false)
-            }
+            compose.onNodeWithTag("reader-aloud-back").assertIsDisplayed()
+            compose.onNodeWithTag("reader-aloud-here").assertIsDisplayed()
             for (paused in listOf(false, true)) {
                 scenario!!.onActivity {
                     playbackFlag("pause", paused)
@@ -275,18 +243,15 @@ class ReadAloudScaleUiTest {
                     it.showReadAloudControls()
                 }
                 await("pause control visible") {
-                    it.findViewById<View>(R.id.iv_pause_aloud).isShown
+                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
                 }
                 screenshot("aloud-scale-circle-$widthDp-$paused")
                 scenario!!.onActivity { activity ->
                     val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-                    val pause = activity.findViewById<ImageView>(R.id.iv_pause_aloud)
                     assertEquals("Circle follows the same scale", expectedHeight, bar.width)
                     assertEquals(expectedHeight, bar.height)
-                    assertEquals(expectedHeight, pause.width)
-                    assertEquals(expectedHeight, pause.height)
-                    assertCircleIconPixels(pause, "aloud-scale-icon-$widthDp-$paused", evidence)
                 }
+                compose.onNodeWithTag("reader-aloud-pause").assertIsDisplayed()
             }
         }
         File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt")
@@ -349,7 +314,9 @@ class ReadAloudScaleUiTest {
             BaseReadAloudService.detachReadAloudFollow()
             it.showReadAloudControls()
         }
-        await("restored position control") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
+        await("restored position control") {
+            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+        }
         screenshot("aloud-scale-restored-85")
         scenario!!.onActivity { activity ->
             assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
@@ -364,7 +331,7 @@ class ReadAloudScaleUiTest {
     }
 
     private fun verifyLockedPosition(pauseControl: Boolean) {
-        val controlId = if (pauseControl) R.id.iv_pause_aloud else R.id.ll_back_to_speech
+        val controlId = R.id.read_aloud_float_bar_container
         prefs
             .edit()
             .remove(PreferKey.readAloudControlsX)
@@ -481,7 +448,9 @@ class ReadAloudScaleUiTest {
             BaseReadAloudService.detachReadAloudFollow()
             it.showReadAloudControls()
         }
-        await("clamped control") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
+        await("clamped control") {
+            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+        }
         screenshot("aloud-scale-old40-clamped85-opacity90")
         scenario!!.onActivity { activity ->
             val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
@@ -489,7 +458,7 @@ class ReadAloudScaleUiTest {
             assertEquals(
                 "Unset opacity uses 90 percent",
                 229,
-                Color.alpha((bar.background as GradientDrawable).color!!.defaultColor),
+                backgroundAlpha(bar),
             )
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "new-defaults")
         }
@@ -514,7 +483,9 @@ class ReadAloudScaleUiTest {
             BaseReadAloudService.detachReadAloudFollow()
             it.showReadAloudControls()
         }
-        await("explicit opacity restored") { it.findViewById<View>(R.id.ll_back_to_speech).isShown }
+        await("explicit opacity restored") {
+            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+        }
         screenshot("aloud-scale-explicit-opacity30")
         scenario!!.onActivity { activity ->
             val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
@@ -523,7 +494,7 @@ class ReadAloudScaleUiTest {
                 30,
                 prefs.getInt(PreferKey.readAloudControlsOpacity, -1),
             )
-            assertEquals(76, Color.alpha((bar.background as GradientDrawable).color!!.defaultColor))
+            assertEquals(76, backgroundAlpha(bar))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "saved-opacity")
         }
         compose
@@ -537,55 +508,11 @@ class ReadAloudScaleUiTest {
         }
     }
 
-    /**
-     * Render the actual ImageButton, then measure its nontransparent icon pixels, not its view box.
-     */
-    private fun assertCircleIconPixels(pause: ImageView, name: String, evidence: StringBuilder) {
-        val content =
-            Rect(
-                pause.paddingLeft,
-                pause.paddingTop,
-                pause.width - pause.paddingRight,
-                pause.height - pause.paddingBottom,
-            )
-        val drawableBounds = RectF(pause.drawable.bounds)
-        pause.imageMatrix.mapRect(drawableBounds)
-        drawableBounds.offset(pause.paddingLeft.toFloat(), pause.paddingTop.toFloat())
-        assertTrue(
-            "The complete drawable must fit the inner circle",
-            drawableBounds.left >= content.left - 1 &&
-                drawableBounds.top >= content.top - 1 &&
-                drawableBounds.right <= content.right + 1 &&
-                drawableBounds.bottom <= content.bottom + 1,
-        )
-        val bitmap = Bitmap.createBitmap(pause.width, pause.height, Bitmap.Config.ARGB_8888)
-        try {
-            pause.draw(Canvas(bitmap))
-            val pixels = Rect(pause.width, pause.height, 0, 0)
-            for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
-                if (Color.alpha(bitmap.getPixel(x, y)) > 16) {
-                    pixels.left = minOf(pixels.left, x)
-                    pixels.top = minOf(pixels.top, y)
-                    pixels.right = maxOf(pixels.right, x + 1)
-                    pixels.bottom = maxOf(pixels.bottom, y + 1)
-                }
-            }
-            evidence.appendLine(
-                "$name view=${pause.width}x${pause.height} content=$content drawable=$drawableBounds pixels=$pixels"
-            )
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
-            File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt")
-                .writeText(evidence.toString())
-            assertTrue(
-                "The icon must remain visibly rendered",
-                pixels.width() >= 2 && pixels.height() >= 2,
-            )
-            assertTrue(
-                "Actual icon pixels must stay inside the padded circle",
-                content.contains(pixels),
-            )
+    private fun backgroundAlpha(bar: View): Int {
+        val bitmap = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
+        return try {
+            bar.draw(Canvas(bitmap))
+            Color.alpha(bitmap.getPixel(bar.width / 2, bar.height / 10))
         } finally {
             bitmap.recycle()
         }

@@ -9,10 +9,11 @@ class ReadAloudBackToSpeechActionTest {
 
     @Test
     fun `floating bar owns back to speaking position control`() {
-        val floatingBar = readProjectFile("src/main/res/layout/view_read_aloud_float_bar.xml")
+        val floatingBar =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadAloudControlsScreen.kt")
 
-        assertTrue(floatingBar.contains("@+id/ll_back_to_speech"))
-        assertTrue(floatingBar.contains("@string/back_to_speaking_position"))
+        assertTrue(floatingBar.contains("reader-aloud-back"))
+        assertTrue(floatingBar.contains("R.string.back_to_speaking_position"))
     }
 
     @Test
@@ -29,7 +30,7 @@ class ReadAloudBackToSpeechActionTest {
         val activityKt =
             readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
 
-        assertTrue(activityKt.contains("llBackToSpeech.setOnClickListener"))
+        assertTrue(activityKt.contains("::backToSpeakingPosition"))
         assertTrue(activityKt.contains("override fun backToSpeakingPosition()"))
         assertTrue(activityKt.contains("ReadAloud.restoreReadAloudFollow()"))
     }

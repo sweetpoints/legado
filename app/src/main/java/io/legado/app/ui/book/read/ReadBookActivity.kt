@@ -317,7 +317,14 @@ class ReadBookActivity :
     private var bookChanged = false
     private var pageChanged = false
     private val aloudControls by lazy {
-        ReadAloudControls(binding.readAloudFloatBarContainer) { updateReadAloudFloatBar() }
+        ReadAloudControls(
+            binding.readAloudFloatBarContainer,
+            { if (BaseReadAloudService.pause) ReadAloud.resume(this) else ReadAloud.pause(this) },
+            ::backToSpeakingPosition,
+            { ReadBook.readAloud() },
+        ) {
+            updateReadAloudFloatBar()
+        }
     }
     private val restoreAloudFollowRunnable = Runnable { restoreAloudFollowOnVisiblePage() }
     /** 最近一次朗读进度的章内字符位置; 供"回到朗读位置"在同章内即时跳转 */
@@ -383,15 +390,6 @@ class ReadBookActivity :
         binding.cursorRight.setColorFilter(accentColor)
         binding.cursorLeft.setOnTouchListener(this)
         binding.cursorRight.setOnTouchListener(this)
-        binding.readAloudFloatBarContainer.ivPauseAloud.setOnClickListener {
-            if (BaseReadAloudService.pause) ReadAloud.resume(this) else ReadAloud.pause(this)
-        }
-        binding.readAloudFloatBarContainer.llBackToSpeech.setOnClickListener {
-            backToSpeakingPosition()
-        }
-        binding.readAloudFloatBarContainer.llReadFromHere.setOnClickListener {
-            ReadBook.readAloud()
-        }
         window.setBackgroundDrawable(null)
         upScreenTimeOut()
         ReadBook.register(this)

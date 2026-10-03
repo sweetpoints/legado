@@ -50,8 +50,11 @@
         android:background="@color/background_menu"
         android:layout_gravity="bottom" />
 
-    <include
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/read_aloud_float_bar_container"
-        layout="@layout/view_read_aloud_float_bar" />
+        android:layout_width="288dp"
+        android:layout_height="48dp"
+        android:elevation="6dp"
+        android:visibility="gone" />
 
 </FrameLayout>
