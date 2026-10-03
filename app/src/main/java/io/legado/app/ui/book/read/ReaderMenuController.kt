@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.toColorInt
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
@@ -37,6 +39,9 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Reader-owned menu state and actions; the host composes Content directly. */
 class ReaderMenuController(
@@ -65,6 +70,7 @@ class ReaderMenuController(
     private var isMenuOutAnimating = false
     private val handler = buildMainHandler()
     private var animationComplete: Runnable? = null
+    private var disposed = false
     private val immersiveMenu
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
 
@@ -315,13 +321,28 @@ class ReaderMenuController(
 
     private fun customButton(longPress: Boolean) {
         val book = ReadBook.book ?: return
-        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
-        activity.let { owner ->
+        val source = ReadBook.bookSource
+        val bookUrl = book.bookUrl
+        val chapterIndex = ReadBook.durChapterIndex
+        activity.lifecycleScope.launch {
+            val chapter =
+                withContext(IO) {
+                    appDb.bookChapterDao.getChapter(bookUrl, chapterIndex)
+                }
+            if (
+                disposed ||
+                    activity.isFinishing ||
+                    !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+                    ReadBook.book !== book ||
+                    ReadBook.bookSource !== source ||
+                    ReadBook.durChapterIndex != chapterIndex
+            )
+                return@launch
             SourceCallBack.callBackBtn(
-                owner,
+                activity,
                 if (longPress) SourceCallBack.LONG_CLICK_CUSTOM_BUTTON
                 else SourceCallBack.CLICK_CUSTOM_BUTTON,
-                ReadBook.bookSource,
+                source,
                 book,
                 chapter,
                 BookType.text,
@@ -330,6 +351,7 @@ class ReaderMenuController(
     }
 
     fun dispose() {
+        disposed = true
         animationComplete?.let(handler::removeCallbacks)
         animationComplete = null
         contentObserver?.let(context.contentResolver::unregisterContentObserver)

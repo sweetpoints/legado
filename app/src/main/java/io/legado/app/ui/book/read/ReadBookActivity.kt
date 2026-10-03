@@ -31,6 +31,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.size
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.script.rhino.runScriptWithContext
@@ -1402,10 +1403,17 @@ class ReadBookActivity :
     }
 
     private fun disableHighlightRule(ruleId: Long) {
-        val rule =
-            ReadBook.highlightRules.firstOrNull { it.id == ruleId }?.copy(isEnabled = false)
-                ?: return
-        Coroutine.async(lifecycleScope) { appDb.highlightRuleDao.update(rule) }
+        val expectedUuid = ReadBook.highlightRules.firstOrNull { it.id == ruleId }?.uuid ?: return
+        Coroutine.async(lifecycleScope) {
+                appDb.withTransaction {
+                    val current = appDb.highlightRuleDao.findById(ruleId)
+                    if (current?.uuid == expectedUuid) {
+                        // Patch only enablement on the latest row; concurrent style edits stay
+                        // intact.
+                        appDb.highlightRuleDao.update(current.copy(isEnabled = false))
+                    }
+                }
+            }
             .onFinally { ReadBook.upHighlightRules() }
     }
 
