@@ -6,15 +6,27 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import io.legado.app.model.analyzeRule.*
 import java.util.regex.Pattern
-import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 
-internal data class CodeSyntaxColors(val legado: Color, val json: Color, val escapedNewline: Color,
-    val operation: Color, val javascript: Color)
+internal data class CodeSyntaxColors(
+    val legado: Color,
+    val json: Color,
+    val escapedNewline: Color,
+    val operation: Color,
+    val javascript: Color,
+)
+
 /** Pure UTF-16 projection preserves every offset used by editing, search and Activity results. */
 internal suspend fun projectCodeSyntax(text: String, colors: CodeSyntaxColors): AnnotatedString {
-    val rules: List<Pair<Pattern, Color>> = listOf(legadoPattern to colors.legado, jsonPattern to colors.json,
-        wrapPattern to colors.escapedNewline, operationPattern to colors.operation, jsPattern to colors.javascript)
+    val rules: List<Pair<Pattern, Color>> =
+        listOf(
+            legadoPattern to colors.legado,
+            jsonPattern to colors.json,
+            wrapPattern to colors.escapedNewline,
+            operationPattern to colors.operation,
+            jsPattern to colors.javascript,
+        )
     val jobContext = coroutineContext
     return buildAnnotatedString {
         append(text)

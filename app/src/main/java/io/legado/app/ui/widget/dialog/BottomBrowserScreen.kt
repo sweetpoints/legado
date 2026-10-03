@@ -12,7 +12,7 @@ internal fun BottomBrowserScreen(
     fullscreen: Boolean,
     page: @Composable () -> Unit,
     video: @Composable () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize().testTag("bottom-browser")) {
         page()

@@ -16,7 +16,8 @@ import org.junit.Test
 class WaitDialogComposeTest {
     @get:Rule val compose = createEmptyComposeRule()
 
-    @Test fun textChangesBeforeAndAfterShowRetainTheFluentApi() {
+    @Test
+    fun textChangesBeforeAndAfterShowRetainTheFluentApi() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
             lateinit var dialog: WaitDialog
             scenario.onActivity {
@@ -38,7 +39,8 @@ class WaitDialogComposeTest {
         }
     }
 
-    @Test fun dismissDestroysTheOldLifecycleAndTheSameDialogCanBeShownAgain() {
+    @Test
+    fun dismissDestroysTheOldLifecycleAndTheSameDialogCanBeShownAgain() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
             lateinit var dialog: WaitDialog
             lateinit var previousLifecycle: Lifecycle

@@ -8,22 +8,35 @@ import org.junit.Test
 
 /** Replaces XML assertions with editable draft and delivery behavior. */
 class VariableDialogLayoutTest {
-    @Test fun constructorParametersInitializeAnImmediateDraft() {
-        val model = VariableViewModel(SavedStateHandle(mapOf("title" to "title", "key" to "key", "variable" to "before", "comment" to "help")))
+    @Test
+    fun constructorParametersInitializeAnImmediateDraft() {
+        val model =
+            VariableViewModel(
+                SavedStateHandle(
+                    mapOf(
+                        "title" to "title",
+                        "key" to "key",
+                        "variable" to "before",
+                        "comment" to "help",
+                    )
+                )
+            )
         assertEquals("title", model.state.value.title)
         assertEquals("key", model.state.value.key)
         assertEquals("before", model.state.value.input)
         assertEquals("help", model.state.value.comment)
     }
 
-    @Test fun nullInputDisplaysAndSavesEmptyTextLikeThePreviousEditText() {
+    @Test
+    fun nullInputDisplaysAndSavesEmptyTextLikeThePreviousEditText() {
         val model = VariableViewModel(SavedStateHandle(mapOf("key" to "key", "variable" to null)))
         assertEquals("", model.state.value.input)
         model.requestSave()
         assertEquals(VariableResult("key", ""), model.consumeSave())
     }
 
-    @Test fun multilineDraftSurvivesRecreationWithoutNormalizingWhitespace() {
+    @Test
+    fun multilineDraftSurvivesRecreationWithoutNormalizingWhitespace() {
         val handle = SavedStateHandle(mapOf("variable" to "before", "key" to "source"))
         val model = VariableViewModel(handle)
         model.setInput("  first\nsecond\n ")
@@ -34,14 +47,16 @@ class VariableDialogLayoutTest {
         assertEquals(VariableResult("source", "  first\nsecond\n "), restored.consumeSave())
     }
 
-    @Test fun clearingTheDraftDoesNotRestoreTheOriginalText() {
+    @Test
+    fun clearingTheDraftDoesNotRestoreTheOriginalText() {
         val handle = SavedStateHandle(mapOf("variable" to "before"))
         VariableViewModel(handle).setInput("")
         val restored = VariableViewModel(copy(handle))
         assertEquals("", restored.state.value.input)
     }
 
-    @Test fun onlySaveProducesAResultAndItCannotBeDeliveredTwice() {
+    @Test
+    fun onlySaveProducesAResultAndItCannotBeDeliveredTwice() {
         val model = VariableViewModel(SavedStateHandle(mapOf("key" to "key")))
         model.setInput("typed")
         assertNull(model.consumeSave())
@@ -54,7 +69,8 @@ class VariableDialogLayoutTest {
         assertNull(model.consumeSave())
     }
 
-    @Test fun cancelledDraftNeverRequestsSaveIncludingAcrossRecreation() {
+    @Test
+    fun cancelledDraftNeverRequestsSaveIncludingAcrossRecreation() {
         val handle = SavedStateHandle()
         val model = VariableViewModel(handle)
         model.setInput("unsaved")
@@ -66,7 +82,8 @@ class VariableDialogLayoutTest {
         assertNull(restored.consumeSave())
     }
 
-    @Test fun restoredConsumedSaveStaysFinishedWithoutAnotherResult() {
+    @Test
+    fun restoredConsumedSaveStaysFinishedWithoutAnotherResult() {
         val handle = SavedStateHandle(mapOf("key" to "source", "variable" to "value"))
         val original = VariableViewModel(handle)
         original.requestSave()
@@ -77,7 +94,8 @@ class VariableDialogLayoutTest {
         assertNull(restored.consumeSave())
     }
 
-    @Test fun pendingSaveIsRestoredAndCancellationCanDiscardIt() {
+    @Test
+    fun pendingSaveIsRestoredAndCancellationCanDiscardIt() {
         val handle = SavedStateHandle(mapOf("key" to "key", "variable" to "value"))
         val model = VariableViewModel(handle)
         model.requestSave()
@@ -88,5 +106,6 @@ class VariableDialogLayoutTest {
         assertNull(cancelled.consumeSave())
     }
 
-    private fun copy(handle: SavedStateHandle) = SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
+    private fun copy(handle: SavedStateHandle) =
+        SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
 }

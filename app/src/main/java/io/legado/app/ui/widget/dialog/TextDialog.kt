@@ -19,36 +19,111 @@ import io.legado.app.utils.startActivity
 import splitties.init.appCtx
 
 class TextDialog() : BaseComposeDialogFragment() {
-    enum class Mode { MD, HTML, TEXT }
-    constructor(title: String, content: String?, mode: Mode = Mode.TEXT, time: Long = 0, autoClose: Boolean = false, showToc: Boolean = false) : this() {
-        arguments = Bundle().apply {
-            putString("requestId", FileTextDialogRequestRepository.stage(appCtx, TextDialogRequest(title, content.orEmpty(), mode.name, time, autoClose, showToc && mode == Mode.MD)))
-        }
+    enum class Mode {
+        MD,
+        HTML,
+        TEXT,
+    }
+
+    constructor(
+        title: String,
+        content: String?,
+        mode: Mode = Mode.TEXT,
+        time: Long = 0,
+        autoClose: Boolean = false,
+        showToc: Boolean = false,
+    ) : this() {
+        arguments =
+            Bundle().apply {
+                putString(
+                    "requestId",
+                    FileTextDialogRequestRepository.stage(
+                        appCtx,
+                        TextDialogRequest(
+                            title,
+                            content.orEmpty(),
+                            mode.name,
+                            time,
+                            autoClose,
+                            showToc && mode == Mode.MD,
+                        ),
+                    ),
+                )
+            }
         isCancelable = false
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val legacy = arguments
         if (legacy != null && !legacy.containsKey("requestId")) {
             val help = legacy.getBoolean("showToc")
-            val content = if (help) legacy.getString("content").orEmpty() else IntentData.get<String>(legacy.getString("content")).orEmpty()
-            arguments = Bundle().apply { putString("requestId", FileTextDialogRequestRepository.stage(appCtx,
-                TextDialogRequest(legacy.getString("title").orEmpty(), content, legacy.getString("mode") ?: Mode.TEXT.name,
-                    legacy.getLong("time"), legacy.getBoolean("autoClose"), help))) }
+            val content =
+                if (help) legacy.getString("content").orEmpty()
+                else IntentData.get<String>(legacy.getString("content")).orEmpty()
+            arguments =
+                Bundle().apply {
+                    putString(
+                        "requestId",
+                        FileTextDialogRequestRepository.stage(
+                            appCtx,
+                            TextDialogRequest(
+                                legacy.getString("title").orEmpty(),
+                                content,
+                                legacy.getString("mode") ?: Mode.TEXT.name,
+                                legacy.getLong("time"),
+                                legacy.getBoolean("autoClose"),
+                                help,
+                            ),
+                        ),
+                    )
+                }
         }
     }
-    private val model by viewModels<TextDialogViewModel> {
-        viewModelFactory { initializer { TextDialogViewModel(FileTextDialogRequestRepository(requireContext()), createSavedStateHandle(), requireArguments().getString("requestId")!!) } }
-    }
+
+    private val model by
+        viewModels<TextDialogViewModel> {
+            viewModelFactory {
+                initializer {
+                    TextDialogViewModel(
+                        FileTextDialogRequestRepository(requireContext()),
+                        createSavedStateHandle(),
+                        requireArguments().getString("requestId")!!,
+                    )
+                }
+            }
+        }
     private val images by lazy { GlideMarkdownImageRepository(requireContext()) }
-    override fun onStart() { super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .9f) }
-    @Composable override fun Content() {
-        TextDialogRoute(model, images, { isAdded && !parentFragmentManager.isStateSaved }, { requireContext().openUrl(it) },
-            { showDialogFragment(PhotoDialog(it)) }, ::openEditor, ::dismissAllowingStateLoss, { isCancelable = it })
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .9f)
     }
+
+    @Composable
+    override fun Content() {
+        TextDialogRoute(
+            model,
+            images,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            { requireContext().openUrl(it) },
+            { showDialogFragment(PhotoDialog(it)) },
+            ::openEditor,
+            ::dismissAllowingStateLoss,
+            { isCancelable = it },
+        )
+    }
+
     private fun openEditor(request: TextDialogRequest) {
-        val key = "code_text_${System.nanoTime()}"; CacheManager.putMemory(key, request.content)
-        startActivity<CodeEditActivity> { putExtra("cacheKey", key); putExtra("title", request.title)
-            putExtra("languageName", if (request.mode == Mode.MD.name) "text.html.markdown" else "text.html.basic") }
+        val key = "code_text_${System.nanoTime()}"
+        CacheManager.putMemory(key, request.content)
+        startActivity<CodeEditActivity> {
+            putExtra("cacheKey", key)
+            putExtra("title", request.title)
+            putExtra(
+                "languageName",
+                if (request.mode == Mode.MD.name) "text.html.markdown" else "text.html.basic",
+            )
+        }
     }
 }

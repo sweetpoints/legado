@@ -31,67 +31,107 @@ import org.junit.Test
 class VariableScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun multilineInputAndSaveEmitCallbacks() {
+    @Test
+    fun multilineInputAndSaveEmitCallbacks() {
         var input: String? = null
         var saves = 0
-        compose.setContent { LegadoComposeTheme { VariableScreen(VariableUiState(title = "Variable title", input = "before"), { input = it }, { saves++ }, {}) } }
+        compose.setContent {
+            LegadoComposeTheme {
+                VariableScreen(
+                    VariableUiState(title = "Variable title", input = "before"),
+                    { input = it },
+                    { saves++ },
+                    {},
+                )
+            }
+        }
         compose.onNodeWithText("Variable title").assertExists()
-        compose.onNodeWithTag("variable-input").performScrollTo().performTextReplacement("first\nsecond")
+        compose
+            .onNodeWithTag("variable-input")
+            .performScrollTo()
+            .performTextReplacement("first\nsecond")
         compose.onNodeWithTag("variable-save").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals("first\nsecond", input); assertEquals(1, saves) }
+        compose.runOnIdle {
+            assertEquals("first\nsecond", input)
+            assertEquals(1, saves)
+        }
     }
 
-    @Test fun cardTapDoesNotCloseButBackgroundTapDoes() {
+    @Test
+    fun cardTapDoesNotCloseButBackgroundTapDoes() {
         var closes = 0
-        compose.setContent { LegadoComposeTheme { VariableScreen(VariableUiState(), {}, {}, { closes++ }) } }
+        compose.setContent {
+            LegadoComposeTheme { VariableScreen(VariableUiState(), {}, {}, { closes++ }) }
+        }
         compose.onNodeWithTag("variable-card").performClick()
         compose.runOnIdle { assertEquals(0, closes) }
         compose.onNodeWithTag("variable-backdrop").performClick()
         compose.runOnIdle { assertEquals(1, closes) }
     }
 
-    @Test fun commentTextCanBeSelectedAndCopiedWithoutClosingTheCard() {
+    @Test
+    fun commentTextCanBeSelectedAndCopiedWithoutClosingTheCard() {
         val toolbar = CaptureToolbar()
         var closes = 0
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         compose.setContent {
             CompositionLocalProvider(LocalTextToolbar provides toolbar) {
-                LegadoComposeTheme { VariableScreen(VariableUiState(comment = "copyable"), {}, {}, { closes++ }) }
+                LegadoComposeTheme {
+                    VariableScreen(VariableUiState(comment = "copyable"), {}, {}, { closes++ })
+                }
             }
         }
-        compose.runOnIdle { clipboard.setPrimaryClip(ClipData.newPlainText("compose-test", "baseline")) }
-        compose.onNodeWithTag("variable-comment").performScrollTo().performTouchInput { longClick(center) }
+        compose.runOnIdle {
+            clipboard.setPrimaryClip(ClipData.newPlainText("compose-test", "baseline"))
+        }
+        compose.onNodeWithTag("variable-comment").performScrollTo().performTouchInput {
+            longClick(center)
+        }
         compose.waitUntil { toolbar.copy != null }
         compose.runOnIdle { toolbar.copy?.invoke() }
         compose.waitUntil { clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "copyable" }
         compose.runOnIdle { assertEquals(0, closes) }
     }
 
-    @Test fun routeDeliversSavedDraftOnceAndCloses() {
+    @Test
+    fun routeDeliversSavedDraftOnceAndCloses() {
         val results = mutableListOf<VariableResult>()
         var closes = 0
         lateinit var model: VariableViewModel
         compose.runOnIdle { model = VariableViewModel(SavedStateHandle(mapOf("key" to "source"))) }
-        compose.setContent { LegadoComposeTheme { VariableRoute(model, { results += it }, { closes++ }) } }
+        compose.setContent {
+            LegadoComposeTheme { VariableRoute(model, { results += it }, { closes++ }) }
+        }
         compose.onNodeWithTag("variable-input").performTextReplacement("new value")
         compose.onNodeWithTag("variable-save").performClick()
         compose.waitUntil { results.size == 1 }
-        compose.runOnIdle { model.requestSave(); assertEquals(listOf(VariableResult("source", "new value")), results); assertEquals(1, closes) }
+        compose.runOnIdle {
+            model.requestSave()
+            assertEquals(listOf(VariableResult("source", "new value")), results)
+            assertEquals(1, closes)
+        }
     }
 
-    @Test fun backgroundCancellationDoesNotDeliverUnsavedDraft() {
+    @Test
+    fun backgroundCancellationDoesNotDeliverUnsavedDraft() {
         val results = mutableListOf<VariableResult>()
         var closes = 0
         lateinit var model: VariableViewModel
         compose.runOnIdle { model = VariableViewModel(SavedStateHandle()) }
-        compose.setContent { LegadoComposeTheme { VariableRoute(model, { results += it }, { closes++ }) } }
+        compose.setContent {
+            LegadoComposeTheme { VariableRoute(model, { results += it }, { closes++ }) }
+        }
         compose.onNodeWithTag("variable-input").performTextReplacement("unsaved")
         compose.onNodeWithTag("variable-backdrop").performClick()
-        compose.runOnIdle { assertEquals(1, closes); assertTrue(results.isEmpty()) }
+        compose.runOnIdle {
+            assertEquals(1, closes)
+            assertTrue(results.isEmpty())
+        }
     }
 
-    @Test fun restoredFinishedDialogClosesWithoutRepeatingSaveCallback() {
+    @Test
+    fun restoredFinishedDialogClosesWithoutRepeatingSaveCallback() {
         var saves = 0
         var closes = 0
         lateinit var restored: VariableViewModel
@@ -100,14 +140,23 @@ class VariableScreenTest {
             val original = VariableViewModel(handle)
             original.requestSave()
             original.consumeSave()
-            restored = VariableViewModel(SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+            restored =
+                VariableViewModel(
+                    SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
+                )
         }
-        compose.setContent { LegadoComposeTheme { VariableRoute(restored, { saves++ }, { closes++ }) } }
+        compose.setContent {
+            LegadoComposeTheme { VariableRoute(restored, { saves++ }, { closes++ }) }
+        }
         compose.waitUntil { closes == 1 }
-        compose.runOnIdle { assertEquals(0, saves); assertEquals(1, closes) }
+        compose.runOnIdle {
+            assertEquals(0, saves)
+            assertEquals(1, closes)
+        }
     }
 
-    @Test fun constructorKeepsNullVariableAndExactParameters() {
+    @Test
+    fun constructorKeepsNullVariableAndExactParameters() {
         val dialog = VariableDialog("title", "key", null, "comment")
         assertEquals("title", dialog.arguments?.getString("title"))
         assertEquals("key", dialog.arguments?.getString("key"))
@@ -118,9 +167,18 @@ class VariableScreenTest {
     private class CaptureToolbar : TextToolbar {
         var copy: (() -> Unit)? = null
         override var status = TextToolbarStatus.Hidden
-        override fun hide() { status = TextToolbarStatus.Hidden }
-        override fun showMenu(rect: Rect, onCopyRequested: (() -> Unit)?, onPasteRequested: (() -> Unit)?,
-            onCutRequested: (() -> Unit)?, onSelectAllRequested: (() -> Unit)?) {
+
+        override fun hide() {
+            status = TextToolbarStatus.Hidden
+        }
+
+        override fun showMenu(
+            rect: Rect,
+            onCopyRequested: (() -> Unit)?,
+            onPasteRequested: (() -> Unit)?,
+            onCutRequested: (() -> Unit)?,
+            onSelectAllRequested: (() -> Unit)?,
+        ) {
             copy = onCopyRequested
             status = TextToolbarStatus.Shown
         }

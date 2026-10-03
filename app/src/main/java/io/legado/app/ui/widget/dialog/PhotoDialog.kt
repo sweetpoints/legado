@@ -15,11 +15,12 @@ import io.legado.app.utils.setLayout
 /** Fullscreen Compose image viewer, including restored src/sourceOrigin/isBook arguments. */
 class PhotoDialog() : BaseComposeDialogFragment() {
     constructor(src: String, sourceOrigin: String? = null, isBook: Boolean = false) : this() {
-        arguments = Bundle().apply {
-            putString("src", src)
-            putString("sourceOrigin", sourceOrigin)
-            putBoolean("isBook", isBook)
-        }
+        arguments =
+            Bundle().apply {
+                putString("src", src)
+                putString("sourceOrigin", sourceOrigin)
+                putBoolean("isBook", isBook)
+            }
     }
 
     override fun onStart() {
@@ -34,10 +35,14 @@ class PhotoDialog() : BaseComposeDialogFragment() {
     @Composable
     override fun Content() {
         val loader = remember { GlidePhotoImageLoader(requireContext()) }
-        val request = remember(arguments) {
-            PhotoRequest(arguments?.getString("src").orEmpty(), arguments?.getString("sourceOrigin"),
-                arguments?.getBoolean("isBook") == true)
-        }
+        val request =
+            remember(arguments) {
+                PhotoRequest(
+                    arguments?.getString("src").orEmpty(),
+                    arguments?.getString("sourceOrigin"),
+                    arguments?.getBoolean("isBook") == true,
+                )
+            }
         PhotoRoute(request, loader, ::dismiss, AppConfig.isEInkMode)
     }
 }

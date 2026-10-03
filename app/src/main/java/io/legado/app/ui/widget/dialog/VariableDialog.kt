@@ -17,18 +17,21 @@ import io.legado.app.utils.setLayout
 
 class VariableDialog() : BaseComposeDialogFragment() {
     constructor(title: String, key: String, variable: String?, comment: String) : this() {
-        arguments = Bundle().apply {
-            putString("title", title)
-            putString("key", key)
-            putString("variable", variable)
-            putString("comment", comment)
-        }
+        arguments =
+            Bundle().apply {
+                putString("title", title)
+                putString("key", key)
+                putString("variable", variable)
+                putString("comment", comment)
+            }
     }
 
-    private val viewModel by viewModels<VariableViewModel> {
-        viewModelFactory { initializer { VariableViewModel(createSavedStateHandle()) } }
-    }
-    val callback get() = (parentFragment as? Callback) ?: (activity as? Callback)
+    private val viewModel by
+        viewModels<VariableViewModel> {
+            viewModelFactory { initializer { VariableViewModel(createSavedStateHandle()) } }
+        }
+    val callback
+        get() = (parentFragment as? Callback) ?: (activity as? Callback)
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         view?.setBackgroundColor(Color.TRANSPARENT)
@@ -50,9 +53,16 @@ class VariableDialog() : BaseComposeDialogFragment() {
         view?.setBackgroundColor(Color.TRANSPARENT)
     }
 
-    @Composable override fun Content() {
-        VariableRoute(viewModel, { callback?.setVariable(it.key, it.variable) }, ::dismissAllowingStateLoss)
+    @Composable
+    override fun Content() {
+        VariableRoute(
+            viewModel,
+            { callback?.setVariable(it.key, it.variable) },
+            ::dismissAllowingStateLoss,
+        )
     }
 
-    interface Callback { fun setVariable(key: String, variable: String?) }
+    interface Callback {
+        fun setVariable(key: String, variable: String?)
+    }
 }

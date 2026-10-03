@@ -1,7 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
-import io.legado.app.data.preferences.SleepTimerMode
 import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.SleepTimerMode
 import io.legado.app.data.preferences.SleepTimerPreferences
 import io.legado.app.service.MAX_CHAPTER_STOP_COUNT
 import io.legado.app.ui.widget.dialog.sleeptimer.*
@@ -10,40 +10,68 @@ import org.junit.Test
 
 /** Timer contracts exercise the real ViewModel rather than inspecting UI source or XML. */
 class SleepTimerDialogWiringTest {
-    @Test fun argumentsBoundCurrentTimersAndRetainEpisodeMode() {
-        val model = SleepTimerViewModel(FakePreferences(), SavedStateHandle(mapOf("minute" to Int.MAX_VALUE, "chapter" to Int.MAX_VALUE, "episodes" to true)))
+    @Test
+    fun argumentsBoundCurrentTimersAndRetainEpisodeMode() {
+        val model =
+            SleepTimerViewModel(
+                FakePreferences(),
+                SavedStateHandle(
+                    mapOf("minute" to Int.MAX_VALUE, "chapter" to Int.MAX_VALUE, "episodes" to true)
+                ),
+            )
         assertEquals(180, model.state.value.minute)
         assertEquals(MAX_CHAPTER_STOP_COUNT, model.state.value.chapter)
         assertTrue(model.state.value.useEpisodes)
-        val negative = SleepTimerViewModel(FakePreferences(), SavedStateHandle(mapOf("minute" to -1, "chapter" to -1)))
+        val negative =
+            SleepTimerViewModel(
+                FakePreferences(),
+                SavedStateHandle(mapOf("minute" to -1, "chapter" to -1)),
+            )
         assertFalse(negative.state.value.isActive)
     }
 
-    @Test fun everyMinutePresetSelectsExactlyItsMinutesWithoutChangingCustomHistory() {
+    @Test
+    fun everyMinutePresetSelectsExactlyItsMinutesWithoutChangingCustomHistory() {
         for (value in listOf(15, 30, 45, 60)) {
             val preferences = FakePreferences()
             val model = SleepTimerViewModel(preferences, SavedStateHandle())
             model.selectPreset(SleepTimerMode.Minutes, value)
-            assertEquals(SleepTimerSelection(SleepTimerMode.Minutes, value), model.consumeSelection())
+            assertEquals(
+                SleepTimerSelection(SleepTimerMode.Minutes, value),
+                model.consumeSelection(),
+            )
             assertEquals(listOf(false), preferences.prefer)
             assertTrue(preferences.remembered.isEmpty())
         }
     }
 
-    @Test fun everyChapterPresetSelectsExactlyItsChaptersAndRemembersMode() {
+    @Test
+    fun everyChapterPresetSelectsExactlyItsChaptersAndRemembersMode() {
         for (value in listOf(1, 2, 3, 5)) {
             val preferences = FakePreferences()
             val model = SleepTimerViewModel(preferences, SavedStateHandle())
             model.selectPreset(SleepTimerMode.Chapters, value)
-            assertEquals(SleepTimerSelection(SleepTimerMode.Chapters, value), model.consumeSelection())
+            assertEquals(
+                SleepTimerSelection(SleepTimerMode.Chapters, value),
+                model.consumeSelection(),
+            )
             assertEquals(listOf(true), preferences.prefer)
             assertTrue(preferences.remembered.isEmpty())
         }
     }
 
-    @Test fun customHistoryWinsOverCurrentValueAndReopeningDoesNotReplaceInput() {
-        val preferences = FakePreferences().apply { minutes = 90; chapters = 7 }
-        val model = SleepTimerViewModel(preferences, SavedStateHandle(mapOf("minute" to 30, "chapter" to 2)))
+    @Test
+    fun customHistoryWinsOverCurrentValueAndReopeningDoesNotReplaceInput() {
+        val preferences =
+            FakePreferences().apply {
+                minutes = 90
+                chapters = 7
+            }
+        val model =
+            SleepTimerViewModel(
+                preferences,
+                SavedStateHandle(mapOf("minute" to 30, "chapter" to 2)),
+            )
         model.showCustom(SleepTimerMode.Minutes)
         assertEquals("90", model.state.value.input)
         model.setInput("123")
@@ -53,7 +81,8 @@ class SleepTimerDialogWiringTest {
         assertEquals("7", model.state.value.input)
     }
 
-    @Test fun absentHistoryFallsBackToCurrentActiveTimerOrBlank() {
+    @Test
+    fun absentHistoryFallsBackToCurrentActiveTimerOrBlank() {
         val model = SleepTimerViewModel(FakePreferences(), SavedStateHandle(mapOf("minute" to 30)))
         model.showCustom(SleepTimerMode.Minutes)
         assertEquals("30", model.state.value.input)
@@ -61,8 +90,13 @@ class SleepTimerDialogWiringTest {
         assertEquals("", model.state.value.input)
     }
 
-    @Test fun minuteAndChapterUpperBoundsAreAcceptedAndWrittenOnlyForCustomSelection() {
-        for ((mode, value) in listOf(SleepTimerMode.Minutes to 180, SleepTimerMode.Chapters to MAX_CHAPTER_STOP_COUNT)) {
+    @Test
+    fun minuteAndChapterUpperBoundsAreAcceptedAndWrittenOnlyForCustomSelection() {
+        for ((mode, value) in
+            listOf(
+                SleepTimerMode.Minutes to 180,
+                SleepTimerMode.Chapters to MAX_CHAPTER_STOP_COUNT,
+            )) {
             val preferences = FakePreferences()
             val model = SleepTimerViewModel(preferences, SavedStateHandle())
             model.showCustom(mode)
@@ -73,8 +107,13 @@ class SleepTimerDialogWiringTest {
         }
     }
 
-    @Test fun invalidCustomInputsDoNotDeliverSaveOrSwitchPreference() {
-        for ((mode, values) in listOf(SleepTimerMode.Minutes to listOf("", "0", "181", "999"), SleepTimerMode.Chapters to listOf("", "0", "100"))) {
+    @Test
+    fun invalidCustomInputsDoNotDeliverSaveOrSwitchPreference() {
+        for ((mode, values) in
+            listOf(
+                SleepTimerMode.Minutes to listOf("", "0", "181", "999"),
+                SleepTimerMode.Chapters to listOf("", "0", "100"),
+            )) {
             for (value in values) {
                 val preferences = FakePreferences()
                 val model = SleepTimerViewModel(preferences, SavedStateHandle())
@@ -89,7 +128,8 @@ class SleepTimerDialogWiringTest {
         }
     }
 
-    @Test fun inputRejectsNonNumericAndOverlongValuesAndEditingClearsError() {
+    @Test
+    fun inputRejectsNonNumericAndOverlongValuesAndEditingClearsError() {
         val model = SleepTimerViewModel(FakePreferences(), SavedStateHandle())
         model.showCustom(SleepTimerMode.Minutes)
         model.setInput("12")
@@ -101,7 +141,8 @@ class SleepTimerDialogWiringTest {
         assertFalse(model.state.value.showValidation)
     }
 
-    @Test fun customDraftAndModeSurviveRecreationWithoutSavingPreferences() {
+    @Test
+    fun customDraftAndModeSurviveRecreationWithoutSavingPreferences() {
         val preferences = FakePreferences()
         val handle = SavedStateHandle(mapOf("episodes" to true))
         val model = SleepTimerViewModel(preferences, handle)
@@ -115,7 +156,8 @@ class SleepTimerDialogWiringTest {
         assertTrue(preferences.prefer.isEmpty())
     }
 
-    @Test fun pendingDeliverySurvivesRecreationAndIsConsumedExactlyOnce() {
+    @Test
+    fun pendingDeliverySurvivesRecreationAndIsConsumedExactlyOnce() {
         val preferences = FakePreferences()
         val handle = SavedStateHandle()
         val model = SleepTimerViewModel(preferences, handle)
@@ -132,7 +174,8 @@ class SleepTimerDialogWiringTest {
         assertEquals(listOf(true), preferences.prefer)
     }
 
-    @Test fun consumedSelectionRestoresFinishedStateWithoutPendingCallback() {
+    @Test
+    fun consumedSelectionRestoresFinishedStateWithoutPendingCallback() {
         val preferences = FakePreferences()
         val handle = SavedStateHandle()
         val model = SleepTimerViewModel(preferences, handle)
@@ -145,7 +188,8 @@ class SleepTimerDialogWiringTest {
         assertEquals(listOf(false), preferences.prefer)
     }
 
-    @Test fun turningOffSendsZeroMinutesWithoutChangingPreferredMode() {
+    @Test
+    fun turningOffSendsZeroMinutesWithoutChangingPreferredMode() {
         val preferences = FakePreferences()
         val model = SleepTimerViewModel(preferences, SavedStateHandle(mapOf("chapter" to 3)))
         model.turnOff()
@@ -156,7 +200,8 @@ class SleepTimerDialogWiringTest {
         assertNull(inactive.consumeSelection())
     }
 
-    @Test fun unknownPresetsAndTypingAloneDoNotCommit() {
+    @Test
+    fun unknownPresetsAndTypingAloneDoNotCommit() {
         val preferences = FakePreferences()
         val model = SleepTimerViewModel(preferences, SavedStateHandle())
         model.selectPreset(SleepTimerMode.Minutes, 20)
@@ -168,14 +213,24 @@ class SleepTimerDialogWiringTest {
         assertTrue(preferences.prefer.isEmpty())
     }
 
-    private fun copy(handle: SavedStateHandle) = SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
+    private fun copy(handle: SavedStateHandle) =
+        SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
+
     private class FakePreferences : SleepTimerPreferences {
         var minutes = 0
         var chapters = 0
         val prefer = mutableListOf<Boolean>()
         val remembered = mutableListOf<Pair<SleepTimerMode, Int>>()
-        override fun lastCustom(mode: SleepTimerMode) = if (mode == SleepTimerMode.Minutes) minutes else chapters
-        override fun rememberCustom(mode: SleepTimerMode, value: Int) { remembered += mode to value }
-        override fun preferChapters(chapters: Boolean) { prefer += chapters }
+
+        override fun lastCustom(mode: SleepTimerMode) =
+            if (mode == SleepTimerMode.Minutes) minutes else chapters
+
+        override fun rememberCustom(mode: SleepTimerMode, value: Int) {
+            remembered += mode to value
+        }
+
+        override fun preferChapters(chapters: Boolean) {
+            prefer += chapters
+        }
     }
 }

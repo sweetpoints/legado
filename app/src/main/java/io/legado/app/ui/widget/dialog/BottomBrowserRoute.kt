@@ -11,7 +11,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 internal fun BottomBrowserRoute(
     pageContainer: FrameLayout,
     videoContainer: FrameLayout,
-    fullscreen: Boolean
+    fullscreen: Boolean,
 ) {
     BottomBrowserScreen(
         fullscreen = fullscreen,
@@ -20,6 +20,6 @@ internal fun BottomBrowserRoute(
         },
         video = {
             AndroidView(factory = { videoContainer }, modifier = Modifier.fillMaxSize())
-        }
+        },
     )
 }

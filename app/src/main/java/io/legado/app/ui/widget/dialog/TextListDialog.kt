@@ -11,10 +11,11 @@ import io.legado.app.utils.setLayout
 @Suppress("unused")
 class TextListDialog() : BaseComposeDialogFragment() {
     constructor(title: String, values: ArrayList<String>) : this() {
-        arguments = Bundle().apply {
-            putString("title", title)
-            putStringArrayList("values", ArrayList(values))
-        }
+        arguments =
+            Bundle().apply {
+                putString("title", title)
+                putStringArrayList("values", ArrayList(values))
+            }
     }
 
     override fun onStart() {
@@ -22,11 +23,15 @@ class TextListDialog() : BaseComposeDialogFragment() {
         setLayout(0.9f, 0.9f)
     }
 
-    @Composable override fun Content() {
-        val state = remember(arguments) {
-            TextListUiState.from(arguments?.getString("title").orEmpty(),
-                arguments?.getStringArrayList("values")?.toList().orEmpty())
-        }
+    @Composable
+    override fun Content() {
+        val state =
+            remember(arguments) {
+                TextListUiState.from(
+                    arguments?.getString("title").orEmpty(),
+                    arguments?.getStringArrayList("values")?.toList().orEmpty(),
+                )
+            }
         TextListScreen(state, ::dismiss)
     }
 }

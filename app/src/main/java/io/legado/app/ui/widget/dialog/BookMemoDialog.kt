@@ -22,29 +22,81 @@ import io.legado.app.utils.setLayout
 import kotlinx.coroutines.launch
 
 class BookMemoDialog : BaseComposeDialogFragment() {
-    private val model by viewModels<BookMemoViewModel> {
-        viewModelFactory { initializer { BookMemoViewModel(RoomBookMemoRepository(requireContext()), createSavedStateHandle(), requireArguments().getString("bookUrl")!!) } }
-    }
+    private val model by
+        viewModels<BookMemoViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookMemoViewModel(
+                        RoomBookMemoRepository(requireContext()),
+                        createSavedStateHandle(),
+                        requireArguments().getString("bookUrl")!!,
+                    )
+                }
+            }
+        }
     private val images by lazy { GlideMarkdownImageRepository(requireContext()) }
     private val visibility = PaddingPanelVisibility()
+
     override fun onStart() {
-        super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .5f)
-        dialog?.window?.apply { setGravity(Gravity.BOTTOM); setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE) }
+        super.onStart()
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .5f)
+        dialog?.window?.apply {
+            setGravity(Gravity.BOTTOM)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
     }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .5f)
+        super.onConfigurationChanged(newConfig)
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .5f)
     }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
-        (activity as? ReadBookActivity)?.let { host -> visibility.acquire(object : PaddingPanelVisibility.Owner {
-            override var bottomDialog: Int get() = host.bottomDialog; set(value) { host.bottomDialog = value }
-        }) }
+        (activity as? ReadBookActivity)?.let { host ->
+            visibility.acquire(
+                object : PaddingPanelVisibility.Owner {
+                    override var bottomDialog: Int
+                        get() = host.bottomDialog
+                        set(value) {
+                            host.bottomDialog = value
+                        }
+                }
+            )
+        }
     }
-    @Composable override fun Content() {
-        BookMemoRoute(model, images, { requireContext().openUrl(it) }, { isAdded && !parentFragmentManager.isStateSaved }, ::dismissAllowingStateLoss,
-            { cancelable, outside -> isCancelable = cancelable; dialog?.setCanceledOnTouchOutside(outside) })
+
+    @Composable
+    override fun Content() {
+        BookMemoRoute(
+            model,
+            images,
+            { requireContext().openUrl(it) },
+            { isAdded && !parentFragmentManager.isStateSaved },
+            ::dismissAllowingStateLoss,
+            { cancelable, outside ->
+                isCancelable = cancelable
+                dialog?.setCanceledOnTouchOutside(outside)
+            },
+        )
     }
-    override fun onStop() { lifecycleScope.launch { model.flushDraft() }; super.onStop() }
-    override fun onDestroyView() { visibility.release(); super.onDestroyView() }
-    override fun onCancel(dialog: DialogInterface) { model.close(); super.onCancel(dialog) }
-    override fun onDismiss(dialog: DialogInterface) { visibility.release(); super.onDismiss(dialog) }
+
+    override fun onStop() {
+        lifecycleScope.launch { model.flushDraft() }
+        super.onStop()
+    }
+
+    override fun onDestroyView() {
+        visibility.release()
+        super.onDestroyView()
+    }
+
+    override fun onCancel(dialog: DialogInterface) {
+        model.close()
+        super.onCancel(dialog)
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        visibility.release()
+        super.onDismiss(dialog)
+    }
 }

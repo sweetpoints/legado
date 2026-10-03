@@ -25,12 +25,16 @@ class WaitDialog(context: Context) : ComponentDialog(context) {
         super.onStart()
         // ComponentDialog destroys its lifecycle on dismissal. Install a new host on each show
         // so reused WaitDialog instances compose against the new lifecycle and window owners.
-        setContentView(ComposeView(context).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                LegadoComposeTheme { WaitDialogContent(message) }
+        setContentView(
+            ComposeView(context).apply {
+                setViewCompositionStrategy(
+                    ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+                )
+                setContent {
+                    LegadoComposeTheme { WaitDialogContent(message) }
+                }
             }
-        })
+        )
     }
 
     fun setText(text: String): WaitDialog {

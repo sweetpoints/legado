@@ -22,13 +22,23 @@ import io.legado.app.utils.setLayout
 class SleepTimerDialog : BaseComposeDialogFragment() {
     interface CallBack {
         fun onSleepTimerMinute(minute: Int)
+
         fun onSleepTimerChapter(count: Int)
     }
 
-    private val viewModel by viewModels<SleepTimerViewModel> {
-        viewModelFactory { initializer { SleepTimerViewModel(AppSleepTimerPreferences(requireContext()), createSavedStateHandle()) } }
-    }
-    private val callBack get() = (parentFragment as? CallBack) ?: (activity as? CallBack)
+    private val viewModel by
+        viewModels<SleepTimerViewModel> {
+            viewModelFactory {
+                initializer {
+                    SleepTimerViewModel(
+                        AppSleepTimerPreferences(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    private val callBack
+        get() = (parentFragment as? CallBack) ?: (activity as? CallBack)
 
     override fun onStart() {
         super.onStart()
@@ -36,22 +46,30 @@ class SleepTimerDialog : BaseComposeDialogFragment() {
         dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
-    @Composable override fun Content() {
-        SleepTimerRoute(viewModel, { selection ->
-            when (selection.mode) {
-                SleepTimerMode.Minutes -> callBack?.onSleepTimerMinute(selection.value)
-                SleepTimerMode.Chapters -> callBack?.onSleepTimerChapter(selection.value)
-            }
-        }, ::dismissAllowingStateLoss, Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
+    @Composable
+    override fun Content() {
+        SleepTimerRoute(
+            viewModel,
+            { selection ->
+                when (selection.mode) {
+                    SleepTimerMode.Minutes -> callBack?.onSleepTimerMinute(selection.value)
+                    SleepTimerMode.Chapters -> callBack?.onSleepTimerChapter(selection.value)
+                }
+            },
+            ::dismissAllowingStateLoss,
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f),
+        )
     }
 
     companion object {
-        fun newInstance(minute: Int, chapter: Int, useEpisodes: Boolean = false) = SleepTimerDialog().apply {
-            arguments = Bundle().apply {
-                putInt("minute", minute)
-                putInt("chapter", chapter)
-                putBoolean("episodes", useEpisodes)
+        fun newInstance(minute: Int, chapter: Int, useEpisodes: Boolean = false) =
+            SleepTimerDialog().apply {
+                arguments =
+                    Bundle().apply {
+                        putInt("minute", minute)
+                        putInt("chapter", chapter)
+                        putBoolean("episodes", useEpisodes)
+                    }
             }
-        }
     }
 }
