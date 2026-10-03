@@ -1,13 +1,13 @@
 package io.legado.app.lib.dialogs
 
 import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.closeSoftKeyboard
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.test.pressBack
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.espresso.Espresso.pressBack
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.utils.getClipText
 import org.junit.Assert.assertEquals
@@ -50,8 +50,8 @@ class SourceSharePassphraseComposeDialogTest {
                 dialog.show()
             }
 
-            compose.onNodeWithTag("source-share-passphrase-input").closeSoftKeyboard()
-            compose.pressBack()
+            closeSoftKeyboard()
+            pressBack()
 
             scenario.onActivity { assertFalse(dialog.isShowing) }
         }
