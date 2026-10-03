@@ -1,9 +1,9 @@
 package io.legado.app.ui.menu
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ManagePopupActionMigrationTest {
 
@@ -11,72 +11,78 @@ class ManagePopupActionMigrationTest {
     fun `shared popup adds vertical danger styling without losing existing behavior`() {
         val popup = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupAction.kt")
         val builder = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionMenu.kt")
-        val row = readProjectFile("src/main/res/layout/item_popup_action.xml")
+        val content = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionContent.kt")
+        listOf(
+                "applyMd3PopupStyle()",
+                "resolveDropDownYOffset(",
+                "PopupActionOwner()",
+                "setViewTreeLifecycleOwner(owner)",
+                "setViewTreeSavedStateRegistryOwner(owner)",
+                "setParentCompositionContext(recomposer)",
+                "view.disposeComposition()",
+                "fun setActionItems(items: List<PopupActionItem>)",
+                "fun setDangerValues(values: Set<String>)",
+                "fun setDisabledValues(values: Set<String>)",
+            )
+            .forEach { expected -> assertContains("PopupAction.kt", popup, expected) }
+        listOf(
+                "items.any { it.icon != null }",
+                "items.any { it.checkable || it.checked }",
+                "widthIn(min = 112.dp, max = 280.dp)",
+                "width(IntrinsicSize.Max)",
+                "FlowRow(",
+                "heightIn(min = 48.dp)",
+                "Role.Checkbox",
+                "Modifier.toggleable(",
+                "item.enabled && item.value !in disabledValues",
+                "colors.disabled",
+                "colors.danger",
+                "Key.Escape",
+                "focus.moveFocus(direction)",
+            )
+            .forEach { expected -> assertContains("PopupActionContent.kt", content, expected) }
+        assertFalse(popup.contains("RecyclerAdapter"))
+        assertFalse(popup.contains("PopupActionBinding"))
+        assertFalse(content.contains("AndroidView"))
 
         listOf(
-            "applyMd3PopupStyle()",
-            "resolveDropDownYOffset(",
-            "LinearLayoutManager(context)",
-            "private var actionItems: List<PopupActionItem> = emptyList()",
-            "items.any { it.icon != null }",
-            "items.any { it.checkable }",
-            "textView.measuredWidth",
-            "textView.minHeight = 48.dpToPx()",
-            "textView.setPadding(5.dpToPx(), 5.dpToPx(), 5.dpToPx(), 5.dpToPx())",
-            "val enabled = isItemEnabled(item)",
-            "item.enabled && item.value !in disabledValues",
-            "context.secondaryDisabledTextColor",
-            "info.isCheckable = item.checkable",
-            "AccessibilityNodeInfoCompat.CHECKED_STATE_TRUE",
-            "AccessibilityNodeInfoCompat.CHECKED_STATE_FALSE",
-            "imageView.visibility = View.INVISIBLE",
-            "takeIf(::isItemEnabled)"
-        ).forEach { expected -> assertContains("PopupAction.kt", popup, expected) }
-        listOf(
-            "@+id/iv_icon",
-            "@+id/text_view",
-            "@+id/iv_check_end",
-            "android:duplicateParentState=\"true\""
-        ).forEach { expected -> assertContains("item_popup_action.xml", row, expected) }
-        assertFalse(row.contains("app:tint="))
-
-        listOf(
-            "setVertical(true)",
-            "setDangerValues(dangerValues)",
-            "dismiss()",
-            "showAsDropDown(anchor, 0, 4.dpToPx())"
-        ).forEach { expected -> assertContains("PopupActionMenu.kt", builder, expected) }
+                "setVertical(true)",
+                "setDangerValues(dangerValues)",
+                "dismiss()",
+                "showAsDropDown(anchor, 0, 4.dpToPx())",
+            )
+            .forEach { expected -> assertContains("PopupActionMenu.kt", builder, expected) }
     }
 
     @Test
     fun `toolbar overflow uses exact items and keeps native fallbacks`() {
-        val bridge = readProjectFile(
-            "src/main/java/io/legado/app/utils/ToolbarOverflowMenuExtensions.kt"
-        )
+        val bridge =
+            readProjectFile("src/main/java/io/legado/app/utils/ToolbarOverflowMenuExtensions.kt")
 
         listOf(
-            "getTag(R.id.toolbar_overflow_menu_state) as? OverflowMenuState",
-            "setTag(R.id.toolbar_overflow_menu_state, newState)",
-            "addOnLayoutChangeListener",
-            "onPrepareMenu(menu)",
-            "onOpenCustomMenu(menu)",
-            "actionItems.hasUnsupportedItems()",
-            "item.subMenu != null || item.actionView != null",
-            "showOverflowMenu()",
-            "actionItems.mapIndexed { index, item ->",
-            "value = index.toString()",
-            "icon = if (state.showIcons)",
-            "enabled = item.isEnabled",
-            "checkable = item.isCheckable",
-            "checked = item.isChecked",
-            "action.toIntOrNull()",
-            "actionItems::getOrNull",
-            "performItemAction(menuItem, 0)",
-            "params.isOverflowButton",
-            "abc_action_menu_overflow_description"
-        ).forEach { expected ->
-            assertContains("ToolbarOverflowMenuExtensions.kt", bridge, expected)
-        }
+                "getTag(R.id.toolbar_overflow_menu_state) as? OverflowMenuState",
+                "setTag(R.id.toolbar_overflow_menu_state, newState)",
+                "addOnLayoutChangeListener",
+                "onPrepareMenu(menu)",
+                "onOpenCustomMenu(menu)",
+                "actionItems.hasUnsupportedItems()",
+                "item.subMenu != null || item.actionView != null",
+                "showOverflowMenu()",
+                "actionItems.mapIndexed { index, item ->",
+                "value = index.toString()",
+                "icon = if (state.showIcons)",
+                "enabled = item.isEnabled",
+                "checkable = item.isCheckable",
+                "checked = item.isChecked",
+                "action.toIntOrNull()",
+                "actionItems::getOrNull",
+                "performItemAction(menuItem, 0)",
+                "params.isOverflowButton",
+                "abc_action_menu_overflow_description",
+            )
+            .forEach { expected ->
+                assertContains("ToolbarOverflowMenuExtensions.kt", bridge, expected)
+            }
         assertFalse(bridge.contains("WeakHashMap"))
         assertFalse(bridge.contains("setOnHierarchyChangeListener"))
         assertFalse(bridge.contains("performIdentifierAction"))
@@ -88,13 +94,14 @@ class ManagePopupActionMigrationTest {
         val fragment = readProjectFile("src/main/java/io/legado/app/base/BaseFragment.kt")
 
         listOf(
-            "if (view is Toolbar) view.installMd3OverflowMenu()",
-            "?: findViewById(R.id.titleBar)",
-            "?.installActivityOverflowMenu()",
-            "showIcons = showOpenMenuIcon",
-            "onPrepareOptionsMenu(toolbarMenu)",
-            "onMenuOpened(Window.FEATURE_OPTIONS_PANEL, toolbarMenu)"
-        ).forEach { expected -> assertContains("BaseThemedActivity.kt", activity, expected) }
+                "if (view is Toolbar) view.installMd3OverflowMenu()",
+                "?: findViewById(R.id.titleBar)",
+                "?.installActivityOverflowMenu()",
+                "showIcons = showOpenMenuIcon",
+                "onPrepareOptionsMenu(toolbarMenu)",
+                "onMenuOpened(Window.FEATURE_OPTIONS_PANEL, toolbarMenu)",
+            )
+            .forEach { expected -> assertContains("BaseThemedActivity.kt", activity, expected) }
         assertFalse(activity.contains("if (view is Toolbar) view.installActivityOverflowMenu()"))
         assertContains("BaseFragment.kt", fragment, "it.installMd3OverflowMenu()")
     }
@@ -108,5 +115,4 @@ class ManagePopupActionMigrationTest {
             .firstOrNull(File::isFile)
             ?.readText()
             .orEmpty()
-
 }

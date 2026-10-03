@@ -41,10 +41,12 @@ class SelectActionBarPopupActionMigrationTest {
 
     @Test
     fun `themed popup preserves disabled menu items`() {
-        val source = readProjectFile(POPUP_ACTION)
+        val source =
+            readProjectFile(POPUP_ACTION) +
+                readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionContent.kt")
 
         listOf(
-                "private var disabledValues: Set<String> = emptySet()",
+                "val disabledValues: Set<String> = emptySet()",
                 "fun setDisabledValues(values: Set<String>)",
                 "item.enabled && item.value !in disabledValues",
                 "context.secondaryDisabledTextColor",
