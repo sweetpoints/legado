@@ -11,8 +11,20 @@ class ReadPaddingBehaviorSourceTest {
 
     @Test
     fun `legacy detail seek bar implementation and layout are retired`() {
-        assertFalse(projectFile("src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt").exists())
-        assertFalse(projectFile("src/main/res/layout/view_detail_seek_bar.xml").exists())
+        assertFalse(
+            listOf(
+                    File("src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt"),
+                    File("app/src/main/java/io/legado/app/ui/widget/DetailSeekBar.kt"),
+                )
+                .any(File::exists)
+        )
+        assertFalse(
+            listOf(
+                    File("src/main/res/layout/view_detail_seek_bar.xml"),
+                    File("app/src/main/res/layout/view_detail_seek_bar.xml"),
+                )
+                .any(File::exists)
+        )
     }
 
     @Test
@@ -61,9 +73,4 @@ class ReadPaddingBehaviorSourceTest {
     }
 
     private fun String.normalizeLines(): String = replace("\r\n", "\n")
-
-    private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
-            ?: error("Missing project file: $pathInApp")
-    }
 }
