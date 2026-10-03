@@ -1,27 +1,25 @@
 package io.legado.app.ui.autoTask
 
-import org.junit.Assert.assertTrue
-import org.junit.Assert.assertEquals
 import io.legado.app.ui.association.jsonImportType
-import org.junit.Test
 import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class AutoTaskImportContractTest {
 
     @Test
     fun `automatic task import is routed from files and links`() {
-        val base = projectFile(
-            "src/main/java/io/legado/app/ui/association/BaseAssociationViewModel.kt"
-        )
-        val online = projectFile(
-            "src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt"
-        )
-        val file = projectFile(
-            "src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt"
-        )
+        val base =
+            projectFile("src/main/java/io/legado/app/ui/association/BaseAssociationViewModel.kt")
+        val online =
+            projectFile("src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt")
+        val file =
+            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt")
 
-        assertTrue(base.contains("map.containsKey(\"cron\") && map.containsKey(\"script\")"))
         assertEquals("autoTask", jsonImportType(mapOf("cron" to "0 * * * *", "script" to "test")))
+        assertEquals(null, jsonImportType(mapOf("cron" to "0 * * * *")))
+        assertEquals(null, jsonImportType(mapOf("script" to "test")))
         assertTrue(base.contains("successLive.postValue(type to uri.toString())"))
         assertTrue(online.contains("\"/autoTask\" -> showDialogFragment("))
         assertTrue(online.contains("\"/auto\" -> viewModel.determineType("))
@@ -40,8 +38,7 @@ class AutoTaskImportContractTest {
     @Test
     fun `automatic task import batches storage and scheduler refresh`() {
         val model = projectFile("src/main/java/io/legado/app/model/AutoTask.kt")
-        val block = model.substringAfter("fun importRules(")
-            .substringBefore("fun delete(")
+        val block = model.substringAfter("fun importRules(").substringBefore("fun delete(")
 
         assertTrue(block.contains("if (rules.isEmpty()) return emptyList()"))
         assertTrue(block.contains("prepareImportedAutoTasks(all(), rules)"))
@@ -50,9 +47,7 @@ class AutoTaskImportContractTest {
     }
 
     private fun projectFile(pathInApp: String): String {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?.readText()
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }?.readText()
             ?: error("Missing project file: $pathInApp")
     }
 }

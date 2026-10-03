@@ -7,50 +7,59 @@ import io.legado.app.data.entities.HighlightRuleFile
 import io.legado.app.help.HighlightStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class HighlightRuleImportTest {
 
     @Test
     fun `raw backup arrays retain styles and never accept replacement rules`() {
-        val rule = HighlightRule(uuid = UUID_A, name = "raw", pattern = "target",
-            style = "{\"bold\":true}", group = "Group", applyToTitle = true)
+        val rule =
+            HighlightRule(
+                uuid = UUID_A,
+                name = "raw",
+                pattern = "target",
+                style = "{\"bold\":true}",
+                group = "Group",
+                applyToTitle = true,
+            )
         val imported = parseHighlightRuleFile(GSON.toJson(listOf(rule))).single()
         assertEquals(GSON.toJson(rule), GSON.toJson(imported))
         listOf(
-            """[{"pattern":"x","replacement":"y"}]""",
-            """[{"uuid":"$UUID_A","pattern":"x","style":"{}","replacement":"y"}]""",
-            """[{"uuid":"$UUID_A","pattern":"x","style":"{}"},{"pattern":"y"}]""",
-        ).forEach { json ->
-            assertThrows(Exception::class.java) { parseHighlightRuleFile(json) }
-        }
+                """[{"pattern":"x","replacement":"y"}]""",
+                """[{"uuid":"$UUID_A","pattern":"x","style":"{}","replacement":"y"}]""",
+                """[{"uuid":"$UUID_A","pattern":"x","style":"{}"},{"pattern":"y"}]""",
+            )
+            .forEach { json ->
+                assertThrows(Exception::class.java) { parseHighlightRuleFile(json) }
+            }
     }
 
     @Test
     fun `typed file round trip keeps complete rule configuration`() {
-        val source = HighlightRule(
-            id = 41,
-            uuid = UUID_A,
-            name = "name",
-            pattern = "a.+",
-            isRegex = true,
-            scope = "book",
-            isEnabled = false,
-            order = 9,
-            timeoutMillisecond = 1234,
-            applyToTitle = true,
-            applyToBody = false
-        ).apply {
-            applyStyle(HighlightStyle(textColor = 7, bold = true))
-        }
-        val json = GSON.toJson(
-            HighlightRuleFile(type = HighlightRuleFile.TYPE, rules = listOf(source))
-        )
+        val source =
+            HighlightRule(
+                    id = 41,
+                    uuid = UUID_A,
+                    name = "name",
+                    pattern = "a.+",
+                    isRegex = true,
+                    scope = "book",
+                    isEnabled = false,
+                    order = 9,
+                    timeoutMillisecond = 1234,
+                    applyToTitle = true,
+                    applyToBody = false,
+                )
+                .apply {
+                    applyStyle(HighlightStyle(textColor = 7, bold = true))
+                }
+        val json =
+            GSON.toJson(HighlightRuleFile(type = HighlightRuleFile.TYPE, rules = listOf(source)))
 
         val parsed = parseHighlightRuleFile(json).single()
 
@@ -69,20 +78,21 @@ class HighlightRuleImportTest {
 
     @Test
     fun `invalid envelope uuid and rule reject the whole file`() {
-        val invalidFiles = listOf(
-            "{}",
-            """{"type":"replaceRule","rules":[]}""",
-            """{"type":"highlightRule"}""",
-            """{"type":"highlightRule","rules":[null]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"bad","pattern":"x"}]}""",
-            """{"type":"highlightRule","rules":[
+        val invalidFiles =
+            listOf(
+                "{}",
+                """{"type":"replaceRule","rules":[]}""",
+                """{"type":"highlightRule"}""",
+                """{"type":"highlightRule","rules":[null]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"bad","pattern":"x"}]}""",
+                """{"type":"highlightRule","rules":[
                 {"uuid":"$UUID_A","pattern":"x"},
                 {"uuid":"$UUID_A","pattern":"y"}
             ]}""",
-            """{"type":"highlightRule","rules":[
+                """{"type":"highlightRule","rules":[
                 {"uuid":"$UUID_A","pattern":"[","isRegex":true}
-            ]}"""
-        )
+            ]}""",
+            )
 
         invalidFiles.forEach { json ->
             val file = GSON.fromJsonObject<HighlightRuleFile>(json).getOrThrow()
@@ -92,19 +102,20 @@ class HighlightRuleImportTest {
 
     @Test
     fun `typed file parser rejects nonstandard json syntax`() {
-        val invalidJson = listOf(
-            "{'type':'highlightRule','rules':[]}",
-            """{"type":"highlightRule",/*comment*/"rules":[]}""",
-            """{type:"highlightRule","rules":[]}""",
-            """{"type":"highlightRule","rules":[{"pattern":"x"}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":123}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","name":{}}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","name":null}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","isRegex":"true"}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","isEnabled":null}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","order":1.5}]}""",
-            """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","timeoutMillisecond":9223372036854775808}]}"""
-        )
+        val invalidJson =
+            listOf(
+                "{'type':'highlightRule','rules':[]}",
+                """{"type":"highlightRule",/*comment*/"rules":[]}""",
+                """{type:"highlightRule","rules":[]}""",
+                """{"type":"highlightRule","rules":[{"pattern":"x"}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":123}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","name":{}}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","name":null}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","isRegex":"true"}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","isEnabled":null}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","order":1.5}]}""",
+                """{"type":"highlightRule","rules":[{"uuid":"$UUID_A","pattern":"x","timeoutMillisecond":9223372036854775808}]}""",
+            )
 
         invalidJson.forEach { json ->
             assertThrows(Exception::class.java) { parseHighlightRuleFile(json) }
@@ -118,32 +129,42 @@ class HighlightRuleImportTest {
         val changed = local.copy(id = 98, order = 91, pattern = "y")
         val added = HighlightRule(id = 1, uuid = UUID_B, pattern = "z")
 
-        val statuses = compareImportedHighlightRules(
-            listOf(same, changed, added),
-            listOf(local)
-        ).map(HighlightRuleImportItem::status)
+        val statuses =
+            compareImportedHighlightRules(
+                    listOf(same, changed, added),
+                    listOf(local),
+                )
+                .map(HighlightRuleImportItem::status)
 
         assertEquals(
             listOf(
                 HighlightRuleImportStatus.EXISTING,
                 HighlightRuleImportStatus.UPDATE,
-                HighlightRuleImportStatus.NEW
+                HighlightRuleImportStatus.NEW,
             ),
-            statuses
+            statuses,
         )
     }
 
     @Test
     fun `merge keeps local identities and appends new rules without remote id collisions`() {
-        val current = listOf(
-            HighlightRule(id = 1, uuid = UUID_A, name = "first", pattern = "old", order = 3),
-            HighlightRule(id = 2, uuid = UUID_B, name = "second", pattern = "stay", order = 8)
-        )
-        val imported = listOf(
-            HighlightRule(id = 200, uuid = UUID_A, name = "updated", pattern = "new", order = 50),
-            HighlightRule(id = 2, uuid = UUID_C, name = "third", pattern = "add", order = 1),
-            HighlightRule(id = 2, uuid = UUID_D, name = "fourth", pattern = "add", order = 2)
-        )
+        val current =
+            listOf(
+                HighlightRule(id = 1, uuid = UUID_A, name = "first", pattern = "old", order = 3),
+                HighlightRule(id = 2, uuid = UUID_B, name = "second", pattern = "stay", order = 8),
+            )
+        val imported =
+            listOf(
+                HighlightRule(
+                    id = 200,
+                    uuid = UUID_A,
+                    name = "updated",
+                    pattern = "new",
+                    order = 50,
+                ),
+                HighlightRule(id = 2, uuid = UUID_C, name = "third", pattern = "add", order = 1),
+                HighlightRule(id = 2, uuid = UUID_D, name = "fourth", pattern = "add", order = 2),
+            )
 
         val merged = mergeImportedHighlightRules(current, imported)
 
@@ -156,9 +177,10 @@ class HighlightRuleImportTest {
 
     @Test
     fun `batch top and bottom keep relative order with unique continuous positions`() {
-        val rules = listOf(UUID_A, UUID_B, UUID_C, UUID_D).mapIndexed { index, uuid ->
-            HighlightRule(id = index + 1L, uuid = uuid, pattern = uuid, order = index * 2)
-        }
+        val rules =
+            listOf(UUID_A, UUID_B, UUID_C, UUID_D).mapIndexed { index, uuid ->
+                HighlightRule(id = index + 1L, uuid = uuid, pattern = uuid, order = index * 2)
+            }
         val selected = setOf(UUID_B, UUID_D)
 
         val top = reorderHighlightRules(rules, selected, toTop = true)
@@ -172,29 +194,35 @@ class HighlightRuleImportTest {
 
     @Test
     fun `file and online association both route typed highlight rules`() {
-        val base = projectFile(
-            "src/main/java/io/legado/app/ui/association/BaseAssociationViewModel.kt"
-        )
-        val file = projectFile(
-            "src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt"
-        )
-        val online = projectFile(
-            "src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt"
-        )
+        val file =
+            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt")
+        val online =
+            projectFile("src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt")
 
-        assertTrue(base.contains("map[\"type\"] == HighlightRuleFile.TYPE"))
-        assertTrue(
-            base.indexOf("map[\"type\"] == HighlightRuleFile.TYPE") <
-                base.indexOf("map.containsKey(\"pattern\")")
+        assertEquals(
+            "highlightRule",
+            jsonImportType(
+                mapOf(
+                    "type" to HighlightRuleFile.TYPE,
+                    "pattern" to "target",
+                    "replacement" to "other",
+                )
+            ),
         )
-        assertTrue(file.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)"))
-        assertTrue(online.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)"))
+        assertEquals(
+            "replaceRule",
+            jsonImportType(mapOf("pattern" to "target", "replacement" to "other")),
+        )
+        assertTrue(
+            file.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)")
+        )
+        assertTrue(
+            online.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)")
+        )
     }
 
     private fun projectFile(pathInApp: String): String =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?.readText()
+        sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)?.readText()
             ?: error("Missing project file: $pathInApp")
 
     private companion object {
