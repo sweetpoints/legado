@@ -6,6 +6,11 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.data.repository.ReplaceRuleImportItem
 import io.legado.app.data.repository.ReplaceRuleImportRepository
 import io.legado.app.data.repository.ReplaceRuleImportSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +29,8 @@ data class ImportReplaceRuleState(val items: List<ReplaceRuleImportItem> = empty
 }
 
 class ImportReplaceRuleViewModel(private val repository: ReplaceRuleImportRepository,
-    private val saved: SavedStateHandle, private val source: String) : ViewModel() {
-    private val session = saved.get<String>("session") ?: UUID.randomUUID().toString().also { saved["session"] = it }
+    private val saved: SavedStateHandle, private val source: String, private val preparedSession: String? = null) : ViewModel() {
+    private val session = saved.get<String>("session") ?: (preparedSession?.also { require(UUID.fromString(it).toString() == it) } ?: UUID.randomUUID().toString()).also { saved["session"] = it }
     private val mutable = MutableStateFlow(ImportReplaceRuleState(finished = saved["finished"] ?: false,
         group = saved["group"] ?: "", addGroup = saved["addGroup"] ?: false,
         groupOpen = saved["groupOpen"] ?: false, groupDraft = saved["groupDraft"] ?: "",
@@ -33,6 +38,8 @@ class ImportReplaceRuleViewModel(private val repository: ReplaceRuleImportReposi
     val state = mutable.asStateFlow()
     private var operation: Job? = null
     private var groupsJob: Job? = null
+    private val cleanup = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var released = false
     init {
         if (state.value.finished) mutable.value = state.value.copy(loading = false)
         else { load(); if (state.value.groupOpen) loadGroups() }
@@ -46,10 +53,12 @@ class ImportReplaceRuleViewModel(private val repository: ReplaceRuleImportReposi
         mutable.value = state.value.copy(loading = true, error = null)
         operation = viewModelScope.launch {
             try {
-                if (source.isEmpty()) { cancel(); return@launch }
-                val staged = repository.restore(session) ?: ReplaceRuleImportSession(repository.read(source)).also {
-                    repository.stage(session, it.items)
-                }
+                if (source.isEmpty() && preparedSession == null) { cancel(); return@launch }
+                val restored = repository.restore(session)
+                currentCoroutineContext().ensureActive()
+                val staged = restored ?: if (preparedSession != null) error("Prepared import session is missing") else
+                    ReplaceRuleImportSession(repository.read(source)).also { repository.stage(session, it.items) }
+                currentCoroutineContext().ensureActive()
                 if (state.value.finished) return@launch
                 if (staged.committed) { finish(); return@launch }
                 val keys = staged.items.mapTo(mutableSetOf()) { it.key }
@@ -135,5 +144,14 @@ class ImportReplaceRuleViewModel(private val repository: ReplaceRuleImportReposi
         }
     }
     private fun finish() { saved.remove<String>("codeKey"); saved["finished"] = true; mutable.value = state.value.copy(loading = false, busy = false, finished = true, code = null) }
-    fun cancel() { if (!state.value.busy) { closeGroup(); finish(); operation?.cancel() } }
+    fun cancel() { if (!state.value.busy) { closeGroup(); finish(); operation?.cancel(); releasePrepared() } }
+    private fun releasePrepared() {
+        if (preparedSession == null || released) return
+        released = true
+        val job = operation
+        cleanup.launch { job?.join(); runCatching { repository.release(session) } }
+    }
+    override fun onCleared() {
+        operation?.cancel(); groupsJob?.cancel(); releasePrepared(); super.onCleared()
+    }
 }

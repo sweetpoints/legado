@@ -36,6 +36,7 @@ interface ReplaceRuleImportRepository {
     suspend fun edit(key: String, code: String): ReplaceRuleImportItem
     suspend fun restore(session: String): ReplaceRuleImportSession?
     suspend fun stage(session: String, items: List<ReplaceRuleImportItem>)
+    suspend fun release(session: String) {}
     suspend fun groups(): List<String>
     suspend fun insert(session: String, items: List<ReplaceRuleImportItem>, selected: Set<String>, group: String, add: Boolean)
 }
@@ -110,6 +111,11 @@ class AppReplaceRuleImportRepository(context: Context) : ReplaceRuleImportReposi
     }
     override suspend fun stage(session: String, items: List<ReplaceRuleImportItem>) = withContext(Dispatchers.IO) {
         write(session, ReplaceRuleImportSession(items))
+    }
+    override suspend fun release(session: String): Unit = withContext(Dispatchers.IO + NonCancellable) {
+        require(java.util.UUID.fromString(session).toString() == session)
+        val target = file(session); target.delete()
+        check(listOf(target.baseFile, File(target.baseFile.path + ".bak"), File(target.baseFile.path + ".new")).none { it.exists() })
     }
     override suspend fun groups(): List<String> = withContext(Dispatchers.IO) { appDb.replaceRuleDao.allGroups() }
     override suspend fun insert(session: String, items: List<ReplaceRuleImportItem>, selected: Set<String>, group: String, add: Boolean) =

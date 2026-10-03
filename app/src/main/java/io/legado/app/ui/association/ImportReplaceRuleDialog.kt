@@ -16,9 +16,16 @@ class ImportReplaceRuleDialog() : BaseComposeDialogFragment(), CodeDialog.Callba
     constructor(source: String, finishOnDismiss: Boolean = false) : this() {
         arguments = Bundle().apply { putString("source", source); putBoolean("finishOnDismiss", finishOnDismiss) }
     }
+    companion object {
+        fun prepared(session: String) = ImportReplaceRuleDialog().apply {
+            require(java.util.UUID.fromString(session).toString() == session)
+            arguments = Bundle().apply { putString("preparedSession", session) }
+        }
+    }
     private val viewModel by viewModels<ImportReplaceRuleViewModel> {
         viewModelFactory { initializer { ImportReplaceRuleViewModel(AppReplaceRuleImportRepository(requireContext()),
-            createSavedStateHandle(), arguments?.getString("source").orEmpty()) } }
+            createSavedStateHandle().apply { remove<String>("source"); remove<String>("preparedSession") },
+            arguments?.getString("source").orEmpty(), arguments?.getString("preparedSession")) } }
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); isCancelable = false }
     override fun onStart() {
