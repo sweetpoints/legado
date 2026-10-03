@@ -89,9 +89,16 @@ class PopupActionComposeTest {
         assertEquals(Color.Red, textColor("Delete"))
         assertEquals(Color.Gray, textColor("Disabled flag"))
         assertEquals(Color.Gray, textColor("Disabled value"))
-        val checkedText = compose.onNodeWithText("Checked", true).fetchSemanticsNode().boundsInRoot
+        val checkedText =
+            compose
+                .onNodeWithText("Checked", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
         val uncheckedText =
-            compose.onNodeWithText("Unchecked", true).fetchSemanticsNode().boundsInRoot
+            compose
+                .onNodeWithText("Unchecked", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
         assertEquals(checkedText.left, uncheckedText.left)
         val first = compose.onNodeWithTag("popup-action-0").fetchSemanticsNode().boundsInRoot
         val last = compose.onNodeWithTag("popup-action-4").fetchSemanticsNode().boundsInRoot
