@@ -75,6 +75,7 @@ class RoomKeyboardAssistSettingsRepository(context: Context, private val databas
     }
     private fun complete(session: String, draft: KeyboardAssistSettingsDraft): KeyboardAssistSettingsDraft {
         val planned = draft.planned ?: return draft
+        failureHook("beforeDatabase")
         database.runInTransaction {
             val current = all(); val original = draft.original?.let { old -> current.find { it.id == old.id } }
             val target = current.find { it.id == planned.id }
@@ -99,8 +100,19 @@ class RoomKeyboardAssistSettingsRepository(context: Context, private val databas
     override suspend fun writeEditor(session: String, draft: KeyboardAssistSettingsDraft) = withContext(Dispatchers.IO + NonCancellable) {
         lock(session).withLock {
             val current = read(session)
-            check(draft.open || current?.planned == null) { "Keyboard save is pending" }
-            if (current == null || current.open && current.planned == null && current.revision <= draft.revision) write(session, draft)
+            if (!draft.open && current?.planned != null) {
+                database.runInTransaction {
+                    val rows = all(); val planned = checkNotNull(current.planned)
+                    val original = current.original?.let { old -> rows.find { it.id == old.id } }
+                    val target = rows.find { it.id == planned.id }
+                    val applied = target == planned && (current.original?.id == planned.id || original == null)
+                    check(!applied) { "Keyboard save is pending; retry to finish it" }
+                    // A conflicting external edit prevented this plan from applying. Consume
+                    // only its disk ticket, without rolling back or changing any Room row.
+                    write(session, current.copy(open = false, planned = null, beforeOriginal = null, beforeTarget = null,
+                        revision = maxOf(current.revision, draft.revision) + 1))
+                }
+            } else if (current == null || current.open && current.planned == null && current.revision <= draft.revision) write(session, draft)
         }
     }
     override suspend fun saveEditor(session: String, draft: KeyboardAssistSettingsDraft) = withContext(Dispatchers.IO + NonCancellable) {

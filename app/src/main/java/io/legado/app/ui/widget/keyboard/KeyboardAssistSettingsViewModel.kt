@@ -18,6 +18,7 @@ class KeyboardAssistSettingsViewModel(private val repository: KeyboardAssistSett
         selectedLines = saved.get<Int>("keyboardSettings.selectedLines") ?: 1, pendingLines = saved.get<Int>("keyboardSettings.pendingLines"),
         scroll = saved.get<Int>("keyboardSettings.scroll") ?: 0, offset = saved.get<Int>("keyboardSettings.offset") ?: 0))
     val state = mutable.asStateFlow()
+    val editorSession: String? get() = saved.get<String>("keyboardSettings.editorSession")
     private var latestRows: List<KeyboardAssistSettingsRow> = emptyList()
     private var dragBase: List<KeyboardAssistSettingsRow>? = null
     private var observation: Job? = null

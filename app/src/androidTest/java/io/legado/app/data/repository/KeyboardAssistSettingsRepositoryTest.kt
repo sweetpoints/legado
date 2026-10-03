@@ -71,4 +71,29 @@ class KeyboardAssistSettingsRepositoryTest {
         insert(KeyboardAssist(0, "Key", "Later", 1)); repo.saveEditor(session, draft)
         assertEquals("Later", repository.observe().first().single().value)
     }
+    @Test fun unappliedConflictingJournalCanCancelWithoutRollingBackExternalRows() = runBlocking {
+        insert(KeyboardAssist(1, "Old", "Original", 7))
+        val old = repository.observe().first().single(); var fail = true
+        val repo = RoomKeyboardAssistSettingsRepository(context, database, directory) { stage -> if (fail && stage == "beforeDatabase") error("Before database") }
+        val session = UUID.randomUUID().toString(); val draft = repo.loadEditor(session, old.id)
+            .copy(key = KeyboardAssistSettingsText("New"), value = KeyboardAssistSettingsText("Planned"), revision = 1)
+        assertTrue(runCatching { repo.saveEditor(session, draft) }.isFailure)
+        insert(KeyboardAssist(0, "New", "External", 11))
+        fail = false; assertTrue(runCatching { repo.loadEditor(session, old.id) }.isFailure)
+        repo.writeEditor(session, draft.copy(open = false, revision = 2))
+        assertFalse(repo.loadEditor(session, old.id).open)
+        val actual = repository.observe().first(); assertEquals(listOf("Original", "External"), actual.map { it.value })
+        assertEquals(listOf(7, 11), actual.map { it.order })
+    }
+    @Test fun appliedPendingJournalCannotCancelAndRetryFinishesOriginalPlannedResult() = runBlocking {
+        var fail = true
+        val repo = RoomKeyboardAssistSettingsRepository(context, database, directory) { stage -> if (fail && stage == "afterDatabase") error("After database") }
+        val session = UUID.randomUUID().toString(); val draft = repo.loadEditor(session, null)
+            .copy(key = KeyboardAssistSettingsText("Key"), value = KeyboardAssistSettingsText("Submitted"), revision = 1)
+        assertTrue(runCatching { repo.saveEditor(session, draft) }.isFailure)
+        assertTrue(runCatching { repo.writeEditor(session, draft.copy(open = false, revision = 2)) }.isFailure)
+        fail = false; val completed = repo.saveEditor(session, draft.copy(value = KeyboardAssistSettingsText("After error"), revision = 3))
+        assertFalse(completed.open); assertEquals("Submitted", repository.observe().first().single().value)
+    }
+
 }
