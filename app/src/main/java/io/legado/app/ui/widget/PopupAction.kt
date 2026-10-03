@@ -11,8 +11,8 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
-import androidx.core.view.updateLayoutParams
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.flexbox.FlexDirection
 import com.google.android.flexbox.FlexWrap
@@ -71,7 +71,7 @@ class PopupAction(private val context: Context) :
             items.map { item ->
                 PopupActionItem(
                     title = item.title,
-                    value = item.value
+                    value = item.value,
                 )
             }
         )
@@ -87,11 +87,12 @@ class PopupAction(private val context: Context) :
         reserveIconColumn = isVertical && items.any { it.icon != null }
         reserveCheckColumn = isVertical && items.any { it.checkable }
         binding.recyclerView.updateLayoutParams {
-            width = if (isVertical) {
-                measureVerticalMenuWidth(items)
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
+            width =
+                if (isVertical) {
+                    measureVerticalMenuWidth(items)
+                } else {
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                }
         }
     }
 
@@ -107,21 +108,24 @@ class PopupAction(private val context: Context) :
         val horizontalPadding = 32.dpToPx()
         val iconColumn = if (reserveIconColumn) 36.dpToPx() else 0
         val checkColumn = if (reserveCheckColumn) 32.dpToPx() else 0
-        return (horizontalPadding + iconColumn + checkColumn + maxTextWidth)
-            .coerceIn(112.dpToPx(), 280.dpToPx())
+        return (horizontalPadding + iconColumn + checkColumn + maxTextWidth).coerceIn(
+            112.dpToPx(),
+            280.dpToPx(),
+        )
     }
 
     fun setVertical(vertical: Boolean) {
         if (isVertical == vertical && binding.recyclerView.layoutManager != null) return
         isVertical = vertical
-        binding.recyclerView.layoutManager = if (vertical) {
-            LinearLayoutManager(context)
-        } else {
-            FlexboxLayoutManager(context).apply {
-                flexDirection = FlexDirection.ROW
-                flexWrap = FlexWrap.WRAP
+        binding.recyclerView.layoutManager =
+            if (vertical) {
+                LinearLayoutManager(context)
+            } else {
+                FlexboxLayoutManager(context).apply {
+                    flexDirection = FlexDirection.ROW
+                    flexWrap = FlexWrap.WRAP
+                }
             }
-        }
         updateMenuLayout(actionItems)
         if (adapter.itemCount > 0) adapter.notifyDataSetChanged()
     }
@@ -151,14 +155,15 @@ class PopupAction(private val context: Context) :
         )
         val location = IntArray(2)
         anchor.getLocationOnScreen(location)
-        val resolvedYOff = resolveDropDownYOffset(
-            anchorTop = location[1],
-            anchorHeight = anchor.height,
-            popupHeight = contentView.measuredHeight,
-            frameTop = visibleFrame.top,
-            frameBottom = visibleFrame.bottom,
-            gap = yoff,
-        )
+        val resolvedYOff =
+            resolveDropDownYOffset(
+                anchorTop = location[1],
+                anchorHeight = anchor.height,
+                popupHeight = contentView.measuredHeight,
+                frameTop = visibleFrame.top,
+                frameBottom = visibleFrame.bottom,
+                gap = yoff,
+            )
         super.showAsDropDown(anchor, xoff, resolvedYOff, gravity)
     }
 
@@ -168,7 +173,7 @@ class PopupAction(private val context: Context) :
         val icon: Drawable? = null,
         val enabled: Boolean = true,
         val checkable: Boolean = false,
-        val checked: Boolean = false
+        val checked: Boolean = false,
     )
 
     inner class Adapter(context: Context) :
@@ -186,7 +191,7 @@ class PopupAction(private val context: Context) :
             holder: ItemViewHolder,
             binding: ItemPopupActionBinding,
             item: PopupActionItem,
-            payloads: MutableList<Any>
+            payloads: MutableList<Any>,
         ) {
             with(binding) {
                 val enabled = isItemEnabled(item)
@@ -196,7 +201,7 @@ class PopupAction(private val context: Context) :
                     object : AccessibilityDelegateCompat() {
                         override fun onInitializeAccessibilityNodeInfo(
                             host: View,
-                            info: AccessibilityNodeInfoCompat
+                            info: AccessibilityNodeInfoCompat,
                         ) {
                             super.onInitializeAccessibilityNodeInfo(host, info)
                             info.isCheckable = item.checkable
@@ -208,7 +213,7 @@ class PopupAction(private val context: Context) :
                                 }
                             )
                         }
-                    }
+                    },
                 )
                 textView.text = item.title
                 if (isVertical) {
@@ -240,11 +245,12 @@ class PopupAction(private val context: Context) :
                     textView.setPadding(5.dpToPx(), 5.dpToPx(), 5.dpToPx(), 5.dpToPx())
                     textView.setBackgroundResource(selectableItemBackgroundResId())
                 }
-                val textColor = when {
-                    !enabled -> context.secondaryDisabledTextColor
-                    item.value in dangerValues -> context.getCompatColor(R.color.error)
-                    else -> context.getCompatColor(R.color.primaryText)
-                }
+                val textColor =
+                    when {
+                        !enabled -> context.secondaryDisabledTextColor
+                        item.value in dangerValues -> context.getCompatColor(R.color.error)
+                        else -> context.getCompatColor(R.color.primaryText)
+                    }
                 textView.setTextColor(textColor)
                 bindLeadingIcon(ivIcon, item, textColor)
                 bindTrailingCheck(ivCheckEnd, item, textColor)
@@ -254,7 +260,7 @@ class PopupAction(private val context: Context) :
         private fun bindLeadingIcon(
             imageView: android.widget.ImageView,
             item: PopupActionItem,
-            tint: Int
+            tint: Int,
         ) {
             when {
                 item.icon != null -> {
@@ -278,7 +284,7 @@ class PopupAction(private val context: Context) :
         private fun bindTrailingCheck(
             imageView: android.widget.ImageView,
             item: PopupActionItem,
-            tint: Int
+            tint: Int,
         ) {
             when {
                 item.checked -> {
@@ -317,5 +323,4 @@ class PopupAction(private val context: Context) :
             return value.resourceId
         }
     }
-
 }
