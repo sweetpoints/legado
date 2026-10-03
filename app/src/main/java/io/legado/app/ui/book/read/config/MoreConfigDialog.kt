@@ -1,26 +1,32 @@
 package io.legado.app.ui.book.read.config
 
-import android.annotation.SuppressLint
 import android.content.DialogInterface
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.LinearLayout
-import androidx.preference.Preference
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BasePrefDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.data.preferences.MoreReaderSetting
+import io.legado.app.data.preferences.MoreReaderSettings
+import io.legado.app.data.preferences.MoreReaderSettingsRepository
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
@@ -29,11 +35,36 @@ import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.removePref
-import io.legado.app.utils.setEdgeEffectColor
 
-class MoreConfigDialog : BasePrefDialogFragment() {
-    private val readPreferTag = "readPreferenceFragment"
+/** Compose implementation of all settings formerly hosted by pref_config_read.xml. */
+class MoreConfigDialog : BaseComposeDialogFragment() {
+    private val settingsRepository by lazy { MoreReaderSettingsRepository(requireContext()) }
+    private val settingsViewModel by
+        viewModels<MoreReaderSettingsViewModel> {
+            viewModelFactory { initializer { MoreReaderSettingsViewModel(settingsRepository) } }
+        }
+    private var preferenceObservation: AutoCloseable? = null
+    private var bottomDialogOwner: ReadBookActivity? = null
+    private var ownsBottomDialogCount = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // A pre-Compose saved child can still be restored after an app update. Retire it before
+        // the Compose dialog is attached so it cannot recreate the old native preference screen.
+        childFragmentManager.findFragmentByTag(LEGACY_PREFERENCE_TAG)?.let { legacyFragment ->
+            childFragmentManager
+                .beginTransaction()
+                .remove(legacyFragment)
+                .commitNowAllowingStateLoss()
+        }
+    }
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        acquireBottomDialogCount()
+        if (!CanvasRecorderFactory.isSupport) {
+            settingsRepository.remove(PreferKey.optimizeRender)
+        }
+    }
 
     override fun onStart() {
         super.onStart()
@@ -41,205 +72,189 @@ class MoreConfigDialog : BasePrefDialogFragment() {
             clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setBackgroundDrawableResource(R.color.background)
             decorView.setPadding(0, 0, 0, 0)
-            val attr = attributes
-            attr.dimAmount = 0.0f
-            attr.gravity = Gravity.BOTTOM
-            attributes = attr
+            attributes = attributes.apply {
+                dimAmount = 0f
+                gravity = Gravity.BOTTOM
+            }
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 360.dpToPx())
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View {
-        (activity as ReadBookActivity).bottomDialog++
-        val view = LinearLayout(context)
-        view.setBackgroundColor(requireContext().bottomBackground)
-        view.id = R.id.tag1
-        container?.addView(view)
-        return view
+    override fun onResume() {
+        super.onResume()
+        settingsViewModel.refresh()
+        preferenceObservation?.close()
+        preferenceObservation = settingsRepository.observe { key ->
+            activity?.runOnUiThread {
+                settingsViewModel.refresh()
+                if (isResumed) handlePreferenceChange(key)
+            }
+        }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        var preferenceFragment = childFragmentManager.findFragmentByTag(readPreferTag)
-        if (preferenceFragment == null) preferenceFragment = ReadPreferenceFragment()
-        childFragmentManager
-            .beginTransaction()
-            .replace(view.id, preferenceFragment, readPreferTag)
-            .commit()
+    override fun onPause() {
+        preferenceObservation?.close()
+        preferenceObservation = null
+        super.onPause()
+    }
+
+    @Composable
+    override fun Content() {
+        val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.85f
+        val visibleSettings =
+            if (CanvasRecorderFactory.isSupport) {
+                MoreReaderSettings.all
+            } else {
+                MoreReaderSettings.all.filterNot { it.key == PreferKey.optimizeRender }
+            }
+        MoreReaderSettingsRoute(
+            viewModel = settingsViewModel,
+            visibleSettings = visibleSettings,
+            background = Color(requireContext().bottomBackground),
+            slopSummary =
+                getString(
+                    R.string.page_touch_slop_summary,
+                    ViewConfiguration.get(requireContext()).scaledTouchSlop.toString(),
+                ),
+            bookmarkSummary =
+                getString(
+                    R.string.pull_bookmark_distance_summary,
+                    (ViewConfiguration.get(requireContext()).scaledTouchSlop * 6).toString(),
+                ),
+            onToggle = settingsViewModel::toggle,
+            onChoice = settingsViewModel::choose,
+            onSeekBar = settingsViewModel::setSpeed,
+            onAction = ::handleSettingAction,
+            modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight),
+        )
+    }
+
+    private fun handleSettingAction(setting: MoreReaderSetting.Action) {
+        when (setting.key) {
+            KEY_CUSTOM_PAGE_KEY -> PageKeyDialog(requireContext()).show()
+            KEY_CLICK_REGIONAL_CONFIG -> (activity as? ReadBookActivity)?.showClickRegionalConfig()
+            KEY_CUSTOM_TEXT_MENU -> (activity as? ReadBookActivity)?.showTextSelectMenuConfig()
+            KEY_CUSTOM_READER_MENU -> (activity as? ReadBookActivity)?.showReaderMenuConfig()
+            PreferKey.pageTouchSlop ->
+                showNumberPicker(
+                    title = R.string.page_touch_slop_dialog_title,
+                    value = AppConfig.pageTouchSlop,
+                    maximum = 9999,
+                ) { value ->
+                    AppConfig.pageTouchSlop = value
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(4))
+                    settingsViewModel.refresh()
+                }
+            PreferKey.pullBookmarkDistance ->
+                showNumberPicker(
+                    title = R.string.pull_bookmark_distance_dialog_title,
+                    value = AppConfig.pullBookmarkDistance,
+                    maximum = 9999,
+                ) { value ->
+                    AppConfig.pullBookmarkDistance = value
+                    settingsViewModel.refresh()
+                }
+            PreferKey.pageTouchClick ->
+                showNumberPicker(
+                    title = R.string.page_touch_click_dialog_title,
+                    value = AppConfig.pageTouchClick,
+                    maximum = 399,
+                ) { value ->
+                    AppConfig.pageTouchClick = value
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(12))
+                    settingsViewModel.refresh()
+                }
+        }
+    }
+
+    private fun showNumberPicker(title: Int, value: Int, maximum: Int, onSelected: (Int) -> Unit) {
+        NumberPickerDialog(requireContext())
+            .setTitle(getString(title))
+            .setMaxValue(maximum)
+            .setMinValue(0)
+            .setValue(value)
+            .show(onSelected)
+    }
+
+    private fun handlePreferenceChange(key: String) {
+        when (key) {
+            PreferKey.readBodyToLh -> activity?.recreate()
+            PreferKey.hideStatusBar -> {
+                ReadBookConfig.hideStatusBar =
+                    requireContext().getPrefBoolean(PreferKey.hideStatusBar)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
+            }
+            PreferKey.hideNavigationBar -> {
+                ReadBookConfig.hideNavigationBar =
+                    requireContext().getPrefBoolean(PreferKey.hideNavigationBar)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
+            }
+            PreferKey.keepLight -> postEvent(key, true)
+            PreferKey.textSelectAble -> postEvent(key, requireContext().getPrefBoolean(key))
+            PreferKey.screenOrientation -> (activity as? ReadBookActivity)?.setOrientation()
+            PreferKey.textFullJustify,
+            PreferKey.textBottomJustify,
+            PreferKey.hangingPunctuation,
+            PreferKey.punctuationCompress,
+            PreferKey.useZhLayout,
+            PreferKey.adaptSpecialStyle -> postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+            PreferKey.showBrightnessView -> postEvent(PreferKey.showBrightnessView, "")
+            PreferKey.doublePageHorizontal -> {
+                ChapterProvider.upLayout()
+                ReadBook.loadContent(false)
+            }
+            PreferKey.showReadTitleAddition,
+            PreferKey.showReadTitleChapterNameOnly,
+            PreferKey.readBarStyleFollowPage -> postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
+            PreferKey.progressBarBehavior -> postEvent(EventBus.UP_SEEK_BAR, true)
+            PreferKey.noAnimScrollPage -> ReadBook.callBack?.upPageAnim()
+            PreferKey.pullToToggleBookmark -> (activity as? ReadBookActivity)?.upBookmarkIndicator()
+            PreferKey.optimizeRender -> {
+                ChapterProvider.upStyle()
+                ReadBook.callBack?.upPageAnim(true)
+                ReadBook.loadContent(false)
+            }
+            PreferKey.paddingDisplayCutouts -> postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+        }
+    }
+
+    private fun acquireBottomDialogCount() {
+        if (ownsBottomDialogCount) return
+        val owner = activity as? ReadBookActivity ?: return
+        owner.bottomDialog++
+        bottomDialogOwner = owner
+        ownsBottomDialogCount = true
+    }
+
+    private fun releaseBottomDialogCount() {
+        if (!ownsBottomDialogCount) return
+        bottomDialogOwner?.let { owner ->
+            owner.bottomDialog = (owner.bottomDialog - 1).coerceAtLeast(0)
+        }
+        bottomDialogOwner = null
+        ownsBottomDialogCount = false
+    }
+
+    override fun onDestroyView() {
+        releaseBottomDialogCount()
+        super.onDestroyView()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        releaseBottomDialogCount()
         super.onDismiss(dialog)
-        (activity as ReadBookActivity).bottomDialog--
     }
 
-    class ReadPreferenceFragment :
-        PreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener {
+    /** Compatibility shell solely for retiring restored fragments created by older versions. */
+    class ReadPreferenceFragment : PreferenceFragment() {
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) = Unit
+    }
 
-        private val slopSquare by lazy { ViewConfiguration.get(requireContext()).scaledTouchSlop }
-
-        @SuppressLint("RestrictedApi")
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            addPreferencesFromResource(R.xml.pref_config_read)
-            upPreferenceSummary(PreferKey.pageTouchSlop, slopSquare.toString())
-            upPreferenceSummary(PreferKey.pullBookmarkDistance, (slopSquare * 6).toString())
-            if (!CanvasRecorderFactory.isSupport) {
-                removePref(PreferKey.optimizeRender)
-                preferenceScreen.removePreferenceRecursively(PreferKey.optimizeRender)
-            }
-        }
-
-        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-            super.onViewCreated(view, savedInstanceState)
-            listView.setEdgeEffectColor(primaryColor)
-        }
-
-        override fun onResume() {
-            super.onResume()
-            preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        }
-
-        override fun onPause() {
-            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
-            super.onPause()
-        }
-
-        override fun onSharedPreferenceChanged(
-            sharedPreferences: SharedPreferences?,
-            key: String?,
-        ) {
-            when (key) {
-                PreferKey.readBodyToLh -> activity?.recreate()
-                PreferKey.hideStatusBar -> {
-                    ReadBookConfig.hideStatusBar = getPrefBoolean(PreferKey.hideStatusBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
-                }
-
-                PreferKey.hideNavigationBar -> {
-                    ReadBookConfig.hideNavigationBar = getPrefBoolean(PreferKey.hideNavigationBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
-                }
-
-                PreferKey.keepLight -> postEvent(key, true)
-                PreferKey.textSelectAble -> postEvent(key, getPrefBoolean(key))
-                PreferKey.screenOrientation -> {
-                    (activity as? ReadBookActivity)?.setOrientation()
-                }
-
-                PreferKey.textFullJustify,
-                PreferKey.textBottomJustify,
-                PreferKey.hangingPunctuation,
-                PreferKey.punctuationCompress,
-                PreferKey.useZhLayout,
-                PreferKey.adaptSpecialStyle -> {
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(5))
-                }
-
-                PreferKey.showBrightnessView -> {
-                    postEvent(PreferKey.showBrightnessView, "")
-                }
-
-                PreferKey.doublePageHorizontal -> {
-                    ChapterProvider.upLayout()
-                    ReadBook.loadContent(false)
-                }
-
-                PreferKey.showReadTitleAddition,
-                PreferKey.showReadTitleChapterNameOnly,
-                PreferKey.readBarStyleFollowPage -> {
-                    postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-                }
-
-                PreferKey.progressBarBehavior -> {
-                    postEvent(EventBus.UP_SEEK_BAR, true)
-                }
-
-                PreferKey.noAnimScrollPage -> {
-                    ReadBook.callBack?.upPageAnim()
-                }
-
-                PreferKey.pullToToggleBookmark -> {
-                    (activity as? ReadBookActivity)?.upBookmarkIndicator()
-                }
-
-                PreferKey.optimizeRender -> {
-                    ChapterProvider.upStyle()
-                    ReadBook.callBack?.upPageAnim(true)
-                    ReadBook.loadContent(false)
-                }
-
-                PreferKey.paddingDisplayCutouts -> {
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(2))
-                }
-            }
-        }
-
-        override fun onPreferenceTreeClick(preference: Preference): Boolean {
-            when (preference.key) {
-                "customPageKey" -> PageKeyDialog(requireContext()).show()
-                "clickRegionalConfig" -> {
-                    (activity as? ReadBookActivity)?.showClickRegionalConfig()
-                }
-
-                "customTextMenu" -> {
-                    (activity as? ReadBookActivity)?.showTextSelectMenuConfig()
-                }
-
-                "customReaderMenu" -> {
-                    (activity as? ReadBookActivity)?.showReaderMenuConfig()
-                }
-
-                PreferKey.pageTouchSlop -> {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.page_touch_slop_dialog_title))
-                        .setMaxValue(9999)
-                        .setMinValue(0)
-                        .setValue(AppConfig.pageTouchSlop)
-                        .show {
-                            AppConfig.pageTouchSlop = it
-                            postEvent(EventBus.UP_CONFIG, arrayListOf(4))
-                        }
-                }
-
-                PreferKey.pullBookmarkDistance -> {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.pull_bookmark_distance_dialog_title))
-                        .setMaxValue(9999)
-                        .setMinValue(0)
-                        .setValue(AppConfig.pullBookmarkDistance)
-                        .show {
-                            AppConfig.pullBookmarkDistance = it
-                        }
-                }
-
-                PreferKey.pageTouchClick -> {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.page_touch_click_dialog_title))
-                        .setMaxValue(399)
-                        .setMinValue(0)
-                        .setValue(AppConfig.pageTouchClick)
-                        .show {
-                            AppConfig.pageTouchClick = it
-                            postEvent(EventBus.UP_CONFIG, arrayListOf(12))
-                        }
-                }
-            }
-            return super.onPreferenceTreeClick(preference)
-        }
-
-        @Suppress("SameParameterValue")
-        private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-            val preference = findPreference<Preference>(preferenceKey) ?: return
-            when (preferenceKey) {
-                PreferKey.pageTouchSlop ->
-                    preference.summary = getString(R.string.page_touch_slop_summary, value)
-                PreferKey.pullBookmarkDistance ->
-                    preference.summary = getString(R.string.pull_bookmark_distance_summary, value)
-            }
-        }
+    private companion object {
+        const val LEGACY_PREFERENCE_TAG = "readPreferenceFragment"
+        const val KEY_CUSTOM_PAGE_KEY = "customPageKey"
+        const val KEY_CLICK_REGIONAL_CONFIG = "clickRegionalConfig"
+        const val KEY_CUSTOM_TEXT_MENU = "customTextMenu"
+        const val KEY_CUSTOM_READER_MENU = "customReaderMenu"
     }
 }
