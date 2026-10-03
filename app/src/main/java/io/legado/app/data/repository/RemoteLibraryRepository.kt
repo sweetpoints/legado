@@ -16,12 +16,14 @@ internal interface RemoteLibraryStore {
     suspend fun connect(): RemoteLibraryConnection
     suspend fun list(connection: RemoteLibraryConnection, path: String): List<RemoteBook>
     suspend fun import(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry)
+    suspend fun importWithReceipt(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry, accepted: suspend () -> Unit) { import(connection, entry); accepted() }
     fun close()
 }
 internal interface RemoteLibraryRepository {
     suspend fun connect(): RemoteLibraryConnection
     suspend fun list(connection: RemoteLibraryConnection, path: String? = null): List<RemoteLibraryEntry>
     suspend fun import(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry)
+    suspend fun importWithReceipt(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry, accepted: suspend () -> Unit) { import(connection, entry); accepted() }
     suspend fun close()
 }
 /** IO includes engine construction: RemoteBookWebDav performs its original mkdir during initialization. */
@@ -37,6 +39,9 @@ internal class DefaultRemoteLibraryRepository(private val store: RemoteLibrarySt
         currentCoroutineContext().ensureActive()
         require(!entry.directory) { "Cannot import a directory" }
         store.import(connection, entry)
+    }
+    override suspend fun importWithReceipt(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry, accepted: suspend () -> Unit) = withContext(io) {
+        currentCoroutineContext().ensureActive(); require(!entry.directory) { "Cannot import a directory" }; store.importWithReceipt(connection, entry, accepted)
     }
     override suspend fun close() = withContext(io + NonCancellable) { store.close() }
 }
@@ -59,7 +64,8 @@ internal class AppRemoteLibraryStore : RemoteLibraryStore {
     private fun manager(connection: RemoteLibraryConnection) = owned?.takeIf { it.id == connection.id }?.manager
         ?: throw NoStackTraceException("远程书籍连接已失效，请刷新")
     override suspend fun list(connection: RemoteLibraryConnection, path: String) = manager(connection).getRemoteBookList(path)
-    override suspend fun import(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry) {
+    override suspend fun import(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry) = importWithReceipt(connection, entry) {}
+    override suspend fun importWithReceipt(connection: RemoteLibraryConnection, entry: RemoteLibraryEntry, accepted: suspend () -> Unit) {
         val manager = manager(connection)
         val uri = manager.downloadRemoteBook(RemoteBook(entry.name, entry.path, entry.size, entry.modified, entry.type, entry.onShelf))
         currentCoroutineContext().ensureActive()
@@ -69,6 +75,7 @@ internal class AppRemoteLibraryStore : RemoteLibraryStore {
                 book.origin = BookType.webDavTag + CustomUrl(entry.path).putAttribute("serverID", manager.serverID).toString()
                 book.save()
             }
+            accepted()
         }
     }
     override fun close() { synchronized(lock) { closed = true; owned = null } }

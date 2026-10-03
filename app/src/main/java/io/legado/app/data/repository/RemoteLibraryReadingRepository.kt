@@ -32,6 +32,7 @@ internal interface RemoteLibraryReadingRepository {
     suspend fun prepare(entry: RemoteLibraryEntry): RemoteLibraryReadTarget
     suspend fun chooseArchive(uri: String, name: String): RemoteLibraryReadTarget
     suspend fun importArchive(uri: String, name: String): String?
+    suspend fun importArchiveWithReceipt(uri: String, name: String, accepted: suspend (String?) -> Unit) { accepted(importArchive(uri, name)) }
     suspend fun readBook(id: String): Book?
 }
 internal class DefaultRemoteLibraryReadingRepository(private val store: RemoteLibraryReadingStore,
@@ -53,6 +54,9 @@ internal class DefaultRemoteLibraryReadingRepository(private val store: RemoteLi
     override suspend fun chooseArchive(uri: String, name: String): RemoteLibraryReadTarget = withContext(io) { resolveArchive(uri, name) }
     override suspend fun importArchive(uri: String, name: String): String? = withContext(io) {
         currentCoroutineContext().ensureActive(); withContext(NonCancellable) { store.importArchive(uri, name)?.bookUrl }
+    }
+    override suspend fun importArchiveWithReceipt(uri: String, name: String, accepted: suspend (String?) -> Unit) = withContext(io) {
+        currentCoroutineContext().ensureActive(); withContext(NonCancellable) { accepted(store.importArchive(uri, name)?.bookUrl) }
     }
     override suspend fun readBook(id: String): Book? = withContext(io) { store.readBook(id)?.copy() }
 }
