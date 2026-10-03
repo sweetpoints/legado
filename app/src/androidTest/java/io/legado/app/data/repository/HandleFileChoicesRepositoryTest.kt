@@ -108,6 +108,21 @@ class HandleFileChoicesRepositoryTest {
     }
 
     @Test
+    fun equalRevisionCannotReplaceDurableCheckpointAcrossRepositoryInstances() = runBlocking {
+        val sessionId = UUID.randomUUID().toString()
+        val firstRepository = FileHandleFileChoicesSessionRepository(directory)
+        val restoredRepository = FileHandleFileChoicesSessionRepository(directory)
+        firstRepository.stage(sessionId, HandleFileSeed(HandleFileInput(), "Payload"))
+        val acceptedCheckpoint = HandleFileCheckpoint(4, "Result", result = "https://accepted")
+        firstRepository.write(sessionId, acceptedCheckpoint)
+        restoredRepository.write(sessionId, HandleFileCheckpoint(4, "Native", draft = "Stale"))
+        assertEquals(acceptedCheckpoint, restoredRepository.read(sessionId))
+        val nextCheckpoint = acceptedCheckpoint.copy(revision = 5, finished = true)
+        restoredRepository.write(sessionId, nextCheckpoint)
+        assertEquals(nextCheckpoint, firstRepository.read(sessionId))
+    }
+
+    @Test
     fun failedInitialStageRetriesSameUuidAndRejectsEscapeAndMissingPayload() = runBlocking {
         directory.parentFile!!.mkdirs()
         directory.writeText("Blocked")

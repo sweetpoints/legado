@@ -158,7 +158,7 @@ class FileHandleFileChoicesSessionRepository(
         withContext(Dispatchers.IO + NonCancellable) {
             gate(id).withLock {
                 val currentRevision = readCheckpointOrNull(id)?.revision ?: -1
-                if (released(id) || currentRevision > value.revision) return@withLock
+                if (released(id) || currentRevision >= value.revision) return@withLock
                 writeAtomicBytes(id, "state.json", GSON.toJson(value).toByteArray())
             }
         }
