@@ -27,7 +27,6 @@ import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityBookReadBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.cacheLocalUri
 import io.legado.app.help.config.AppConfig
@@ -38,6 +37,7 @@ import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.CacheBook
+import io.legado.app.ui.book.download.showChapterDownloadDialog
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.book.read.config.BgTextConfigDialog
@@ -57,30 +57,7 @@ import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-@SuppressLint("InflateParams", "SetTextI18n")
-fun Context.showBookDownloadDialog(book: Book) {
-    alert(titleResource = R.string.offline_cache) {
-        val alertBinding = DialogDownloadChoiceBinding
-            .inflate(LayoutInflater.from(this@showBookDownloadDialog))
-            .apply {
-                editStart.setText((book.durChapterIndex + 1).toString())
-                editEnd.setText(book.totalChapterNum.toString())
-            }
-        customView { alertBinding.root }
-        okButton {
-            alertBinding.run {
-                val start = editStart.text!!.toString().let {
-                    if (it.isEmpty()) 0 else it.toInt()
-                }
-                val end = editEnd.text!!.toString().let {
-                    if (it.isEmpty()) book.totalChapterNum else it.toInt()
-                }
-                CacheBook.start(this@showBookDownloadDialog, book, start - 1, end - 1)
-            }
-        }
-        cancelButton()
-    }
-}
+fun Context.showBookDownloadDialog(book: Book) { showChapterDownloadDialog(book) }
 
 /**
  * 阅读界面

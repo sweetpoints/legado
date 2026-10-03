@@ -1091,3 +1091,5 @@ RSS 阅读 B：实际宿主使用 Compose Chrome/Route/Screen，保留公开启�
 书籍详情 A2 网络：IO 仓库复用现有 WebBook/LocalBook/AnalyzeUrl 引擎，完整实体输入与结果独立，保留详情后目录和直接目录刷新的不同标志、预更新脚本、网页文件下载解析及缺图规则。新增 7 个 JVM 引擎桥/取消/文件名用例与 2 个实际 HTTP/解析引擎 Android 用例；Android 用例仅编译验证。
 
 备份设置 A2c：新增与表单共用私有草稿的任务协调器，权限、文件选择和扫码传小独立票据并拒绝迟到结果。恢复 Running 任务等待明确重新确认，完成回执写失败仅重写回执，避免重跑备份/恢复；局域网关闭与取消等待原任务结束。新增 19 个真实 JVM 任务、恢复、回执和原生结果用例。
+
+章节范围 B：普通阅读、漫画入口与音频页共同切换 Compose 范围 Dialog/Route/Screen，保留音频目录权限流程和既有服务参数。Fragment 只传小 UUID，生命周期限定待办交付，旋转恢复小输入，关闭清理私有完整书籍；删除共用 dialog_download_choice.xml 和两处 ViewBinding 使用。新增 3 个实际 Compose、3 个生命周期 Route 与 1 个真实 Fragment 宿主 Android 用例；Android 用例仅编译验证。

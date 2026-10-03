@@ -26,9 +26,10 @@ import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityAudioPlayBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
 import io.legado.app.help.audio.AudioCacheManager
-import io.legado.app.help.audio.AudioCachePolicy
+import io.legado.app.ui.book.download.ChapterDownloadDialog
+import io.legado.app.ui.book.download.showChapterDownloadDialog
+import io.legado.app.model.download.ChapterDownloadMode
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
@@ -86,7 +87,8 @@ class AudioPlayActivity :
     VMBaseActivity<ActivityAudioPlayBinding, AudioPlayViewModel>(toolBarTheme = Theme.Dark),
     ChangeBookSourceDialog.CallBack,
     AudioPlay.CallBack,
-    SleepTimerDialog.CallBack {
+    SleepTimerDialog.CallBack,
+    ChapterDownloadDialog.AudioHost {
 
     override val binding by viewBinding(ActivityAudioPlayBinding::inflate)
     override val viewModel by viewModels<AudioPlayViewModel>()
@@ -283,38 +285,14 @@ class AudioPlayActivity :
 
     private fun showAudioCacheRange() {
         val book = AudioPlay.book ?: return
-        val chapterCount = AudioPlay.simulatedChapterSize.takeIf { it > 0 }
-            ?: book.simulatedTotalChapterNum()
-        if (chapterCount <= 0) return
-        alert(titleResource = R.string.audio_cache_range) {
-            val dialogBinding = DialogDownloadChoiceBinding.inflate(layoutInflater).apply {
-                editStart.setText((AudioPlay.durChapterIndex + 1).toString())
-                editEnd.setText(chapterCount.toString())
-            }
-            customView { dialogBinding.root }
-            okButton {
-                val start = dialogBinding.editStart.text?.toString()?.trim()?.toIntOrNull()
-                val end = dialogBinding.editEnd.text?.toString()?.trim()?.toIntOrNull()
-                val range = AudioCachePolicy.normalizeRange(
-                    start = start?.minus(1) ?: -1,
-                    endInclusive = end?.minus(1) ?: -1,
-                    chapterCount = chapterCount,
-                )
-                if (range == null) {
-                    toastOnUi(R.string.error_scope_input)
-                    return@okButton
-                }
-                ensureAudioCacheFolder {
-                    AudioCacheService.start(
-                        this@AudioPlayActivity,
-                        book.bookUrl,
-                        range.first,
-                        range.last,
-                    )
-                    toastOnUi(R.string.audio_cache_start_range)
-                }
-            }
-            cancelButton()
+        val count = AudioPlay.simulatedChapterSize.takeIf { it > 0 } ?: book.simulatedTotalChapterNum()
+        if (count > 0) showChapterDownloadDialog(book, ChapterDownloadMode.Audio, AudioPlay.durChapterIndex + 1, count)
+    }
+
+    override fun downloadAudioRange(bookUrl: String, start: Int, endInclusive: Int) {
+        ensureAudioCacheFolder {
+            AudioCacheService.start(this, bookUrl, start, endInclusive)
+            toastOnUi(R.string.audio_cache_start_range)
         }
     }
 
