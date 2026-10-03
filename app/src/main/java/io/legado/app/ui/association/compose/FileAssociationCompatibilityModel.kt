@@ -38,6 +38,7 @@ private constructor(
         dependencies.files,
         dependencies.online,
         dependencies.actions,
+        dependencies.nativeResults,
     ) {
     constructor(
         application: Application,

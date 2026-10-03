@@ -9,6 +9,10 @@ import io.legado.app.data.association.AssociationHostKind
 import io.legado.app.data.association.AssociationImportOperations
 import io.legado.app.data.association.AssociationInput
 import io.legado.app.data.association.AssociationInputKind
+import io.legado.app.data.association.AssociationNativeKind
+import io.legado.app.data.association.AssociationNativeReceipt
+import io.legado.app.data.association.AssociationNativeResult
+import io.legado.app.data.association.AssociationNativeResultRepository
 import io.legado.app.data.association.AssociationOnlinePayload
 import io.legado.app.data.association.AssociationOnlineRepository
 import io.legado.app.data.association.AssociationOperation
@@ -378,11 +382,193 @@ class AssociationImportViewModelTest {
             }
         }
 
+    @Test
+    fun directoryResultBeforeLoadImportsOnceAndRestoredCompletedResultDoesNotReplay() =
+        runTest(dispatcher) {
+            val receipt =
+                AssociationNativeReceipt("picker", 0, AssociationNativeKind.SelectDirectory)
+            val sessions =
+                MemorySessions().apply {
+                    current =
+                        AssociationSession(
+                            input,
+                            phase = AssociationPhase.Directory,
+                            previews = listOf(preview),
+                            selectedIds = listOf(preview.id),
+                            choosingDirectory = true,
+                            claimedEffects = listOf(receipt),
+                        )
+                    readGate = CompletableDeferred()
+                }
+            val results = MemoryNativeResults()
+            var imports = 0
+            val actions =
+                object : AssociationImportOperations {
+                    override suspend fun execute(
+                        ticket: String,
+                        session: AssociationSession,
+                        operation: AssociationOperation,
+                    ): AssociationOperationResult {
+                        imports++
+                        assertEquals("content://picked/folder", operation.payload)
+                        assertEquals(listOf(preview.id), session.selectedIds)
+                        return AssociationOperationResult()
+                    }
+                }
+            val saved = SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket"))
+            val model =
+                model(
+                    saved,
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                    actions,
+                    results,
+                )
+            try {
+                runCurrent()
+                assertFalse(model.state.value.loaded)
+                val result = AssociationNativeResult(receipt, directory = "content://picked/folder")
+                results.record("ticket", result)
+                sessions.readGate!!.complete(Unit)
+                runCurrent()
+                assertEquals(1, imports)
+                assertEquals(AssociationPhase.Finished, model.state.value.session!!.phase)
+                assertTrue(results.values.isEmpty())
+                assertEquals(setOf(AssociationImportViewModel.TICKET_KEY), saved.keys())
+                // A duplicate callback whose platform receipt was already accepted is ignored.
+                model.recordNativeResult("ticket", result)
+                runCurrent()
+                assertEquals(1, imports)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+            val restored =
+                model(
+                    saved,
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                    actions,
+                    results,
+                )
+            try {
+                runCurrent()
+                assertEquals(1, imports)
+                assertFalse(restored.state.value.nativeResultPending)
+            } finally {
+                clear(restored)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun acknowledgedFolderWithoutAcceptedImportRecoversFromRetainedNativeResult() =
+        runTest(dispatcher) {
+            val receipt =
+                AssociationNativeReceipt("picker", 0, AssociationNativeKind.SelectDirectory)
+            val sessions =
+                MemorySessions().apply {
+                    current =
+                        AssociationSession(
+                            input,
+                            phase = AssociationPhase.Preview,
+                            previews = listOf(preview),
+                            selectedIds = listOf(preview.id),
+                        )
+                }
+            val results =
+                MemoryNativeResults().apply {
+                    values = listOf(AssociationNativeResult(receipt, directory = "file:///picked"))
+                }
+            var imports = 0
+            val actions =
+                object : AssociationImportOperations {
+                    override suspend fun execute(
+                        ticket: String,
+                        session: AssociationSession,
+                        operation: AssociationOperation,
+                    ): AssociationOperationResult {
+                        imports++
+                        return AssociationOperationResult()
+                    }
+                }
+            val model =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                    actions,
+                    results,
+                )
+            try {
+                runCurrent()
+                assertEquals(1, imports)
+                assertTrue(results.values.isEmpty())
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun directoryCancellationBeforeRestoreReturnsPreviewWithoutImport() =
+        runTest(dispatcher) {
+            val receipt =
+                AssociationNativeReceipt("picker", 0, AssociationNativeKind.SelectDirectory)
+            val sessions =
+                MemorySessions().apply {
+                    current =
+                        AssociationSession(
+                            input,
+                            phase = AssociationPhase.Directory,
+                            previews = listOf(preview),
+                            selectedIds = listOf(preview.id),
+                            choosingDirectory = true,
+                            claimedEffects = listOf(receipt),
+                        )
+                }
+            val results =
+                MemoryNativeResults().apply { values = listOf(AssociationNativeResult(receipt)) }
+            val model =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    Files(AssociationFileInspection(finished = true)),
+                    nativeResults = results,
+                )
+            try {
+                runCurrent()
+                assertEquals(AssociationPhase.Preview, model.state.value.session!!.phase)
+                assertFalse(model.state.value.session!!.choosingDirectory)
+                assertTrue(results.values.isEmpty())
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    private class MemoryNativeResults : AssociationNativeResultRepository {
+        var values = emptyList<AssociationNativeResult>()
+
+        override suspend fun record(ticket: String, result: AssociationNativeResult): Boolean {
+            if (values.any { it.receipt == result.receipt }) return false
+            values = values + result
+            return true
+        }
+
+        override suspend fun read(ticket: String) = values
+
+        override suspend fun acknowledge(ticket: String, receipt: AssociationNativeReceipt) {
+            values = values.filterNot { it.receipt == receipt }
+        }
+    }
+
     private fun model(
         saved: SavedStateHandle,
         sessions: MemorySessions,
         files: Files,
         actions: AssociationImportOperations? = null,
+        nativeResults: AssociationNativeResultRepository? = null,
     ) =
         AssociationImportViewModel(
             saved,
@@ -402,6 +588,7 @@ class AssociationImportViewModelTest {
                 override suspend fun text(url: String): String = error("Unused")
             },
             actions,
+            nativeResults,
         )
 
     private fun clear(model: AssociationImportViewModel) {
@@ -432,6 +619,7 @@ class AssociationImportViewModelTest {
         var creations = 0
         var writes = 0
         var readFailure: Throwable? = null
+        var readGate: CompletableDeferred<Unit>? = null
 
         override suspend fun create(input: AssociationInput): String {
             creations++
@@ -440,6 +628,7 @@ class AssociationImportViewModelTest {
         }
 
         override suspend fun read(ticket: String): AssociationSession {
+            readGate?.await()
             readFailure?.let { throw it }
             return checkNotNull(current)
         }

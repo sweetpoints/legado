@@ -29,9 +29,10 @@ fun AssociationImportScreen(
     onClose: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (!state.loaded || state.busy) CircularProgressIndicator(Modifier.padding(24.dp))
+        if (!state.loaded || state.busy || state.nativeResultPending)
+            CircularProgressIndicator(Modifier.padding(24.dp))
         val session = state.session
-        if (state.busy) return@Box
+        if (state.busy || state.nativeResultPending) return@Box
         when (session?.phase) {
             AssociationPhase.ReadConfig ->
                 AssociationConfirmation(
@@ -77,7 +78,7 @@ fun AssociationImportScreen(
                 }
             else -> Unit
         }
-        state.restoreError?.let { error ->
+        (state.restoreError ?: session?.error)?.let { error ->
             AlertDialog(
                 onDismissRequest = onClose,
                 title = { Text(stringResource(R.string.error)) },

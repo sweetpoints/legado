@@ -12,6 +12,8 @@ import io.legado.app.data.association.AssociationInput
 import io.legado.app.data.association.AssociationInputKind
 import io.legado.app.data.association.AssociationNativeKind
 import io.legado.app.data.association.AssociationNativeReceipt
+import io.legado.app.data.association.AssociationNativeResult
+import io.legado.app.data.association.AssociationNativeResultRepository
 import io.legado.app.data.association.AssociationOnlinePayload
 import io.legado.app.data.association.AssociationOnlineRepository
 import io.legado.app.data.association.AssociationOperation
@@ -28,6 +30,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class AssociationImportState(
@@ -36,6 +40,7 @@ data class AssociationImportState(
     val session: AssociationSession? = null,
     val busy: Boolean = false,
     val restoreError: String? = null,
+    val nativeResultPending: Boolean = false,
 )
 
 /** Each host owns one private UUID; providers, JSON and complete book metadata stay off Bundle. */
@@ -45,12 +50,14 @@ open class AssociationImportViewModel(
     private val files: AssociationFileRepository,
     private val online: AssociationOnlineRepository,
     private val actions: AssociationImportOperations? = null,
+    private val nativeResults: AssociationNativeResultRepository? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(AssociationImportState())
     val state = mutableState.asStateFlow()
     private var operation: Job? = null
     private var closed = false
     private var sessionController: AssociationSessionController? = null
+    private val nativeResultCommands = Mutex()
 
     private fun controller(ticket: String): AssociationSessionController {
         return sessionController?.takeIf { it.ticket == ticket }
@@ -62,6 +69,7 @@ open class AssociationImportViewModel(
             operation = viewModelScope.launch {
                 try {
                     val restored = sessions.read(ticket)
+                    val pendingResults = nativeResults?.read(ticket).orEmpty()
                     currentCoroutineContext().ensureActive()
                     if (closed) return@launch
                     val needsInspection =
@@ -74,12 +82,14 @@ open class AssociationImportViewModel(
                             ticket = ticket,
                             session = restored,
                             busy = needsInspection,
+                            nativeResultPending = pendingResults.isNotEmpty(),
                         )
                     // Reading/staging is repeatable. An accepted import operation is resumed only
                     // by its dedicated journal, never by rerunning the first incoming Intent.
                     if (needsInspection) {
                         inspect(ticket, restored)
                     }
+                    reconcileNativeResults()
                 } catch (failure: Throwable) {
                     currentCoroutineContext().ensureActive()
                     if (!closed)
@@ -167,7 +177,80 @@ open class AssociationImportViewModel(
     }
 
     suspend fun awaitCommands() {
-        operation?.join()
+        val currentJob = currentCoroutineContext()[Job]
+        operation?.takeIf { it != currentJob }?.join()
+    }
+
+    /**
+     * Record first, even while restore is suspended. The callback carries only its private owner.
+     */
+    suspend fun recordNativeResult(ticket: String, result: AssociationNativeResult) {
+        if (closed || savedState.get<String>(TICKET_KEY) != ticket) return
+        val repository = nativeResults ?: return
+        repository.record(ticket, result)
+        currentCoroutineContext().ensureActive()
+        reconcileNativeResults()
+    }
+
+    suspend fun reconcileNativeResults() {
+        val repository = nativeResults ?: return
+        awaitCommands()
+        nativeResultCommands.withLock {
+            if (closed) return@withLock
+            val ticket = state.value.ticket ?: return@withLock
+            val results = repository.read(ticket)
+            if (results.isEmpty()) return@withLock
+            mutableState.value = state.value.copy(nativeResultPending = true)
+            try {
+                for (result in results) {
+                    if (closed || state.value.ticket != ticket) return@withLock
+                    val session = controller(ticket).read()
+                    if (session.generation != result.receipt.generation) continue
+                    publish(ticket, session, busy = false)
+                    when (result.receipt.kind) {
+                        AssociationNativeKind.StoragePermission -> {
+                            if (result.receipt in session.claimedEffects) {
+                                permissionResult(result.receipt, result.permissionGranted == true)
+                            }
+                            repository.acknowledge(ticket, result.receipt)
+                        }
+                        AssociationNativeKind.SelectDirectory -> {
+                            if (result.receipt in session.claimedEffects) {
+                                directoryResult(result.receipt, result.directory)
+                            } else if (
+                                result.directory != null &&
+                                    session.importAfterDirectory &&
+                                    session.phase != AssociationPhase.Finished
+                            ) {
+                                // Cancellation may follow the folder acknowledgement but precede
+                                // the accepted import command. The retained result bridges that
+                                // gap; the local journal handles an already accepted command.
+                                check(
+                                    session.operation == null ||
+                                        session.operation.kind == "local-import"
+                                )
+                                confirmOperation("local-import", result.directory)
+                            }
+                            awaitCommands()
+                            val completed = controller(ticket).read()
+                            publish(ticket, completed, busy = false)
+                            if (
+                                result.directory == null ||
+                                    !completed.importAfterDirectory ||
+                                    completed.phase == AssociationPhase.Finished
+                            ) {
+                                repository.acknowledge(ticket, result.receipt)
+                            }
+                        }
+                        else -> error("Unexpected platform result")
+                    }
+                }
+            } finally {
+                if (!closed && state.value.ticket == ticket) {
+                    mutableState.value = state.value.copy(nativeResultPending = false)
+                }
+            }
+        }
     }
 
     suspend fun closeOwnedSession() {
@@ -226,7 +309,13 @@ open class AssociationImportViewModel(
     suspend fun claimNative(receipt: AssociationNativeReceipt): AssociationNativeReceipt? {
         val current = state.value
         val ticket = current.ticket ?: return null
-        if (closed || current.busy || current.session?.generation != receipt.generation) return null
+        if (
+            closed ||
+                current.busy ||
+                current.nativeResultPending ||
+                current.session?.generation != receipt.generation
+        )
+            return null
         return controller(ticket).claim(receipt.token, receipt.generation)
     }
 
@@ -528,7 +617,13 @@ open class AssociationImportViewModel(
     private fun publish(ticket: String, session: AssociationSession, busy: Boolean) {
         if (closed || state.value.ticket != ticket) return
         mutableState.value =
-            AssociationImportState(loaded = true, ticket = ticket, session = session, busy = busy)
+            AssociationImportState(
+                loaded = true,
+                ticket = ticket,
+                session = session,
+                busy = busy,
+                nativeResultPending = state.value.nativeResultPending,
+            )
     }
 
     override fun onCleared() {

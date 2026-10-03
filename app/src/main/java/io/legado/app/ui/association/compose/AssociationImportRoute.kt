@@ -39,8 +39,15 @@ fun AssociationImportRoute(
     val currentError by rememberUpdatedState(onDeliveryError)
     LaunchedEffect(model, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            model.reconcileNativeResults()
             model.state.collectLatest { current ->
-                if (!current.loaded || current.busy || !currentCanDeliver()) return@collectLatest
+                if (
+                    !current.loaded ||
+                        current.busy ||
+                        current.nativeResultPending ||
+                        !currentCanDeliver()
+                )
+                    return@collectLatest
                 for (receipt in current.session?.effects.orEmpty()) {
                     var claimed: AssociationNativeReceipt? = null
                     var accepted = false
