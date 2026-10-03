@@ -3,11 +3,11 @@ package io.legado.app.config
 import io.legado.app.data.entities.AutoTaskRule
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class AutoTaskPersistenceContractTest {
 
@@ -18,11 +18,8 @@ class AutoTaskPersistenceContractTest {
         val database = file("app/src/main/java/io/legado/app/data/AppDatabase.kt").readText()
         val dao = file("app/src/main/java/io/legado/app/data/dao/AutoTaskRuleDao.kt").readText()
         val autoTask = file("app/src/main/java/io/legado/app/model/AutoTask.kt").readText()
-        val databaseVersion = Regex("""version = (\d+)""")
-            .find(database)
-            ?.groupValues
-            ?.get(1)
-            ?.toInt()
+        val databaseVersion =
+            Regex("""version = (\d+)""").find(database)?.groupValues?.get(1)?.toInt()
         assertTrue(requireNotNull(databaseVersion) >= 94)
         assertTrue(database.contains("AutoMigration(from = 93, to = 94)"))
         assertTrue(database.contains("AutoTaskRule::class"))
@@ -32,19 +29,19 @@ class AutoTaskPersistenceContractTest {
         assertTrue(autoTask.contains("fun reorder("))
         assertMutationChecksLegacyFirst(
             autoTask.substringAfter("fun upsert(").substringBefore("fun delete("),
-            "appDb.autoTaskRuleDao.upsert"
+            "appDb.autoTaskRuleDao.upsert",
         )
         assertMutationChecksLegacyFirst(
             autoTask.substringAfter("fun delete(").substringBefore("fun reorder("),
-            "appDb.autoTaskRuleDao.deleteByIds"
+            "appDb.autoTaskRuleDao.deleteByIds",
         )
         assertMutationChecksLegacyFirst(
             autoTask.substringAfter("fun reorder(").substringBefore("fun updateEnabled("),
-            "appDb.autoTaskRuleDao.update"
+            "appDb.autoTaskRuleDao.update",
         )
         assertMutationChecksLegacyFirst(
             autoTask.substringAfter("fun get(").substringBefore("fun upsert("),
-            "appDb.autoTaskRuleDao.getById"
+            "appDb.autoTaskRuleDao.getById",
         )
     }
 
@@ -52,11 +49,10 @@ class AutoTaskPersistenceContractTest {
     fun `batch cron update changes only cron and refreshes scheduling once`() {
         val dao = file("app/src/main/java/io/legado/app/data/dao/AutoTaskRuleDao.kt").readText()
         val autoTask = file("app/src/main/java/io/legado/app/model/AutoTask.kt").readText()
-        val update = autoTask.substringAfter("fun updateCron(").substringBefore("fun updateRunState(")
-        val cronQuery = Regex("""@Query\("([^"]+)"\)\s+fun updateCron""")
-            .find(dao)
-            ?.groupValues
-            ?.get(1)
+        val update =
+            autoTask.substringAfter("fun updateCron(").substringBefore("fun updateRunState(")
+        val cronQuery =
+            Regex("""@Query\("([^"]+)"\)\s+fun updateCron""").find(dao)?.groupValues?.get(1)
 
         assertEquals("UPDATE auto_task_rules SET cron = :cron WHERE id IN (:ids)", cronQuery)
         assertMutationChecksLegacyFirst(update, "appDb.autoTaskRuleDao.updateCron")
@@ -69,15 +65,14 @@ class AutoTaskPersistenceContractTest {
     fun `batch selection actions update only selected state and refresh scheduling once`() {
         val dao = file("app/src/main/java/io/legado/app/data/dao/AutoTaskRuleDao.kt").readText()
         val autoTask = file("app/src/main/java/io/legado/app/model/AutoTask.kt").readText()
-        val update = autoTask.substringAfter("fun updateEnabled(").substringBefore("fun updateCron(")
-        val enabledQuery = Regex("""@Query\("([^"]+)"\)\s+fun updateEnabled""")
-            .find(dao)
-            ?.groupValues
-            ?.get(1)
+        val update =
+            autoTask.substringAfter("fun updateEnabled(").substringBefore("fun updateCron(")
+        val enabledQuery =
+            Regex("""@Query\("([^"]+)"\)\s+fun updateEnabled""").find(dao)?.groupValues?.get(1)
 
         assertEquals(
             "UPDATE auto_task_rules SET enable = :enabled WHERE id IN (:ids)",
-            enabledQuery
+            enabledQuery,
         )
         assertMutationChecksLegacyFirst(update, "appDb.autoTaskRuleDao.updateEnabled")
         assertTrue(update.contains("ids.chunked(900).sumOf"))
@@ -90,8 +85,8 @@ class AutoTaskPersistenceContractTest {
         val dao = file("app/src/main/java/io/legado/app/data/dao/AutoTaskRuleDao.kt").readText()
         val autoTask = file("app/src/main/java/io/legado/app/model/AutoTask.kt").readText()
         val clearQuery = dao.substringBefore("fun clearRunLog").substringAfterLast("@Query")
-        val clearModel = autoTask.substringAfter("fun clearRunLog(")
-            .substringBefore("fun updateRunState(")
+        val clearModel =
+            autoTask.substringAfter("fun clearRunLog(").substringBefore("fun updateRunState(")
 
         assertTrue(clearQuery.contains("SET lastResult = NULL"))
         assertTrue(clearQuery.contains("lastError = NULL"))
@@ -113,10 +108,14 @@ class AutoTaskPersistenceContractTest {
     @Test
     fun `persisted jobs and settings keep lifecycle contract`() {
         val manifest = file("app/src/main/AndroidManifest.xml").readText()
-        val scheduler = file("app/src/main/java/io/legado/app/service/AutoTaskScheduler.kt").readText()
-        val service = file("app/src/main/java/io/legado/app/service/AutoTaskJobService.kt").readText()
-        val preferences = file("app/src/main/java/io/legado/app/ui/main/my/MySettingItem.kt").readText()
-        val myFragment = file("app/src/main/java/io/legado/app/ui/main/my/MyViewModel.kt").readText()
+        val scheduler =
+            file("app/src/main/java/io/legado/app/service/AutoTaskScheduler.kt").readText()
+        val service =
+            file("app/src/main/java/io/legado/app/service/AutoTaskJobService.kt").readText()
+        val preferences =
+            file("app/src/main/java/io/legado/app/ui/main/my/MySettingItem.kt").readText()
+        val myViewModel =
+            file("app/src/main/java/io/legado/app/ui/main/my/MyViewModel.kt").readText()
         assertTrue(manifest.contains("android.permission.RECEIVE_BOOT_COMPLETED"))
         assertTrue(manifest.contains("android.permission.BIND_JOB_SERVICE"))
         assertTrue(manifest.contains(".service.AutoTaskJobService"))
@@ -129,9 +128,10 @@ class AutoTaskPersistenceContractTest {
         assertTrue(service.contains("return AutoTaskScheduler.shouldRetry(this)"))
         assertTrue(service.contains("start = CoroutineStart.LAZY"))
         assertTrue(service.contains("jobs.remove(jobId, currentJob)"))
-        val scheduleNext = service.indexOf(
-            "val nextScheduled = AutoTaskScheduler.refresh(this, afterBatch = true)"
-        )
+        val scheduleNext =
+            service.indexOf(
+                "val nextScheduled = AutoTaskScheduler.refresh(this, afterBatch = true)"
+            )
         val runDueTasks = service.indexOf("AutoTaskRunner.runDueTasks(this@AutoTaskJobService)")
         assertTrue(scheduleNext >= 0)
         assertTrue(runDueTasks > scheduleNext)
@@ -139,8 +139,8 @@ class AutoTaskPersistenceContractTest {
         val startJob = service.indexOf("currentJob.start()")
         assertTrue(saveJob >= 0)
         assertTrue(startJob > saveJob)
-        val completion = service.substringAfter("} finally {")
-            .substringBefore("override fun onStopJob")
+        val completion =
+            service.substringAfter("} finally {").substringBefore("override fun onStopJob")
         val stoppedFlag = completion.indexOf("stoppedJobs.remove(jobId)")
         val completionRelease = completion.indexOf("AutoTaskScheduler.markStopped(jobId)")
         val jobFinished = completion.indexOf("jobFinished(params, retry)")
@@ -157,9 +157,10 @@ class AutoTaskPersistenceContractTest {
         assertTrue(releaseSlot > cancelJob)
         assertTrue(cancelScope > releaseSlot)
         assertTrue(preferences.contains("MySettingItem(\"autoTaskService\""))
-        assertTrue(myFragment.contains("PreferKey.autoTaskService -> viewModelScope.launch(Dispatchers.IO)"))
-        assertTrue(myFragment.contains("AutoTaskScheduler.refresh(context)"))
-        assertTrue(myFragment.contains("AutoTaskScheduler.cancelAll(context)"))
+        assertTrue(myViewModel.contains("PreferKey.autoTaskService ->"))
+        assertTrue(myViewModel.contains("viewModelScope.launch(Dispatchers.IO)"))
+        assertTrue(myViewModel.contains("AutoTaskScheduler.refresh(context)"))
+        assertTrue(myViewModel.contains("AutoTaskScheduler.cancelAll(context)"))
     }
 
     @Test
@@ -195,8 +196,7 @@ class AutoTaskPersistenceContractTest {
         assertTrue(backup.contains("appDb.autoTaskRuleDao.all()"))
         assertTrue(restore.contains("fileToListT<AutoTaskRule>(path, \"autoTask.json\")"))
         assertTrue(restore.contains("appDb.autoTaskRuleDao.upsert"))
-        val preferenceRestore =
-            restore.indexOf("readPreferenceSnapshot(appCtx, path, \"config\")")
+        val preferenceRestore = restore.indexOf("readPreferenceSnapshot(appCtx, path, \"config\")")
         val taskUpsert = restore.indexOf("appDb.autoTaskRuleDao.upsert")
         val scheduleRefresh = restore.indexOf("AutoTaskScheduler.refresh(appCtx)")
         assertTrue(preferenceRestore >= 0)
@@ -207,30 +207,30 @@ class AutoTaskPersistenceContractTest {
 
     @Test
     fun `automatic task backup json preserves every persisted field`() {
-        val rule = AutoTaskRule(
-            id = "task-id",
-            name = "task-name",
-            enable = false,
-            cron = "1 2 3 4 5",
-            loginUrl = "https://example.com/login",
-            loginUi = "login-ui",
-            loginCheckJs = "login-check",
-            comment = "comment",
-            script = "script",
-            header = "header",
-            jsLib = "library",
-            concurrentRate = "2/1000",
-            enabledCookieJar = false,
-            customOrder = 7,
-            lastRunAt = 8L,
-            lastResult = "result",
-            lastError = "error",
-            lastLog = "log",
-        )
+        val rule =
+            AutoTaskRule(
+                id = "task-id",
+                name = "task-name",
+                enable = false,
+                cron = "1 2 3 4 5",
+                loginUrl = "https://example.com/login",
+                loginUi = "login-ui",
+                loginCheckJs = "login-check",
+                comment = "comment",
+                script = "script",
+                header = "header",
+                jsLib = "library",
+                concurrentRate = "2/1000",
+                enabledCookieJar = false,
+                customOrder = 7,
+                lastRunAt = 8L,
+                lastResult = "result",
+                lastError = "error",
+                lastLog = "log",
+            )
 
-        val restored = GSON.fromJsonArray<AutoTaskRule>(GSON.toJson(listOf(rule)))
-            .getOrThrow()
-            .single()
+        val restored =
+            GSON.fromJsonArray<AutoTaskRule>(GSON.toJson(listOf(rule))).getOrThrow().single()
 
         assertEquals(rule, restored)
     }
