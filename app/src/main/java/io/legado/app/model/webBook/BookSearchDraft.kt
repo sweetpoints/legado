@@ -25,6 +25,8 @@ data class BookSearchDraft(
     val clearHistoryConfirmation: Boolean = false,
     val emptyScopeConfirmation: Boolean = false,
     val initialEntryAccepted: Boolean = false,
+    val navigationSeed: Boolean = false,
+    val acceptedNavigationTicket: String? = null,
     val pendingScopeRequest: String? = null,
     val pendingScopeValue: String? = null,
     val effects: List<BookSearchReceipt> = emptyList(),

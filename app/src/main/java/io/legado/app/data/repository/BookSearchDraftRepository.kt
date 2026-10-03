@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 internal interface BookSearchDraftRepository {
     suspend fun open(session: String): BookSearchDraft
 
+    suspend fun existing(session: String): BookSearchDraft = open(session)
+
     suspend fun write(session: String, draft: BookSearchDraft)
 
     suspend fun release(session: String)
@@ -67,6 +69,18 @@ internal class FileBookSearchDraftRepository(context: Context) : BookSearchDraft
                 } else {
                     BookSearchDraft().also { draft -> save(sessionFile, draft) }
                 }
+            }
+        }
+
+    override suspend fun existing(session: String): BookSearchDraft =
+        withContext(Dispatchers.IO) {
+            val sessionFile = file(session)
+            lock(sessionFile).withLock {
+                check(!closed(sessionFile)) { "Book search draft closed" }
+                check(sessionFile.exists() || File(sessionFile.path + ".bak").exists()) {
+                    "Book search input missing"
+                }
+                read(sessionFile)
             }
         }
 

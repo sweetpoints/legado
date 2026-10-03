@@ -17,6 +17,37 @@ import org.junit.Test
 
 class BookSearchDraftFileTest {
     @Test
+    fun existingInputReadNeverCreatesMissingOrReleasedSession() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = FileBookSearchDraftRepository(context)
+        val session = UUID.randomUUID().toString()
+        val directory = File(context.filesDir, "book-search-drafts")
+        val file = File(directory, "$session.json")
+        try {
+            assertTrue(runCatching { repository.existing(session) }.isFailure)
+            assertFalse(file.exists())
+            repository.open(session)
+            val input = BookSearchDraft(revision = 1, query = "prepared", navigationSeed = true)
+            repository.write(session, input)
+            assertEquals(input, repository.existing(session))
+            repository.release(session)
+            assertTrue(runCatching { repository.existing(session) }.isFailure)
+            assertFalse(file.exists())
+        } finally {
+            repository.release(session)
+            listOf(
+                    ".json",
+                    ".json.bak",
+                    ".json.new",
+                    ".json.closed",
+                    ".json.closed.bak",
+                    ".json.closed.new",
+                )
+                .forEach { suffix -> File(directory, session + suffix).delete() }
+        }
+    }
+
+    @Test
     fun sameRevisionIsIdempotentAcrossRepositoryInstances() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val session = UUID.randomUUID().toString()
