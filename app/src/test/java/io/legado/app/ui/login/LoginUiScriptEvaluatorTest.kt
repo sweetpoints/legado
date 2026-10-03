@@ -12,7 +12,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
-import java.io.File
 
 class LoginUiScriptEvaluatorTest {
 
@@ -118,20 +117,5 @@ class LoginUiScriptEvaluatorTest {
         assertEquals(emptyList<String>(), emptySuccess.value)
     }
 
-    @Test
-    fun `login startup only reads stored form values before showing the dialog`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/login/SourceLoginViewModel.kt"
-        )
-
-        assertTrue(source.contains("source?.getStoredLoginInfoMap() ?: mutableMapOf()"))
-        assertFalse(source.contains("getLoginInfoMap()"))
-    }
-
-    private fun readProjectFile(pathInApp: String): String {
-        val file = sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-        requireNotNull(file) { "Project file not found: $pathInApp" }
-        return file.readText()
-    }
+    // Stored-only initialization is exercised through real Room/header scripts in SourceLoginRepositoryTest.
 }
