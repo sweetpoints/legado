@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.repository.BookDetailIntroImageRepository
+import io.legado.app.ui.book.info.detail.BookDetailIntroDocument
 import io.legado.app.ui.book.info.detail.BookDetailIntroMode
 import io.legado.app.ui.book.info.detail.BookDetailIntroWebContent
 import io.legado.app.ui.book.info.detail.bookDetailIntroDocument
@@ -45,7 +46,7 @@ internal fun VideoBookIntroScreen(
     val context = LocalContext.current
     val imageRepository = remember(context) { BookDetailIntroImageRepository(context) }
     val documentState =
-        produceState(initialValue = null, state.rawIntro) {
+        produceState<BookDetailIntroDocument?>(initialValue = null, state.rawIntro) {
             value = withContext(Dispatchers.IO) { bookDetailIntroDocument(state.rawIntro) }
         }
     val document = documentState.value ?: return
