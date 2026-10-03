@@ -149,7 +149,10 @@ internal fun MangaViewportScreen(
     val menuLabel = stringResource(R.string.menu)
     val boundaryColor = colorResource(R.color.book_ant_10)
     LaunchedEffect(options.disableZoom) {
-        if (options.disableZoom) transform = MangaViewportTransform()
+        if (options.disableZoom) {
+            motion.animation?.cancel()
+            transform = MangaViewportTransform()
+        }
     }
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
         val density = LocalDensity.current
