@@ -72,10 +72,12 @@ fun ExploreResultsRoute(
                 model.scroll(current.rows.getOrNull(rowIndex)?.key, rowIndex, offset)
                 val upward =
                     index < previousIndex || index == previousIndex && offset < previousOffset
+                val topIndex = if ((current.checkpoint?.firstPage ?: 1) <= 1) 1 else 0
                 if (
                     scrolling &&
                         upward &&
-                        index == 0 &&
+                        index <= topIndex &&
+                        offset == 0 &&
                         owner.lifecycle.currentState == Lifecycle.State.RESUMED
                 )
                     model.previous()

@@ -1608,3 +1608,14 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
   the next scroll to retry; added a seventeenth state behavior case for failure then recovery.
 - Formatter/check and diff checks passed. The exact follow-up commit will repeat both full tasks
   before integration. No Android device scenarios or release shrinker have been executed for it.
+
+### Explore first-page top detection
+
+- The recovery candidate passed all 3,877 JVM tests and Android test Kotlin compilation in 20s
+  (/private/tmp/legado-explore-compose-final-recovery-build.log).
+- Final scroll review found that the stable zero-height header can leave the first visible book
+  at LazyList index 1. Top detection now recognizes that position for page one, while requiring
+  offset zero and a visible header for earlier-page fetches. Added a real HTTP/Compose swipe
+  scenario verifying page-one restoration without another previous request.
+- Actual formatter/check and diff checks passed. This minimal follow-up awaits the next complete
+  build slot; the added Android scenario has not been executed on a device.

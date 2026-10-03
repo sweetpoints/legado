@@ -10,8 +10,11 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -286,6 +289,23 @@ class ExploreCategoriesTest {
                 setOf(ExploreShowActivity.PREPARED_SESSION),
                 activity.intent.extras!!.keySet(),
             )
+        }
+    }
+
+    @Test
+    fun scrollingBackToFirstBookRestoresPageOneWithoutPreviousRequest() {
+        scenario!!.onActivity { it.resultsModel.next() }
+        awaitActivity { it.resultsModel.state.value.checkpoint?.displayedPage == 2 }
+        compose.onNodeWithTag("explore-results-list").performScrollToIndex(6)
+        repeat(8) {
+            compose.onNodeWithTag("explore-results-list").performTouchInput { swipeDown() }
+            compose.waitForIdle()
+        }
+        awaitActivity { it.resultsModel.state.value.checkpoint?.displayedPage == 1 }
+        scenario!!.onActivity { activity ->
+            assertEquals(1, activity.resultsModel.state.value.checkpoint!!.firstPage)
+            assertEquals(40, activity.resultsModel.state.value.rows.size)
+            assertEquals(3, activity.resultsModel.state.value.checkpoint!!.nextPage)
         }
     }
 
