@@ -52,7 +52,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         (activity as ReadBookActivity).bottomDialog++
         val view = LinearLayout(context)
@@ -66,7 +66,8 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         var preferenceFragment = childFragmentManager.findFragmentByTag(readPreferTag)
         if (preferenceFragment == null) preferenceFragment = ReadPreferenceFragment()
-        childFragmentManager.beginTransaction()
+        childFragmentManager
+            .beginTransaction()
             .replace(view.id, preferenceFragment, readPreferTag)
             .commit()
     }
@@ -76,8 +77,8 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         (activity as ReadBookActivity).bottomDialog--
     }
 
-    class ReadPreferenceFragment : PreferenceFragment(),
-        SharedPreferences.OnSharedPreferenceChangeListener {
+    class ReadPreferenceFragment :
+        PreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
         private val slopSquare by lazy { ViewConfiguration.get(requireContext()).scaledTouchSlop }
 
@@ -99,21 +100,17 @@ class MoreConfigDialog : BasePrefDialogFragment() {
 
         override fun onResume() {
             super.onResume()
-            preferenceManager
-                .sharedPreferences
-                ?.registerOnSharedPreferenceChangeListener(this)
+            preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
         }
 
         override fun onPause() {
-            preferenceManager
-                .sharedPreferences
-                ?.unregisterOnSharedPreferenceChangeListener(this)
+            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
             super.onPause()
         }
 
         override fun onSharedPreferenceChanged(
             sharedPreferences: SharedPreferences?,
-            key: String?
+            key: String?,
         ) {
             when (key) {
                 PreferKey.readBodyToLh -> activity?.recreate()
@@ -138,7 +135,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
                 PreferKey.hangingPunctuation,
                 PreferKey.punctuationCompress,
                 PreferKey.useZhLayout,
-                PreferKey.adaptSpecialStyle-> {
+                PreferKey.adaptSpecialStyle -> {
                     postEvent(EventBus.UP_CONFIG, arrayListOf(5))
                 }
 
@@ -238,12 +235,11 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         private fun upPreferenceSummary(preferenceKey: String, value: String?) {
             val preference = findPreference<Preference>(preferenceKey) ?: return
             when (preferenceKey) {
-                PreferKey.pageTouchSlop -> preference.summary =
-                    getString(R.string.page_touch_slop_summary, value)
-                PreferKey.pullBookmarkDistance -> preference.summary =
-                    getString(R.string.pull_bookmark_distance_summary, value)
+                PreferKey.pageTouchSlop ->
+                    preference.summary = getString(R.string.page_touch_slop_summary, value)
+                PreferKey.pullBookmarkDistance ->
+                    preference.summary = getString(R.string.pull_bookmark_distance_summary, value)
             }
         }
-
     }
 }
