@@ -49,7 +49,17 @@ class PredictiveBackTest {
             )
             .forEach { path ->
                 val source = File(path).readText()
-                if (path.endsWith("ReadMangaActivity.kt")) {
+                if (path.endsWith("CodeEditActivity.kt")) {
+                    val route =
+                        File("src/main/java/io/legado/app/ui/code/CodeEditorRoute.kt").readText()
+                    assertTrue(route.contains("BackHandler(onBack = ::exit)"))
+                    val exit = route.substringAfter("fun exit()").substringBefore("SideEffect")
+                    val dismiss = exit.indexOf("engine?.dismissActions() == true")
+                    val requestExit = exit.indexOf("model.requestExit()")
+                    assertTrue(dismiss >= 0 && requestExit > dismiss)
+                    assertTrue(source.contains("controller.exit?.invoke() ?: super.finish()"))
+                    assertTrue(source.contains("private fun closeHost() = super.finish()"))
+                } else if (path.endsWith("ReadMangaActivity.kt")) {
                     val guardedMangaCallback =
                         Regex(
                             """onBackPressedDispatcher\.addCallback\(this\)\s*\{\s*viewModel\.requestExit\(\)"""
