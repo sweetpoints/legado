@@ -1,158 +1,123 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.Menu
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnAttach
 import androidx.fragment.app.Fragment
-import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.PreferenceGroup
-import io.legado.app.ui.main.my.MyMoreActivity
-import io.legado.app.utils.startActivity
+import androidx.fragment.app.FragmentContainerView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityConfigBinding
-import io.legado.app.lib.dialogs.selector
+import io.legado.app.data.repository.FileConfigSearchSessionRepository
+import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.ui.main.my.MyMoreActivity
 import io.legado.app.utils.observeEvent
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.utils.startActivity
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 
-class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() {
-
-    override val binding by viewBinding(ActivityConfigBinding::inflate)
-    override val viewModel by viewModels<ConfigViewModel>()
+/** Compose chrome and private search state host the existing Compose settings destinations. */
+class ConfigActivity : BaseComposeActivity() {
+    val viewModel by viewModels<ConfigViewModel>()
+    internal val searchModel by viewModels<ConfigSearchViewModel> { viewModelFactory { initializer {
+        ConfigSearchViewModel(FileConfigSearchSessionRepository(applicationContext), createSavedStateHandle().apply {
+            keys().filterNot { it.startsWith("config.search.") }.forEach { remove<Any?>(it) }
+        })
+    } } }
+    private var pageTitle by mutableStateOf("")
+    private var pageReady by mutableStateOf(false)
 
     override fun shouldCreateContentView(): Boolean {
         if (intent.getStringExtra("configTag") == ConfigTag.MY_MORE) {
-            startActivity<MyMoreActivity>()
-            finish()
-            return false
+            startActivity<MyMoreActivity>(); finish(); return false
         }
         return true
     }
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        when (val configTag = intent.getStringExtra("configTag")) {
-            ConfigTag.OTHER_CONFIG -> replaceFragment<OtherConfigFragment>(configTag)
-            ConfigTag.THEME_CONFIG -> replaceFragment<ThemeConfigFragment>(configTag)
-            ConfigTag.BACKUP_CONFIG -> replaceFragment<BackupConfigFragment>(configTag)
-            ConfigTag.COVER_CONFIG -> replaceFragment<CoverConfigFragment>(configTag)
-            ConfigTag.COVER_FONT_CONFIG -> replaceFragment<CoverFontConfigFragment>(configTag)
-            ConfigTag.WELCOME_CONFIG -> replaceFragment<WelcomeConfigFragment>(configTag)
-            else -> finish()
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        pageTitle = getString(R.string.setting)
+        if (pageClass(intent.getStringExtra("configTag")) == null) finish()
+    }
+    override fun setTitle(resId: Int) { super.setTitle(resId); pageTitle = getString(resId) }
+    private fun pageClass(tag: String?): Class<out Fragment>? = when (tag) {
+        ConfigTag.OTHER_CONFIG -> OtherConfigFragment::class.java
+        ConfigTag.THEME_CONFIG -> ThemeConfigFragment::class.java
+        ConfigTag.BACKUP_CONFIG -> BackupConfigFragment::class.java
+        ConfigTag.COVER_CONFIG -> CoverConfigFragment::class.java
+        ConfigTag.COVER_FONT_CONFIG -> CoverFontConfigFragment::class.java
+        ConfigTag.WELCOME_CONFIG -> WelcomeConfigFragment::class.java
+        else -> null
+    }
+    private fun attachPage() {
+        if (isFinishing || supportFragmentManager.isStateSaved) return
+        val tag = intent.getStringExtra("configTag") ?: return
+        val type = pageClass(tag) ?: return
+        if (supportFragmentManager.findFragmentByTag(tag) == null) {
+            val page = supportFragmentManager.fragmentFactory.instantiate(classLoader, type.name)
+            supportFragmentManager.beginTransaction().replace(R.id.configFrameLayout, page, tag).commitNow()
         }
+        pageReady = supportFragmentManager.findFragmentByTag(tag) is ConfigSearchPage
     }
-
-    override fun setTitle(resId: Int) {
-        super.setTitle(resId)
-        binding.titleBar.setTitle(resId)
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.search_view, menu)
-        (menu.findItem(R.id.menu_search).actionView as SearchView).apply {
-            queryHint = getString(R.string.search)
-            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean {
-                    showPreferenceSearchResults(query.orEmpty(), this@apply)
-                    return true
+    @Composable override fun Content(savedInstanceState: Bundle?) {
+        val state by searchModel.state.collectAsStateWithLifecycle()
+        val draft = state.draft
+        LaunchedEffect(searchModel, lifecycle, pageReady) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                searchModel.state.collect { current ->
+                    val pending = current.draft.request ?: return@collect
+                    if (!pageReady || isFinishing || supportFragmentManager.isStateSaved) return@collect
+                    val page = supportFragmentManager.findFragmentById(R.id.configFrameLayout) as? ConfigSearchPage ?: return@collect
+                    try {
+                        searchModel.claim(pending.token) { pageReady && !isFinishing && !supportFragmentManager.isStateSaved && lifecycle.currentState == Lifecycle.State.RESUMED }
+                            ?.let { request -> page.searchSettings(request.query) { searchModel.selected(request.token) } }
+                    } catch (canceled: CancellationException) { throw canceled }
+                    catch (error: Exception) { AppLog.put("设置搜索交付失败", error) }
                 }
-
-                override fun onQueryTextChange(newText: String?): Boolean = false
-            })
-        }
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    inline fun <reified T : Fragment> replaceFragment(configTag: String) {
-        intent.putExtra("configTag", configTag)
-        @Suppress("DEPRECATION")
-        val configFragment = supportFragmentManager.findFragmentByTag(configTag)
-            ?: T::class.java.newInstance()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.configFrameLayout, configFragment, configTag)
-            .commit()
-    }
-
-    override fun observeLiveBus() {
-        super.observeLiveBus()
-        observeEvent<String>(EventBus.RECREATE) {
-            recreate()
-        }
-    }
-
-    private fun showPreferenceSearchResults(query: String, searchView: SearchView) {
-        val normalizedQuery = query.trim()
-        if (normalizedQuery.isEmpty()) return
-        val currentPage = supportFragmentManager.findFragmentById(R.id.configFrameLayout)
-        if (currentPage is ConfigSearchPage) {
-            currentPage.searchSettings(normalizedQuery) {
-                searchView.setQuery("", false)
-                searchView.clearFocus()
-                searchView.isIconified = true
             }
-            return
         }
-        val fragment = currentPage as? PreferenceFragmentCompat ?: return
-        val results = findPreferenceSearchResults(fragment.preferenceScreen, normalizedQuery)
-        if (results.isEmpty()) {
-            toastOnUi(R.string.config_search_empty)
-            return
-        }
-        selector(R.string.search, results) { _, result, _ ->
-            searchView.setQuery("", false)
-            searchView.clearFocus()
-            searchView.isIconified = true
-            fragment.scrollToPreference(result.preference)
-        }
-    }
-
-    private fun findPreferenceSearchResults(
-        group: PreferenceGroup,
-        query: String,
-        categories: List<CharSequence> = emptyList(),
-    ): List<PreferenceSearchResult> {
-        val results = mutableListOf<PreferenceSearchResult>()
-        repeat(group.preferenceCount) { index ->
-            val preference = group.getPreference(index)
-            if (!preference.isVisible) return@repeat
-            if (preference is PreferenceGroup) {
-                val childCategories = preference.title
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { categories + it }
-                    ?: categories
-                results += findPreferenceSearchResults(preference, query, childCategories)
-                return@repeat
+        ConfigScaffold(pageTitle, draft.searching, TextFieldValue(draft.text, TextRange(draft.start, draft.end)),
+            { searchModel.text(it.text, it.selection.start, it.selection.end) }, searchModel::searching,
+            { searchModel.submit() }, ::finish, enabled = state.editable) {
+            Column(Modifier.fillMaxSize()) {
+                state.error?.let { message -> Row(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                    TextButton(searchModel::retry, enabled = !state.saving, modifier = Modifier.testTag("config-search-retry")) { Text(getString(R.string.retry)) }
+                } }
+                AndroidView(factory = { context -> FragmentContainerView(context).apply {
+                    id = R.id.configFrameLayout
+                    doOnAttach { attachPage() }
+                } }, modifier = Modifier.weight(1f).fillMaxWidth())
             }
-            val matches = configPreferenceMatches(
-                query,
-                preference.title,
-                preference.summary,
-                categories,
-            )
-            if (!matches) {
-                return@repeat
-            }
-            val title = preference.title?.takeIf { it.isNotBlank() }
-                ?: preference.summary?.takeIf { it.isNotBlank() }
-                ?: return@repeat
-            results += PreferenceSearchResult(
-                label = (categories + title).joinToString(" > "),
-                preference = preference,
-            )
         }
-        return results
     }
-
-    private data class PreferenceSearchResult(
-        val label: String,
-        val preference: Preference,
-    ) {
-        override fun toString(): String = label
+    override fun observeLiveBus() { super.observeLiveBus(); observeEvent<String>(EventBus.RECREATE) { recreate() } }
+    override fun onStop() {
+        val captured = searchModel
+        Coroutine.async(context = Dispatchers.Main.immediate) { captured.flush() }.onError { AppLog.put("保存设置搜索草稿失败", it) }
+        super.onStop()
     }
-
+    override fun onDestroy() {
+        if (isFinishing && !isChangingConfigurations) {
+            val captured = searchModel; captured.stop()
+            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }.onError { AppLog.put("清理设置搜索草稿失败", it) }
+        }
+        super.onDestroy()
+    }
 }
 
 internal fun configPreferenceMatches(

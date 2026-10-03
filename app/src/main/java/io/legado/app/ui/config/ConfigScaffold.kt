@@ -33,12 +33,13 @@ internal fun ConfigScaffold(
     onSearching: (Boolean) -> Unit,
     onSearch: (String) -> Unit,
     onBack: () -> Unit,
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     val submit = {
-        query.text.trim().takeIf { it.isNotEmpty() }?.let {
+        if (enabled) query.text.trim().takeIf { it.isNotEmpty() }?.let {
             keyboard?.hide()
             onSearch(it)
         }
@@ -53,6 +54,7 @@ internal fun ConfigScaffold(
                         value = query,
                         onValueChange = onQuery,
                         singleLine = true,
+                        enabled = enabled,
                         placeholder = { Text(stringResource(R.string.search)) },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { submit() }),
@@ -66,9 +68,9 @@ internal fun ConfigScaffold(
                     }
                 },
                 actions = {
-                    if (searching) IconButton(onClick = submit, modifier = Modifier.testTag("config-submit-search")) {
+                    if (searching) IconButton(onClick = submit, enabled = enabled, modifier = Modifier.testTag("config-submit-search")) {
                         Icon(painterResource(R.drawable.ic_search), stringResource(R.string.search))
-                    } else IconButton(onClick = { onSearching(true) }, modifier = Modifier.testTag("config-open-search")) {
+                    } else IconButton(onClick = { onSearching(true) }, enabled = enabled, modifier = Modifier.testTag("config-open-search")) {
                         Icon(painterResource(R.drawable.ic_search), stringResource(R.string.search))
                     }
                 },

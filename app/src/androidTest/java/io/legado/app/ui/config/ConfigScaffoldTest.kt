@@ -56,4 +56,13 @@ class ConfigScaffoldTest {
         compose.runOnIdle { searching = true }
         compose.onNodeWithTag("config-search-input").assertTextEquals("restored query")
     }
+    @Test fun pendingPrivateWriteDisablesEditingAndSearchButKeepsNativeBack() {
+        var searched = false; var opened = false; var back = false
+        compose.setContent { LegadoComposeTheme {
+            ConfigScaffold("Settings", false, TextFieldValue(), {}, { opened = it }, { searched = true }, { back = true }, enabled = false) {}
+        } }
+        compose.onNodeWithTag("config-open-search").assertIsNotEnabled()
+        compose.onNodeWithTag("config-back").performClick()
+        assertTrue(back); assertFalse(opened); assertFalse(searched)
+    }
 }
