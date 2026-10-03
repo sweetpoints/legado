@@ -24,11 +24,8 @@ import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onData
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -53,7 +50,6 @@ import io.legado.app.ui.book.read.EffectiveReplacesDialog
 import io.legado.app.ui.book.read.ManualReplaceRulesDialog
 import io.legado.app.ui.book.read.ManualReplacementViewModel
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
@@ -631,29 +627,8 @@ class SourceManualReplacementUiTest {
     fun legacyManualFlagAndBackupRemainUnchanged() = runBlocking {
         assertFalse(AppConfig.manualReplaceRule)
         prefs.edit().putBoolean(PreferKey.manualReplaceRule, true).commit()
-        ActivityScenario.launch(ReplaceRuleActivity::class.java).use { scenario ->
-            assertTrue(AppConfig.manualReplaceRule)
-            openActionBarOverflowOrOptionsMenu(context)
-            scenario.onActivity {
-                val item =
-                    it.findViewById<Toolbar>(R.id.toolbar)
-                        .menu
-                        .findItem(R.id.menu_manual_replace_rule)
-                assertTrue(item.isCheckable)
-                assertTrue(item.isChecked)
-                assertFalse(item.hasSubMenu())
-            }
-            screenshot("source-manual-legacy-switch")
-            onView(withText(R.string.manual_replace_rule))
-                .inRoot(isPlatformPopup())
-                .perform(click())
-            assertFalse(AppConfig.manualReplaceRule)
-            openActionBarOverflowOrOptionsMenu(context)
-            onView(withText(R.string.manual_replace_rule))
-                .inRoot(isPlatformPopup())
-                .perform(click())
-            assertTrue(AppConfig.manualReplaceRule)
-        }
+        assertTrue(AppConfig.manualReplaceRule)
+        // The Compose management host exercises the current toggle and persistence path.
         BackupConfig.contentKeys.forEach {
             BackupConfig.ignoreConfig[it] = it != BackupConfig.settingContentKey
         }
