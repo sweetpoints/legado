@@ -17,6 +17,7 @@ internal interface BookshelfManagementDraftRepository {
 /** Selection URLs, form text and operation payloads never enter SavedState; a closed owner cannot resurrect files. */
 internal class FileBookshelfManagementDraftRepository(context: Context) : BookshelfManagementDraftRepository {
     private val directory = File(context.applicationContext.filesDir, "bookshelf-management-drafts")
+    private val exportDirectory = File(context.applicationContext.filesDir, "bookshelf-management-exports")
     private fun file(session: String): File { require(session.matches(Regex("[A-Za-z0-9-]{1,64}"))); return File(directory, "$session.json") }
     private fun lock(file: File) = locks[(file.canonicalPath.hashCode() and Int.MAX_VALUE) % locks.size]
     private fun closed(file: File) = File(file.path + ".closed").let { it.exists() || File(it.path + ".bak").exists() }
@@ -44,6 +45,11 @@ internal class FileBookshelfManagementDraftRepository(context: Context) : Booksh
             check(directory.isDirectory || directory.mkdirs())
             val marker = AtomicFile(File(file.path + ".closed")); val output = marker.startWrite()
             try { output.write("closed".toByteArray()); marker.finishWrite(output) } catch (error: Throwable) { marker.failWrite(output); throw error }
+            if (file.exists() || File(file.path + ".bak").exists()) read(file).exports.forEach { path ->
+                val export = File(path)
+                check(export.parentFile?.canonicalFile == exportDirectory.canonicalFile && export.name.matches(Regex("[A-Za-z0-9-]{1,64}\\.json"))) { "Invalid owned bookshelf export" }
+                check(!export.exists() || export.delete()) { "Unable to release owned bookshelf export" }
+            }
             AtomicFile(file).delete()
             check(!file.exists() && !File(file.path + ".bak").exists() && !File(file.path + ".new").exists()) { "Unable to release bookshelf management draft" }
         }

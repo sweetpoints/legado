@@ -71,4 +71,12 @@ class BookshelfMaintenanceRepositoryTest {
         } finally { release.countDown(); directory.deleteRecursively() }
     }
 
+    @Test fun hostPreparationReadsAllCurrentBookKindsAndReturnsDetachedSnapshots() = runTest {
+        val store = Store(); val repo = DefaultBookshelfMaintenanceRepository(store, StandardTestDispatcher(testScheduler))
+        val books = repo.books(listOf("local", "disabled", "gone", "local"))
+        assertEquals(listOf("local", "disabled"), books.map { it.bookUrl })
+        books.first().name = "host snapshot changed"; assertEquals("local", store.rows.getValue("local").name)
+        assertTrue(store.events.isEmpty())
+    }
+
 }

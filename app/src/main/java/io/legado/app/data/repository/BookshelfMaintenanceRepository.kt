@@ -31,6 +31,7 @@ internal interface BookshelfMaintenanceRepository {
     suspend fun delete(ids: List<String>, original: Boolean): Int
     suspend fun clearCache(ids: List<String>): Int
     suspend fun exportSources(): File
+    suspend fun books(ids: List<String>): List<Book>
     suspend fun updateCandidates(ids: List<String>): List<Book>
     suspend fun createTasks(ids: List<String>, cron: String): Int
 }
@@ -69,6 +70,7 @@ internal class DefaultBookshelfMaintenanceRepository(private val store: Bookshel
             throw error
         }
     }
+    override suspend fun books(ids: List<String>): List<Book> = withContext(io) { ids.distinct().mapNotNull(store::read).map { it.copy() } }
     override suspend fun updateCandidates(ids: List<String>): List<Book> = withContext(io) {
         ids.distinct().mapNotNull(store::read).filter { !it.isLocal && it.canUpdate }.map { it.copy() }
     }

@@ -32,4 +32,17 @@ class BookshelfManagementDraftRepositoryTest {
             listOf(id, other).forEach { owner -> AtomicFile(File(directory, "$owner.json")).delete(); AtomicFile(File(directory, "$owner.json.closed")).delete() }
         }
     }
+    @Test fun closingSessionDeletesOnlyItsRegisteredExportAndKeepsAnIndependentPreparedFile() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>(); val repository = FileBookshelfManagementDraftRepository(context)
+        val session = UUID.randomUUID().toString(); val directory = File(context.filesDir, "bookshelf-management-exports").apply { check(isDirectory || mkdirs()) }
+        val owned = File(directory, "${UUID.randomUUID()}.json").apply { writeText("owned synthetic export") }
+        val other = File(directory, "${UUID.randomUUID()}.json").apply { writeText("independent synthetic export") }
+        val drafts = File(context.filesDir, "bookshelf-management-drafts")
+        try {
+            repository.open(session); repository.write(session, BookshelfManagementDraft(8, exports = listOf(owned.absolutePath)))
+            repository.release(session); assertFalse(owned.exists()); assertTrue(other.exists()); assertEquals("independent synthetic export", other.readText())
+            assertTrue(runCatching { repository.write(session, BookshelfManagementDraft(9)) }.isFailure)
+        } finally { owned.delete(); other.delete(); AtomicFile(File(drafts, "$session.json")).delete(); AtomicFile(File(drafts, "$session.json.closed")).delete() }
+    }
+
 }
