@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
-import android.app.DatePickerDialog
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.os.Build
@@ -12,6 +11,13 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import io.legado.app.data.repository.*
+import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.toastOnUi
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
@@ -23,9 +29,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityBookReadBinding
 import io.legado.app.databinding.DialogDownloadChoiceBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogSimulatedReadingBinding
 import io.legado.app.help.book.cacheLocalUri
-import io.legado.app.help.book.savePreservingCustomCoverUrl
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -52,8 +56,6 @@ import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 @SuppressLint("InflateParams", "SetTextI18n")
 fun Context.showBookDownloadDialog(book: Book) {
@@ -117,6 +119,9 @@ abstract class BaseReadBookActivity :
         setOrientation()
         upLayoutInDisplayCutoutMode()
         super.onCreate(savedInstanceState)
+        supportFragmentManager.setFragmentResultListener(SimulatedReadingDialog.RESULT, this) { _, result ->
+            if (ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) == result.getString("owner")) viewModel.initData(intent)
+        }
         binding.navigationBar.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updateLayoutParams {
@@ -302,58 +307,21 @@ abstract class BaseReadBookActivity :
     }
 
     fun showSimulatedReading() {
-        val book = ReadBook.book ?: return
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val alertBinding = DialogSimulatedReadingBinding.inflate(layoutInflater).apply {
-            srEnabled.isChecked = book.getReadSimulating()
-            editStart.setText(book.getStartChapter().toString())
-            editNum.setText(book.getDailyChapters().toString())
-            startDate.setText(book.getStartDate()?.format(dateFormatter))
-            startDate.isFocusable = false // 设置为false，不允许获得焦点
-            startDate.isCursorVisible = false // 不显示光标
-            startDate.setOnClickListener {
-                // 获取当前日期
-                val localStartDate = runCatching {
-                    LocalDate.parse(startDate.text)
-                }.getOrDefault(LocalDate.now())
-                // 创建 DatePickerDialog
-                val datePickerDialog = DatePickerDialog(
-                    root.context,
-                    { _, yy, mm, dayOfMonth ->
-                        // 使用Java 8的日期和时间API来格式化日期
-                        val date = LocalDate.of(yy, mm + 1, dayOfMonth) // Java 8的LocalDate，月份从1开始
-                        val formattedDate = date.format(dateFormatter)
-                        startDate.setText(formattedDate)
-                    }, localStartDate.year,
-                    localStartDate.monthValue - 1,
-                    localStartDate.dayOfMonth
-                )
-                datePickerDialog.show()
-            }
-        }
-        alert(titleResource = R.string.simulated_reading) {
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.run {
-                    val start = editStart.text.toString().toIntOrNull()?.coerceAtLeast(0) ?: 0
-                    val num = editNum.text.toString().toIntOrNull()?.coerceAtLeast(1)
-                        ?: book.totalChapterNum.coerceAtLeast(1)
-                    val enabled = srEnabled.isChecked
-                    val date = startDate.text.toString().let {
-                        if (it.isEmpty()) LocalDate.now()
-                        else runCatching { LocalDate.parse(it, dateFormatter) }
-                            .getOrDefault(LocalDate.now())
-                    }
-                    book.setStartDate(date)
-                    book.setDailyChapters(num)
-                    book.setStartChapter(start)
-                    book.setReadSimulating(enabled)
-                    book.savePreservingCustomCoverUrl()
-                    ReadBook.clearTextChapter()
-                    viewModel.initData(intent)
+        val book=ReadBook.book ?: return
+        val request=SimulatedReadingRequest(book.bookUrl,SimulatedReadingSettings(book.getReadSimulating(),
+            book.getStartDate()?.toString().orEmpty(),book.getStartChapter().toString(),book.getDailyChapters().toString(),book.totalChapterNum))
+        val requests=FileSimulatedReadingRequestRepository(applicationContext)
+        lifecycleScope.launch {
+            var ticket:String?=null;var shown=false
+            try {
+                ticket=requests.create(request)
+                lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+                if(!isFinishing && !supportFragmentManager.isStateSaved && ReadBook.book?.bookUrl==request.bookUrl) {
+                    SimulatedReadingDialog.newInstance(ticket).show(supportFragmentManager,"simulated-reading");shown=true
                 }
-            }
-            cancelButton()
+            } catch(error:CancellationException) {throw error}
+            catch(error:Exception) {toastOnUi(error.localizedMessage ?: getString(R.string.error))}
+            finally {if(!shown) ticket?.let { withContext(NonCancellable) {requests.release(it)} }}
         }
     }
 

@@ -21,6 +21,11 @@ class SimulatedReadingViewModel(private val repository: SimulatedReadingReposito
     init { load() }
     fun load() {
         if(state.value.saving) return
+        if(saved.get<Boolean>("simulation.finished")==true &&
+            (saved.get<Boolean>("simulation.applied")!=true || saved.get<Boolean>("simulation.consumed")==true)) {
+            mutable.value=SimulatedReadingState(loading=false,finished=true,applied=saved.get<Boolean>("simulation.applied")==true)
+            return
+        }
         mutable.value=state.value.copy(loading=true,error=null)
         loading?.cancel()
         loading=viewModelScope.launch {
@@ -37,7 +42,10 @@ class SimulatedReadingViewModel(private val repository: SimulatedReadingReposito
                     finished=saved.get<Boolean>("simulation.finished")==true,
                     applied=saved.get<Boolean>("simulation.applied")==true)
             } catch(error: CancellationException) { throw error }
-            catch(error: Exception) { mutable.value=state.value.copy(loading=false,error=error.localizedMessage ?: "Unable to load simulation settings") }
+            catch(error: Exception) {
+                if(saved.get<Boolean>("simulation.finished")==true) finish(false)
+                else mutable.value=state.value.copy(loading=false,error=error.localizedMessage ?: "Unable to load simulation settings")
+            }
         }
     }
     private fun checkpoint(value: SimulatedReadingSettings) {

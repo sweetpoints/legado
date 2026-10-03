@@ -64,4 +64,15 @@ class SimulatedReadingViewModelTest {
         vm.start("1");vm.save();runCurrent();assertNull(vm.state.value.settings);assertTrue(repo.writes.isEmpty())
         requests.fail=false;vm.retry();runCurrent();assertEquals(initial,vm.state.value.settings)
     }
+    @Test fun restoredConsumedCompletionClosesWithoutReadingAlreadyReleasedRequest()=runTest(dispatcher) {
+        val requests=Requests(SimulatedReadingRequest("url",initial)).apply {fail=true}
+        val vm=model(backgroundScope,requests,saved=SavedStateHandle(mapOf("simulation.finished" to true,"simulation.applied" to true,"simulation.consumed" to true)))
+        runCurrent();assertTrue(vm.state.value.finished);assertFalse(vm.state.value.loading);assertNull(vm.state.value.error);assertNull(vm.claim())
+    }
+    @Test fun restoredCompletionWithMissingPrivateOwnerClosesWithoutRepeatingSaveOrNativeResult()=runTest(dispatcher) {
+        val requests=Requests(SimulatedReadingRequest("url",initial)).apply {fail=true};val repo=Repo()
+        val vm=model(backgroundScope,requests,repo,SavedStateHandle(mapOf("simulation.finished" to true,"simulation.applied" to true)))
+        runCurrent();assertTrue(vm.state.value.finished);assertFalse(vm.state.value.applied);assertNull(vm.claim());assertTrue(repo.writes.isEmpty())
+    }
+
 }
