@@ -1,7 +1,10 @@
 package io.legado.app.ui.book.read
 
 import io.legado.app.ui.book.searchContent.SearchResult
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderSearchMenuControllerTest {
@@ -58,6 +61,26 @@ class ReaderSearchMenuControllerTest {
         assertFalse(controller.hidden(second))
         assertFalse(controller.state.value.panelVisible)
         assertTrue(controller.state.value.navigationVisible)
+    }
+
+    @Test
+    fun leavingSearchHidesBothNavigationAndPanelAndInvalidatesQueuedCompletion() {
+        val controller = ReaderSearchMenuController()
+        controller.results(listOf(SearchResult(query = "retained")))
+        controller.index(0)
+        controller.show()
+        val queuedExit = controller.hide()!!
+
+        controller.deactivate()
+        assertFalse(controller.state.value.navigationVisible)
+        assertFalse(controller.state.value.panelVisible)
+        assertFalse(controller.hidden(queuedExit))
+        assertEquals("retained", controller.state.value.selected!!.query)
+
+        controller.show()
+        val currentExit = controller.hide()!!
+        assertFalse(controller.hidden(queuedExit))
+        assertTrue(controller.hidden(currentExit))
     }
 
     @Test

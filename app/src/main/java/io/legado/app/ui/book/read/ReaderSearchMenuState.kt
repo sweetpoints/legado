@@ -55,6 +55,17 @@ internal class ReaderSearchMenuController {
             state.value.copy(visible = true, panelVisible = true, navigationVisible = true)
     }
 
+    fun deactivate() {
+        // Advance the epoch so a completion already queued by Compose cannot settle a new menu.
+        mutable.value =
+            state.value.copy(
+                visible = false,
+                panelVisible = false,
+                navigationVisible = false,
+                exitId = state.value.exitId + 1,
+            )
+    }
+
     fun hide(): Long? {
         if (!state.value.visible) return null
         val next = state.value.exitId + 1
