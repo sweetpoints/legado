@@ -18,16 +18,19 @@ class SourceImmersiveBackgroundTest {
     @Test
     fun transparentBottomBarsUseVisibleBackgroundForContrast() {
         mapOf(
-                "src/main/java/io/legado/app/ui/widget/SelectActionBar.kt" to
-                    "if (context.transparentNavBar) context.backgroundColor else context.bottomBackground",
                 "src/main/java/io/legado/app/ui/widget/text/AccentStrokeTextView.kt" to
-                    "if (context.transparentNavBar) context.backgroundColor else context.bottomBackground",
-                "src/main/java/io/legado/app/lib/theme/view/ThemeBottomNavigationVIew.kt" to
-                    "if (transparentNavBar) context.backgroundColor else context.bottomBackground",
+                    "if (context.transparentNavBar) context.backgroundColor else context.bottomBackground"
             )
             .forEach { (path, expression) ->
                 assertTrue(projectFile(path).readText().contains(expression))
             }
+
+        val mainScreen = projectFile("src/main/java/io/legado/app/ui/main/MainScreen.kt").readText()
+        assertTrue(
+            mainScreen.contains(
+                ".background(if (transparentNavigation) Color.Transparent else colors.bottomBackground)"
+            )
+        )
     }
 
     @Test

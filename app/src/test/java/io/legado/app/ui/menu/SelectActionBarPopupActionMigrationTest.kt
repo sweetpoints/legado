@@ -11,32 +11,34 @@ import org.w3c.dom.Element
 class SelectActionBarPopupActionMigrationTest {
 
     @Test
-    fun `select action bar uses the themed popup and preserves listener behavior`() {
-        val source = readProjectFile(SELECT_ACTION_BAR)
-
-        listOf(
-                "private var selMenu: Menu? = null",
-                "private var menuItemClickListener: PopupMenu.OnMenuItemClickListener? = null",
-                "MenuBuilder(context)",
-                "SupportMenuInflater(context).inflate(resId, this)",
-                "private fun showMoreMenu()",
-                "setVertical(true)",
-                "setDangerValues(",
-                "setDisabledValues(",
-                "if (item.isVisible)",
-                "it.isEnabled && it.itemId.toString() == action",
-                "menuItemClickListener?.onMenuItemClick(menuItem)",
-                "R.id.menu_del_selection",
-                "R.id.menu_del",
+    fun `retired select action bar has no layout or production consumer`() {
+        assertFalse(resolveFile(SELECT_ACTION_BAR).exists())
+        assertFalse(resolveFile("src/main/res/layout/view_select_action_bar.xml").exists())
+        val productionSources =
+            File("src/main/java").takeIf(File::isDirectory) ?: File("app/src/main/java")
+        productionSources.walkTopDown().filter(File::isFile).forEach { file ->
+            assertFalse(
+                "${file.path} still references SelectActionBar",
+                file.readText().contains("SelectActionBar"),
             )
-            .forEach { expected ->
-                assertTrue("SelectActionBar should contain $expected", source.contains(expected))
-            }
+        }
 
-        assertFalse(source.contains("selMenu?.show()"))
-        assertFalse(source.contains("PopupMenu(context"))
-        assertFalse(source.contains("selMenu?.setOnMenuItemClickListener"))
-        assertFalse(source.contains("import android.view.MenuInflater"))
+        val composePopup = readProjectFile(POPUP_ACTION)
+        assertTrue(composePopup.contains("PopupActionContent"))
+        val popupComposeTest =
+            sequenceOf(
+                    File("src/androidTest/java/io/legado/app/ui/widget/PopupActionComposeTest.kt"),
+                    File(
+                        "app/src/androidTest/java/io/legado/app/ui/widget/PopupActionComposeTest.kt"
+                    ),
+                )
+                .first(File::isFile)
+                .readText()
+        assertTrue(
+            popupComposeTest.contains(
+                "verticalRowsExposeCheckStateAndRejectBothKindsOfDisabledAction"
+            )
+        )
     }
 
     @Test
