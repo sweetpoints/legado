@@ -13,7 +13,7 @@ import java.io.File
 import java.util.UUID
 
 data class RssReaderSession(val request: RssReaderRequest, val revision: Long,
-    val currentUrl: String? = null, val currentTitle: String? = null)
+    val currentUrl: String? = null, val currentTitle: String? = null, val acceptedLaunchTicket: String? = null)
 interface RssReaderSessionRepository {
     suspend fun read(session: String): RssReaderSession?
     suspend fun write(session: String, value: RssReaderSession)

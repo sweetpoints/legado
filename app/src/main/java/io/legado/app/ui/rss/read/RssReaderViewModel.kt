@@ -28,6 +28,9 @@ class RssReaderViewModel(private val repository: RssReaderRepository,
     val state: StateFlow<RssReaderState> = mutable
     @Volatile private var owned: RssReaderSnapshot? = null
     private var request: RssReaderRequest? = null
+    private var acceptedLaunchTicket: String? = null
+    private var pendingLaunch: String? = null
+    private var launchRepository: RssReaderLaunchRepository? = null
     private var revision = saved.get<Long>("rssReader.revision") ?: 0L
     private var nextDocument = saved.get<Long>("rssReader.nextDocument") ?: 0L
     private var generation = 0L
@@ -43,8 +46,19 @@ class RssReaderViewModel(private val repository: RssReaderRepository,
             is RssReaderDocument.Url -> document.copy(headers = document.headers.toMap())
             else -> document
         })
-    fun bind(value: RssReaderRequest? = null) {
-        if (value == null && (state.value.loaded || loading?.isActive == true)) return
+    fun bind(value: RssReaderRequest? = null) = bindInput(value, null, null)
+    fun bindPrepared(ticket: String, launches: RssReaderLaunchRepository) {
+        if (acceptedLaunchTicket == ticket && (state.value.loaded || loading?.isActive == true) || pendingLaunch == ticket && loading?.isActive == true) return
+        bindInput(null, ticket, launches)
+    }
+    private fun bindInput(value: RssReaderRequest?, ticket: String?, launches: RssReaderLaunchRepository?) {
+        if (ticket == null && value == null && (state.value.loaded || loading?.isActive == true)) return
+        val replacedTicket = pendingLaunch?.takeUnless { it == ticket }
+        val replacedRepository = launchRepository
+        if (replacedTicket != null) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { replacedRepository?.release(replacedTicket) }
+        }
+        pendingLaunch = ticket; launchRepository = launches
         if (value != null) request = value
         loading?.cancel(); speechJob?.cancel(); saved.remove<String>("rssReader.speechNonce"); val current = ++generation
         mutable.value = state.value.copy(loaded = false, busy = false, error = null, missingOrigin = false, progress = 0, document = 0)
@@ -53,13 +67,23 @@ class RssReaderViewModel(private val repository: RssReaderRepository,
                 val disk = sessions.read(session); currentCoroutineContext().ensureActive(); if (current != generation) return@launch
                 revision = maxOf(revision, disk?.revision ?: 0)
                 val previous = owned?.request ?: disk?.request
-                val input = value ?: request ?: disk?.request
+                val prepared = if (ticket != null) {
+                    if (disk?.acceptedLaunchTicket == ticket) disk.request else checkNotNull(launches).read(ticket)
+                } else null
+                currentCoroutineContext().ensureActive(); if (current != generation) return@launch
+                val input = if (ticket != null) prepared else value ?: request ?: disk?.request
                 if (input == null || input.origin == null) { mutable.value = state.value.copy(missingOrigin = true); return@launch }
                 if (previous != null && previous != input) { clearEffect(); favoriteOwner = null; saved.remove<String>("rssReader.favoriteOwner") }
                 request = input
-                currentUrl = if (value == null) disk?.currentUrl else null
-                currentTitle = if (value == null) disk?.currentTitle else null
+                acceptedLaunchTicket = ticket ?: disk?.takeIf { value == null || it.request == input }?.acceptedLaunchTicket
+                val restoring = value == null && (ticket == null || disk?.acceptedLaunchTicket == ticket)
+                currentUrl = if (restoring) disk?.currentUrl else null
+                currentTitle = if (restoring) disk?.currentTitle else null
                 sessions.write(session, checkpoint()); currentCoroutineContext().ensureActive(); if (current != generation) return@launch
+                if (ticket != null) {
+                    checkNotNull(launches).release(ticket); currentCoroutineContext().ensureActive(); if (current != generation) return@launch
+                    pendingLaunch = null; launchRepository = null
+                }
                 val loaded = repository.load(input); currentCoroutineContext().ensureActive(); if (current != generation) return@launch
                 owned = loaded?.let(::clone)
                 project(loaded)
@@ -75,7 +99,7 @@ class RssReaderViewModel(private val repository: RssReaderRepository,
     }
     private fun checkpoint(): RssReaderSession {
         revision++; saved["rssReader.revision"] = revision
-        return RssReaderSession(checkNotNull(request), revision, currentUrl, currentTitle)
+        return RssReaderSession(checkNotNull(request), revision, currentUrl, currentTitle, acceptedLaunchTicket)
     }
     /** A new WebView owner requires the current document; recomposition alone must not reload it. */
     fun attachKernel(owner: String) {
@@ -169,8 +193,20 @@ class RssReaderViewModel(private val repository: RssReaderRepository,
     private fun owner(): String? = owned?.request?.let { value -> java.security.MessageDigest.getInstance("SHA-256")
         .digest("${value.origin?.length ?: -1}:${value.origin.orEmpty()}${value.link?.length ?: -1}:${value.link.orEmpty()}${value.sort?.length ?: -1}:${value.sort.orEmpty()}${value.openUrl?.length ?: -1}:${value.openUrl.orEmpty()}".toByteArray())
         .joinToString("") { "%02x".format(it) } }
-    fun retry() { if (!state.value.loaded) bind(request) else { failed(""); request?.let(::bind) } }
+    fun retry() {
+        val ticket = pendingLaunch; val launches = launchRepository
+        if (ticket != null && launches != null) bindPrepared(ticket, launches)
+        else if (!state.value.loaded) bind(request) else { failed(""); request?.let(::bind) }
+    }
     fun failed(message: String) { mutable.value = state.value.copy(error = message.takeUnless { it.isEmpty() }, busy = false) }
     fun stop() { generation++; speech.stop(); viewModelScope.cancel() }
-    override fun onCleared() { stop(); speech.release(); CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { runCatching { sessions.release(session) } }; super.onCleared() }
+    override fun onCleared() {
+        stop(); speech.release()
+        val ticket = pendingLaunch; val launches = launchRepository
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { sessions.release(session) }
+            ticket?.let { runCatching { launches?.release(it) } }
+        }
+        super.onCleared()
+    }
 }
