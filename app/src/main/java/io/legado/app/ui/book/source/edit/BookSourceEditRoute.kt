@@ -17,6 +17,7 @@ import androidx.lifecycle.repeatOnLifecycle
 internal fun BookSourceEditRoute(
     model: BookSourceComposeViewModel,
     onNative: (BookSourceNativeRequest) -> Unit,
+    onRegister: (BookSourceNativeRequest?) -> Unit,
     onFinish: (String?) -> Unit,
     onSaved: (String) -> Unit,
     onPaste: () -> Unit,
@@ -29,6 +30,7 @@ internal fun BookSourceEditRoute(
     val state by model.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val launch by rememberUpdatedState(onNative)
+    val register by rememberUpdatedState(onRegister)
     val finish by rememberUpdatedState(onFinish)
     val saved by rememberUpdatedState(onSaved)
     val ready by rememberUpdatedState(canHandle)
@@ -39,6 +41,7 @@ internal fun BookSourceEditRoute(
             model.state.collect { current ->
                 if (!ready()) return@collect
                 val document = current.document ?: return@collect
+                register(document.nativeRequest)
                 document.savedUrl?.let(saved)
                 if (document.finished) {
                     if (!finished) {

@@ -41,9 +41,11 @@ internal class BookSourceComposeViewModel(
     private var draft: BookSourceEditDocument? = null
     private var pendingSave = false
     private var pendingNativeRollback: BookSourceEditDocument? = null
+    private var pendingNativeReceipt: BookSourceEditDocument? = null
+    private var pendingNativeResult: BookSourceEditDocument? = null
 
     init {
-        retry()
+        retryInternal(manual = false)
         viewModelScope.launch {
             try {
                 repository.assists().collect { assists ->
@@ -94,22 +96,40 @@ internal class BookSourceComposeViewModel(
         draft = next
     }
 
-    private fun operation(block: suspend () -> Unit) = viewModelScope.launch {
-        operationMutex.withLock {
-            mutableState.value = mutableState.value.copy(busy = true, error = null)
-            try {
-                flush()
-                block()
-                publish()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                publish(error.localizedMessage ?: "Error")
-            }
-        }
+    private suspend fun resultCheckpoint(updated: BookSourceEditDocument) {
+        // Preserve an immutable native result if private IO fails. Its retry consumes this
+        // receipt and cannot revive an earlier accepted handoff or borrow a newer owner.
+        pendingNativeResult = updated
+        checkpoint(updated)
+        pendingNativeResult = null
+        pendingNativeReceipt = null
+        pendingNativeRollback = null
+        mutableState.value = mutableState.value.copy(error = null)
     }
 
-    fun retry() {
+    private fun operation(clearError: Boolean = true, block: suspend () -> Unit) =
+        viewModelScope.launch {
+            operationMutex.withLock {
+                mutableState.value =
+                    mutableState.value.copy(
+                        busy = true,
+                        error = if (clearError) null else mutableState.value.error,
+                    )
+                try {
+                    flush()
+                    block()
+                    publish()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    publish(error.localizedMessage ?: "Error")
+                }
+            }
+        }
+
+    fun retry() = retryInternal(manual = true)
+
+    private fun retryInternal(manual: Boolean) {
         operation {
             if (draft == null || pendingSave) {
                 draft = repository.readDraft(sessionId) ?: repository.load(sourceUrl)
@@ -120,7 +140,26 @@ internal class BookSourceComposeViewModel(
                 checkpoint(it)
                 pendingNativeRollback = null
             }
-            val current = draft ?: return@operation
+            pendingNativeResult?.let { resultCheckpoint(it) }
+            pendingNativeReceipt?.let {
+                checkpoint(it)
+                pendingNativeReceipt = null
+            }
+            var current = draft ?: return@operation
+            val nativeRequest = current.nativeRequest
+            if (
+                nativeRequest?.delivered == true &&
+                    !nativeRequest.handedOff &&
+                    !nativeRequest.returning &&
+                    current.importPayload == null
+            ) {
+                if (!manual) {
+                    publish("原生请求交付中断，请确认子页面状态后点击重试；此前可能已打开子页面")
+                    return@operation
+                }
+                checkpoint(current.copy(nativeRequest = nativeRequest.copy(delivered = false)))
+                current = draft!!
+            }
             if (current.finished) {
                 repository.release(*current.ownedTransfers.toTypedArray())
             } else if (current.importPayload != null) {
@@ -361,11 +400,11 @@ internal class BookSourceComposeViewModel(
                 val current = draft ?: return@withLock false
                 val request = current.nativeRequest ?: return@withLock false
                 if (request.id != id || request.delivered || current.finished) return@withLock false
-                // The claim survives lifecycle cancellation. A paused host restores the same ticket
-                // and prepared file; it cannot strand an editor claim without launching its child.
                 mutableState.value = mutableState.value.copy(busy = true)
                 pendingNativeRollback = current
                 try {
+                    // The private claim survives lifecycle cancellation. Pausing restores the same
+                    // owner and file; a failed rollback is retried before a new handoff is allowed.
                     checkpoint(current.copy(nativeRequest = request.copy(delivered = true)))
                     if (!canLaunch()) {
                         checkpoint(current)
@@ -374,37 +413,74 @@ internal class BookSourceComposeViewModel(
                         return@withLock false
                     }
                     launch(request)
-                    pendingNativeRollback = null
-                    publish()
-                    true
                 } catch (error: Exception) {
                     runCatching { checkpoint(current) }.onSuccess { pendingNativeRollback = null }
                     publish(error.localizedMessage)
-                    false
+                    return@withLock false
                 }
+                // A returned launcher has accepted the handoff. A receipt failure must never roll
+                // back its owner or repeat the launch in this live VM. Recovery without that
+                // private
+                // receipt requires explicit confirmation because the child may already be open.
+                pendingNativeRollback = null
+                pendingNativeReceipt =
+                    draft!!.copy(nativeRequest = request.copy(delivered = true, handedOff = true))
+                try {
+                    checkpoint(pendingNativeReceipt!!)
+                    pendingNativeReceipt = null
+                    publish()
+                } catch (error: Exception) {
+                    publish(error.localizedMessage)
+                }
+                true
             }
         }
 
-    fun nativeReturned(action: BookSourceNativeAction) {
-        operation {
+    fun qrReturned(id: String, text: String?) {
+        operation(clearError = false) {
             val current = draft ?: return@operation
+            val request = current.nativeRequest ?: return@operation
             if (
-                current.nativeRequest?.action == action && current.nativeRequest?.delivered == true
-            ) {
-                checkpoint(current.copy(nativeRequest = null))
+                request.id != id ||
+                    request.action != BookSourceNativeAction.QR ||
+                    !request.delivered
+            )
+                return@operation
+            if (text == null) resultCheckpoint(current.copy(nativeRequest = null))
+            else {
+                resultCheckpoint(
+                    current.copy(
+                        importPayload = text,
+                        nativeRequest = request.copy(handedOff = true),
+                    )
+                )
+                completeImport()
             }
         }
     }
 
-    fun nativeInserted(action: BookSourceNativeAction, text: String?) {
-        operation {
+    fun nativeReturned(id: String, action: BookSourceNativeAction) {
+        operation(clearError = false) {
+            val current = draft ?: return@operation
+            if (
+                current.nativeRequest?.id == id &&
+                    current.nativeRequest?.action == action &&
+                    current.nativeRequest?.delivered == true
+            ) {
+                resultCheckpoint(current.copy(nativeRequest = null))
+            }
+        }
+    }
+
+    fun nativeInserted(id: String, action: BookSourceNativeAction, text: String?) {
+        operation(clearError = false) {
             val current = draft ?: return@operation
             val request = current.nativeRequest ?: return@operation
-            if (request.action != action || !request.delivered) return@operation
+            if (request.id != id || request.action != action || !request.delivered) return@operation
             val key = request.key
             val field = key?.let { current.form.field(request.tab, it) }
             if (text == null || field == null || key == null) {
-                checkpoint(current.copy(nativeRequest = null))
+                resultCheckpoint(current.copy(nativeRequest = null))
                 return@operation
             }
             val form =
@@ -420,7 +496,7 @@ internal class BookSourceComposeViewModel(
             val history =
                 current.histories.find { it.tab == request.tab && it.key == key }
                     ?: BookSourceFieldHistory(request.tab, key)
-            checkpoint(
+            resultCheckpoint(
                 current.copy(
                     form = form,
                     histories =
@@ -436,21 +512,26 @@ internal class BookSourceComposeViewModel(
         }
     }
 
-    fun editorReturned(ok: Boolean, text: String?, path: String?, cursor: Int) {
-        operation {
+    fun editorReturned(id: String, ok: Boolean, text: String?, path: String?, cursor: Int) {
+        operation(clearError = false) {
             val current = draft ?: return@operation
             val request = current.nativeRequest ?: return@operation
-            if (request.action != BookSourceNativeAction.EDITOR || !request.delivered)
+            if (
+                request.id != id ||
+                    request.action != BookSourceNativeAction.EDITOR ||
+                    !request.delivered
+            )
                 return@operation
             if (!ok) {
-                checkpoint(current.copy(nativeRequest = null))
+                resultCheckpoint(current.copy(nativeRequest = null))
                 repository.release(request.path)
                 return@operation
             }
-            checkpoint(
+            resultCheckpoint(
                 current.copy(
                     nativeRequest =
                         request.copy(
+                            handedOff = true,
                             returning = true,
                             returnedText = text,
                             returnedPath = path,
@@ -545,7 +626,7 @@ internal class BookSourceComposeViewModel(
 
     private suspend fun close(current: BookSourceEditDocument) {
         val empty = BookSourceEditDocument.from(BookSource(), originalKey = null)
-        checkpoint(
+        resultCheckpoint(
             current.copy(
                 originalJson = empty.originalJson,
                 form = empty.form,
@@ -563,10 +644,15 @@ internal class BookSourceComposeViewModel(
         mutableState.value = mutableState.value.copy(confirmDiscard = false)
     }
 
-    fun jsReturned(ok: Boolean, origin: String?) {
-        operation {
+    fun jsReturned(id: String, ok: Boolean, origin: String?) {
+        operation(clearError = false) {
             val current = draft ?: return@operation
-            if (current.nativeRequest?.action != BookSourceNativeAction.JS) return@operation
+            if (
+                current.nativeRequest?.id != id ||
+                    current.nativeRequest?.action != BookSourceNativeAction.JS ||
+                    current.nativeRequest?.delivered != true
+            )
+                return@operation
             close(current.copy(savedUrl = if (ok) origin else current.savedUrl))
         }
     }

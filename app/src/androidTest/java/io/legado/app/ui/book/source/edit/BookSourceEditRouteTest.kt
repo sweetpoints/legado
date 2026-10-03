@@ -55,7 +55,7 @@ class BookSourceEditRouteTest {
             store.put("editor", model)
         }
         compose.setContent {
-            BookSourceEditRoute(model, {}, { finishes++ }, {}, {}, { true }, false, 6, 1, false)
+            BookSourceEditRoute(model, {}, {}, { finishes++ }, {}, {}, { true }, false, 6, 1, false)
         }
         compose.waitUntil(10_000) { model.state.value.document != null && !model.state.value.busy }
         compose.runOnIdle { model.updateField(0, "bookSourceName", "dirty", 5, 5) }

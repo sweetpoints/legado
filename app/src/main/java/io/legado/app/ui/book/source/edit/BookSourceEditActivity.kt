@@ -3,6 +3,7 @@ package io.legado.app.ui.book.source.edit
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.createSavedStateHandle
@@ -24,7 +25,6 @@ import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.keyboard.KeyboardAssistsConfig
-import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
@@ -48,46 +48,14 @@ class BookSourceEditActivity : BaseComposeActivity() {
                 }
             }
         }
-    private val jsSourceEdit =
-        registerForActivityResult(StartActivityContract(JsSourceEditActivity::class.java)) { result
-            ->
-            model.jsReturned(
-                result.resultCode == Activity.RESULT_OK,
-                result.data?.getStringExtra("origin"),
-            )
-        }
-    private val qrCodeResult =
-        registerForActivityResult(QrCodeResult()) { text ->
-            if (text == null) model.nativeReturned(BookSourceNativeAction.QR)
-            else model.importText(text)
-        }
-    private val selectDoc =
-        registerForActivityResult(HandleFileContract()) { result ->
-            val uri = result.uri
-            val text = uri?.let { if (it.isContentScheme()) it.toString() else it.path }
-            model.nativeInserted(BookSourceNativeAction.FILE, text)
-        }
-    private val textEditLauncher =
-        registerForActivityResult(StartActivityContract(CodeEditActivity::class.java)) { result ->
-            model.editorReturned(
-                result.resultCode == Activity.RESULT_OK,
-                result.data?.getStringExtra("text"),
-                result.data?.getStringExtra("textFile"),
-                result.data?.getIntExtra("cursorPosition", -1) ?: -1,
-            )
-        }
-    private val debugResult =
-        registerForActivityResult(StartActivityContract(BookSourceDebugActivity::class.java)) {
-            model.nativeReturned(BookSourceNativeAction.DEBUG)
-        }
-    private val loginResult =
-        registerForActivityResult(StartActivityContract(SourceLoginActivity::class.java)) {
-            model.nativeReturned(BookSourceNativeAction.LOGIN)
-        }
-    private val searchResult =
-        registerForActivityResult(StartActivityContract(SearchActivity::class.java)) {
-            model.nativeReturned(BookSourceNativeAction.SEARCH)
-        }
+
+    private data class RegisteredNative(
+        val id: String,
+        val launch: () -> Unit,
+        val unregister: () -> Unit,
+    )
+
+    private var registered: RegisteredNative? = null
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         observeEvent<Int>(PreferKey.showBoardLine) { rows -> model.keyboardRows(rows) }
@@ -98,6 +66,7 @@ class BookSourceEditActivity : BaseComposeActivity() {
         BookSourceEditRoute(
             model,
             ::launchNative,
+            ::registerNative,
             ::complete,
             ::recordSaved,
             ::paste,
@@ -110,14 +79,93 @@ class BookSourceEditActivity : BaseComposeActivity() {
     }
 
     private fun paste() {
-        val text = getClipText()
-        model.importText(text.orEmpty())
+        model.importText(getClipText().orEmpty())
     }
 
-    private fun launchNative(request: BookSourceNativeRequest) {
-        when (request.action) {
-            BookSourceNativeAction.EDITOR ->
-                textEditLauncher.launch {
+    private fun registerNative(request: BookSourceNativeRequest?) {
+        if (registered?.id == request?.id) return
+        registered?.unregister?.invoke()
+        registered = null
+        request ?: return
+        val registryKey = "book-source-native-${request.id}"
+        // The registry key and callback closure share the private owner UUID. Restoration uses
+        // the same key, so an old result can never borrow a newer request's current UUID.
+        registered =
+            when (request.action) {
+                BookSourceNativeAction.QR -> {
+                    val launcher =
+                        activityResultRegistry.register(registryKey, QrCodeResult()) { text ->
+                            model.qrReturned(request.id, text)
+                        }
+                    RegisteredNative(request.id, { launcher.launch(null) }, launcher::unregister)
+                }
+                BookSourceNativeAction.FILE -> {
+                    val launcher =
+                        activityResultRegistry.register(registryKey, HandleFileContract()) { result
+                            ->
+                            val uri = result.uri
+                            val text = uri?.let {
+                                if (it.isContentScheme()) it.toString() else it.path
+                            }
+                            model.nativeInserted(request.id, request.action, text)
+                        }
+                    RegisteredNative(
+                        request.id,
+                        { launcher.launch { mode = HandleFileContract.FILE } },
+                        launcher::unregister,
+                    )
+                }
+                BookSourceNativeAction.EDITOR,
+                BookSourceNativeAction.JS,
+                BookSourceNativeAction.DEBUG,
+                BookSourceNativeAction.LOGIN,
+                BookSourceNativeAction.SEARCH -> {
+                    val launcher =
+                        activityResultRegistry.register(
+                            registryKey,
+                            ActivityResultContracts.StartActivityForResult(),
+                        ) { result ->
+                            when (request.action) {
+                                BookSourceNativeAction.EDITOR ->
+                                    model.editorReturned(
+                                        request.id,
+                                        result.resultCode == Activity.RESULT_OK,
+                                        result.data?.getStringExtra("text"),
+                                        result.data?.getStringExtra("textFile"),
+                                        result.data?.getIntExtra("cursorPosition", -1) ?: -1,
+                                    )
+                                BookSourceNativeAction.JS ->
+                                    model.jsReturned(
+                                        request.id,
+                                        result.resultCode == Activity.RESULT_OK,
+                                        result.data?.getStringExtra("origin"),
+                                    )
+                                else -> model.nativeReturned(request.id, request.action)
+                            }
+                        }
+                    RegisteredNative(
+                        request.id,
+                        { launcher.launch(nativeIntent(request)) },
+                        launcher::unregister,
+                    )
+                }
+                else -> null
+            }
+    }
+
+    private fun nativeIntent(request: BookSourceNativeRequest): Intent {
+        val target =
+            when (request.action) {
+                BookSourceNativeAction.EDITOR -> CodeEditActivity::class.java
+                BookSourceNativeAction.JS -> JsSourceEditActivity::class.java
+                BookSourceNativeAction.DEBUG -> BookSourceDebugActivity::class.java
+                BookSourceNativeAction.LOGIN -> SourceLoginActivity::class.java
+                BookSourceNativeAction.SEARCH -> SearchActivity::class.java
+                else -> error("No native Activity for ${request.action}")
+            }
+        return Intent(this, target).apply {
+            when (request.action) {
+                BookSourceNativeAction.EDITOR -> {
                     putExtra("textFile", request.path)
                     putExtra("useTextFile", true)
                     putExtra("cursorPosition", request.cursor)
@@ -130,26 +178,37 @@ class BookSourceEditActivity : BaseComposeActivity() {
                         field?.label ?: field?.labelResource?.takeIf { it != 0 }?.let(::getString),
                     )
                 }
-            BookSourceNativeAction.JS ->
-                jsSourceEdit.launch { putExtra("sourceUrl", request.sourceUrl) }
-            BookSourceNativeAction.DEBUG ->
-                debugResult.launch { putExtra("key", request.sourceUrl) }
-            BookSourceNativeAction.LOGIN ->
-                loginResult.launch {
+                BookSourceNativeAction.JS -> putExtra("sourceUrl", request.sourceUrl)
+                BookSourceNativeAction.DEBUG -> putExtra("key", request.sourceUrl)
+                BookSourceNativeAction.LOGIN -> {
                     putExtra("type", "bookSource")
                     putExtra("key", request.sourceUrl)
                 }
-            BookSourceNativeAction.SEARCH ->
-                searchResult.launch { putExtra("searchScope", request.text) }
-            BookSourceNativeAction.QR -> qrCodeResult.launch()
-            BookSourceNativeAction.FILE -> selectDoc.launch { mode = HandleFileContract.FILE }
+                BookSourceNativeAction.SEARCH -> putExtra("searchScope", request.text)
+                else -> Unit
+            }
+        }
+    }
+
+    private fun launchNative(request: BookSourceNativeRequest) {
+        when (request.action) {
+            BookSourceNativeAction.EDITOR,
+            BookSourceNativeAction.JS,
+            BookSourceNativeAction.DEBUG,
+            BookSourceNativeAction.LOGIN,
+            BookSourceNativeAction.SEARCH,
+            BookSourceNativeAction.QR,
+            BookSourceNativeAction.FILE -> {
+                check(registered?.id == request.id) { "Missing native request owner" }
+                registered!!.launch()
+            }
             BookSourceNativeAction.COPY -> {
                 sendToClip(request.text.orEmpty())
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
             BookSourceNativeAction.SHARE -> {
                 share(request.text.orEmpty())
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
             BookSourceNativeAction.QR_SHARE -> {
                 shareWithQr(
@@ -157,28 +216,33 @@ class BookSourceEditActivity : BaseComposeActivity() {
                     getString(R.string.share_book_source),
                     ErrorCorrectionLevel.L,
                 )
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
             BookSourceNativeAction.HELP -> {
                 showHelp(request.text.orEmpty())
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
             BookSourceNativeAction.LOG -> {
                 showDialogFragment<AppLogDialog>()
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
             BookSourceNativeAction.KEYBOARD_CONFIG -> {
                 showDialogFragment<KeyboardAssistsConfig>()
-                model.nativeReturned(request.action)
+                model.nativeReturned(request.id, request.action)
             }
-            BookSourceNativeAction.URL_OPTIONS -> {
-                UrlOptionDialog(this) { model.nativeInserted(request.action, it) }
+            BookSourceNativeAction.URL_OPTIONS ->
+                UrlOptionDialog(this) { model.nativeInserted(request.id, request.action, it) }
                     .apply {
-                        setOnDismissListener { model.nativeReturned(request.action) }
+                        setOnDismissListener { model.nativeReturned(request.id, request.action) }
                     }
                     .show()
-            }
         }
+    }
+
+    override fun onDestroy() {
+        registered?.unregister?.invoke()
+        registered = null
+        super.onDestroy()
     }
 
     private fun recordSaved(origin: String) {
@@ -186,7 +250,7 @@ class BookSourceEditActivity : BaseComposeActivity() {
     }
 
     private fun complete(origin: String?) {
-        if (origin != null) setResult(Activity.RESULT_OK, Intent().putExtra("origin", origin))
+        if (origin != null) recordSaved(origin)
         super.finish()
     }
 }

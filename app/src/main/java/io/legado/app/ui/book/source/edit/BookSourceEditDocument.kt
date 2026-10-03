@@ -44,6 +44,7 @@ internal data class BookSourceNativeRequest(
     val id: String,
     val action: BookSourceNativeAction,
     val delivered: Boolean = false,
+    val handedOff: Boolean = false,
     val text: String? = null,
     val path: String? = null,
     val sourceUrl: String? = null,

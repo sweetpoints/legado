@@ -187,7 +187,13 @@ class BookSourceComposeViewModelTest {
             val request = model.state.value.document!!.nativeRequest!!
             model.deliverNative(request.id, { true }, {})
             val resultPath = repository.transfer("raw\r\n😀text")
-            model.editorReturned(true, null, resultPath, 7)
+            model.editorReturned(
+                model.state.value.document!!.nativeRequest!!.id,
+                true,
+                null,
+                resultPath,
+                7,
+            )
             runCurrent()
             assertEquals(
                 "raw\r\n😀text",
@@ -198,7 +204,13 @@ class BookSourceComposeViewModelTest {
             model.requestAction(BookSourceNativeAction.EDITOR)
             runCurrent()
             model.deliverNative(model.state.value.document!!.nativeRequest!!.id, { true }, {})
-            model.editorReturned(true, null, null, 1)
+            model.editorReturned(
+                model.state.value.document!!.nativeRequest!!.id,
+                true,
+                null,
+                null,
+                1,
+            )
             runCurrent()
             assertEquals(
                 "raw\r\n😀text",
@@ -219,7 +231,13 @@ class BookSourceComposeViewModelTest {
             runCurrent()
             model.deliverNative(model.state.value.document!!.nativeRequest!!.id, { true }, {})
             repository.failRead = true
-            model.editorReturned(true, null, repository.transfer("returned"), 3)
+            model.editorReturned(
+                model.state.value.document!!.nativeRequest!!.id,
+                true,
+                null,
+                repository.transfer("returned"),
+                3,
+            )
             runCurrent()
             assertTrue(model.state.value.document!!.nativeRequest!!.returning)
             repository.failRead = false
@@ -274,10 +292,157 @@ class BookSourceComposeViewModelTest {
             assertTrue(document.dirty())
         }
 
+    @Test
+    fun oldQrResultCannotOverwritePasteOrConsumeNewQrOwner() =
+        runTest(dispatcher) {
+            val model = BookSourceComposeViewModel(FakeRepository(), SavedStateHandle(), "old")
+            runCurrent()
+            model.requestAction(BookSourceNativeAction.QR)
+            runCurrent()
+            val oldId = model.state.value.document!!.nativeRequest!!.id
+            model.deliverNative(oldId, { true }, {})
+            model.importText(GSON.toJson(BookSource("pasted", "paste")))
+            runCurrent()
+            model.qrReturned(oldId, GSON.toJson(BookSource("stale", "stale")))
+            runCurrent()
+            assertEquals(
+                "pasted",
+                model.state.value.document!!.form.field(0, "bookSourceUrl")!!.value,
+            )
+            model.requestAction(BookSourceNativeAction.QR)
+            runCurrent()
+            val newId = model.state.value.document!!.nativeRequest!!.id
+            model.deliverNative(newId, { true }, {})
+            model.qrReturned(oldId, GSON.toJson(BookSource("stale", "stale")))
+            runCurrent()
+            assertEquals(newId, model.state.value.document!!.nativeRequest!!.id)
+            model.qrReturned(newId, GSON.toJson(BookSource("current", "current")))
+            runCurrent()
+            assertEquals(
+                "current",
+                model.state.value.document!!.form.field(0, "bookSourceUrl")!!.value,
+            )
+        }
+
+    @Test
+    fun acceptedHandoffReceiptFailureRetriesDiskWithoutRepeatingLaunch() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val model = BookSourceComposeViewModel(repository, SavedStateHandle(), "old")
+            runCurrent()
+            model.requestAction(BookSourceNativeAction.QR)
+            runCurrent()
+            val request = model.state.value.document!!.nativeRequest!!
+            repository.failHandoffReceipt = true
+            var launches = 0
+            assertTrue(model.deliverNative(request.id, { true }, { launches++ }))
+            assertTrue(model.state.value.document!!.nativeRequest!!.delivered)
+            assertFalse(model.state.value.document!!.nativeRequest!!.handedOff)
+            repository.failHandoffReceipt = false
+            model.retry()
+            runCurrent()
+            assertEquals(1, launches)
+            assertTrue(model.state.value.document!!.nativeRequest!!.handedOff)
+            assertFalse(model.deliverNative(request.id, { true }, { launches++ }))
+            assertEquals(1, launches)
+        }
+
+    @Test
+    fun restoredUnprovenHandoffOffersExplicitRecoveryAndAcceptsOnlyItsActualResult() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val sessionId = UUID.randomUUID().toString()
+            val ownerId = UUID.randomUUID().toString()
+            val request =
+                BookSourceNativeRequest(ownerId, BookSourceNativeAction.QR, delivered = true)
+            repository.drafts[sessionId] =
+                BookSourceEditDocument.from(BookSource("old", "name"))
+                    .copy(nativeRequest = request, revision = 4)
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    SavedStateHandle(mapOf("bookSourceDraftId" to sessionId)),
+                    "old",
+                )
+            runCurrent()
+            assertTrue(model.state.value.error!!.contains("交付中断"))
+            assertEquals(request, model.state.value.document!!.nativeRequest)
+            model.qrReturned("other owner", GSON.toJson(BookSource("wrong", "wrong")))
+            runCurrent()
+            assertEquals("old", model.state.value.document!!.form.field(0, "bookSourceUrl")!!.value)
+            assertTrue(model.state.value.error!!.contains("交付中断"))
+            model.qrReturned(ownerId, GSON.toJson(BookSource("actual", "actual")))
+            runCurrent()
+            assertEquals(
+                "actual",
+                model.state.value.document!!.form.field(0, "bookSourceUrl")!!.value,
+            )
+            assertEquals(null, model.state.value.document!!.nativeRequest)
+        }
+
+    @Test
+    fun restoredUnprovenHandoffWaitsForManualRetryBeforeBecomingLaunchable() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val sessionId = UUID.randomUUID().toString()
+            val request =
+                BookSourceNativeRequest(
+                    UUID.randomUUID().toString(),
+                    BookSourceNativeAction.QR,
+                    delivered = true,
+                )
+            repository.drafts[sessionId] =
+                BookSourceEditDocument.from(BookSource("old", "name"))
+                    .copy(nativeRequest = request, revision = 4)
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    SavedStateHandle(mapOf("bookSourceDraftId" to sessionId)),
+                    "old",
+                )
+            runCurrent()
+            var launches = 0
+            assertFalse(model.deliverNative(request.id, { true }, { launches++ }))
+            assertEquals(0, launches)
+            model.retry()
+            runCurrent()
+            assertEquals(null, model.state.value.error)
+            assertFalse(model.state.value.document!!.nativeRequest!!.delivered)
+            assertEquals(request.id, model.state.value.document!!.nativeRequest!!.id)
+            assertTrue(model.deliverNative(request.id, { true }, { launches++ }))
+            assertEquals(1, launches)
+        }
+
+    @Test
+    fun lateEditorResultCannotConsumeNewSameTypeOwner() =
+        runTest(dispatcher) {
+            val model = BookSourceComposeViewModel(FakeRepository(), SavedStateHandle(), "old")
+            runCurrent()
+            model.focus(0, "bookSourceName")
+            model.requestAction(BookSourceNativeAction.EDITOR)
+            runCurrent()
+            val oldId = model.state.value.document!!.nativeRequest!!.id
+            model.deliverNative(oldId, { true }, {})
+            model.editorReturned(oldId, false, null, null, -1)
+            runCurrent()
+            model.requestAction(BookSourceNativeAction.EDITOR)
+            runCurrent()
+            val newId = model.state.value.document!!.nativeRequest!!.id
+            model.deliverNative(newId, { true }, {})
+            model.editorReturned(oldId, true, "stale", null, 0)
+            runCurrent()
+            assertEquals(newId, model.state.value.document!!.nativeRequest!!.id)
+            assertEquals(
+                "name",
+                model.state.value.document!!.form.field(0, "bookSourceName")!!.value,
+            )
+        }
+
     private class FakeRepository : BookSourceEditorRepository {
         val drafts = mutableMapOf<String, BookSourceEditDocument>()
         val transfers = mutableMapOf<String, String>()
         var failWrites = false
+        var failHandoffReceipt = false
         var failRead = false
         var failSaveReceipt = false
         var saves = 0
@@ -297,7 +462,8 @@ class BookSourceComposeViewModelTest {
         }
 
         override suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument) {
-            if (failWrites) error("disk failed")
+            if (failWrites || (failHandoffReceipt && document.nativeRequest?.handedOff == true))
+                error("disk failed")
             if ((drafts[sessionId]?.revision ?: -1) < document.revision)
                 drafts[sessionId] = document
         }
