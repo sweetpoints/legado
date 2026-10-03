@@ -105,8 +105,6 @@ compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
-# 让 Compose 内可直接生成/复用现有 ViewBinding，便于渐进式互操作
-compose-ui-viewbinding = { module = "androidx.compose.ui:ui-viewbinding" }
 # Flow -> Compose 的 collectAsStateWithLifecycle
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 

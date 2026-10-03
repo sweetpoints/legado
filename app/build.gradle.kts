@@ -388,8 +388,7 @@ android {
     }
     buildFeatures {
         buildConfig = true
-        viewBinding = true
-        // 与 viewBinding 并存：老 View 页面不受影响，新页面可逐步改用 Compose
+        viewBinding = false
         compose = true
     }
     testOptions {
@@ -533,15 +532,14 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
 
-    // Compose（渐进式迁移脚手架：老 View 页面保持不变，新页面按需使用）
+    // Compose UI
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
-    // 互操作：Compose 内复用 ViewBinding / View 树，以及 LiveData 直接转 State
-    implementation(libs.compose.ui.viewbinding)
+    // LiveData 状态供 Compose 页面收集。
     implementation(libs.compose.runtime.livedata)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
