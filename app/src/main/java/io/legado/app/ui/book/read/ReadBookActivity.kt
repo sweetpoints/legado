@@ -373,16 +373,18 @@ class ReadBookActivity :
     private var justInitData: Boolean = false
     private var syncDialog: AlertDialog? = null
 
-    @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
-        editingHighlight = savedInstanceState?.getParcelable(STATE_EDITING_HIGHLIGHT)
+        editingHighlightTime =
+            savedInstanceState?.getLong(STATE_EDITING_HIGHLIGHT)?.takeIf { it != 0L }
+        editingHighlightOwner = savedInstanceState?.getString(STATE_EDITING_HIGHLIGHT_OWNER)
         super.onCreate(savedInstanceState)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBundle("pdfZoom", binding.readView.pdfZoom.save())
         outState.putBundle("aloudControls", aloudControls.save())
-        editingHighlight?.let { outState.putParcelable(STATE_EDITING_HIGHLIGHT, it) }
+        editingHighlightTime?.let { outState.putLong(STATE_EDITING_HIGHLIGHT, it) }
+        editingHighlightOwner?.let { outState.putString(STATE_EDITING_HIGHLIGHT_OWNER, it) }
         super.onSaveInstanceState(outState)
     }
 
@@ -1252,10 +1254,13 @@ class ReadBookActivity :
     }
 
     private var editingHighlightTime: Long? = null
+    private var editingHighlightOwner: String? = null
     private var editingHighlightSnapshot: BookHighlight? = null
     private var editingHighlight: BookHighlight?
         get() {
             val time = editingHighlightTime ?: return null
+            if (ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) != editingHighlightOwner)
+                return null
             val snapshot = editingHighlightSnapshot
             return ReadBook.highlights.firstOrNull {
                 it.time == time &&
@@ -1265,6 +1270,8 @@ class ReadBookActivity :
         }
         set(value) {
             editingHighlightTime = value?.time
+            editingHighlightOwner =
+                if (value == null) null else ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode)
             editingHighlightSnapshot = value
         }
 
@@ -3284,7 +3291,8 @@ class ReadBookActivity :
         private const val ACTION_HIGHLIGHT_RULE_EDIT = "highlightRuleEdit"
         private const val ACTION_HIGHLIGHT_RULE_MANAGE = "highlightRuleManage"
         private const val ACTION_HIGHLIGHT_RULE_DISABLE = "highlightRuleDisable"
-        private const val STATE_EDITING_HIGHLIGHT = "editingHighlight"
+        private const val STATE_EDITING_HIGHLIGHT = "editingHighlightTime"
+        private const val STATE_EDITING_HIGHLIGHT_OWNER = "editingHighlightOwner"
     }
 }
 
