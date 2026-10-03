@@ -8,6 +8,12 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
+import io.legado.app.data.repository.rssSourceManagementId
+import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,15 +42,77 @@ import java.util.UUID
 /** Exercise the real ItemTouchHelper gesture, database order and reopened management list. */
 @RunWith(AndroidJUnit4::class)
 class SourceDragOrderUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private enum class Kind { BOOK, RSS, REPLACE }
 
     @Test fun filteredBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK)
     @Test fun descendingBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK, true)
-    @Test fun filteredRssDragPreservesHiddenOrder() = verifyDrag(Kind.RSS)
+    @Test fun filteredRssDragPreservesHiddenOrder() = verifyRssComposeDrag()
     @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyDrag(Kind.REPLACE)
     @Test fun heldBookDragWithDeletedTargetDoesNotMoveAnotherSource() = verifyDrag(Kind.BOOK, removeTarget = true)
+
+    private fun verifyRssComposeDrag() {
+        val group = "Compose drag ${UUID.randomUUID()}"
+        val old = appDb.rssSourceDao.all
+        val fixtures = listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
+            RssSource(sourceUrl = "https://compose-drag.invalid/$group/$index", sourceName = "Source $index",
+                sourceGroup = if (index % 2 == 0) group else "Hidden $group", customOrder = order,
+                sourceComment = "Metadata $index", ruleContent = "body@text")
+        }
+        val visible = fixtures.filterIndexed { index, _ -> index % 2 == 0 }
+        val ids = visible.map { rssSourceManagementId(it.sourceUrl) }
+        try {
+            appDb.rssSourceDao.insert(*fixtures.toTypedArray())
+            val before = appDb.rssSourceDao.all.map { it.sourceUrl }
+            val raw = appDb.rssSourceDao.all.associate { it.sourceUrl to it.customOrder }
+            ActivityScenario.launch(RssSourceActivity::class.java).use { scenario ->
+                waitUntil("Compose RSS loaded") {
+                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.loaded }; ready
+                }
+                scenario.onActivity { it.managementModel.query("group:$group") }
+                fun waitRows(expected: List<String>) = waitUntil("Compose RSS rows $expected") {
+                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == expected }; ready
+                }
+                waitRows(ids)
+                fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
+                    val list = compose.onNodeWithTag("rss-source-list")
+                    val bounds = list.fetchSemanticsNode().boundsInRoot
+                    val first = compose.onNodeWithTag("rss-source-row-${ids[0]}").fetchSemanticsNode().boundsInRoot
+                    val last = compose.onNodeWithTag("rss-source-row-${ids[2]}").fetchSemanticsNode().boundsInRoot
+                    val start = Offset(8 * context.resources.displayMetrics.density, first.center.y - bounds.top)
+                    val end = Offset(start.x, last.center.y + last.height / 4 - bounds.top)
+                    list.performTouchInput { down(start); advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150); moveTo(end, 500) }
+                    waitRows(listOf(ids[1], ids[2], ids[0])); whileHeld()
+                    if (returnToStart) {
+                        list.performTouchInput { moveTo(Offset(start.x, start.y - first.height / 4), 500) }
+                        waitRows(ids)
+                    }
+                    list.performTouchInput { up() }
+                }
+                drag(true)
+                assertEquals(before, appDb.rssSourceDao.all.map { it.sourceUrl })
+                assertEquals(raw, appDb.rssSourceDao.all.associate { it.sourceUrl to it.customOrder })
+                drag(false) {
+                    val source = appDb.rssSourceDao.getByKey(visible[1].sourceUrl)!!
+                    appDb.rssSourceDao.update(source.copy(sourceComment = "Edited during drag"))
+                    assertEquals(before, appDb.rssSourceDao.all.map { it.sourceUrl })
+                }
+                val expected = before.toMutableList().apply {
+                    remove(visible[0].sourceUrl); add(indexOf(visible[2].sourceUrl) + 1, visible[0].sourceUrl)
+                }
+                waitUntil("Compose RSS committed") { appDb.rssSourceDao.all.map { it.sourceUrl } == expected }
+                assertEquals("Edited during drag", appDb.rssSourceDao.getByKey(visible[1].sourceUrl)!!.sourceComment)
+                waitRows(listOf(ids[1], ids[2], ids[0]))
+                scenario.recreate(); waitRows(listOf(ids[1], ids[2], ids[0]))
+            }
+        } finally {
+            appDb.rssSourceDao.delete(*fixtures.toTypedArray())
+            val orders = old.associate { it.sourceUrl to it.customOrder }
+            appDb.rssSourceDao.update(*appDb.rssSourceDao.all.map { it.copy(customOrder = orders[it.sourceUrl] ?: it.customOrder) }.toTypedArray())
+        }
+    }
 
     private fun verifyDrag(kind: Kind, descending: Boolean = false, removeTarget: Boolean = false) {
         val id = UUID.randomUUID().toString()

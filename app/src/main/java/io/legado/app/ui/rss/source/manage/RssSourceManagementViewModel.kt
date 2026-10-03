@@ -9,16 +9,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.UUID
 
-enum class RssSourceManagementAction { Add, Edit, ImportLocal, ImportQr, ImportUrl, Export, Share, Help, Groups }
-enum class RssSourceManagementDialog { Delete, AddGroup, RemoveGroup, ImportUrl }
+enum class RssSourceManagementAction { Add, Edit, ImportLocal, ImportQr, ImportUrl, ImportInput, Export, Share, Help, Groups, Copy }
+enum class RssSourceManagementDialog { Delete, AddGroup, RemoveGroup, ImportUrl, ExportResult, Passphrase }
 data class RssSourceManagementEffect(val action: RssSourceManagementAction, val nonce: String)
 data class RssSourceManagementLabels(val enabled: String, val disabled: String, val login: String, val noGroup: String)
 data class RssSourceManagementState(val loaded: Boolean = false, val busy: Boolean = false,
     val rows: List<RssSourceManagementRow> = emptyList(), val groups: List<String> = emptyList(),
     val query: String = "", val queryStart: Int = 0, val queryEnd: Int = 0, val selected: Set<String> = emptySet(),
     val dialog: RssSourceManagementDialog? = null, val draft: String = "", val draftStart: Int = 0, val draftEnd: Int = 0,
-    val history: List<String> = emptyList(), val pending: RssSourceManagementEffect? = null,
-    val dragging: String? = null, val error: String? = null, val scrollIndex: Int = 0, val scrollOffset: Int = 0) {
+    val history: List<String> = emptyList(), val targets: List<String> = emptyList(), val pending: RssSourceManagementEffect? = null,
+    val dragging: String? = null, val feedback: RssSourceManagementShareFeedback? = null, val waitingNative: Boolean = false, val error: String? = null, val scrollIndex: Int = 0, val scrollOffset: Int = 0) {
     val visibleSelection get() = rows.filter { it.id in selected }.map { it.id }
 }
 data class RssSourceManagementNative(val effect: RssSourceManagementEffect, val sourceId: String? = null,
@@ -26,7 +26,8 @@ data class RssSourceManagementNative(val effect: RssSourceManagementEffect, val 
 
 /** Queries, large selections and drafts are disk backed; transient gestures never write a checkpoint. */
 class RssSourceManagementViewModel(private val repository: RssSourceManagementRepository,
-    private val sessions: RssSourceManagementSessionRepository, private val saved: SavedStateHandle) : ViewModel() {
+    private val sessions: RssSourceManagementSessionRepository, private val saved: SavedStateHandle,
+    private val sharing: RssSourceManagementSharingRepository = AppRssSourceManagementSharingRepository()) : ViewModel() {
     private val id = saved.get<String>("rssManagement.session") ?: UUID.randomUUID().toString().also { saved["rssManagement.session"] = it }
     private val mutable = MutableStateFlow(RssSourceManagementState(scrollIndex = saved.get<Int>("rssManagement.scrollIndex") ?: 0,
         scrollOffset = saved.get<Int>("rssManagement.scrollOffset") ?: 0))
@@ -43,6 +44,7 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
     private var dragRows: List<RssSourceManagementRow>? = null
     private var bufferedRows: List<RssSourceManagementRow>? = null
     private var moveTarget: Pair<String, Boolean>? = null
+    private var earlyResult: Pair<String, String?>? = null
     private val cleanup = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     fun bind(value: RssSourceManagementLabels) {
         if (state.value.loaded) { if (labels != value) { labels = value; observe() }; return }
@@ -55,7 +57,8 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
                 revision = maxOf(revision, disk?.revision ?: 0); checkpoint = disk ?: checkpoint
                 val pending = checkpoint.pending?.takeUnless { saved.get<String>("rssManagement.delivered") == it.nonce }
                 checkpoint = checkpoint.copy(pending = pending)
-                project(); observe(); observeGroups(); if (state.value.dialog == RssSourceManagementDialog.ImportUrl) loadHistory()
+                clearPersistedReturn(); project(); observe(); observeGroups(); if (state.value.dialog == RssSourceManagementDialog.ImportUrl) loadHistory()
+                earlyResult?.also { earlyResult = null; returned(it.first, it.second) }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (epoch == generation) failed(error) }
         }
@@ -65,7 +68,13 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
             queryStart = checkpoint.queryStart, queryEnd = checkpoint.queryEnd, selected = checkpoint.selected.toSet(),
             dialog = checkpoint.dialog?.let { runCatching { RssSourceManagementDialog.valueOf(it) }.getOrNull() },
             draft = checkpoint.draft, draftStart = checkpoint.draftStart, draftEnd = checkpoint.draftEnd,
-            pending = checkpoint.pending?.let { value -> runCatching { RssSourceManagementEffect(RssSourceManagementAction.valueOf(value.action), value.nonce) }.getOrNull() }, error = null)
+            pending = checkpoint.pending?.let { value -> runCatching { RssSourceManagementEffect(RssSourceManagementAction.valueOf(value.action), value.nonce) }.getOrNull() },
+            targets = checkpoint.targets, feedback = checkpoint.feedback, waitingNative = saved.get<String>("rssManagement.waitingNonce") != null, error = null)
+        drainResult()
+    }
+    private fun drainResult() {
+        if (!state.value.loaded || state.value.busy || state.value.pending != null) return
+        earlyResult?.also { earlyResult = null; returned(it.first, it.second) }
     }
     private fun filter(): RssSourceManagementFilter {
         val key = checkpoint.query; val labels = checkNotNull(labels)
@@ -157,8 +166,9 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
     }
     fun finishDrag() {
         val moving = state.value.dragging ?: return; val target = moveTarget
+        val changed = state.value.rows.map { it.id } != dragRows?.map { it.id }
         cancelGesture()
-        if (target != null) mutate { repository.move(moving, target.first, target.second) }
+        if (changed && target != null) mutate { repository.move(moving, target.first, target.second) }
     }
     fun cancelGesture() {
         val original = dragRows
@@ -173,7 +183,7 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
         if (!editable()) return
         cancelGesture(); val epoch = generation; mutable.value = state.value.copy(busy = true, error = null)
         operation = viewModelScope.launch {
-            try { block(); currentCoroutineContext().ensureActive(); if (epoch == generation) mutable.value = state.value.copy(busy = false) }
+            try { block(); currentCoroutineContext().ensureActive(); if (epoch == generation) { mutable.value = state.value.copy(busy = false); drainResult() } }
             catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (epoch == generation) failed(error) }
         }
@@ -218,8 +228,8 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
         repository.forgetImport(value); val history = repository.importHistory(); currentCoroutineContext().ensureActive()
         mutable.value = state.value.copy(history = history)
     }
-    fun effect(action: RssSourceManagementAction, sourceId: String? = null, input: String? = null) {
-        if (!editable()) return
+    fun effect(action: RssSourceManagementAction, sourceId: String? = null, input: String? = null, returningNonce: String? = null) {
+        if (!editable() || (saved.get<String>("rssManagement.waitingNonce") != null && returningNonce != saved.get<String>("rssManagement.waitingNonce"))) return
         val ids = state.value.visibleSelection
         if (action in listOf(RssSourceManagementAction.Export, RssSourceManagementAction.Share) && ids.isEmpty()) return
         if (action == RssSourceManagementAction.Edit && sourceId == null) return
@@ -231,11 +241,11 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
                 ownedExport = exported
                 if (action == RssSourceManagementAction.ImportUrl) repository.rememberImport(input.orEmpty())
                 currentCoroutineContext().ensureActive(); if (epoch != generation) return@launch
-                val prepared = RssSourceManagementPrepared(action.name, UUID.randomUUID().toString(), sourceId, input, exported)
+                val prepared = RssSourceManagementPrepared(action.name, UUID.randomUUID().toString(), sourceId, input, exported, returningNonce)
                 revision++; saved["rssManagement.revision"] = revision
                 checkpoint = checkpoint.copy(revision = revision, pending = prepared, dialog = null, draft = "", draftStart = 0, draftEnd = 0, targets = emptyList(), exportFile = exported ?: checkpoint.exportFile)
                 ownedExport = null // The private pending checkpoint now owns the file, including write-failure retry.
-                sessions.write(id, checkpoint); currentCoroutineContext().ensureActive(); if (epoch == generation) project()
+                sessions.write(id, checkpoint); currentCoroutineContext().ensureActive(); if (epoch == generation) { clearPersistedReturn(); project() }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (epoch == generation) failed(error) }
             finally { ownedExport?.let { export -> withContext(Dispatchers.IO + NonCancellable) { repository.releaseExport(export.path) } } }
@@ -246,7 +256,54 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
     }
     fun delivered(nonce: String): Boolean {
         if (state.value.pending?.nonce != nonce) return false
+        val action = state.value.pending!!.action
+        if (action in listOf(RssSourceManagementAction.Export, RssSourceManagementAction.ImportLocal, RssSourceManagementAction.ImportQr)) {
+            saved["rssManagement.waitingNonce"] = nonce; saved["rssManagement.waitingAction"] = action.name
+        }
         saved["rssManagement.delivered"] = nonce; checkpoint = checkpoint.copy(pending = null); project(); persist(); return true
+    }
+    fun waiting(action: RssSourceManagementAction): String? = saved.get<String>("rssManagement.waitingNonce")
+        .takeIf { saved.get<String>("rssManagement.waitingAction") == action.name }
+    private fun clearPersistedReturn() {
+        val waiting = saved.get<String>("rssManagement.waitingNonce") ?: return
+        if (checkpoint.returnedNonce == waiting || checkpoint.pending?.returningNonce == waiting) {
+            saved.remove<String>("rssManagement.waitingNonce"); saved.remove<String>("rssManagement.waitingAction")
+        }
+    }
+    fun returned(nonce: String, input: String?) {
+        if (saved.get<String>("rssManagement.waitingNonce") != nonce) return
+        if (!state.value.loaded) { earlyResult = nonce to input; return }
+        if (state.value.busy) { if (earlyResult == null) earlyResult = nonce to input; return }
+        val action = saved.get<String>("rssManagement.waitingAction") ?: return
+        if (input != null && action != RssSourceManagementAction.Export.name) {
+            effect(RssSourceManagementAction.ImportInput, input = input, returningNonce = nonce); return
+        }
+        val epoch = generation; mutable.value = state.value.copy(busy = true, error = null)
+        operation = viewModelScope.launch {
+            try {
+                val feedback = input?.let { sharing.feedback(it) }; currentCoroutineContext().ensureActive()
+                if (epoch != generation) return@launch
+                revision++; saved["rssManagement.revision"] = revision
+                checkpoint = checkpoint.copy(revision = revision, returnedNonce = nonce, feedback = feedback,
+                    dialog = if (feedback != null) RssSourceManagementDialog.ExportResult.name else null,
+                    draft = feedback?.url.orEmpty(), draftStart = 0, draftEnd = feedback?.url?.length ?: 0)
+                sessions.write(id, checkpoint); currentCoroutineContext().ensureActive()
+                if (epoch == generation) { clearPersistedReturn(); project() }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (epoch == generation) failed(error) }
+        }
+    }
+    fun passphrase() {
+        val feedback = checkpoint.feedback?.takeIf { it.canEncode } ?: return
+        mutate {
+            val text = sharing.passphrase(feedback.url); currentCoroutineContext().ensureActive()
+            checkpoint = checkpoint.copy(feedback = feedback.copy(passphrase = text), dialog = RssSourceManagementDialog.Passphrase.name,
+                draft = text, draftStart = 0, draftEnd = text.length); project(); persist()
+        }
+    }
+    fun copyFeedback() {
+        val feedback = checkpoint.feedback ?: return
+        effect(RssSourceManagementAction.Copy, input = if (state.value.dialog == RssSourceManagementDialog.Passphrase) feedback.passphrase else feedback.url)
     }
     suspend fun source(id: String) = repository.source(id)
     fun scroll(index: Int, offset: Int) {
@@ -260,11 +317,12 @@ class RssSourceManagementViewModel(private val repository: RssSourceManagementRe
         operation = viewModelScope.launch {
             try {
                 sessions.write(id, checkpoint.copy(revision = revision)); currentCoroutineContext().ensureActive()
-                if (epoch == generation) { project(); observe() }
+                if (epoch == generation) { clearPersistedReturn(); project(); observe() }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (epoch == generation) failed(error) }
         }
     }
+    fun failed(message: String) { mutable.value = state.value.copy(busy = false, error = message) }
     private fun failed(error: Exception) { mutable.value = state.value.copy(busy = false, error = error.localizedMessage ?: error.javaClass.simpleName) }
     suspend fun flush() { val current = checkpoint.copy(revision = revision); sessions.write(id, current) }
     fun stop() { generation++; cancelGesture(); viewModelScope.cancel() }

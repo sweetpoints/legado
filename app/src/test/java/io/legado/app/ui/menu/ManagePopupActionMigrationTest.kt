@@ -113,13 +113,6 @@ class ManagePopupActionMigrationTest {
     @Test
     fun `management menu actions keep their current callbacks and side effects`() {
         assertActions(
-            RSS_SOURCE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "callBack.del(source)",
-            "selected.remove(source)"
-        )
-        assertActions(
             REPLACE_RULE,
             "\"top\" -> callBack.toTop(item)",
             "\"bottom\" -> callBack.toBottom(item)",
@@ -131,7 +124,7 @@ class ManagePopupActionMigrationTest {
 
     @Test
     fun `management menu labels keep their previous order`() {
-        listOf(RSS_SOURCE, REPLACE_RULE).forEach { path ->
+        listOf(REPLACE_RULE).forEach { path ->
             assertOrdered(
                 path,
                 "item(context.getString(R.string.to_top), \"top\")",
@@ -167,8 +160,7 @@ class ManagePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val RSS_SOURCE = "src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        val adapterFiles = listOf(RSS_SOURCE, REPLACE_RULE)
+        val adapterFiles = listOf(REPLACE_RULE)
     }
 }

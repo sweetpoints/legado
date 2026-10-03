@@ -15,9 +15,11 @@ data class RssSourceManagementCheckpoint(val revision: Long = 0, val query: Stri
     val queryStart: Int = 0, val queryEnd: Int = 0, val selected: List<String> = emptyList(),
     val dialog: String? = null, val draft: String = "", val draftStart: Int = 0, val draftEnd: Int = 0,
     val targets: List<String> = emptyList(), val pending: RssSourceManagementPrepared? = null,
-    val exportFile: RssSourceManagementExport? = null)
+    val exportFile: RssSourceManagementExport? = null, val feedback: RssSourceManagementShareFeedback? = null,
+    val returnedNonce: String? = null)
 data class RssSourceManagementPrepared(val action: String, val nonce: String,
-    val sourceId: String? = null, val input: String? = null, val export: RssSourceManagementExport? = null)
+    val sourceId: String? = null, val input: String? = null, val export: RssSourceManagementExport? = null,
+    val returningNonce: String? = null)
 interface RssSourceManagementSessionRepository {
     suspend fun read(session: String): RssSourceManagementCheckpoint?
     suspend fun write(session: String, value: RssSourceManagementCheckpoint)

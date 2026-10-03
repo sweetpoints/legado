@@ -40,4 +40,13 @@ class RssSourceManagementSessionRepositoryTest {
         assertTrue(runCatching { repository.read("../escape") }.isFailure)
         assertTrue(runCatching { repository.release("../escape") }.isFailure)
     }
+    @Test fun returningReceiptAndLargeFeedbackRestoreExactlyWithoutPreferenceMutation() = runBlocking {
+        val nonce = UUID.randomUUID().toString()
+        val checkpoint = RssSourceManagementCheckpoint(revision = 12,
+            pending = RssSourceManagementPrepared("ImportInput", UUID.randomUUID().toString(), input = "I".repeat(2000000), returningNonce = nonce),
+            feedback = RssSourceManagementShareFeedback("https://owned.invalid", "Summary", true, "P".repeat(100000)), returnedNonce = nonce)
+        repository.write(id, checkpoint)
+        assertEquals(checkpoint, FileRssSourceManagementSessionRepository(directory).read(id))
+    }
+
 }

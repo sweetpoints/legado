@@ -5,6 +5,11 @@ import android.widget.CompoundButton
 import androidx.appcompat.widget.SearchView
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import io.legado.app.data.repository.rssSourceManagementId
+import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -16,8 +21,6 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleAdapter
 import io.legado.app.ui.replace.ReplaceRuleViewModel
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
-import io.legado.app.ui.rss.source.manage.RssSourceAdapter
-import io.legado.app.ui.rss.source.manage.RssSourceViewModel
 import io.legado.app.utils.GSON
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +32,7 @@ import java.util.UUID
 /** A displayed row can predate a committed move or an edit from another screen. */
 @RunWith(AndroidJUnit4::class)
 class SourceOrderMetadataUpdateTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     @Test
@@ -48,10 +52,17 @@ class SourceOrderMetadataUpdateTest {
                     remove(stale[0].sourceUrl)
                     add(indexOf(stale[2].sourceUrl) + 1, stale[0].sourceUrl)
                 }
+                waitUntil("RSS model loaded") {
+                    var loaded = false; scenario.onActivity { loaded = it.managementModel.state.value.loaded }; loaded
+                }
+                val ids = stale.map { rssSourceManagementId(it.sourceUrl) }
+                scenario.onActivity { it.managementModel.query("group:$group") }
+                waitUntil("RSS filter ready") {
+                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == ids }; ready
+                }
                 scenario.onActivity { activity ->
-                    ViewModelProvider(activity)[RssSourceViewModel::class.java]
-                        .move(stale[0].sourceUrl, stale[2].sourceUrl, true)
-                    activity.findViewById<SearchView>(R.id.search_view).setQuery("group:$group", false)
+                    activity.managementModel.beginDrag(ids[0]); activity.managementModel.dragTo(ids[2], true)
+                    activity.managementModel.finishDrag()
                 }
                 waitUntil("RSS move committed") {
                     appDb.rssSourceDao.all.map { it.sourceUrl } == expectedOrder
@@ -69,35 +80,14 @@ class SourceOrderMetadataUpdateTest {
                         it.sourceUrl to GSON.toJson(it)
                     })
                 }
-                waitUntil("RSS switch row") {
-                    var ready = false
-                    scenario.onActivity { activity ->
-                        val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                        val adapter = recycler.adapter as RssSourceAdapter
-                        val position = adapter.getItems().indexOfFirst { it.sourceUrl == stale[0].sourceUrl }
-                        ready = adapter.getItems().map { it.sourceUrl } == listOf(stale[1].sourceUrl, stale[2].sourceUrl, stale[0].sourceUrl)
-                            && recycler.findViewHolderForAdapterPosition(position) != null
-                    }
-                    ready
-                }
-                scenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    val adapter = recycler.adapter as RssSourceAdapter
-                    val position = adapter.getItems().indexOfFirst { it.sourceUrl == stale[0].sourceUrl }
-                    val row = checkNotNull(recycler.findViewHolderForAdapterPosition(position)).itemView
-                    // Force the real switch listener to receive the pre-move snapshot in this UI turn.
-                    adapter.setItem(position, stale[0])
-                    val switch = row.findViewById<CompoundButton>(R.id.swt_enabled)
-                    assertFalse(switch.isChecked)
-                    switch.performClick()
-                    assertTrue(switch.isChecked)
-                }
+                // Immutable IDs captured before the concurrent edit target only the enabled column.
+                compose.onNodeWithTag("rss-source-enabled-${ids[0]}").performClick()
                 waitUntil("RSS switch enabled") { appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true }
                 assertState(setOf(stale[0].sourceUrl))
-                scenario.onActivity { ViewModelProvider(it)[RssSourceViewModel::class.java].enableSelection(stale) }
+                scenario.onActivity { it.managementModel.enabled(ids, true) }
                 waitUntil("RSS selection enabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true } }
                 assertState(keys)
-                scenario.onActivity { ViewModelProvider(it)[RssSourceViewModel::class.java].disableSelection(stale) }
+                scenario.onActivity { it.managementModel.enabled(ids, false) }
                 waitUntil("RSS selection disabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false } }
                 assertState(emptySet())
             }

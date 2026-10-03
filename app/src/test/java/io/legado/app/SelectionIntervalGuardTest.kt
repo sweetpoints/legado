@@ -40,7 +40,6 @@ class SelectionIntervalGuardTest {
         val sources = listOf(
             "io/legado/app/ui/book/manage/BookAdapter.kt",
             "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
-            "io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt",
         )
     }
 }

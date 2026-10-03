@@ -1,31 +1,17 @@
 package io.legado.app.ui.rss.source.manage
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import io.legado.app.utils.renameGroupExact
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
+/** The named-group manager retains exact-member rename/delete rather than substring matching. */
 class RssSourceViewModelGroupContractTest {
-
-    private val source by lazy {
-        projectFile("src/main/java/io/legado/app/ui/rss/source/manage/RssSourceViewModel.kt")
-            .readText()
-            .replace("\r\n", "\n")
-            .replace(Regex("\\s+"), " ")
+    @Test fun exactDeletionKeepsOtherNormalizedMembers() {
+        assertEquals("AA,History", "A；AA，History".renameGroupExact("A", null))
+        assertNull("AA,History".renameGroupExact("A", null))
     }
-
-    @Test
-    fun `group deletion delegates to exact group update`() {
-        assertTrue(source.contains("fun delGroup(group: String) = upGroup(group, null)"))
-        assertTrue(
-            source.contains("source.sourceGroup.renameGroupExact(oldGroup, newGroup)")
-        )
-        assertFalse(source.contains("source.sourceGroup?.splitNotBlank"))
-    }
-
-    private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?: error("Missing project file: $pathInApp")
+    @Test fun renamePreservesUnrelatedGroupAndLiteralWildcard() {
+        assertEquals("History,New", "%；History".renameGroupExact("%", "New"))
+        assertNull("AA,History".renameGroupExact("_", "New"))
     }
 }

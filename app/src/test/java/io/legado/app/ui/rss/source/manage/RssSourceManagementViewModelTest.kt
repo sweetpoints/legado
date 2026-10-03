@@ -57,8 +57,17 @@ class RssSourceManagementViewModelTest {
         }
         override suspend fun release(session: String) {}
     }
-    private fun model(repo: Repo = Repo(), sessions: Sessions = Sessions(), saved: SavedStateHandle = SavedStateHandle()) =
-        RssSourceManagementViewModel(repo, sessions, saved).also { models += it }
+    private class Sharing : RssSourceManagementSharingRepository {
+        var calls = 0
+        var gate: CompletableDeferred<Unit>? = null
+        override suspend fun feedback(url: String): RssSourceManagementShareFeedback {
+            calls++; withContext(NonCancellable) { gate?.await() }
+            return RssSourceManagementShareFeedback(url, "Expiry summary", true)
+        }
+        override suspend fun passphrase(url: String) = "RSS passphrase:$url"
+    }
+    private fun model(repo: Repo = Repo(), sessions: Sessions = Sessions(), saved: SavedStateHandle = SavedStateHandle(), sharing: Sharing = Sharing()) =
+        RssSourceManagementViewModel(repo, sessions, saved, sharing).also { models += it }
     private fun clone(saved: SavedStateHandle) = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
     private fun gate() = CompletableDeferred<Unit>().also { gates += it }
     private fun test(block: suspend TestScope.() -> Unit) = runTest(dispatcher) {
@@ -148,4 +157,93 @@ class RssSourceManagementViewModelTest {
         val repo = Repo().apply { gate = gate() }; val loaded = model(repo); loaded.bind(labels); runCurrent(); loaded.enabled(listOf("id-0"), false); runCurrent()
         loaded.stop(); repo.gate!!.complete(Unit); runCurrent(); assertTrue(loaded.state.value.busy); assertEquals(1, repo.enabled.size)
     }
+    @Test fun reorderBackToOriginalKeepsRawDaoOrderUntouched() = test {
+        val repo = Repo(); val model = model(repo); model.bind(labels); runCurrent()
+        model.beginDrag("id-0"); model.dragTo("id-3", true); model.dragTo("id-1", false)
+        model.finishDrag(); runCurrent(); assertTrue(repo.moves.isEmpty())
+        assertEquals(repo.values.value, model.state.value.rows)
+    }
+    private fun TestScope.launch(model: RssSourceManagementViewModel, action: RssSourceManagementAction): String {
+        model.effect(action); runCurrent()
+        val nonce = model.state.value.pending!!.nonce
+        assertTrue(model.delivered(nonce)); runCurrent(); return nonce
+    }
+    @Test fun localReturnRejectsOldNoncePersistsLargeInputAndNeverAddsUrlHistory() = test {
+        val repo = Repo(); val saved = SavedStateHandle(); val sessions = Sessions()
+        val model = model(repo, sessions, saved); model.bind(labels); runCurrent()
+        val nonce = launch(model, RssSourceManagementAction.ImportLocal)
+        model.returned("stale", "wrong"); runCurrent(); assertNull(model.state.value.pending)
+        val input = "content://" + "A".repeat(2000000)
+        model.returned(nonce, input); runCurrent()
+        val pending = model.state.value.pending!!
+        assertEquals(RssSourceManagementAction.ImportInput, pending.action)
+        assertEquals(input, model.native(pending.nonce)!!.input); assertTrue(repo.imports.isEmpty())
+        assertNull(model.waiting(RssSourceManagementAction.ImportLocal))
+        model.returned(nonce, "duplicate"); runCurrent(); assertEquals(input, model.native(pending.nonce)!!.input)
+        assertTrue(saved.keys().all { saved.get<Any?>(it).toString().length < 100 })
+        model.stop(); val restored = model(repo, sessions, clone(saved)); restored.bind(labels); runCurrent()
+        assertEquals(input, restored.native(pending.nonce)!!.input)
+        assertTrue(restored.delivered(pending.nonce)); assertFalse(restored.delivered(pending.nonce))
+    }
+    @Test fun canceledPickerAndFailedLaunchReleaseWaitingTicketAndAllowNextRequest() = test {
+        val model = model(); model.bind(labels); runCurrent()
+        val first = launch(model, RssSourceManagementAction.ImportQr)
+        model.returned(first, null); runCurrent(); assertFalse(model.state.value.waitingNative)
+        val second = launch(model, RssSourceManagementAction.ImportLocal)
+        assertNotEquals(first, second); model.returned(first, "late QR"); runCurrent()
+        assertEquals(second, model.waiting(RssSourceManagementAction.ImportLocal))
+    }
+    @Test fun earlyPickerReturnWaitsForRestoredDiskBeforeImportAndIsConsumedOnce() = test {
+        val saved = SavedStateHandle(); val sessions = Sessions(); val first = model(sessions = sessions, saved = saved)
+        first.bind(labels); runCurrent(); val nonce = launch(first, RssSourceManagementAction.ImportLocal); first.stop()
+        sessions.readGate = gate(); val restored = model(sessions = sessions, saved = clone(saved))
+        restored.bind(labels); runCurrent(); restored.returned(nonce, "content://restored")
+        assertFalse(restored.state.value.loaded); sessions.readGate!!.complete(Unit); runCurrent()
+        val pending = restored.state.value.pending!!
+        assertEquals("content://restored", restored.native(pending.nonce)!!.input)
+        assertFalse(restored.state.value.waitingNative)
+    }
+    @Test fun failedReturnedWriteKeepsSamePayloadAndWaitingUntilRetrySucceeds() = test {
+        val sessions = Sessions(); val model = model(sessions = sessions); model.bind(labels); runCurrent()
+        val nonce = launch(model, RssSourceManagementAction.ImportLocal)
+        sessions.failure = true; model.returned(nonce, "content://large-document"); runCurrent()
+        assertNotNull(model.state.value.error); assertNull(model.state.value.pending)
+        assertEquals(nonce, model.waiting(RssSourceManagementAction.ImportLocal))
+        sessions.failure = false; model.retry(); runCurrent(); val pending = model.state.value.pending!!
+        assertEquals("content://large-document", model.native(pending.nonce)!!.input)
+        assertFalse(model.state.value.waitingNative)
+    }
+    @Test fun exportFeedbackAndPassphraseRestoreAndCopyCapturedOriginalRatherThanEditedDisplay() = test {
+        val saved = SavedStateHandle(); val sessions = Sessions(); val sharing = Sharing()
+        val model = model(sessions = sessions, saved = saved, sharing = sharing); model.bind(labels); runCurrent(); model.selected("id-0", true)
+        val nonce = launch(model, RssSourceManagementAction.Export)
+        model.returned(nonce, "https://export.invalid/rss"); runCurrent()
+        assertEquals(RssSourceManagementDialog.ExportResult, model.state.value.dialog)
+        assertEquals("Expiry summary", model.state.value.feedback!!.summary)
+        model.passphrase(); runCurrent(); model.draft("display only", 3, 4); runCurrent(); model.stop()
+        val restored = model(sessions = sessions, saved = clone(saved), sharing = sharing); restored.bind(labels); runCurrent()
+        assertEquals(RssSourceManagementDialog.Passphrase, restored.state.value.dialog)
+        assertEquals("display only", restored.state.value.draft); assertEquals(4, restored.state.value.draftEnd)
+        restored.copyFeedback(); runCurrent(); val pending = restored.state.value.pending!!
+        assertEquals("RSS passphrase:https://export.invalid/rss", restored.native(pending.nonce)!!.input)
+        assertEquals(1, sharing.calls)
+    }
+    @Test fun pausedNonCooperativeExportFeedbackCannotPublishAfterOwnerStops() = test {
+        val sharing = Sharing().apply { gate = gate() }; val model = model(sharing = sharing)
+        model.bind(labels); runCurrent(); model.selected("id-0", true)
+        val nonce = launch(model, RssSourceManagementAction.Export)
+        model.returned(nonce, "https://export.invalid"); runCurrent(); model.stop(); sharing.gate!!.complete(Unit); runCurrent()
+        assertNull(model.state.value.dialog); assertEquals(nonce, model.waiting(RssSourceManagementAction.Export))
+    }
+
+    @Test fun pickerReturnDuringInFlightMutationWaitsAndKeepsFirstMatchingPayload() = test {
+        val repo = Repo().apply { gate = gate() }; val model = model(repo)
+        model.bind(labels); runCurrent(); val nonce = launch(model, RssSourceManagementAction.ImportLocal)
+        model.enabled(listOf("id-0"), false); runCurrent()
+        model.returned(nonce, "content://first"); model.returned(nonce, "content://duplicate"); runCurrent()
+        assertNull(model.state.value.pending)
+        repo.gate!!.complete(Unit); runCurrent()
+        assertEquals("content://first", model.native(model.state.value.pending!!.nonce)!!.input)
+    }
+
 }
