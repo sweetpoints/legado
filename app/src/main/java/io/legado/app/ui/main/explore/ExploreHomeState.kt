@@ -39,6 +39,7 @@ internal data class ExploreHomeState(
     val expandedUrl: String? = null,
     val controls: List<ExploreHomeControl> = emptyList(),
     val loading: Boolean = true,
+    val sessionLoaded: Boolean = false,
     val panelLoading: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,

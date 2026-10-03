@@ -19,12 +19,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 
 internal class ExploreHomeViewModel(
     private val repository: ExploreHomeRepository,
@@ -36,6 +37,7 @@ internal class ExploreHomeViewModel(
     private val operationMutex = Mutex()
     private var session = ExploreHomeSession()
     private var restored = false
+    private val restorationReady = MutableStateFlow(false)
     @Volatile private var terminated = false
     private var generation = 0L
     private var panelJob: Job? = null
@@ -45,35 +47,40 @@ internal class ExploreHomeViewModel(
     private val activeCallbacks = mutableMapOf<String, SourceLoginJsExtensions.Callback>()
 
     init {
-        viewModelScope.launch {
-            operationMutex.withLock {
-                try {
-                    session = withContext(ioDispatcher) { storage.read() }
-                    mutableState.update {
-                        it.copy(
-                            query = session.query,
-                            expandedUrl = session.expandedUrl,
-                            deleteUrl = session.deleteUrl,
-                            errorText = session.errorText,
-                            effect =
-                                session.effect?.takeUnless { request ->
-                                    request.id in session.receipts
-                                },
-                            error = if (session.pendingOperation) "上次操作被中断，请检查结果后重试" else null,
-                        )
-                    }
-                    session = session.copy(pendingOperation = false)
-                } catch (failure: Exception) {
-                    fail(failure)
-                }
-                restored = true
+        viewModelScope.launch { operationMutex.withLock { restoreSession() } }
+    }
+
+    private suspend fun restoreSession() {
+        restored = false
+        restorationReady.value = false
+        try {
+            val loaded = withContext(ioDispatcher) { storage.read() }
+            session = loaded.copy(pendingOperation = false)
+            mutableState.update {
+                it.copy(
+                    query = loaded.query,
+                    expandedUrl = loaded.expandedUrl,
+                    deleteUrl = loaded.deleteUrl,
+                    errorText = loaded.errorText,
+                    effect = loaded.effect?.takeUnless { request -> request.id in loaded.receipts },
+                    sessionLoaded = true,
+                    loading = true,
+                    error = if (loaded.pendingOperation) "上次操作被中断，请检查结果后重试" else null,
+                )
             }
+            restored = true
+            restorationReady.value = true
+        } catch (failure: Exception) {
+            // Preserve the unreadable body. A default in-memory session cannot authorize any
+            // edit, mutation or native receipt until Retry successfully reads the owned file.
+            mutableState.update { it.copy(sessionLoaded = false) }
+            fail(failure)
         }
     }
 
     /** The view's RESUMED collector owns Room observation and control loading. */
     suspend fun observeResumed() {
-        while (!restored) yield()
+        restorationReady.filter { it }.first()
         currentCoroutineContext().ensureActive()
         resumed = true
         groupsJob?.cancel()
@@ -173,9 +180,22 @@ internal class ExploreHomeViewModel(
             )
         // Only a committed revision becomes the accepted session. A superseded receipt must
         // never clear a pending effect or authorize native/business work.
-        val accepted = withContext(ioDispatcher + NonCancellable) { storage.write(snapshot) }
+        val accepted =
+            try {
+                withContext(ioDispatcher + NonCancellable) { storage.write(snapshot) }
+            } catch (failure: Exception) {
+                invalidateRestoration()
+                throw failure
+            }
+        if (!accepted) invalidateRestoration()
         check(accepted) { "发现会话写入已由新的页面取代，请重新加载" }
         session = snapshot
+    }
+
+    private fun invalidateRestoration() {
+        restored = false
+        restorationReady.value = false
+        mutableState.update { it.copy(sessionLoaded = false) }
     }
 
     private fun edit(transform: (ExploreHomeState) -> ExploreHomeState) {
@@ -224,6 +244,7 @@ internal class ExploreHomeViewModel(
     }
 
     fun refresh(url: String = state.value.expandedUrl.orEmpty()) {
+        if (!restored || terminated) return
         if (url == state.value.expandedUrl) loadPanel(url, true)
         else
             viewModelScope.launch {
@@ -341,8 +362,15 @@ internal class ExploreHomeViewModel(
     fun dismiss() = edit { it.copy(deleteUrl = null, errorText = null, error = null) }
 
     fun retry() {
-        dismiss()
-        state.value.expandedUrl?.let { loadPanel(it, false) }
+        if (terminated || state.value.busy) return
+        viewModelScope.launch {
+            if (!restored) {
+                operationMutex.withLock { restoreSession() }
+            } else {
+                mutableState.update { it.copy(error = null) }
+                if (resumed) observeResumed()
+            }
+        }
     }
 
     fun delete() {

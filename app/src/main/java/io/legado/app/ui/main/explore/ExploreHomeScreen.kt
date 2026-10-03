@@ -137,12 +137,12 @@ internal fun ExploreHomeScreen(state: ExploreHomeState, actions: ExploreHomeActi
                 )
             },
             confirmButton = {
-                TextButton(actions.delete, enabled = !state.busy) {
+                TextButton(actions.delete, enabled = !state.busy && state.sessionLoaded) {
                     Text(stringResource(R.string.yes))
                 }
             },
             dismissButton = {
-                TextButton(actions.dismiss, enabled = !state.busy) {
+                TextButton(actions.dismiss, enabled = !state.busy && state.sessionLoaded) {
                     Text(stringResource(R.string.no))
                 }
             },
@@ -170,12 +170,12 @@ private fun ExploreHomeToolbar(state: ExploreHomeState, actions: ExploreHomeActi
             Modifier.weight(1f).testTag("explore-home-query"),
             label = { Text(stringResource(R.string.screen_find)) },
             singleLine = true,
-            enabled = !state.busy,
+            enabled = !state.busy && state.sessionLoaded,
         )
         Box {
             TextButton(
                 { groupMenu = true },
-                enabled = !state.busy,
+                enabled = !state.busy && state.sessionLoaded,
                 modifier = Modifier.testTag("explore-home-groups"),
             ) {
                 Text(stringResource(R.string.group))
@@ -206,7 +206,7 @@ private fun ExploreHomeToolbar(state: ExploreHomeState, actions: ExploreHomeActi
                 }
             }
         }
-        IconButton({ actions.action("manage", "") }, enabled = !state.busy) {
+        IconButton({ actions.action("manage", "") }, enabled = !state.busy && state.sessionLoaded) {
             Icon(Icons.Default.Settings, stringResource(R.string.book_source_manage))
         }
     }
@@ -229,7 +229,7 @@ private fun ExploreHomeCard(
         Row(
             Modifier.fillMaxWidth()
                 .combinedClickable(
-                    enabled = !state.busy,
+                    enabled = !state.busy && state.sessionLoaded,
                     onClick = { actions.expand(source.url) },
                     onLongClick = { menu = true },
                 )
@@ -245,7 +245,7 @@ private fun ExploreHomeCard(
                 null,
             )
             Box {
-                IconButton({ menu = true }, enabled = !state.busy) {
+                IconButton({ menu = true }, enabled = !state.busy && state.sessionLoaded) {
                     Icon(Icons.Default.MoreVert, "${stringResource(R.string.menu)} ${source.name}")
                 }
                 DropdownMenu(menu, { menu = false }) {

@@ -55,7 +55,7 @@ internal class FileExploreHomeSessionStorage(
     private fun readBody(): ExploreHomeSession? {
         if (!exists(file)) return null
         return file.openRead().bufferedReader().use {
-            GSON.fromJson(it, ExploreHomeSession::class.java)
+            checkNotNull(GSON.fromJson(it, ExploreHomeSession::class.java)) { "发现会话内容为空" }
         }
     }
 

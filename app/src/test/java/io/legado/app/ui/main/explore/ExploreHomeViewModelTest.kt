@@ -227,15 +227,65 @@ class ExploreHomeViewModelTest {
             assertFalse(effect.id in storage.snapshot.receipts)
         }
 
+    @Test
+    fun failedPrivateReadBlocksEditsAndBusinessWritesUntilRetryRestoresOriginalPayload() =
+        runTest(dispatcher) {
+            val original =
+                ExploreHomeSession(
+                    revision = 7,
+                    query = "original query",
+                    effect =
+                        ExploreHomeEffect(
+                            "original effect",
+                            "open",
+                            "a",
+                            "title",
+                            "full original URL",
+                        ),
+                )
+            val storage =
+                Storage().apply {
+                    snapshot = original
+                    failRead = true
+                }
+            val repository = Repository()
+            val manager = model(repository, storage)
+            runCurrent()
+            assertFalse(manager.state.value.sessionLoaded)
+            assertNotNull(manager.state.value.error)
+            manager.query("must not overwrite")
+            manager.effect("manage")
+            manager.top("a")
+            runCurrent()
+            assertEquals(0, storage.writes)
+            assertEquals(original, storage.snapshot)
+            assertTrue(repository.topCalls.isEmpty())
+            storage.failRead = false
+            manager.retry()
+            runCurrent()
+            assertTrue(manager.state.value.sessionLoaded)
+            assertEquals("original query", manager.state.value.query)
+            assertEquals(original.effect, manager.state.value.effect)
+            assertEquals(2, storage.reads)
+        }
+
     private class Storage : ExploreHomeSessionStorage {
         var snapshot = ExploreHomeSession()
         var onWrite: ((ExploreHomeSession) -> Unit)? = null
         var rejectWrite = false
+        var failRead = false
+        var reads = 0
+        var writes = 0
 
-        override fun read() = snapshot
+        override fun read(): ExploreHomeSession {
+            reads++
+            if (failRead) error("private read failed")
+            return snapshot
+        }
 
         override fun write(snapshot: ExploreHomeSession): Boolean {
             if (rejectWrite) return false
+            writes++
             this.snapshot = snapshot
             onWrite?.invoke(snapshot)
             return true
@@ -254,6 +304,7 @@ class ExploreHomeViewModelTest {
         var label: String? = null
         var emptyPanel = false
         val deleted = mutableListOf<String>()
+        val topCalls = mutableListOf<String>()
 
         override fun sources(query: String) = rows.map {
             if (query.isBlank() || query.startsWith("group:")) it
@@ -288,7 +339,9 @@ class ExploreHomeViewModelTest {
 
         override suspend fun savePendingValues() = Unit
 
-        override suspend fun top(url: String) = Unit
+        override suspend fun top(url: String) {
+            topCalls += url
+        }
 
         override suspend fun delete(url: String) {
             deleted += url
