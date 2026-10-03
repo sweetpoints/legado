@@ -3,7 +3,6 @@ package io.legado.app.ui.file
 import android.app.Activity
 import android.content.Intent
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
