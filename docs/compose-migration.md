@@ -1117,3 +1117,5 @@ RSS 源管理 A2：查询、完整选择集、编辑草稿和原生动作写入�
 书籍详情 WebDAV 桥：既有 upload 入口保持上传成功后更新原实体的合同；新增复用相同传输与 origin 构造的 uploadWithoutPersist，供详情服务以最新实体的字段增量落库，避免上传期间旧快照覆盖阅读进度。新增 2 个 JVM 顺序/取消用例和 2 个真实本地 HTTP PUT/条件头/冲突及 Room Android 回归；Android 用例仅编译验证。
 
 书籍详情 A5 服务：IO 数据边界复用原 LocalBook/WebDAV/档案/缓存引擎，平台及 Reader 回调交由页面 Route。上传仅增量写最新实体的 origin 和时间，删除期间不重建实体，外部来源变更报冲突；保留远端缺失后的本地回退、删除顺序及阅读快照。来源变量与更新任务在 IO 按所属来源处理。新增 7 个真实 Room/Main 调用及引擎边界 Android 用例；Android 用例仅编译验证。
+
+设置框架 A1：新增纯 Compose 标题与搜索 Scaffold，查询、光标和持久化由宿主状态持有。搜索输入不触发操作，IME/按钮明确提交去空白查询，空查询不交付，搜索返回先关闭输入再导航；页面内容保持组合。新增 3 个实际 Compose 输入、返回及外部恢复状态 Android 用例；Android 用例仅编译验证，旧 ConfigActivity 接入留下一批。
