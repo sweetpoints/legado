@@ -1198,3 +1198,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 远程书库操作 VM 接入私有导入 checkpoint 与原生回执，普通书籍与压缩导入接受段先保存完成标识再返回；取消或完成回执写失败只重试未完成项/同一回执，不重复已成功导入。存储选择按小 nonce 绑定，早到结果等待草稿初始化，恢复任务需显式重试。新增 7 个 JVM 回归，含真实 IO 返回取消后的磁盘恢复；完整 JVM 与 Android 测试编译通过，设备端未执行。
 
 远程书库页面改为直接 BaseComposeActivity 与独立 Screen/Route，保留目录、排序、搜索、隐藏多选导入、压缩选择确认及服务器/帮助/日志入口；原生文件选择按小 ticket 恢复，RESUMED 后先认领再交付阅读回执。删除旧远程 Adapter/ViewModel/排序类与专属菜单 XML，本地导入共享布局继续保留。新增 Compose、真实宿主与生命周期测试编译覆盖，完整 JVM 通过，设备端未执行。
+
+搜索范围纯模型移至 model/webBook，保留旧 UI typealias、LiveData 与公开 ScopeDialog 调用；搜索引擎不再依赖 UI 包。纯结果过滤移入 model 并保留原公开薄委托，大小写、trim、空白列表身份和字段过滤规则保持；新增 2 个 JVM 回归，完整 JVM 与 Android 测试编译通过。
