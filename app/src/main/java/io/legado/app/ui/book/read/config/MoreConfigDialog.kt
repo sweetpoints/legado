@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.Gravity
@@ -45,6 +46,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
     private var preferenceObservation: AutoCloseable? = null
     private var bottomDialogOwner: ReadBookActivity? = null
     private var ownsBottomDialogCount = false
+    private var numberPickerRequest = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -165,17 +167,33 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
         onSaved: () -> Unit,
     ) {
         val maximum = requireNotNull(setting.numericMaximum)
+        val owner = activity as? ReadBookActivity ?: return
+        val ownerDialog = dialog ?: return
+        val request = ++numberPickerRequest
         NumberPickerDialog(requireContext())
             .setTitle(getString(title))
             .setMaxValue(maximum)
             .setMinValue(0)
             .setValue(settingsViewModel.numericValue(setting.key))
             .show { value ->
+                if (!ownsPickerResult(owner, ownerDialog, request)) return@show
                 settingsViewModel.saveNumber(setting, value) {
-                    if (isResumed && activity === bottomDialogOwner) onSaved()
+                    if (ownsPickerResult(owner, ownerDialog, request)) onSaved()
                 }
             }
     }
+
+    private fun ownsPickerResult(
+        owner: ReadBookActivity,
+        ownerDialog: Dialog,
+        request: Int,
+    ): Boolean =
+        isResumed &&
+            activity === owner &&
+            dialog === ownerDialog &&
+            ownsBottomDialogCount &&
+            bottomDialogOwner === owner &&
+            numberPickerRequest == request
 
     private fun handlePreferenceChange(key: String) {
         when (key) {
@@ -229,6 +247,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
 
     private fun releaseBottomDialogCount() {
         if (!ownsBottomDialogCount) return
+        numberPickerRequest++
         bottomDialogOwner?.let { owner ->
             owner.bottomDialog = (owner.bottomDialog - 1).coerceAtLeast(0)
         }

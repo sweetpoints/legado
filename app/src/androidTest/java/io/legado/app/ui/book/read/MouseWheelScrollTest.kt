@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -14,11 +15,14 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.Observer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.constant.BookType
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -32,7 +36,11 @@ import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.utils.defaultSharedPreferences
+import io.legado.app.utils.eventObservable
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -49,12 +57,18 @@ class MouseWheelScrollTest {
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
     private val savedPreferences =
-        listOf(PreferKey.mouseWheelPage, PreferKey.mouseWheelScrollSpeed).associateWith {
-            preferences.all[it]
-        }
+        listOf(
+                PreferKey.mouseWheelPage,
+                PreferKey.mouseWheelScrollSpeed,
+                PreferKey.pageTouchSlop,
+            )
+            .associateWith {
+                preferences.all[it]
+            }
     private lateinit var file: File
     private lateinit var book: Book
     private var scenario: ActivityScenario<ReadBookActivity>? = null
+    private var upConfigObserver: Observer<ArrayList<Int>>? = null
     // This is the offset used by ContentTextView.drawPage, not a duplicate speed calculation.
     private val pageOffset =
         ContentTextView::class.java.getDeclaredField("pageOffset").apply { isAccessible = true }
@@ -65,6 +79,7 @@ class MouseWheelScrollTest {
             preferences
                 .edit()
                 .putBoolean(PreferKey.mouseWheelPage, true)
+                .putInt(PreferKey.pageTouchSlop, 11)
                 .remove(PreferKey.mouseWheelScrollSpeed)
                 .commit()
         )
@@ -98,6 +113,12 @@ class MouseWheelScrollTest {
     @After
     fun tearDown() {
         scenario?.close()
+        upConfigObserver?.let { observer ->
+            instrumentation.runOnMainSync {
+                eventObservable<ArrayList<Int>>(EventBus.UP_CONFIG).removeObserver(observer)
+            }
+        }
+        upConfigObserver = null
         TextFile.clear()
         if (::book.isInitialized) appDb.bookDao.delete(book)
         if (::file.isInitialized) file.delete()
@@ -239,6 +260,96 @@ class MouseWheelScrollTest {
         }
         awaitReader { it.bottomDialog == 0 && !it.readerView.curPage.textPage.isMsgPage }
         assertScrollDelta(-100) { dispatchScroll(it, -1f) }
+    }
+
+    @Test
+    fun numberPickerSelectionIsFencedToTheReaderDialogThatOpenedIt() {
+        launchReader(PageAnim.scrollPageAnim)
+        val receivedConfigurationEvents = CopyOnWriteArrayList<ArrayList<Int>>()
+        val eventReceived = CountDownLatch(1)
+        val eventObserver =
+            Observer<ArrayList<Int>> { event ->
+                if (event == arrayListOf(4)) {
+                    receivedConfigurationEvents += event
+                    eventReceived.countDown()
+                }
+            }
+        upConfigObserver = eventObserver
+        instrumentation.runOnMainSync {
+            eventObservable<ArrayList<Int>>(EventBus.UP_CONFIG).observeForever(eventObserver)
+        }
+        scenario!!.onActivity {
+            MoreConfigDialog().showNow(it.supportFragmentManager, "number-owner-settings")
+        }
+        awaitReader { it.bottomDialog == 1 }
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithTag("more-reader-settings-list")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        compose
+            .onNodeWithTag("more-reader-setting-${PreferKey.pageTouchSlop}")
+            .performScrollTo()
+            .performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("number-input").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("number-input").performScrollTo().performTextReplacement("57")
+        val staleConfirmAction =
+            compose
+                .onNodeWithTag("number-confirm")
+                .fetchSemanticsNode()
+                .config[SemanticsActions.OnClick]
+                .action!!
+
+        scenario!!.recreate()
+        awaitReader { it.bottomDialog == 1 }
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithTag("more-reader-settings-list")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithTag("number-input").assertDoesNotExist()
+        instrumentation.runOnMainSync {
+            assertTrue("Captured old picker confirm", staleConfirmAction())
+        }
+        SystemClock.sleep(300)
+        assertEquals(
+            "A disposed picker cannot change the preference",
+            11,
+            preferences.getInt(PreferKey.pageTouchSlop, 0),
+        )
+        assertTrue(
+            "A disposed picker cannot post reader configuration",
+            receivedConfigurationEvents.isEmpty(),
+        )
+
+        compose
+            .onNodeWithTag("more-reader-setting-${PreferKey.pageTouchSlop}")
+            .performScrollTo()
+            .performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("number-input").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("number-input").performScrollTo().performTextReplacement("42")
+        compose.onNodeWithTag("number-confirm").performScrollTo().performClick()
+        awaitReader { preferences.getInt(PreferKey.pageTouchSlop, 0) == 42 }
+        assertEquals(42, AppConfig.pageTouchSlop)
+        assertTrue(
+            "The current picker emits the original reader update",
+            eventReceived.await(5, TimeUnit.SECONDS),
+        )
+        assertEquals(listOf(arrayListOf(4)), receivedConfigurationEvents.toList())
+
+        scenario!!.onActivity {
+            (it.supportFragmentManager.findFragmentByTag("number-owner-settings")
+                    as MoreConfigDialog)
+                .dismissNow()
+        }
+        awaitReader { it.bottomDialog == 0 }
     }
 
     private fun launchReader(pageAnim: Int) {
