@@ -2,39 +2,65 @@ package io.legado.app.ui
 
 import io.legado.app.ui.book.read.ContentDraftState
 import io.legado.app.ui.book.read.ContentEditTarget
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.test.resetMain
 
 class DialogViewLifecycleContractTest {
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
-    fun `search scope stops collecting when the dialog view pauses or is destroyed`() = kotlinx.coroutines.test.runTest {
-        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
-        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
-        var collectors = 0
-        val repository = object : io.legado.app.data.repository.SearchScopeRepository {
-            override suspend fun groups() = emptyList<String>()
-            override fun sources(query: String) = kotlinx.coroutines.flow.flow<List<io.legado.app.data.repository.SearchScopeSource>> {
-                collectors++
-                try { emit(emptyList()); kotlinx.coroutines.awaitCancellation() } finally { collectors-- }
+    fun `search scope stops collecting when the dialog view pauses or is destroyed`() =
+        kotlinx.coroutines.test.runTest {
+            val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+            kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+            var collectors = 0
+            val repository =
+                object : io.legado.app.data.repository.SearchScopeRepository {
+                    override suspend fun groups() = emptyList<String>()
+
+                    override fun sources(query: String) =
+                        kotlinx.coroutines.flow.flow<
+                            List<io.legado.app.data.repository.SearchScopeSource>
+                        > {
+                            collectors++
+                            try {
+                                emit(emptyList())
+                                kotlinx.coroutines.awaitCancellation()
+                            } finally {
+                                collectors--
+                            }
+                        }
+                }
+            val model =
+                io.legado.app.ui.book.search.SearchScopeViewModel(
+                    repository,
+                    androidx.lifecycle.SavedStateHandle(),
+                )
+            val store = androidx.lifecycle.ViewModelStore().apply { put("search", model) }
+            try {
+                model.tab(io.legado.app.ui.book.search.SearchScopeTab.Sources)
+                model.setActive(true)
+                testScheduler.runCurrent()
+                assertEquals(1, collectors)
+                model.setActive(false)
+                testScheduler.runCurrent()
+                assertEquals(0, collectors)
+                model.setActive(true)
+                testScheduler.runCurrent()
+                assertEquals(1, collectors)
+                store.clear()
+                testScheduler.runCurrent()
+                assertEquals(0, collectors)
+            } finally {
+                store.clear()
+                kotlinx.coroutines.Dispatchers.resetMain()
             }
         }
-        val model = io.legado.app.ui.book.search.SearchScopeViewModel(repository, androidx.lifecycle.SavedStateHandle())
-        val store = androidx.lifecycle.ViewModelStore().apply { put("search", model) }
-        try {
-            model.tab(io.legado.app.ui.book.search.SearchScopeTab.Sources)
-            model.setActive(true); testScheduler.runCurrent(); assertEquals(1, collectors)
-            model.setActive(false); testScheduler.runCurrent(); assertEquals(0, collectors)
-            model.setActive(true); testScheduler.runCurrent(); assertEquals(1, collectors)
-            store.clear(); testScheduler.runCurrent(); assertEquals(0, collectors)
-        } finally { store.clear(); kotlinx.coroutines.Dispatchers.resetMain() }
-    }
 
     @Test
     fun `content editor target does not follow the global reader chapter`() {
@@ -122,5 +148,4 @@ class DialogViewLifecycleContractTest {
         assertEquals("restored draft", state.text)
         assertTrue(state.hasDraft)
     }
-
 }

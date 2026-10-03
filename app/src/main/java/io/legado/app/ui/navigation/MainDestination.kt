@@ -8,6 +8,7 @@ enum class MainDestination(val key: String, val legacyId: Int, val skinSlot: Str
     My("my", 3, "settings");
 
     companion object {
-        fun fromKey(key: String?): MainDestination = entries.firstOrNull { it.key == key } ?: Bookshelf
+        fun fromKey(key: String?): MainDestination =
+            entries.firstOrNull { it.key == key } ?: Bookshelf
     }
 }

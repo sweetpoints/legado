@@ -22,12 +22,11 @@ import io.legado.app.lib.theme.primaryColorDark
 import io.legado.app.utils.ColorUtils
 
 /**
- * 阅读现有主题体系（[io.legado.app.lib.theme.ThemeStore] + `lib/theme/MaterialValueHelper.kt`）
- * 在 Compose 世界的映射。
+ * 阅读现有主题体系（[io.legado.app.lib.theme.ThemeStore] + `lib/theme/MaterialValueHelper.kt`） 在 Compose
+ * 世界的映射。
  *
- * 引入原因：旧页面通过 `Context.primaryColor` 之类的扩展属性取色，新 Compose 页面若直接用
- * Material3 默认配色，两套皮肤会同时出现在一个界面里。这里把旧体系的取值收敛成
- * [LegadoColors]，再喂给 [MaterialTheme]，保证新老页面配色一致。
+ * 引入原因：旧页面通过 `Context.primaryColor` 之类的扩展属性取色，新 Compose 页面若直接用 Material3
+ * 默认配色，两套皮肤会同时出现在一个界面里。这里把旧体系的取值收敛成 [LegadoColors]，再喂给 [MaterialTheme]，保证新老页面配色一致。
  */
 @Immutable
 data class LegadoColors(
@@ -45,22 +44,22 @@ data class LegadoColors(
     /**
      * 明暗由**背景色**亮度判定（`onBackground`/`onSurface` 必须与 `background` 对比）。
      *
-     * 注意不要用 [io.legado.app.lib.theme.isDarkTheme]：那个是「主色是否浅」，
-     * 与背景明暗可能相反——默认浅蓝主色会让它得到 `false`，从而取出白色文字放到浅灰背景上。
+     * 注意不要用 [io.legado.app.lib.theme.isDarkTheme]：那个是「主色是否浅」， 与背景明暗可能相反——默认浅蓝主色会让它得到
+     * `false`，从而取出白色文字放到浅灰背景上。
      */
     val isLight: Boolean,
 )
 
-val LocalLegadoColors = staticCompositionLocalOf<LegadoColors> {
-    error("未提供 LegadoColors，请在 LegadoComposeTheme 内使用")
-}
+val LocalLegadoColors =
+    staticCompositionLocalOf<LegadoColors> {
+        error("未提供 LegadoColors，请在 LegadoComposeTheme 内使用")
+    }
 
 /**
  * 取当前主题配色。
  *
- * 缓存策略：主题色变更时 [io.legado.app.help.config.ThemeConfig] 会 post
- * `EventBus.RECREATE` 并让 Activity `recreate()`，因此以 `context` 为 key 缓存即可覆盖
- * 主题与配置变化；取值本身会读 SharedPreferences，不能在每次重组时都算。
+ * 缓存策略：主题色变更时 [io.legado.app.help.config.ThemeConfig] 会 post `EventBus.RECREATE` 并让 Activity
+ * `recreate()`，因此以 `context` 为 key 缓存即可覆盖 主题与配置变化；取值本身会读 SharedPreferences，不能在每次重组时都算。
  */
 @Composable
 fun rememberLegadoColors(): LegadoColors {
@@ -73,40 +72,41 @@ fun LegadoComposeTheme(
     colors: LegadoColors = rememberLegadoColors(),
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = remember(colors) {
-        val onPrimary = colors.onPrimary
-        if (colors.isLight) {
-            lightColorScheme(
-                primary = colors.primary,
-                onPrimary = onPrimary,
-                primaryContainer = colors.primaryDark,
-                onPrimaryContainer = onPrimary,
-                secondary = colors.accent,
-                onSecondary = onPrimary,
-                background = colors.background,
-                onBackground = colors.textPrimary,
-                surface = colors.background,
-                onSurface = colors.textPrimary,
-                surfaceVariant = colors.bottomBackground,
-                onSurfaceVariant = colors.textSecondary,
-            )
-        } else {
-            darkColorScheme(
-                primary = colors.primary,
-                onPrimary = onPrimary,
-                primaryContainer = colors.primaryDark,
-                onPrimaryContainer = onPrimary,
-                secondary = colors.accent,
-                onSecondary = onPrimary,
-                background = colors.background,
-                onBackground = colors.textPrimary,
-                surface = colors.background,
-                onSurface = colors.textPrimary,
-                surfaceVariant = colors.bottomBackground,
-                onSurfaceVariant = colors.textSecondary,
-            )
+    val colorScheme =
+        remember(colors) {
+            val onPrimary = colors.onPrimary
+            if (colors.isLight) {
+                lightColorScheme(
+                    primary = colors.primary,
+                    onPrimary = onPrimary,
+                    primaryContainer = colors.primaryDark,
+                    onPrimaryContainer = onPrimary,
+                    secondary = colors.accent,
+                    onSecondary = onPrimary,
+                    background = colors.background,
+                    onBackground = colors.textPrimary,
+                    surface = colors.background,
+                    onSurface = colors.textPrimary,
+                    surfaceVariant = colors.bottomBackground,
+                    onSurfaceVariant = colors.textSecondary,
+                )
+            } else {
+                darkColorScheme(
+                    primary = colors.primary,
+                    onPrimary = onPrimary,
+                    primaryContainer = colors.primaryDark,
+                    onPrimaryContainer = onPrimary,
+                    secondary = colors.accent,
+                    onSecondary = onPrimary,
+                    background = colors.background,
+                    onBackground = colors.textPrimary,
+                    surface = colors.background,
+                    onSurface = colors.textPrimary,
+                    surfaceVariant = colors.bottomBackground,
+                    onSurfaceVariant = colors.textSecondary,
+                )
+            }
         }
-    }
     CompositionLocalProvider(LocalLegadoColors provides colors) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -138,22 +138,24 @@ private fun Context.toLegadoColors(): LegadoColors {
         // —— 就是这个 bug 导致 About 页白字白底看不清。
         textPrimary = Color(ContextCompat.getColor(this, R.color.primaryText)),
         textSecondary = Color(ContextCompat.getColor(this, R.color.tv_text_summary)),
-        textPrimaryDisabled = Color(
-            ContextCompat.getColor(
-                this,
-                if (isLight) R.color.md_light_disabled else R.color.md_dark_disabled
-            )
-        ),
-        textSecondaryDisabled = Color(
-            ContextCompat.getColor(
-                this,
-                if (isLight) {
-                    androidx.appcompat.R.color.secondary_text_disabled_material_light
-                } else {
-                    androidx.appcompat.R.color.secondary_text_disabled_material_dark
-                }
-            )
-        ),
+        textPrimaryDisabled =
+            Color(
+                ContextCompat.getColor(
+                    this,
+                    if (isLight) R.color.md_light_disabled else R.color.md_dark_disabled,
+                )
+            ),
+        textSecondaryDisabled =
+            Color(
+                ContextCompat.getColor(
+                    this,
+                    if (isLight) {
+                        androidx.appcompat.R.color.secondary_text_disabled_material_light
+                    } else {
+                        androidx.appcompat.R.color.secondary_text_disabled_material_dark
+                    },
+                )
+            ),
         isLight = isLight,
     )
 }

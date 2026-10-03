@@ -42,6 +42,7 @@ open class WelcomeActivity : BaseComposeActivity() {
     override fun Content(savedInstanceState: Bundle?) {
         WelcomeScreen(welcomeUiState)
     }
+
     private var startMainJob: Job? = null
 
     private val broughtToFront: Boolean
@@ -92,39 +93,51 @@ open class WelcomeActivity : BaseComposeActivity() {
             super.upBackgroundImage()
             return
         }
-        val key = if (ThemeConfig.getTheme() == Theme.Dark) PreferKey.welcomeImageDark else PreferKey.welcomeImage
+        val key =
+            if (ThemeConfig.getTheme() == Theme.Dark) PreferKey.welcomeImageDark
+            else PreferKey.welcomeImage
         val path = getPrefString(key) ?: return
         val size = windowManager.windowSize
         lifecycleScope.launch {
-            val drawable = withContext(Dispatchers.IO) {
-                runCatching {
-                    if (path.endsWith(".9.png")) {
-                        BitmapUtils.decodeNinePatchDrawable(path)
-                    } else {
-                        BitmapUtils.decodeBitmap(path, size.widthPixels, size.heightPixels)?.toDrawable(resources)
+            val drawable =
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        if (path.endsWith(".9.png")) {
+                            BitmapUtils.decodeNinePatchDrawable(path)
+                        } else {
+                            BitmapUtils.decodeBitmap(path, size.widthPixels, size.heightPixels)
+                                ?.toDrawable(resources)
+                        }
                     }
-                }.getOrNull()
-            }
-            if (drawable != null && !isFinishing && !isDestroyed) window.decorView.background = drawable
+                        .getOrNull()
+                }
+            if (drawable != null && !isFinishing && !isDestroyed)
+                window.decorView.background = drawable
         }
     }
 
     private fun startMainActivity() {
         startMainJob = lifecycleScope.launch {
-            val openReader = getPrefBoolean(PreferKey.defaultToRead) && withContext(Dispatchers.IO) {
-                appDb.bookDao.lastReadBook != null
-            }
+            val openReader =
+                getPrefBoolean(PreferKey.defaultToRead) &&
+                    withContext(Dispatchers.IO) {
+                        appDb.bookDao.lastReadBook != null
+                    }
             startActivity<MainActivity>()
             if (openReader) startActivity<ReadBookActivity>()
             finish()
         }
     }
-
 }
 
 class Launcher1 : WelcomeActivity()
+
 class Launcher2 : WelcomeActivity()
+
 class Launcher3 : WelcomeActivity()
+
 class Launcher4 : WelcomeActivity()
+
 class Launcher5 : WelcomeActivity()
+
 class Launcher6 : WelcomeActivity()

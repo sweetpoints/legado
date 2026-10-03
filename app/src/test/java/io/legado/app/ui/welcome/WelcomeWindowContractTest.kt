@@ -1,16 +1,14 @@
 package io.legado.app.ui.welcome
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class WelcomeWindowContractTest {
 
     @Test
     fun `welcome startup uses an opaque window background before content draws`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/welcome/WelcomeActivity.kt"
-        )
+        val activity = projectFile("src/main/java/io/legado/app/ui/welcome/WelcomeActivity.kt")
         val base = projectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt")
         val manifest = projectFile("src/main/AndroidManifest.xml")
         val styles = projectFile("src/main/res/values/styles.xml")
@@ -27,8 +25,6 @@ class WelcomeWindowContractTest {
     // Welcome image ownership, same-file protection and deletion are exercised by
     // WelcomeSettingsRepositoryTest and AppWelcomeSettingsStoreTest against actual stores/files.
     private fun projectFile(pathInApp: String): String =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?.readText()
+        sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)?.readText()
             ?: error("Missing project file: $pathInApp")
 }

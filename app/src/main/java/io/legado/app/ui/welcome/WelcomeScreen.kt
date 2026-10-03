@@ -38,17 +38,23 @@ fun WelcomeScreen(state: WelcomeUiState, modifier: Modifier = Modifier) {
                 Spacer(Modifier.width(6.dp).height(120.dp).background(accent))
                 Text(
                     stringResource(R.string.welcome_title),
-                    Modifier.padding(start = 6.dp), color = accent, fontSize = 49.sp,
+                    Modifier.padding(start = 6.dp),
+                    color = accent,
+                    fontSize = 49.sp,
                 )
                 Text(
                     stringResource(R.string.welcome_subtitle),
-                    Modifier.padding(start = 6.dp, top = 60.dp), color = accent, fontSize = 16.sp,
+                    Modifier.padding(start = 6.dp, top = 60.dp),
+                    color = accent,
+                    fontSize = 16.sp,
                 )
             }
             Text(
                 stringResource(R.string.welcome_tagline),
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-                color = accent, fontSize = 16.sp, letterSpacing = 1.6.sp,
+                color = accent,
+                fontSize = 16.sp,
+                letterSpacing = 1.6.sp,
             )
         }
         if (state.showIcon) {
@@ -56,7 +62,8 @@ fun WelcomeScreen(state: WelcomeUiState, modifier: Modifier = Modifier) {
                 Icon(
                     painterResource(R.drawable.icon_read_book),
                     contentDescription = stringResource(R.string.welcome),
-                    modifier = Modifier.size(120.dp), tint = accent,
+                    modifier = Modifier.size(120.dp),
+                    tint = accent,
                 )
             }
         }
