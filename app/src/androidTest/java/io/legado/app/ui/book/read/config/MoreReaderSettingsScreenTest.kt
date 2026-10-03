@@ -20,6 +20,7 @@ import io.legado.app.data.preferences.MoreReaderSettingsRepository
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.defaultSharedPreferences
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
