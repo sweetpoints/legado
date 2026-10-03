@@ -258,7 +258,7 @@ internal class MangaReaderComposeViewModel(
                             readingBook.author,
                             source?.bookSourceUrl,
                             source?.bookSourceName,
-                            source?.bookSourceType,
+                            mangaBrowserSourceKind(source),
                             readingBook.isLocal,
                             readingBook.isPdf,
                         ),

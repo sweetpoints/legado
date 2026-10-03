@@ -1498,3 +1498,8 @@ Exit now belongs to immutable ViewModel state. A book already on the shelf reque
 ### Manga color-filter Gson release names
 
 The existing color-filter configuration DTO now keeps its serialized field names under minification, matching the already protected private reader sessions and footer DTO. This is a narrow annotation fix with official formatting/check; existing configuration roundtrip tests remain the meaningful persistence coverage. The upcoming manga Host is not yet covered by a release/R8 packaging run.
+
+
+### Manga browser source identity
+
+The browser payload identifies the current manga `BookSource` with its browser source kind, rather than reusing the text reader's source or confusing its image/text category with the Book/RSS kind. A real Android Intent regression deliberately sets a different text-reader source and verifies the manga origin/name/kind plus a complete 2.4 MB opaque chapter URL. This tests payload construction only; shared browser prepared-UUID migration is explicitly deferred until that Host's internal API is ready, while its public ABI remains unchanged. Official formatting/check and diff checks pass; device execution and final candidate compilation remain pending.
