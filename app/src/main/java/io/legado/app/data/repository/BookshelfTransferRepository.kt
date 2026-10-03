@@ -165,8 +165,7 @@ class BookshelfTransferRepository(private val context: Context) {
 internal suspend fun importBookshelfJson(
     json: String,
     groupId: Long,
-    onBookAccepted: suspend (name: String, author: String, bookUrl: String) -> Unit = { _, _, _ ->
-    },
+    onBookAccepted: (suspend (name: String, author: String, bookUrl: String) -> Unit)? = null,
 ) = coroutineScope {
     val books = parseBookshelfImport(json)
     val sources = appDb.bookSourceDao.allEnabledPart
@@ -185,7 +184,12 @@ internal suspend fun importBookshelfJson(
                                     }
                                 } ?: throw NoStackTraceException("没有搜索到<$name>$author")
                             if (groupId > 0) book.group = groupId
-                            commitBookshelfImport(book, name, author, onBookAccepted)
+                            if (onBookAccepted == null) {
+                                // Existing callers retain the original save/cancellation behavior.
+                                book.savePreservingCustomCoverUrl()
+                            } else {
+                                commitBookshelfImport(book, name, author, onBookAccepted)
+                            }
                         }
                     }
                         .onFailure { currentCoroutineContext().ensureActive() }
@@ -211,8 +215,9 @@ internal suspend fun commitBookshelfImport(
     withContext(NonCancellable) {
         appDb.withTransaction {
             book.savePreservingCustomCoverUrl()
-            // Observer failure rolls the Room write back. A private receipt is committed here,
-            // before the worker can lose acceptance at its return hop to the native host.
+            // Observer failure rolls Room back. The file receipt can still outlive a later SQL
+            // commit failure: recovery must verify the row and report uncertainty, never recreate
+            // it automatically. This is a paired handoff, not a cross-storage atomic transaction.
             onBookAccepted(requestedName, requestedAuthor, book.bookUrl)
         }
     }

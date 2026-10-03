@@ -189,6 +189,49 @@ class AssociationBookshelfImportRepositoryTest {
         }
     }
 
+    @Test
+    fun durableObserverReceiptThenSqlRollbackReportsUnknownWithoutRecreatingMissingRow() =
+        runBlocking {
+            val fixture = fixture()
+            val engine =
+                Engine(fixture.book).apply {
+                    afterAccepted = {
+                        throw IOException("post-observer SQL transaction completion failed")
+                    }
+                }
+            try {
+                val repository =
+                    AssociationBookshelfImportRepository(context, fixture.sessions, engine)
+                assertTrue(
+                    runCatching { repository.import(fixture.ticket, fixture.token, fixture.source) }
+                        .isFailure
+                )
+                withContext(Dispatchers.IO) { assertFalse(appDb.bookDao.has(fixture.book.bookUrl)) }
+                val file =
+                    File(
+                        File(fixture.directory, fixture.ticket),
+                        "bookshelf-import-${fixture.token}.json",
+                    )
+                val durable =
+                    GSON.fromJsonObject<AssociationBookshelfImportJournal>(file.readText())
+                        .getOrThrow()
+                assertTrue(durable.entries.single().accepted)
+                assertFalse(durable.completed)
+                engine.afterAccepted = {}
+                val restored =
+                    AssociationBookshelfImportRepository(context, fixture.sessions, engine)
+                val failure = runCatching {
+                    restored.import(fixture.ticket, fixture.token, fixture.source)
+                }
+                    .exceptionOrNull()
+                assertTrue(checkNotNull(failure).message!!.contains("cannot be verified"))
+                assertEquals(1, engine.importCalls)
+                withContext(Dispatchers.IO) { assertFalse(appDb.bookDao.has(fixture.book.bookUrl)) }
+            } finally {
+                fixture.close()
+            }
+        }
+
     private suspend fun fixture(): Fixture {
         val directory =
             File(context.cacheDir, "association-bookshelf-${UUID.randomUUID()}").apply { mkdirs() }

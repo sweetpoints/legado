@@ -99,7 +99,7 @@ class AssociationBookshelfImportRepository(
             }
             for (entry in journal.entries.filter { it.accepted }) {
                 check(engine.current(checkNotNull(entry.bookUrl)) != null) {
-                    "A previously accepted book was deleted; confirm a new import"
+                    "The accepted result cannot be verified; close and confirm a new import"
                 }
             }
             if (journal.completed) return@withContext journal.entries.size
