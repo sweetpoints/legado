@@ -324,9 +324,11 @@ open class AssociationImportViewModel(
     suspend fun permissionResult(receipt: AssociationNativeReceipt, granted: Boolean) {
         val ticket = state.value.ticket ?: return
         if (closed || receipt.kind != AssociationNativeKind.StoragePermission) return
+        var accepted = false
         val persisted =
             controller(ticket).update(receipt.generation) {
                 if (receipt !in it.claimedEffects) return@update it
+                accepted = true
                 val acknowledged = it.copy(claimedEffects = it.claimedEffects - receipt)
                 if (granted) acknowledged.copy(storagePermissionGranted = true)
                 else finish(acknowledged)
