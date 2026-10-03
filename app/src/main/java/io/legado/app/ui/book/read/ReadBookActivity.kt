@@ -265,7 +265,7 @@ class ReadBookActivity :
             }
         }
     private var menu: Menu? = null
-    @SuppressLint("RestrictedApi")
+    @get:SuppressLint("RestrictedApi")
     private val composeReaderMenu by lazy {
         MenuBuilder(this).also { menuInflater.inflate(R.menu.book_read, it) }
     }

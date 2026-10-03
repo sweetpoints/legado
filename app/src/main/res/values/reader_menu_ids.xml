@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kept while the independently migrated manga menu still uses this constraint anchor. -->
+    <item name="ll_brightness" type="id" />
+</resources>
