@@ -30,6 +30,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     val state:StateFlow<BookDetailState> = mutable.asStateFlow()
     private val writes=Mutex();private val ready=CompletableDeferred<Unit>()
     private var dirty=false;private var loadJob:Job?=null;private var networkJob:Job?=null;private var mutationJob:Job?=null
+    private var coverJob:Job?=null
     private var generation=0L;private var childJob:Job?=null;private var serviceJob:Job?=null
     init{if(state.value.closed){ready.complete(Unit);release()}else load()}
     private fun load() {
@@ -51,6 +52,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                 mutable.update{it.copy(session=record,loading=false,loaded=true,childPending=hasChildren,
                     error=if(interrupted)"Previous request was interrupted; retry to continue" else null)}
                 if(!ready.isCompleted)ready.complete(Unit)
+                if(!interrupted)coverByRule()
                 if(hasChildren && record.pendingService==null){processChildren();return@launch}
                 if(record.pendingNetwork!=null || record.pendingMutation!=null)recoverPending()
                 else if(stored==null && !interrupted) {
@@ -63,6 +65,29 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                     }
                 }
             }catch(error:Throwable){ensureActive();if(!state.value.closed)mutable.update{it.copy(loading=false,error=error.message ?: error.toString())}}
+        }
+    }
+    /** Rule lookup is independent of detail parsing; only a still-missing fresh cover may be patched. */
+    private fun coverByRule() {
+        val request=state.value.data?.book ?: return
+        if(!request.cover.path.isNullOrBlank() || coverJob?.isActive==true)return
+        coverJob=viewModelScope.launch {
+            var claimed=false
+            try {
+                val generated=network.cover(request) ?: return@launch
+                ensureActive();val path=generated.cover.path?.takeIf{it.isNotBlank()} ?: return@launch
+                state.first{it.closed || (!it.networkLoading && it.canInteract)}
+                ensureActive();if(state.value.closed)return@launch
+                writes.withLock {
+                    val current=state.value.data?.book ?: return@withLock
+                    if(current.bookUrl!=request.bookUrl || current.origin!=request.origin || !current.cover.path.isNullOrBlank())return@withLock
+                    claimed=true;mutable.update{it.copy(busy=true)};flushLocked()
+                    val completed=sessions.mutate(ticket,checkNotNull(state.value.session),BookDetailOperation(UUID.randomUUID().toString(),
+                        BookDetailMutation(BookDetailMutationKind.Cover,text=path,onlyIfCoverMissing=true)))
+                    ensureActive();if(!state.value.closed)publish(completed)
+                }
+            }catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}
+            finally{if(claimed && !state.value.closed && childJob?.isActive!=true)mutable.update{it.copy(busy=false)}}
         }
     }
     suspend fun flush()=writes.withLock{flushLocked()}
@@ -373,7 +398,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     }
     fun close(){if(state.value.closed)return;saved[CLOSED]=true;mutable.update{it.copy(closed=true,loading=false,busy=false,networkLoading=false)};stop();release()}
     private fun release(){(cleanupScope ?: viewModelScope).launch{withContext(NonCancellable){runCatching{sessions.release(ticket)};runCatching{children?.release(ticket)}}}}
-    fun stop(){generation++;loadJob?.cancel();networkJob?.cancel();mutationJob?.cancel();childJob?.cancel();serviceJob?.cancel()}
+    fun stop(){generation++;loadJob?.cancel();networkJob?.cancel();mutationJob?.cancel();childJob?.cancel();serviceJob?.cancel();coverJob?.cancel()}
     override fun onCleared(){stop();super.onCleared()}
     companion object{private const val DELETED_RESULT=100;private const val KEY="book.detail.ticket";private const val CLOSED="book.detail.closed";private const val EXPANDED="book.detail.intro.expanded"}
 }

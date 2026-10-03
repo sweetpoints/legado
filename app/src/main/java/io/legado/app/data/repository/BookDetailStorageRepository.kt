@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 enum class BookDetailMutationKind { Cover,Group,CanUpdate,SplitLong,CustomVariable,Top,JoinShelf,PrepareRead,PrepareToc }
 data class BookDetailPosition(val index:Int,val pos:Int,val volume:Int,val chapterInVolume:Int)
 data class BookDetailMutation(val kind:BookDetailMutationKind,val text:String?=null,val flag:Boolean=false,
-    val group:Long=0,val position:BookDetailPosition?=null)
+    val group:Long=0,val position:BookDetailPosition?=null,val onlyIfCoverMissing:Boolean=false)
 data class BookDetailStorageResult(val book:BookDetailBook,val inBookshelf:Boolean)
 /** Canonical Room entities omit transient HTML. The session writes this plan before the transaction mutates Room. */
 data class BookDetailWritePlan(val beforeJson:String?,val targetJson:String,val chaptersJson:List<String>,val beforeChaptersJson:List<String> = emptyList())
@@ -43,7 +43,11 @@ class RoomBookDetailStorageRepository(private val database:AppDatabase=appDb,
             val inherited=current ?: if(add || prepare)database.bookDao.getBook(preview.name,preview.author)else null
             val target=GSON.fromJsonObject<Book>(GSON.toJson((inherited ?: preview).copy())).getOrThrow()
             when(change.kind) {
-                BookDetailMutationKind.Cover->{target.customCoverUrl=change.text;target.persistedCoverUrl=null}
+                BookDetailMutationKind.Cover->{
+                    if(!change.onlyIfCoverMissing || (target.origin==preview.origin && target.getDisplayCover().isNullOrBlank())) {
+                        target.customCoverUrl=change.text;target.persistedCoverUrl=null
+                    }
+                }
                 BookDetailMutationKind.Group->target.group=change.group
                 BookDetailMutationKind.CanUpdate->{target.canUpdate=change.flag;if(inBookshelf && !change.flag)target.removeType(BookType.updateError)}
                 BookDetailMutationKind.SplitLong->target.setSplitLongChapter(change.flag)

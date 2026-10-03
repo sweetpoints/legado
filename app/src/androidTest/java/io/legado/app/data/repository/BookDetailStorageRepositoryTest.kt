@@ -21,6 +21,19 @@ class BookDetailStorageRepositoryTest {
     private suspend fun mutate(book:Book,kind:BookDetailMutationKind,inShelf:Boolean=true,text:String?=null,flag:Boolean=false,group:Long=0,
         chapters:List<BookDetailChapter> = emptyList(),journal:(BookDetailWritePlan)->Unit={}):BookDetailStorageResult=
         repo().mutate(BookDetailBook.from(book),inShelf,chapters,BookDetailMutation(kind,text,flag,group),journal)
+    @Test fun generatedRuleCoverPatchesOnlyMissingSameSourceAndPreservesFreshReaderMetadata()=runBlocking {
+        val stale=Book(bookUrl="book",name="Name",origin="source",durChapterPos=1);insert(stale)
+        insert(stale.copy(durChapterIndex=9,durChapterPos=42,group=7))
+        val rule=BookDetailMutation(BookDetailMutationKind.Cover,text="rule-cover",onlyIfCoverMissing=true)
+        val first=repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
+        assertEquals("rule-cover",first.book.cover.path);assertEquals(42,read("book")!!.durChapterPos);assertEquals(7L,read("book")!!.group)
+        insert(read("book")!!.copy(customCoverUrl="external",persistedCoverUrl="external-cache"))
+        val fresh=repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
+        assertEquals("external",fresh.book.cover.path);assertEquals("external-cache",read("book")!!.persistedCoverUrl)
+        insert(read("book")!!.copy(origin="new-source",customCoverUrl=null,persistedCoverUrl=null))
+        repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
+        assertNull(read("book")!!.customCoverUrl);assertEquals("new-source",read("book")!!.origin)
+    }
     @Test fun groupPatchRetainsLatestProgressCoverReaderConfigAndUnrelatedBookFields()=runBlocking {
         val old=Book(bookUrl="book",name="Name",author="Author",origin="source",customCoverUrl="old",persistedCoverUrl="cached",variable="old variable",group=1);insert(old)
         val fresh=old.copy(durChapterIndex=9,durChapterPos=42,customCoverUrl="new external",persistedCoverUrl="new cached",variable="external variable",order=77);fresh.setSplitLongChapter(false);insert(fresh)

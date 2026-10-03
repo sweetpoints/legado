@@ -20,6 +20,28 @@ class BookDetailViewModelTest {
     private fun saved(ticket:String)=SavedStateHandle(mapOf("book.detail.ticket" to ticket))
     private fun vm(sessions:Sessions,engine:Network=Network(),handle:SavedStateHandle=saved(sessions.ticket),details:Details=Details())=
         BookDetailViewModel(handle,details,sessions,engine,BookDetailIdentity("Name","Author","book"))
+    @Test fun missingCoverRunsRuleAndDurablyPatchesWithoutRepeatingDetailNetwork()=runTest(dispatcher) {
+        val sessions=Sessions(record());val network=Network().apply{coverPath="generated"};val model=vm(sessions,network)
+        try{runCurrent();assertEquals("generated",model.state.value.data!!.book.cover.path)
+            assertEquals(0,network.calls);assertEquals(1,network.coverCalls)
+            assertTrue(sessions.lastMutation!!.change.onlyIfCoverMissing)
+            val restored=vm(sessions,network)
+            try{runCurrent();assertEquals(1,network.coverCalls)}finally{restored.stop();runCurrent()}
+        }finally{model.stop();runCurrent()}
+    }
+    @Test fun lateRuleLookupDoesNotReplaceExplicitCoverChosenWhileItWasRunning()=runTest(dispatcher) {
+        val sessions=Sessions(record());val gate=CompletableDeferred<Unit>();val network=Network().apply{coverPath="rule";coverGate=gate};val model=vm(sessions,network)
+        try{runCurrent();model.mutate(BookDetailMutation(BookDetailMutationKind.Cover,text="chosen"));runCurrent()
+            gate.complete(Unit);runCurrent();assertEquals("chosen",model.state.value.data!!.book.cover.path)
+            assertFalse(sessions.lastMutation!!.change.onlyIfCoverMissing);assertFalse(model.state.value.busy)
+        }finally{gate.complete(Unit);model.stop();runCurrent()}
+    }
+    @Test fun closingDuringNonCooperativeCoverLookupDoesNotPersistOrPublishItsLateResult()=runTest(dispatcher) {
+        val sessions=Sessions(record());val gate=CompletableDeferred<Unit>();val network=Network().apply{coverPath="rule";coverGate=gate};val model=vm(sessions,network)
+        try{runCurrent();model.close();gate.complete(Unit);runCurrent()
+            assertNull(sessions.lastMutation);assertTrue(model.state.value.closed);assertEquals(1,sessions.releases)
+        }finally{gate.complete(Unit);model.stop();runCurrent()}
+    }
     @Test fun restoredCachedResponseDoesNotAutomaticallyExecuteEngineAndSavedStateContainsOnlySmallIdsAndFlags()=runTest(dispatcher) {
         val sessions=Sessions(record());val engine=Network();val handle=saved(sessions.ticket);val vm=vm(sessions,engine,handle)
         try{runCurrent();assertTrue(vm.state.value.loaded);assertEquals(0,engine.calls);assertEquals("Name",vm.state.value.data!!.book.name)
@@ -106,6 +128,7 @@ class BookDetailViewModelTest {
     }
     private class Network:BookDetailNetworkRepository {
         var calls=0;var firstGate:CompletableDeferred<Unit>?=null
+        var coverCalls=0;var coverPath:String?=null;var coverGate:CompletableDeferred<Unit>?=null
         override suspend fun info(book:BookDetailBook,source:BookDetailSource?,canRename:Boolean,runPreUpdate:Boolean):BookDetailNetworkResult {
             val call=++calls;if(call==1)firstGate?.let{withContext(NonCancellable){it.await()}}
             val native=book.materializeBook();native.bookUrl="result-$call"
@@ -113,10 +136,14 @@ class BookDetailViewModelTest {
         }
         override suspend fun toc(book:BookDetailBook,source:BookDetailSource?,runPreUpdate:Boolean,fromBookInfo:Boolean)=info(book,source,false,runPreUpdate)
         override suspend fun files(book:BookDetailBook,source:BookDetailSource?)=emptyList<BookDetailWebFile>()
-        override suspend fun cover(book:BookDetailBook):BookDetailBook?=null
+        override suspend fun cover(book:BookDetailBook):BookDetailBook? {
+            coverCalls++;coverGate?.let{withContext(NonCancellable){it.await()}}
+            val path=coverPath ?: return null;return BookDetailBook.from(book.materializeBook().apply{customCoverUrl=path})
+        }
     }
     private class Sessions(var record:BookDetailSession?):BookDetailSessionRepository {
         val ticket=UUID.randomUUID().toString();var recoveries=0;var networkCommits=0;var releases=0;var recoverFailure=false
+        var lastMutation:BookDetailOperation?=null
         var claimGate:CompletableDeferred<Unit>?=null;var claimEntered:CompletableDeferred<Unit>?=null;var realIoClaim=false
         override suspend fun read(ticket:String)=record
         override suspend fun write(ticket:String,record:BookDetailSession) {
@@ -131,6 +158,7 @@ class BookDetailViewModelTest {
             this.record=record
         }
         override suspend fun mutate(ticket:String,record:BookDetailSession,operation:BookDetailOperation):BookDetailSession {
+            lastMutation=operation
             val data=checkNotNull(record.data);val native=data.book.materializeBook();native.customCoverUrl=operation.change.text
             val next=record.copy(data=data.copy(book=BookDetailBook.from(native)),effects=record.effects+BookDetailNativeEffect(operation.token,BookDetailNativeKind.ReaderSync),revision=record.revision+1)
             this.record=next;return next
