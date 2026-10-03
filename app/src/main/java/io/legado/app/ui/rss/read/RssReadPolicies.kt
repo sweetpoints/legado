@@ -10,7 +10,9 @@ internal fun resolveRssReadTitle(
 
 internal sealed interface RssReadLoadTarget {
     data class CachedContent(val content: String) : RssReadLoadTarget
+
     data class RuleContent(val article: RssArticle, val rule: String) : RssReadLoadTarget
+
     data class Url(val url: String, val baseUrl: String) : RssReadLoadTarget
 }
 

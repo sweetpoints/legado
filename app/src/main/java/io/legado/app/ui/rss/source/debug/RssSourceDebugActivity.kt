@@ -13,13 +13,32 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 
 class RssSourceDebugActivity : BaseComposeActivity() {
-    val viewModel by viewModels<RssSourceDebugViewModel> {
-        viewModelFactory { initializer { RssSourceDebugViewModel(AppRssSourceDebugRepository(applicationContext),
-            createSavedStateHandle(), intent.getStringExtra("key")) } }
+    val viewModel by
+        viewModels<RssSourceDebugViewModel> {
+            viewModelFactory {
+                initializer {
+                    RssSourceDebugViewModel(
+                        AppRssSourceDebugRepository(applicationContext),
+                        createSavedStateHandle(),
+                        intent.getStringExtra("key"),
+                    )
+                }
+            }
+        }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        RssSourceDebugRoute(
+            viewModel,
+            { super.finish() },
+            { showDialogFragment(TextDialog("Html", it)) },
+            { toastOnUi(it) },
+            { !supportFragmentManager.isStateSaved },
+        )
     }
-    @Composable override fun Content(savedInstanceState: Bundle?) {
-        RssSourceDebugRoute(viewModel, { super.finish() }, { showDialogFragment(TextDialog("Html", it)) },
-            { toastOnUi(it) }, { !supportFragmentManager.isStateSaved })
+
+    override fun finish() {
+        viewModel.close()
+        super.finish()
     }
-    override fun finish() { viewModel.close(); super.finish() }
 }

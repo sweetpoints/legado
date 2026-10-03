@@ -18,20 +18,49 @@ import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.theme.LegadoComposeTheme
 
 class RssFavoritesFragment() : Fragment() {
-    constructor(group: String) : this() { arguments = Bundle().apply { putString("group", group) } }
-    internal val model by viewModels<RssFavoriteListViewModel> {
-        viewModelFactory { initializer { RssFavoriteListViewModel(RoomRssFavoriteListRepository(), createSavedStateHandle(), arguments?.getString("group")) } }
+    constructor(group: String) : this() {
+        arguments = Bundle().apply { putString("group", group) }
     }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+
+    internal val model by
+        viewModels<RssFavoriteListViewModel> {
+            viewModelFactory {
+                initializer {
+                    RssFavoriteListViewModel(
+                        RoomRssFavoriteListRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getString("group"),
+                    )
+                }
+            }
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             id = R.id.rss_favorites_compose_content
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme {
-                RssFavoriteListRoute(model, arguments?.containsKey("group") != true,
-                    { isAdded && !parentFragmentManager.isStateSaved }, ::readRss,
-                    { requireActivity().onBackPressedDispatcher.onBackPressed() })
-            } }
+            setContent {
+                LegadoComposeTheme {
+                    RssFavoriteListRoute(
+                        model,
+                        arguments?.containsKey("group") != true,
+                        { isAdded && !parentFragmentManager.isStateSaved },
+                        ::readRss,
+                        { requireActivity().onBackPressedDispatcher.onBackPressed() },
+                    )
+                }
+            }
         }
-    fun readRss(rssStar: RssStar) { ReadRss.readRss(this, rssStar.toRssArticle()) }
-    fun delStar(rssStar: RssStar) { model.requestDelete(RoomRssFavoriteListRepository.key(rssStar.origin, rssStar.link)) }
+
+    fun readRss(rssStar: RssStar) {
+        ReadRss.readRss(this, rssStar.toRssArticle())
+    }
+
+    fun delStar(rssStar: RssStar) {
+        model.requestDelete(RoomRssFavoriteListRepository.key(rssStar.origin, rssStar.link))
+    }
 }

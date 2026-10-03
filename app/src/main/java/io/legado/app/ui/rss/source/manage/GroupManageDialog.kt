@@ -15,11 +15,22 @@ import io.legado.app.ui.group.NamedGroupViewModel
 import io.legado.app.utils.setLayout
 
 class GroupManageDialog : BaseComposeDialogFragment() {
-    private val model by viewModels<NamedGroupViewModel> {
-        viewModelFactory { initializer { NamedGroupViewModel(RssSourceGroupRepository(), createSavedStateHandle()) } }
+    private val model by
+        viewModels<NamedGroupViewModel> {
+            viewModelFactory {
+                initializer {
+                    NamedGroupViewModel(RssSourceGroupRepository(), createSavedStateHandle())
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, 0.9f)
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, 0.9f) }
-    @Composable override fun Content() {
+
+    @Composable
+    override fun Content() {
         val state by model.state.collectAsStateWithLifecycle()
         SideEffect { isCancelable = !state.busy }
         NamedGroupRoute(model, ::dismissAllowingStateLoss, showDone = true)

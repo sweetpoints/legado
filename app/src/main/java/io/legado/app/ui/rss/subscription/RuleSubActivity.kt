@@ -15,19 +15,40 @@ import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 
-class RuleSubActivity:BaseComposeActivity() {
-    val viewModel by viewModels<RuleSubscriptionViewModel> { viewModelFactory { initializer {
-        val repository=RoomRuleSubscriptionRepository()
-        RuleSubscriptionViewModel(repository,FileRuleSubscriptionDraftRepository(applicationContext,repository),createSavedStateHandle())
-    } } }
-    @Composable override fun Content(savedInstanceState:Bundle?) {
-        RuleSubscriptionRoute(viewModel,{super.finish()},{ request->
-            when(request.type) {
-                0->showDialogFragment(ImportBookSourceDialog(request.url))
-                1->showDialogFragment(ImportRssSourceDialog(request.url))
-                2->showDialogFragment(ImportReplaceRuleDialog(request.url))
+class RuleSubActivity : BaseComposeActivity() {
+    val viewModel by
+        viewModels<RuleSubscriptionViewModel> {
+            viewModelFactory {
+                initializer {
+                    val repository = RoomRuleSubscriptionRepository()
+                    RuleSubscriptionViewModel(
+                        repository,
+                        FileRuleSubscriptionDraftRepository(applicationContext, repository),
+                        createSavedStateHandle(),
+                    )
+                }
             }
-        },{toastOnUi(it)},{!supportFragmentManager.isStateSaved})
+        }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        RuleSubscriptionRoute(
+            viewModel,
+            { super.finish() },
+            { request ->
+                when (request.type) {
+                    0 -> showDialogFragment(ImportBookSourceDialog(request.url))
+                    1 -> showDialogFragment(ImportRssSourceDialog(request.url))
+                    2 -> showDialogFragment(ImportReplaceRuleDialog(request.url))
+                }
+            },
+            { toastOnUi(it) },
+            { !supportFragmentManager.isStateSaved },
+        )
     }
-    override fun finish() { viewModel.close();super.finish() }
+
+    override fun finish() {
+        viewModel.close()
+        super.finish()
+    }
 }
