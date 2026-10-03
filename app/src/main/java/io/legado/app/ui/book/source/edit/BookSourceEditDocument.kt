@@ -22,6 +22,50 @@ internal data class BookSourceSaveDelivery(
 )
 
 @Keep
+internal enum class BookSourceNativeAction {
+    EDITOR,
+    QR,
+    FILE,
+    JS,
+    DEBUG,
+    LOGIN,
+    SEARCH,
+    COPY,
+    SHARE,
+    QR_SHARE,
+    HELP,
+    LOG,
+    URL_OPTIONS,
+    KEYBOARD_CONFIG,
+}
+
+@Keep
+internal data class BookSourceNativeRequest(
+    val id: String,
+    val action: BookSourceNativeAction,
+    val delivered: Boolean = false,
+    val text: String? = null,
+    val path: String? = null,
+    val sourceUrl: String? = null,
+    val tab: Int = 0,
+    val key: String? = null,
+    val cursor: Int = 0,
+    val selectionEnd: Int = cursor,
+    val returning: Boolean = false,
+    val returnedText: String? = null,
+    val returnedPath: String? = null,
+    val returnedCursor: Int = -1,
+)
+
+@Keep
+internal data class BookSourceFieldHistory(
+    val tab: Int,
+    val key: String,
+    val undo: List<BookSourceEditField> = emptyList(),
+    val redo: List<BookSourceEditField> = emptyList(),
+)
+
+@Keep
 internal data class BookSourceEditDocument(
     val originalKey: String?,
     val originalJson: String,
@@ -34,6 +78,13 @@ internal data class BookSourceEditDocument(
     val revision: Long = 0,
     val finished: Boolean = false,
     val delivery: BookSourceSaveDelivery? = null,
+    val nativeRequest: BookSourceNativeRequest? = null,
+    val ownedTransfers: List<String> = emptyList(),
+    val histories: List<BookSourceFieldHistory> = emptyList(),
+    val savedUrl: String? = null,
+    val variableDraft: String? = null,
+    val variableComment: String? = null,
+    val redirectJs: Boolean = false,
 ) {
     fun original(): BookSource = GSON.fromJsonObject<BookSource>(originalJson).getOrThrow()
 
@@ -51,7 +102,12 @@ internal data class BookSourceEditDocument(
             originalKey: String? = source.bookSourceUrl,
         ): BookSourceEditDocument {
             val form = projectBookSourceEditForm(source)
-            return BookSourceEditDocument(originalKey, GSON.toJson(source), form)
+            return BookSourceEditDocument(
+                originalKey,
+                GSON.toJson(source),
+                form,
+                redirectJs = source.isJsSource(),
+            )
         }
     }
 }

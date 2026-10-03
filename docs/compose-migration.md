@@ -1391,3 +1391,5 @@ BookInfo 全页最终验证：clean 源码候选 b191736b6 在 ae5cfc089 整合�
 JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的标准AndroidTest Kotlin编译及全部3767 JVM用例通过（620 suites，0 failures/errors）；日志/private/tmp/legado-compose-source-editor-final-reviewed-03.log。设备与R8 release未实际执行。
 
 书源完整编辑新增独立IO repository与不可变私有document：七页字段/选区/基线/原始元数据JSON进入UUID Atomic草稿，固定64个锁及严格revision保护，实际Gson DTO/枚举全部精准@Keep。保留原URL/旧书源JSON/数组首项parser、RuleComplete、变量/分组/cookie/文件传输；保存先持久fixed plan，再事务校验原/目标快照，Room接受后恢复同一结果回执，不覆盖并发更改。重读保留最新非编辑order/weight等元数据，比较通过纯字段投影避免BookSource.equal填充规则副作用，包含event/custom开关。新增3项JVM document与7项真实Room/Atomic/cancel/恢复设备用例；统一实际format/check及git diff --check通过，本foundation尚未编译/JVM执行，随VM/Compose完整候选统一验证，设备与release/R8执行仍待可用环境。
+
+书源编辑新增独立不可变StateFlow VM：七页字段/光标、逐字段撤销重做、选项/补全、保存origin、变量编辑和原生请求所有者进入私有草稿，SavedState仅UUID。平台交付先持久认领，暂停恢复同ticket/file，rollback磁盘失败保留待重试状态；返回文件先持久认领再读取，读取失败恢复同结果且支持原cursor-only返回。DB回执失败先读取fixed journal结果再允许新保存，取消确认包含event/custom且关闭清除私有可执行字段，只释放登记文件。新增10项实际VM回归；统一actualformat/check和diff check通过，编译/JVM执行随完整Compose宿主候选统一验证，尚未执行设备或R8 release。

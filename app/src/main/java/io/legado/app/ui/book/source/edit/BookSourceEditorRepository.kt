@@ -33,11 +33,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal data class BookSourceKeyboardAssist(val key: String, val value: String)
+
 internal interface BookSourceEditorRepository {
+    fun assists(): Flow<List<BookSourceKeyboardAssist>>
+
     suspend fun load(sourceUrl: String?): BookSourceEditDocument
 
     suspend fun readDraft(sessionId: String): BookSourceEditDocument?
@@ -57,6 +64,8 @@ internal interface BookSourceEditorRepository {
     suspend fun groups(): List<String>
 
     suspend fun clearCookie(sourceUrl: String)
+
+    suspend fun variableComment(sourceUrl: String): String
 
     suspend fun variable(sourceUrl: String): String
 
@@ -81,6 +90,12 @@ internal class RoomBookSourceEditorRepository(
     private val invalidate: suspend (BookSource?, BookSource) -> Unit = ::invalidateBookSource,
 ) : BookSourceEditorRepository {
     private val context = context.applicationContext
+
+    override fun assists(): Flow<List<BookSourceKeyboardAssist>> =
+        database.keyboardAssistsDao
+            .flowByType(0)
+            .map { items -> items.map { BookSourceKeyboardAssist(it.key, it.value) } }
+            .flowOn(Dispatchers.IO)
 
     override suspend fun load(sourceUrl: String?): BookSourceEditDocument =
         withContext(Dispatchers.IO) {
@@ -191,6 +206,7 @@ internal class RoomBookSourceEditorRepository(
                 val result =
                     document.copy(
                         originalKey = source.bookSourceUrl,
+                        savedUrl = source.bookSourceUrl,
                         originalJson = GSON.toJson(source),
                         form = normalized,
                         baseline = normalized,
@@ -296,6 +312,12 @@ internal class RoomBookSourceEditorRepository(
 
     override suspend fun clearCookie(sourceUrl: String) =
         withContext(Dispatchers.IO) { CookieStore.removeCookie(sourceUrl) }
+
+    override suspend fun variableComment(sourceUrl: String): String =
+        withContext(Dispatchers.IO) {
+            (database.bookSourceDao.getBookSource(sourceUrl) ?: BookSource())
+                .getDisplayVariableComment("源变量可在js中通过source.getVariable()获取")
+        }
 
     override suspend fun variable(sourceUrl: String): String =
         withContext(Dispatchers.IO) {
