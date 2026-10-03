@@ -5,7 +5,7 @@ gradle.beforeProject { project ->
             android.buildTypes.getByName('release').signingConfig = android.signingConfigs.getByName('debug')
             // A single APK avoids duplicate, independently shrunk j$ libraries in app/test APKs.
             // Only this CI build includes the platform instrumentation entry point.
-            android.sourceSets.getByName('release').java.srcDir('src/cronetRuntime/java')
+            android.sourceSets.getByName('release').kotlin.directories.add('src/cronetRuntime/java')
             android.sourceSets.getByName('release').manifest.srcFile('src/cronetRuntime/AndroidManifest.xml')
         }
     }

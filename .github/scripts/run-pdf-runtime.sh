@@ -6,7 +6,7 @@ trap 'adb logcat -d > app/build/pdf-runtime/logcat.txt || true' EXIT
 apks=(app/build/outputs/apk/app/release/*.apk)
 [[ ${#apks[@]} -eq 1 && -f "${apks[0]}" ]]
 adb install -r -t "${apks[0]}"
-adb logcat -c
+adb logcat -c || echo 'Warning: unable to clear emulator logcat; continuing runtime checks' >&2
 timeout 180 adb shell am instrument -w -r \
   com.legado.app.release/io.legado.app.model.localBook.PdfRuntimeInstrumentation \
   | tee app/build/pdf-runtime/result.txt

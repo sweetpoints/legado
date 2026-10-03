@@ -24,7 +24,7 @@ print(f'APK size: {Path(sys.argv[1]).stat().st_size} bytes')
 PY
 adb install -r -t "${apks[0]}"
 adb shell pm clear com.legado.app.release
-adb logcat -c
+adb logcat -c || echo 'Warning: unable to clear emulator logcat; continuing runtime checks' >&2
 timeout 300 adb shell am instrument -w -r \
   com.legado.app.release/io.legado.app.lib.cronet.CronetRuntimeInstrumentation \
   | tee app/build/cronet-runtime/result.txt
