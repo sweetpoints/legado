@@ -90,6 +90,7 @@ import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.utils.StartActivityContract
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.toastOnUi
 import kotlin.math.roundToInt

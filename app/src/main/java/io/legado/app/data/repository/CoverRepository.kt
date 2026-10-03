@@ -13,6 +13,9 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookshelfBook
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.data.image.CoverLoadResult
+import io.legado.app.data.image.CoverTitleRenderer
+import io.legado.app.data.image.GlideCoverImageLoader
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
