@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
@@ -18,7 +19,6 @@ import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -212,18 +212,13 @@ class HighlightTriggerUiTest {
             MoreConfigDialog().showNow(it.supportFragmentManager, "highlight-settings")
         }
         instrumentation.waitForIdleSync()
-        scenario!!.onActivity {
-            val dialog =
-                it.supportFragmentManager.findFragmentByTag("highlight-settings")
-                    as MoreConfigDialog
-            (dialog.childFragmentManager.fragments.single()
-                    as MoreConfigDialog.ReadPreferenceFragment)
-                .scrollToPreference(PreferKey.highlightActionTrigger)
-        }
-        onView(withText(R.string.highlight_action_trigger)).inRoot(isDialog()).perform(click())
-        onView(withText(R.string.highlight_action_trigger_double_tap))
-            .inRoot(isDialog())
-            .perform(click())
+        compose
+            .onNodeWithTag("more-reader-setting-${PreferKey.highlightActionTrigger}")
+            .performScrollTo()
+            .performClick()
+        compose
+            .onNodeWithTag("more-reader-option-${PreferKey.highlightActionTrigger}-doubleTap")
+            .performClick()
         assertEquals("doubleTap", AppConfig.highlightActionTrigger)
         assertTrue(
             "The existing preference remains included in backup",

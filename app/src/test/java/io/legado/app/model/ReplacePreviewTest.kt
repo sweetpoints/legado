@@ -127,14 +127,13 @@ class ReplacePreviewTest {
     fun `reader setting is opt in`() {
         val key = source("app/src/main/java/io/legado/app/constant/PreferKey.kt")
         val config = source("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
-        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        val readerSettings =
+            source(
+                "app/src/main/java/io/legado/app/data/preferences/MoreReaderSettingsRepository.kt"
+            )
         assertTrue(key.contains("twoFingerReplacePreview"))
         assertTrue(config.contains("PreferKey.twoFingerReplacePreview, false"))
-        val preference =
-            preferences
-                .substringBefore("android:key=\"twoFingerReplacePreview\"")
-                .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference")
-        assertTrue(preference.contains("android:defaultValue=\"false\""))
+        assertTrue(readerSettings.contains("PreferKey.twoFingerReplacePreview"))
     }
 
     private fun assertOrder(source: String, vararg expected: String) {

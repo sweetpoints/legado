@@ -1,9 +1,9 @@
 package io.legado.app.ui.book.read.page
 
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class LongPressParagraphSelectionTest {
 
@@ -19,9 +19,8 @@ class LongPressParagraphSelectionTest {
 
     @Test
     fun `paragraph selection starts at the first visible column`() {
-        fun indexOf(vararg columns: String?) = firstParagraphSelectionColumnIndex(
-            columns.size,
-        ) { columns[it] }
+        fun indexOf(vararg columns: String?) =
+            firstParagraphSelectionColumnIndex(columns.size) { columns[it] }
 
         assertEquals(2, indexOf("\u3000", "\u3000", "text"))
         assertEquals(3, indexOf(" ", "\t", "\u00a0", "text"))
@@ -36,24 +35,20 @@ class LongPressParagraphSelectionTest {
         val preferKey = source("app/src/main/java/io/legado/app/constant/PreferKey.kt")
         val appConfig = source("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
         val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
-        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        val readerSettings =
+            source(
+                "app/src/main/java/io/legado/app/data/preferences/MoreReaderSettingsRepository.kt"
+            )
 
         assertTrue(preferKey.contains("const val longPressSelectParagraph"))
-        assertTrue(
-            appConfig.contains(
-                "getPrefBoolean(PreferKey.longPressSelectParagraph, false)"
-            )
-        )
-        assertTrue(preferences.contains("android:key=\"longPressSelectParagraph\""))
-        assertTrue(preferences.contains("android:defaultValue=\"false\""))
+        assertTrue(appConfig.contains("getPrefBoolean(PreferKey.longPressSelectParagraph, false)"))
+        assertTrue(readerSettings.contains("PreferKey.longPressSelectParagraph"))
         assertTrue(readView.contains("if (AppConfig.longPressSelectParagraph)"))
         assertTrue(readView.contains("visibleParagraphRange("))
         assertTrue(readView.contains("selectableParagraphRange("))
         assertTrue(readView.contains("columns.isNotEmpty()"))
         assertTrue(readView.contains("firstParagraphSelectionColumnIndex("))
-        assertTrue(
-            readView.contains("(startLine.columns[it] as? TextBaseColumn)?.charData")
-        )
+        assertTrue(readView.contains("(startLine.columns[it] as? TextBaseColumn)?.charData"))
         assertTrue(readView.contains("columns.lastIndex"))
         assertTrue(readView.contains("boundary.setText(stringBuilder.toString())"))
     }

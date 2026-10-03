@@ -17,11 +17,14 @@ class PullBookmarkGestureTest {
         val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
         val settings =
             source("app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt")
-        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        val readerSettings =
+            source(
+                "app/src/main/java/io/legado/app/data/preferences/MoreReaderSettingsRepository.kt"
+            )
         assertTrue(readView.contains("AppConfig.pullBookmarkDistance"))
         assertTrue(settings.contains("PreferKey.pullBookmarkDistance ->"))
-        assertTrue(settings.contains("AppConfig.pullBookmarkDistance = it"))
-        assertTrue(preferences.contains("android:key=\"pullBookmarkDistance\""))
+        assertTrue(settings.contains("AppConfig.pullBookmarkDistance = value"))
+        assertTrue(readerSettings.contains("PreferKey.pullBookmarkDistance"))
     }
 
     @Test

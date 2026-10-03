@@ -10,7 +10,10 @@ class Issue1046ReadTitleAdditionTest {
     fun `title only preference is persisted with a disabled legacy default`() {
         val preferKey = source("app/src/main/java/io/legado/app/constant/PreferKey.kt")
         val appConfig = source("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
-        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        val readerSettings =
+            source(
+                "app/src/main/java/io/legado/app/data/preferences/MoreReaderSettingsRepository.kt"
+            )
         val backupConfig = source("app/src/main/java/io/legado/app/help/storage/BackupConfig.kt")
         val restore = source("app/src/main/java/io/legado/app/help/storage/Restore.kt")
 
@@ -18,16 +21,8 @@ class Issue1046ReadTitleAdditionTest {
         assertTrue(
             appConfig.contains("getPrefBoolean(PreferKey.showReadTitleChapterNameOnly, false)")
         )
-        assertTrue(preferences.contains("android:key=\"showReadTitleChapterNameOnly\""))
-        val titleOnlyPreference =
-            Regex(
-                    "(?s)<io\\.legado\\.app\\.lib\\.prefs\\.SwitchPreference\\b.*?" +
-                        "android:key=\"showReadTitleChapterNameOnly\".*?/>"
-                )
-                .find(preferences)
-                ?.value
-                .orEmpty()
-        assertTrue(titleOnlyPreference.contains("android:defaultValue=\"false\""))
+        assertTrue(readerSettings.contains("PreferKey.showReadTitleChapterNameOnly"))
+        assertTrue(readerSettings.contains("R.string.show_read_title_chapter_name_only"))
         assertTrue(backupConfig.contains("PreferKey.showReadTitleChapterNameOnly"))
         assertTrue(restore.contains("PreferKey.showReadTitleChapterNameOnly !in map"))
         assertTrue(
