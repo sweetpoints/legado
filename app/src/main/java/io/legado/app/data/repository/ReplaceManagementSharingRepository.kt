@@ -3,6 +3,7 @@ package io.legado.app.data.repository
 import androidx.annotation.Keep
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
+import io.legado.app.utils.isAbsUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

@@ -13,6 +13,7 @@ import io.legado.app.model.remote.RemoteLibraryEntry
 import io.legado.app.model.remote.RemoteLibraryReadTarget
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
+import io.legado.app.utils.find
 import kotlinx.coroutines.*
 
 internal interface RemoteLibraryReadingStore {

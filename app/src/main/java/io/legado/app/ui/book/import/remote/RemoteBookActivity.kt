@@ -20,6 +20,7 @@ import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 
