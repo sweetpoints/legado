@@ -7,6 +7,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import io.legado.app.data.repository.AppBrowserNavigationStore
 import io.legado.app.model.browser.BrowserBackAction
 import io.legado.app.model.browser.BrowserHistoryItem
 import io.legado.app.model.browser.browserBackAction
