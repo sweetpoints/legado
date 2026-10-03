@@ -422,7 +422,10 @@ private fun SourceManagerItem(
                 enabled = !state.busy,
                 modifier = reorderGesture.width(48.dp).testTag("source-manager-drag:${row.url}"),
             ) {
-                Text("⋮")
+                Icon(
+                    painterResource(R.drawable.ic_more_vert),
+                    "${stringResource(R.string.menu)} ${row.displayName}",
+                )
             }
             DropdownMenu(menuOpen, { menuOpen = false }) {
                 val top = stringResource(R.string.to_top)
