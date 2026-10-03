@@ -121,4 +121,26 @@ class RssArticlesPageViewModelTest {
         third.more();runCurrent();assertEquals("next-url" to 2,repo.requests.last())
     }
 
+    @Test fun preparedReadKeepsMetadataAndDoesNotConsumeTicketBeforeNativeDelivery() = test {
+        val repo = repo(); val model = model(repo); model.bind(params); runCurrent(); model.open("one")
+        val ticket = model.state.value.open!!; var input: RssArticlesParameters? = null
+        val result = model.resolvePrepared(ticket, RssArticlesReadRepository { parameters, key ->
+            input = parameters; assertEquals("one", key); RssArticlesRead(repo.batch.articles.single().copy(), null)
+        })!!
+        assertEquals(params, input); assertEquals(repo.batch.articles.single().variable, result.article.variable)
+        assertEquals(2, result.article.type); assertEquals(ticket, model.state.value.open)
+        assertNotNull(model.delivered(ticket.nonce)); assertNull(model.delivered(ticket.nonce))
+    }
+    @Test fun nonCooperativePreparedReadAfterOwnerChangesCannotDeliverOldArticle() = test {
+        val model = model(repo()); model.bind(params); runCurrent(); model.open("one")
+        val ticket = model.state.value.open!!; val gate = CompletableDeferred<Unit>()
+        val result = async { model.resolvePrepared(ticket, RssArticlesReadRepository { _, _ ->
+            withContext(NonCancellable) { gate.await() }; RssArticlesRead(RssArticle(origin = "old", link = "old", title = "Old"), null)
+        }) }
+        try {
+            runCurrent(); model.bind(params.copy(sortName = "Other")); runCurrent(); gate.complete(Unit); runCurrent()
+            assertNull(result.await()); assertNull(model.state.value.open)
+        } finally { gate.complete(Unit); result.cancel(); runCurrent() }
+    }
+
 }

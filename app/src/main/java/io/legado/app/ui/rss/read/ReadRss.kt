@@ -3,6 +3,8 @@ package io.legado.app.ui.rss.read
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.withStateAtLeast
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
@@ -17,6 +19,12 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object ReadRss {
     /**
@@ -72,28 +80,57 @@ object ReadRss {
         readNoHtml(fragment, rssArticle, rssSource, type)
     }
 
+    /** Compose callers prepare the read record on IO before dispatching the full article. */
+    fun readRss(activity: AppCompatActivity, rssArticle: RssArticle, rssSource: RssSource? = null) {
+        when (rssArticle.type) {
+            0 -> ReadRssActivity.start(activity, rssArticle.origin, rssArticle.title, link = rssArticle.link, sort = rssArticle.sort)
+            2 -> activity.startActivity<VideoPlayerActivity> {
+                putExtra("sourceKey", rssArticle.origin)
+                putExtra("sourceType", SourceType.rss)
+                putExtra("record", rssArticle.link)
+            }
+            else -> readArticleLink(activity.lifecycleScope, rssArticle, rssSource, rssArticle.type) { url ->
+                showPhoto(activity, url)
+            }
+        }
+    }
+
     private fun readNoHtml(fragment: Fragment, rssArticle: RssArticle, rssSource: RssSource? = null, type: Int) {
-        val rssSource = rssSource ?: appDb.rssSourceDao.getByKey(rssArticle.origin)
-        rssSource?.let { s ->
+        val source = rssSource ?: appDb.rssSourceDao.getByKey(rssArticle.origin)
+        readArticleLink(fragment.viewLifecycleOwner.lifecycleScope, rssArticle, source, type) { url ->
+            withContext(Dispatchers.Main.immediate) {
+                val owner = fragment.viewLifecycleOwner
+                val context = currentCoroutineContext(); context.ensureActive()
+                owner.lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) {
+                    context.ensureActive()
+                    if (fragment.isAdded && !fragment.parentFragmentManager.isStateSaved) fragment.showDialogFragment(PhotoDialog(url))
+                }
+            }
+        }
+    }
+
+    private fun readArticleLink(scope: CoroutineScope, rssArticle: RssArticle, source: RssSource?, type: Int,
+        showPhoto: suspend (String) -> Unit) {
+        source?.let { s ->
             val ruleContent = s.ruleContent
             if (ruleContent.isNullOrBlank()) {
-                when (type) {
-                    1 -> fragment.showDialogFragment(PhotoDialog(rssArticle.link))
-                }
+                if (type == 1) scope.launch { showPhoto(rssArticle.link) }
             } else {
-                Rss.getContent(fragment.viewLifecycleOwner.lifecycleScope, rssArticle, ruleContent, s)
+                Rss.getContent(scope, rssArticle, ruleContent, s)
                     .onSuccess(IO) { body ->
-                        if (body.isBlank()) {
-                            throw ContentEmptyException("正文为空")
-                        }
+                        if (body.isBlank()) throw ContentEmptyException("正文为空")
                         val url = NetworkUtils.getAbsoluteURL(rssArticle.link, body)
-                        when (type) {
-                            1 -> fragment.showDialogFragment(PhotoDialog(url))
-                        }
-                    }.onError {
-                        AppLog.put("加载为链接的正文失败", it, true)
-                    }
+                        if (type == 1) showPhoto(url)
+                    }.onError { AppLog.put("加载为链接的正文失败", it, true) }
             }
+        }
+    }
+
+    private suspend fun showPhoto(activity: AppCompatActivity, url: String) = withContext(Dispatchers.Main.immediate) {
+        val context = currentCoroutineContext(); context.ensureActive()
+        activity.lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) {
+            context.ensureActive()
+            if (!activity.isFinishing && !activity.supportFragmentManager.isStateSaved) activity.showDialogFragment(PhotoDialog(url))
         }
     }
 
@@ -103,14 +140,14 @@ object ReadRss {
             val ruleContent = s.ruleContent
             if (ruleContent.isNullOrBlank()) {
                 when (type) {
-                    1 -> activity.showDialogFragment(PhotoDialog(record.record))
+                    1 -> activity.lifecycleScope.launch { showPhoto(activity, record.record) }
                 }
             } else {
                 Rss.getContent(activity.lifecycleScope, record.toRssArticle(), ruleContent, s)
                     .onSuccess(IO) { body ->
                         val url = NetworkUtils.getAbsoluteURL(record.record, body)
                         when (type) {
-                            1 -> activity.showDialogFragment(PhotoDialog(url))
+                            1 -> showPhoto(activity, url)
                         }
                     }.onError {
                         AppLog.put("加载为链接的正文失败", it, true)

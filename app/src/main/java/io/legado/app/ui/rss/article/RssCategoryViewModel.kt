@@ -158,6 +158,7 @@ class RssCategoryViewModel(private val repository: RssCategoryRepository,
         clearEffect(); return effect
     }
     private fun clearEffect() { saved.remove<String>("rssCategory.effectKind"); saved.remove<String>("rssCategory.effectNonce"); mutable.value = state.value.copy(pending = null) }
+    fun failed(message: String) { mutable.value = state.value.copy(error = message) }
     private fun failed(error: Exception) { mutable.value = state.value.copy(error = error.localizedMessage ?: "Error") }
     fun retry() {
         if (!state.value.loaded) bind(requested) else state.value.request?.let {

@@ -158,6 +158,13 @@ class RssArticlesPageViewModel(private val repository: RssArticlesPageRepository
         val result = repository.resolve(params, value.key); currentCoroutineContext().ensureActive()
         return result.takeIf { current == generation && state.value.open?.nonce == value.nonce && parameters?.let(::owner) == value.owner }
     }
+    suspend fun resolvePrepared(value: RssArticlesOpen, resolver: RssArticlesReadRepository): RssArticlesRead? {
+        val params = parameters ?: return null
+        if (state.value.open?.nonce != value.nonce || value.owner != owner(params)) return null
+        val current = generation
+        val result = resolver.prepare(params, value.key); currentCoroutineContext().ensureActive()
+        return result.takeIf { current == generation && state.value.open?.nonce == value.nonce && parameters?.let(::owner) == value.owner }
+    }
     fun delivered(nonce: String): RssArticlesOpen? { val value = state.value.open?.takeIf { it.nonce == nonce } ?: return null; clearOpen(); return value }
     private fun clearOpen() { saved.remove<String>("rssArticles.openKey"); saved.remove<String>("rssArticles.openOwner"); saved.remove<String>("rssArticles.openNonce"); mutable.value = state.value.copy(open = null) }
     fun retry() {
