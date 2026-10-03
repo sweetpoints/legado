@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.source.manage
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.cnCompare
@@ -73,6 +74,7 @@ internal data class SourceManagerState(
         get() = sort == BookSourceSort.Default && !byDomain && !busy
 }
 
+@Keep
 internal enum class SourceManagerDialog {
     DELETE,
     ADD_GROUP,

@@ -2,11 +2,13 @@ package io.legado.app.ui.book.source.manage
 
 import android.content.Context
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
 
 /** Android saved state contains an opaque UUID. Large drafts and checked IDs stay private. */
+@Keep
 internal data class SourceManagerSession(
     val query: String = "",
     val selected: Set<String> = emptySet(),
