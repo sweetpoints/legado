@@ -36,11 +36,12 @@ fun LegadoTopAppBar(
         },
         actions = actions,
         windowInsets = windowInsets,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = colors.primary,
-            titleContentColor = colors.onPrimary,
-            navigationIconContentColor = colors.onPrimary,
-            actionIconContentColor = colors.onPrimary,
-        ),
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = colors.primary,
+                titleContentColor = colors.onPrimary,
+                navigationIconContentColor = colors.onPrimary,
+                actionIconContentColor = colors.onPrimary,
+            ),
     )
 }

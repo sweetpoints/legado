@@ -16,22 +16,54 @@ import io.legado.app.data.preferences.AppCodeSettingsPreferences
 
 class SettingsDialog() : BaseComposeDialogFragment() {
     private var providedCallback: CallBack? = null
+
     @Suppress("UNUSED_PARAMETER")
-    constructor(context: Context, callBack: CallBack) : this() { providedCallback = callBack }
-    private val callback: CallBack? get() = providedCallback ?: parentFragment as? CallBack ?: activity as? CallBack
-    private val model by viewModels<CodeSettingsViewModel> {
-        viewModelFactory { initializer { CodeSettingsViewModel(AppCodeSettingsPreferences(requireContext()), createSavedStateHandle()) } }
+    constructor(context: Context, callBack: CallBack) : this() {
+        providedCallback = callBack
     }
-    @Composable override fun Content() {
-        CodeSettingsRoute(model, { font, auto -> callback?.upEdit(fontSize = font, autoComplete = auto) },
-            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
+
+    private val callback: CallBack?
+        get() = providedCallback ?: parentFragment as? CallBack ?: activity as? CallBack
+
+    private val model by
+        viewModels<CodeSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    CodeSettingsViewModel(
+                        AppCodeSettingsPreferences(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    @Composable
+    override fun Content() {
+        CodeSettingsRoute(
+            model,
+            { font, auto -> callback?.upEdit(fontSize = font, autoComplete = auto) },
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f),
+        )
     }
+
     override fun onDismiss(dialog: DialogInterface) {
-        model.onDismiss(activity?.isChangingConfigurations == true)?.let { callback?.upEdit(editNonPrintable = it) }
+        model.onDismiss(activity?.isChangingConfigurations == true)?.let {
+            callback?.upEdit(editNonPrintable = it)
+        }
         super.onDismiss(dialog)
     }
-    override fun onDetach() { providedCallback = null; super.onDetach() }
+
+    override fun onDetach() {
+        providedCallback = null
+        super.onDetach()
+    }
+
     interface CallBack {
-        fun upEdit(fontSize: Int? = null, autoComplete: Boolean? = null, autoWarp: Boolean? = null, editNonPrintable: Int? = null)
+        fun upEdit(
+            fontSize: Int? = null,
+            autoComplete: Boolean? = null,
+            autoWarp: Boolean? = null,
+            editNonPrintable: Int? = null,
+        )
     }
 }

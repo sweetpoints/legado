@@ -13,12 +13,33 @@ import io.legado.app.data.repository.AtomicFileManagementDraftRepository
 import io.legado.app.utils.openFileUri
 import io.legado.app.utils.toastOnUi
 
-class FileManageActivity:BaseComposeActivity() {
-    val viewModel by viewModels<FileManagementViewModel> { viewModelFactory { initializer {
-        FileManagementViewModel(AppFileManagementRepository(applicationContext),AtomicFileManagementDraftRepository(applicationContext),createSavedStateHandle())
-    } } }
-    @Composable override fun Content(savedInstanceState:Bundle?) {
-        FileManagementRoute(viewModel,{super.finish()},{openFileUri(Uri.parse(it))},{toastOnUi(it)},{!supportFragmentManager.isStateSaved})
+class FileManageActivity : BaseComposeActivity() {
+    val viewModel by
+        viewModels<FileManagementViewModel> {
+            viewModelFactory {
+                initializer {
+                    FileManagementViewModel(
+                        AppFileManagementRepository(applicationContext),
+                        AtomicFileManagementDraftRepository(applicationContext),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        FileManagementRoute(
+            viewModel,
+            { super.finish() },
+            { openFileUri(Uri.parse(it)) },
+            { toastOnUi(it) },
+            { !supportFragmentManager.isStateSaved },
+        )
     }
-    override fun finish() { viewModel.close();super.finish() }
+
+    override fun finish() {
+        viewModel.close()
+        super.finish()
+    }
 }

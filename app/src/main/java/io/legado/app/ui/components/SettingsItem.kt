@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.ui.theme.LocalLegadoColors
 
 /**
- * 单行偏好。[view_preference.xml](../res/layout/view_preference.xml) 的等价实现：
- * 左右 16dp / 上下 10dp、最小高度 60dp、标题 16sp、摘要 14sp 且上边距 8dp。
+ * 单行偏好。[view_preference.xml](../res/layout/view_preference.xml) 的等价实现： 左右 16dp / 上下 10dp、最小高度
+ * 60dp、标题 16sp、摘要 14sp 且上边距 8dp。
  */
 @Composable
 fun SettingsRow(
@@ -29,11 +29,12 @@ fun SettingsRow(
 ) {
     val colors = LocalLegadoColors.current
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = 60.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .defaultMinSize(minHeight = 60.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
@@ -55,8 +56,8 @@ fun SettingsRow(
 }
 
 /**
- * 分类标题。[view_preference_category.xml](../res/layout/view_preference_category.xml) 的等价实现：
- * 上方 8dp 间隔 + 上 16dp / 下 8dp / 左 16dp 内边距。
+ * 分类标题。[view_preference_category.xml](../res/layout/view_preference_category.xml) 的等价实现： 上方 8dp
+ * 间隔 + 上 16dp / 下 8dp / 左 16dp 内边距。
  *
  * 原布局用的是静态 `@color/accent`，这里改用主题强调色（`ThemeStore`）以便跟随用户自定义主题。
  */
@@ -68,9 +69,7 @@ fun SettingsCategoryHeader(title: String, modifier: Modifier = Modifier) {
         Text(
             text = title,
             color = colors.accent,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
         )
     }
 }

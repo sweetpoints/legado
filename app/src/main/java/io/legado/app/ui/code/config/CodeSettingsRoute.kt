@@ -16,21 +16,43 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
 @Composable
-fun CodeSettingsRoute(model: CodeSettingsViewModel, onPreview: (Int, Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun CodeSettingsRoute(
+    model: CodeSettingsViewModel,
+    onPreview: (Int, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by model.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current
     val preview by rememberUpdatedState(onPreview)
     LaunchedEffect(model, lifecycle) {
         lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            model.state.filter { !it.loading && it.error == null }.map { it.font to it.autoComplete }
-                .distinctUntilChanged().collect { (font, auto) -> preview(font, auto) }
+            model.state
+                .filter { !it.loading && it.error == null }
+                .map { it.font to it.autoComplete }
+                .distinctUntilChanged()
+                .collect { (font, auto) -> preview(font, auto) }
         }
     }
-    CodeSettingsScreen(state, { model.showFontPicker(true) }, model::setAutoComplete, model::toggleFlag, model::load, modifier)
-    if (state.fontPicker) Dialog(onDismissRequest = { model.showFontPicker(false) }) {
-        val title = stringResource(R.string.font_scale)
-        val config = remember { NumberPickerConfig(title = title, minimum = 9, maximum = 36, initial = state.font) }
-        NumberPickerRoute(config,
-            stringResource(R.string.btn_default_s), model::setFont, { model.setFont(16) }, { model.showFontPicker(false) })
-    }
+    CodeSettingsScreen(
+        state,
+        { model.showFontPicker(true) },
+        model::setAutoComplete,
+        model::toggleFlag,
+        model::load,
+        modifier,
+    )
+    if (state.fontPicker)
+        Dialog(onDismissRequest = { model.showFontPicker(false) }) {
+            val title = stringResource(R.string.font_scale)
+            val config = remember {
+                NumberPickerConfig(title = title, minimum = 9, maximum = 36, initial = state.font)
+            }
+            NumberPickerRoute(
+                config,
+                stringResource(R.string.btn_default_s),
+                model::setFont,
+                { model.setFont(16) },
+                { model.showFontPicker(false) },
+            )
+        }
 }

@@ -1,24 +1,28 @@
 package io.legado.app.ui.components.image
 
-import io.legado.app.data.image.AnimatedDrawableResource
-import io.legado.app.data.image.ManagedDrawableCallback
-
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.painter.Painter
+import io.legado.app.data.image.AnimatedDrawableResource
+import io.legado.app.data.image.ManagedDrawableCallback
 
 /** Drawable callbacks invalidate Compose's draw phase without embedding an Android View. */
-internal class LifecycleDrawablePainter(private val image: AnimatedDrawableResource) : Painter(), ManagedDrawableCallback {
+internal class LifecycleDrawablePainter(private val image: AnimatedDrawableResource) :
+    Painter(), ManagedDrawableCallback {
     private val drawable = image.drawable
     private val handler = Handler(Looper.getMainLooper())
     private val frameRevision = mutableIntStateOf(0)
-    override val intrinsicSize: Size = Size(drawable.intrinsicWidth.coerceAtLeast(1).toFloat(), drawable.intrinsicHeight.coerceAtLeast(1).toFloat())
+    override val intrinsicSize: Size =
+        Size(
+            drawable.intrinsicWidth.coerceAtLeast(1).toFloat(),
+            drawable.intrinsicHeight.coerceAtLeast(1).toFloat(),
+        )
 
     fun start() {
         if (image.isReleased) return
@@ -40,7 +44,9 @@ internal class LifecycleDrawablePainter(private val image: AnimatedDrawableResou
         if (!image.isReleased) handler.postAtTime(what, this, `when`)
     }
 
-    override fun unscheduleDrawable(who: Drawable, what: Runnable) { handler.removeCallbacks(what) }
+    override fun unscheduleDrawable(who: Drawable, what: Runnable) {
+        handler.removeCallbacks(what)
+    }
 
     override fun DrawScope.onDraw() {
         frameRevision.intValue // Observe frames only in the draw phase.

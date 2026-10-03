@@ -19,22 +19,64 @@ import io.legado.app.utils.toastOnUi
 
 class CurlAnalyzeUrlDialog() : BaseComposeDialogFragment() {
     constructor(input: String, canInsert: Boolean) : this() {
-        arguments = Bundle().apply { putString(ARG_INPUT, IntentData.put(input)); putBoolean(ARG_CAN_INSERT, canInsert) }
+        arguments =
+            Bundle().apply {
+                putString(ARG_INPUT, IntentData.put(input))
+                putBoolean(ARG_CAN_INSERT, canInsert)
+            }
     }
-    private val viewModel by viewModels<CurlConversionViewModel> {
-        viewModelFactory { initializer { CurlConversionViewModel(DefaultCurlConversionRepository(AppCurlDraftStore(requireContext())),
-            createSavedStateHandle(), arguments?.getString(ARG_INPUT), arguments?.getBoolean(ARG_CAN_INSERT) == true) } }
+
+    private val viewModel by
+        viewModels<CurlConversionViewModel> {
+            viewModelFactory {
+                initializer {
+                    CurlConversionViewModel(
+                        DefaultCurlConversionRepository(AppCurlDraftStore(requireContext())),
+                        createSavedStateHandle(),
+                        arguments?.getString(ARG_INPUT),
+                        arguments?.getBoolean(ARG_CAN_INSERT) == true,
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
     }
-    override fun onStart() { super.onStart(); setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT) }
-    override fun onStop() { viewModel.flush(); super.onStop() }
-    @Composable override fun Content() {
-        CurlConversionRoute(viewModel, { isAdded && !parentFragmentManager.isStateSaved }, { requireContext().sendToClip(it) },
+
+    override fun onStop() {
+        viewModel.flush()
+        super.onStop()
+    }
+
+    @Composable
+    override fun Content() {
+        CurlConversionRoute(
+            viewModel,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            { requireContext().sendToClip(it) },
             { text, result ->
                 val callback = parentFragment as? Callback ?: activity as? Callback
-                if (callback == null) result(false) else callback.onCurlAnalyzeUrlInsert(text, result)
-            }, { toastOnUi(it) }, { dismissAllowingStateLoss() }, Modifier.fillMaxSize())
+                if (callback == null) result(false)
+                else callback.onCurlAnalyzeUrlInsert(text, result)
+            },
+            { toastOnUi(it) },
+            { dismissAllowingStateLoss() },
+            Modifier.fillMaxSize(),
+        )
     }
-    override fun dismiss() { viewModel.finish() }
-    interface Callback { fun onCurlAnalyzeUrlInsert(text: String, onResult: (Boolean) -> Unit) }
-    private companion object { const val ARG_INPUT = "input"; const val ARG_CAN_INSERT = "canInsert" }
+
+    override fun dismiss() {
+        viewModel.finish()
+    }
+
+    interface Callback {
+        fun onCurlAnalyzeUrlInsert(text: String, onResult: (Boolean) -> Unit)
+    }
+
+    private companion object {
+        const val ARG_INPUT = "input"
+        const val ARG_CAN_INSERT = "canInsert"
+    }
 }
