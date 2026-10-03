@@ -515,7 +515,7 @@ class SourceManualReplacementUiTest {
             main { code.dismiss() }
             host.ready()
             host.names("Editor Seed+0", "Seed+1")
-            host.click(R.id.tv_ok)
+            host.click(ImportControl.Confirm)
             await("Import not persisted") {
                 val stored =
                     if (rss) appDb.rssSourceDao.getByKey(urls[0])?.sourceName
@@ -576,7 +576,7 @@ class SourceManualReplacementUiTest {
             host.names("Seed+0", "Seed+1")
             host.manualEnabled(true)
             assertFalse(AppConfig.manualReplaceRule)
-            host.click(R.id.tv_cancel)
+            host.click(ImportControl.Cancel)
             AppConfig.importReplaceSource = true
         }
     }
@@ -609,7 +609,7 @@ class SourceManualReplacementUiTest {
             host.menu(R.id.menu_replace_source)
             host.ready()
             host.names("Seed++0", "Seed+1")
-            host.click(R.id.tv_cancel)
+            host.click(ImportControl.Cancel)
             AppConfig.importReplaceSource = false
         }
     }
@@ -658,7 +658,7 @@ class SourceManualReplacementUiTest {
                 if (sourceAutomatic) host.names("Seed++0", "Seed+1")
                 else host.names("Seed0", "Seed1")
                 host.manualEnabled(!sourceAutomatic)
-                host.click(R.id.tv_cancel)
+                host.click(ImportControl.Cancel)
             }
         }
         val readerCandidates = appDb.replaceRuleDao.findManualCandidates().map { it.id }
@@ -690,6 +690,11 @@ class SourceManualReplacementUiTest {
             host.ready()
             action(host)
         }
+    }
+
+    private enum class ImportControl(val tag: String) {
+        Confirm("confirm"),
+        Cancel("cancel"),
     }
 
     private inner class Host(
@@ -855,19 +860,9 @@ class SourceManualReplacementUiTest {
             else compose.onNodeWithTag("book-import-search").performTextReplacement(value)
         }
 
-        fun click(id: Int) {
-            if (rss)
-                compose
-                    .onNodeWithTag(
-                        if (id == R.id.tv_ok) "rss-import-confirm" else "rss-import-cancel"
-                    )
-                    .performClick()
-            else
-                compose
-                    .onNodeWithTag(
-                        if (id == R.id.tv_ok) "book-import-confirm" else "book-import-cancel"
-                    )
-                    .performClick()
+        fun click(control: ImportControl) {
+            val prefix = if (rss) "rss-import" else "book-import"
+            compose.onNodeWithTag("$prefix-${control.tag}").assertIsDisplayed().performClick()
         }
 
         fun open(index: Int): CodeDialog {
