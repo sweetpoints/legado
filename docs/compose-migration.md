@@ -1493,3 +1493,8 @@ The pure Compose reader Screen now combines the Compose viewport/menu with loadi
 ### Manga Compose exit acceptance
 
 Exit now belongs to immutable ViewModel state. A book already on the shelf requests platform finish; a temporary book either offers the original add-to-shelf decision or completes queued progress and fresh-row deletion before finishing. Accepting the shelf decision removes only the temporary-shelf bit through a fresh Room transaction, emits RESULT_OK, and continues reading, matching the original behavior. Cancellation after an accepted database operation cannot interrupt it; generation guards prevent a receipt from closing a later Intent. A real Room Android regression verifies fresh cover/name/group/progress survive shelf acceptance and a removed row is not resurrected. It awaits device execution and final AndroidTest compilation. Formatting and diff checks pass.
+
+
+### Manga color-filter Gson release names
+
+The existing color-filter configuration DTO now keeps its serialized field names under minification, matching the already protected private reader sessions and footer DTO. This is a narrow annotation fix with official formatting/check; existing configuration roundtrip tests remain the meaningful persistence coverage. The upcoming manga Host is not yet covered by a release/R8 packaging run.
