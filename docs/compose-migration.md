@@ -1257,3 +1257,4 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 搜索私有草稿revision严格单调：同版本重试幂等，迟到的同版本不同内容不能覆盖已接受值。新增跨仓库实例真实Atomic文件回归，验证同版本保留、相同载荷重试及更高版本推进；formatter/check通过，设备测试仍仅编译。
 
 搜索私有Gson持久化的draft/result/receipt及effect枚举精准增加@Keep，防止release混淆改变字段/枚举名称，不改共享ProGuard。新增JSON字段与完整payload往返JVM合同；本批统一编译/JVM验证，未执行R8发布打包。
+代码编辑宿主、选区回归与JS Web API契约测试独立整理为统一ktfmt 0.64 Kotlinlang格式；选区用例展开Kotlin语句分隔符，保留嵌入JS/HTML字符串。实际format/check与git diff --check执行，当前专属worktree完整JVM 3737项零失败及AndroidTest Kotlin编译通过，设备端未执行。

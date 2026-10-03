@@ -9,8 +9,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -20,15 +20,15 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.annotation.Keep
+import androidx.annotation.RequiresApi
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
-import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.ColorSchemeUpdateEvent
+import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
 import io.github.rosemoe.sora.util.regex.RegexBackrefGrammar
@@ -64,7 +64,9 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class CodeEditActivity :
     VMBaseActivity<ActivityCodeEditBinding, CodeEditViewModel>(),
-    KeyboardToolPop.CallBack, ChangeThemeDialog.CallBack, SettingsDialog.CallBack,
+    KeyboardToolPop.CallBack,
+    ChangeThemeDialog.CallBack,
+    SettingsDialog.CallBack,
     CurlAnalyzeUrlDialog.Callback {
     companion object {
         const val EXTRA_SHOW_DEBUG_SOURCE = "showDebugSourceAction"
@@ -81,6 +83,7 @@ class CodeEditActivity :
         private const val SAFE_EDITOR_LOAD_TIMEOUT_MILLIS = 15_000L
         private const val SAFE_EDITOR_READ_TIMEOUT_MILLIS = 5_000L
     }
+
     override val binding by viewBinding(ActivityCodeEditBinding::inflate)
     override val viewModel by viewModels<CodeEditViewModel>()
     private val softKeyboardTool by lazy {
@@ -106,11 +109,12 @@ class CodeEditActivity :
         IDLE,
         LOADING,
         READY,
-        FAILED
+        FAILED,
     }
 
     private val isDark
         get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme()
+
     private var themeIndex = -1
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -124,7 +128,8 @@ class CodeEditActivity :
             if (textActions?.dismiss() != true) finish()
         }
         softKeyboardTool.attachToWindow(window)
-        editor.colorScheme = TextMateColorScheme2.create(ThemeRegistry.getInstance()) //先设置颜色,避免一开始的白屏
+        editor.colorScheme =
+            TextMateColorScheme2.create(ThemeRegistry.getInstance()) // 先设置颜色,避免一开始的白屏
         viewModel.initData(intent) {
             if (isDestroyed) return@initData
             viewModel.title?.let {
@@ -164,34 +169,39 @@ class CodeEditActivity :
             editable = viewModel.writable
             requestFocus()
             // Restore before accepting input; a delayed restore can overwrite a new selection.
-            val pos = cursor.indexer.getCharPosition(viewModel.cursorPosition.coerceIn(0, text.length))
+            val pos =
+                cursor.indexer.getCharPosition(viewModel.cursorPosition.coerceIn(0, text.length))
             setSelection(pos.line, pos.column, true)
         }
     }
 
     private fun setupTextActions() {
         val actions = editor.getComponent(EditorTextActionWindow::class.java)
-        val copy = actions.view.findViewById<ImageButton>(io.github.rosemoe.sora.R.id.panel_btn_copy)
+        val copy =
+            actions.view.findViewById<ImageButton>(io.github.rosemoe.sora.R.id.panel_btn_copy)
         val buttons = copy.parent as ViewGroup
-        val shareButton = ImageButton(this).apply {
-            id = R.id.code_share_selection
-            contentDescription = getString(R.string.share)
-            setImageResource(R.drawable.ic_share)
-            background = copy.background?.constantState?.newDrawable()?.mutate()
-            setPadding(copy.paddingLeft, copy.paddingTop, copy.paddingRight, copy.paddingBottom)
-            layoutParams = LinearLayout.LayoutParams(copy.layoutParams)
-            setOnClickListener {
-                val cursor = editor.cursor
-                if (cursor.isSelected) {
-                    share(editor.text.subSequence(cursor.left, cursor.right).toString())
-                    actions.dismiss()
+        val shareButton =
+            ImageButton(this).apply {
+                id = R.id.code_share_selection
+                contentDescription = getString(R.string.share)
+                setImageResource(R.drawable.ic_share)
+                background = copy.background?.constantState?.newDrawable()?.mutate()
+                setPadding(copy.paddingLeft, copy.paddingTop, copy.paddingRight, copy.paddingBottom)
+                layoutParams = LinearLayout.LayoutParams(copy.layoutParams)
+                setOnClickListener {
+                    val cursor = editor.cursor
+                    if (cursor.isSelected) {
+                        share(editor.text.subSequence(cursor.left, cursor.right).toString())
+                        actions.dismiss()
+                    }
                 }
             }
-        }
         buttons.addView(shareButton, buttons.indexOfChild(copy) + 1)
         fun updateShareButton() {
             shareButton.isVisible = editor.cursor.isSelected
-            shareButton.setColorFilter(editor.colorScheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR))
+            shareButton.setColorFilter(
+                editor.colorScheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR)
+            )
         }
         updateShareButton()
         editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> updateShareButton() }
@@ -219,94 +229,110 @@ class CodeEditActivity :
                 blockNetworkLoads = true
             }
             // This WebView only loads our network-disabled, locally generated editor document.
-            addJavascriptInterface(object {
-                @Keep
-                @JavascriptInterface
-                fun changed(text: String, cursor: Int, dirty: Boolean) {
-                    if (!isDestroyed) {
-                        viewModel.editorDraft = SafeEditorContent(text, cursor, dirty)
-                            .resolveAgainst(viewModel.initialText)
-                    }
-                }
-
-                @Keep
-                @JavascriptInterface
-                fun selected(cursor: Int) {
-                    if (!isDestroyed) {
-                        viewModel.editorDraft = viewModel.editorDraft?.let {
-                            // A clean textarea normalizes CRLF; preserve the source offset contract.
-                            if (it.dirty) it.copy(cursorPosition = cursor.coerceIn(0, it.text.length))
-                            else SafeEditorContent(it.text, cursor, false).resolveAgainst(viewModel.initialText)
+            addJavascriptInterface(
+                object {
+                    @Keep
+                    @JavascriptInterface
+                    fun changed(text: String, cursor: Int, dirty: Boolean) {
+                        if (!isDestroyed) {
+                            viewModel.editorDraft =
+                                SafeEditorContent(text, cursor, dirty)
+                                    .resolveAgainst(viewModel.initialText)
                         }
                     }
-                }
-            }, "EditorDraft")
-            webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView, url: String?) {
-                    if (safeEditor !== view) return
-                    safeEditorLoadTimeout?.let(view::removeCallbacks)
-                    safeEditorLoadTimeout = null
-                    safeEditorStatus = SafeEditorStatus.READY
-                    updateSafeEditorActionButtons()
-                    view.requestFocus()
-                }
 
-                override fun onReceivedError(
-                    view: WebView,
-                    request: WebResourceRequest,
-                    error: WebResourceError
-                ) {
-                    if (safeEditor === view && request.isForMainFrame) {
-                        markSafeEditorLoadFailed(view)
+                    @Keep
+                    @JavascriptInterface
+                    fun selected(cursor: Int) {
+                        if (!isDestroyed) {
+                            viewModel.editorDraft =
+                                viewModel.editorDraft?.let {
+                                    // A clean textarea normalizes CRLF; preserve the source offset
+                                    // contract.
+                                    if (it.dirty)
+                                        it.copy(cursorPosition = cursor.coerceIn(0, it.text.length))
+                                    else
+                                        SafeEditorContent(it.text, cursor, false)
+                                            .resolveAgainst(viewModel.initialText)
+                                }
+                        }
+                    }
+                },
+                "EditorDraft",
+            )
+            webViewClient =
+                object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        if (safeEditor !== view) return
+                        safeEditorLoadTimeout?.let(view::removeCallbacks)
+                        safeEditorLoadTimeout = null
+                        safeEditorStatus = SafeEditorStatus.READY
+                        updateSafeEditorActionButtons()
+                        view.requestFocus()
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: WebResourceError,
+                    ) {
+                        if (safeEditor === view && request.isForMainFrame) {
+                            markSafeEditorLoadFailed(view)
+                        }
+                    }
+
+                    override fun onRenderProcessGone(
+                        view: WebView,
+                        detail: RenderProcessGoneDetail,
+                    ): Boolean {
+                        if (safeEditor !== view) return false
+                        handleSafeEditorRenderProcessGone(view)
+                        return true
                     }
                 }
-
-                override fun onRenderProcessGone(
-                    view: WebView,
-                    detail: RenderProcessGoneDetail
-                ): Boolean {
-                    if (safeEditor !== view) return false
-                    handleSafeEditorRenderProcessGone(view)
-                    return true
-                }
-            }
             scheduleSafeEditorLoadTimeout(this)
             loadDataWithBaseURL(
                 null,
                 buildSafeEditorHtml(text),
                 "text/html",
                 "utf-8",
-                null
+                null,
             )
         }
         updateSafeEditorActionButtons()
     }
 
     private fun getOrCreateSafeEditor(): WebView {
-        return safeEditor ?: WebView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            contentDescription = getString(R.string.safe_code_editor)
-            visibility = View.GONE
-        }.also {
-            binding.editorContainer.addView(it)
-            safeEditor = it
-        }
+        return safeEditor
+            ?: WebView(this)
+                .apply {
+                    layoutParams =
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                        )
+                    contentDescription = getString(R.string.safe_code_editor)
+                    visibility = View.GONE
+                }
+                .also {
+                    binding.editorContainer.addView(it)
+                    safeEditor = it
+                }
     }
 
     private fun scheduleSafeEditorLoadTimeout(webView: WebView) {
         safeEditorLoadTimeout?.let(webView::removeCallbacks)
-        safeEditorLoadTimeout = Runnable {
-            if (safeEditor === webView && safeEditorStatus == SafeEditorStatus.LOADING) {
-                safeEditorStatus = SafeEditorStatus.FAILED
-                updateSafeEditorActionButtons()
-                toastOnUi(R.string.safe_code_editor_load_failed)
+        safeEditorLoadTimeout =
+            Runnable {
+                if (safeEditor === webView && safeEditorStatus == SafeEditorStatus.LOADING) {
+                    safeEditorStatus = SafeEditorStatus.FAILED
+                    updateSafeEditorActionButtons()
+                    toastOnUi(R.string.safe_code_editor_load_failed)
+                }
             }
-        }.also {
-            webView.postDelayed(it, SAFE_EDITOR_LOAD_TIMEOUT_MILLIS)
-        }
+                .also {
+                    webView.postDelayed(it, SAFE_EDITOR_LOAD_TIMEOUT_MILLIS)
+                }
     }
 
     private fun markSafeEditorLoadFailed(webView: WebView) {
@@ -331,26 +357,32 @@ class CodeEditActivity :
     }
 
     private fun updateSafeEditorActionButtons() {
-        val enabled = viewModel.writable &&
-            safeEditorStatus == SafeEditorStatus.READY &&
-            !safeEditorReadPending
+        val enabled =
+            viewModel.writable &&
+                safeEditorStatus == SafeEditorStatus.READY &&
+                !safeEditorReadPending
         menuSaveBtn?.isEnabled = enabled
         menuDebugSourceBtn?.isEnabled = enabled && isDebugSourceActionEnabled()
         menuLoginSourceBtn?.isEnabled = enabled && isLoginSourceActionEnabled()
     }
 
     private fun buildSafeEditorHtml(text: String): String {
-        val encodedText = Base64.encodeToString(
-            text.toByteArray(Charsets.UTF_8),
-            Base64.NO_WRAP
-        )
+        val encodedText =
+            Base64.encodeToString(
+                text.toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP,
+            )
         val background = ColorUtils.intToString(backgroundColor)
         val foreground = ColorUtils.intToString(primaryTextColor)
         val readOnly = if (viewModel.writable) "" else " readonly"
         val writable = viewModel.writable
         val wrap = if (AppConfig.editAutoWrap) "soft" else "off"
-        val cursorPosition = text.take(viewModel.cursorPosition.coerceIn(0, text.length))
-            .replace("\r\n", "\n").replace('\r', '\n').length
+        val cursorPosition =
+            text
+                .take(viewModel.cursorPosition.coerceIn(0, text.length))
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .length
         return """
             <!doctype html>
             <html>
@@ -460,33 +492,37 @@ class CodeEditActivity :
                 </script>
             </body>
             </html>
-        """.trimIndent()
+        """
+            .trimIndent()
     }
 
     private fun readSafeEditorState(onResult: (SafeEditorContent) -> Unit) {
         if (safeEditorReadPending) return
-        val webView = safeEditor ?: run {
-            toastOnUi(R.string.safe_code_editor_read_failed)
-            return
-        }
+        val webView =
+            safeEditor
+                ?: run {
+                    toastOnUi(R.string.safe_code_editor_read_failed)
+                    return
+                }
         val generation = ++safeEditorReadGeneration
         safeEditorReadPending = true
         updateSafeEditorActionButtons()
-        safeEditorReadTimeout = Runnable {
-            if (safeEditorReadGeneration == generation) {
-                safeEditorReadGeneration++
-                safeEditorReadPending = false
-                safeEditorReadTimeout = null
-                restoreSafeEditorEditing()
-                updateSafeEditorActionButtons()
-                toastOnUi(R.string.safe_code_editor_read_failed)
+        safeEditorReadTimeout =
+            Runnable {
+                if (safeEditorReadGeneration == generation) {
+                    safeEditorReadGeneration++
+                    safeEditorReadPending = false
+                    safeEditorReadTimeout = null
+                    restoreSafeEditorEditing()
+                    updateSafeEditorActionButtons()
+                    toastOnUi(R.string.safe_code_editor_read_failed)
+                }
             }
-        }.also {
-            webView.postDelayed(it, SAFE_EDITOR_READ_TIMEOUT_MILLIS)
-        }
-        webView.evaluateJavascript(
-            "window.__getEditorState && window.__getEditorState();"
-        ) { value ->
+                .also {
+                    webView.postDelayed(it, SAFE_EDITOR_READ_TIMEOUT_MILLIS)
+                }
+        webView.evaluateJavascript("window.__getEditorState && window.__getEditorState();") { value
+            ->
             if (safeEditorReadGeneration != generation) return@evaluateJavascript
             safeEditorReadTimeout?.let(webView::removeCallbacks)
             safeEditorReadTimeout = null
@@ -517,7 +553,7 @@ class CodeEditActivity :
         if (safeEditorStatus != SafeEditorStatus.READY || !viewModel.writable) return
         safeEditor?.evaluateJavascript(
             "window.__setEditorReadOnly && window.__setEditorReadOnly(false);",
-            null
+            null,
         )
     }
 
@@ -525,24 +561,27 @@ class CodeEditActivity :
         text: String,
         onResult: (Boolean) -> Unit = {},
     ) {
-        val webView = safeEditor ?: run {
-            onResult(false)
-            return
-        }
+        val webView =
+            safeEditor
+                ?: run {
+                    onResult(false)
+                    return
+                }
         if (
             safeEditorStatus != SafeEditorStatus.READY ||
-            !viewModel.writable ||
-            safeEditorReadPending
+                !viewModel.writable ||
+                safeEditorReadPending
         ) {
             onResult(false)
             return
         }
-        val encodedText = Base64.encodeToString(
-            text.toByteArray(Charsets.UTF_8),
-            Base64.NO_WRAP
-        )
+        val encodedText =
+            Base64.encodeToString(
+                text.toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP,
+            )
         webView.evaluateJavascript(
-            "window.__insertEditorText && window.__insertEditorText('$encodedText');",
+            "window.__insertEditorText && window.__insertEditorText('$encodedText');"
         ) { result ->
             onResult(result == "true")
         }
@@ -552,7 +591,8 @@ class CodeEditActivity :
         if (editorReady) {
             if (!useSafeEditor) {
                 val text = editor.text.toString()
-                viewModel.editorDraft = SafeEditorContent(text, editor.cursor.left, text != viewModel.initialText)
+                viewModel.editorDraft =
+                    SafeEditorContent(text, editor.cursor.left, text != viewModel.initialText)
             }
             runCatching { viewModel.persistEditorDraft() }
                 .onFailure { toastOnUi(it.localizedMessage) }
@@ -581,9 +621,7 @@ class CodeEditActivity :
         super.onDestroy()
     }
 
-    /**
-     * 使用super.finish(),防止循环回调
-     * */
+    /** 使用super.finish(),防止循环回调 */
     private fun save(check: Boolean) {
         if (!viewModel.writable) return super.finish()
         if (useSafeEditor) {
@@ -626,13 +664,13 @@ class CodeEditActivity :
     private fun saveText(check: Boolean, text: String, cursorPos: Int) {
         when {
             text == viewModel.initialText -> {
-                val returnText = !check &&
-                    intent.getBooleanExtra("returnUnchangedText", false)
+                val returnText = !check && intent.getBooleanExtra("returnUnchangedText", false)
                 if (returnText || cursorPos > 0) {
-                    val result = Intent().apply {
-                        if (returnText) putEditorText(this, text)
-                        putExtra("cursorPosition", cursorPos)
-                    }
+                    val result =
+                        Intent().apply {
+                            if (returnText) putEditorText(this, text)
+                            putExtra("cursorPosition", cursorPos)
+                        }
                     setResult(RESULT_OK, result)
                 }
                 super.finish()
@@ -643,9 +681,10 @@ class CodeEditActivity :
                     positiveButton(R.string.yes)
                     negativeButton(R.string.no) {
                         if (cursorPos > 0) {
-                            val result = Intent().apply {
-                                putExtra("cursorPosition", cursorPos)
-                            }
+                            val result =
+                                Intent().apply {
+                                    putExtra("cursorPosition", cursorPos)
+                                }
                             setResult(RESULT_OK, result)
                         }
                         super.finish()
@@ -653,10 +692,11 @@ class CodeEditActivity :
                 }
             }
             else -> {
-                val result = Intent().apply {
-                    putEditorText(this, text)
-                    putExtra("cursorPosition", cursorPos)
-                }
+                val result =
+                    Intent().apply {
+                        putEditorText(this, text)
+                        putExtra("cursorPosition", cursorPos)
+                    }
                 setResult(RESULT_OK, result)
                 super.finish()
             }
@@ -664,8 +704,9 @@ class CodeEditActivity :
     }
 
     private fun putEditorText(intent: Intent, text: String) {
-        if (this.intent.getBooleanExtra("useTextFile", false) &&
-            text.length > io.legado.app.ui.widget.code.EditSafety.MAX_INLINE_TEXT_LENGTH
+        if (
+            this.intent.getBooleanExtra("useTextFile", false) &&
+                text.length > io.legado.app.ui.widget.code.EditSafety.MAX_INLINE_TEXT_LENGTH
         ) {
             intent.putExtra("textFile", CodeTextTransfer.write(this, text))
         } else {
@@ -691,11 +732,12 @@ class CodeEditActivity :
     }
 
     private fun returnText(action: String, text: String, cursorPosition: Int) {
-        val result = Intent().apply {
-            putEditorText(this, text)
-            putExtra("cursorPosition", cursorPosition)
-            putExtra(EXTRA_RESULT_ACTION, action)
-        }
+        val result =
+            Intent().apply {
+                putEditorText(this, text)
+                putExtra("cursorPosition", cursorPosition)
+                putExtra(EXTRA_RESULT_ACTION, action)
+            }
         setResult(RESULT_OK, result)
         super.finish()
     }
@@ -708,7 +750,12 @@ class CodeEditActivity :
         return intent.getBooleanExtra(EXTRA_SHOW_LOGIN_SOURCE, false)
     }
 
-    override fun upEdit(fontSize: Int?, autoComplete: Boolean?, autoWarp: Boolean?, editNonPrintable: Int?) {
+    override fun upEdit(
+        fontSize: Int?,
+        autoComplete: Boolean?,
+        autoWarp: Boolean?,
+        editNonPrintable: Int?,
+    ) {
         if (useSafeEditor) return
         if (fontSize != null) {
             editor.setTextSize(fontSize.toFloat())
@@ -729,7 +776,7 @@ class CodeEditActivity :
         if (useSafeEditor) return
         if (themeIndex != index) {
             viewModel.loadTextMateThemes(index)
-            editor.setEditorLanguage(viewModel.language) //每次更改颜色后需要再执行一次语言设置,防止切换主题后高亮颜色不正确
+            editor.setEditorLanguage(viewModel.language) // 每次更改颜色后需要再执行一次语言设置,防止切换主题后高亮颜色不正确
             themeIndex = index
         }
     }
@@ -750,9 +797,10 @@ class CodeEditActivity :
 
     private fun updateEditorMenu(menu: Menu) {
         val showSoraActions = !useSafeEditor
-        val canReturnText = viewModel.writable &&
-            (!useSafeEditor ||
-                (safeEditorStatus == SafeEditorStatus.READY && !safeEditorReadPending))
+        val canReturnText =
+            viewModel.writable &&
+                (!useSafeEditor ||
+                    (safeEditorStatus == SafeEditorStatus.READY && !safeEditorReadPending))
         menu.findItem(R.id.menu_search)?.isVisible = showSoraActions
         menu.findItem(R.id.menu_change_theme)?.isVisible = showSoraActions
         menu.findItem(R.id.menu_select_all)?.isVisible = showSoraActions
@@ -769,27 +817,30 @@ class CodeEditActivity :
             isEnabled = canReturnText
         }
         menu.findItem(R.id.menu_debug_source)?.apply {
-            isVisible = shouldShowDebugSourceAction(
-                viewModel.writable,
-                isDebugSourceActionEnabled()
-            )
+            isVisible =
+                shouldShowDebugSourceAction(
+                    viewModel.writable,
+                    isDebugSourceActionEnabled(),
+                )
             isEnabled = canReturnText
         }
         menu.findItem(R.id.menu_login)?.apply {
-            isVisible = shouldShowLoginSourceAction(
-                viewModel.writable,
-                isLoginSourceActionEnabled()
-            )
+            isVisible =
+                shouldShowLoginSourceAction(
+                    viewModel.writable,
+                    isLoginSourceActionEnabled(),
+                )
             isEnabled = canReturnText
         }
     }
 
     private fun setSearchOptions() {
-        searchOptions =  SearchOptions(
-            if (isRegex) SearchOptions.TYPE_REGULAR_EXPRESSION else SearchOptions.TYPE_NORMAL,
-            !isRegex,
-            RegexBackrefGrammar.DEFAULT
-        )
+        searchOptions =
+            SearchOptions(
+                if (isRegex) SearchOptions.TYPE_REGULAR_EXPRESSION else SearchOptions.TYPE_NORMAL,
+                !isRegex,
+                RegexBackrefGrammar.DEFAULT,
+            )
     }
 
     private fun search() {
@@ -813,11 +864,12 @@ class CodeEditActivity :
                     updateSearchResults()
                 }
             }
-        val receiptChange = editor.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
-            if (event.cause == SelectionChangeEvent.CAUSE_SEARCH) {
-                updateSearchResults()
+        val receiptChange =
+            editor.subscribeEvent(SelectionChangeEvent::class.java) { event, _ ->
+                if (event.cause == SelectionChangeEvent.CAUSE_SEARCH) {
+                    updateSearchResults()
+                }
             }
-        }
         binding.searchGroup.visibility = View.VISIBLE
         binding.btnCloseFind.setOnClickListener {
             binding.searchGroup.visibility = View.GONE
@@ -840,7 +892,6 @@ class CodeEditActivity :
                     editor.invalidate()
                 }
             }
-
         }
         binding.etReplace.run {
             setText(replaceText)
@@ -915,14 +966,16 @@ class CodeEditActivity :
             R.id.menu_login -> returnText(RESULT_ACTION_LOGIN_SOURCE)
             R.id.menu_select_all -> if (!useSafeEditor) editor.selectAll()
             R.id.menu_format_code -> if (!useSafeEditor) viewModel.formatCode(editor)
-            R.id.menu_check_javascript_syntax -> if (!useSafeEditor) {
-                viewModel.checkJavaScriptSyntax(editor)
-            }
+            R.id.menu_check_javascript_syntax ->
+                if (!useSafeEditor) {
+                    viewModel.checkJavaScriptSyntax(editor)
+                }
             R.id.menu_curl_analyze_url -> showCurlAnalyzeUrlConverter()
             R.id.menu_change_theme -> if (!useSafeEditor) showDialogFragment(ChangeThemeDialog())
-            R.id.menu_config_settings -> if (!useSafeEditor) {
-                showDialogFragment(SettingsDialog(this, this))
-            }
+            R.id.menu_config_settings ->
+                if (!useSafeEditor) {
+                    showDialogFragment(SettingsDialog(this, this))
+                }
             R.id.menu_auto_wrap -> {
                 if (useSafeEditor) return super.onCompatOptionsItemSelected(item)
                 item.isChecked = !AppConfig.editAutoWrap
@@ -935,11 +988,12 @@ class CodeEditActivity :
     }
 
     private fun showCurlAnalyzeUrlConverter() {
-        val input = if (!useSafeEditor && editor.cursor.isSelected) {
-            editor.text.substring(editor.cursor.left, editor.cursor.right)
-        } else {
-            ""
-        }
+        val input =
+            if (!useSafeEditor && editor.cursor.isSelected) {
+                editor.text.substring(editor.cursor.left, editor.cursor.right)
+            } else {
+                ""
+            }
         showDialogFragment(CurlAnalyzeUrlDialog(input, viewModel.writable))
     }
 
@@ -952,7 +1006,7 @@ class CodeEditActivity :
             SelectItem("书源教程", "ruleHelp"),
             SelectItem("订阅源教程", "rssRuleHelp"),
             SelectItem("js教程", "jsHelp"),
-            SelectItem("正则教程", "regexHelp")
+            SelectItem("正则教程", "regexHelp"),
         )
     }
 
@@ -980,15 +1034,14 @@ class CodeEditActivity :
                 end = temp
             }
             if (text.isNotEmpty()) {
-                val edit = view.editableText//获取EditText的文字
+                val edit = view.editableText // 获取EditText的文字
                 if (start < 0 || start >= edit.length) {
                     edit.append(text)
                 } else {
-                    edit.replace(start, end, text)//光标所在位置插入文字
+                    edit.replace(start, end, text) // 光标所在位置插入文字
                 }
             }
-        }
-        else {
+        } else {
             editor.insertText(text, text.length)
         }
     }
@@ -1009,8 +1062,8 @@ class CodeEditActivity :
         if (useSafeEditor) {
             if (
                 safeEditorStatus == SafeEditorStatus.READY &&
-                viewModel.writable &&
-                !safeEditorReadPending
+                    viewModel.writable &&
+                    !safeEditorReadPending
             ) {
                 safeEditor?.evaluateJavascript("document.execCommand('undo');", null)
             }
@@ -1024,8 +1077,8 @@ class CodeEditActivity :
         if (useSafeEditor) {
             if (
                 safeEditorStatus == SafeEditorStatus.READY &&
-                viewModel.writable &&
-                !safeEditorReadPending
+                    viewModel.writable &&
+                    !safeEditorReadPending
             ) {
                 safeEditor?.evaluateJavascript("document.execCommand('redo');", null)
             }

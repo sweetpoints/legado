@@ -3,35 +3,33 @@ package io.legado.app.ui.code
 import android.app.Activity
 import android.app.Instrumentation
 import android.app.SearchManager
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.ClipData
 import android.graphics.Bitmap
 import android.graphics.Rect
-import android.os.SystemClock
 import android.os.Parcel
-import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityManager
-import android.view.View
-import android.view.ViewGroup
-import android.view.ViewConfiguration
+import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.webkit.WebView
-import android.view.inputmethod.EditorInfo
-import android.widget.ArrayAdapter
-import android.widget.MultiAutoCompleteTextView
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.isVisible
 import androidx.core.view.children
-import androidx.core.content.FileProvider
+import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.NoMatchingViewException
 import androidx.test.espresso.action.GeneralClickAction
@@ -40,54 +38,51 @@ import androidx.test.espresso.action.Press
 import androidx.test.espresso.action.Swipe
 import androidx.test.espresso.action.Tap
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
+import androidx.test.espresso.matcher.RootMatchers.withDecorView
+import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.withDecorView
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
-import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.event.HandleStateChangeEvent
+import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow
 import io.legado.app.R
-import io.legado.app.help.CacheManager
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.rule.SearchRule
+import io.legado.app.help.CacheManager
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.association.BookImportViewModel
 import io.legado.app.ui.association.FileAssociationActivity
 import io.legado.app.ui.association.ImportBookSourceDialog
-import io.legado.app.ui.association.BookImportViewModel
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.RssImportViewModel
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import org.junit.Rule
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.GSON
-import io.legado.app.ui.widget.code.KeywordTokenizer
-import org.junit.After
-import org.junit.Assert.*
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.hamcrest.Matchers.allOf
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import org.hamcrest.Matchers.allOf
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
@@ -96,28 +91,38 @@ class CodeSelectionUiTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val cacheKey = "code-selection-${UUID.randomUUID()}"
-    private val source = "const before = 1;\nfunction example() {\n  const message = \"你好 🌍\";\n  return message;\n}\nconst after = 2;"
+    private val source =
+        "const before = 1;\nfunction example() {\n  const message = \"你好 🌍\";\n  return message;\n}\nconst after = 2;"
     private var scenario: ActivityScenario<CodeEditActivity>? = null
-    private val selectedText = source.substring(source.indexOf("function"), source.indexOf("\nconst after"))
+    private val selectedText =
+        source.substring(source.indexOf("function"), source.indexOf("\nconst after"))
 
-    @After fun cleanUp() {
+    @After
+    fun cleanUp() {
         instrumentation.runOnMainSync {
             // Read lifecycle and reset the draft in one main-thread turn: a finished result can
             // arrive before onDestroy, racing a separate scenario.state / onActivity pair.
             val monitor = ActivityLifecycleMonitorRegistry.getInstance()
             listOf(Stage.CREATED, Stage.STARTED, Stage.RESUMED, Stage.PAUSED, Stage.STOPPED)
-                .flatMap(monitor::getActivitiesInStage).filterIsInstance<CodeEditActivity>()
-                .filterNot { it.isFinishing }.forEach { activity ->
+                .flatMap(monitor::getActivitiesInStage)
+                .filterIsInstance<CodeEditActivity>()
+                .filterNot { it.isFinishing }
+                .forEach { activity ->
                     // A failed edit assertion must not leave a discard dialog blocking later tests.
-                    activity.findViewById<CodeEditor>(R.id.editText).takeIf { it.isShown }
-                        ?.setText(ViewModelProvider(activity)[CodeEditViewModel::class.java].initialText)
+                    activity
+                        .findViewById<CodeEditor>(R.id.editText)
+                        .takeIf { it.isShown }
+                        ?.setText(
+                            ViewModelProvider(activity)[CodeEditViewModel::class.java].initialText
+                        )
                 }
         }
         scenario?.close()
         CacheManager.deleteMemory(cacheKey)
     }
 
-    @Test fun longPressKeepsMultilineSelectionAndSharesExactlyThatText() {
+    @Test
+    fun longPressKeepsMultilineSelectionAndSharesExactlyThatText() {
         launchEditor()
         selectFunction()
         val expectedLeft = source.indexOf("function")
@@ -129,18 +134,29 @@ class CodeSelectionUiTest {
             press(Tap.LONG, line, column)
             try {
                 awaitEditor {
-                    it.cursor.left == expectedLeft && it.cursor.right == expectedRight &&
-                        !actions(it).isEnabled && !actions(it).isShowing
+                    it.cursor.left == expectedLeft &&
+                        it.cursor.right == expectedRight &&
+                        !actions(it).isEnabled &&
+                        !actions(it).isShowing
                 }
             } catch (failure: AssertionError) {
                 val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
                 try {
-                    File(context.getExternalFilesDir("ui-regression"), "code-selection-failed-$line-$column.png")
-                        .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                } finally { bitmap.recycle() }
+                    File(
+                            context.getExternalFilesDir("ui-regression"),
+                            "code-selection-failed-$line-$column.png",
+                        )
+                        .outputStream()
+                        .use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                } finally {
+                    bitmap.recycle()
+                }
                 withEditor {
-                    throw AssertionError("Long press at $line:$column: selection=${it.cursor.left}..${it.cursor.right}, " +
-                        "expected=$expectedLeft..$expectedRight, panel=${actions(it).isShowing}", failure)
+                    throw AssertionError(
+                        "Long press at $line:$column: selection=${it.cursor.left}..${it.cursor.right}, " +
+                            "expected=$expectedLeft..$expectedRight, panel=${actions(it).isShowing}",
+                        failure,
+                    )
                 }
             }
             withEditor { assertEquals(source, it.text.toString()) }
@@ -155,11 +171,13 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun longPressOutsideSelectionSelectsAndSharesTheNewWord() {
+    @Test
+    fun longPressOutsideSelectionSelectsAndSharesTheNewWord() {
         assertOutsideSelectionReselects(readOnly = false)
     }
 
-    @Test fun readOnlyLongPressOutsideSelectionSelectsAndSharesTheNewWord() {
+    @Test
+    fun readOnlyLongPressOutsideSelectionSelectsAndSharesTheNewWord() {
         assertOutsideSelectionReselects(readOnly = true)
     }
 
@@ -183,7 +201,8 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun firstLongPressStillSelectsWordAndTapClearsSelection() {
+    @Test
+    fun firstLongPressStillSelectsWordAndTapClearsSelection() {
         launchEditor()
         withEditor {
             it.setSelection(0, 0)
@@ -202,14 +221,25 @@ class CodeSelectionUiTest {
         withEditor { assertEquals(source, it.text.toString()) }
     }
 
-    @Test fun readOnlyCodeCanShareSelectionWithoutExposingCutOrPaste() {
+    @Test
+    fun readOnlyCodeCanShareSelectionWithoutExposingCutOrPaste() {
         launchEditor(readOnly = true)
         selectFunction()
         withEditor {
             assertFalse(it.isEditable)
             assertTrue(actions(it).isShowing)
-            assertFalse(actions(it).view.findViewById<View>(io.github.rosemoe.sora.R.id.panel_btn_cut).isVisible)
-            assertFalse(actions(it).view.findViewById<View>(io.github.rosemoe.sora.R.id.panel_btn_paste).isVisible)
+            assertFalse(
+                actions(it)
+                    .view
+                    .findViewById<View>(io.github.rosemoe.sora.R.id.panel_btn_cut)
+                    .isVisible
+            )
+            assertFalse(
+                actions(it)
+                    .view
+                    .findViewById<View>(io.github.rosemoe.sora.R.id.panel_btn_paste)
+                    .isVisible
+            )
         }
         screenshot("code-selection-read-only-share")
         shareAndAssert(selectedText)
@@ -222,13 +252,15 @@ class CodeSelectionUiTest {
         withEditor { assertEquals(source, it.text.toString()) }
     }
 
-    @Test fun searchResultLongPressThenOutsideReselects() {
+    @Test
+    fun searchResultLongPressThenOutsideReselects() {
         launchEditor()
         scenario!!.onActivity { activity ->
             val search = CodeEditActivity::class.java.getDeclaredMethod("search")
             search.isAccessible = true
             search.invoke(activity)
-            val searchTxt = CodeEditActivity::class.java.getDeclaredMethod("searchTxt", String::class.java)
+            val searchTxt =
+                CodeEditActivity::class.java.getDeclaredMethod("searchTxt", String::class.java)
             searchTxt.isAccessible = true
             searchTxt.invoke(activity, "function")
         }
@@ -248,17 +280,24 @@ class CodeSelectionUiTest {
         assertNativeMenu()
     }
 
-    @Test fun nativeCopyCutPasteAndSelectAllUseTheCurrentSelection() {
+    @Test
+    fun nativeCopyCutPasteAndSelectAllUseTheCurrentSelection() {
         launchEditor()
         lateinit var clipboard: ClipboardManager
         withEditor {
             clipboard = it.context.getSystemService(ClipboardManager::class.java)
             clipboard.setPrimaryClip(ClipData.newPlainText("before copy", "clipboard sentinel"))
         }
-        awaitEditor { it.hasWindowFocus() && clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "clipboard sentinel" }
+        awaitEditor {
+            it.hasWindowFocus() &&
+                clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "clipboard sentinel"
+        }
         selectFunction(native = true)
         clickNativeAction(android.R.string.copy)
-        awaitEditor { !it.cursor.isSelected && clipboard.primaryClip?.getItemAt(0)?.text?.toString() == selectedText }
+        awaitEditor {
+            !it.cursor.isSelected &&
+                clipboard.primaryClip?.getItemAt(0)?.text?.toString() == selectedText
+        }
         withEditor {
             assertEquals(selectedText, clipboard.primaryClip!!.getItemAt(0).text.toString())
             assertEquals(source, it.text.toString())
@@ -267,7 +306,10 @@ class CodeSelectionUiTest {
         selectFunction(native = true)
         clickNativeAction(android.R.string.cut)
         val withoutFunction = source.replace(selectedText, "")
-        awaitEditor { it.text.toString() == withoutFunction && clipboard.primaryClip?.getItemAt(0)?.text?.toString() == selectedText }
+        awaitEditor {
+            it.text.toString() == withoutFunction &&
+                clipboard.primaryClip?.getItemAt(0)?.text?.toString() == selectedText
+        }
         withEditor {
             assertEquals(selectedText, clipboard.primaryClip!!.getItemAt(0).text.toString())
             it.setText(source)
@@ -283,17 +325,19 @@ class CodeSelectionUiTest {
         screenshot("code-selection-native-select-all")
     }
 
-    @Test fun nativeSearchSharesOnlySelectedTextAndBackKeepsTheEditorOpen() {
+    @Test
+    fun nativeSearchSharesOnlySelectedTextAndBackKeepsTheEditorOpen() {
         launchEditor()
         selectFunction(native = true)
         val search = AtomicReference<Intent?>()
-        val monitor = object : Instrumentation.ActivityMonitor() {
-            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
-                if (intent.action != Intent.ACTION_WEB_SEARCH) return null
-                search.set(intent)
-                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+        val monitor =
+            object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.action != Intent.ACTION_WEB_SEARCH) return null
+                    search.set(intent)
+                    return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+                }
             }
-        }
         instrumentation.addMonitor(monitor)
         try {
             clickNativeAction(R.string.search)
@@ -313,16 +357,21 @@ class CodeSelectionUiTest {
         onView(withText(android.R.string.copy)).check(doesNotExist())
     }
 
-    @Test fun longPressDragExtendsTheSelectionAndReturnsToTheEditorToolbar() {
+    @Test
+    fun longPressDragExtendsTheSelectionAndReturnsToTheEditorToolbar() {
         launchEditor()
         val from = editorPoint(2, 11)
         val to = editorPoint(3, 15)
         val down = SystemClock.uptimeMillis()
         fun touch(action: Int, point: FloatArray) {
-            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, point[0], point[1], 0)
+            val event =
+                MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, point[0], point[1], 0)
             event.source = InputDevice.SOURCE_TOUCHSCREEN
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
-            finally { event.recycle() }
+            try {
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            } finally {
+                event.recycle()
+            }
         }
         touch(MotionEvent.ACTION_DOWN, from)
         SystemClock.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 100)
@@ -331,13 +380,15 @@ class CodeSelectionUiTest {
         touch(MotionEvent.ACTION_UP, to)
         awaitEditor {
             it.cursor.left == source.indexOf("message") &&
-                selection(it).contains("\n  return") && it.text.toString() == source
+                selection(it).contains("\n  return") &&
+                it.text.toString() == source
         }
         assertEditorToolbar()
         screenshot("code-selection-editor-drag")
     }
 
-    @Test fun nativeMenuStaysClearOfKeyboardAndSearchToolsNearTheBottomAfterScrolling() {
+    @Test
+    fun nativeMenuStaysClearOfKeyboardAndSearchToolsNearTheBottomAfterScrolling() {
         launchEditor()
         val code = (0..80).joinToString("\n") { "const line$it = $it;" }
         scenario!!.onActivity { activity ->
@@ -346,17 +397,26 @@ class CodeSelectionUiTest {
                 // The hosted emulator reports a hardware keyboard; allow the phone's IME path.
                 setDisableSoftKbdIfHardKbdAvailable(false)
             }
-            CodeEditActivity::class.java.getDeclaredMethod("search").apply { isAccessible = true }.invoke(activity)
+            CodeEditActivity::class
+                .java
+                .getDeclaredMethod("search")
+                .apply { isAccessible = true }
+                .invoke(activity)
         }
         onView(withId(R.id.editText)).perform(click())
         withEditor { it.showSoftInput() }
-        awaitEditor { ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+        awaitEditor {
+            ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
         var selected = ""
         var offset = 0
         var selectedLine = 0
         withEditor {
             val end = it.lastVisibleLine - 1
-            assertTrue("The fixture must leave room for a multiline selection", end >= it.firstVisibleLine + 2)
+            assertTrue(
+                "The fixture must leave room for a multiline selection",
+                end >= it.firstVisibleLine + 2,
+            )
             it.setSelectionRegion(end - 2, 0, end, 10, false)
             selected = selection(it)
             offset = it.offsetY
@@ -378,10 +438,15 @@ class CodeSelectionUiTest {
             val editor = view as CodeEditor
             val position = IntArray(2)
             view.getLocationOnScreen(position)
-            val point = floatArrayOf(position[0] + view.width * 0.9f,
-                position[1] + view.height - editor.rowHeight * rowsFromBottom)
-            assertFalse("The scroll gesture must avoid the visible native menu $nativeMenu",
-                nativeMenu.contains(point[0].toInt(), point[1].toInt()))
+            val point =
+                floatArrayOf(
+                    position[0] + view.width * 0.9f,
+                    position[1] + view.height - editor.rowHeight * rowsFromBottom,
+                )
+            assertFalse(
+                "The scroll gesture must avoid the visible native menu $nativeMenu",
+                nativeMenu.contains(point[0].toInt(), point[1].toInt()),
+            )
             return point
         }
         var from = floatArrayOf()
@@ -392,10 +457,14 @@ class CodeSelectionUiTest {
         }
         val down = SystemClock.uptimeMillis()
         fun touch(action: Int, point: FloatArray) {
-            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, point[0], point[1], 0)
+            val event =
+                MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, point[0], point[1], 0)
             event.source = InputDevice.SOURCE_TOUCHSCREEN
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
-            finally { event.recycle() }
+            try {
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            } finally {
+                event.recycle()
+            }
         }
         // Move before a long press can select text, then stop before lifting to avoid a fling.
         touch(MotionEvent.ACTION_DOWN, from)
@@ -407,8 +476,10 @@ class CodeSelectionUiTest {
         await(message = { scrollState }) {
             var ready = false
             withEditor {
-                scrollState = "Scroll ${it.offsetY} > $offset; selection=${selection(it)}; expected=$selected"
-                ready = it.offsetY > offset && selection(it) == selected && it.text.toString() == code
+                scrollState =
+                    "Scroll ${it.offsetY} > $offset; selection=${selection(it)}; expected=$selected"
+                ready =
+                    it.offsetY > offset && selection(it) == selected && it.text.toString() == code
             }
             ready
         }
@@ -419,7 +490,8 @@ class CodeSelectionUiTest {
         screenshot("code-selection-native-ime-search-scrolled")
     }
 
-    @Test fun draggingEitherSelectionHandleAfterLongPressRestoresEditorActions() {
+    @Test
+    fun draggingEitherSelectionHandleAfterLongPressRestoresEditorActions() {
         launchEditor()
         var heldType = -1
         withEditor {
@@ -444,34 +516,46 @@ class CodeSelectionUiTest {
                 val location = IntArray(2)
                 it.getLocationOnScreen(location)
                 assertFalse(handle.position.isEmpty)
-                from = floatArrayOf(location[0] + handle.position.centerX(),
-                    location[1] + handle.position.centerY())
+                from =
+                    floatArrayOf(
+                        location[0] + handle.position.centerX(),
+                        location[1] + handle.position.centerY(),
+                    )
                 handleHeight = handle.position.height()
                 fixedEnd = if (rightHandle) it.cursor.left else it.cursor.right
             }
             val to = if (rightHandle) editorPoint(3, 15) else editorPoint(1, 9)
             // Sora places the caret one handle-height above the dragging finger.
             to[1] += handleHeight
-            onView(withId(R.id.editText)).perform(GeneralSwipeAction(Swipe.SLOW, { from }, { to }, Press.FINGER))
+            onView(withId(R.id.editText))
+                .perform(GeneralSwipeAction(Swipe.SLOW, { from }, { to }, Press.FINGER))
             awaitEditor {
-                !it.eventHandler.hasAnyHeldHandle() && selection(it).contains('\n') &&
-                    actions(it).isEnabled && actions(it).isShowing
+                !it.eventHandler.hasAnyHeldHandle() &&
+                    selection(it).contains('\n') &&
+                    actions(it).isEnabled &&
+                    actions(it).isShowing
             }
             var draggedSelection = ""
             withEditor {
-                assertEquals(if (rightHandle) HandleStateChangeEvent.HANDLE_TYPE_RIGHT
-                    else HandleStateChangeEvent.HANDLE_TYPE_LEFT, heldType)
+                assertEquals(
+                    if (rightHandle) HandleStateChangeEvent.HANDLE_TYPE_RIGHT
+                    else HandleStateChangeEvent.HANDLE_TYPE_LEFT,
+                    heldType,
+                )
                 assertEquals(fixedEnd, if (rightHandle) it.cursor.left else it.cursor.right)
                 assertEquals(source, it.text.toString())
                 draggedSelection = selection(it)
             }
             assertEditorToolbar()
-            screenshot("code-selection-${if (rightHandle) "right" else "left"}-handle-editor-toolbar")
+            screenshot(
+                "code-selection-${if (rightHandle) "right" else "left"}-handle-editor-toolbar"
+            )
             shareAndAssert(draggedSelection)
         }
     }
 
-    @Test fun ordinarySelectionKeepsEditorActionsUntilLongPressAndReturnsAfterTap() {
+    @Test
+    fun ordinarySelectionKeepsEditorActionsUntilLongPressAndReturnsAfterTap() {
         launchEditor()
         selectFunction()
         screenshot("code-selection-ordinary-editor-toolbar")
@@ -488,24 +572,29 @@ class CodeSelectionUiTest {
         shareAndAssert(selectedText)
     }
 
-    @Test fun longPressAtAnEmptyCaretShowsNativePasteAndInsertsClipboardText() {
+    @Test
+    fun longPressAtAnEmptyCaretShowsNativePasteAndInsertsClipboardText() {
         launchEditor()
         val clipboardText = "native caret paste 中文"
         withEditor {
             it.setText("")
-            it.context.getSystemService(ClipboardManager::class.java)
+            it.context
+                .getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("caret paste", clipboardText))
         }
         press(Tap.LONG, 0, 0)
         awaitEditor { !it.cursor.isSelected && !actions(it).isEnabled && !actions(it).isShowing }
-        onView(withText(android.R.string.paste)).inRoot(isPlatformPopup()).check(matches(isCompletelyDisplayed()))
+        onView(withText(android.R.string.paste))
+            .inRoot(isPlatformPopup())
+            .check(matches(isCompletelyDisplayed()))
         onView(withText(android.R.string.copy)).inRoot(isPlatformPopup()).check(doesNotExist())
         screenshot("code-selection-empty-native-paste")
         clickNativeAction(android.R.string.paste)
         awaitEditor { it.text.toString() == clipboardText && actions(it).isEnabled }
     }
 
-    @Test fun savedDraftUsesTheCallersRequestedTransport() {
+    @Test
+    fun savedDraftUsesTheCallersRequestedTransport() {
         val large = "中文 draft 🌍\n".repeat(2_000)
         for ((fileMode, expected) in listOf(true to large, false to large, true to "短文本")) {
             var returnedFile: String? = null
@@ -519,7 +608,10 @@ class CodeSelectionUiTest {
                 val data = checkNotNull(result.resultData)
                 returnedFile = data.getStringExtra("textFile")
                 if (fileMode && expected == large) {
-                    assertFalse("Large drafts must stay out of the result Bundle", data.hasExtra("text"))
+                    assertFalse(
+                        "Large drafts must stay out of the result Bundle",
+                        data.hasExtra("text"),
+                    )
                     assertNotNull(returnedFile)
                     assertEquals(expected, CodeTextTransfer.read(context, returnedFile!!))
                 } else {
@@ -534,59 +626,126 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun sourcePreviewEditsReturnToTheSameBookAndRssCandidateWithoutLosingLongCode() {
+    @Test
+    fun sourcePreviewEditsReturnToTheSameBookAndRssCandidateWithoutLosingLongCode() {
         val id = UUID.randomUUID().toString()
         val script = "// 中文 🌍 original draft\n".repeat(2_000)
         val savedReplacement = AppConfig.importReplaceSource
-        val rule = ReplaceRule(name = "Preview editor $id", pattern = "#edited",
-            replacement = "#edited-once", isRegex = false, scopeSource = true, scopeContent = false)
+        val rule =
+            ReplaceRule(
+                name = "Preview editor $id",
+                pattern = "#edited",
+                replacement = "#edited-once",
+                isRegex = false,
+                scopeSource = true,
+                scopeContent = false,
+            )
         appDb.replaceRuleDao.insert(rule)
         try {
-            for ((rss, replacements) in listOf(false to false, true to false, false to true, true to true)) {
+            for ((rss, replacements) in
+                listOf(false to false, true to false, false to true, true to true)) {
                 AppConfig.importReplaceSource = replacements
-                val urls = listOf("https://preview-$id.invalid/first", "https://preview-$id.invalid/second")
-                val sources = if (rss) urls.mapIndexed { index, url ->
-                    RssSource(sourceUrl = url, sourceName = "Preview $index", jsLib = script, ruleArticles = "article")
-                } else urls.mapIndexed { index, url ->
-                    BookSource(bookSourceUrl = url, bookSourceName = "Preview $index", jsLib = script,
-                        searchUrl = "/search", ruleSearch = SearchRule(bookList = "article", name = "text"))
-                }
-                val file = File(context.cacheDir, "preview-editor-$id-$rss.json").apply {
-                    writeText(GSON.toJson(sources))
-                }
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
-                val intent = Intent(context, FileAssociationActivity::class.java).apply {
-                    action = Intent.ACTION_SEND
-                    type = "application/json"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    clipData = ClipData.newRawUri(file.name, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
+                val urls =
+                    listOf(
+                        "https://preview-$id.invalid/first",
+                        "https://preview-$id.invalid/second",
+                    )
+                val sources =
+                    if (rss)
+                        urls.mapIndexed { index, url ->
+                            RssSource(
+                                sourceUrl = url,
+                                sourceName = "Preview $index",
+                                jsLib = script,
+                                ruleArticles = "article",
+                            )
+                        }
+                    else
+                        urls.mapIndexed { index, url ->
+                            BookSource(
+                                bookSourceUrl = url,
+                                bookSourceName = "Preview $index",
+                                jsLib = script,
+                                searchUrl = "/search",
+                                ruleSearch = SearchRule(bookList = "article", name = "text"),
+                            )
+                        }
+                val file =
+                    File(context.cacheDir, "preview-editor-$id-$rss.json").apply {
+                        writeText(GSON.toJson(sources))
+                    }
+                val uri =
+                    FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
+                val intent =
+                    Intent(context, FileAssociationActivity::class.java).apply {
+                        action = Intent.ACTION_SEND
+                        type = "application/json"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri(file.name, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
                 var editorActivity: CodeEditActivity? = null
                 try {
                     ActivityScenario.launch<FileAssociationActivity>(intent).use { host ->
                         var parent: DialogFragment? = null
                         await {
                             host.onActivity { activity ->
-                                parent = activity.supportFragmentManager.fragments.filterIsInstance<DialogFragment>()
-                                    .find { if (rss) it is ImportRssSourceDialog else it is ImportBookSourceDialog }
+                                parent =
+                                    activity.supportFragmentManager.fragments
+                                        .filterIsInstance<DialogFragment>()
+                                        .find {
+                                            if (rss) it is ImportRssSourceDialog
+                                            else it is ImportBookSourceDialog
+                                        }
                             }
                             var ready = false
                             instrumentation.runOnMainSync {
-                                ready = (if (rss) parent?.let { ViewModelProvider(it)[RssImportViewModel::class.java].state.value.let { value -> value.interactive && value.items.size == 2 } } == true
-                                    else parent?.let { ViewModelProvider(it)[BookImportViewModel::class.java].state.value.let { value -> value.interactive && value.items.size == 2 } } == true) &&
-                                    parent?.dialog?.window?.decorView?.hasWindowFocus() == true
+                                ready =
+                                    (if (rss)
+                                        parent?.let {
+                                            ViewModelProvider(it)[RssImportViewModel::class.java]
+                                                .state
+                                                .value
+                                                .let { value ->
+                                                    value.interactive && value.items.size == 2
+                                                }
+                                        } == true
+                                    else
+                                        parent?.let {
+                                            ViewModelProvider(it)[BookImportViewModel::class.java]
+                                                .state
+                                                .value
+                                                .let { value ->
+                                                    value.interactive && value.items.size == 2
+                                                }
+                                        } == true) &&
+                                        parent?.dialog?.window?.decorView?.hasWindowFocus() == true
                             }
                             ready
                         }
-                        if (rss) compose.onNodeWithTag("rss-import-code-1").performScrollTo().performClick()
-                        else compose.onNodeWithTag("book-import-code-1").performScrollTo().performClick()
+                        if (rss)
+                            compose
+                                .onNodeWithTag("rss-import-code-1")
+                                .performScrollTo()
+                                .performClick()
+                        else
+                            compose
+                                .onNodeWithTag("book-import-code-1")
+                                .performScrollTo()
+                                .performClick()
                         var preview: CodeDialog? = null
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                preview = parent!!.childFragmentManager.fragments.filterIsInstance<CodeDialog>().firstOrNull()
-                                ready = preview?.dialog?.window?.decorView?.hasWindowFocus() == true && preview?.model?.state?.value?.loaded == true
+                                preview =
+                                    parent!!
+                                        .childFragmentManager
+                                        .fragments
+                                        .filterIsInstance<CodeDialog>()
+                                        .firstOrNull()
+                                ready =
+                                    preview?.dialog?.window?.decorView?.hasWindowFocus() == true &&
+                                        preview?.model?.state?.value?.loaded == true
                             }
                             ready
                         }
@@ -598,21 +757,33 @@ class CodeSelectionUiTest {
                             assertFalse(!preview!!.model.state.value.busy)
                             preview!!.setReplaceRuleRefreshPending(false)
                             assertEquals(replacements, preview!!.model.state.value.showingAlternate)
-                            assertTrue((!preview!!.model.state.value.showingAlternate || preview!!.model.sourcePreview))
+                            assertTrue(
+                                (!preview!!.model.state.value.showingAlternate ||
+                                    preview!!.model.sourcePreview)
+                            )
                         }
                         compose.onNodeWithTag("code-fullscreen").performClick()
                         var inputPath: String? = null
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
+                                editorActivity =
+                                    ActivityLifecycleMonitorRegistry.getInstance()
+                                        .getActivitiesInStage(Stage.RESUMED)
+                                        .filterIsInstance<CodeEditActivity>()
+                                        .firstOrNull()
                                 val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                ready = editor != null && editor.text.toString() == original && editor.isShown && editor.isEditable
+                                ready =
+                                    editor != null &&
+                                        editor.text.toString() == original &&
+                                        editor.isShown &&
+                                        editor.isEditable
                                 if (ready) {
                                     inputPath = editorActivity!!.intent.getStringExtra("textFile")
                                     assertFalse(editorActivity!!.intent.hasExtra("text"))
-                                    assertFalse(editorActivity!!.intent.getBooleanExtra("readOnly", false))
+                                    assertFalse(
+                                        editorActivity!!.intent.getBooleanExtra("readOnly", false)
+                                    )
                                 }
                             }
                             ready
@@ -621,11 +792,15 @@ class CodeSelectionUiTest {
                         assertEquals(original, CodeTextTransfer.read(context, inputPath!!))
                         val insertion = original.indexOf(urls[1]) + urls[1].length
                         assertTrue(insertion > urls[1].length)
-                        val edited = original.substring(0, insertion) + "#edited" + original.substring(insertion)
+                        val edited =
+                            original.substring(0, insertion) +
+                                "#edited" +
+                                original.substring(insertion)
                         instrumentation.runOnMainSync {
                             val editor = editorActivity!!.findViewById<CodeEditor>(R.id.editText)
                             editor.text.replace(insertion, insertion, "#edited")
-                            val position = editor.cursor.indexer.getCharPosition(insertion + "#edited".length)
+                            val position =
+                                editor.cursor.indexer.getCharPosition(insertion + "#edited".length)
                             editor.setSelection(position.line, position.column)
                             assertEquals(edited, editor.text.toString())
                             assertEquals(insertion + "#edited".length, editor.cursor.left)
@@ -636,15 +811,23 @@ class CodeSelectionUiTest {
                         await(message = { "Editor draft restoration: $recreationState" }) {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
+                                editorActivity =
+                                    ActivityLifecycleMonitorRegistry.getInstance()
+                                        .getActivitiesInStage(Stage.RESUMED)
+                                        .filterIsInstance<CodeEditActivity>()
+                                        .firstOrNull()
                                 val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                recreationState = "newActivity=${editorActivity !== beforeRecreation}, " +
-                                    "editable=${editor?.isEditable}, textMatches=${editor?.text?.toString() == edited}, " +
-                                    "length=${editor?.text?.length}/${edited.length}, " +
-                                    "cursor=${editor?.cursor?.left}/${insertion + "#edited".length}"
-                                ready = editorActivity !== beforeRecreation && editor != null && editor.isEditable &&
-                                    editor.text.toString() == edited && editor.cursor.left == insertion + "#edited".length
+                                recreationState =
+                                    "newActivity=${editorActivity !== beforeRecreation}, " +
+                                        "editable=${editor?.isEditable}, textMatches=${editor?.text?.toString() == edited}, " +
+                                        "length=${editor?.text?.length}/${edited.length}, " +
+                                        "cursor=${editor?.cursor?.left}/${insertion + "#edited".length}"
+                                ready =
+                                    editorActivity !== beforeRecreation &&
+                                        editor != null &&
+                                        editor.isEditable &&
+                                        editor.text.toString() == edited &&
+                                        editor.cursor.left == insertion + "#edited".length
                             }
                             ready
                         }
@@ -652,83 +835,147 @@ class CodeSelectionUiTest {
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                val expected = if (replacements) edited.replace("#edited", "#edited-once") else edited
-                                ready = preview!!.currentOriginalCode() == edited &&
-                                    preview!!.model.state.value.displayed == expected &&
-                                    preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    !preview!!.model.state.value.busy
+                                val expected =
+                                    if (replacements) edited.replace("#edited", "#edited-once")
+                                    else edited
+                                ready =
+                                    preview!!.currentOriginalCode() == edited &&
+                                        preview!!.model.state.value.displayed == expected &&
+                                        preview!!.dialog?.window?.decorView?.hasWindowFocus() ==
+                                            true &&
+                                        !preview!!.model.state.value.busy
                                 if (ready) {
-                                    assertEquals(replacements, preview!!.model.state.value.showingAlternate)
-                                    assertTrue((!preview!!.model.state.value.showingAlternate || preview!!.model.sourcePreview))
+                                    assertEquals(
+                                        replacements,
+                                        preview!!.model.state.value.showingAlternate,
+                                    )
+                                    assertTrue(
+                                        (!preview!!.model.state.value.showingAlternate ||
+                                            preview!!.model.sourcePreview)
+                                    )
                                 }
                             }
                             ready
                         }
-                        assertFalse("The input transfer file must be removed after return", File(inputPath!!).exists())
+                        assertFalse(
+                            "The input transfer file must be removed after return",
+                            File(inputPath!!).exists(),
+                        )
                         instrumentation.waitForIdleSync()
                         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
                             try {
-                                File(context.getExternalFilesDir("ui-regression"), "source-preview-editor-return-$rss-$replacements.png")
-                                    .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-                            } finally { bitmap.recycle() }
+                                File(
+                                        context.getExternalFilesDir("ui-regression"),
+                                        "source-preview-editor-return-$rss-$replacements.png",
+                                    )
+                                    .outputStream()
+                                    .use {
+                                        assertTrue(
+                                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                                        )
+                                    }
+                            } finally {
+                                bitmap.recycle()
+                            }
                         }
-                        // Discard a second edit: only the cursor may return, never the discarded draft.
+                        // Discard a second edit: only the cursor may return, never the discarded
+                        // draft.
                         compose.onNodeWithTag("code-fullscreen").performClick()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
+                                editorActivity =
+                                    ActivityLifecycleMonitorRegistry.getInstance()
+                                        .getActivitiesInStage(Stage.RESUMED)
+                                        .filterIsInstance<CodeEditActivity>()
+                                        .firstOrNull()
                                 val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
                                 ready = editor?.text?.toString() == edited && editor.isEditable
                             }
                             ready
                         }
                         instrumentation.runOnMainSync {
-                            editorActivity!!.findViewById<CodeEditor>(R.id.editText).text.replace(insertion, insertion, "discarded")
+                            editorActivity!!
+                                .findViewById<CodeEditor>(R.id.editText)
+                                .text
+                                .replace(insertion, insertion, "discarded")
                             editorActivity!!.finish()
                         }
                         onView(withText(R.string.no)).inRoot(isDialog()).perform(click())
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
-                                ready = preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                    !preview!!.model.state.value.busy
+                                ready =
+                                    preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
+                                        !preview!!.model.state.value.busy
                                 if (ready) assertEquals(edited, preview!!.currentOriginalCode())
                             }
                             ready
                         }
                         if (replacements) {
-                            // A malformed draft stays editable; it must not overwrite the valid candidate.
+                            // A malformed draft stays editable; it must not overwrite the valid
+                            // candidate.
                             val invalid = "] invalid source draft"
                             for (draft in listOf(invalid, edited)) {
                                 compose.onNodeWithTag("code-fullscreen").performClick()
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
-                                        editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                            .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                        val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                        ready = editor != null && editor.isEditable && editor.hasWindowFocus()
+                                        editorActivity =
+                                            ActivityLifecycleMonitorRegistry.getInstance()
+                                                .getActivitiesInStage(Stage.RESUMED)
+                                                .filterIsInstance<CodeEditActivity>()
+                                                .firstOrNull()
+                                        val editor =
+                                            editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                        ready =
+                                            editor != null &&
+                                                editor.isEditable &&
+                                                editor.hasWindowFocus()
                                     }
                                     ready
                                 }
                                 instrumentation.runOnMainSync {
-                                    val editor = editorActivity!!.findViewById<CodeEditor>(R.id.editText)
+                                    val editor =
+                                        editorActivity!!.findViewById<CodeEditor>(R.id.editText)
                                     editor.text.replace(0, editor.text.length, draft)
                                 }
                                 onView(withId(R.id.menu_save)).perform(click())
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
-                                        ready = preview!!.currentOriginalCode() == draft &&
-                                            preview!!.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                            !preview!!.model.state.value.busy
+                                        ready =
+                                            preview!!.currentOriginalCode() == draft &&
+                                                preview!!
+                                                    .dialog
+                                                    ?.window
+                                                    ?.decorView
+                                                    ?.hasWindowFocus() == true &&
+                                                !preview!!.model.state.value.busy
                                         if (ready) {
-                                            val expected = if (draft == invalid) draft else edited.replace("#edited", "#edited-once")
-                                            assertEquals(expected, preview!!.model.state.value.displayed)
-                                            val raw = if (rss) ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items[1].originalJson
-                                                else ViewModelProvider(parent!!)[BookImportViewModel::class.java].state.value.items.find { it.key == "1" }?.originalJson
+                                            val expected =
+                                                if (draft == invalid) draft
+                                                else edited.replace("#edited", "#edited-once")
+                                            assertEquals(
+                                                expected,
+                                                preview!!.model.state.value.displayed,
+                                            )
+                                            val raw =
+                                                if (rss)
+                                                    ViewModelProvider(parent!!)[
+                                                            RssImportViewModel::class.java]
+                                                        .state
+                                                        .value
+                                                        .items[1]
+                                                        .originalJson
+                                                else
+                                                    ViewModelProvider(parent!!)[
+                                                            BookImportViewModel::class.java]
+                                                        .state
+                                                        .value
+                                                        .items
+                                                        .find { it.key == "1" }
+                                                        ?.originalJson
                                             assertEquals(edited, raw)
                                         }
                                     }
@@ -742,42 +989,78 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 if (rss) {
-                                    val actual = ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value.items.map { GSON.fromJson(it.json, RssSource::class.java) }
+                                    val actual =
+                                        ViewModelProvider(parent!!)[RssImportViewModel::class.java]
+                                            .state
+                                            .value
+                                            .items
+                                            .map { GSON.fromJson(it.json, RssSource::class.java) }
                                     ready = actual.size == 2 && actual[1].sourceUrl == expectedUrl
-                                    if (ready) { assertEquals(urls[0], actual[0].sourceUrl); assertEquals(script, actual[1].jsLib) }
+                                    if (ready) {
+                                        assertEquals(urls[0], actual[0].sourceUrl)
+                                        assertEquals(script, actual[1].jsLib)
+                                    }
                                 } else {
-                                    val actual = ViewModelProvider(parent!!)[BookImportViewModel::class.java].state.value.items.map { GSON.fromJson(it.json, BookSource::class.java) }
-                                    ready = actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
-                                    if (ready) { assertEquals(urls[0], actual[0].bookSourceUrl); assertEquals(script, actual[1].jsLib) }
+                                    val actual =
+                                        ViewModelProvider(parent!!)[BookImportViewModel::class.java]
+                                            .state
+                                            .value
+                                            .items
+                                            .map { GSON.fromJson(it.json, BookSource::class.java) }
+                                    ready =
+                                        actual.size == 2 && actual[1].bookSourceUrl == expectedUrl
+                                    if (ready) {
+                                        assertEquals(urls[0], actual[0].bookSourceUrl)
+                                        assertEquals(script, actual[1].jsLib)
+                                    }
                                 }
                             }
                             ready
                         }
                         if (rss && !replacements) {
                             val derived = edited.replace("#edited", "#replacement-only")
-                            val readOnlyPreview = CodeDialog(edited, false, "1", derived, showAlternate = true)
+                            val readOnlyPreview =
+                                CodeDialog(edited, false, "1", derived, showAlternate = true)
                             instrumentation.runOnMainSync {
-                                readOnlyPreview.show(parent!!.childFragmentManager, "readonly-editor-entry")
+                                readOnlyPreview.show(
+                                    parent!!.childFragmentManager,
+                                    "readonly-editor-entry",
+                                )
                             }
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true && readOnlyPreview.model.state.value.loaded
+                                    ready =
+                                        readOnlyPreview.dialog
+                                            ?.window
+                                            ?.decorView
+                                            ?.hasWindowFocus() == true &&
+                                            readOnlyPreview.model.state.value.loaded
                                 }
                                 ready
                             }
                             instrumentation.runOnMainSync {
                                 assertTrue(readOnlyPreview.model.state.value.showingAlternate)
-                                assertFalse((!readOnlyPreview.model.state.value.showingAlternate || readOnlyPreview.model.sourcePreview))
+                                assertFalse(
+                                    (!readOnlyPreview.model.state.value.showingAlternate ||
+                                        readOnlyPreview.model.sourcePreview)
+                                )
                             }
                             compose.onNodeWithTag("code-fullscreen").performClick()
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    editorActivity = ActivityLifecycleMonitorRegistry.getInstance()
-                                        .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
-                                    val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                    ready = editor != null && editor.text.toString() == derived && !editor.isEditable
+                                    editorActivity =
+                                        ActivityLifecycleMonitorRegistry.getInstance()
+                                            .getActivitiesInStage(Stage.RESUMED)
+                                            .filterIsInstance<CodeEditActivity>()
+                                            .firstOrNull()
+                                    val editor =
+                                        editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                    ready =
+                                        editor != null &&
+                                            editor.text.toString() == derived &&
+                                            !editor.isEditable
                                 }
                                 ready
                             }
@@ -785,8 +1068,14 @@ class CodeSelectionUiTest {
                             await {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready = readOnlyPreview.dialog?.window?.decorView?.hasWindowFocus() == true && readOnlyPreview.model.state.value.loaded
-                                    if (ready) assertEquals(edited, readOnlyPreview.currentOriginalCode())
+                                    ready =
+                                        readOnlyPreview.dialog
+                                            ?.window
+                                            ?.decorView
+                                            ?.hasWindowFocus() == true &&
+                                            readOnlyPreview.model.state.value.loaded
+                                    if (ready)
+                                        assertEquals(edited, readOnlyPreview.currentOriginalCode())
                                 }
                                 ready
                             }
@@ -794,7 +1083,9 @@ class CodeSelectionUiTest {
                         }
                     }
                 } finally {
-                    instrumentation.runOnMainSync { editorActivity?.takeUnless { it.isFinishing }?.finish() }
+                    instrumentation.runOnMainSync {
+                        editorActivity?.takeUnless { it.isFinishing }?.finish()
+                    }
                     file.delete()
                 }
             }
@@ -804,15 +1095,19 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun fileBackedReplacementPreviewIsReadOnlyInTheFullEditor() {
+    @Test
+    fun fileBackedReplacementPreviewIsReadOnlyInTheFullEditor() {
         val code = "// replacement preview 中文 🌍\n".repeat(1_000)
         val path = CodeTextTransfer.write(context, code)
         try {
-            scenario = ActivityScenario.launchActivityForResult(Intent(context, CodeEditActivity::class.java).apply {
-                putExtra("textFile", path)
-                putExtra("useTextFile", true)
-                putExtra("readOnly", true)
-            })
+            scenario =
+                ActivityScenario.launchActivityForResult(
+                    Intent(context, CodeEditActivity::class.java).apply {
+                        putExtra("textFile", path)
+                        putExtra("useTextFile", true)
+                        putExtra("readOnly", true)
+                    }
+                )
             awaitEditor { it.isShown && it.text.toString() == code }
             withEditor { assertFalse(it.isEditable) }
             scenario!!.onActivity { it.finish() }
@@ -823,29 +1118,45 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun safeEditorRetainsItsEditedDraftAndCursorAcrossRecreation() {
+    @Test
+    fun safeEditorRetainsItsEditedDraftAndCursorAcrossRecreation() {
         val code = "\uFEFF// 中文 🌍\r\n" + "a" + "\u0301".repeat(12) + "\r\noriginal"
         val edited = code.replace("\r\n", "\n") + " 已修改"
         val cursor = edited.length - 2
-        scenario = ActivityScenario.launchActivityForResult(Intent(context, CodeEditActivity::class.java).apply {
-            putExtra("text", code)
-            putExtra("useTextFile", true)
-        })
+        scenario =
+            ActivityScenario.launchActivityForResult(
+                Intent(context, CodeEditActivity::class.java).apply {
+                    putExtra("text", code)
+                    putExtra("useTextFile", true)
+                }
+            )
         await {
             var ready = false
-            scenario!!.onActivity { ready = ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text == code }
+            scenario!!.onActivity {
+                ready =
+                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text == code
+            }
             ready
         }
         scenario!!.onActivity { activity ->
-            activity.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().single().evaluateJavascript(
-                "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
-                    "editor.dispatchEvent(new Event('input'));", null,
-            )
+            activity
+                .findViewById<ViewGroup>(R.id.editorContainer)
+                .children
+                .filterIsInstance<WebView>()
+                .single()
+                .evaluateJavascript(
+                    "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
+                        "editor.dispatchEvent(new Event('input'));",
+                    null,
+                )
         }
         await {
             var ready = false
             scenario!!.onActivity {
-                ready = ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.let { draft -> draft.text == edited && draft.cursorPosition == cursor } == true
+                ready =
+                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.let { draft ->
+                        draft.text == edited && draft.cursorPosition == cursor
+                    } == true
             }
             ready
         }
@@ -853,19 +1164,31 @@ class CodeSelectionUiTest {
         await {
             var ready = false
             scenario!!.onActivity {
-                ready = ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text == edited &&
-                    it.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().any { web -> web.isShown }
+                ready =
+                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text ==
+                        edited &&
+                        it.findViewById<ViewGroup>(R.id.editorContainer)
+                            .children
+                            .filterIsInstance<WebView>()
+                            .any { web -> web.isShown }
             }
             ready
         }
         val restored = AtomicReference<String>()
         await {
             scenario!!.onActivity {
-                it.findViewById<ViewGroup>(R.id.editorContainer).children.filterIsInstance<WebView>().single().evaluateJavascript(
-                    "window.__getEditorState && window.__getEditorState();", restored::set,
-                )
+                it.findViewById<ViewGroup>(R.id.editorContainer)
+                    .children
+                    .filterIsInstance<WebView>()
+                    .single()
+                    .evaluateJavascript(
+                        "window.__getEditorState && window.__getEditorState();",
+                        restored::set,
+                    )
             }
-            SafeEditorResultCodec.decode(restored.get())?.let { it.text == edited && it.cursorPosition == cursor && it.dirty } == true
+            SafeEditorResultCodec.decode(restored.get())?.let {
+                it.text == edited && it.cursorPosition == cursor && it.dirty
+            } == true
         }
         onView(withId(R.id.menu_save)).perform(click())
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
@@ -873,79 +1196,139 @@ class CodeSelectionUiTest {
         assertEquals(cursor, scenario!!.result.resultData.getIntExtra("cursorPosition", -1))
     }
 
-    @Test fun composePreviewTypesLongCodeWithSelectionAndActualIme() {
+    @Test
+    fun composePreviewTypesLongCodeWithSelectionAndActualIme() {
         launchEditor()
         val code = "{\"jsLib\":\"" + "var value = '中文'; ".repeat(12_000) + "\"}"
         val dialog = CodeDialog(code, disableEdit = false)
         val timings = linkedMapOf<String, Long>()
         scenario!!.onActivity { dialog.show(it.supportFragmentManager, "compose-input-cost") }
         try {
-            await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }; ready }
+            await {
+                var ready = false
+                instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }
+                ready
+            }
             val focusStart = SystemClock.uptimeMillis()
             compose.onNodeWithTag("code-body").performClick()
             await {
-                var visible = false; instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                }; visible
+                var visible = false
+                instrumentation.runOnMainSync {
+                    visible =
+                        ViewCompat.getRootWindowInsets(dialog.requireView())
+                            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }
+                visible
             }
             timings["focusAndImeMs"] = SystemClock.uptimeMillis() - focusStart
             val offset = code.length - 2
-            compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
+            compose
+                .onNodeWithTag("code-body")
+                .performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
             val inputStart = SystemClock.uptimeMillis()
             compose.onNodeWithTag("code-body").performTextInput("中")
-            compose.waitForIdle(); timings["inputAndFrameMs"] = SystemClock.uptimeMillis() - inputStart
+            compose.waitForIdle()
+            timings["inputAndFrameMs"] = SystemClock.uptimeMillis() - inputStart
             val expected = code.substring(0, offset) + "中" + code.substring(offset)
-            instrumentation.runOnMainSync { assertEquals(expected, dialog.currentOriginalCode()); assertEquals(offset + 1, dialog.model.state.value.selectionEnd) }
-            val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-            File(artifacts, "compose-preview-input.txt").writeText("characters=${code.length}\n$timings\n")
-            checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
-                try { File(artifacts, "compose-preview-input.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
-                finally { bitmap.recycle() }
+            instrumentation.runOnMainSync {
+                assertEquals(expected, dialog.currentOriginalCode())
+                assertEquals(offset + 1, dialog.model.state.value.selectionEnd)
             }
-            assertTrue("Typing stalls the code preview: $timings", timings.getValue("inputAndFrameMs") < 1_000)
+            val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
+            File(artifacts, "compose-preview-input.txt")
+                .writeText("characters=${code.length}\n$timings\n")
+            checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
+                try {
+                    File(artifacts, "compose-preview-input.png").outputStream().use {
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+            assertTrue(
+                "Typing stalls the code preview: $timings",
+                timings.getValue("inputAndFrameMs") < 1_000,
+            )
             compose.onNodeWithTag("code-body").performTextReplacement("prefix target")
             compose.onNodeWithTag("code-body").assertTextEquals("prefix target")
-        } finally { instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() } }
+        } finally {
+            instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
+        }
     }
 
-    @Test fun composePreviewReportsActualAccessibilityPayloadDuringRepeatedDeletion() {
+    @Test
+    fun composePreviewReportsActualAccessibilityPayloadDuringRepeatedDeletion() {
         launchEditor()
         var expected = "{\"jsLib\":\"" + "var value = '中文'; ".repeat(4_500) + "\"}"
         val dialog = CodeDialog(expected, disableEdit = false)
         val report = StringBuilder("characters=${expected.length}\n")
         val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "compose-accessibility-cost") }
+        scenario!!.onActivity {
+            dialog.show(it.supportFragmentManager, "compose-accessibility-cost")
+        }
         try {
-            await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }; ready }
+            await {
+                var ready = false
+                instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }
+                ready
+            }
             compose.onNodeWithTag("code-body").performClick()
             await {
-                var visible = false; instrumentation.runOnMainSync {
-                    visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                }; visible
+                var visible = false
+                instrumentation.runOnMainSync {
+                    visible =
+                        ViewCompat.getRootWindowInsets(dialog.requireView())
+                            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }
+                visible
             }
             assertTrue(context.getSystemService(AccessibilityManager::class.java).isEnabled)
             repeat(4) { iteration ->
-                val before = expected; val cursor = before.length - 2
-                compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(cursor))
+                val before = expected
+                val cursor = before.length - 2
+                compose
+                    .onNodeWithTag("code-body")
+                    .performTextInputSelection(androidx.compose.ui.text.TextRange(cursor))
                 val started = SystemClock.uptimeMillis()
-                val event = instrumentation.uiAutomation.executeAndWaitForEvent({
-                    instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
-                }, { received ->
-                    received.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
-                        received.packageName?.toString() == context.packageName && received.fromIndex == cursor - 1 &&
-                        received.removedCount == 1 && received.addedCount == 0
-                }, 10_000)
+                val event =
+                    instrumentation.uiAutomation.executeAndWaitForEvent(
+                        {
+                            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
+                        },
+                        { received ->
+                            received.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+                                received.packageName?.toString() == context.packageName &&
+                                received.fromIndex == cursor - 1 &&
+                                received.removedCount == 1 &&
+                                received.addedCount == 0
+                        },
+                        10_000,
+                    )
                 try {
                     expected = before.removeRange(cursor - 1, cursor)
                     val parcel = Parcel.obtain()
-                    val bytes = try { event.writeToParcel(parcel, 0); parcel.dataSize() } finally { parcel.recycle() }
-                    report.append("delete=$iteration; parcelBytes=$bytes; beforeChars=${event.beforeText?.length}; textChars=${event.text.firstOrNull()?.length}; frameMs=${SystemClock.uptimeMillis() - started}\n")
-                    assertEquals(before, event.beforeText?.toString()); assertEquals(expected, event.text.single().toString())
-                    compose.waitForIdle(); instrumentation.runOnMainSync {
-                        assertEquals(expected, dialog.currentOriginalCode()); assertEquals(cursor - 1, dialog.model.state.value.selectionStart)
+                    val bytes =
+                        try {
+                            event.writeToParcel(parcel, 0)
+                            parcel.dataSize()
+                        } finally {
+                            parcel.recycle()
+                        }
+                    report.append(
+                        "delete=$iteration; parcelBytes=$bytes; beforeChars=${event.beforeText?.length}; textChars=${event.text.firstOrNull()?.length}; frameMs=${SystemClock.uptimeMillis() - started}\n"
+                    )
+                    assertEquals(before, event.beforeText?.toString())
+                    assertEquals(expected, event.text.single().toString())
+                    compose.waitForIdle()
+                    instrumentation.runOnMainSync {
+                        assertEquals(expected, dialog.currentOriginalCode())
+                        assertEquals(cursor - 1, dialog.model.state.value.selectionStart)
                         assertEquals(cursor - 1, dialog.model.state.value.selectionEnd)
                     }
-                } finally { event.recycle() }
+                } finally {
+                    event.recycle()
+                }
             }
         } finally {
             File(artifacts, "compose-preview-accessibility.txt").writeText(report.toString())
@@ -953,67 +1336,140 @@ class CodeSelectionUiTest {
         }
     }
 
-    @Test fun reportedRssPreviewMeasuresOpeningImeAndEditsWithItsActualIcon() {
-        val connection = java.net.URL("https://github.com/user-attachments/files/32066159/shareRssSource.json")
-            .openConnection().apply { connectTimeout = 15_000; readTimeout = 15_000 }
+    @Test
+    fun reportedRssPreviewMeasuresOpeningImeAndEditsWithItsActualIcon() {
+        val connection =
+            java.net
+                .URL("https://github.com/user-attachments/files/32066159/shareRssSource.json")
+                .openConnection()
+                .apply {
+                    connectTimeout = 15_000
+                    readTimeout = 15_000
+                }
         val bytes = connection.getInputStream().use { it.readBytes() }
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        val digest =
+            java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") {
+                "%02x".format(it.toInt() and 255)
+            }
         assertEquals("0893a7bf2af946735d331d1e37acdf3aa3bf05f3b5beb45181f736e15509f9a9", digest)
-        val rss = GSON.fromJson(bytes.toString(Charsets.UTF_8), Array<RssSource>::class.java).single()
-        val actual = GSON.toJson(rss); val withoutIcon = GSON.toJson(rss.copy(sourceIcon = ""))
-        launchEditor(); val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
+        val rss =
+            GSON.fromJson(bytes.toString(Charsets.UTF_8), Array<RssSource>::class.java).single()
+        val actual = GSON.toJson(rss)
+        val withoutIcon = GSON.toJson(rss.copy(sourceIcon = ""))
+        launchEditor()
+        val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
         val report = StringBuilder("sampleSha256=$digest\n")
         try {
             for ((label, code) in listOf("actual" to actual, "without-icon" to withoutIcon)) {
-                val dialog = CodeDialog(code, disableEdit = false); var expected = code
+                val dialog = CodeDialog(code, disableEdit = false)
+                var expected = code
                 val opened = SystemClock.uptimeMillis()
-                scenario!!.onActivity { dialog.show(it.supportFragmentManager, "reported-rss-$label") }
+                scenario!!.onActivity {
+                    dialog.show(it.supportFragmentManager, "reported-rss-$label")
+                }
                 try {
-                    await { var ready = false; instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded && dialog.dialog?.window?.decorView?.hasWindowFocus() == true }; ready }
-                    report.append("$label; characters=${code.length}; openMs=${SystemClock.uptimeMillis() - opened}\n")
-                    val focusStarted = SystemClock.uptimeMillis(); compose.onNodeWithTag("code-body").performClick()
-                    await { var visible = false; instrumentation.runOnMainSync { visible = ViewCompat.getRootWindowInsets(dialog.requireView())?.isVisible(WindowInsetsCompat.Type.ime()) == true }; visible }
-                    report.append("$label; focusImeMs=${SystemClock.uptimeMillis() - focusStarted}\n")
-                    for (offset in listOf(15, code.length / 2, code.length - 3)) {
-                        compose.onNodeWithTag("code-body").performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
-                        val started = SystemClock.uptimeMillis(); compose.onNodeWithTag("code-body").performTextInput("x")
-                        expected = expected.substring(0, offset) + "x" + expected.substring(offset)
-                        compose.waitForIdle(); instrumentation.runOnMainSync {
-                            assertEquals(expected, dialog.currentOriginalCode()); assertEquals(offset + 1, dialog.model.state.value.selectionEnd)
+                    await {
+                        var ready = false
+                        instrumentation.runOnMainSync {
+                            ready =
+                                dialog.model.state.value.loaded &&
+                                    dialog.dialog?.window?.decorView?.hasWindowFocus() == true
                         }
-                        report.append("$label; offset=$offset; inputFrameMs=${SystemClock.uptimeMillis() - started}\n")
-                        val deleteStarted = SystemClock.uptimeMillis(); instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
+                        ready
+                    }
+                    report.append(
+                        "$label; characters=${code.length}; openMs=${SystemClock.uptimeMillis() - opened}\n"
+                    )
+                    val focusStarted = SystemClock.uptimeMillis()
+                    compose.onNodeWithTag("code-body").performClick()
+                    await {
+                        var visible = false
+                        instrumentation.runOnMainSync {
+                            visible =
+                                ViewCompat.getRootWindowInsets(dialog.requireView())
+                                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                        }
+                        visible
+                    }
+                    report.append(
+                        "$label; focusImeMs=${SystemClock.uptimeMillis() - focusStarted}\n"
+                    )
+                    for (offset in listOf(15, code.length / 2, code.length - 3)) {
+                        compose
+                            .onNodeWithTag("code-body")
+                            .performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
+                        val started = SystemClock.uptimeMillis()
+                        compose.onNodeWithTag("code-body").performTextInput("x")
+                        expected = expected.substring(0, offset) + "x" + expected.substring(offset)
+                        compose.waitForIdle()
+                        instrumentation.runOnMainSync {
+                            assertEquals(expected, dialog.currentOriginalCode())
+                            assertEquals(offset + 1, dialog.model.state.value.selectionEnd)
+                        }
+                        report.append(
+                            "$label; offset=$offset; inputFrameMs=${SystemClock.uptimeMillis() - started}\n"
+                        )
+                        val deleteStarted = SystemClock.uptimeMillis()
+                        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
                         expected = expected.removeRange(offset, offset + 1)
-                        await { var matches = false; instrumentation.runOnMainSync { matches = dialog.currentOriginalCode() == expected }; matches }
-                        report.append("$label; offset=$offset; keyDeleteMs=${SystemClock.uptimeMillis() - deleteStarted}\n")
+                        await {
+                            var matches = false
+                            instrumentation.runOnMainSync {
+                                matches = dialog.currentOriginalCode() == expected
+                            }
+                            matches
+                        }
+                        report.append(
+                            "$label; offset=$offset; keyDeleteMs=${SystemClock.uptimeMillis() - deleteStarted}\n"
+                        )
                     }
                     checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
-                        try { File(artifacts, "reported-rss-$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
-                        finally { bitmap.recycle() }
+                        try {
+                            File(artifacts, "reported-rss-$label.png").outputStream().use {
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                            }
+                        } finally {
+                            bitmap.recycle()
+                        }
                     }
-                } finally { closeSoftKeyboard(); instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }; instrumentation.waitForIdleSync() }
+                } finally {
+                    closeSoftKeyboard()
+                    instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
+                    instrumentation.waitForIdleSync()
+                }
             }
-        } finally { File(artifacts, "reported-rss-preview.txt").writeText(report.toString()) }
+        } finally {
+            File(artifacts, "reported-rss-preview.txt").writeText(report.toString())
+        }
     }
 
-    private fun launchEditor(readOnly: Boolean = false, forResult: Boolean = false, fileMode: Boolean = false) {
-        val intent = Intent(context, CodeEditActivity::class.java).putExtra("title", "Code selection regression")
-            .putExtra("useTextFile", fileMode)
+    private fun launchEditor(
+        readOnly: Boolean = false,
+        forResult: Boolean = false,
+        fileMode: Boolean = false,
+    ) {
+        val intent =
+            Intent(context, CodeEditActivity::class.java)
+                .putExtra("title", "Code selection regression")
+                .putExtra("useTextFile", fileMode)
         if (readOnly) {
             CacheManager.putMemory(cacheKey, source)
             intent.putExtra("cacheKey", cacheKey)
         } else {
             intent.putExtra("text", source)
         }
-        scenario = if (forResult) ActivityScenario.launchActivityForResult(intent) else ActivityScenario.launch(intent)
+        scenario =
+            if (forResult) ActivityScenario.launchActivityForResult(intent)
+            else ActivityScenario.launch(intent)
         awaitEditor { it.isShown && it.width > 0 && it.text.toString() == source && it.hasFocus() }
         closeSoftKeyboard()
     }
 
     private fun selectFunction(native: Boolean = false) {
         withEditor { it.setSelectionRegion(1, 0, 4, 1, false) }
-        awaitEditor { selection(it) == selectedText && actions(it).isEnabled && actions(it).isShowing }
+        awaitEditor {
+            selection(it) == selectedText && actions(it).isEnabled && actions(it).isShowing
+        }
         assertEditorToolbar()
         if (native) {
             dismissEditorToolbar()
@@ -1023,18 +1479,31 @@ class CodeSelectionUiTest {
     }
 
     private fun press(tap: Tap, line: Int, column: Int) {
-        onView(withId(R.id.editText)).perform(GeneralClickAction(tap, { view ->
-            val editor = view as CodeEditor
-            val location = IntArray(2)
-            editor.getLocationOnScreen(location)
-            val point = floatArrayOf(location[0] + editor.getCharOffsetX(line, column) + editor.dpUnit,
-                location[1] + editor.getCharOffsetY(line, column) - editor.rowHeight / 2f)
-            val visible = Rect()
-            assertTrue(editor.getGlobalVisibleRect(visible))
-            assertTrue("Gesture must hit the visible editor at line $line, column $column",
-                visible.contains(point[0].toInt(), point[1].toInt()))
-            point
-        }, Press.FINGER))
+        onView(withId(R.id.editText))
+            .perform(
+                GeneralClickAction(
+                    tap,
+                    { view ->
+                        val editor = view as CodeEditor
+                        val location = IntArray(2)
+                        editor.getLocationOnScreen(location)
+                        val point =
+                            floatArrayOf(
+                                location[0] + editor.getCharOffsetX(line, column) + editor.dpUnit,
+                                location[1] + editor.getCharOffsetY(line, column) -
+                                    editor.rowHeight / 2f,
+                            )
+                        val visible = Rect()
+                        assertTrue(editor.getGlobalVisibleRect(visible))
+                        assertTrue(
+                            "Gesture must hit the visible editor at line $line, column $column",
+                            visible.contains(point[0].toInt(), point[1].toInt()),
+                        )
+                        point
+                    },
+                    Press.FINGER,
+                )
+            )
     }
 
     private fun editorPoint(line: Int, column: Int): FloatArray {
@@ -1042,8 +1511,11 @@ class CodeSelectionUiTest {
         withEditor {
             val location = IntArray(2)
             it.getLocationOnScreen(location)
-            point = floatArrayOf(location[0] + it.getCharOffsetX(line, column) + it.dpUnit,
-                location[1] + it.getCharOffsetY(line, column) - it.rowHeight / 2f)
+            point =
+                floatArrayOf(
+                    location[0] + it.getCharOffsetX(line, column) + it.dpUnit,
+                    location[1] + it.getCharOffsetY(line, column) - it.rowHeight / 2f,
+                )
         }
         return point
     }
@@ -1051,13 +1523,14 @@ class CodeSelectionUiTest {
     @Suppress("DEPRECATION")
     private fun shareAndAssert(expected: String) {
         val chooser = AtomicReference<Intent?>()
-        val monitor = object : Instrumentation.ActivityMonitor() {
-            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
-                if (intent.action != Intent.ACTION_CHOOSER) return null
-                chooser.set(intent)
-                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+        val monitor =
+            object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.action != Intent.ACTION_CHOOSER) return null
+                    chooser.set(intent)
+                    return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+                }
             }
-        }
         instrumentation.addMonitor(monitor)
         try {
             var native = false
@@ -1078,7 +1551,8 @@ class CodeSelectionUiTest {
         }
     }
 
-    private fun actions(editor: CodeEditor) = editor.getComponent(EditorTextActionWindow::class.java)
+    private fun actions(editor: CodeEditor) =
+        editor.getComponent(EditorTextActionWindow::class.java)
 
     private fun dismissEditorToolbar() {
         lateinit var popup: View
@@ -1087,7 +1561,8 @@ class CodeSelectionUiTest {
             actions(it).dismiss()
         }
         await { !popup.isAttachedToWindow }
-        // Popup removal reaches InputDispatcher asynchronously; do not inject into its stale window.
+        // Popup removal reaches InputDispatcher asynchronously; do not inject into its stale
+        // window.
         // Accessibility idle alone does not synchronize the removed input window.
         SystemClock.sleep(ViewConfiguration.getDoubleTapTimeout().toLong() + 50)
         instrumentation.uiAutomation.waitForIdle(500, 5_000)
@@ -1095,7 +1570,8 @@ class CodeSelectionUiTest {
 
     private fun assertNativeMenu() {
         // Sora's image-button popup has no text labels. This checks the actual platform popup.
-        onView(withText(android.R.string.copy)).inRoot(isPlatformPopup())
+        onView(withText(android.R.string.copy))
+            .inRoot(isPlatformPopup())
             .check(matches(isCompletelyDisplayed()))
         withEditor {
             assertFalse("The editor toolbar must not overlap Android's menu", actions(it).isShowing)
@@ -1104,7 +1580,8 @@ class CodeSelectionUiTest {
     }
 
     private fun assertEditorToolbar() {
-        onView(withId(R.id.code_share_selection)).inRoot(isPlatformPopup())
+        onView(withId(R.id.code_share_selection))
+            .inRoot(isPlatformPopup())
             .check(matches(isCompletelyDisplayed()))
         withEditor {
             assertTrue(actions(it).isEnabled)
@@ -1117,8 +1594,13 @@ class CodeSelectionUiTest {
         val menuBounds = Rect()
         onView(withText(android.R.string.copy)).inRoot(isPlatformPopup()).check { view, failure ->
             if (failure != null) throw failure
-            val nativeTextId = context.resources.getIdentifier("floating_toolbar_menu_item_text", "id", "android")
-            assertEquals("The selection action must be rendered by Android", nativeTextId, view!!.id)
+            val nativeTextId =
+                context.resources.getIdentifier("floating_toolbar_menu_item_text", "id", "android")
+            assertEquals(
+                "The selection action must be rendered by Android",
+                nativeTextId,
+                view!!.id,
+            )
             val panel = view.parent.parent as View
             visibleScreenBounds(panel, menuBounds)
         }
@@ -1129,11 +1611,17 @@ class CodeSelectionUiTest {
                 if (failure != null) throw failure
                 visibleScreenBounds(view!!, toolBounds)
             }
-        assertFalse("Native menu $menuBounds overlaps keyboard tools $toolBounds", Rect.intersects(menuBounds, toolBounds))
+        assertFalse(
+            "Native menu $menuBounds overlaps keyboard tools $toolBounds",
+            Rect.intersects(menuBounds, toolBounds),
+        )
         val keyboardBounds = Rect(toolBounds)
         scenario!!.onActivity { activity ->
             visibleScreenBounds(activity.findViewById(R.id.search_group), toolBounds)
-            assertFalse("Native menu $menuBounds overlaps search tools $toolBounds", Rect.intersects(menuBounds, toolBounds))
+            assertFalse(
+                "Native menu $menuBounds overlaps search tools $toolBounds",
+                Rect.intersects(menuBounds, toolBounds),
+            )
         }
         File(context.getExternalFilesDir("ui-regression"), "code-selection-native-menu-bounds.txt")
             .appendText("menu=$menuBounds; keyboard=$keyboardBounds; search=$toolBounds\n")
@@ -1150,7 +1638,8 @@ class CodeSelectionUiTest {
     private fun dismissNativeMenu() {
         var native = false
         withEditor { native = !actions(it).isEnabled }
-        // Exercise the real Back callback for native mode; Sora's nonmodal toolbar has no Back action.
+        // Exercise the real Back callback for native mode; Sora's nonmodal toolbar has no Back
+        // action.
         if (native) pressBack() else withEditor { actions(it).dismiss() }
         withEditor { assertTrue(it.isShown) }
     }
@@ -1161,16 +1650,25 @@ class CodeSelectionUiTest {
         try {
             onView(visibleAction).inRoot(isPlatformPopup()).check(matches(isCompletelyDisplayed()))
         } catch (_: NoMatchingViewException) {
-            val overflow = context.resources.getIdentifier(
-                "floating_toolbar_open_overflow_description", "string", "android"
-            )
+            val overflow =
+                context.resources.getIdentifier(
+                    "floating_toolbar_open_overflow_description",
+                    "string",
+                    "android",
+                )
             assertNotEquals("Android's overflow accessibility label must exist", 0, overflow)
-            onView(withContentDescription(context.getString(overflow))).inRoot(isPlatformPopup()).perform(click())
+            onView(withContentDescription(context.getString(overflow)))
+                .inRoot(isPlatformPopup())
+                .perform(click())
         }
-        onView(visibleAction).inRoot(isPlatformPopup()).check(matches(isCompletelyDisplayed())).perform(click())
+        onView(visibleAction)
+            .inRoot(isPlatformPopup())
+            .check(matches(isCompletelyDisplayed()))
+            .perform(click())
     }
 
-    private fun selection(editor: CodeEditor) = editor.text.subSequence(editor.cursor.left, editor.cursor.right).toString()
+    private fun selection(editor: CodeEditor) =
+        editor.text.subSequence(editor.cursor.left, editor.cursor.right).toString()
 
     private fun withEditor(action: (CodeEditor) -> Unit) {
         scenario!!.onActivity { action(it.findViewById(R.id.editText)) }
@@ -1212,6 +1710,8 @@ class CodeSelectionUiTest {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-        } finally { bitmap.recycle() }
+        } finally {
+            bitmap.recycle()
+        }
     }
 }
