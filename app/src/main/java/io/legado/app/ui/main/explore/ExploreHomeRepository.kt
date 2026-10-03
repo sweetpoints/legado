@@ -5,7 +5,6 @@ import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.source.clearExploreKindsCache
@@ -30,7 +29,7 @@ internal interface ExploreHomeRepository {
 
     suspend fun execute(
         url: String,
-        controlId: Int,
+        action: String,
         values: Map<String, String>,
         activity: AppCompatActivity?,
         callback: SourceLoginJsExtensions.Callback,
@@ -52,7 +51,6 @@ internal interface ExploreHomeRepository {
 }
 
 internal class AppExploreHomeRepository : ExploreHomeRepository {
-    private val kinds = mutableMapOf<String, List<ExploreKind>>()
     private val scriptMutex = Mutex()
 
     override fun sources(query: String): Flow<List<ExploreHomeSource>> {
@@ -88,7 +86,6 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                 val source = appDb.bookSourceDao.getBookSource(url) ?: error("书源不存在")
                 if (refresh) source.clearExploreKindsCache()
                 val loadedKinds = source.exploreKinds()
-                kinds[url] = loadedKinds
                 val values = infoMap(url)
                 ExploreHomePanel(
                     loadedKinds.mapIndexed { index, kind ->
@@ -141,6 +138,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                                 style.layout_justifySelf,
                                 style.layout_wrapBefore,
                             ),
+                            action = kind.action,
                         )
                     }
                 )
@@ -154,7 +152,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
 
     override suspend fun execute(
         url: String,
-        controlId: Int,
+        action: String,
         values: Map<String, String>,
         activity: AppCompatActivity?,
         callback: SourceLoginJsExtensions.Callback,
@@ -162,8 +160,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
         withContext(Dispatchers.IO) {
             scriptMutex.withLock {
                 val source = appDb.bookSourceDao.getBookSource(url) ?: return@withLock
-                val kind = kinds[url]?.getOrNull(controlId) ?: return@withLock
-                val action = kind.action?.takeIf { it.isNotBlank() } ?: return@withLock
+                if (action.isBlank()) return@withLock
                 val info = infoMap(url).apply { putAll(values) }
                 val bridge = SourceLoginJsExtensions(activity, source, callback = callback)
                 try {
@@ -174,7 +171,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                         }
                     }
                 } catch (failure: Exception) {
-                    AppLog.put("ExploreUI Button ${kind.title} JavaScript error", failure)
+                    AppLog.put("ExploreUI Button JavaScript error", failure)
                     throw failure
                 }
             }

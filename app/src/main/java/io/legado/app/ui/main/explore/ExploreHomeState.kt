@@ -22,6 +22,7 @@ internal data class ExploreHomeControl(
     val choices: List<String>,
     val value: String,
     val style: ExploreControlStyle,
+    val action: String? = null,
 )
 
 internal data class ExploreHomePanel(val controls: List<ExploreHomeControl>)

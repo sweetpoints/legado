@@ -298,7 +298,8 @@ private fun ExploreHomeControl(
         }
     when (control.type) {
         "text" -> {
-            var submittedValue by remember(control.id) { mutableStateOf(control.value) }
+            var submittedValue by
+                remember(control.id, control.title) { mutableStateOf(control.value) }
             LaunchedEffect(control.value) {
                 if (control.value != submittedValue) {
                     delay(600)

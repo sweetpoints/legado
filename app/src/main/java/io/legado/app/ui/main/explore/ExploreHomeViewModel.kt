@@ -42,6 +42,7 @@ internal class ExploreHomeViewModel(
     private var sourcesJob: Job? = null
     private var groupsJob: Job? = null
     private var resumed = false
+    private val activeCallbacks = mutableMapOf<String, SourceLoginJsExtensions.Callback>()
 
     init {
         viewModelScope.launch {
@@ -292,11 +293,16 @@ internal class ExploreHomeViewModel(
             "toggle" -> {
                 val nextIndex = (control.choices.indexOf(control.value) + 1) % control.choices.size
                 value(controlId, control.choices[nextIndex])
-                effect("script", url, value = controlId.toString())
+                control.action
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { action -> effect("script", url, title = control.title, value = action) }
             }
             "button",
             "text",
-            "select" -> effect("script", url, value = controlId.toString())
+            "select" ->
+                control.action
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { action -> effect("script", url, title = control.title, value = action) }
         }
     }
 
@@ -406,18 +412,22 @@ internal class ExploreHomeViewModel(
                     viewModelScope.launch { if (!terminated && resumed) refresh(effect.sourceUrl) }
                 }
             }
-        // The script bridge keeps callbacks weakly. This operation owns the callback strongly.
+        // The native bridge holds a weak callback. Keep an explicit owner until the script's
+        // final completion, including a script-triggered GC before refreshExplore().
+        activeCallbacks[effect.id] = callback
         viewModelScope.launch {
             try {
                 repository.execute(
                     effect.sourceUrl,
-                    effect.value.toInt(),
+                    effect.value,
                     values,
                     activity,
                     callback,
                 )
             } catch (failure: Exception) {
                 fail(failure)
+            } finally {
+                activeCallbacks.remove(effect.id)
             }
         }
     }

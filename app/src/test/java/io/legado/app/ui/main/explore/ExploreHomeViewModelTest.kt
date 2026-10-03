@@ -115,6 +115,7 @@ class ExploreHomeViewModelTest {
             val script = manager.state.value.effect!!
             manager.value(2, "later edit")
             assertEquals("full draft", script.values["text"])
+            assertEquals("action-2", script.value)
             manager.deliver(script, { true }, {})
             manager.control(3)
             runCurrent()
@@ -222,7 +223,7 @@ class ExploreHomeViewModelTest {
 
         override suspend fun execute(
             url: String,
-            controlId: Int,
+            action: String,
             values: Map<String, String>,
             activity: AppCompatActivity?,
             callback: SourceLoginJsExtensions.Callback,
@@ -261,6 +262,7 @@ class ExploreHomeViewModelTest {
                 listOf("on", "off"),
                 value,
                 ExploreControlStyle(),
+                action = "action-$id",
             )
     }
 }
