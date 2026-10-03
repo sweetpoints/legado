@@ -1515,3 +1515,9 @@ Unified ktfmt check and git diff check passed. Full debug Android-test compilati
 All existing MangaReadingDirection device cases remain, now consuming Compose page pixels/semantics and immutable Host state instead of XML adapters. Coverage retains direction gestures and hardware keys, nonzero initial progress, stale loading receipts, vertical mode, separators, menu settings, first/last boundaries, actual orientation changes, auto modes, and backup restoration. PDF outline fixture consumes the new manga native route and captured page state; only the manga parts of shared offline/source lifecycle checks changed. Current image receipts now also update the displayed footer page, while boundary receipts retain the previous image.
 
 Tests are implemented and formatted; Android compilation, JVM execution and device execution for this batch remain pending.
+
+### Manga legacy rendering removal
+
+A complete app/src consumer search after Host and regression migration found no remaining users of ReadMangaViewModel, MangaAdapter, MangaVH, WebtoonFrame/WebtoonRecyclerView, MangaLayoutManager, ScrollTimer or their gesture wrapper. Removed these legacy renderers and the unreferenced activity_manga, item_book_manga_page/item_book_manga_edge and book_manga menu resources. Core manga chapter/page models, parsing, Glide pipeline and source/download engines remain. The separately owned old MangaMenu/view_manga_menu last consumer cleanup is coordinated with the Reader owner.
+
+Source consumer audit and git diff check passed; final compile/JVM/device evidence is still pending.
