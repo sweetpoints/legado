@@ -27,7 +27,8 @@ class RemoteLibraryViewModelTest {
         override suspend fun close() {}
     }
     private class Reading : RemoteLibraryReadingRepository {
-        var storage = true
+        var storage = true; var initialHelp = false
+        override suspend fun showHelpInitially() = initialHelp
         override suspend fun storageConfigured() = storage
         override suspend fun storageHelp() = "Synthetic help"
         override suspend fun storageUri(value: String) { storage = true }
@@ -90,4 +91,15 @@ class RemoteLibraryViewModelTest {
         try { runCurrent(); assertTrue(f.vm.state.value.interrupted); assertEquals(listOf(second), f.vm.state.value.draft!!.effects); assertFalse(f.vm.consumeEffect("first")); assertFalse(f.vm.consumeEffect("second"))
         } finally { f.close() }
     }
+    @Test fun initialHelpIsDurableOnceAndFailedServerConfigurationCanOpenSettingsThenReconnect() = runTest(dispatcher) {
+        val f = Fixture(reading = Reading().apply { initialHelp = true })
+        try { runCurrent(); val help = f.vm.state.value.draft!!.effects.single(); assertEquals(RemoteLibraryEffect.Help, help.effect)
+            assertTrue(f.vm.consumeEffect(help.id)); runCurrent(); f.vm.refresh(); runCurrent(); assertTrue(f.vm.state.value.draft!!.effects.isEmpty()); assertTrue(f.drafts.value.initialHelpChecked)
+            f.repository.fail = true; f.vm.refresh(); runCurrent(); assertTrue(f.vm.state.value.failed)
+            val failure = f.vm.state.value.draft!!.effects.single(); assertEquals(RemoteLibraryEffect.Toast, failure.effect); assertTrue(f.vm.consumeEffect(failure.id)); runCurrent()
+            f.vm.menu(RemoteLibraryEffect.Servers); runCurrent(); val config = f.vm.state.value.draft!!.effects.single(); assertEquals(RemoteLibraryEffect.Servers, config.effect); assertTrue(f.vm.consumeEffect(config.id)); runCurrent()
+            f.repository.fail = false; val before = f.repository.connectCalls; f.vm.serverChanged(); runCurrent(); assertFalse(f.vm.state.value.failed); assertTrue(f.repository.connectCalls > before)
+        } finally { f.close() }
+    }
+
 }

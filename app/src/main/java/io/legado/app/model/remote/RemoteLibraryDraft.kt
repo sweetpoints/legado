@@ -13,4 +13,4 @@ internal data class RemoteLibraryReceipt(val id: String, val effect: RemoteLibra
 internal data class RemoteLibraryDraft(val revision: Long = 0, val query: String = "", val sort: RemoteLibrarySort = RemoteLibrarySort.Modified,
     val ascending: Boolean = false, val directories: List<RemoteLibraryEntry> = emptyList(), val rows: List<RemoteLibraryEntry> = emptyList(),
     val selected: List<String> = emptyList(), val confirmation: RemoteLibraryConfirmation? = null,
-    val task: RemoteLibraryTask? = null, val effects: List<RemoteLibraryReceipt> = emptyList(), val storageTicket: String? = null)
+    val task: RemoteLibraryTask? = null, val effects: List<RemoteLibraryReceipt> = emptyList(), val storageTicket: String? = null, val initialHelpChecked: Boolean = false)

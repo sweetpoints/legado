@@ -96,7 +96,7 @@ class RemoteLibraryOperationsTest {
     @Test fun permissionFailureClearsSelectionAndOffersOwnedPickerWithoutAutomaticallyRepeatingImport() = runTest(dispatcher) {
         val f = Fixture(repository = Repository().apply { failure = SecurityException("synthetic permission") })
         try { runCurrent(); f.vm.selectAll(true); runCurrent(); f.vm.importSelected(); runCurrent(); assertTrue(f.vm.state.value.interrupted); assertTrue(f.drafts.value.selected.isEmpty())
-            val id = f.vm.storageTicket()!!; assertEquals(RemoteLibraryEffect.PickStorage, f.drafts.value.effects.single().effect); assertTrue(f.vm.consumeEffect(id))
+            val id = f.vm.storageTicket()!!; assertEquals(RemoteLibraryEffect.PickStorage, f.drafts.value.effects.first().effect); assertTrue(f.vm.consumeEffect(id))
             f.vm.storagePicked(id, null); runCurrent(); assertEquals(1, f.repository.imports.size); assertTrue(f.vm.state.value.interrupted); assertTrue(f.vm.state.value.draft!!.effects.none { it.effect == RemoteLibraryEffect.Close })
         } finally { f.close() }
     }
@@ -131,6 +131,14 @@ class RemoteLibraryOperationsTest {
                 restored.retryTaskConfirmed(); restored.state.first { !it.busy && it.draft?.task == null }; assertEquals(1, imports)
             } finally { restoredOwner.clear() }
         } finally { latch.countDown(); owner.clear(); directory.deleteRecursively() }
+    }
+
+    @Test fun filteringKeepsHiddenSelectionsInTheActualImportPayloadAndSuccessClearsAllOfThem() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.vm.selectAll(true); runCurrent(); f.vm.query("a.txt"); runCurrent()
+            assertEquals(listOf("a"), f.vm.state.value.visibleSelection); assertEquals(listOf("b", "a"), f.vm.state.value.selection)
+            f.vm.importSelected(); runCurrent(); assertEquals(listOf("b", "a"), f.repository.imports); assertTrue(f.vm.state.value.selection.isEmpty())
+        } finally { f.close() }
     }
 
 }

@@ -7,6 +7,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.remote.*
 import io.legado.app.utils.ArchiveUtils
@@ -15,6 +16,7 @@ import io.legado.app.utils.find
 import kotlinx.coroutines.*
 
 internal interface RemoteLibraryReadingStore {
+    fun showHelpInitially(): Boolean = false
     fun storageUri(): String?
     fun storageHelp(): String
     fun storageUri(value: String)
@@ -26,6 +28,7 @@ internal interface RemoteLibraryReadingStore {
     fun importArchive(uri: String, name: String): Book?
 }
 internal interface RemoteLibraryReadingRepository {
+    suspend fun showHelpInitially(): Boolean = false
     suspend fun storageConfigured(): Boolean
     suspend fun storageHelp(): String
     suspend fun storageUri(value: String)
@@ -37,6 +40,7 @@ internal interface RemoteLibraryReadingRepository {
 }
 internal class DefaultRemoteLibraryReadingRepository(private val store: RemoteLibraryReadingStore,
     private val io: CoroutineDispatcher = Dispatchers.IO) : RemoteLibraryReadingRepository {
+    override suspend fun showHelpInitially() = withContext(io) { store.showHelpInitially() }
     override suspend fun storageConfigured() = withContext(io) { !store.storageUri().isNullOrBlank() }
     override suspend fun storageHelp() = withContext(io) { store.storageHelp() }
     override suspend fun storageUri(value: String) = withContext(io + NonCancellable) { store.storageUri(value) }
@@ -62,6 +66,7 @@ internal class DefaultRemoteLibraryReadingRepository(private val store: RemoteLi
 }
 internal class AppRemoteLibraryReadingStore(context: Context, private val database: AppDatabase = appDb) : RemoteLibraryReadingStore {
     private val application = context.applicationContext
+    override fun showHelpInitially() = !LocalConfig.webDavBookHelpVersionIsLast
     override fun storageUri() = AppConfig.defaultBookTreeUri
     override fun storageHelp() = application.assets.open("storageHelp.md").use { String(it.readBytes()) }
     override fun storageUri(value: String) { AppConfig.defaultBookTreeUri = value }

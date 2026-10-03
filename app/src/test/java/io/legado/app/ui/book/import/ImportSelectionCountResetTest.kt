@@ -13,17 +13,14 @@ class ImportSelectionCountResetTest {
             projectFile("src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt"),
             "\n    private fun alertDirectoryGroup",
         )
-        val remoteAction = mainAction(
-            projectFile("src/main/java/io/legado/app/ui/book/import/remote/RemoteBookActivity.kt")
-        )
-
-        listOf(localAction, remoteAction).forEach { action ->
+        listOf(localAction).forEach { action ->
             assertTrue(action.contains("adapter.selectAll(false)"))
             assertFalse(action.contains("adapter.selected.clear()"))
             assertFalse(action.contains("adapter.notifyDataSetChanged()"))
         }
     }
 
+    // Remote success and failure selection reset is exercised by RemoteLibraryOperationsTest.
     private fun mainAction(file: File, endMarker: String = "\n    private fun"): String {
         val source = file.readText()
         val start = source.indexOf("override fun onClickSelectBarMainAction()")

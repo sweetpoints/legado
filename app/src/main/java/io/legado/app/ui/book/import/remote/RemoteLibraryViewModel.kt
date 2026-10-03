@@ -18,19 +18,21 @@ internal data class RemoteLibraryState(val loading: Boolean = true, val failed: 
     val writeFailed: Boolean = false, val interrupted: Boolean = false, val pendingCommit: Boolean = false, val progress: Int = 0, val total: Int = 0) {
     val visible: List<RemoteLibraryEntry> get() = draft?.let { projectRemoteLibrary(it.rows, it.query, it.sort, it.ascending) }.orEmpty()
     val visibleSelection: List<String> get() { val selected = draft?.selected.orEmpty().toHashSet(); return visible.filter { it.checkable && it.id in selected }.map { it.id } }
+    val selection: List<String> get() { val selectable = draft?.rows.orEmpty().filter { it.checkable }.map { it.id }.toHashSet(); return draft?.selected.orEmpty().filter { it in selectable } }
     val checkableCount: Int get() = visible.count { it.checkable }
     val path: String get() = (if (connection?.defaultServer == true) "books/" else "/") + draft?.directories.orEmpty().joinToString("") { it.name + "/" }
 }
 /** Only an opaque UUID and consumed effect ownership enter SavedState. */
 internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepository,
     private val reading: RemoteLibraryReadingRepository, private val drafts: RemoteLibraryDraftRepository,
-    private val saved: SavedStateHandle) : ViewModel() {
+    private val saved: SavedStateHandle, private val issue: (String, Throwable) -> Unit = { _, _ -> }) : ViewModel() {
     val session = saved.get<String>("remoteLibrarySession") ?: UUID.randomUUID().toString().also { saved["remoteLibrarySession"] = it }
     private val mutable = MutableStateFlow(RemoteLibraryState()); val state = mutable.asStateFlow()
     private var current = RemoteLibraryDraft(); private var initialized = false; private var stopped = false
     private var revision = 0L; private var generation = 0; private var loading: Job? = null
     private var operation: Job? = null; private var pendingAccepted: RemoteLibraryDraft? = null
     private var earlyStorage: Pair<String, String?>? = null
+    private var loadFailurePrefix = "初始化webDav出错:"
     private val gate = Mutex(); private val changes = MutableStateFlow<RemoteLibraryDraft?>(null)
     private val writer = viewModelScope.launch { changes.filterNotNull().collect { value ->
         try { persist(value); currentCoroutineContext().ensureActive(); if (!stopped && current.revision == value.revision) mutable.value = state.value.copy(writeFailed = false) }
@@ -67,15 +69,20 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
                     loadInside(token, reconnect = state.value.connection == null)
                 }
             } catch (canceled: CancellationException) { throw canceled }
-            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && token == generation) mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) }
+            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && token == generation) { reportFailure(loadFailurePrefix, error); mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) } }
         }
     }
     private suspend fun loadInside(token: Int, reconnect: Boolean) {
+        loadFailurePrefix = if (reconnect) "初始化webDav出错:" else "获取webDav书籍出错\n"
         val connection = if (reconnect) repository.connect() else requireNotNull(state.value.connection)
         currentCoroutineContext().ensureActive(); if (stopped || token != generation) return
+        loadFailurePrefix = "获取webDav书籍出错\n"
         val rows = repository.list(connection, current.directories.lastOrNull()?.path)
         currentCoroutineContext().ensureActive(); if (stopped || token != generation) return
-        update(current.copy(rows = rows.toList())); mutable.value = state.value.copy(loading = false, failed = false, connection = connection)
+        val showHelp = !current.initialHelpChecked && reading.showHelpInitially()
+        currentCoroutineContext().ensureActive(); if (stopped || token != generation) return
+        update(current.copy(rows = rows.toList(), initialHelpChecked = true, effects = if (showHelp) current.effects + receipt(RemoteLibraryEffect.Help) else current.effects)); mutable.value = state.value.copy(loading = false, failed = false, connection = connection)
+        drainServerChange()
     }
     fun refresh(reconnect: Boolean = false) {
         if (!usable()) return
@@ -84,9 +91,11 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
         loading = viewModelScope.launch {
             try { loadInside(token, reconnect || state.value.connection == null) }
             catch (canceled: CancellationException) { throw canceled }
-            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && token == generation) mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) }
+            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped && token == generation) { reportFailure(loadFailurePrefix, error); mutable.value = state.value.copy(loading = false, failed = true, error = error.localizedMessage.orEmpty()) } }
         }
     }
+    fun serverChanged() { if (stopped) return; if (state.value.failed && initialized && !state.value.busy && !state.value.pendingCommit) { mutable.value = state.value.copy(connection = null); initialize(); return }; saved["remoteServerChanged"] = true; drainServerChange() }
+    private fun drainServerChange() { if (usable() && saved.get<Boolean>("remoteServerChanged") == true) { saved.remove<Boolean>("remoteServerChanged"); refresh(reconnect = true) } }
     fun query(value: String) { if (usable()) update(current.copy(query = value)) }
     fun sort(value: RemoteLibrarySort) { if (usable()) { update(current.copy(sort = value, ascending = if (current.sort == value) !current.ascending else true)); refresh() } }
     fun openDirectory(id: String) {
@@ -103,7 +112,10 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
     fun selectAll(value: Boolean) { if (usable()) update(current.copy(selected = if (value) (current.selected + state.value.visible.filter { it.checkable }.map { it.id }).distinct() else emptyList())) }
     fun inverse() { if (usable()) { val selected = current.selected.toMutableSet(); state.value.visible.filter { it.checkable }.forEach { if (!selected.remove(it.id)) selected.add(it.id) }; update(current.copy(selected = selected.toList())) } }
     fun consumeEffect(id: String): Boolean {
-        if ((!usable() && !(initialized && !stopped && !state.value.loading && !state.value.failed && !state.value.busy && !state.value.writeFailed && !state.value.pendingCommit && current.effects.firstOrNull()?.effect == RemoteLibraryEffect.PickStorage)) || current.effects.firstOrNull()?.id != id) return false
+        val effect = current.effects.firstOrNull()?.effect
+        val exceptional = initialized && !stopped && !state.value.loading && !state.value.busy && !state.value.writeFailed && !state.value.pendingCommit &&
+            (effect == RemoteLibraryEffect.PickStorage && !state.value.failed || effect == RemoteLibraryEffect.Toast && current.effects.firstOrNull()?.text != null || current.task == null && effect in listOf(RemoteLibraryEffect.Servers, RemoteLibraryEffect.Log, RemoteLibraryEffect.Help))
+        if ((!usable() && !exceptional) || current.effects.firstOrNull()?.id != id) return false
         saved["remoteLibraryConsumed"] = id; update(current.copy(effects = current.effects.drop(1))); return true
     }
     fun retry() {
@@ -115,11 +127,17 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
                 try { commit(accepted); if (!stopped) mutable.value = state.value.copy(interrupted = current.task != null) }
                 catch (canceled: CancellationException) { throw canceled }
                 catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) }
-                finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+                finally { if (!stopped && currentCoroutineContext().isActive) { mutable.value = state.value.copy(busy = false); drainServerChange() } }
             }
         } else if (state.value.writeFailed) update(current) else initialize()
     }
 
+    private fun reportFailure(prefix: String, error: Exception) {
+        if (!initialized || pendingAccepted != null || stopped) return
+        val message = prefix + error.localizedMessage.orEmpty()
+        if (prefix.isNotEmpty() && prefix != "初始化webDav出错:") runCatching { issue(message, error) }
+        update(current.copy(effects = current.effects + receipt(RemoteLibraryEffect.Toast, text = message)))
+    }
     private fun receipt(effect: RemoteLibraryEffect, resource: Int = 0, text: String? = null, bookId: String? = null) = RemoteLibraryReceipt(UUID.randomUUID().toString(), effect, text, bookId, resource)
     private suspend fun commit(value: RemoteLibraryDraft) {
         pendingAccepted = value; mutable.value = state.value.copy(pendingCommit = true)
@@ -127,18 +145,18 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
         currentCoroutineContext().ensureActive()
         if (!stopped) { current = value; mutable.value = state.value.copy(draft = current, pendingCommit = false, writeFailed = false) }
     }
-    private fun readOperation(block: suspend () -> RemoteLibraryDraft) {
-        if (!usable()) return
+    private fun readOperation(allowFailed: Boolean = false, block: suspend () -> RemoteLibraryDraft) {
+        if (!usable() && !(allowFailed && initialized && !stopped && !state.value.loading && !state.value.busy && !state.value.pendingCommit && !state.value.writeFailed && current.task == null)) return
         mutable.value = state.value.copy(busy = true, error = null)
         operation = viewModelScope.launch {
             try { val value = block(); currentCoroutineContext().ensureActive(); commit(value.copy(revision = nextRevision())) }
             catch (canceled: CancellationException) { throw canceled }
-            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) }
-            finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+            catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) { reportFailure("", error); mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) } }
+            finally { if (!stopped && currentCoroutineContext().isActive) { mutable.value = state.value.copy(busy = false); drainServerChange() } }
         }
     }
     fun menu(effect: RemoteLibraryEffect) { if (effect in listOf(RemoteLibraryEffect.Log, RemoteLibraryEffect.Help, RemoteLibraryEffect.Servers))
-        readOperation { current.copy(effects = current.effects + receipt(effect)) } }
+        readOperation(allowFailed = true) { current.copy(effects = current.effects + receipt(effect)) } }
     fun dismissConfirmation() { if (usable()) update(current.copy(confirmation = null)) }
     fun reimport(id: String) { if (usable()) current.rows.firstOrNull { it.id == id && !it.directory && it.onShelf }?.let { update(current.copy(confirmation = RemoteLibraryConfirmation(RemoteLibraryPrompt.Reimport, id))) } }
     private fun readingDraft(target: RemoteLibraryReadTarget): RemoteLibraryDraft = when (target) {
@@ -166,7 +184,7 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
             RemoteLibraryPrompt.ChooseArchive -> Unit
         }
     }
-    fun importSelected() { if (usable() && state.value.visibleSelection.isNotEmpty()) startTask(RemoteLibraryTask(UUID.randomUUID().toString(), RemoteLibraryTaskKind.ImportBooks, state.value.visibleSelection)) }
+    fun importSelected() { if (usable() && state.value.selection.isNotEmpty()) startTask(RemoteLibraryTask(UUID.randomUUID().toString(), RemoteLibraryTaskKind.ImportBooks, state.value.selection)) }
     private fun startTask(task: RemoteLibraryTask) {
         if (stopped || state.value.busy || state.value.pendingCommit) return
         mutable.value = state.value.copy(busy = true, error = null, interrupted = false, progress = task.completed.size, total = task.ids.size)
@@ -203,18 +221,19 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
                 currentCoroutineContext().ensureActive()
                 if (!stopped) {
                     if (pendingAccepted == null) update(current.copy(selected = emptyList())) else pendingAccepted = pendingAccepted!!.copy(revision = nextRevision(), selected = emptyList())
+                    reportFailure("导入出错\n", error)
                     mutable.value = state.value.copy(error = error.localizedMessage.orEmpty(), interrupted = current.task != null)
                     if (error is SecurityException && !state.value.pendingCommit) pickStorage(initial = false, allowInterrupted = true)
                 }
-            } finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+            } finally { if (!stopped && currentCoroutineContext().isActive) { mutable.value = state.value.copy(busy = false); drainServerChange() } }
         }
     }
     fun retryTaskConfirmed() { if (!stopped && !state.value.busy && !state.value.pendingCommit) current.task?.let(::startTask) }
-    fun discardTask() { if (!stopped && !state.value.busy && !state.value.pendingCommit) { update(current.copy(task = null, selected = emptyList())); mutable.value = state.value.copy(interrupted = false, error = null) } }
+    fun discardTask() { if (!stopped && !state.value.busy && !state.value.pendingCommit) { update(current.copy(task = null, selected = emptyList())); mutable.value = state.value.copy(interrupted = false, error = null); drainServerChange() } }
     private fun pickStorage(initial: Boolean, allowInterrupted: Boolean = false) {
         if (!allowInterrupted && !usable()) return
         val ticket = receipt(RemoteLibraryEffect.PickStorage); saved["remoteStorageInitial"] = initial
-        update(current.copy(confirmation = null, storageTicket = ticket.id, effects = current.effects + ticket))
+        update(current.copy(confirmation = null, storageTicket = ticket.id, effects = listOf(ticket) + current.effects))
     }
     fun cancelStorageHelp() { if (usable() && current.confirmation?.kind == RemoteLibraryPrompt.StorageHelp)
         readOperation { current.copy(confirmation = null, effects = current.effects + receipt(RemoteLibraryEffect.Close)) } }
@@ -233,7 +252,7 @@ internal class RemoteLibraryViewModel(private val repository: RemoteLibraryRepos
                 if ((uri != null || !initial) && !stopped) { mutable.value = state.value.copy(busy = false); initialize() }
             } catch (canceled: CancellationException) { throw canceled }
             catch (error: Exception) { currentCoroutineContext().ensureActive(); if (!stopped) mutable.value = state.value.copy(error = error.localizedMessage.orEmpty()) }
-            finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
+            finally { if (!stopped && currentCoroutineContext().isActive) { mutable.value = state.value.copy(busy = false); drainServerChange() } }
         }
     }
     suspend fun flush() { if (initialized) persist(current) }
