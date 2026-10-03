@@ -42,7 +42,10 @@ fun HandleFileChoicesScreen(
     if (
         state.finished ||
             (state.phase == "Result" && state.error == null) ||
-            (state.phase == "Native" && state.error == null)
+            (state.phase == "Native" &&
+                state.error == null &&
+                state.issue == null &&
+                !state.requiresRetry)
     )
         return
     val input = state.input
@@ -65,6 +68,12 @@ fun HandleFileChoicesScreen(
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 if (state.busy) {
                     CircularProgressIndicator(Modifier.testTag("handle-file-progress"))
+                }
+                if (state.requiresRetry) {
+                    Text(
+                        stringResource(R.string.handle_file_interrupted_action),
+                        Modifier.testTag("handle-file-interrupted"),
+                    )
                 }
                 state.error?.let { Text(it, Modifier.testTag("handle-file-error")) }
                 if (manual) {
@@ -98,7 +107,7 @@ fun HandleFileChoicesScreen(
                 ) {
                     Text(stringResource(R.string.ok))
                 }
-            } else if (state.error != null) {
+            } else if (state.error != null || state.issue != null || state.requiresRetry) {
                 TextButton(
                     onClick = retry,
                     enabled = !state.busy,

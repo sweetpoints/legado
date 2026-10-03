@@ -37,7 +37,15 @@ fun HandleFileChoicesRoute(
     LaunchedEffect(lifecycle, state.phase, state.pending?.nonce) {
         if (lifecycle != Lifecycle.State.RESUMED || state.phase != "Native") return@LaunchedEffect
         val current = model.state.first { !it.busy }
-        if (!current.loaded || current.finished || !ready()) return@LaunchedEffect
+        if (
+            !current.loaded ||
+                current.finished ||
+                current.requiresRetry ||
+                current.error != null ||
+                current.issue != null ||
+                !ready()
+        )
+            return@LaunchedEffect
         val pending = current.pending ?: return@LaunchedEffect
         val resumePermission = pending.action in listOf(10, 11, 112, 113)
         if (pending.delivered && !resumePermission) return@LaunchedEffect

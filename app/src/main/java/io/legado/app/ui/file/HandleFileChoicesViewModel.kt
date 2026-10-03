@@ -36,6 +36,7 @@ data class HandleFileChoicesState(
     val pending: HandleFilePending? = null,
     val result: String? = null,
     val busy: Boolean = false,
+    val requiresRetry: Boolean = false,
     val issue: HandleFileIssue? = null,
     val error: String? = null,
     val finished: Boolean = false,
@@ -73,7 +74,8 @@ class HandleFileChoicesViewModel(
         if (stopped || state.value.finished || state.value.loaded || state.value.busy) return
         if (value != null) initialSeed = value
         val loadGeneration = ++currentGeneration
-        mutableState.value = state.value.copy(busy = true, issue = null, error = null)
+        mutableState.value =
+            state.value.copy(busy = true, issue = null, error = null, requiresRetry = false)
         activeJob = viewModelScope.launch {
             try {
                 val input =
@@ -105,6 +107,12 @@ class HandleFileChoicesViewModel(
                         pending = checkpoint.pending,
                         result = checkpoint.result,
                         finished = checkpoint.finished,
+                        requiresRetry =
+                            !checkpoint.finished &&
+                                (checkpoint.phase in listOf("Saving", "Uploading") ||
+                                    (checkpoint.phase == "Native" &&
+                                        checkpoint.pending?.delivered == true &&
+                                        checkpoint.pending?.action !in listOf(10, 11, 112, 113))),
                     )
                 drainResult()
             } catch (error: Throwable) {
@@ -325,7 +333,8 @@ class HandleFileChoicesViewModel(
                 operation {
                     accept(checkNotNull(checkpoint.result))
                 }
-            state.value.phase == "Native" && state.value.error != null ->
+            state.value.phase == "Native" &&
+                (state.value.error != null || state.value.requiresRetry) ->
                 operation {
                     val pending = checkNotNull(checkpoint.pending)
                     persist(
@@ -473,7 +482,8 @@ class HandleFileChoicesViewModel(
     }
 
     private fun operation(block: suspend () -> Unit) {
-        mutableState.value = state.value.copy(busy = true, issue = null, error = null)
+        mutableState.value =
+            state.value.copy(busy = true, issue = null, error = null, requiresRetry = false)
         activeJob = viewModelScope.launch {
             try {
                 draftWriteJob?.join()

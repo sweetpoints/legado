@@ -199,6 +199,87 @@ class HandleFileChoicesViewModelTest {
         assertTrue(model.nativeDelivered(nonce))
     }
 
+    @Test
+    fun restoredUnacceptedUploadRequiresExplicitRetryAndDoesNotRepeatAutomatically() = test {
+        val repository = Files()
+        val disk =
+            Disk().apply {
+                input =
+                    HandleFileInput(
+                        mode = 3,
+                        fileName = "data.json",
+                        contentType = "application/json",
+                    )
+                value =
+                    HandleFileCheckpoint(4, "Uploading", pending = HandleFilePending(111, "upload"))
+            }
+        val restored = model(repo = repository, disk = disk)
+        restored.load()
+        runCurrent()
+        assertTrue(restored.state.value.requiresRetry)
+        assertEquals(0, repository.uploads)
+        restored.retry()
+        runCurrent()
+        assertFalse(restored.state.value.requiresRetry)
+        assertEquals(1, repository.uploads)
+        assertEquals("https://accepted", restored.state.value.result)
+    }
+
+    @Test
+    fun restoredUnacceptedSaveRequiresExplicitRetryAndRetainsChosenDirectory() = test {
+        val repository = Files()
+        val disk =
+            Disk().apply {
+                input =
+                    HandleFileInput(
+                        mode = 3,
+                        fileName = "data.json",
+                        contentType = "application/json",
+                    )
+                value =
+                    HandleFileCheckpoint(
+                        4,
+                        "Saving",
+                        pending = HandleFilePending(0, "save"),
+                        result = "file:///chosen",
+                    )
+            }
+        val restored = model(repo = repository, disk = disk)
+        restored.load()
+        runCurrent()
+        assertTrue(restored.state.value.requiresRetry)
+        assertEquals(0, repository.saves)
+        restored.retry()
+        runCurrent()
+        assertEquals(1, repository.saves)
+        assertEquals("file:///chosen/data.json", restored.state.value.result)
+    }
+
+    @Test
+    fun restoredSystemClaimOffersManualRetryWithFreshNonce() = test {
+        val disk =
+            Disk().apply {
+                input = HandleFileInput(mode = 1)
+                value =
+                    HandleFileCheckpoint(
+                        4,
+                        "Native",
+                        pending = HandleFilePending(1, "old", delivered = true),
+                    )
+            }
+        val restored = model(disk = disk)
+        restored.load()
+        runCurrent()
+        assertTrue(restored.state.value.requiresRetry)
+        restored.retry()
+        runCurrent()
+        assertFalse(restored.state.value.requiresRetry)
+        assertNotEquals("old", restored.state.value.pending!!.nonce)
+        restored.returned("old", "content://old")
+        runCurrent()
+        assertNull(restored.state.value.result)
+    }
+
     private class Files : HandleFileChoicesRepository {
 
         var uploads = 0

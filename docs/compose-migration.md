@@ -1339,3 +1339,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 文件选择 registry 在 launch 回执写入期间同步返回时，VM 缓冲第一个匹配 nonce 的结果，busy 解除后消费；重复与旧 nonce 不替换待处理结果。新增真实 gated JVM 用例，完整验证在本批最终恢复修复合并后统一执行。
 
 文件选择 MIME IO 准备移到 launch claim 之前，最终 RESUMED/nonce 检查后仅同步交给平台。claim 后若取消或暂停且尚未 handoff，按最新磁盘 revision 写入持久 rollback，避免留下永远隐藏的 Native 状态。新增两个 gated JVM 回归，覆盖非合作 MIME 迟到返回与 Atomic claim 完成后取消；完整验证在本批共同基线最终执行。
+
+文件选择恢复中断的 Saving/Uploading 时展示本地化提示与显式重试，不自动重复未经接受的文件/网络操作；已 claim 的系统选择器恢复仍注册原结果，并允许用户确认后以新 nonce 重试。新增三个 VM 恢复回归及一个 Compose 重试入口用例，已接受 Result 恢复沿原回执交付。完整验证在最终共同基线执行。

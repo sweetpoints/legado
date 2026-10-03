@@ -90,4 +90,30 @@ class HandleFileChoicesScreenTest {
         compose.onNodeWithTag("handle-file-confirm").assertIsNotEnabled()
         compose.onNodeWithTag("handle-file-manual-input").assertIsNotEnabled()
     }
+
+    @Test
+    fun interruptedUploadShowsExplicitRetryWithoutInvokingItAutomatically() {
+        var retries = 0
+        compose.setContent {
+            LegadoComposeTheme {
+                HandleFileChoicesScreen(
+                    HandleFileChoicesState(
+                        loaded = true,
+                        input = HandleFileInput(mode = 3),
+                        phase = "Uploading",
+                        requiresRetry = true,
+                    ),
+                    { _, _ -> },
+                    { _, _, _ -> },
+                    {},
+                    { retries += 1 },
+                    {},
+                )
+            }
+        }
+        compose.onNodeWithTag("handle-file-interrupted").assertExists()
+        assertEquals(0, retries)
+        compose.onNodeWithTag("handle-file-retry").performClick()
+        assertEquals(1, retries)
+    }
 }

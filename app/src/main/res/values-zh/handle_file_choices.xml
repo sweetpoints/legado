@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="handle_file_interrupted_action">上次操作已中断，请确认后重试。</string>
+</resources>
