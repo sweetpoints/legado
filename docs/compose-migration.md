@@ -1013,3 +1013,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 文件管理宿主、面包屑、过滤、文件列表、长按删除及快速滚动改为 Compose，删除旧 ViewModel 和 3 个独占布局 XML。父目录入口不弹删除菜单，FileProvider 的精确 URI/MIME/读取授权仍通过原生文件打开接口交付；恢复导航认领前后校验 RESUMED，暂停取消时回滚私有回执。新增 7 个 Compose 交互、6 个 Route 和实际外置目录宿主回归，状态 JVM 增至 15 个；Android 测试仅编译。
 
 模拟阅读编辑状态迁入 ViewModel。完整书籍 URL 与初始表单留私有请求文件，弹窗 Bundle 只携带 UUID，SavedState 保留有长度上限的表单及完成票据。取消不写入，旋转保留草稿和日期选择，保存失败显式重试，确认提交期间阻止重复保存/取消；提交后使用规范化值更新阅读器。6 个 JVM 状态回归执行，1 个完整 URL/AtomicFile Android 回归仅编译。
+
+主题设置状态层使用不可变偏好快照、小型弹窗/导航 SavedState 和私有文件名称草稿，任意长名称存于 filesDir，避免 Bundle 膨胀及缓存清除导致草稿丢失。确认操作在触发重建前消费弹窗，外部偏好变化不覆盖编辑内容，名称回写按版本拒绝迟到值，关闭使用原子栅栏并识别备份。8 个 JVM 状态回归和字体范围真实回归执行，1 个大名称/AtomicFile Android 回归仅编译。
