@@ -12,6 +12,7 @@ internal class ChapterSourceAutomationSession(
 ) {
     var position: Int = 0
         private set
+
     var stopAfterCurrent: Boolean = false
         private set
 
@@ -47,10 +48,13 @@ internal fun chapterSourceAutomationRange(
 internal class ChapterSourceProgress {
     var chapterIndex: Int = 0
         private set
+
     var chapterTitle: String = ""
         private set
+
     var isFinished: Boolean = false
         private set
+
     private var initialized = false
 
     fun initialize(chapterIndex: Int, chapterTitle: String) {
@@ -91,6 +95,11 @@ internal fun nextChapterSourceOriginal(
     currentIndex: Int,
 ): BookChapter? = chapters.firstOrNull { !it.isVolume && it.index > currentIndex }
 
-internal fun selectedChapterSourceItems(chapters: List<BookChapter>, selectedIndices: Set<Int>): List<Pair<BookChapter, String?>> = chapters.mapIndexedNotNull { position, chapter ->
-    if (!chapter.isVolume && chapter.index in selectedIndices) chapter to chapters.getOrNull(position + 1)?.url else null
+internal fun selectedChapterSourceItems(
+    chapters: List<BookChapter>,
+    selectedIndices: Set<Int>,
+): List<Pair<BookChapter, String?>> = chapters.mapIndexedNotNull { position, chapter ->
+    if (!chapter.isVolume && chapter.index in selectedIndices)
+        chapter to chapters.getOrNull(position + 1)?.url
+    else null
 }

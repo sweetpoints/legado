@@ -8,6 +8,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.RegexJsExtensions
 import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.utils.quoteReplacementJs
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,7 +17,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import java.util.concurrent.TimeUnit
 
 object ReplacePreview {
 
@@ -33,7 +33,7 @@ object ReplacePreview {
     internal suspend fun apply(
         rule: ReplaceRule,
         sample: String,
-        nanoTime: () -> Long
+        nanoTime: () -> Long,
     ): String {
         if (sample.isEmpty() || rule.pattern.isEmpty()) return sample
         if (!rule.isRegex) return sample.replace(rule.pattern, rule.replacement)
@@ -54,18 +54,19 @@ object ReplacePreview {
     private suspend fun applyRegex(
         rule: ReplaceRule,
         sample: String,
-        nanoTime: () -> Long
+        nanoTime: () -> Long,
     ): String {
         val timeoutNanos = TimeUnit.MILLISECONDS.toNanos(rule.getValidTimeoutMillisecond())
         val startedAt = nanoTime()
         val coroutineContext = currentCoroutineContext()
-        val input = DeadlineCharSequence(
-            sample,
-            startedAt,
-            timeoutNanos,
-            nanoTime,
-            shouldContinue = { coroutineContext[Job]?.isActive != false }
-        )
+        val input =
+            DeadlineCharSequence(
+                sample,
+                startedAt,
+                timeoutNanos,
+                nanoTime,
+                shouldContinue = { coroutineContext[Job]?.isActive != false },
+            )
         val matcher = rule.pattern.toRegex().toPattern().matcher(input)
         val output = StringBuffer()
         val isJs = rule.replacement.startsWith("@js:")
@@ -74,12 +75,13 @@ object ReplacePreview {
         while (matcher.find()) {
             coroutineContext.ensureActive()
             if (isJs) {
-                val jsResult = evaluateJsReplacement(
-                    replacement,
-                    matcher.group(),
-                    jsExtensions,
-                    coroutineContext
-                )
+                val jsResult =
+                    evaluateJsReplacement(
+                        replacement,
+                        matcher.group(),
+                        jsExtensions,
+                        coroutineContext,
+                    )
                 matcher.appendReplacement(output, jsResult.quoteReplacementJs())
             } else {
                 matcher.appendReplacement(output, replacement)
@@ -93,7 +95,7 @@ object ReplacePreview {
         script: String,
         result: String,
         jsExtensions: RegexJsExtensions,
-        coroutineContext: kotlin.coroutines.CoroutineContext
+        coroutineContext: kotlin.coroutines.CoroutineContext,
     ): String {
         // The editor has no real book/chapter object; reject direct property access rather than
         // silently evaluating it against null. String literals such as "book" remain valid.
@@ -101,12 +103,13 @@ object ReplacePreview {
             throw ReplacePreviewException(ReplacePreviewException.Reason.CONTEXT_UNAVAILABLE)
         }
         return try {
-            val bindings = ScriptBindings().apply {
-                this["result"] = result
-                this["chapter"] = null
-                this["book"] = null
-                this["java"] = jsExtensions
-            }
+            val bindings =
+                ScriptBindings().apply {
+                    this["result"] = result
+                    this["chapter"] = null
+                    this["book"] = null
+                    this["java"] = jsExtensions
+                }
             RhinoScriptEngine.eval(script, bindings, coroutineContext).toString()
         } catch (error: CancellationException) {
             throw error
@@ -126,7 +129,7 @@ object ReplacePreview {
         private val nanoTime: () -> Long,
         private val shouldContinue: () -> Boolean,
         private val start: Int = 0,
-        private val end: Int = source.length
+        private val end: Int = source.length,
     ) : CharSequence {
 
         override val length: Int
@@ -146,7 +149,7 @@ object ReplacePreview {
                 nanoTime,
                 shouldContinue,
                 start + startIndex,
-                start + endIndex
+                start + endIndex,
             )
         }
 
@@ -217,13 +220,17 @@ object ReplacePreview {
             if (current.isLetter() || current == '_' || current == '$') {
                 val start = index
                 index++
-                while (index < script.length &&
-                    (script[index].isLetterOrDigit() || script[index] == '_' || script[index] == '$')
+                while (
+                    index < script.length &&
+                        (script[index].isLetterOrDigit() ||
+                            script[index] == '_' ||
+                            script[index] == '$')
                 ) {
                     index++
                 }
-                if (script.substring(start, index) == "book" ||
-                    script.substring(start, index) == "chapter"
+                if (
+                    script.substring(start, index) == "book" ||
+                        script.substring(start, index) == "chapter"
                 ) {
                     return true
                 }
@@ -239,6 +246,6 @@ internal class ReplacePreviewException(val reason: Reason) : NoStackTraceExcepti
     enum class Reason {
         TIMEOUT,
         CONTEXT_UNAVAILABLE,
-        JS_EVALUATION
+        JS_EVALUATION,
     }
 }

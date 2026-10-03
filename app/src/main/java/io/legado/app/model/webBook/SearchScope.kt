@@ -9,21 +9,19 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.splitNotBlank
 import splitties.init.appCtx
 
-/**
- * 搜索范围
- */
+/** 搜索范围 */
 @Suppress("unused")
 data class SearchScope(private var scope: String) {
 
     constructor(groups: List<String>) : this(groups.joinToString(","))
 
-    constructor(source: BookSource) : this(
-        "${source.bookSourceName.replace(":", "")}::${source.bookSourceUrl}"
-    )
+    constructor(
+        source: BookSource
+    ) : this("${source.bookSourceName.replace(":", "")}::${source.bookSourceUrl}")
 
-    constructor(source: BookSourcePart) : this(
-        "${source.bookSourceName.replace(":", "")}::${source.bookSourceUrl}"
-    )
+    constructor(
+        source: BookSourcePart
+    ) : this("${source.bookSourceName.replace(":", "")}::${source.bookSourceUrl}")
 
     override fun toString(): String {
         return scope
@@ -34,7 +32,7 @@ data class SearchScope(private var scope: String) {
     fun update(scope: String, postValue: Boolean = true, save: Boolean = true) {
         this.scope = scope
         if (postValue) stateLiveData.postValue(scope)
-        if (save) { //不对单书源的搜索进行缓存，防止下次依旧为单书源搜索（单书源搜索需要每次都指定）
+        if (save) { // 不对单书源的搜索进行缓存，防止下次依旧为单书源搜索（单书源搜索需要每次都指定）
             save()
         }
     }
@@ -68,9 +66,7 @@ data class SearchScope(private var scope: String) {
             return scope
         }
 
-    /**
-     * 搜索范围显示
-     */
+    /** 搜索范围显示 */
     val displayNames: List<String>
         get() {
             val list = arrayListOf<String>()
@@ -102,9 +98,7 @@ data class SearchScope(private var scope: String) {
         stateLiveData.postValue(this.scope)
     }
 
-    /**
-     * 搜索范围书源
-     */
+    /** 搜索范围书源 */
     fun getBookSourceParts(): List<BookSourcePart> {
         val list = hashSetOf<BookSourcePart>()
         if (scope.isEmpty()) {
@@ -153,5 +147,4 @@ data class SearchScope(private var scope: String) {
             AppConfig.searchGroup = scope
         }
     }
-
 }

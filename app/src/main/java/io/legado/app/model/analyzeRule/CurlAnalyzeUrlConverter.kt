@@ -1,6 +1,5 @@
 package io.legado.app.model.analyzeRule
 
-import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.GSON
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.fromJsonObject
@@ -43,17 +42,34 @@ object CurlAnalyzeUrlConverter {
     )
 
     private val supportedMethods = setOf("GET", "POST", "HEAD")
-    private val ignoredOptions = setOf(
-        "-s", "--silent", "-S", "--show-error", "-sS", "-Ss",
-        "-f", "--fail", "--fail-with-body",
-        "--no-progress-meter", "--progress-bar",
-    )
-    private val ignoredOptionsWithValue = setOf(
-        "-o", "--output", "-w", "--write-out",
-    )
-    private val analyzeOptionKeys = setOf(
-        "method", "headers", "body", "followRedirects",
-    )
+    private val ignoredOptions =
+        setOf(
+            "-s",
+            "--silent",
+            "-S",
+            "--show-error",
+            "-sS",
+            "-Ss",
+            "-f",
+            "--fail",
+            "--fail-with-body",
+            "--no-progress-meter",
+            "--progress-bar",
+        )
+    private val ignoredOptionsWithValue =
+        setOf(
+            "-o",
+            "--output",
+            "-w",
+            "--write-out",
+        )
+    private val analyzeOptionKeys =
+        setOf(
+            "method",
+            "headers",
+            "body",
+            "followRedirects",
+        )
     private val curlCommand = Regex("^\\s*curl(?:\\.exe)?(?:\\s|$)", RegexOption.IGNORE_CASE)
     private val safeShellValue = Regex("[A-Za-z0-9_@%+=:,./-]+")
     private const val FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
@@ -113,45 +129,48 @@ object CurlAnalyzeUrlConverter {
         if (url.isBlank()) throw ConversionException(ErrorReason.MISSING_URL)
         validateUrl(url, globOff = true)
 
-        val (option, rawOptions) = optionJson?.let {
-            val rawOptions = GSON
-                .fromJsonObject<LinkedHashMap<String, Any?>>(it)
-                .getOrElse {
+        val (option, rawOptions) =
+            optionJson?.let {
+                val rawOptions =
+                    GSON.fromJsonObject<LinkedHashMap<String, Any?>>(it).getOrElse {
+                        throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
+                    }
+                val unsupported =
+                    rawOptions.entries
+                        .filter { entry -> entry.value != null && entry.key !in analyzeOptionKeys }
+                        .map { it.key }
+                if (unsupported.isNotEmpty()) {
+                    throw ConversionException(
+                        ErrorReason.UNSUPPORTED_OPTION,
+                        unsupported.joinToString(", "),
+                    )
+                }
+                if (rawOptions["method"] != null && rawOptions["method"] !is String) {
                     throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
                 }
-            val unsupported = rawOptions.entries
-                .filter { entry -> entry.value != null && entry.key !in analyzeOptionKeys }
-                .map { it.key }
-            if (unsupported.isNotEmpty()) {
-                throw ConversionException(
-                    ErrorReason.UNSUPPORTED_OPTION,
-                    unsupported.joinToString(", "),
-                )
-            }
-            if (rawOptions["method"] != null && rawOptions["method"] !is String) {
-                throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
-            }
-            if (
-                rawOptions["headers"] != null &&
-                rawOptions["headers"] !is Map<*, *> &&
-                rawOptions["headers"] !is String
-            ) {
-                throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
-            }
-            val option = GSON.fromJsonObject<AnalyzeUrl.UrlOption>(it).getOrElse {
-                throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
-            }
-            option to rawOptions
-        } ?: (AnalyzeUrl.UrlOption() to linkedMapOf())
+                if (
+                    rawOptions["headers"] != null &&
+                        rawOptions["headers"] !is Map<*, *> &&
+                        rawOptions["headers"] !is String
+                ) {
+                    throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
+                }
+                val option =
+                    GSON.fromJsonObject<AnalyzeUrl.UrlOption>(it).getOrElse {
+                        throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
+                    }
+                option to rawOptions
+            } ?: (AnalyzeUrl.UrlOption() to linkedMapOf())
 
         val method = option.getMethod()?.uppercase().orEmpty().ifBlank { "GET" }
         validateMethod(method)
         val hasBody = rawOptions["body"] != null
-        val body = if (hasBody) {
-            option.getBody() ?: throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
-        } else {
-            null
-        }
+        val body =
+            if (hasBody) {
+                option.getBody() ?: throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
+            } else {
+                null
+            }
         if (body != null && method != "POST") {
             throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "$method body")
         }
@@ -159,19 +178,23 @@ object CurlAnalyzeUrlConverter {
         if (rawOptions["headers"] != null && headerMap == null) {
             throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
         }
-        val followRedirects = rawOptions["followRedirects"]?.let {
-            option.getFollowRedirects()
-                ?: throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
-        } ?: true
-        val contentType = headerMap?.entries
-            ?.firstOrNull { it.key.toString() == "Content-Type" }
-            ?.value
-            ?.toString()
-        val effectivePost = if (method == "POST") {
-            effectiveAnalyzePost(body, contentType)
-        } else {
-            null
-        }
+        val followRedirects =
+            rawOptions["followRedirects"]?.let {
+                option.getFollowRedirects()
+                    ?: throw ConversionException(ErrorReason.INVALID_ANALYZE_URL)
+            } ?: true
+        val contentType =
+            headerMap
+                ?.entries
+                ?.firstOrNull { it.key.toString() == "Content-Type" }
+                ?.value
+                ?.toString()
+        val effectivePost =
+            if (method == "POST") {
+                effectiveAnalyzePost(body, contentType)
+            } else {
+                null
+            }
 
         val parts = mutableListOf("curl", "-g")
         if (followRedirects) parts += "-L"
@@ -182,10 +205,7 @@ object CurlAnalyzeUrlConverter {
             if (name.equals("proxy", true) || name.equals("CookieJar", true)) {
                 throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, name)
             }
-            if (
-                name.equals("Content-Length", true) ||
-                name.equals("Transfer-Encoding", true)
-            ) {
+            if (name.equals("Content-Length", true) || name.equals("Transfer-Encoding", true)) {
                 throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, name)
             }
             if (method == "POST" && name.equals("Content-Type", true)) {
@@ -208,7 +228,7 @@ object CurlAnalyzeUrlConverter {
         val tokens = tokenize(text)
         if (
             tokens.isEmpty() ||
-            (!tokens[0].equals("curl", true) && !tokens[0].equals("curl.exe", true))
+                (!tokens[0].equals("curl", true) && !tokens[0].equals("curl.exe", true))
         ) {
             throw ConversionException(ErrorReason.INVALID_CURL)
         }
@@ -231,71 +251,85 @@ object CurlAnalyzeUrlConverter {
                 token == "--" -> endOfOptions = true
 
                 token == "-X" || token == "--request" -> request.customMethod = nextValue()
-                token.startsWith("--request=") -> request.customMethod =
-                    token.substringAfter("--request=")
+                token.startsWith("--request=") ->
+                    request.customMethod = token.substringAfter("--request=")
                 token.startsWith("-X") && token.length > 2 ->
                     request.customMethod = token.substring(2)
 
                 token == "-I" || token == "--head" -> request.head = true
 
                 token == "-H" || token == "--header" -> addHeader(request, nextValue())
-                token.startsWith("--header=") -> addHeader(
-                    request,
-                    token.substringAfter("--header="),
-                )
-                token.startsWith("-H") && token.length > 2 -> addHeader(
-                    request,
-                    token.substring(2),
-                )
+                token.startsWith("--header=") ->
+                    addHeader(
+                        request,
+                        token.substringAfter("--header="),
+                    )
+                token.startsWith("-H") && token.length > 2 ->
+                    addHeader(
+                        request,
+                        token.substring(2),
+                    )
 
-                token == "-A" || token == "--user-agent" -> addUserAgent(
-                    request,
-                    nextValue(),
-                )
-                token.startsWith("--user-agent=") -> addUserAgent(
-                    request,
-                    token.substringAfter("--user-agent="),
-                )
-                token.startsWith("-A") && token.length > 2 -> addUserAgent(
-                    request,
-                    token.substring(2),
-                )
+                token == "-A" || token == "--user-agent" ->
+                    addUserAgent(
+                        request,
+                        nextValue(),
+                    )
+                token.startsWith("--user-agent=") ->
+                    addUserAgent(
+                        request,
+                        token.substringAfter("--user-agent="),
+                    )
+                token.startsWith("-A") && token.length > 2 ->
+                    addUserAgent(
+                        request,
+                        token.substring(2),
+                    )
 
-                token == "-e" || token == "--referer" -> addReferer(
-                    request,
-                    nextValue(),
-                )
-                token.startsWith("--referer=") -> addReferer(
-                    request,
-                    token.substringAfter("--referer="),
-                )
-                token.startsWith("-e") && token.length > 2 -> addReferer(
-                    request,
-                    token.substring(2),
-                )
+                token == "-e" || token == "--referer" ->
+                    addReferer(
+                        request,
+                        nextValue(),
+                    )
+                token.startsWith("--referer=") ->
+                    addReferer(
+                        request,
+                        token.substringAfter("--referer="),
+                    )
+                token.startsWith("-e") && token.length > 2 ->
+                    addReferer(
+                        request,
+                        token.substring(2),
+                    )
 
-                token == "-d" || token == "--data" || token == "--data-raw" ||
+                token == "-d" ||
+                    token == "--data" ||
+                    token == "--data-raw" ||
                     token == "--data-binary" -> addBody(request, token, nextValue())
-                token.startsWith("--data=") -> addBody(
-                    request,
-                    "--data",
-                    token.substringAfter("--data="),
-                )
-                token.startsWith("--data-raw=") -> addBody(
-                    request,
-                    "--data-raw",
-                    token.substringAfter("--data-raw="),
-                )
-                token.startsWith("--data-binary=") -> addBody(
-                    request,
-                    "--data-binary",
-                    token.substringAfter("--data-binary="),
-                )
-                token.startsWith("-d") && token.length > 2 -> addBody(
-                    request,
-                    "-d",
-                    token.substring(2),
-                )
+                token.startsWith("--data=") ->
+                    addBody(
+                        request,
+                        "--data",
+                        token.substringAfter("--data="),
+                    )
+                token.startsWith("--data-raw=") ->
+                    addBody(
+                        request,
+                        "--data-raw",
+                        token.substringAfter("--data-raw="),
+                    )
+                token.startsWith("--data-binary=") ->
+                    addBody(
+                        request,
+                        "--data-binary",
+                        token.substringAfter("--data-binary="),
+                    )
+                token.startsWith("-d") && token.length > 2 ->
+                    addBody(
+                        request,
+                        "-d",
+                        token.substring(2),
+                    )
 
                 token == "--json" -> {
                     addBody(request, "--json", nextValue())
@@ -306,24 +340,28 @@ object CurlAnalyzeUrlConverter {
                     request.addJsonHeaders = true
                 }
 
-                token == "-b" || token == "--cookie" -> addCookie(
-                    request,
-                    nextValue(),
-                )
-                token.startsWith("--cookie=") -> addCookie(
-                    request,
-                    token.substringAfter("--cookie="),
-                )
-                token.startsWith("-b") && token.length > 2 -> addCookie(
-                    request,
-                    token.substring(2),
-                )
+                token == "-b" || token == "--cookie" ->
+                    addCookie(
+                        request,
+                        nextValue(),
+                    )
+                token.startsWith("--cookie=") ->
+                    addCookie(
+                        request,
+                        token.substringAfter("--cookie="),
+                    )
+                token.startsWith("-b") && token.length > 2 ->
+                    addCookie(
+                        request,
+                        token.substring(2),
+                    )
 
                 token == "--url" -> setUrl(request, nextValue())
-                token.startsWith("--url=") -> setUrl(
-                    request,
-                    token.substringAfter("--url="),
-                )
+                token.startsWith("--url=") ->
+                    setUrl(
+                        request,
+                        token.substringAfter("--url="),
+                    )
 
                 token == "-L" || token == "--location" -> request.followRedirects = true
                 token == "--no-location" -> request.followRedirects = false
@@ -333,13 +371,13 @@ object CurlAnalyzeUrlConverter {
                 token in ignoredOptions -> Unit
                 token in ignoredOptionsWithValue -> nextValue()
                 ignoredOptionsWithValue.any { token.startsWith("$it=") } -> Unit
-                (token.startsWith("-o") || token.startsWith("-w")) &&
-                    token.length > 2 -> Unit
+                (token.startsWith("-o") || token.startsWith("-w")) && token.length > 2 -> Unit
 
-                token.startsWith("-") -> throw ConversionException(
-                    ErrorReason.UNSUPPORTED_OPTION,
-                    optionName(token),
-                )
+                token.startsWith("-") ->
+                    throw ConversionException(
+                        ErrorReason.UNSUPPORTED_OPTION,
+                        optionName(token),
+                    )
                 else -> setUrl(request, token)
             }
             index++
@@ -389,9 +427,9 @@ object CurlAnalyzeUrlConverter {
         val isUserAgent = normalizedName == "User-Agent"
         if (
             normalizedName.isEmpty() ||
-            normalizedName.any { it <= ' ' || it == ':' || it.code >= 127 } ||
-            value.any { it == '\r' || it == '\n' } ||
-            (value.isEmpty() && !isUserAgent)
+                normalizedName.any { it <= ' ' || it == ':' || it.code >= 127 } ||
+                value.any { it == '\r' || it == '\n' } ||
+                (value.isEmpty() && !isUserAgent)
         ) {
             throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "empty header")
         }
@@ -414,11 +452,14 @@ object CurlAnalyzeUrlConverter {
             "user-agent" -> "User-Agent"
             "referer" -> "Referer"
             "accept" -> "Accept"
-            "proxy", "cookiejar", "content-length", "transfer-encoding" ->
+            "proxy",
+            "cookiejar",
+            "content-length",
+            "transfer-encoding" ->
                 throw ConversionException(
-                ErrorReason.UNSUPPORTED_OPTION,
-                name,
-            )
+                    ErrorReason.UNSUPPORTED_OPTION,
+                    name,
+                )
             else -> name
         }
     }
@@ -494,8 +535,9 @@ object CurlAnalyzeUrlConverter {
         if (AnalyzeUrl.paramPattern.matcher(value).find()) {
             throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "URL ,{")
         }
-        val url = value.toHttpUrlOrNull()
-            ?: throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "HTTP(S) URL")
+        val url =
+            value.toHttpUrlOrNull()
+                ?: throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "HTTP(S) URL")
         if (url.username.isNotEmpty() || url.password.isNotEmpty()) {
             throw ConversionException(ErrorReason.UNSUPPORTED_OPTION, "URL userinfo")
         }
@@ -505,8 +547,9 @@ object CurlAnalyzeUrlConverter {
         if ('{' in value || '}' in value) return true
         if ('[' !in value && ']' !in value) return false
         val authorityStart = value.indexOf("://").takeIf { it >= 0 }?.plus(3) ?: return true
-        val authorityEnd = value.indexOfAny(charArrayOf('/', '?', '#'), authorityStart)
-            .takeIf { it >= 0 } ?: value.length
+        val authorityEnd =
+            value.indexOfAny(charArrayOf('/', '?', '#'), authorityStart).takeIf { it >= 0 }
+                ?: value.length
         val authority = value.substring(authorityStart, authorityEnd)
         val ipv6Authority = Regex("(?:[^@]+@)?\\[[0-9A-Fa-f:.%]+](?::[0-9]+)?")
         return !ipv6Authority.matches(authority) ||
@@ -523,7 +566,8 @@ object CurlAnalyzeUrlConverter {
             if (separator < 0) {
                 encodeFormPart(field)
             } else {
-                encodeFormPart(field.substring(0, separator)) + "=" +
+                encodeFormPart(field.substring(0, separator)) +
+                    "=" +
                     encodeFormPart(field.substring(separator + 1))
             }
         }
@@ -617,10 +661,11 @@ object CurlAnalyzeUrlConverter {
                     }
                 }
 
-                char == '$' || char == '`' -> throw ConversionException(
-                    ErrorReason.UNSUPPORTED_OPTION,
-                    "shell expansion",
-                )
+                char == '$' || char == '`' ->
+                    throw ConversionException(
+                        ErrorReason.UNSUPPORTED_OPTION,
+                        "shell expansion",
+                    )
 
                 else -> {
                     current.append(char)
