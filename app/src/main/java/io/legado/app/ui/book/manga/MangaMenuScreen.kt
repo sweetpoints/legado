@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -174,7 +175,11 @@ internal fun MangaMenuScreen(
                         else LayoutDirection.Ltr
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onChapter(-1) }, enabled = state.chapterIndex > 0) {
+                        TextButton(
+                            onClick = { onChapter(-1) },
+                            enabled = state.chapterIndex > 0,
+                            modifier = Modifier.testTag("manga-previous-chapter"),
+                        ) {
                             Text(stringResource(R.string.previous_chapter))
                         }
                         Slider(
@@ -183,13 +188,14 @@ internal fun MangaMenuScreen(
                                     .coerceIn(0, (state.imageCount - 1).coerceAtLeast(0))
                                     .toFloat(),
                             onValueChange = { onPage(it.toInt()) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("manga-progress"),
                             enabled = state.imageCount > 1,
                             valueRange = 0f..(state.imageCount - 1).coerceAtLeast(1).toFloat(),
                             steps = (state.imageCount - 2).coerceAtLeast(0),
                         )
                         TextButton(
                             onClick = { onChapter(1) },
+                            modifier = Modifier.testTag("manga-next-chapter"),
                             enabled = state.chapterIndex + 1 < state.chapterCount,
                         ) {
                             Text(stringResource(R.string.next_chapter))

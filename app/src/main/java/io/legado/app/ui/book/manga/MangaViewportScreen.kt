@@ -281,36 +281,39 @@ internal fun MangaViewportScreen(
                         }
                         .testTag("manga-pages")
                 val pageContent: @Composable (MangaReaderItem) -> Unit = { item ->
-                    when (item) {
-                        is MangaReaderItem.Page ->
-                            MangaImageRoute(
-                                request =
-                                    MangaImageRequest(
-                                        bookUrl,
-                                        sourceOrigin,
-                                        item.imageUrl,
-                                        transformation,
-                                    ),
-                                repository = repository,
-                                horizontal = options.horizontal,
-                                isLastImage =
-                                    item.imageCount > 0 && item.pageIndex == item.imageCount - 1,
-                                viewportWidth = viewportWidth,
-                                viewportHeight = viewportHeight,
-                                colorFilter = colorFilter,
-                                isEInk = options.isEInk,
-                                modifier = Modifier.width(viewportWidth),
-                            )
-                        is MangaReaderItem.Boundary ->
-                            Box(
-                                modifier =
-                                    Modifier.width(viewportWidth)
-                                        .height(if (item.volume) viewportHeight else 96.dp)
-                                        .background(boundaryColor),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(item.message.orEmpty(), color = Color.White)
-                            }
+                    Box(Modifier.testTag("manga-item:${item.chapterIndex}:${item.pageIndex}")) {
+                        when (item) {
+                            is MangaReaderItem.Page ->
+                                MangaImageRoute(
+                                    request =
+                                        MangaImageRequest(
+                                            bookUrl,
+                                            sourceOrigin,
+                                            item.imageUrl,
+                                            transformation,
+                                        ),
+                                    repository = repository,
+                                    horizontal = options.horizontal,
+                                    isLastImage =
+                                        item.imageCount > 0 &&
+                                            item.pageIndex == item.imageCount - 1,
+                                    viewportWidth = viewportWidth,
+                                    viewportHeight = viewportHeight,
+                                    colorFilter = colorFilter,
+                                    isEInk = options.isEInk,
+                                    modifier = Modifier.width(viewportWidth),
+                                )
+                            is MangaReaderItem.Boundary ->
+                                Box(
+                                    modifier =
+                                        Modifier.width(viewportWidth)
+                                            .height(if (item.volume) viewportHeight else 96.dp)
+                                            .background(boundaryColor),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(item.message.orEmpty(), color = Color.White)
+                                }
+                        }
                     }
                 }
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {

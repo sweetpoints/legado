@@ -13,11 +13,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import io.legado.app.constant.AppLog
 import io.legado.app.data.image.GlideMangaImageRepository
 import io.legado.app.data.repository.MangaNativeKind
 import io.legado.app.data.repository.MangaNativePhase
 import io.legado.app.data.repository.MangaNativeRequest
-import io.legado.app.help.AppLog
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.currentCoroutineContext

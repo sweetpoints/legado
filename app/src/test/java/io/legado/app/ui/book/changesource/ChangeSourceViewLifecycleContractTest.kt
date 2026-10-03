@@ -31,9 +31,7 @@ class ChangeSourceViewLifecycleContractTest {
         val viewModels =
             listOf(
                 appSource("book/read/ReadBookViewModel.kt")
-                    .section("fun changeTo(", "/**\n     * 自动换源"),
-                appSource("book/manga/ReadMangaViewModel.kt")
-                    .section("fun changeTo(", "private fun checkLocalBookFileExist"),
+                    .section("fun changeTo(", "/**\n     * 自动换源")
             )
         viewModels.forEach { changeTo ->
             assertTrue(changeTo.contains("onSuccess: () -> Unit"))
@@ -61,7 +59,15 @@ class ChangeSourceViewLifecycleContractTest {
 
         assertTrue(readActivity.contains("viewModel.changeTo(book, toc, onSuccess)"))
         assertTrue(audioActivity.contains("viewModel.changeTo(source, book, toc, onSuccess)"))
-        assertTrue(mangaActivity.contains("viewModel.changeTo(book, toc, onSuccess)"))
+        assertTrue(mangaActivity.contains("viewModel.changeSource(book, toc) {"))
+        assertTrue(
+            mangaActivity.indexOf("viewModel.changeSource(book, toc)") <
+                mangaActivity.indexOf("onSuccess()")
+        )
+        val mangaModel =
+            appSource("book/manga/MangaReaderComposeViewModel.kt")
+                .section("fun changeSource(", "fun requestExit")
+        assertTrue(mangaModel.contains("engine?.changeTo(book, toc, onSuccess)"))
         val audioTextMigration =
             appSource("book/audio/AudioPlayViewModel.kt")
                 .section("internal fun changeToText(", "fun removeFromBookshelf")

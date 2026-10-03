@@ -1509,3 +1509,9 @@ The browser payload identifies the current manga `BookSource` with its browser s
 ReadMangaActivity now hosts the immutable reader route and pure Compose viewport/menu, preserving the singleton engine, public launch contract, window/eInk effects, hardware direction and volume keys, source callbacks, chapter boundaries, progress, and original shelf exit behavior. Route native claims require the live RESUMED owner and matching private session. Large book/source/image/cloud payloads remain in the private UUID journal; SavedState contains only session/operation UUIDs. BookInfo uses its live prepared UUID API; shared Toc, ChangeSource and browser public contracts remain compatible until their prepared interfaces are delivered. PDF results use the captured request book, and accepted image exports survive a subsequent book switch.
 
 Unified ktfmt check and git diff check passed. Full debug Android-test compilation and JVM execution for this candidate are pending a coordinated build slot; device behavior and future release minification are not yet verified. Legacy RecyclerView consumers/tests and XML removal are the next audited batch.
+
+### Manga Compose regression consumers
+
+All existing MangaReadingDirection device cases remain, now consuming Compose page pixels/semantics and immutable Host state instead of XML adapters. Coverage retains direction gestures and hardware keys, nonzero initial progress, stale loading receipts, vertical mode, separators, menu settings, first/last boundaries, actual orientation changes, auto modes, and backup restoration. PDF outline fixture consumes the new manga native route and captured page state; only the manga parts of shared offline/source lifecycle checks changed. Current image receipts now also update the displayed footer page, while boundary receipts retain the previous image.
+
+Tests are implemented and formatted; Android compilation, JVM execution and device execution for this batch remain pending.

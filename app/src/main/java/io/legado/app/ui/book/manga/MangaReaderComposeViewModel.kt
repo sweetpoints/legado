@@ -324,6 +324,7 @@ internal class MangaReaderComposeViewModel(
             state.value.copy(
                 chapterIndex = ReadManga.durChapterIndex,
                 pageIndex = ReadManga.durChapterPos,
+                footerPage = (item as? MangaReaderItem.Page) ?: state.value.footerPage,
             )
         checkpoint()
     }
