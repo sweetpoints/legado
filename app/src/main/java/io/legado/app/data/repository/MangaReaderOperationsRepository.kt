@@ -55,19 +55,21 @@ class DefaultMangaReaderOperationsRepository(
 ) : MangaReaderOperationsRepository {
     override suspend fun saveImage(request: MangaImageSaveRequest) {
         currentCoroutineContext().ensureActive()
-        // A destination and full request have been accepted; disposal must not leave a partial
-        // file.
-        withContext(imageDispatcher + NonCancellable) {
-            // Detached full snapshots preserve transient books and original source request headers.
-            val book = GSON.fromJsonObject<Book>(request.bookSnapshot).getOrThrow()
-            check(book.bookUrl == request.bookUrl)
-            val source =
-                request.sourceSnapshot?.let {
-                    GSON.fromJsonObject<BookSource>(it).getOrThrow()
+        val image =
+            withContext(preparationDispatcher) {
+                // Header-aware download and shared image mutex waits remain cancellable.
+                val book = GSON.fromJsonObject<Book>(request.bookSnapshot).getOrThrow()
+                check(book.bookUrl == request.bookUrl)
+                val source =
+                    request.sourceSnapshot?.let { GSON.fromJsonObject<BookSource>(it).getOrThrow() }
+                BookHelp.saveImage(source, book, request.imageUrl)
+                BookHelp.getImage(book, request.imageUrl).also {
+                    if (!it.isFile) throw NoStackTraceException("图片下载失败")
                 }
-            BookHelp.saveImage(source, book, request.imageUrl)
-            val image = BookHelp.getImage(book, request.imageUrl)
-            if (!image.isFile) throw NoStackTraceException("图片下载失败")
+            }
+        currentCoroutineContext().ensureActive()
+        // Only a ready local image is accepted for a bounded, complete destination-file copy.
+        withContext(imageDispatcher + NonCancellable) {
             try {
                 FileDoc.fromDir(Uri.parse(request.directoryUri))
                     .createFileIfNotExist(image.name)
