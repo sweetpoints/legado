@@ -2,78 +2,46 @@ package io.legado.app.ui.book.audio.config
 
 import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import androidx.compose.runtime.Composable
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.DialogAudioSkipCreditsBinding
-import io.legado.app.help.book.savePreservingCustomCoverUrl
-import io.legado.app.help.config.AppConfig
+import io.legado.app.data.repository.*
+import io.legado.app.model.AudioPlay
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.lang.ref.WeakReference
 
-class AudioSkipCredits : BaseDialogFragment(R.layout.dialog_audio_skip_credits) {
-    private val binding by viewBinding(DialogAudioSkipCreditsBinding::bind)
-
+class AudioSkipCredits : BaseComposeDialogFragment() {
+    private var liveBook: WeakReference<Book>? = null
     companion object {
-        private var bookRef: WeakReference<Book>? = null
-
-        fun newInstance(book: Book): AudioSkipCredits {
-            return AudioSkipCredits().apply {
-                bookRef = WeakReference(book)
-            }
+        fun newInstance(book: Book) = AudioSkipCredits().apply {
+            arguments = Bundle().apply { putString("bookUrl", book.bookUrl) }
+            liveBook = WeakReference(book)
         }
     }
-
-    private val book: Book by lazy {
-        bookRef?.get() ?: throw IllegalStateException("Book reference lost")
+    private val model by viewModels<AudioSkipCreditsViewModel> {
+        viewModelFactory { initializer {
+            val id = arguments?.getString("bookUrl").orEmpty()
+            val book = liveBook?.get()?.takeIf { it.bookUrl == id } ?: AudioPlay.book?.takeIf { it.bookUrl == id }
+            AudioSkipCreditsViewModel(DefaultAudioSkipCreditsRepository(AppAudioSkipCreditsStore(id, book)), createSavedStateHandle())
+        } }
     }
- 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initData()
-        initView()
+    override fun onStart() { super.onStart(); dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
+    @Composable override fun Content() {
+        AudioSkipCreditsRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, { draft ->
+            val id = arguments?.getString("bookUrl")
+            val book = liveBook?.get()?.takeIf { it.bookUrl == id } ?: AudioPlay.book?.takeIf { it.bookUrl == id }
+            book?.config?.apply { useGlobalAudioSkip = draft.useGlobal; openCredits = draft.bookOpen; closeCredits = draft.bookClose }
+        }, ::dismissAllowingStateLoss)
     }
-
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
-    private fun initData() {
-        binding.run {
-            rgScope.check(if (book.isAudioSkipUsingGlobal()) R.id.rb_global else R.id.rb_book)
-            updateValues()
-        }
-    }
-
-    private fun initView() {
-        binding.run {
-            rgScope.setOnCheckedChangeListener { _, checkedId ->
-                book.setAudioSkipUsingGlobal(checkedId == R.id.rb_global)
-                updateValues()
-            }
-            openCredits.onChanged = {
-                if (rbGlobal.isChecked) AppConfig.audioSkipOpenCredits = it
-                else book.setOpenCredits(it)
-            }
-            closeCredits.onChanged = {
-                if (rbGlobal.isChecked) AppConfig.audioSkipCloseCredits = it
-                else book.setCloseCredits(it)
-            }
-        }
-    }
-
-    private fun updateValues() = binding.run {
-        openCredits.progress = book.getOpenCredits()
-        closeCredits.progress = book.getCloseCredits()
-    }
-
     override fun onDismiss(dialog: DialogInterface) {
+        if (activity?.isChangingConfigurations != true && !model.state.value.finished) model.requestClose()
         super.onDismiss(dialog)
-        book.savePreservingCustomCoverUrl()
     }
 }
