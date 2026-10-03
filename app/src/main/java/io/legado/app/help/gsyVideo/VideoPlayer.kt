@@ -41,6 +41,112 @@ class VideoPlayer : StandardGSYVideoPlayer {
 
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs)
 
+    private var gestureFeedbackDialog: VideoFeedbackDialog? = null
+    private var networkConfirmationDialog: VideoNetworkDialog? = null
+    private var activeChoiceDialog: VideoChoiceDialog? = null
+    private val playbackPromptFence = VideoPlaybackPromptFence()
+
+    override fun showWifiDialog() {
+        if (!com.shuyu.gsyvideoplayer.utils.NetworkUtils.isAvailable(context)) {
+            startPlayLogic()
+            return
+        }
+        networkConfirmationDialog?.dismiss()
+        val ticket = playbackPromptFence.capture(mOriginUrl)
+        val dialog =
+            VideoNetworkDialog(context) {
+                // A delayed confirmation must not start a replacement stream or a released player.
+                if (playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) {
+                    startPlayLogic()
+                }
+            }
+        networkConfirmationDialog = dialog
+        dialog.setOnDismissListener {
+            if (networkConfirmationDialog === dialog) {
+                networkConfirmationDialog = null
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dismissNetworkConfirmation() {
+        networkConfirmationDialog?.dismiss()
+        networkConfirmationDialog = null
+    }
+
+    private fun showOwnedChoiceDialog(dialog: VideoChoiceDialog) {
+        activeChoiceDialog?.dismiss()
+        activeChoiceDialog = dialog
+        dialog.setOnDismissListener {
+            if (activeChoiceDialog === dialog) {
+                activeChoiceDialog = null
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dismissPlayerDialogs() {
+        // Window callbacks belong to this player, never to a later stream or the transfer target.
+        activeChoiceDialog?.dismiss()
+        activeChoiceDialog = null
+        dismissNetworkConfirmation()
+        dismissGestureFeedback()
+    }
+
+    private fun showGestureFeedback(label: String, fraction: Float) {
+        val dialog =
+            gestureFeedbackDialog
+                ?: VideoFeedbackDialog(context).also {
+                    gestureFeedbackDialog = it
+                }
+        dialog.feedback = VideoFeedbackState(label, fraction)
+        dialog.showOver(this)
+    }
+
+    private fun dismissGestureFeedback() {
+        // Each native player owns its window, including the separate GSY fullscreen clone.
+        gestureFeedbackDialog?.dismiss()
+        gestureFeedbackDialog = null
+    }
+
+    override fun showProgressDialog(
+        deltaX: Float,
+        seekTime: String?,
+        seekTimePosition: Long,
+        totalTime: String?,
+        totalTimeDuration: Long,
+    ) {
+        val direction = if (deltaX >= 0f) "快进" else "快退"
+        val progress =
+            if (totalTimeDuration > 0) {
+                seekTimePosition.toFloat() / totalTimeDuration
+            } else {
+                0f
+            }
+        showGestureFeedback("$direction $seekTime / $totalTime", progress)
+    }
+
+    override fun dismissProgressDialog() {
+        dismissGestureFeedback()
+    }
+
+    override fun showVolumeDialog(deltaY: Float, volumePercent: Int) {
+        showGestureFeedback("音量 $volumePercent%", volumePercent / 100f)
+    }
+
+    override fun dismissVolumeDialog() {
+        dismissGestureFeedback()
+    }
+
+    override fun showBrightnessDialog(percent: Float) {
+        val brightnessPercent = (percent * 100).toInt().coerceIn(0, 100)
+        showGestureFeedback("亮度 $brightnessPercent%", percent)
+    }
+
+    override fun dismissBrightnessDialog() {
+        dismissGestureFeedback()
+    }
+
     private var episodeList: TextView? = null
     private var playbackSpeed: TextView? = null
     private var playSpeed: Float = 1.0f
@@ -196,11 +302,15 @@ class VideoPlayer : StandardGSYVideoPlayer {
     }
 
     override fun onAutoCompletion() { // 播放完成
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.onAutoCompletion()
         VideoPlay.upDurIndex(1, this)
     }
 
     override fun onCompletion() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.onCompletion()
         releaseDanmaku(this)
     }
@@ -279,6 +389,8 @@ class VideoPlayer : StandardGSYVideoPlayer {
         cachePath: File?,
         title: String?,
     ): Boolean {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         initDanmaku()
         return super.setUp(url, cacheWithPlay, cachePath, title)
     }
@@ -402,16 +514,18 @@ class VideoPlayer : StandardGSYVideoPlayer {
     }
 
     private fun showEpisodeDialog() {
-        if (!mHadPlay || VideoPlay.episodes.isNullOrEmpty()) {
-            return
-        }
+        val episodes = VideoPlay.episodes ?: return
+        if (!mHadPlay || episodes.isEmpty()) return
+        val ticket = playbackPromptFence.capture(mOriginUrl)
         isChanging = true
         val choiceEpisodeDialog = ChoiceEpisodeDialog(mContext)
         choiceEpisodeDialog.initList(
-            VideoPlay.episodes!!,
+            episodes,
             object : ChoiceEpisodeDialog.OnListItemClickListener {
                 override fun onItemClick(position: Int) {
-                    if (!isCurrentMediaListener || !mHadPlay) return
+                    if (!isCurrentMediaListener || !mHadPlay || VideoPlay.episodes !== episodes)
+                        return
+                    if (!playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) return
                     VideoPlay.chapterInVolumeIndex = position
                     VideoPlay.saveRead(0)
                     VideoPlay.startPlay(this@VideoPlayer)
@@ -423,13 +537,14 @@ class VideoPlayer : StandardGSYVideoPlayer {
             },
             VideoPlay.chapterInVolumeIndex,
         )
-        choiceEpisodeDialog.show()
+        showOwnedChoiceDialog(choiceEpisodeDialog)
     }
 
     private fun showSpeedDialog() {
         if (!mHadPlay) {
             return
         }
+        val ticket = playbackPromptFence.capture(mOriginUrl)
         isChanging = true
         val choiceSpeedDialog = ChoiceSpeedDialog(mContext)
         choiceSpeedDialog.initList(
@@ -438,6 +553,7 @@ class VideoPlayer : StandardGSYVideoPlayer {
                 @SuppressLint("SetTextI18n")
                 override fun onItemClick(value: Float) {
                     if (!isCurrentMediaListener || !mHadPlay) return
+                    if (!playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) return
                     playSpeed = value
                     setSpeed(playSpeed, true)
                     if (playSpeed != 1.0f) {
@@ -453,7 +569,7 @@ class VideoPlayer : StandardGSYVideoPlayer {
                 }
             },
         )
-        choiceSpeedDialog.show()
+        showOwnedChoiceDialog(choiceSpeedDialog)
     }
 
     override fun updateStartImage() {
@@ -478,6 +594,8 @@ class VideoPlayer : StandardGSYVideoPlayer {
     }
 
     override fun onError(what: Int, extra: Int) {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.onError(what, extra)
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
@@ -517,7 +635,15 @@ class VideoPlayer : StandardGSYVideoPlayer {
         }
     }
 
+    override fun onDetachedFromWindow() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
+        super.onDetachedFromWindow()
+    }
+
     override fun release() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.release()
         releaseDanmaku(this)
     }

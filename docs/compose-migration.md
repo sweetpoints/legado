@@ -1228,3 +1228,4 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 书籍详情异步偏好确认新增点击身份保护：等待磁盘偏好期间若书籍 URL、来源、书名/作者或完整书源发生变化，旧点击不作用于替换后的书籍。新增实际 gated JVM 用例覆盖换书与同 URL 换源，并验证新点击仍可执行；最终 rebase 后的完整验证统一排队。
 
 视频播放第一批：倍速/选集侧边弹窗改为 ComponentDialog 自持生命周期的纯 Compose 列表；保留原调用接口、窗口宽度、选集计数、当前集定位和结束回调顺序。列表仅接收 detached 标题与索引，回调检查当前媒体 owner，旧 SwitchVideoAdapter 与三份专属 XML 已经审计无其他 consumer 后删除。主视频页、原生 GSY/Exo 播放引擎及浮动窗口控制器仍待后续批次迁移。新增 4 个 Android 行为用例已编译，设备端未执行；标准 AndroidTest Kotlin 编译与全量 JVM 3723 用例零失败。所有本批 Kotlin 实际运行 ktfmt 0.64 kotlinlang-style 后再 dry-run 检查。
+视频播放第二批：GSY 进度、音量、亮度手势反馈及移动网络确认改为 Compose ComponentDialog，保留反馈窗口的非触摸/非焦点属性与原生定位；手势帧只更新 Compose 状态，不反复触发 WindowManager 布局。每个原生播放器独立持有窗口，并在错误、完成、释放和 detach 时关闭；网络确认、倍速和选集操作由 URL/version/attached 与列表身份栅栏防止作用到替换后的播放。新增 3 个 JVM 栅栏回归及 2 个 Android 行为用例；本批 formatter 和 diff 检查通过，完整构建待运行。
