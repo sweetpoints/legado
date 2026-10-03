@@ -911,3 +911,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 清理无消费者的 item_1line_text.xml：对生产、测试、模块源码与 XML 引用以及动态 getIdentifier 调用检查后确认没有布局或生成 Binding 消费者。现有 item_1line_text_and_del.xml 的键盘与补全消费者保留。删除后完整 JVM 测试和 Android 测试编译验证。
 
 音频片头片尾页面迁移至 Compose Dialog/Route/Screen 和不可变状态 ViewModel，保留本书/全局、0–180 秒、加减和滑块松手提交。切换范围前串行落盘并读取最新全局值，过期读取不覆盖新的操作；旋转保留草稿且不保存书籍，真实关闭进入持久写入并合并最新书籍配置。删除独占 dialog_audio_skip_credits.xml，新增 6 个 JVM、3 个 Compose 和 1 个真实宿主/Room Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
+
+书源校验配置的数据层与不可变状态 ViewModel 独立迁移：读取和保存移至 IO，保留入口检查项的互斥回退及详情、目录、正文联动，取消不保存。超时输入限制为小型数字草稿，确认时检查空值、非正值和毫秒乘法溢出；进程恢复保留未保存选择，重复保存被阻止，失败后可修改并重试。新增 5 个 JVM 行为测试，完整 JVM 测试及 Android 测试编译验证。
