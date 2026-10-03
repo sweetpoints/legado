@@ -991,3 +991,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 补齐书源调试已关闭会话的恢复边界：初始化即清除 loading，Route 在 RESUMED 清理并退出一次，不重新加载或执行。新增实际 Compose Route 回归；隔离全量 JVM 与 Android 测试编译通过。
 
 通用网页状态层迁入专属 ViewModel，完整 HTML/source/image 留私有会话，SavedState 只保留小票据与全屏状态。准备成功但落盘失败的响应保留供重试，不重复 POST；验证、图片和来源操作先产生持久化回执，认领后交付一次。审查补齐回执保存失败时保留原结果重写，避免重复验证/保存图片，排队关闭等待原成功通知消费。Cookie 冷缓存读取移至 IO；新增 13 个 JVM 行为回归，隔离全量 JVM 与 Android 测试编译通过。
+
+规则订阅状态层将完整编辑草稿、导入地址和事务回执保存在私有文件，SavedState 只保存会话票据。Room 写入前先记录回执，恢复时核对完整行内容，避免重复创建或覆盖外部修改；关闭栅栏同时识别 AtomicFile 备份，阻止迟到写入。新增 16 个 JVM 状态测试和 7 个 Android 文件/Room 测试；JVM 测试执行，Android 测试仅编译。

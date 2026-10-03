@@ -19,10 +19,14 @@ data class RuleSubscriptionInput(val id: Long? = null, val name: String = "", va
 class RuleSubscriptionEmptyUrl : IllegalArgumentException()
 class RuleSubscriptionDuplicateUrl(val name: String) : IllegalArgumentException()
 class RuleSubscriptionMissing : IllegalStateException()
+class RuleSubscriptionConflict : IllegalStateException()
+data class RuleSubscriptionSave(val before: RuleSubscription?, val target: RuleSubscription)
 interface RuleSubscriptionRepository {
     fun rows(): Flow<List<RuleSubscription>>
     suspend fun load(id: Long): RuleSubscription?
     suspend fun save(input: RuleSubscriptionInput): RuleSubscription
+    suspend fun saveJournaled(input: RuleSubscriptionInput, newId: Long, journal: (RuleSubscriptionSave) -> Unit): RuleSubscription
+    suspend fun recoverSave(plan: RuleSubscriptionSave): RuleSubscription
     suspend fun delete(id: Long)
     suspend fun reorder(ids: List<Long>)
 }
@@ -48,6 +52,39 @@ class RoomRuleSubscriptionRepository(private val database: AppDatabase = appDb) 
                 updateInterval = input.interval, silentUpdate = input.silent)
             database.ruleSubDao.insert(row)
             result = checkNotNull(database.ruleSubDao.findByUrl(input.url)).snapshot()
+        }
+        checkNotNull(result)
+    } }
+    private fun RuleSubscription.entity() = RuleSub(id, name, url, type, order, automatic, lastUpdate, interval, silent, js, showRule, sourceUrl)
+    override suspend fun saveJournaled(input: RuleSubscriptionInput, newId: Long,
+        journal: (RuleSubscriptionSave) -> Unit): RuleSubscription = withContext(IO) { writes.withLock {
+        if (input.url.isBlank()) throw RuleSubscriptionEmptyUrl()
+        require(input.type in 0..2 && newId > 0)
+        var result: RuleSubscription? = null
+        database.runInTransaction {
+            val current=input.id?.let { id -> database.ruleSubDao.all.find { it.id==id } ?: throw RuleSubscriptionMissing() }
+            val duplicate=database.ruleSubDao.findByUrl(input.url)
+            if (duplicate!=null && duplicate.id!=input.id) throw RuleSubscriptionDuplicateUrl(duplicate.name)
+            if (current==null && database.ruleSubDao.all.any { it.id==newId }) throw RuleSubscriptionConflict()
+            val target=(current ?: RuleSub(id=newId,customOrder=Math.addExact(database.ruleSubDao.maxOrder,1))).copy(
+                name=input.name,url=input.url,type=input.type,autoUpdate=input.automatic,updateInterval=input.interval,silentUpdate=input.silent).snapshot()
+            // Durable receipt precedes the mutation and contains the latest full baseline/target.
+            journal(RuleSubscriptionSave(current?.snapshot(),target))
+            database.ruleSubDao.insert(target.entity());result=target
+        }
+        checkNotNull(result)
+    } }
+    override suspend fun recoverSave(plan: RuleSubscriptionSave): RuleSubscription = withContext(IO) { writes.withLock {
+        var result: RuleSubscription?=null
+        database.runInTransaction {
+            val current=database.ruleSubDao.all.find { it.id==plan.target.id }?.snapshot()
+            if (current==plan.target) { result=current;return@runInTransaction }
+            // A missing new target is ambiguous (not committed vs externally deleted): fail safely.
+            // Never reinterpret another host's edit or deletion as our successful write.
+            if (current!=plan.before || plan.before==null) throw RuleSubscriptionConflict()
+            val duplicate=database.ruleSubDao.findByUrl(plan.target.url)
+            if (duplicate!=null && duplicate.id!=plan.target.id) throw RuleSubscriptionDuplicateUrl(duplicate.name)
+            database.ruleSubDao.insert(plan.target.entity());result=plan.target
         }
         checkNotNull(result)
     } }
