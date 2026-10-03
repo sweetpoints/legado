@@ -22,9 +22,17 @@ class BookshelfTransferSession(private val saved: SavedStateHandle) {
     val pendingImportRequestId: String?
         get() = requestId("shelf.import.requestId", saved.get<Long>("shelf.import.group") != null)
 
+    val launchedImportRequestId: String?
+        get() = saved.get("shelf.import.launched")
+
+    val launchedExportRequestId: String?
+        get() = saved.get("shelf.export.launched")
+
+    val launchedExportPath: String?
+        get() = saved.get("shelf.export.launchedPath")
+
     val exportPickerInFlight: Boolean
-        get() =
-            pendingExportRequestId?.let { saved.get<String>("shelf.export.launched") == it } == true
+        get() = launchedExportRequestId != null
 
     private var generation = 0
 
@@ -63,17 +71,16 @@ class BookshelfTransferSession(private val saved: SavedStateHandle) {
     fun exportLaunched(path: String, requestId: String) {
         if (pendingExport.value == path && pendingExportRequestId == requestId) {
             saved["shelf.export.launched"] = requestId
+            saved["shelf.export.launchedPath"] = path
         }
     }
 
     fun exportReturned(path: String, requestId: String) {
-        if (
-            pendingExport.value == path &&
-                pendingExportRequestId == requestId &&
-                exportPickerInFlight
-        ) {
+        if (launchedExportRequestId != requestId || launchedExportPath != path) return
+        saved.remove<String>("shelf.export.launched")
+        saved.remove<String>("shelf.export.launchedPath")
+        if (pendingExport.value == path && pendingExportRequestId == requestId) {
             saved.remove<String>("shelf.export.requestId")
-            saved.remove<String>("shelf.export.launched")
             saved["shelf.export.path"] = null
         }
     }
@@ -84,7 +91,13 @@ class BookshelfTransferSession(private val saved: SavedStateHandle) {
             saved["shelf.import.group"] = groupId
         }
 
+    fun importLaunched(requestId: String) {
+        if (pendingImportRequestId == requestId) saved["shelf.import.launched"] = requestId
+    }
+
     fun importReturned(requestId: String): Long? {
+        if (launchedImportRequestId != requestId) return null
+        saved.remove<String>("shelf.import.launched")
         if (pendingImportRequestId != requestId) return null
         saved.remove<String>("shelf.import.requestId")
         return saved.remove<Long>("shelf.import.group")

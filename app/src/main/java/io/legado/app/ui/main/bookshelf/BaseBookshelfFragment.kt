@@ -45,7 +45,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
         registerForActivityResult(HandleFileContract()) { result ->
             val requestId =
                 importRequestId
-                    ?: viewModel.transfer.pendingImportRequestId
+                    ?: viewModel.transfer.launchedImportRequestId
                     ?: return@registerForActivityResult
             val targetGroup = viewModel.transfer.importReturned(requestId)
             val host = activity as? MainBookshelfHost
@@ -61,9 +61,9 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
             val transfer = viewModel.transfer
             val requestId =
                 exportRequestId
-                    ?: transfer.pendingExportRequestId
+                    ?: transfer.launchedExportRequestId
                     ?: return@registerForActivityResult
-            val path = transfer.pendingExport.value
+            val path = transfer.launchedExportPath
             if (path != null) transfer.exportReturned(path, requestId)
             val host = activity as? MainBookshelfHost
             if (host != null)
@@ -145,6 +145,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                         val file = java.io.File(path)
                         if (file.exists()) {
                             exportRequestId = requestId
+                            viewModel.transfer.exportLaunched(path, requestId)
                             exportResult.launch {
                                 mode = HandleFileContract.EXPORT
                                 fileData =
@@ -154,7 +155,6 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                                         "application/json",
                                     )
                             }
-                            viewModel.transfer.exportLaunched(path, requestId)
                         } else {
                             toastOnUi(getString(R.string.error))
                             viewModel.transfer.exportReturned(path, requestId)
@@ -186,6 +186,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
 
     internal fun selectBookshelfImportFile(groupId: Long) {
         importRequestId = viewModel.transfer.importRequested(groupId)
+        viewModel.transfer.importLaunched(requireNotNull(importRequestId))
         importBookshelf.launch {
             mode = HandleFileContract.FILE
             allowExtensions = arrayOf("txt", "json")

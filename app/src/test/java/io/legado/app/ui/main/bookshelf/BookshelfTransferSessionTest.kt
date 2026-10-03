@@ -32,8 +32,8 @@ class BookshelfTransferSessionTest {
         val saved = SavedStateHandle()
         val session = BookshelfTransferSession(saved)
         val old = session.exportReady("old")
-        val current = session.exportReady("new")
         session.exportLaunched("old", old)
+        val current = session.exportReady("new")
         session.exportReturned("old", old)
         assertEquals("new", session.pendingExport.value)
         val restored =
@@ -52,7 +52,9 @@ class BookshelfTransferSessionTest {
     @Test
     fun pickerUsesOriginalGroupAcrossRecreationAndResultIsConsumedOnce() {
         val saved = SavedStateHandle()
-        val requestId = BookshelfTransferSession(saved).importRequested(8)
+        val session = BookshelfTransferSession(saved)
+        val requestId = session.importRequested(8)
+        session.importLaunched(requestId)
         val restored =
             BookshelfTransferSession(
                 SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
