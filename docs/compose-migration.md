@@ -1346,3 +1346,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 书籍详情状态 VM 独立执行统一 Kotlin formatter，并以显式导入替代 repository/coroutine/flow 通配导入，保持现有所有权、持久回执及取消行为；prepared 入口功能另批提交，两批最终验证统一排队。
 
 书籍详情 release 私有会话保名保护：对 JSON 可达的 session/identity/native effect/服务回执/子页面账本/网络与 mutation plan DTO 及 enum 精确添加 androidx.annotation.Keep，包含嵌套 CoverRequest。现有 entities keep 规则不能覆盖 repository 类型，本批不改共享 ProGuard；保名修复与后续纯格式整理分开提交，完整回归统一排队，未声称运行 release 混淆产物。
+
+书籍详情数据基础与嵌套封面仓库独立执行统一 Kotlin formatter，展开原单行类型和分支，并将通配导入改为显式导入；保持 Room/网络桥、私有 session、子页面账本、服务 accepted receipt 和资源释放算法。@Keep 保名与 prepared/Host 功能分别提交，本批 formatter check 与 diff check 通过，完整验证统一排队。
