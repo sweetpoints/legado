@@ -23,11 +23,25 @@ import org.junit.Test
 
 class BookSourcePickerUiTest {
     @get:Rule val compose = createComposeRule()
-    @Test fun realtimeSearchAndGroupDisplaySelectExactStableUrl() {
-        val repo = Fake(); lateinit var model: BookSourcePickerViewModel; var payload: String? = null; var closes = 0
+
+    @Test
+    fun realtimeSearchAndGroupDisplaySelectExactStableUrl() {
+        val repo = Fake()
+        lateinit var model: BookSourcePickerViewModel
+        var payload: String? = null
+        var closes = 0
         compose.runOnIdle { model = BookSourcePickerViewModel(repo, SavedStateHandle()) }
         try {
-            compose.setContent { LegadoComposeTheme { BookSourcePickerRoute(model, { payload = it }, { closes++ }, Modifier.height(320.dp)) } }
+            compose.setContent {
+                LegadoComposeTheme {
+                    BookSourcePickerRoute(
+                        model,
+                        { payload = it },
+                        { closes++ },
+                        Modifier.height(320.dp),
+                    )
+                }
+            }
             compose.waitUntil { model.state.value.items.size == 30 }
             compose.onNodeWithTag("source-picker-list").performScrollToIndex(29)
             compose.onNodeWithTag("source-picker-row:29").assertTextEquals("Source 29 (Group)")
@@ -37,14 +51,29 @@ class BookSourcePickerUiTest {
             compose.onNodeWithTag("source-picker-row:7").performClick()
             compose.waitUntil { closes == 1 }
             assertEquals("full:7", payload)
-        } finally { compose.runOnIdle { model.viewModelScope.cancel() } }
+        } finally {
+            compose.runOnIdle { model.viewModelScope.cancel() }
+        }
     }
-    @Test fun numericDraftSurvivesRestorationAndOnlyConfirmWrites() {
-        val repo = Fake(); val saved = SavedStateHandle(); lateinit var model: BookSourcePickerViewModel
+
+    @Test
+    fun numericDraftSurvivesRestorationAndOnlyConfirmWrites() {
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        lateinit var model: BookSourcePickerViewModel
         var active by mutableStateOf<BookSourcePickerViewModel?>(null)
-        compose.runOnIdle { model = BookSourcePickerViewModel(repo, saved); active = model }
+        compose.runOnIdle {
+            model = BookSourcePickerViewModel(repo, saved)
+            active = model
+        }
         try {
-            compose.setContent { active?.let { LegadoComposeTheme { BookSourcePickerRoute(it, {}, {}, Modifier.height(320.dp)) } } }
+            compose.setContent {
+                active?.let {
+                    LegadoComposeTheme {
+                        BookSourcePickerRoute(it, {}, {}, Modifier.height(320.dp))
+                    }
+                }
+            }
             compose.onNodeWithTag("source-picker-menu").performClick()
             compose.onNodeWithTag("source-picker-delay-menu").performClick()
             compose.waitUntil { model.state.value.delayOpen && !model.state.value.delayLoading }
@@ -52,48 +81,113 @@ class BookSourcePickerUiTest {
             compose.onNodeWithTag("source-picker-delay-save").assertIsNotEnabled()
             compose.onNodeWithTag("source-picker-delay").performTextReplacement("987")
             compose.runOnIdle {
-                active = null; model.viewModelScope.cancel()
-                model = BookSourcePickerViewModel(repo, SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })); active = model
+                active = null
+                model.viewModelScope.cancel()
+                model =
+                    BookSourcePickerViewModel(
+                        repo,
+                        SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }),
+                    )
+                active = model
             }
             compose.onNodeWithTag("source-picker-delay").assertTextEquals("987")
-            compose.onNodeWithTag("source-picker-delay-cancel").performClick(); assertTrue(repo.writes.isEmpty())
-            compose.onNodeWithTag("source-picker-menu").performClick(); compose.onNodeWithTag("source-picker-delay-menu").performClick()
+            compose.onNodeWithTag("source-picker-delay-cancel").performClick()
+            assertTrue(repo.writes.isEmpty())
+            compose.onNodeWithTag("source-picker-menu").performClick()
+            compose.onNodeWithTag("source-picker-delay-menu").performClick()
             compose.waitUntil { !model.state.value.delayLoading }
             compose.onNodeWithTag("source-picker-delay").performTextReplacement("0")
             compose.onNodeWithTag("source-picker-delay-save").performClick()
-            compose.waitUntil { repo.writes == listOf(0) }; compose.onNodeWithTag("source-picker-delay").assertDoesNotExist()
-        } finally { compose.runOnIdle { model.viewModelScope.cancel() } }
+            compose.waitUntil { repo.writes == listOf(0) }
+            compose.onNodeWithTag("source-picker-delay").assertDoesNotExist()
+        } finally {
+            compose.runOnIdle { model.viewModelScope.cancel() }
+        }
     }
-    @Test fun callbackWaitsForResumeIsConsumedBeforeDeliveryAndDoesNotRepeatAfterRestore() {
-        val owner = Owner(); val repo = Fake(); val saved = SavedStateHandle()
-        lateinit var model: BookSourcePickerViewModel; var deliveries = 0; var closes = 0
+
+    @Test
+    fun callbackWaitsForResumeIsConsumedBeforeDeliveryAndDoesNotRepeatAfterRestore() {
+        val owner = Owner()
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        lateinit var model: BookSourcePickerViewModel
+        var deliveries = 0
+        var closes = 0
         var active by mutableStateOf<BookSourcePickerViewModel?>(null)
-        compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED; model = BookSourcePickerViewModel(repo, saved); active = model }
+        compose.runOnIdle {
+            owner.registry.currentState = Lifecycle.State.CREATED
+            model = BookSourcePickerViewModel(repo, saved)
+            active = model
+        }
         try {
-            compose.setContent { CompositionLocalProvider(LocalLifecycleOwner provides owner) { active?.let { current -> LegadoComposeTheme {
-                BookSourcePickerRoute(current, { assertNull(current.consumeSource()); deliveries++ }, { closes++ }, Modifier.height(320.dp))
-            } } } }
+            compose.setContent {
+                CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                    active?.let { current ->
+                        LegadoComposeTheme {
+                            BookSourcePickerRoute(
+                                current,
+                                {
+                                    assertNull(current.consumeSource())
+                                    deliveries++
+                                },
+                                { closes++ },
+                                Modifier.height(320.dp),
+                            )
+                        }
+                    }
+                }
+            }
             compose.waitUntil { model.state.value.items.isNotEmpty() }
-            compose.runOnIdle { model.select("0") }; compose.waitUntil { model.state.value.finished }
-            assertEquals(0, deliveries); assertEquals(0, closes)
-            compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }; compose.waitUntil { closes == 1 }
+            compose.runOnIdle { model.select("0") }
+            compose.waitUntil { model.state.value.finished }
+            assertEquals(0, deliveries)
+            assertEquals(0, closes)
+            compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
+            compose.waitUntil { closes == 1 }
             assertEquals(1, deliveries)
             compose.runOnIdle {
-                active = null; model.viewModelScope.cancel()
-                model = BookSourcePickerViewModel(repo, SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })); active = model
+                active = null
+                model.viewModelScope.cancel()
+                model =
+                    BookSourcePickerViewModel(
+                        repo,
+                        SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }),
+                    )
+                active = model
             }
-            compose.waitUntil { closes == 2 }; assertEquals(1, deliveries); assertEquals(1, repo.reads)
-        } finally { compose.runOnIdle { model.viewModelScope.cancel() } }
+            compose.waitUntil { closes == 2 }
+            assertEquals(1, deliveries)
+            assertEquals(1, repo.reads)
+        } finally {
+            compose.runOnIdle { model.viewModelScope.cancel() }
+        }
     }
+
     private class Owner : LifecycleOwner {
-        val registry = LifecycleRegistry(this); override val lifecycle: Lifecycle get() = registry
+        val registry = LifecycleRegistry(this)
+        override val lifecycle: Lifecycle
+            get() = registry
     }
+
     private class Fake : BookSourcePickerRepository {
-        val rows = MutableStateFlow((0..29).map { BookSourcePickerItem("$it", "Source $it", "Group") })
-        val writes = mutableListOf<Int>(); var reads = 0
-        override fun observe(query: String) = rows.map { it.filter { row -> row.displayName.contains(query) } }
-        override suspend fun source(url: String): String { reads++; return "full:$url" }
+        val rows =
+            MutableStateFlow((0..29).map { BookSourcePickerItem("$it", "Source $it", "Group") })
+        val writes = mutableListOf<Int>()
+        var reads = 0
+
+        override fun observe(query: String) = rows.map {
+            it.filter { row -> row.displayName.contains(query) }
+        }
+
+        override suspend fun source(url: String): String {
+            reads++
+            return "full:$url"
+        }
+
         override suspend fun delay(): Int = 15
-        override suspend fun saveDelay(value: Int) { writes += value }
+
+        override suspend fun saveDelay(value: Int) {
+            writes += value
+        }
     }
 }

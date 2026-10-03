@@ -12,16 +12,37 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 
 class GroupManageDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<BookGroupManagementViewModel> {
-        viewModelFactory { initializer { BookGroupManagementViewModel(RoomBookGroupManagementRepository(), createSavedStateHandle()) } }
+    private val viewModel by
+        viewModels<BookGroupManagementViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookGroupManagementViewModel(
+                        RoomBookGroupManagementRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, 0.9f)
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, 0.9f) }
+
     @Composable
     override fun Content() {
         val state by viewModel.state.collectAsStateWithLifecycle()
         SideEffect { isCancelable = !state.busy }
-        BookGroupManagementRoute(viewModel, { showDialogFragment(GroupEditDialog()) },
-            { showDialogFragment(GroupEditDialog(it.entity())) }, ::dismissAllowingStateLoss)
+        BookGroupManagementRoute(
+            viewModel,
+            { showDialogFragment(GroupEditDialog()) },
+            { showDialogFragment(GroupEditDialog(it.entity())) },
+            ::dismissAllowingStateLoss,
+        )
     }
-    override fun onPause() { viewModel.cancelReorder(); super.onPause() }
+
+    override fun onPause() {
+        viewModel.cancelReorder()
+        super.onPause()
+    }
 }

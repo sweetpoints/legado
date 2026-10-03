@@ -1,28 +1,28 @@
 package io.legado.app.ui.book.manage
 
 import io.legado.app.utils.mergeFilteredOrder
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
 import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class BookshelfManageOrderTest {
 
     @Test
     fun `filtered drag preserves hidden slots and uses current rows`() {
-        val allItems = listOf(
-            Item("a", "a-latest"),
-            Item("x", "x-latest"),
-            Item("b", "b-latest"),
-            Item("y", "y-latest"),
-        )
-        val orderedItems = listOf(
-            Item("missing", "missing"),
-            Item("y", "y-stale"),
-            Item("x", "x-stale"),
-            Item("y", "y-duplicate"),
-        )
+        val allItems =
+            listOf(
+                Item("a", "a-latest"),
+                Item("x", "x-latest"),
+                Item("b", "b-latest"),
+                Item("y", "y-latest"),
+            )
+        val orderedItems =
+            listOf(
+                Item("missing", "missing"),
+                Item("y", "y-stale"),
+                Item("x", "x-stale"),
+                Item("y", "y-duplicate"),
+            )
 
         val result = mergeFilteredOrder(allItems, orderedItems) { it.key }
 

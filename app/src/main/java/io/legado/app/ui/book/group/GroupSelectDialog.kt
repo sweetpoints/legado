@@ -13,19 +13,52 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 
 class GroupSelectDialog() : BaseComposeDialogFragment() {
-    constructor(groupId: Long, requestCode: Int = -1) : this() { arguments = Bundle().apply { putLong("groupId", groupId); putInt("requestCode", requestCode) } }
-    private val viewModel by viewModels<BookGroupSelectionViewModel> {
-        viewModelFactory { initializer { BookGroupSelectionViewModel(RoomBookGroupSelectionRepository(), createSavedStateHandle(), arguments?.getLong("groupId") ?: 0, arguments?.getInt("requestCode", -1) ?: -1) } }
+    constructor(groupId: Long, requestCode: Int = -1) : this() {
+        arguments =
+            Bundle().apply {
+                putLong("groupId", groupId)
+                putInt("requestCode", requestCode)
+            }
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, 0.9f) }
+
+    private val viewModel by
+        viewModels<BookGroupSelectionViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookGroupSelectionViewModel(
+                        RoomBookGroupSelectionRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getLong("groupId") ?: 0,
+                        arguments?.getInt("requestCode", -1) ?: -1,
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, 0.9f)
+    }
+
     @Composable
     override fun Content() {
         val state by viewModel.state.collectAsStateWithLifecycle()
         SideEffect { isCancelable = !state.busy }
-        BookGroupSelectionRoute(viewModel, { showDialogFragment(GroupEditDialog()) },
+        BookGroupSelectionRoute(
+            viewModel,
+            { showDialogFragment(GroupEditDialog()) },
             { showDialogFragment(GroupEditDialog(it.entity())) },
-            { (activity as? CallBack)?.upGroup(it.requestCode, it.groupId) }, ::dismissAllowingStateLoss)
+            { (activity as? CallBack)?.upGroup(it.requestCode, it.groupId) },
+            ::dismissAllowingStateLoss,
+        )
     }
-    override fun onPause() { viewModel.cancelReorder(); super.onPause() }
-    interface CallBack { fun upGroup(requestCode: Int, groupId: Long) }
+
+    override fun onPause() {
+        viewModel.cancelReorder()
+        super.onPause()
+    }
+
+    interface CallBack {
+        fun upGroup(requestCode: Int, groupId: Long)
+    }
 }
