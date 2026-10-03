@@ -1236,3 +1236,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 漫画图片改为纯 Compose Image Screen/Route，以共享 lifecycle Drawable painter 保留真实动画帧；连续模式按视口宽度和原图比例排高，末图保留 2/3 视口最小高度，横向整页 Fit、ARGB 不可变滤镜、墨水屏加载提示及失败重试延续原语义。Route 在取消/离开时释放请求，停止 drawable callback 后才释放池化静态像素或动画帧。新增 2 个实际 Compose 尺寸和资源生命周期回归，最终 tip 构建排队，设备端未执行；旧漫画宿主尚未接入，不宣称整页已迁移。
 
 漫画 viewport 缩放抽为独立纯几何，保留原 0.5–3 倍范围、2 倍双击与再次双击复位、焦点坐标和边缘平移约束；缩小视口不产生平移，非法输入不进入绘制坐标。新增 4 个真实 JVM 缩放/焦点/边缘回归，本批实际官方格式化及 check 通过，统一 tip 完整构建待 slot，Compose 页控件后续接入。
+
+漫画 viewport 改为纯 Compose LazyColumn/LazyRow 页控件，章节边界与卷保持原高度，横向 RTL 仅反转物理摆放、逻辑章节顺序不变；保留整视口翻页、可关动画/吸附、逐帧自动滚动和定时翻页、viewport pinch/双击/惯性、原触摸区域、长按保存开关及触觉反馈。手势独立函数保留缩放后的普通列表滚动并取消过期动画，小 UUID/三浮点变换及 Lazy 小滚动状态进入 SavedState。新增 2 个实际 Compose RTL 命令与 tap 交互回归，实际格式化/check/diff check 已过；最终 tip 编译与 JVM 等 slot，宿主尚未接入。
