@@ -3,15 +3,7 @@ name: Test Build
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - 'modules/web/**'
-      - 'docs/**'
-      - 'README.md'
   pull_request:
-    paths-ignore:
-      - 'modules/web/**'
-      - 'docs/**'
-      - 'README.md'
   workflow_dispatch:
 
 permissions:
@@ -253,3 +245,44 @@ jobs:
             ${{ runner.temp }}/gradle-*.log
             app/build/reports/lint-results-*.html
           if-no-files-found: warn
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.0.10
+        with:
+          version: 9.15.9
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: modules/web/pnpm-lock.yaml
+      - name: Test and build web
+        working-directory: modules/web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+  ci:
+    name: CI
+    needs: [prepare, unit-tests, build, web]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all CI jobs to succeed
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          UNIT_TEST_RESULT: ${{ needs.unit-tests.result }}
+          APK_BUILD_RESULT: ${{ needs.build.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+        run: |
+          for result in "$PREPARE_RESULT" "$UNIT_TEST_RESULT" "$APK_BUILD_RESULT" "$WEB_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "CI dependency did not succeed: $result"
+              exit 1
+            fi
+          done
