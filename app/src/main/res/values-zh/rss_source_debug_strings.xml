@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rss_debug_busy">调试通道占用中，请稍后重试</string>
+    <string name="rss_debug_interrupted">上次调试已中断，可提交查询重新运行。</string>
+    <string name="rss_debug_search_help">调试搜索&gt;&gt;输入关键字，如：</string>
+    <string name="rss_debug_category_help">调试分类&gt;&gt;输入分类URL，如：</string>
+    <string name="rss_debug_content_help">调试内容页&gt;&gt;输入内容页URL，如：</string>
+    <string name="rss_debug_choose_category">选择分类</string>
+</resources>

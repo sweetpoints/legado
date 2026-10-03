@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rss_debug_busy">Debug channel is busy. Try again later.</string>
+    <string name="rss_debug_interrupted">The previous debug run was interrupted. Submit the query to run again.</string>
+    <string name="rss_debug_search_help">Debug search: enter a keyword, for example:</string>
+    <string name="rss_debug_category_help">Debug category: enter a category URL, for example:</string>
+    <string name="rss_debug_content_help">Debug content: enter a content page URL, for example:</string>
+    <string name="rss_debug_choose_category">Choose a category</string>
+</resources>

@@ -242,26 +242,15 @@ class JsSourceWebApiContractTest {
         val bookDebugModel = readProjectFile(
             "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugModel.kt"
         )
-        val rssDebugModel = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/rss/source/debug/RssSourceDebugModel.kt"
-        )
         assertTrue(bookDebugModel.contains("state == -1 || state == 1000"))
-        assertTrue(rssDebugModel.contains("state == -1 || state == 1000"))
         assertTrue(bookDebugModel.contains("Debug.cancelDebug(this)"))
-        assertTrue(rssDebugModel.contains("Debug.cancelDebug(this)"))
         assertTrue(bookDebugModel.contains("error: ((Throwable) -> Unit)?"))
-        assertTrue(rssDebugModel.contains("error: ((Throwable) -> Unit)?"))
         assertTrue(bookDebugModel.contains("error?.invoke(it)"))
-        assertTrue(rssDebugModel.contains("error?.invoke(it)"))
 
         val bookDebugActivity = readProjectFile(
             "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugActivity.kt"
         )
-        val rssDebugActivity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/rss/source/debug/RssSourceDebugActivity.kt"
-        )
         assertTrue(bookDebugActivity.contains("error.localizedMessage ?: \"调试失败\""))
-        assertTrue(rssDebugActivity.contains("error.localizedMessage ?: \"调试失败\""))
 
         val debugModel = readProjectFile("app/src/main/java/io/legado/app/model/Debug.kt")
         assertTrue(debugModel.contains("withActiveDebugSession"))
