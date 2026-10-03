@@ -160,11 +160,11 @@ class BookDetailNetworkStorageRepositoryTest {
         var plan: BookDetailNetworkWritePlan? = null
         assertTrue(
             runCatching {
-                    repo().commit(data(old), result(old.copy(bookUrl = "new")), false) {
-                        plan = it
-                        error("journal failed")
-                    }
+                repo().commit(data(old), result(old.copy(bookUrl = "new")), false) {
+                    plan = it
+                    error("journal failed")
                 }
+            }
                 .isFailure
         )
         assertNotNull(read("old"))
@@ -193,10 +193,10 @@ class BookDetailNetworkStorageRepositoryTest {
                 )
             assertTrue(
                 runCatching {
-                        repository.commit(data(old), result(old.copy(bookUrl = "new")), false) {
-                            plan = it
-                        }
+                    repository.commit(data(old), result(old.copy(bookUrl = "new")), false) {
+                        plan = it
                     }
+                }
                     .isFailure
             )
             assertNull(read("old"))
@@ -274,8 +274,8 @@ class BookDetailNetworkStorageRepositoryTest {
         insert(old, book("occupied", name = "Other"))
         assertTrue(
             runCatching {
-                    repo().commit(data(old), result(old.copy(bookUrl = "occupied")), false) {}
-                }
+                repo().commit(data(old), result(old.copy(bookUrl = "occupied")), false) {}
+            }
                 .exceptionOrNull() is BookDetailConflict
         )
         assertEquals("Other", read("occupied")!!.name)

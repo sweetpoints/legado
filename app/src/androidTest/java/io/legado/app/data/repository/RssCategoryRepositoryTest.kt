@@ -89,7 +89,11 @@ class RssCategoryRepositoryTest {
         )
         assertEquals(
             "search",
-            repository.load(RssCategoryRequest(source.sourceUrl, query = "query")).tabs.single().url,
+            repository
+                .load(RssCategoryRequest(source.sourceUrl, query = "query"))
+                .tabs
+                .single()
+                .url,
         )
         assertEquals(0, categoryCalls)
         assertEquals(2, repository.load(RssCategoryRequest(source.sourceUrl)).tabs.size)

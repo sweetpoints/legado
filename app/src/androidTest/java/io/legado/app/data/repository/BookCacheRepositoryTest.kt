@@ -190,12 +190,12 @@ class BookCacheRepositoryTest {
             assertFalse(File(directory, "$ticket.json").exists())
             assertTrue(
                 runCatching {
-                        repo()
-                            .writeSection(
-                                ticket,
-                                BookCacheSectionDraft("path", false, "1", "1", "late", 2),
-                            )
-                    }
+                    repo()
+                        .writeSection(
+                            ticket,
+                            BookCacheSectionDraft("path", false, "1", "1", "late", 2),
+                        )
+                }
                     .isFailure
             )
             assertFalse(File(directory, "$ticket.json").exists())

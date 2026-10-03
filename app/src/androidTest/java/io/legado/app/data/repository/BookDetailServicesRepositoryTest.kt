@@ -164,8 +164,8 @@ class BookDetailServicesRepositoryTest {
         var snapshots = 0
         assertTrue(
             runCatching {
-                    repo(engine) { snapshots++ }.delete(BookDetailBook.from(initial), true, true)
-                }
+                repo(engine) { snapshots++ }.delete(BookDetailBook.from(initial), true, true)
+            }
                 .exceptionOrNull() is BookDetailRemoteDeleteFailed
         )
         assertNotNull(read())
@@ -259,8 +259,8 @@ class BookDetailServicesRepositoryTest {
             )
             assertTrue(
                 runCatching {
-                        repository.download(initial, null, BookDetailWebFile("raw", "book.txt"))
-                    }
+                    repository.download(initial, null, BookDetailWebFile("raw", "book.txt"))
+                }
                     .exceptionOrNull() is BookDetailNoSource
             )
         }

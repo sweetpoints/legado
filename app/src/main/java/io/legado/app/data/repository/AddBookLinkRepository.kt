@@ -83,7 +83,8 @@ class DefaultAddBookLinkRepository(
                 for (source in store.patternSources()) {
                     val matches = runCatching {
                         url.matches(source.bookUrlPattern!!.toRegex())
-                    }.getOrDefault(false)
+                    }
+                        .getOrDefault(false)
                     if (matches) book = fromSource(source)
                     if (book != null) break
                 }

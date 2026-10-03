@@ -228,15 +228,15 @@ class AppBookImportStoreTest {
         failing.stage("failure", snapshot)
         assertTrue(
             runCatching {
-                    failing.insert(
-                        "failure",
-                        snapshot,
-                        setOf(entries.single().key),
-                        BookImportPreferences(),
-                        null,
-                        false,
-                    )
-                }
+                failing.insert(
+                    "failure",
+                    snapshot,
+                    setOf(entries.single().key),
+                    BookImportPreferences(),
+                    null,
+                    false,
+                )
+            }
                 .isFailure
         )
         assertFalse(failing.restore("failure")!!.committed)

@@ -160,15 +160,15 @@ class BookDetailSessionRepositoryTest {
             }
             assertTrue(
                 runCatching {
-                        failing.completeNetwork(
-                            id,
-                            initial,
-                            initial.data!!,
-                            result,
-                            false,
-                            "network",
-                        )
-                    }
+                    failing.completeNetwork(
+                        id,
+                        initial,
+                        initial.data!!,
+                        result,
+                        false,
+                        "network",
+                    )
+                }
                     .isFailure
             )
             assertNull(read("book"))
@@ -203,15 +203,15 @@ class BookDetailSessionRepositoryTest {
             }
             assertTrue(
                 runCatching {
-                        failing.completeNetwork(
-                            id,
-                            initial,
-                            initial.data!!,
-                            result,
-                            false,
-                            "network",
-                        )
-                    }
+                    failing.completeNetwork(
+                        id,
+                        initial,
+                        initial.data!!,
+                        result,
+                        false,
+                        "network",
+                    )
+                }
                     .isFailure
             )
             assertNotNull(read("book"))
@@ -223,15 +223,15 @@ class BookDetailSessionRepositoryTest {
             }
             assertTrue(
                 runCatching {
-                        finalFail.completeNetwork(
-                            id,
-                            initial,
-                            initial.data!!,
-                            result,
-                            false,
-                            "network",
-                        )
-                    }
+                    finalFail.completeNetwork(
+                        id,
+                        initial,
+                        initial.data!!,
+                        result,
+                        false,
+                        "network",
+                    )
+                }
                     .isFailure
             )
             insert(read("changed")!!.copy(durChapterPos = 900))

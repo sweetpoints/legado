@@ -59,7 +59,9 @@ class AppRssCategoryRepository(
                 }
             RssCategorySnapshot(
                 source.copy(),
-                tabs.mapIndexed { index, entry -> RssCategoryTab(index, entry.first, entry.second) },
+                tabs.mapIndexed { index, entry ->
+                    RssCategoryTab(index, entry.first, entry.second)
+                },
             )
         }
 

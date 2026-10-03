@@ -95,7 +95,10 @@ class AppBottomBarSkinCatalogRepository(context: Context) : BottomBarSkinCatalog
             try {
                 val name = runCatching {
                     FileDoc.fromUri(source, false).name
-                }.getOrNull().orEmpty().substringBeforeLast('.')
+                }
+                    .getOrNull()
+                    .orEmpty()
+                    .substringBeforeLast('.')
                 BottomBarSkinStaged(
                     session,
                     if (name.codePointCount(0, name.length) <= 512) name

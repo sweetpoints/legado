@@ -80,7 +80,9 @@ class RoomHighlightGroupRepositoryTest {
         repo.move("A", "No group")
         assertEquals(
             3,
-            withContext(Dispatchers.IO) { db.highlightRuleDao.all.count { it.group == "No group" } },
+            withContext(Dispatchers.IO) {
+                db.highlightRuleDao.all.count { it.group == "No group" }
+            },
         )
         repo.move("No group", null)
         assertEquals(

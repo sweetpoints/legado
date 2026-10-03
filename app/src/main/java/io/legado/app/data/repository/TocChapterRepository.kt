@@ -225,7 +225,8 @@ class AppTocChapterRepository(
                 val tree = AppConfig.audioCacheTreeUri
                 val keys = runCatching {
                     AudioCacheManager.listCachedChapterKeys(tree, book.bookUrl)
-                }.getOrDefault(emptySet())
+                }
+                    .getOrDefault(emptySet())
                 if (tree == AppConfig.audioCacheTreeUri)
                     return@withContext TocChapterCache(audio = keys.toSet(), tree = tree)
             }

@@ -62,9 +62,9 @@ class BookDetailChildRepositoryTest {
             repo().owner(id, owner)
             assertTrue(
                 runCatching {
-                        repo { if (it.pending.isNotEmpty()) error("disk unavailable") }
-                            .result(id, result)
-                    }
+                    repo { if (it.pending.isNotEmpty()) error("disk unavailable") }
+                        .result(id, result)
+                }
                     .isFailure
             )
             assertEquals(owner, repo().read(id).owners.single())

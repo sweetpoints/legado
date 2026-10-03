@@ -176,11 +176,8 @@ internal class AppChapterSourceSearchStore(private val database: AppDatabase = a
         val chapter = database.bookChapterDao.getChapter(book.bookUrl, index) ?: return null
         val content = BookHelp.getContent(book, chapter) ?: return null
         return runCatching {
-                ContentProcessor.get(book)
-                    .getContent(book, chapter, content, false)
-                    .toString()
-                    .length
-            }
+            ContentProcessor.get(book).getContent(book, chapter, content, false).toString().length
+        }
             .getOrNull()
             ?.takeIf { it > 0 }
     }

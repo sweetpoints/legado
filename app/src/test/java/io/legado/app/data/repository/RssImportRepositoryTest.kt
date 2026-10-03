@@ -255,8 +255,8 @@ class RssImportRepositoryTest {
             store.insertFailure = true
             assertTrue(
                 runCatching {
-                        repo.insert("session", snapshot, setOf("key-0"), prefs, "New", false)
-                    }
+                    repo.insert("session", snapshot, setOf("key-0"), prefs, "New", false)
+                }
                     .isFailure
             )
             assertFalse(repo.restore("session")!!.committed)

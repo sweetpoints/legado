@@ -201,9 +201,8 @@ class BookMetadataEditorRepositoryTest {
             var plan: BookMetadataSave? = null
             assertTrue(
                 runCatching {
-                        repo { _, _ -> error("post commit failure") }
-                            .save(input(book)) { plan = it }
-                    }
+                    repo { _, _ -> error("post commit failure") }.save(input(book)) { plan = it }
+                }
                     .isFailure
             )
             val saved = withContext(Dispatchers.IO) { database.bookDao.getBook("book")!! }

@@ -61,9 +61,9 @@ class BookMetadataCoverImportRepositoryTest {
         val source = File(directory, "missing.jpg")
         assertTrue(
             runCatching {
-                    FileBookMetadataCoverImportRepository(context, covers)
-                        .install(Uri.fromFile(source).toString())
-                }
+                FileBookMetadataCoverImportRepository(context, covers)
+                    .install(Uri.fromFile(source).toString())
+            }
                 .isFailure
         )
         assertTrue(covers.listFiles().orEmpty().isEmpty())

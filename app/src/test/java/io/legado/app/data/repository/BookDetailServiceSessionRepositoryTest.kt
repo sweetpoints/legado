@@ -56,8 +56,8 @@ class BookDetailServiceSessionRepositoryTest {
         sessions.failFirst = true
         assertTrue(
             runCatching {
-                    repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
-                }
+                repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
+            }
                 .isFailure
         )
         assertTrue(services.events.isEmpty())
@@ -66,8 +66,8 @@ class BookDetailServiceSessionRepositoryTest {
         services.deleteFailure = true
         assertTrue(
             runCatching {
-                    repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
-                }
+                repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
+            }
                 .isFailure
         )
         assertEquals(listOf("delete"), services.events)
@@ -84,8 +84,8 @@ class BookDetailServiceSessionRepositoryTest {
         sessions.failCompletion = true
         assertTrue(
             runCatching {
-                    repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
-                }
+                repo.execute("ticket", sessions.record, request(BookDetailServiceKind.Delete))
+            }
                 .isFailure
         )
         assertNotNull(sessions.record.pendingService!!.result)

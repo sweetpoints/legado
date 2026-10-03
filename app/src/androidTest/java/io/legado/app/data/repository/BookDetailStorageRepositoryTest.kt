@@ -197,11 +197,11 @@ class BookDetailStorageRepositoryTest {
         var plan: BookDetailWritePlan? = null
         assertTrue(
             runCatching {
-                    mutate(book, BookDetailMutationKind.SplitLong, flag = false) {
-                        plan = it
-                        error("disk failed")
-                    }
+                mutate(book, BookDetailMutationKind.SplitLong, flag = false) {
+                    plan = it
+                    error("disk failed")
                 }
+            }
                 .isFailure
         )
         assertTrue(read("book")!!.getSplitLongChapter())
@@ -265,16 +265,16 @@ class BookDetailStorageRepositoryTest {
             var plan: BookDetailWritePlan? = null
             assertTrue(
                 runCatching {
-                        mutate(
-                            owned,
-                            BookDetailMutationKind.JoinShelf,
-                            false,
-                            journal = {
-                                plan = it
-                                error("journal completed, before Room")
-                            },
-                        )
-                    }
+                    mutate(
+                        owned,
+                        BookDetailMutationKind.JoinShelf,
+                        false,
+                        journal = {
+                            plan = it
+                            error("journal completed, before Room")
+                        },
+                    )
+                }
                     .isFailure
             )
             val external = owned.copy(bookUrl = "foreign")

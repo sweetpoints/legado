@@ -116,8 +116,8 @@ class SimulatedReadingRepositoryTest {
         withContext(Dispatchers.IO) { database.bookDao.deleteRows(book) }
         assertTrue(
             runCatching {
-                    repository.save(book.bookUrl, SimulatedReadingSettings(true, "", "1", "3", 12))
-                }
+                repository.save(book.bookUrl, SimulatedReadingSettings(true, "", "1", "3", 12))
+            }
                 .isFailure
         )
         withContext(Dispatchers.IO) { assertNull(database.bookDao.getBook(book.bookUrl)) }
