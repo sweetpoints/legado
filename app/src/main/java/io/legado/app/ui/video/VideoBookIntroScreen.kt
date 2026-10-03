@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -42,10 +43,7 @@ internal fun VideoBookIntroScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val imageRepository =
-        androidx.compose.runtime.remember(context) {
-            BookDetailIntroImageRepository(context)
-        }
+    val imageRepository = remember(context) { BookDetailIntroImageRepository(context) }
     val documentState =
         produceState(initialValue = null, state.rawIntro) {
             value = withContext(Dispatchers.IO) { bookDetailIntroDocument(state.rawIntro) }
