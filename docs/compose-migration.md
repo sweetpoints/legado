@@ -967,3 +967,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 目录标注数据与状态层独立迁移：书籍 URL 隔离查询，按最新章节 URL 映射、正文位置和时间排序，展示有界投影，阅读及备注前重新获取完整实体。完整查询保存在 UUID 私有会话，SavedState 保留小票据；持久化修订基于磁盘基线，清理后迟到写入不会重建。保留原坐标、标题长度、锚点与颜色合同，新增 15 个 JVM 与 7 个 Room/私有会话回归；隔离全量 JVM 与 Android 测试编译通过。
 
 目录标注 Fragment 改为 Compose Route/Screen，保留卡片、颜色条、章节/原文/备注、点击阅读及长按备注，复用 Compose 快速滚动。异步解析后再次核对 RESUMED 和宿主状态，消费票据后交付，孤立章节继续可编辑但不跳转。删除旧 Adapter 及最后两个专属布局；新增 7 个 Compose 和 3 个宿主回归，只替换共享测试中该页旧 XML/源码断言。隔离 JVM 回归与 Android 测试编译通过；设备测试尚未执行。
+
+二维码页面迁入 Compose Activity/Route/Screen，保留图片选择与 RESULT_OK/result 可空字符串协议。CameraX PreviewView 作为原生扫码内核，QR-only/full-area/0.8 区域与缩放、灯光感应、手电筒保留；工具栏、扫描框、进度及错误重试由 Compose 绘制，原 Fragment/布局/菜单删除。结果认领失败显示可重试错误，暂停认领后恢复仅交付一次；真实结束清理会话，旋转保留。新增 4 个实际 Compose/生命周期回归；隔离全量 JVM 与 Android 测试编译通过，尚未执行设备相机测试。

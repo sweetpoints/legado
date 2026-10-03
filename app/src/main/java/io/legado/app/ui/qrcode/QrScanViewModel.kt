@@ -107,7 +107,8 @@ internal class QrScanViewModel(private val repository: QrScanRepository, private
         publish(claimed)
         QrScanDelivery(value.result)
     }
-    fun retry() { if (closed) return; val value = current; if (value == null) initialize() else if (!value.completed) { val pending = queuedResult; if (pending != null) capture(pending.text) else value.gallery?.let(::gallery) } }
+    fun failed(message: String) { if (!closed) mutable.value = state.value.copy(error = message) }
+    fun retry() { if (closed) return; if (current?.resultReady == true && current?.completed == false) { mutable.value = state.value.copy(error = null); return }; val value = current; if (value == null) initialize() else if (!value.completed) { val pending = queuedResult; if (pending != null) capture(pending.text) else value.gallery?.let(::gallery) } }
     suspend fun close() {
         if (closed) return
         closed = true; ++generation; initializing?.cancel(); work?.cancel()

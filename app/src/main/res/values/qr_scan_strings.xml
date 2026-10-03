@@ -1,0 +1,4 @@
+<resources>
+    <string name="qr_flashlight_on">Turn flashlight on</string>
+    <string name="qr_flashlight_off">Turn flashlight off</string>
+</resources>
