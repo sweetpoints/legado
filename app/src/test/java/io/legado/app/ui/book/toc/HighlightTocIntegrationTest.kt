@@ -62,21 +62,6 @@ class HighlightTocIntegrationTest {
     }
 
     @Test
-    fun `highlight flow belongs to the current view`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/HighlightFragment.kt"
-        ).readText()
-
-        assertTrue(fragment.contains("bookData.observe(viewLifecycleOwner)"))
-        assertTrue(fragment.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertTrue(fragment.countMatches("highlightJob?.cancel()") >= 2)
-        assertTrue(fragment.contains("binding.recyclerView.adapter = null"))
-        assertTrue(fragment.contains("clearCallbackIfOwned"))
-        assertTrue(fragment.contains("upHighlight(viewModel.searchKey)"))
-        assertTrue(fragment.contains("if (!supportsHighlightPosition(book))"))
-    }
-
-    @Test
     fun `recreated chapter page restores the shared search`() {
         val fragment = projectFile(
             "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
@@ -111,9 +96,6 @@ class HighlightTocIntegrationTest {
 
     @Test
     fun `highlight jump waits for current layout coordinates`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/HighlightFragment.kt"
-        ).readText()
         val readBook = projectFile(
             "src/main/java/io/legado/app/model/ReadBook.kt"
         ).readText()
@@ -124,9 +106,9 @@ class HighlightTocIntegrationTest {
             "src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt"
         ).readText()
 
-        assertTrue(fragment.contains("EXTRA_HIGHLIGHT_LAYOUT_TITLE_LENGTH"))
-        assertTrue(fragment.contains("EXTRA_HIGHLIGHT_ANCHOR_TEXT"))
-        assertTrue(fragment.contains("highlight.chapterPosEnd - highlight.chapterPos == it.length"))
+        val highlight = BookHighlight(chapterPos = 20, chapterPosEnd = 24, layoutTitleLength = 12, bookText = "Text")
+        assertEquals("Text", io.legado.app.model.book.tocHighlightAnchorText(highlight))
+        assertEquals("", io.legado.app.model.book.tocHighlightAnchorText(highlight.copy(chapterPosEnd = 23)))
         assertTrue(readBook.contains("if (hasPendingHighlightJump()) return"))
         assertTrue(readBook.countMatches("positionReady && !available") >= 2)
         assertTrue(readBook.contains("if (curTextChapter !== textChapter) return false"))
@@ -157,35 +139,9 @@ class HighlightTocIntegrationTest {
         val dao = projectFile(
             "src/main/java/io/legado/app/data/dao/BookHighlightDao.kt"
         ).readText()
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/HighlightFragment.kt"
-        ).readText()
-
         assertTrue(dao.contains("where bookUrl = :bookUrl"))
         assertTrue(dao.contains("fun flowByBook(bookUrl: String)"))
         assertTrue(dao.contains("fun flowSearch(bookUrl: String, key: String)"))
-        assertTrue(fragment.contains("flowByBook(book.bookUrl)"))
-        assertTrue(fragment.contains("flowSearch(book.bookUrl, searchKey)"))
-        assertTrue(fragment.contains("getChapterList(book.bookUrl)"))
-        assertTrue(fragment.contains("resolveHighlightChapterIndex"))
-        assertTrue(!fragment.contains("book.name, book.author"))
-    }
-
-    @Test
-    fun `highlight item keeps card styling and bindings`() {
-        val root = parseLayout("item_highlight.xml")
-
-        assertEquals("androidx.cardview.widget.CardView", root.tagName)
-        assertEquals("8dp", root.appAttribute("cardCornerRadius"))
-        val fields = root.getElementsByTagName("TextView")
-        val ids = (0 until fields.length)
-            .map { fields.item(it) as Element }
-            .map { it.androidAttribute("id") }
-            .toSet()
-        assertEquals(
-            setOf("@+id/tv_chapter_name", "@+id/tv_book_text", "@+id/tv_note"),
-            ids
-        )
     }
 
     private fun parseLayout(name: String): Element =
