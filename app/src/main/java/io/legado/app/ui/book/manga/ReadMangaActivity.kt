@@ -141,8 +141,9 @@ class ReadMangaActivity :
             object : FragmentManager.FragmentLifecycleCallbacks() {
                 override fun onFragmentDetached(manager: FragmentManager, fragment: Fragment) {
                     if (fragment is ChangeBookSourceDialog) {
-                        sourceTicket?.let { viewModel.completeNative(it, cancelled = true) }
-                        sourceTicket = null
+                        val ticket = fragment.arguments?.getString(SOURCE_DIALOG_TICKET)
+                        ticket?.let { viewModel.completeNative(it, cancelled = true) }
+                        if (sourceTicket == ticket) sourceTicket = null
                     }
                 }
             },
@@ -237,6 +238,12 @@ class ReadMangaActivity :
                 sourceTicket = request.ticket
                 showDialogFragment(
                     ChangeBookSourceDialog(request.title.orEmpty(), request.author.orEmpty())
+                        .apply {
+                            arguments =
+                                (arguments ?: Bundle()).apply {
+                                    putString(SOURCE_DIALOG_TICKET, request.ticket)
+                                }
+                        }
                 )
             }
             MangaNativeKind.Download -> {
@@ -406,5 +413,6 @@ class ReadMangaActivity :
         const val CATALOG_TICKET = "manga.native.catalog"
         const val IMAGE_TICKET = "manga.native.image"
         const val SOURCE_TICKET = "manga.native.source"
+        const val SOURCE_DIALOG_TICKET = "manga.native.sourceDialog"
     }
 }

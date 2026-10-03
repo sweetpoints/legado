@@ -2,6 +2,7 @@ package io.legado.app.ui.book.manga
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Bundle
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,47 @@ class MangaNativeResultRegistryTest {
     fun lateDirectoryResultKeepsNewSessionClaim() {
         val input: (HandleFileContract.HandleFileParam.() -> Unit)? = { value = "opaque UUID" }
         verifyLateReceipt("imageDirectory", HandleFileContract(), input)
+    }
+
+    @Test
+    fun restoredPendingResultsRetainCapturedUuidDuringSynchronousRegistration() {
+        val first = RecordingRegistry()
+        val original = MangaNativeResultRegistry(first)
+        val ticketA = UUID.randomUUID().toString()
+        val ticketB = UUID.randomUUID().toString()
+        val contract = ActivityResultContracts.StartActivityForResult()
+        original.launcher("bookInfo", ticketA, contract) { _, _ -> }.launch(Intent())
+        original.launcher("bookInfo", ticketB, contract) { _, _ -> }.launch(Intent())
+        val saved = Bundle()
+        first.onSaveInstanceState(saved)
+        original.close()
+        val restored = RecordingRegistry()
+        restored.onRestoreInstanceState(saved)
+        assertTrue(restored.dispatchResult(first.codes[0], Activity.RESULT_CANCELED, null))
+        assertTrue(restored.dispatchResult(first.codes[1], Activity.RESULT_CANCELED, null))
+        val owner = MangaNativeResultRegistry(restored)
+        val accepted = mutableListOf<String>()
+        owner.launcher("bookInfo", ticketA, contract) { ticket, _ ->
+            if (ticket == ticketB) accepted.add(ticket)
+        }
+        owner.launcher("bookInfo", ticketB, contract) { ticket, _ ->
+            if (ticket == ticketB) accepted.add(ticket)
+        }
+        assertEquals(listOf(ticketB), accepted)
+        owner.close()
+    }
+
+    private class RecordingRegistry : ActivityResultRegistry() {
+        val codes = mutableListOf<Int>()
+
+        override fun <I, O> onLaunch(
+            requestCode: Int,
+            contract: ActivityResultContract<I, O>,
+            input: I,
+            options: ActivityOptionsCompat?,
+        ) {
+            codes.add(requestCode)
+        }
     }
 
     private fun <Input, Result> verifyLateReceipt(
