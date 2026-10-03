@@ -67,12 +67,6 @@
         <attr name="speed" format="dimension" />
     </declare-styleable>
 
-    <declare-styleable name="DetailSeekBar">
-        <attr name="title" format="string" />
-        <attr name="max" format="integer" />
-        <attr name="isBottomBackground" />
-    </declare-styleable>
-
     <declare-styleable name="SmoothCheckBox">
         <attr name="duration" format="integer" />
         <attr name="stroke_width" format="dimension" />
@@ -80,12 +74,6 @@
         <attr name="color_checked" format="color" />
         <attr name="color_unchecked" format="color" />
         <attr name="color_unchecked_stroke" format="color" />
-    </declare-styleable>
-
-    <declare-styleable name="NumberPickerPreference">
-        <attr name="MinValue" format="integer" />
-        <attr name="MaxValue" format="integer" />
-        <attr name="android:summary" />
     </declare-styleable>
 
     <declare-styleable name="RefreshLayout">
@@ -110,10 +98,6 @@
         <attr name="right_top_radius" format="dimension" />
         <attr name="right_bottom_radius" format="dimension" />
         <attr name="left_bottom_radius" format="dimension" />
-    </declare-styleable>
-
-    <declare-styleable name="IconListPreference">
-        <attr name="icons" format="reference" />
     </declare-styleable>
 
     <declare-styleable name="RotateLoading">
@@ -189,10 +173,6 @@
     </declare-styleable>
 
     <declare-styleable name="ThemeRadioNoButton">
-        <attr name="isBottomBackground" />
-    </declare-styleable>
-
-    <declare-styleable name="Preference">
         <attr name="isBottomBackground" />
     </declare-styleable>
 
