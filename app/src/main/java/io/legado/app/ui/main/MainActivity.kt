@@ -68,12 +68,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
-/**
- * 主界面
- */
+/** 主界面 */
 @Suppress("PrivatePropertyName")
-class MainActivity : BaseComposeActivity(),
-    MainViewModel.CallBack {
+class MainActivity : BaseComposeActivity(), MainViewModel.CallBack {
 
     val viewModel by viewModels<MainViewModel>()
     private val idBookshelf = 0
@@ -86,11 +83,17 @@ class MainActivity : BaseComposeActivity(),
     private var exitTime: Long = 0
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
-    private val pagePosition get() = viewModel.uiState.value.selectedIndex
+    private val pagePosition
+        get() = viewModel.uiState.value.selectedIndex
+
     private val fragmentMap = hashMapOf<Int, Fragment>()
-    private val bottomMenuCount get() = viewModel.uiState.value.destinations.size
+    private val bottomMenuCount
+        get() = viewModel.uiState.value.destinations.size
+
     private val EXIT_INTERVAL = 2000L
-    private val realPositions get() = viewModel.uiState.value.destinations.map { it.legacyId }
+    private val realPositions
+        get() = viewModel.uiState.value.destinations.map { it.legacyId }
+
     private val viewPagerMain by lazy { ViewPager(this).apply { id = R.id.view_pager_main } }
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
@@ -136,23 +139,23 @@ class MainActivity : BaseComposeActivity(),
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         lifecycleScope.launch {
-            //隐私协议
+            // 隐私协议
             if (!privacyPolicy()) return@launch
-            //版本更新
+            // 版本更新
             upVersion()
-            //设置本地密码
+            // 设置本地密码
             setLocalPassword()
             notifyAppCrash()
-            //备份同步
+            // 备份同步
             backupSync()
-            //设置回调
+            // 设置回调
             viewModel.setActivityCallback(this@MainActivity)
-            //自动更新书源
+            // 自动更新书源
             window.decorView.postDelayed(1000) {
                 viewModel.ruleSubsUp()
             }
             scheduleSourceSharePassphraseRead(1500)
-            //自动更新书籍
+            // 自动更新书籍
             val isAutoRefreshedBook = savedInstanceState?.getBoolean("isAutoRefreshedBook") ?: false
             if (AppConfig.autoRefreshBook && !isAutoRefreshedBook) {
                 window.decorView.postDelayed(2000) {
@@ -167,7 +170,8 @@ class MainActivity : BaseComposeActivity(),
 
     override fun onResume() {
         super.onResume()
-        if (SourceSharePassphraseImportPolicy.shouldScheduleOnResume(
+        if (
+            SourceSharePassphraseImportPolicy.shouldScheduleOnResume(
                 privacyPolicyOk = LocalConfig.privacyPolicyOk
             )
         ) {
@@ -218,9 +222,7 @@ class MainActivity : BaseComposeActivity(),
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
     }
 
-    /**
-     * 用户隐私与协议
-     */
+    /** 用户隐私与协议 */
     private suspend fun privacyPolicy(): Boolean = suspendCancellableCoroutine sc@{ block ->
         if (LocalConfig.privacyPolicyOk) {
             block.resume(true)
@@ -239,23 +241,21 @@ class MainActivity : BaseComposeActivity(),
         }
     }
 
-    /**
-     * 版本更新日志
-     */
+    /** 版本更新日志 */
     private suspend fun upVersion() = suspendCancellableCoroutine sc@{ block ->
         if (LocalConfig.versionCode == appInfo.versionCode) {
             if (AppConfig.autoUpdateVariant) {
-                if (LocalConfig.lastCheckUpdate + 24.hours.inWholeMilliseconds < System.currentTimeMillis()) {
-                    AppUpdate.gitHubUpdate.check(lifecycleScope)
-                        .onSuccess {
-                            if (isIgnoredAppUpdate(it.tagName, LocalConfig.ignoreUpdateVersion)) {
-                                return@onSuccess
-                            }
-                            if (supportFragmentManager.isStateSaved) return@onSuccess
-                            showDialogFragment(
-                                UpdateDialog(it)
-                            )
+                if (
+                    LocalConfig.lastCheckUpdate + 24.hours.inWholeMilliseconds <
+                        System.currentTimeMillis()
+                ) {
+                    AppUpdate.gitHubUpdate.check(lifecycleScope).onSuccess {
+                        if (isIgnoredAppUpdate(it.tagName, LocalConfig.ignoreUpdateVersion)) {
+                            return@onSuccess
                         }
+                        if (supportFragmentManager.isStateSaved) return@onSuccess
+                        showDialogFragment(UpdateDialog(it))
+                    }
                     LocalConfig.lastCheckUpdate = System.currentTimeMillis()
                 }
             }
@@ -265,12 +265,13 @@ class MainActivity : BaseComposeActivity(),
         LocalConfig.versionCode = appInfo.versionCode
         if (LocalConfig.isFirstOpenApp) {
             val help = String(assets.open("web/help/md/appHelp.md").readBytes())
-            val dialog = TextDialog(
-                getString(R.string.help),
-                help,
-                TextDialog.Mode.MD,
-                showToc = true,
-            )
+            val dialog =
+                TextDialog(
+                    getString(R.string.help),
+                    help,
+                    TextDialog.Mode.MD,
+                    showToc = true,
+                )
             dialog.setOnDismissListener {
                 block.resume(null)
             }
@@ -287,18 +288,17 @@ class MainActivity : BaseComposeActivity(),
         }
     }
 
-    /**
-     * 设置本地密码
-     */
+    /** 设置本地密码 */
     private suspend fun setLocalPassword() = suspendCancellableCoroutine sc@{ block ->
         if (LocalConfig.password != null) {
             block.resume(null)
             return@sc
         }
         alert(R.string.set_local_password, R.string.set_local_password_summary) {
-            val editTextBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "password"
-            }
+            val editTextBinding =
+                DialogEditTextBinding.inflate(layoutInflater).apply {
+                    editView.hint = "password"
+                }
             customView {
                 editTextBinding.root
             }
@@ -327,9 +327,7 @@ class MainActivity : BaseComposeActivity(),
         }
     }
 
-    /**
-     * 备份同步
-     */
+    /** 备份同步 */
     private fun backupSync() {
         if (!AppConfig.autoCheckNewBackup) {
             return
@@ -340,10 +338,11 @@ class MainActivity : BaseComposeActivity(),
             if (lastBackupFile.lastModify - LocalConfig.lastBackup > DateUtils.MINUTE_IN_MILLIS) {
                 alert(R.string.restore, R.string.webdav_after_local_restore_confirm) {
                     cancelButton {
-                        LocalConfig.lastBackup = maxOf(
-                            LocalConfig.lastBackup,
-                            lastBackupFile.lastModify,
-                        )
+                        LocalConfig.lastBackup =
+                            maxOf(
+                                LocalConfig.lastBackup,
+                                lastBackupFile.lastModify,
+                            )
                     }
                     okButton {
                         viewModel.restoreWebDav(
@@ -373,9 +372,7 @@ class MainActivity : BaseComposeActivity(),
         }
     }
 
-    /**
-     * 如果重启太快fragment不会重建,这里更新一下书架的排序
-     */
+    /** 如果重启太快fragment不会重建,这里更新一下书架的排序 */
     override fun recreate() {
         (fragmentMap[getFragmentId(0)] as? BaseBookshelfFragment)?.run {
             upSort()
@@ -432,13 +429,13 @@ class MainActivity : BaseComposeActivity(),
             privacyPolicyOk = LocalConfig.privacyPolicyOk,
             isFinishing = isFinishing,
             isResumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
-            isFragmentStateSaved = supportFragmentManager.isStateSaved
+            isFragmentStateSaved = supportFragmentManager.isStateSaved,
         )
     }
 
     private fun readSourceSharePassphrase(
         delayMillis: Long,
-        generation: Int = passphraseReadGeneration
+        generation: Int = passphraseReadGeneration,
     ) {
         pendingPassphraseRead = false
         window.decorView.postDelayed(delayMillis) {
@@ -447,12 +444,13 @@ class MainActivity : BaseComposeActivity(),
             if (!hasWindowFocus) {
                 pendingPassphraseRead = canAwaitPassphraseWindowFocus()
             }
-            if (!SourceSharePassphraseImportPolicy.canReadClipboard(
+            if (
+                !SourceSharePassphraseImportPolicy.canReadClipboard(
                     privacyPolicyOk = LocalConfig.privacyPolicyOk,
                     isFinishing = isFinishing,
                     isResumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
                     isFragmentStateSaved = supportFragmentManager.isStateSaved,
-                    hasWindowFocus = hasWindowFocus
+                    hasWindowFocus = hasWindowFocus,
                 )
             ) {
                 return@postDelayed
@@ -521,9 +519,10 @@ class MainActivity : BaseComposeActivity(),
 
         override fun onPageSelected(position: Int) {
             if (updatingNavigation) return
-            viewModel.uiState.value.destinations.getOrNull(position)?.let(viewModel::selectDestination)
+            viewModel.uiState.value.destinations
+                .getOrNull(position)
+                ?.let(viewModel::selectDestination)
         }
-
     }
 
     @Suppress("DEPRECATION")
@@ -535,15 +534,15 @@ class MainActivity : BaseComposeActivity(),
         }
 
         override fun getItemPosition(any: Any): Int {
-            val position = (any as MainFragmentInterface).position
-                ?: return POSITION_NONE
+            val position = (any as MainFragmentInterface).position ?: return POSITION_NONE
             if (position !in 0 until bottomMenuCount) return POSITION_NONE
             val fragmentId = getId(position)
-            if ((fragmentId == idBookshelf1 && any is BookshelfFragment1)
-                || (fragmentId == idBookshelf2 && any is BookshelfFragment2)
-                || (fragmentId == idExplore && any is ExploreFragment)
-                || (fragmentId == idRss && any is RssFragment)
-                || (fragmentId == idMy && any is MyFragment)
+            if (
+                (fragmentId == idBookshelf1 && any is BookshelfFragment1) ||
+                    (fragmentId == idBookshelf2 && any is BookshelfFragment2) ||
+                    (fragmentId == idExplore && any is ExploreFragment) ||
+                    (fragmentId == idRss && any is RssFragment) ||
+                    (fragmentId == idMy && any is MyFragment)
             ) {
                 return POSITION_UNCHANGED
             }
@@ -573,21 +572,13 @@ class MainActivity : BaseComposeActivity(),
             fragmentMap[getId(position)] = fragment
             return fragment
         }
-
     }
 
-    override fun openImportUi(type:Int, source: String) {
+    override fun openImportUi(type: Int, source: String) {
         when (type) {
-            0 -> showDialogFragment(
-                ImportBookSourceDialog(source)
-            )
-            1 -> showDialogFragment(
-                ImportRssSourceDialog(source)
-            )
-            2 -> showDialogFragment(
-                ImportReplaceRuleDialog(source)
-            )
+            0 -> showDialogFragment(ImportBookSourceDialog(source))
+            1 -> showDialogFragment(ImportRssSourceDialog(source))
+            2 -> showDialogFragment(ImportReplaceRuleDialog(source))
         }
     }
-
 }
