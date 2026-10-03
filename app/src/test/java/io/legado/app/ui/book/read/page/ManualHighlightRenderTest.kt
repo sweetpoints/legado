@@ -194,7 +194,12 @@ class ManualHighlightRenderTest {
         assertTrue(activity.contains("HighlightRuleEditDialog.edit(ruleId)"))
         assertTrue(activity.contains("R.string.highlight_rule_disable"))
         assertTrue(activity.contains("copy(isEnabled = false)"))
-        assertTrue(activity.contains("appDb.highlightRuleDao.update(rule)"))
+        assertTrue(activity.contains("appDb.withTransaction"))
+        assertTrue(activity.contains("appDb.highlightRuleDao.findById(ruleId)"))
+        assertTrue(activity.contains("current?.uuid == expectedUuid"))
+        assertTrue(
+            activity.contains("appDb.highlightRuleDao.update(current.copy(isEnabled = false))")
+        )
         assertTrue(activity.contains("ReadBook.upHighlightRules()"))
     }
 

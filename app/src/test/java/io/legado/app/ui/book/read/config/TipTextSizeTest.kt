@@ -52,7 +52,12 @@ class TipTextSizeTest {
         val pageView = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
 
         assertTrue(config.contains("exportConfig.tipTextSize = shareConfig.tipTextSize"))
-        assertTrue(pageView.contains("textSize = ReadTipConfig.tipTextSize.toFloat()"))
+        assertTrue(pageView.contains("tipTextSize = ReadTipConfig.tipTextSize"))
+        assertTrue(pageView.contains("textSizeSp = tipTextSize"))
+        val readerInfo =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ComposeReaderInfo.kt")
+        assertTrue(readerInfo.contains("with(density) { textSizeSp.sp.toPx() }"))
+        assertTrue(readerInfo.contains("textSize = textSizePx"))
     }
 
     @Test

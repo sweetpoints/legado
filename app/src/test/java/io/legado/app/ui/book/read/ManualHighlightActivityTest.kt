@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,13 +12,24 @@ class ManualHighlightActivityTest {
         val content =
             readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
         val onCreate = content.indexOf("override fun onCreate(savedInstanceState: Bundle?)")
-        val restore =
-            content.indexOf("editingHighlight = savedInstanceState?.getParcelable", onCreate)
+        val restore = content.indexOf("editingHighlightTime =", onCreate)
         val superOnCreate = content.indexOf("super.onCreate(savedInstanceState)", onCreate)
 
         assertTrue(onCreate >= 0)
         assertTrue(restore in onCreate until superOnCreate)
-        assertTrue(content.contains("outState.putParcelable(STATE_EDITING_HIGHLIGHT, it)"))
+        val ownerRestore =
+            content.indexOf("editingHighlightOwner = savedInstanceState?.getString", onCreate)
+        assertTrue(ownerRestore in onCreate until superOnCreate)
+        assertTrue(content.contains("savedInstanceState?.getLong(STATE_EDITING_HIGHLIGHT)"))
+        assertTrue(content.contains("outState.putLong(STATE_EDITING_HIGHLIGHT, it)"))
+        assertTrue(content.contains("outState.putString(STATE_EDITING_HIGHLIGHT_OWNER, it)"))
+        assertFalse(content.contains("putParcelable(STATE_EDITING_HIGHLIGHT"))
+        assertTrue(
+            content.contains(
+                "ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) != editingHighlightOwner"
+            )
+        )
+        assertTrue(content.contains("ReadBook.highlights.firstOrNull"))
         assertTrue(content.contains("findFragmentByTag(HighlightStyleDialog::class.simpleName)"))
     }
 

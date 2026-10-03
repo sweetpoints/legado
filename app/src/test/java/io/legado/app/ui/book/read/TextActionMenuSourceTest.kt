@@ -32,12 +32,14 @@ class TextActionMenuSourceTest {
         val source =
             projectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt").readText()
 
-        assertEquals(
-            2,
-            Regex("binding\\.root\\.rootView\\.height").findAll(source).count(),
-        )
-        assertFalse(source.contains("binding.navigationBar.height"))
-        assertFalse(source.contains("binding.root.height +"))
+        assertEquals(1, Regex("window\\.decorView\\.height").findAll(source).count())
+        assertTrue(source.contains("textActionMenu.show(\n            readView,"))
+        assertFalse(source.contains("readView.height +"))
+        val contextPopup =
+            projectFile("src/main/java/io/legado/app/ui/book/read/ReaderContextMenuScreen.kt")
+                .readText()
+        assertTrue(contextPopup.contains("anchorBounds.top + state.y.roundToInt()"))
+        assertTrue(contextPopup.contains("windowSize.height - contentSize.height"))
     }
 
     private fun projectFile(pathInApp: String): File {
