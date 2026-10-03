@@ -1208,3 +1208,4 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 文件选择宿主新增独立 IO 数据基础，保留五种选择模式、JavaScript 双 MIME、手工目录/图片路径与原上传/本地写入算法。一次性导出载荷、长标题、自定义选项 JSON 和完整草稿进入私有 Atomic 会话，revision 与终止标记阻止旧写入复活，仅释放自身目录。新增 3 个 JVM 与 5 个真实文件/IO Android 编译用例；AndroidTest Kotlin 编译及全量 JVM 3697 项零失败，设备端未执行，VM 与宿主接入另批迁移。
 
 替换规则管理宿主与 Screen/Route 改为纯 Compose，保留搜索、隐藏多选、滑动反选、拖动和无障碍排序、分组/删除确认、原生导入导出与菜单动作。原生结果按 nonce 恢复，prepared import 在 IO 交接并清理仅自有未交付 session；暂停/错误不重复认领。删除旧 Adapter/ViewModel、两布局与两菜单，陈旧源字符串测试仅对应 Replace 分支迁为真实行为。新增 13 个 Compose/宿主/生命周期 Android 编译用例，既有真实分享/metadata 场景保留；AndroidTest Kotlin 编译与全 JVM 回归通过，设备端未执行。
+搜索结果新增完整不可变投影，保留所有 SearchBook 字段、合并书源及临时 HTML，公开实体转换每次返回独立副本；UI identity 沿用书名/作者身份并避免拼接碰撞。不可变过滤保持旧纯文本与字段规则，完整载荷后续进入私有草稿而非 Bundle；新增 3 个 JVM 回归，完整 JVM 与 Android 测试编译通过。
