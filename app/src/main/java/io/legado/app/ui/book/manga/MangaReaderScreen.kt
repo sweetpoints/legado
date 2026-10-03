@@ -79,51 +79,55 @@ internal fun MangaReaderScreen(
 ) {
     val settings = state.settings
     Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        MangaViewportScreen(
-            sessionKey = state.sessionId,
-            items = state.items,
-            bookUrl = state.book?.bookUrl.orEmpty(),
-            sourceOrigin = state.book?.sourceOrigin,
-            repository = imageRepository,
-            options =
-                MangaViewportOptions(
-                    horizontal = settings.horizontal,
-                    rightToLeft = settings.horizontal && settings.rightToLeft,
-                    disableZoom = settings.disableZoom,
-                    disableClickScroll = settings.disableClickScroll,
-                    longPressSaveEnabled = settings.longPressSave,
-                    disablePageAnimation = settings.disablePageAnimation,
-                    snapPages = !settings.disableSnap,
-                    isEInk = settings.isEInk,
-                    epaperThreshold = if (settings.epaper) settings.threshold else null,
-                    grayscale = settings.grayscale,
-                    autoPageSeconds = if (state.autoPage) settings.autoSpeed else null,
-                    autoScrollDistance = if (state.autoScroll) settings.autoSpeed else null,
-                ),
-            colorFilter = state.colorFilter,
-            anchorIndex = state.anchorIndex,
-            command = state.scrollCommand,
-            readerActive = readerActive && !state.menuVisible && !state.loading,
-            onCurrentItem = onCurrentItem,
-            onCommandHandled = onCommandHandled,
-            onMenu = { onMenu(true) },
-            onPageTap = onPage,
-            onLongPress = onLongPress,
-            footer = {
-                Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        state.error != null && !state.loading ->
-                            TextButton(onClick = onRetry) {
-                                Text("加载失败，点击重试")
-                            }
-                        state.nextLoading ->
-                            if (settings.isEInk) Text(stringResource(R.string.loading))
-                            else CircularProgressIndicator()
-                        state.chapterIndex + 1 >= state.chapterCount -> Text("暂无章节了！")
+        if (state.sessionId.isNotEmpty())
+            MangaViewportScreen(
+                sessionKey = state.sessionId,
+                items = state.items,
+                bookUrl = state.book?.bookUrl.orEmpty(),
+                sourceOrigin = state.book?.sourceOrigin,
+                repository = imageRepository,
+                options =
+                    MangaViewportOptions(
+                        horizontal = settings.horizontal,
+                        rightToLeft = settings.horizontal && settings.rightToLeft,
+                        disableZoom = settings.disableZoom,
+                        disableClickScroll = settings.disableClickScroll,
+                        longPressSaveEnabled = settings.longPressSave,
+                        disablePageAnimation = settings.disablePageAnimation,
+                        snapPages = !settings.disableSnap,
+                        isEInk = settings.isEInk || !state.settingsLoaded,
+                        epaperThreshold = if (settings.epaper) settings.threshold else null,
+                        grayscale = settings.grayscale,
+                        autoPageSeconds = if (state.autoPage) settings.autoSpeed else null,
+                        autoScrollDistance = if (state.autoScroll) settings.autoSpeed else null,
+                    ),
+                colorFilter = state.colorFilter,
+                anchorIndex = state.anchorIndex,
+                command = state.scrollCommand,
+                readerActive = readerActive && !state.menuVisible && !state.loading,
+                onCurrentItem = onCurrentItem,
+                onCommandHandled = onCommandHandled,
+                onMenu = { onMenu(true) },
+                onPageTap = onPage,
+                onLongPress = onLongPress,
+                footer = {
+                    Box(
+                        Modifier.fillMaxWidth().height(64.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when {
+                            state.error != null && !state.loading ->
+                                TextButton(onClick = onRetry) {
+                                    Text("加载失败，点击重试")
+                                }
+                            state.nextLoading ->
+                                if (settings.isEInk) Text(stringResource(R.string.loading))
+                                else CircularProgressIndicator()
+                            state.chapterIndex + 1 >= state.chapterCount -> Text("暂无章节了！")
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
         if (!state.loading && !state.footer.hideFooter) {
             MangaReaderFooterScreen(state, timeText, Modifier.align(Alignment.BottomCenter))
         }
@@ -139,7 +143,7 @@ internal fun MangaReaderScreen(
                         Text(state.error, Modifier.padding(16.dp))
                         if (state.retryAllowed) TextButton(onClick = onRetry) { Text("重新加载") }
                     } else {
-                        if (!settings.isEInk) CircularProgressIndicator()
+                        if (state.settingsLoaded && !settings.isEInk) CircularProgressIndicator()
                         Text(stringResource(R.string.loading), Modifier.padding(12.dp))
                     }
                 }

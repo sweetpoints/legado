@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +79,9 @@ internal fun MangaMenuScreen(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(state.menuOverflowRevision) {
+        if (state.menuOverflowRevision > 0) expanded = true
+    }
     var numericAction by remember { mutableStateOf<MangaMenuAction?>(null) }
     var browserChoice by remember { mutableStateOf(false) }
     val settings = state.settings

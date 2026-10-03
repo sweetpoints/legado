@@ -1503,3 +1503,9 @@ The existing color-filter configuration DTO now keeps its serialized field names
 ### Manga browser source identity
 
 The browser payload identifies the current manga `BookSource` with its browser source kind, rather than reusing the text reader's source or confusing its image/text category with the Book/RSS kind. A real Android Intent regression deliberately sets a different text-reader source and verifies the manga origin/name/kind plus a complete 2.4 MB opaque chapter URL. This tests payload construction only; shared browser prepared-UUID migration is explicitly deferred until that Host's internal API is ready, while its public ABI remains unchanged. Official formatting/check and diff checks pass; device execution and final candidate compilation remain pending.
+
+### Manga Compose Host and native route
+
+ReadMangaActivity now hosts the immutable reader route and pure Compose viewport/menu, preserving the singleton engine, public launch contract, window/eInk effects, hardware direction and volume keys, source callbacks, chapter boundaries, progress, and original shelf exit behavior. Route native claims require the live RESUMED owner and matching private session. Large book/source/image/cloud payloads remain in the private UUID journal; SavedState contains only session/operation UUIDs. BookInfo uses its live prepared UUID API; shared Toc, ChangeSource and browser public contracts remain compatible until their prepared interfaces are delivered. PDF results use the captured request book, and accepted image exports survive a subsequent book switch.
+
+Unified ktfmt check and git diff check passed. Full debug Android-test compilation and JVM execution for this candidate are pending a coordinated build slot; device behavior and future release minification are not yet verified. Legacy RecyclerView consumers/tests and XML removal are the next audited batch.

@@ -30,6 +30,10 @@ enum class MangaNativeKind {
     ChapterBrowser,
     ExternalBrowser,
     ChangeSource,
+    Download,
+    FooterSettings,
+    ColorFilter,
+    EpaperSettings,
 }
 
 @Keep
@@ -55,6 +59,8 @@ data class MangaNativeRequest(
     val sourceType: Int? = null,
     val bookSnapshot: String? = null,
     val sourceSnapshot: String? = null,
+    val directoryUri: String? = null,
+    val preparedTicket: String? = null,
 )
 
 @Keep

@@ -135,7 +135,7 @@ class MangaReaderSessionController(
         }
     }
 
-    suspend fun complete(ticket: String, cancelled: Boolean = false) {
+    suspend fun complete(ticket: String, cancelled: Boolean = false, directoryUri: String? = null) {
         update { current ->
             current.copy(
                 nativeRequests =
@@ -144,7 +144,8 @@ class MangaReaderSessionController(
                             request.copy(
                                 phase =
                                     if (cancelled) MangaNativePhase.Cancelled
-                                    else MangaNativePhase.Complete
+                                    else MangaNativePhase.Complete,
+                                directoryUri = directoryUri ?: request.directoryUri,
                             )
                         } else request
                     }

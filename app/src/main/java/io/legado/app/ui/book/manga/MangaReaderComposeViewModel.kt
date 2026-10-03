@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import io.legado.app.BuildConfig
+import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
@@ -16,11 +18,13 @@ import io.legado.app.data.preferences.MangaFooterDraft
 import io.legado.app.data.preferences.MangaReaderSetting
 import io.legado.app.data.preferences.MangaReaderSettingsValues
 import io.legado.app.data.preferences.PreferenceMangaColorFilterRepository
+import io.legado.app.data.repository.BookDetailIdentity
 import io.legado.app.data.repository.DefaultMangaReaderOperationsRepository
 import io.legado.app.data.repository.FileMangaReaderSessionRepository
 import io.legado.app.data.repository.MangaChapterRefreshRequest
 import io.legado.app.data.repository.MangaImageSaveRequest
 import io.legado.app.data.repository.MangaNativeKind
+import io.legado.app.data.repository.MangaNativePhase
 import io.legado.app.data.repository.MangaNativeRequest
 import io.legado.app.data.repository.MangaReaderEngineRepository
 import io.legado.app.data.repository.MangaReaderLaunch
@@ -28,12 +32,17 @@ import io.legado.app.data.repository.MangaReaderSessionController
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isPdf
 import io.legado.app.help.book.removeType
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadManga
+import io.legado.app.model.localBook.PdfFile
+import io.legado.app.ui.book.info.BookInfoNavigation
+import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -42,6 +51,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -88,6 +99,9 @@ internal data class MangaReaderUiState(
     val finishRequested: Boolean = false,
     val shelfAdded: Boolean = false,
     val deletedResult: Boolean = false,
+    val colorFilterPreviewRevision: Int = 0,
+    val settingsLoaded: Boolean = false,
+    val menuOverflowRevision: Long = 0,
 )
 
 /**
@@ -120,12 +134,13 @@ internal class MangaReaderComposeViewModel(
         if (initialized && !newIntent) return
         initialized = true
         val requestedGeneration = ++generation
+        mutableState.value = MangaReaderUiState()
         viewModelScope.launch {
             transition.withLock {
                 if (requestedGeneration != generation) return@withLock
                 ownerJob?.cancelAndJoin()
                 callback?.let { ReadManga.unregister(it) }
-                if (newIntent) session?.release()
+                if (newIntent) session?.let { releaseSession(it) }
                 val restoredId = if (!newIntent) savedState.get<String>(SESSION_KEY) else null
                 val id = restoredId ?: UUID.randomUUID().toString()
                 savedState[SESSION_KEY] = id
@@ -319,6 +334,17 @@ internal class MangaReaderComposeViewModel(
             state.value.copy(scrollCommand = MangaScrollCommand.Page(++commandId, direction))
     }
 
+    fun hardwareMenu() {
+        val current = state.value
+        mutableState.value =
+            current.copy(
+                menuVisible = true,
+                menuOverflowRevision =
+                    current.menuOverflowRevision + if (current.menuVisible) 1 else 0,
+            )
+        checkpoint()
+    }
+
     fun setMenu(visible: Boolean) {
         if (visible && state.value.loading) return
         mutableState.value = state.value.copy(menuVisible = visible)
@@ -342,6 +368,7 @@ internal class MangaReaderComposeViewModel(
             mutableState.value =
                 state.value.copy(
                     settings = settings,
+                    settingsLoaded = true,
                     footer = footer,
                     colorFilter = filter,
                 )
@@ -352,7 +379,11 @@ internal class MangaReaderComposeViewModel(
     }
 
     fun previewColorFilter(filter: MangaColorFilterValues) {
-        mutableState.value = state.value.copy(colorFilter = filter)
+        mutableState.value =
+            state.value.copy(
+                colorFilter = filter,
+                colorFilterPreviewRevision = state.value.colorFilterPreviewRevision + 1,
+            )
     }
 
     fun setSetting(setting: MangaReaderSetting, enabled: Boolean) {
@@ -412,6 +443,17 @@ internal class MangaReaderComposeViewModel(
         if (direction > 0) ReadManga.moveToNextChapter(true) else ReadManga.moveToPrevChapter(true)
     }
 
+    fun volumePage(direction: Int) {
+        if (state.value.loading) return
+        mutableState.value =
+            state.value.copy(scrollCommand = MangaScrollCommand.Page(++commandId, direction))
+    }
+
+    fun previewEpaperThreshold(value: Int) {
+        mutableState.value =
+            state.value.copy(settings = state.value.settings.copy(threshold = value))
+    }
+
     fun retry() {
         mutableState.value = state.value.copy(error = null)
         ReadManga.loadOrUpContent()
@@ -439,20 +481,121 @@ internal class MangaReaderComposeViewModel(
                         )
                             current.chapterUrl
                         else null,
-                title = if (kind == MangaNativeKind.BookInfo) book.name else current.chapterName,
+                title =
+                    if (kind == MangaNativeKind.BookInfo || kind == MangaNativeKind.ChangeSource)
+                        book.name
+                    else current.chapterName,
                 author = book.author,
                 sourceOrigin = book.sourceOrigin,
                 sourceName = book.sourceName,
                 sourceType = book.sourceType,
-                bookSnapshot =
-                    if (kind == MangaNativeKind.ImageDirectory) GSON.toJson(ReadManga.book)
-                    else null,
-                sourceSnapshot =
-                    if (kind == MangaNativeKind.ImageDirectory)
-                        ReadManga.bookSource?.let { GSON.toJson(it) }
-                    else null,
+                bookSnapshot = GSON.toJson(ReadManga.book),
+                sourceSnapshot = ReadManga.bookSource?.let { GSON.toJson(it) },
             )
-        ownerScope?.launch { session?.enqueue(request) }
+        val owner = generation
+        val controller = session ?: return
+        ownerScope?.launch {
+            try {
+                if (kind == MangaNativeKind.BookInfo) {
+                    withContext(NonCancellable) {
+                        val ticket =
+                            BookInfoNavigation.prepare(
+                                getApplication<Application>(),
+                                BookDetailIdentity(book.name, book.author, book.bookUrl),
+                            )
+                        var transferred = false
+                        try {
+                            if (generation == owner && ownerJob?.isActive == true) {
+                                controller.enqueue(request.copy(preparedTicket = ticket))
+                                transferred = true
+                            }
+                        } finally {
+                            // A cancelled preparation owns only its freshly created child ticket.
+                            if (!transferred)
+                                BookInfoNavigation.abandon(getApplication<Application>(), ticket)
+                        }
+                    }
+                } else controller.enqueue(request)
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                AppLog.put("打开漫画页面失败\n${error.localizedMessage}", error)
+                if (generation == owner) notify("打开漫画页面失败\n${error.localizedMessage}")
+            }
+        }
+    }
+
+    fun nativeRequest(ticket: String?): MangaNativeRequest? =
+        state.value.nativeRequests.firstOrNull {
+            it.ticket == ticket && it.phase == MangaNativePhase.Claimed
+        }
+
+    fun saveImage(imageUrl: String) {
+        val readingBook = ReadManga.book ?: return
+        val captured =
+            MangaImageSaveRequest(
+                readingBook.bookUrl,
+                GSON.toJson(readingBook),
+                ReadManga.bookSource?.let { GSON.toJson(it) },
+                imageUrl,
+                "",
+            )
+        val owner = generation
+        ownerScope?.launch {
+            val directory =
+                withContext(Dispatchers.IO) { ACache.get().getAsString(AppConst.imagePathKey) }
+            if (owner != generation) return@launch
+            if (directory.isNullOrEmpty()) {
+                val request =
+                    MangaNativeRequest(
+                        ticket = UUID.randomUUID().toString(),
+                        kind = MangaNativeKind.ImageDirectory,
+                        bookUrl = captured.bookUrl,
+                        imageUrl = captured.imageUrl,
+                        bookSnapshot = captured.bookSnapshot,
+                        sourceSnapshot = captured.sourceSnapshot,
+                    )
+                session?.enqueue(request)
+            } else {
+                try {
+                    // Once a cached destination is accepted, a book switch cannot cancel its
+                    // export.
+                    viewModelScope.launch {
+                        try {
+                            operations.saveImage(captured.copy(directoryUri = directory))
+                        } catch (error: Exception) {
+                            currentCoroutineContext().ensureActive()
+                            AppLog.put("保存图片出错\n${error.localizedMessage}", error)
+                            if (owner == generation) notify("保存图片出错\n${error.localizedMessage}")
+                        }
+                    }
+                } catch (error: Exception) {
+                    currentCoroutineContext().ensureActive()
+                    AppLog.put("保存图片出错\n${error.localizedMessage}", error)
+                    if (owner == generation) notify("保存图片出错\n${error.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    fun resumed() {
+        ReadManga.readStartTime = System.currentTimeMillis()
+    }
+
+    fun paused() {
+        ReadManga.upReadTime()
+        if (ReadManga.inBookshelf) {
+            ReadManga.saveRead()
+            if (!BuildConfig.DEBUG) {
+                if (AppConfig.syncBookProgressPlus) ReadManga.syncProgress()
+                else ReadManga.uploadProgress()
+            }
+        }
+        ReadManga.cancelPreDownloadTask()
+    }
+
+    fun networkAvailable() {
+        if (AppConfig.syncBookProgressPlus && !state.value.loading && ReadManga.inBookshelf)
+            syncProgress()
     }
 
     suspend fun claimNative(
@@ -467,25 +610,92 @@ internal class MangaReaderComposeViewModel(
         ownerScope?.launch { session?.complete(ticket, cancelled) }
     }
 
-    fun saveSelectedImage(request: MangaNativeRequest, directoryUri: String) {
+    fun handleBookInfoResult(ticket: String?, deleted: Boolean) {
+        acceptNativeResult(ticket) { _, controller, owner ->
+            controller.complete(checkNotNull(ticket))
+            if (owner == generation) {
+                if (deleted) finishFromBookInfo() else ReadManga.loadOrUpContent()
+            }
+        }
+    }
+
+    fun handleCatalogResult(
+        ticket: String?,
+        chapterIndex: Int?,
+        pageIndex: Int?,
+        pdfPage: Int = -1,
+    ) {
+        acceptNativeResult(ticket) { request, controller, owner ->
+            val pdf =
+                withContext(Dispatchers.IO) {
+                    request.bookSnapshot?.let {
+                        GSON.fromJsonObject<Book>(it).getOrThrow().isPdf
+                    } == true
+                }
+            val position = if (pdf && pdfPage >= 0) pdfPage % PdfFile.PAGE_SIZE else pageIndex
+            if (chapterIndex != null && position != null) {
+                controller.checkpoint(state.value.menuVisible, chapterIndex, position)
+                if (owner == generation) engine?.openChapter(chapterIndex, position)
+            }
+            controller.complete(checkNotNull(ticket), cancelled = chapterIndex == null)
+        }
+    }
+
+    fun handleImageDirectoryResult(ticket: String?, directoryUri: String?) {
+        acceptNativeResult(ticket) { request, controller, owner ->
+            controller.complete(
+                checkNotNull(ticket),
+                cancelled = directoryUri == null,
+                directoryUri = directoryUri,
+            )
+            if (directoryUri != null) {
+                withContext(Dispatchers.IO) {
+                    ACache.get().put(AppConst.imagePathKey, directoryUri)
+                }
+                saveSelectedImage(request, directoryUri, owner)
+            }
+        }
+    }
+
+    private fun acceptNativeResult(
+        ticket: String?,
+        apply: suspend (MangaNativeRequest, MangaReaderSessionController, Long) -> Unit,
+    ) {
+        if (ticket == null) return
+        viewModelScope.launch {
+            state.filter { it.sessionId.isNotEmpty() }.first()
+            transition.withLock {
+                val request = nativeRequest(ticket) ?: return@withLock
+                val controller = session ?: return@withLock
+                // The platform has delivered this result; preserve its accepted receipt on
+                // disposal.
+                val owner = generation
+                withContext(NonCancellable) { apply(request, controller, owner) }
+            }
+        }
+    }
+
+    private fun saveSelectedImage(request: MangaNativeRequest, directoryUri: String, owner: Long) {
         val imageUrl = request.imageUrl ?: return
         val bookUrl = request.bookUrl ?: return
         val snapshot = request.bookSnapshot ?: return
         val captured =
             MangaImageSaveRequest(bookUrl, snapshot, request.sourceSnapshot, imageUrl, directoryUri)
-        ownerScope?.launch {
+        // Accepted export work captures its full payload and survives switching the reader's book.
+        viewModelScope.launch {
             try {
                 operations.saveImage(captured)
             } catch (error: Exception) {
                 currentCoroutineContext().ensureActive()
                 AppLog.put("保存图片出错\n${error.localizedMessage}", error)
-                notify("保存图片出错\n${error.localizedMessage}")
+                if (owner == generation) notify("保存图片出错\n${error.localizedMessage}")
             }
         }
     }
 
     fun refreshChapter() {
         val book = ReadManga.book ?: return
+        mutableState.value = state.value.copy(loading = true, error = null)
         val owner = generation
         val request =
             MangaChapterRefreshRequest(
@@ -565,12 +775,30 @@ internal class MangaReaderComposeViewModel(
         notificationChannel.trySend(message)
     }
 
+    private suspend fun releaseSession(controller: MangaReaderSessionController) {
+        withContext(NonCancellable) {
+            controller.state.value?.nativeRequests?.forEach { request ->
+                val ticket = request.preparedTicket
+                if (
+                    ticket != null &&
+                        (request.phase == MangaNativePhase.Pending ||
+                            request.phase == MangaNativePhase.Cancelled)
+                ) {
+                    BookInfoNavigation.abandon(getApplication<Application>(), ticket)
+                }
+            }
+            controller.release()
+        }
+    }
+
     override fun onCleared() {
         callback?.let { ReadManga.unregister(it) }
         ownerJob?.cancel()
         val releasedSession = session
         // The VM scope is already cancelled; durable owner cleanup needs an independent IO job.
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { releasedSession?.release() }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            releasedSession?.let { releaseSession(it) }
+        }
         super.onCleared()
     }
 
