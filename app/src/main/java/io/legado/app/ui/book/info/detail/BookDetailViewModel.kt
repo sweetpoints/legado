@@ -12,22 +12,24 @@ import java.util.UUID
 
 data class BookDetailState(val session:BookDetailSession?=null,val loading:Boolean=true,val loaded:Boolean=false,
     val networkLoading:Boolean=false,val busy:Boolean=false,val error:String?=null,val closed:Boolean=false,
-    val introExpanded:Boolean=true) {
+    val introExpanded:Boolean=true,val childPending:Boolean=false) {
     val data:BookDetailData? get()=session?.data
-    val canInteract:Boolean get()=loaded && !closed && !busy && session?.pendingMutation==null && session?.pendingNetwork==null
+    val canInteract:Boolean get()=loaded && !closed && !busy && session?.pendingMutation==null && session?.pendingNetwork==null && !childPending
 }
 
 /** Owns immutable private-session snapshots. Native callbacks belong exclusively to the resumed Route. */
 class BookDetailViewModel(private val saved:SavedStateHandle,private val details:BookDetailRepository,
     private val sessions:BookDetailSessionRepository,private val network:BookDetailNetworkRepository,
-    private val initialIdentity:BookDetailIdentity?,private val cleanupScope:CoroutineScope?=null):ViewModel() {
+    private val initialIdentity:BookDetailIdentity?,private val cleanupScope:CoroutineScope?=null,
+    private val children:BookDetailChildRepository?=null,private val services:BookDetailServicesRepository?=null,
+    private val childServices:BookDetailChildServicesRepository?=null):ViewModel() {
     val ticket:String=saved.get<String>(KEY) ?: UUID.randomUUID().toString().also{saved[KEY]=it}
     private val mutable=MutableStateFlow(BookDetailState(closed=saved.get<Boolean>(CLOSED)==true,
         loading=saved.get<Boolean>(CLOSED)!=true,introExpanded=saved.get<Boolean>(EXPANDED) ?: true))
     val state:StateFlow<BookDetailState> = mutable.asStateFlow()
     private val writes=Mutex();private val ready=CompletableDeferred<Unit>()
     private var dirty=false;private var loadJob:Job?=null;private var networkJob:Job?=null;private var mutationJob:Job?=null
-    private var generation=0L
+    private var generation=0L;private var childJob:Job?=null
     init{if(state.value.closed){ready.complete(Unit);release()}else load()}
     private fun load() {
         loadJob?.cancel();loadJob=viewModelScope.launch {
@@ -42,8 +44,13 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                 }
                 ensureActive();if(state.value.closed)return@launch
                 val interrupted=record.running && record.pendingNetwork==null
-                mutable.update{it.copy(session=record,loading=false,loaded=true,error=if(interrupted)"Previous request was interrupted; retry to continue" else null)}
+                val hasChildren=children?.read(ticket)?.pending?.isNotEmpty()==true
+                ensureActive();if(state.value.closed)return@launch
+                // Publish the ledger gate atomically with loaded, before any native claim can leave ready.await().
+                mutable.update{it.copy(session=record,loading=false,loaded=true,childPending=hasChildren,
+                    error=if(interrupted)"Previous request was interrupted; retry to continue" else null)}
                 if(!ready.isCompleted)ready.complete(Unit)
+                if(hasChildren){processChildren();return@launch}
                 if(record.pendingNetwork!=null || record.pendingMutation!=null)recoverPending()
                 else if(stored==null && !interrupted) {
                     val data=checkNotNull(record.data)
@@ -64,7 +71,11 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
         sessions.write(ticket,record)
         if(state.value.session?.revision==record.revision)dirty=false
     }
-    private fun publish(record:BookDetailSession){mutable.update{it.copy(session=record)};dirty=false}
+    private fun publish(record:BookDetailSession){
+        val oldIntro=state.value.data?.book?.intro;val nextIntro=record.data?.book?.intro
+        if(state.value.loaded && oldIntro!=nextIntro){saved[EXPANDED]=true;mutable.update{it.copy(introExpanded=true)}}
+        mutable.update{it.copy(session=record)};dirty=false
+    }
     private fun failure(error:Throwable){if(!state.value.closed)mutable.update{it.copy(error=error.message ?: error.toString())}}
     fun introExpanded(value:Boolean){saved[EXPANDED]=value;mutable.update{it.copy(introExpanded=value)}}
     fun refreshInfo()=requestNetwork(info=true,canRename=false,runPre=true)
@@ -122,7 +133,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     suspend fun consumeEffect(token:String,canDeliver:()->Boolean):BookDetailNativeEffect? {
         ready.await();mutable.update{it.copy(busy=true)}
         try{return writes.withLock {
-            flushLocked();currentCoroutineContext().ensureActive();if(state.value.closed || !canDeliver())return@withLock null
+            flushLocked();currentCoroutineContext().ensureActive();if(state.value.closed || state.value.childPending || !canDeliver())return@withLock null
             val before=state.value.session ?: return@withLock null
             val effect=before.effects.firstOrNull()?.takeIf{it.token==token} ?: return@withLock null
             val next=before.copy(effects=before.effects.drop(1),revision=before.revision+1)
@@ -148,6 +159,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     fun retry() {
         if(state.value.closed || state.value.busy)return
         if(!state.value.loaded){load();return}
+        if(state.value.childPending){processChildren();return}
         if(state.value.session?.pendingNetwork!=null || state.value.session?.pendingMutation!=null){recoverPending();return}
         refreshInfo()
     }
@@ -168,9 +180,129 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
             }}catch(error:Throwable){ensureActive();failure(error)}finally{mutable.update{it.copy(busy=false)}}
         }
     }
+    suspend fun registerChild(owner:BookDetailChildOwner) {
+        check(!state.value.closed){"Book detail is closed"};checkNotNull(children).owner(ticket,owner)
+        currentCoroutineContext().ensureActive()
+    }
+    /** The native result becomes durable before waiting for initial book/session loading. */
+    suspend fun acceptChild(result:BookDetailChildResult) {
+        if(state.value.closed)return
+        withContext(NonCancellable){checkNotNull(children).result(ticket,result)}
+        currentCoroutineContext().ensureActive();if(!state.value.closed)processChildren()
+    }
+    suspend fun childOwner(kind:BookDetailChildKind)=children?.read(ticket)?.owners?.firstOrNull{it.kind==kind}
+    fun processChildren() {
+        val ledger=children ?: return
+        if(state.value.closed || childJob?.isActive==true)return
+        childJob=viewModelScope.launch {
+            try {
+                ready.await();ensureActive();if(state.value.closed)return@launch
+                if(ledger.read(ticket).pending.isEmpty()){ensureActive();mutable.update{it.copy(childPending=false)};return@launch}
+                ensureActive();mutable.update{it.copy(childPending=true)}
+                // A returned child owns the next mutation; stop and join the earlier network request first.
+                val previous=networkJob;generation++;previous?.cancelAndJoin()
+                mutable.update{it.copy(networkLoading=false,busy=true,error=null)}
+                writes.withLock {
+                    flushLocked()
+                    while(!state.value.closed) {
+                        val result=ledger.read(ticket).pending.firstOrNull()
+                        ensureActive();if(result==null){mutable.update{it.copy(childPending=false)};break}
+                        val record=checkNotNull(state.value.session)
+                        if(record.pendingMutation!=null || record.pendingNetwork!=null) {
+                            val recovered=sessions.recover(ticket);ensureActive()
+                            if(recovered!=null)publish(recovered)
+                        }
+                        val current=checkNotNull(state.value.session)
+                        val active=checkNotNull(current.data)
+                        if(result.owner.bookUrl!=active.book.bookUrl) {
+                            ledger.complete(ticket,result.owner.token);ensureActive();continue
+                        }
+                        val next=applyChild(current,result)
+                        ensureActive();if(state.value.closed)return@withLock
+                        if(next!==current)publish(next)
+                        withContext(NonCancellable){ledger.complete(ticket,result.owner.token)}
+                        ensureActive()
+                    }
+                }
+            }catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}
+            finally{if(!state.value.closed)mutable.update{it.copy(busy=false)}}
+        }
+    }
+    private suspend fun applyChild(record:BookDetailSession,result:BookDetailChildResult):BookDetailSession {
+        val data=checkNotNull(record.data);val token=result.owner.token
+        suspend fun change(value:BookDetailMutation,native:BookDetailNativeKind?=null,
+            titleLength:Int?=null,anchor:String?=null)=sessions.mutate(ticket,record,
+                BookDetailOperation(token,value,native,titleLength,anchor))
+        suspend fun persist(value:BookDetailSession):BookDetailSession {
+            withContext(NonCancellable){sessions.write(ticket,value)};currentCoroutineContext().ensureActive();return value
+        }
+        when(result.owner.kind) {
+            BookDetailChildKind.Cover->if(!result.canceled)return change(BookDetailMutation(BookDetailMutationKind.Cover,text=result.value))
+            BookDetailChildKind.Group->if(!result.canceled)return change(BookDetailMutation(BookDetailMutationKind.Group,group=result.number))
+            BookDetailChildKind.Variable->if(!result.canceled) {
+                if(result.number==1L) {
+                    if(data.source?.url!=result.owner.sourceUrl)return record
+                    checkNotNull(services).sourceVariable(data.source,checkNotNull(result.owner.sourceUrl),result.value)
+                    currentCoroutineContext().ensureActive();return record
+                }
+                return change(BookDetailMutation(BookDetailMutationKind.CustomVariable,text=result.value))
+            }
+            BookDetailChildKind.Source->if(!result.canceled) {
+                return sessions.completeNetwork(ticket,record,data,checkNotNull(result.network),true,token)
+            }
+            BookDetailChildKind.Folder->if(!result.canceled && result.value!=null) {
+                checkNotNull(childServices).folder(result.value);currentCoroutineContext().ensureActive()
+            }
+            BookDetailChildKind.Toc->{
+                if(result.canceled) {
+                    if(!data.inBookshelf) {
+                        val removed=checkNotNull(childServices).discardTemporary(data.book)
+                        currentCoroutineContext().ensureActive()
+                        if(!removed) {
+                            val latest=details.reload(data.book.bookUrl)
+                            currentCoroutineContext().ensureActive()
+                            if(latest!=null)return persist(record.copy(data=latest,revision=record.revision+1))
+                        }
+                    }
+                }else {
+                    val defer=result.highlightTitleLength!=null && checkNotNull(childServices).deferHighlight(data.book)
+                    currentCoroutineContext().ensureActive()
+                    val changed=record.copy(chapterChanged=result.chapterChanged,revision=record.revision+1)
+                    persist(changed)
+                    val operation=BookDetailOperation(token,BookDetailMutation(BookDetailMutationKind.PrepareRead,
+                        position=result.position.takeUnless{defer}),BookDetailNativeKind.Reader,
+                        result.highlightTitleLength.takeIf{defer},result.highlightAnchor.takeIf{defer})
+                    val completed=sessions.mutate(ticket,changed,operation)
+                    if(defer) {
+                        val updated=completed.copy(effects=completed.effects.map{
+                            if(it.token==token+":navigate")it.copy(position=result.position)else it
+                        },revision=completed.revision+1)
+                        return persist(updated)
+                    }
+                    return completed
+                }
+            }
+            BookDetailChildKind.Reader->{
+                if(result.resultCode==DELETED_RESULT) {
+                    val effect=BookDetailNativeEffect(token,BookDetailNativeKind.Deleted,data.book,data.source,flag=false)
+                    if(record.effects.any{it.token==token})return record
+                    return persist(record.copy(effects=record.effects+effect,revision=record.revision+1))
+                }
+                val latest=details.reload(data.book.bookUrl)
+                currentCoroutineContext().ensureActive()
+                if(latest!=null)return persist(record.copy(data=latest,revision=record.revision+1))
+            }
+            BookDetailChildKind.InfoEditor,BookDetailChildKind.SourceEditor->if(!result.canceled) {
+                val latest=details.reload(data.book.bookUrl) ?: throw BookDetailMissing()
+                currentCoroutineContext().ensureActive()
+                return persist(record.copy(data=latest,revision=record.revision+1))
+            }
+        }
+        return record
+    }
     fun close(){if(state.value.closed)return;saved[CLOSED]=true;mutable.update{it.copy(closed=true,loading=false,busy=false,networkLoading=false)};stop();release()}
-    private fun release(){(cleanupScope ?: viewModelScope).launch{withContext(NonCancellable){runCatching{sessions.release(ticket)}}}}
-    fun stop(){generation++;loadJob?.cancel();networkJob?.cancel();mutationJob?.cancel()}
+    private fun release(){(cleanupScope ?: viewModelScope).launch{withContext(NonCancellable){runCatching{sessions.release(ticket)};runCatching{children?.release(ticket)}}}}
+    fun stop(){generation++;loadJob?.cancel();networkJob?.cancel();mutationJob?.cancel();childJob?.cancel()}
     override fun onCleared(){stop();super.onCleared()}
-    companion object{private const val KEY="book.detail.ticket";private const val CLOSED="book.detail.closed";private const val EXPANDED="book.detail.intro.expanded"}
+    companion object{private const val DELETED_RESULT=100;private const val KEY="book.detail.ticket";private const val CLOSED="book.detail.closed";private const val EXPANDED="book.detail.intro.expanded"}
 }
