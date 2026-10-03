@@ -598,10 +598,10 @@ class ReaderSourceReimportUiTest {
 
     private fun showMenu() {
         awaitDraw()
-        if (!main { it.findViewById<ReadMenu>(R.id.read_menu).isVisible }) {
+        if (!main { it.readMenu.isVisible }) {
             onView(withId(R.id.read_view)).perform(click())
         }
-        await("reader menu visible") { it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        await("reader menu visible") { it.readMenu.isVisible }
     }
 
     private fun awaitDraw() {

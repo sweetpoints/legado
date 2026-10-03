@@ -909,17 +909,16 @@ class ContentReversalUiTest {
     private fun showReaderMenu() {
         awaitDraw()
         var visible = false
-        scenario!!.onActivity { visible = it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        scenario!!.onActivity { visible = it.readMenu.isVisible }
         if (!visible) onView(withId(R.id.read_view)).perform(click())
-        await("reader menu shown") { it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        await("reader menu shown") { it.readMenu.isVisible }
     }
 
     private fun closeReaderMenu() {
         var visible = false
-        scenario!!.onActivity { visible = it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
-        if (visible)
-            scenario!!.onActivity { it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(false) }
-        await("reader menu hidden") { !it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        scenario!!.onActivity { visible = it.readMenu.isVisible }
+        if (visible) scenario!!.onActivity { it.readMenu.runMenuOut(false) }
+        await("reader menu hidden") { !it.readMenu.isVisible }
     }
 
     private fun openOverflow() {
@@ -1004,7 +1003,7 @@ class ContentReversalUiTest {
         scenario!!.onActivity {
             pageState =
                 "messagePage=${it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage}, " +
-                    "readerMenu=${it.findViewById<ReadMenu>(R.id.read_menu).isVisible}, bottomDialog=${it.bottomDialog}"
+                    "readerMenu=${it.readMenu.isVisible}, bottomDialog=${it.bottomDialog}"
         }
         throw AssertionError(
             "Timed out waiting for $description; chapter=${ReadBook.durChapterIndex}, " +

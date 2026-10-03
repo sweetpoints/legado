@@ -79,7 +79,7 @@ class ReadBookPopupActionMigrationTest {
 
         assertOrdered(
             book,
-            "binding.readMenu.runMenuOut()",
+            "readMenu.runMenuOut()",
             "ReadBook.book?.let",
             "ChangeBookSourceDialog(it.name, it.author)",
         )
@@ -88,7 +88,7 @@ class ReadBookPopupActionMigrationTest {
             "lifecycleScope.launch",
             "val book = ReadBook.book ?: return@launch",
             "appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)",
-            "binding.readMenu.runMenuOut()",
+            "readMenu.runMenuOut()",
             "ChangeChapterSourceDialog(",
             "batchMode = batchMode",
         )
@@ -128,7 +128,7 @@ class ReadBookPopupActionMigrationTest {
             "if (ReadBook.bookSource == null)",
             "upContent()",
             "ReadBook.curTextChapter = null",
-            "binding.readView.upContent()",
+            "readView.upContent()",
             "viewModel.refreshContentDur(it)",
         )
         assertOrdered(
@@ -137,7 +137,7 @@ class ReadBookPopupActionMigrationTest {
             "if (ReadBook.bookSource == null)",
             "upContent()",
             "ReadBook.clearTextChapter()",
-            "binding.readView.upContent()",
+            "readView.upContent()",
             "viewModel.refreshContentAfter(it)",
         )
         assertOrdered(

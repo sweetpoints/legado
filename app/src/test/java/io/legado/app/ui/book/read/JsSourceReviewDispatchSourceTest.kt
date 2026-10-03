@@ -71,13 +71,11 @@ class JsSourceReviewDispatchSourceTest {
                 .substringBefore("override fun upContent(")
 
         assertTrue(
-            applyBlock.contains(
-                "binding.readView.upContent(relativePosition = 0, resetPageOffset = false)"
-            )
+            applyBlock.contains("readView.upContent(relativePosition = 0, resetPageOffset = false)")
         )
         assertTrue(
             applyBlock.indexOf("ChapterProvider.setReviewProviders(") <
-                applyBlock.indexOf("binding.readView.upContent(")
+                applyBlock.indexOf("readView.upContent(")
         )
         assertTrue(!applyBlock.contains("ReadBook.loadContent("))
         assertTrue(applyBlock.contains("chapterIndex = chapterIndex"))

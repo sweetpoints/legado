@@ -109,9 +109,7 @@ class ReplacePreviewTest {
                 .substringBefore("private fun startBackupJob")
         assertTrue(preview.contains("++replacePreviewGeneration"))
         assertTrue(preview.contains("generation != replacePreviewGeneration"))
-        assertTrue(
-            preview.replace(Regex("\\s+"), "").contains("binding.readView.getReadPosition()")
-        )
+        assertTrue(preview.replace(Regex("\\s+"), "").contains("readView.getReadPosition()"))
 
         val pause =
             activity
@@ -119,7 +117,7 @@ class ReplacePreviewTest {
                 .substringBefore("override fun onCompatCreateOptionsMenu")
         assertOrder(
             pause,
-            "binding.readView.cancelTouchGestures()",
+            "readView.cancelTouchGestures()",
             "updateScrollReadPosition()",
             "ReadBook.saveRead()",
         )

@@ -17,7 +17,7 @@ class ScrollReadPositionContractTest {
             activity
                 .substringAfter("override fun onPostCreate")
                 .substringBefore("override fun onNewIntent")
-        val layout = onPostCreate.indexOf("binding.readView.doOnLayout")
+        val layout = onPostCreate.indexOf("readView.doOnLayout")
         val idle = onPostCreate.indexOf("Looper.myQueue().addIdleHandler")
         val init = onPostCreate.indexOf("viewModel.initData(intent)")
 

@@ -10,7 +10,6 @@ import android.graphics.pdf.PdfDocument
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -173,9 +172,9 @@ class PdfZoomNavigationTest {
         assertEquals(initial, images())
         await { it.reader.content.pdfRenderCount >= 2 }
         scenario!!.onActivity { tap(it.reader, .5f, .5f) }
-        await { it.findViewById<View>(R.id.read_menu).visibility == View.VISIBLE }
+        await { it.readMenu.isVisible }
         screenshot("pdf-zoom-configured-menu")
-        scenario!!.onActivity { it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(false) }
+        scenario!!.onActivity { it.readMenu.runMenuOut(false) }
         // Swap the lower-right action to previous: the zoom path must use the configured value.
         scenario!!.onActivity {
             AppConfig.clickActionBR = 2

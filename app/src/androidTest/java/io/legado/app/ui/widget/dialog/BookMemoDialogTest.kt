@@ -29,7 +29,6 @@ import io.legado.app.help.storage.Restore
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.book.read.ReadBookActivity
-import io.legado.app.ui.book.read.ReadMenu
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.utils.GSON
@@ -127,12 +126,12 @@ class BookMemoDialogTest {
                 it.bottomDialog == 0
         }
         scenario!!.onActivity {
-            it.findViewById<ReadMenu>(R.id.read_menu).runMenuIn(false)
+            it.readMenu.runMenuIn(false)
         }
         compose.onNodeWithTag("reader-memo").assertDoesNotExist()
         preferences.edit().putBoolean(PreferKey.showBookMemo, true).commit()
         scenario!!.onActivity {
-            it.findViewById<ReadMenu>(R.id.read_menu).runMenuIn(false)
+            it.readMenu.runMenuIn(false)
         }
         for (tag in
             listOf(

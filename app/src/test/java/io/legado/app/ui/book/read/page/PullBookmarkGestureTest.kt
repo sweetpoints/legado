@@ -103,8 +103,8 @@ class PullBookmarkGestureTest {
             source
                 .substringAfter("override fun toggleBookmark()")
                 .substringBefore("private suspend fun deleteBookmarks")
-        assertTrue(toggleBookmark.contains("val page = binding.readView.curPage.textPage"))
-        assertFalse(toggleBookmark.contains("binding.readView.getCurVisiblePage()"))
+        assertTrue(toggleBookmark.contains("val page = readView.curPage.textPage"))
+        assertFalse(toggleBookmark.contains("readView.getCurVisiblePage()"))
         assertTrue(source.contains("private val bookmarkToggleMutex = Mutex()"))
         assertTrue(source.contains("bookmarkToggleMutex.withLock"))
     }
@@ -210,8 +210,9 @@ class PullBookmarkGestureTest {
         assertTrue(pageOverlay.contains("app:layout_constraintTop_toTopOf=\"parent\""))
         assertTrue(pageOverlay.contains("app:layout_constraintRight_toRightOf=\"parent\""))
 
-        val activityLayout = source("app/src/main/res/layout/activity_book_read.xml")
-        assertFalse(activityLayout.contains("android:id=\"@+id/bookmark_indicator\""))
+        val activityLayout =
+            source("app/src/main/java/io/legado/app/ui/book/read/ReaderHostScreen.kt")
+        assertFalse(activityLayout.contains("bookmark_indicator"))
         assertFalse(activity.contains("override fun setPullBookmarkPageOffset"))
 
         val longIndicator = source("app/src/main/res/drawable/ic_bookmark_long.xml")

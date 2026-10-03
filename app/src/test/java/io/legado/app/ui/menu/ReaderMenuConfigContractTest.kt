@@ -19,8 +19,8 @@ class ReaderMenuConfigContractTest {
         listOf(
                 "override fun onShowActivityOverflowMenu(anchor: View, menu: Menu): Boolean",
                 "loadReaderMenuConfig(this)",
-                "binding.readMenu.openPopup(ReaderPopup.Overflow)",
-                "binding.readMenu.openPopup(ReaderPopup.More)",
+                "readMenu.openPopup(ReaderPopup.Overflow)",
+                "readMenu.openPopup(ReaderPopup.More)",
                 "readerOverflowItemsByKey()",
                 "\"_more\"",
                 "\"_config\"",
