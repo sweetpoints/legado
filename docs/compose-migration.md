@@ -905,3 +905,5 @@ Replaced ChangeChapterSourceDialog and its source/TOC adapters with Compose Rout
 音频片头片尾设置的数据层独立迁移：不可变草稿保留原始秒数，仅控件展示限制在 0–180；全局和本书切换、串行写入与真实关闭保存分别处理。保存前读取最新 Room 书籍，只合并三个音频配置字段，保留阅读进度、自定义封面与其他配置。新增 6 个 JVM 测试和 2 个实际 Room Android 测试；完整 JVM 测试与 Android 测试编译验证，设备测试待运行。
 
 RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助、分类选择、日志选区复制和自动网页链接、列表与正文 HTML 入口。调试执行由独立 ViewModel 与拥有者租约管理，暂停显示期间继续执行，返回关闭时释放租约，旋转不重复启动。删除旧 Model/Adapter、独占布局和菜单；新增 11 个 Compose、生命周期与真实宿主 Android 测试。完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
+
+键盘辅助配置的数据层与 ViewModel 独立迁移：观察所有类型的辅助键，使用稳定主键处理增删改和完整列表排序；保留空键与 Room 替换语义，编辑后转为 type 0 并保留原序号。编辑草稿和数据库提交日志存入私有文件，小 SavedState 仅保存会话、选区位置和待发送行数；拖动取消不写入，行数确认提交后单次发送。新增 8 个 JVM 与 5 个真实 Room/文件 Android 测试；完整 JVM 测试与 Android 测试编译验证，设备测试待运行。
