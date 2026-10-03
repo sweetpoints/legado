@@ -179,12 +179,12 @@ class ImportBookPathMigrationTest {
         assertTrue(viewModel.contains("groupDao.getUnusedId()"))
         assertTrue(viewModel.contains("groupName = name"))
         assertTrue(viewModel.contains("val (importedUris, importedBooks)"))
-        assertTrue(viewModel.contains("importedBooks.map { it.bookUrl }.chunked(900).forEach"))
+        assertTrue(viewModel.containsCode("importedBooks.map { it.bookUrl }.chunked(900).forEach"))
         assertTrue(viewModel.contains("bookDao.addGroup(it, groupId)"))
         assertFalse(viewModel.contains("bookDao.update("))
         assertTrue(bookDao.contains("set `group` = `group` | :groupId"))
         assertTrue(bookDao.contains("where bookUrl in (:bookUrls)"))
-        assertTrue(viewModel.contains("}.exceptionOrNull()"))
+        assertTrue(viewModel.containsCode("}.exceptionOrNull()"))
         assertTrue(viewModel.contains("LocalImportResult("))
         assertTrue(activity.contains("selected.size < 2 || state.value.recursive"))
         assertTrue(activity.contains("loadDirectory(recursive = true)"))
@@ -312,6 +312,9 @@ class ImportBookPathMigrationTest {
         assertFalse(readActivity.contains("book.bookUrl ="))
         assertFalse(readActivity.contains("book.save()"))
     }
+
+    private fun String.containsCode(expected: String): Boolean =
+        replace(Regex("\\s+"), "").contains(expected.replace(Regex("\\s+"), ""))
 
     private fun readProjectFile(pathInApp: String): String {
         val file = sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)
