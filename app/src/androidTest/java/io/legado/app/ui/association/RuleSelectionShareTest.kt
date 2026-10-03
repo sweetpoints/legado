@@ -25,7 +25,6 @@ import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleAdapter
 import io.legado.app.ui.highlight.HighlightRuleActivity
-import io.legado.app.ui.highlight.HighlightRuleAdapter
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import org.junit.Assert.assertEquals
@@ -44,31 +43,38 @@ class RuleSelectionShareTest {
     private val context = instrumentation.targetContext.applicationContext
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun highlightSelectionSharesOnlyCheckedRulesWithTheImportEnvelopeAndFullStyle() {
-        val id = UUID.randomUUID().toString()
-        val rule = HighlightRule(name = "Share highlight $id", pattern = "甲乙[?&]",
-            isRegex = true, scope = "Fixture", group = "Share group", isEnabled = false,
-            applyToTitle = true, applyToBody = false, timeoutMillisecond = 4567,
-            style = "{\"textColor\":123456}")
-        val other = HighlightRule(name = "Unselected highlight $id", pattern = "other")
-        val ids = appDb.highlightRuleDao.insert(rule, other)
-        rule.id = ids[0]
-        other.id = ids[1]
+        val id=UUID.randomUUID().toString()
+        val rule=HighlightRule(name="Share highlight $id",pattern="甲乙[?&]",isRegex=true,scope="Fixture",group="Share group",isEnabled=false,applyToTitle=true,applyToBody=false,timeoutMillisecond=4567,style="{\"textColor\":123456}")
+        val other=HighlightRule(name="Unselected highlight $id",pattern="other")
+        val ids=appDb.highlightRuleDao.insert(rule,other);rule.id=ids[0];other.id=ids[1]
+        val chooser=AtomicReference<Intent?>()
+        val monitor=object:Instrumentation.ActivityMonitor(){override fun onStartActivity(intent:Intent):Instrumentation.ActivityResult? {
+            if(intent.action!=Intent.ACTION_CHOOSER)return null
+            chooser.set(intent);return Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null)
+        }}
+        instrumentation.addMonitor(monitor)
+        var sharedUri:Uri?=null
         try {
-            val json = shareSelection(HighlightRuleActivity::class.java, R.menu.replace_rule_sel) { activity ->
-                val adapter = activity.findViewById<RecyclerView>(R.id.recycler_view).adapter as HighlightRuleAdapter
-                val index = adapter.getItems().indexOfFirst { it.uuid == rule.uuid }
-                if (index < 0 || adapter.getItems().none { it.uuid == other.uuid }) false else {
-                    assertTrue(adapter.dragSelectCallback.onSelectChange(index, true))
-                    assertEquals(listOf(rule.uuid), adapter.selection.map { it.uuid })
-                    true
-                }
+            var json=""
+            runAndroidComposeUiTest<HighlightRuleActivity> {
+                waitUntil(timeoutMillis=15_000){activity?.viewModel?.state?.value?.rules.orEmpty().any{it.uuid==rule.uuid}}
+                onNodeWithTag("highlight-management-selection-menu").assertIsNotEnabled();assertNull(chooser.get())
+                onNodeWithTag("highlight-management-list").performScrollToNode(hasTestTag("highlight-management-select-${rule.uuid}"))
+                onNodeWithTag("highlight-management-select-${rule.uuid}").performClick().assertIsOn()
+                onNodeWithTag("highlight-management-selection-menu").performClick();onNodeWithTag("highlight-management-share").performClick()
+                waitUntil(timeoutMillis=15_000){chooser.get()!=null}
+                @Suppress("DEPRECATION") val send=checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                assertEquals(Intent.ACTION_SEND,send.action);assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0)
+                @Suppress("DEPRECATION") val uri=checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM));sharedUri=uri
+                assertEquals("content",uri.scheme);json=context.contentResolver.openInputStream(uri)!!.bufferedReader().use{it.readText()}
             }
-            val restored = GSON.fromJson(json, HighlightRuleFile::class.java)
-            assertEquals(HighlightRuleFile.TYPE, restored.type)
-            assertEquals(GSON.toJson(rule), GSON.toJson(restored.rules!!.single()))
+            val restored=GSON.fromJson(json,HighlightRuleFile::class.java);assertEquals(HighlightRuleFile.TYPE,restored.type)
+            assertEquals(GSON.toJson(rule),GSON.toJson(restored.rules!!.single()))
         } finally {
-            appDb.highlightRuleDao.delete(rule, other)
+            instrumentation.removeMonitor(monitor);sharedUri?.lastPathSegment?.let{File(context.cacheDir,it).delete()}
+            appDb.highlightRuleDao.delete(rule,other)
         }
     }
 

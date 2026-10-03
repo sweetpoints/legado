@@ -110,10 +110,37 @@ class HighlightManagementViewModelTest {
         assertTrue(vm.state.value.closed);assertTrue(store.records.isEmpty());val count=rules.subscriptions
         val restored=model(rules,store,restored(saved));runCurrent();assertTrue(restored.state.value.closed);assertFalse(restored.state.value.loading);assertEquals(count,rules.subscriptions)
     }
+    @Test fun exportCallbackArrivingBeforeLoadWaitsAndRejectsUnownedOrDuplicateTokens()=runTest(dispatcher) {
+        val store=Store();val saved=SavedStateHandle(mapOf(HighlightManagementViewModel.KEY to "ticket"))
+        store.records["ticket"]=HighlightManagementDraft(exporting="owned",revision=5)
+        val vm=model(store=store,saved=saved);vm.exportResult("first","owned");runCurrent();assertEquals("first",vm.state.value.draft.exportResult)
+        vm.exportResult("duplicate","owned");runCurrent();assertEquals("first",vm.state.value.draft.exportResult)
+        vm.dismissExportResult();vm.export(true);runCurrent();val next=vm.state.value.draft.effects.single();vm.consume(next.token){true}
+        vm.exportResult("late-old","owned");runCurrent();assertEquals(next.token,vm.state.value.draft.exporting);assertNull(vm.state.value.draft.exportResult)
+        vm.exportResult("new",next.token);runCurrent();assertEquals("new",vm.state.value.draft.exportResult)
+    }
+    @Test fun importFullResultUriIsQueuedForLifecycleDeliveryAndRestoresWithoutBundleInput()=runTest(dispatcher) {
+        val store=Store();val saved=SavedStateHandle();val vm=model(store=store,saved=saved)
+        val uri="content://provider/"+"large".repeat(200000);vm.importResult(uri);runCurrent();vm.flush();vm.stop()
+        val restored=model(store=store,saved=restored(saved));runCurrent();val effect=restored.state.value.draft.effects.single()
+        assertEquals(HighlightManagementAction.Import,effect.action);assertEquals(uri,effect.text)
+        assertTrue(saved.keys().all{(saved.get<Any?>(it) as? String)?.length?.let{n->n<100}!=false})
+    }
+    @Test fun initialRoomFlowFailureCanRetryWithoutLosingLoadedSessionSelection()=runTest(dispatcher) {
+        val rules=Rules();rules.failRows=true;val store=Store();val saved=SavedStateHandle(mapOf(HighlightManagementViewModel.KEY to "ticket"))
+        store.records["ticket"]=HighlightManagementDraft(selection=setOf("a"),revision=1)
+        val vm=model(rules,store,saved);runCurrent();assertFalse(vm.state.value.rowsReady);assertNotNull(vm.state.value.error);assertFalse(vm.state.value.loading)
+        rules.failRows=false;vm.retry();runCurrent();assertTrue(vm.state.value.rowsReady);assertEquals(setOf("a"),vm.state.value.draft.selection);assertEquals(4,vm.state.value.visible.size)
+    }
+    @Test fun emptyExportQueuesLocalizedHostNotificationWithoutStagingAnyNativePayload()=runTest(dispatcher) {
+        val rules=Rules();rules.rows.value=emptyList();val vm=model(rules);runCurrent();vm.export(true);runCurrent()
+        val effect=vm.state.value.draft.effects.single();assertEquals(HighlightManagementAction.EmptyExport,effect.action);assertTrue(effect.rules.isEmpty())
+        assertEquals(effect,vm.consume(effect.token){true});assertTrue(vm.state.value.draft.effects.isEmpty());assertNull(vm.state.value.draft.exporting)
+    }
     private class Rules:HighlightManagementRepository {
         val rows=MutableStateFlow(listOf("a","b","c","d").mapIndexed{index,id->HighlightManagedRule(index+1L,id,id,"pattern $id",false,"scope",true,"style $id",index,3000,when(id){"a"->"A,B";"b"->"B";"d"->"未分组";else->null},false,true)})
-        var subscriptions=0;val enabled=mutableListOf<Pair<Set<String>,Boolean>>();val moved=mutableListOf<Pair<Set<String>,Boolean>>();val deleted=mutableListOf<Set<String>>();val reordered=mutableListOf<List<String>>()
-        override fun rows():Flow<List<HighlightManagedRule>> = rows.onStart{subscriptions++}
+        var subscriptions=0;var failRows=false;val enabled=mutableListOf<Pair<Set<String>,Boolean>>();val moved=mutableListOf<Pair<Set<String>,Boolean>>();val deleted=mutableListOf<Set<String>>();val reordered=mutableListOf<List<String>>()
+        override fun rows():Flow<List<HighlightManagedRule>> = rows.onStart{subscriptions++;if(failRows)error("observe failed")}
         override fun groups():Flow<List<String>> = flowOf(listOf("A,B","B","未分组"))
         override suspend fun enable(uuids:Set<String>,enabled:Boolean){this.enabled+=uuids to enabled}
         override suspend fun delete(uuids:Set<String>){deleted+=uuids;rows.value=rows.value.filter{it.uuid !in uuids}}

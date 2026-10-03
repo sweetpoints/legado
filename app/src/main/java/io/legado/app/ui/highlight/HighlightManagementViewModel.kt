@@ -12,7 +12,7 @@ import java.util.UUID
 
 data class HighlightManagementState(val rules: List<HighlightManagedRule> = emptyList(),
     val groups: List<String> = emptyList(), val draft: HighlightManagementDraft = HighlightManagementDraft(),
-    val loaded: Boolean = false, val loading: Boolean = true, val busy: Boolean = false,
+    val loaded: Boolean = false, val rowsReady: Boolean = loaded, val loading: Boolean = true, val busy: Boolean = false,
     val error: String? = null, val closed: Boolean = false) {
     val visible: List<HighlightManagedRule> get() = rules.filter { rule -> when(draft.filter) {
         null -> true
@@ -20,7 +20,7 @@ data class HighlightManagementState(val rules: List<HighlightManagedRule> = empt
         else -> rule.group == draft.filter
     } }
     val selected: List<HighlightManagedRule> get() = visible.filter { it.uuid in draft.selection }
-    val canAct: Boolean get() = loaded && !busy && !closed
+    val canAct: Boolean get() = loaded && rowsReady && !busy && !closed
     companion object { const val UNGROUPED = "\u0000" }
 }
 
@@ -36,6 +36,7 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
     private var groupJob:Job?=null
     private var loadJob:Job?=null
     private var dirty=false
+    private var observeFailed=false
     private var orderBaseline:List<HighlightManagedRule>?=null
     private var rangeBaseline:Set<String>?=null
     private val ready=CompletableDeferred<Unit>()
@@ -47,13 +48,14 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
             try {
                 val restored=sessions.read(ticket) ?: HighlightManagementDraft()
                 ensureActive();if(state.value.closed)return@launch
-                mutable.update{it.copy(draft=restored,loaded=true,loading=false)}
+                mutable.update{it.copy(draft=restored,loaded=true,loading=true)}
                 if(!ready.isCompleted)ready.complete(Unit)
                 observe()
             } catch(error:Throwable){ensureActive();mutable.update{it.copy(loading=false,error=error.message ?: error.toString())}}
         }
     }
     private fun observe() {
+        observeFailed=false
         rowJob?.cancel();groupJob?.cancel()
         rowJob=viewModelScope.launch {
             try {rules.rows().collect { latest ->
@@ -65,13 +67,13 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
                 val selection=old.draft.selection.intersect(visible.mapTo(hashSetOf()){it.uuid})
                 // Room updates cancel an incomplete gesture; only explicit release commits its preview.
                 orderBaseline=null;rangeBaseline=null
-                mutable.update{it.copy(rules=latest,error=null)}
+                mutable.update{it.copy(rules=latest,rowsReady=true,loading=false,error=null)}
                 if(filter!=old.draft.filter || selection!=old.draft.selection) edit { copy(filter=filter,selection=selection) }
-            }} catch(error:Throwable){ensureActive();mutable.update{it.copy(error=error.message ?: error.toString())}}
+            }} catch(error:Throwable){ensureActive();observeFailed=true;mutable.update{it.copy(loading=false,error=error.message ?: error.toString())}}
         }
         groupJob=viewModelScope.launch {
             try {rules.groups().collect{groups ->mutable.update{it.copy(groups=groups)}}}
-            catch(error:Throwable){ensureActive();mutable.update{it.copy(error=error.message ?: error.toString())}}
+            catch(error:Throwable){ensureActive();observeFailed=true;mutable.update{it.copy(error=error.message ?: error.toString())}}
         }
     }
     private fun edit(block: HighlightManagementDraft.()->HighlightManagementDraft) {
@@ -141,7 +143,7 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
     fun export(all:Boolean) {
         if(!state.value.canAct || state.value.draft.exporting!=null || state.value.draft.effects.any{it.action==HighlightManagementAction.Export})return
         val rows=if(all)state.value.rules else state.value.selected
-        if(rows.isEmpty()){mutable.update{it.copy(error="No highlight rules")};return}
+        if(rows.isEmpty()){queue(HighlightManagementAction.EmptyExport);return}
         queue(HighlightManagementAction.Export,rows=rows)
     }
     fun share(){if(state.value.canAct && state.value.selected.isNotEmpty())queue(HighlightManagementAction.Share,rows=state.value.selected)}
@@ -170,22 +172,24 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
             mutable.update{it.copy(draft=next)};dirty=false;effect
         } } finally {mutable.update{it.copy(busy=false)}}
     }
-    fun exportResult(url:String?)=viewModelScope.launch {
+    fun exportResult(url:String?,owner:String?=null)=viewModelScope.launch {
         ready.await()
         if(state.value.closed)return@launch
         try { writes.withLock {
             val before=state.value.draft
-            if(before.exporting==null || state.value.closed)return@withLock
+            if(before.exporting==null || (owner!=null && before.exporting!=owner) || state.value.closed)return@withLock
+            mutable.update{it.copy(busy=true)}
             val next=before.copy(exporting=null,exportResult=url,revision=before.revision+1)
             withContext(NonCancellable){sessions.write(ticket,next)}
             ensureActive();if(!state.value.closed)mutable.update{it.copy(draft=next)}
             dirty=false
-        } } catch(error:Throwable){ensureActive();deliveryFailure(error)}
+        } } catch(error:Throwable){ensureActive();deliveryFailure(error)} finally {mutable.update{it.copy(busy=false)}}
     }
+    fun importResult(url:String?) {if(url!=null && !state.value.closed)viewModelScope.launch {ready.await();if(!state.value.closed)queue(HighlightManagementAction.Import,text=url)} }
     fun dismissExportResult(){edit{copy(exportResult=null)}}
     fun copyExportResult(){val url=state.value.draft.exportResult ?: return;queue(HighlightManagementAction.Copy,text=url);dismissExportResult()}
     fun deliveryFailure(error:Throwable){mutable.update{it.copy(error=error.message ?: error.toString())}}
-    fun retry(){if(!state.value.loaded){load();return};mutable.update{it.copy(error=null)};viewModelScope.launch{try{flush()}catch(error:Throwable){ensureActive();deliveryFailure(error)}}}
+    fun retry(){if(!state.value.loaded){load();return};if(observeFailed)observe();mutable.update{it.copy(error=null)};viewModelScope.launch{try{flush()}catch(error:Throwable){ensureActive();deliveryFailure(error)}}}
     fun close() {
         if(state.value.closed)return
         saved[CLOSED]=true;cancelGesture();mutable.update{it.copy(closed=true,loading=false)}

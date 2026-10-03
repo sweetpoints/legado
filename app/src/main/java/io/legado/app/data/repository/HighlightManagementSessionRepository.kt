@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.UUID
 
-enum class HighlightManagementAction { Add, Edit, Import, Groups, Export, Share, Refresh, Copy }
+enum class HighlightManagementAction { Add, Edit, Import, Groups, Export, Share, Refresh, Copy, EmptyExport }
 data class HighlightManagementEffect(val token: String, val action: HighlightManagementAction,
     val id: Long? = null, val rules: List<HighlightManagedRule> = emptyList(), val text: String? = null)
 data class HighlightManagementDraft(val filter: String? = null, val selection: Set<String> = emptySet(),

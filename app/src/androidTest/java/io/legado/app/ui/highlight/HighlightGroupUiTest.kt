@@ -3,6 +3,9 @@ package io.legado.app.ui.highlight
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertTextContains
@@ -26,7 +29,6 @@ import android.view.Window
 import android.view.inspector.WindowInspector
 import android.widget.ListView
 import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
@@ -53,13 +55,11 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HighlightRuleFile
-import io.legado.app.databinding.ItemHighlightRuleBinding
 import io.legado.app.help.IntentData
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.HighlightStyle
 import io.legado.app.ui.file.HandleFileActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import org.hamcrest.Matchers.allOf
@@ -111,7 +111,8 @@ class HighlightGroupUiTest {
 
     @Test fun fontSizeAndNegativeSpacingPersistAndResetThroughTheActualStyleDialog() {
         fun openStyle() {
-            onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice")))).perform(click())
+            compose.onNodeWithTag("highlight-management-list").performScrollToNode(hasTestTag("highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"))
+            compose.onNodeWithTag("highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}").performClick()
             compose.waitUntil {
                 compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
                     !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
@@ -167,8 +168,8 @@ class HighlightGroupUiTest {
     @Test fun pillMarginEditsPersistAndResetThroughTheActualStyleDialog() {
         fun margin(value: Int) = context.getString(R.string.highlight_pill_padding_value, value)
         fun openStyle() {
-            onView(allOf(withId(R.id.iv_edit), hasSibling(withText("[Characters] Alice"))))
-                .perform(click())
+            compose.onNodeWithTag("highlight-management-list").performScrollToNode(hasTestTag("highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"))
+            compose.onNodeWithTag("highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}").performClick()
             compose.waitUntil {
                 compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
                     !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
@@ -206,8 +207,7 @@ class HighlightGroupUiTest {
     }
 
     @Test fun filterRenameMoveAndDeleteUseRealDialogsAndPreserveOtherRules() {
-        onView(withContentDescription(androidx.appcompat.R.string.abc_action_menu_overflow_description))
-            .perform(click())
+        compose.onNodeWithTag("highlight-management-menu").performClick()
         instrumentation.waitForIdleSync()
         val menuBitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
@@ -219,7 +219,7 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "Characters" })
         screenshot("highlight-group-filter")
 
-        menu(R.id.menu_highlight_group_manage)
+        menu("highlight-management-groups")
         groupAction("Characters", editing = true)
         compose.onNodeWithTag("highlight-group-name").performTextReplacement("People")
         compose.onNodeWithTag("highlight-group-rename-confirm").performClick()
@@ -231,7 +231,7 @@ class HighlightGroupUiTest {
 
         filter("[People]")
         awaitRules(dao.all.filter { it.group == "People" })
-        menu(R.id.menu_highlight_group_manage)
+        menu("highlight-management-groups")
         groupAction("People")
         compose.onNodeWithTag("highlight-group-choose-move").performClick()
         // This is a real group named like the special ungrouped option.
@@ -244,7 +244,7 @@ class HighlightGroupUiTest {
 
         filter("[$namedUngrouped]")
         awaitRules(dao.all.filter { it.group == namedUngrouped })
-        menu(R.id.menu_highlight_group_manage)
+        menu("highlight-management-groups")
         groupAction(namedUngrouped)
         compose.onNodeWithTag("highlight-group-choose-move").performClick()
         compose.onNodeWithTag("highlight-group-move-none").performClick()
@@ -256,7 +256,7 @@ class HighlightGroupUiTest {
 
         filter("[Quotes]")
         awaitRules(dao.all.filter { it.group == "Quotes" })
-        menu(R.id.menu_highlight_group_manage)
+        menu("highlight-management-groups")
         groupAction("Quotes")
         compose.onNodeWithTag("highlight-group-delete-confirm").performClick()
         await { dao.all.size == 4 }
@@ -280,7 +280,7 @@ class HighlightGroupUiTest {
         }
         instrumentation.addMonitor(monitor)
         try {
-            menu(R.id.menu_export_all)
+            menu("highlight-management-export-all")
             await { launched.get() != null }
             val intent = launched.get()!!
             assertEquals(HandleFileContract.EXPORT, intent.getIntExtra("mode", -1))
@@ -329,23 +329,14 @@ class HighlightGroupUiTest {
                 downloadUrlRule = "$.url", summary = summary,
             ))
             val expected = dao.all.first()
-            onView(allOf(withId(R.id.cb_name), withText("[Characters] Alice"))).perform(click())
-            onView(allOf(withId(R.id.iv_menu_more), isDescendantOfA(withId(R.id.select_action_bar))))
-                .perform(click())
-            onView(withText(R.string.export_selection)).perform(click())
+            compose.onNodeWithTag("highlight-management-select-${expected.uuid}").performClick()
+            compose.onNodeWithTag("highlight-management-selection-menu").performClick()
+            compose.onNodeWithTag("highlight-management-export").performClick()
             onView(withText(R.string.upload_url)).inRoot(isDialog()).perform(click())
-            await {
-                var shown = false
-                instrumentation.runOnMainSync {
-                    shown = WindowInspector.getGlobalWindowViews().any {
-                        it.hasWindowFocus() && it.findViewById<TextView>(R.id.edit_view)?.text?.toString() == url
-                    }
-                }
-                shown
-            }
-            onView(withText(R.string.export_success)).inRoot(isDialog()).check(matches(isDisplayed()))
-            onView(withText(summary)).inRoot(isDialog()).check(matches(isDisplayed()))
-            onView(withId(R.id.edit_view)).inRoot(isDialog()).check(matches(withText(url)))
+            compose.waitUntil(15_000) {compose.onAllNodesWithTag("highlight-management-export-result").fetchSemanticsNodes().isNotEmpty()}
+            compose.onNodeWithTag("highlight-management-export-result").assertTextEquals(url)
+            compose.onNodeWithTag("highlight-management-export-summary").assertTextEquals(summary)
+            compose.onNodeWithText(context.getString(R.string.export_success)).assertIsDisplayed()
             assertEquals("HighlightRules.json", uploadedName.get())
             val downloaded = URL(url).readText()
             assertEquals(uploaded.get(), downloaded)
@@ -357,7 +348,7 @@ class HighlightGroupUiTest {
                 File(context.getExternalFilesDir("ui-regression"), "highlight-export-success.png")
                     .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             } finally { bitmap.recycle() }
-            onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("highlight-management-export-copy").performClick()
             scenario!!.onActivity { assertEquals(url, clipboard.primaryClip?.getItemAt(0)?.text?.toString()) }
         } finally {
             if (previousRule == null) DirectLinkUpload.delConfig() else DirectLinkUpload.putConfig(previousRule)
@@ -387,33 +378,20 @@ class HighlightGroupUiTest {
         screenshot("highlight-group-import-refresh")
     }
 
-    private fun menu(id: Int) {
-        scenario!!.onActivity {
-            assertTrue(it.findViewById<TitleBar>(R.id.title_bar).menu.performIdentifierAction(id, 0))
-        }
+    private fun menu(tag: String) {
+        compose.onNodeWithTag("highlight-management-menu").performClick()
+        compose.onNodeWithTag(tag).performClick()
     }
 
     private fun filter(label: String) {
-        menu(R.id.menu_highlight_group_filter)
-        choose(label)
-    }
-
-    private fun choose(label: String) {
-        fun hasChoice(view: View): Boolean {
-            if (view is ListView && (0 until view.count).any { view.getItemAtPosition(it).toString() == label }) {
-                return true
-            }
-            return view is ViewGroup && (0 until view.childCount).any { hasChoice(view.getChildAt(it)) }
+        menu("highlight-management-filter")
+        val tag = when(label) {
+            context.getString(R.string.all) -> "highlight-filter-all"
+            context.getString(R.string.no_group) -> "highlight-filter-ungrouped"
+            else -> "highlight-filter-${label.removePrefix("[").removeSuffix("]")}"
         }
-        // Room's first emission is asynchronous; wait for the actual focused list dialog.
-        await {
-            var ready = false
-            instrumentation.runOnMainSync {
-                ready = WindowInspector.getGlobalWindowViews().any { it.hasWindowFocus() && hasChoice(it) }
-            }
-            ready
-        }
-        onView(withText(label)).inRoot(isDialog()).perform(click())
+        compose.onNodeWithTag("highlight-management-filter-list").performScrollToNode(hasTestTag(tag))
+        compose.onNodeWithTag(tag).performClick()
     }
 
     private fun groupAction(group: String, editing: Boolean = false) {
@@ -426,23 +404,18 @@ class HighlightGroupUiTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("highlight-group-label-$group").fetchSemanticsNodes().isNotEmpty() }
     }
 
-    private fun awaitRules(expected: List<HighlightRule>) = await {
-        var rendered = false
-        scenario!!.onActivity { activity ->
-            val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-            val adapter = recycler.adapter as HighlightRuleAdapter
-            rendered = adapter.getItems().map { it.uuid } == expected.map { it.uuid } &&
-                !recycler.isComputingLayout && !recycler.hasPendingAdapterUpdates() &&
-                !recycler.isLayoutRequested && recycler.itemAnimator?.isRunning != true &&
-                recycler.childCount == expected.size && (0 until recycler.childCount).all { index ->
-                    val binding = ItemHighlightRuleBinding.bind(recycler.getChildAt(index))
-                    val rule = expected[index]
-                    val label = rule.group?.takeIf { it.isNotBlank() }?.let { "[$it] ${rule.getDisplayName()}" }
-                        ?: rule.getDisplayName()
-                    binding.cbName.text.toString() == label && binding.swtEnabled.isChecked == rule.isEnabled
-                }
+    private fun awaitRules(expected: List<HighlightRule>) {
+        compose.waitUntil(15_000) {
+            var matches=false
+            scenario!!.onActivity {activity ->matches=activity.viewModel.state.value.visible.map{it.uuid}==expected.map{it.uuid}}
+            matches
         }
-        rendered
+        expected.forEach {rule ->
+            compose.onNodeWithTag("highlight-management-list").performScrollToNode(hasTestTag("highlight-management-row-${rule.uuid}"))
+            val label=rule.group?.takeIf{it.isNotBlank()}?.let{"[$it] ${rule.getDisplayName()}"} ?: rule.getDisplayName()
+            compose.onNodeWithTag("highlight-management-name-${rule.uuid}").assertTextEquals(label)
+            compose.onNodeWithTag("highlight-management-enabled-${rule.uuid}").assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState,if(rule.isEnabled)ToggleableState.On else ToggleableState.Off))
+        }
     }
 
     private fun groupDialog(activity: HighlightRuleActivity) =
