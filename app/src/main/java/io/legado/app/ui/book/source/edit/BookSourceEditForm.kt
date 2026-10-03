@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.source.edit
 
+import androidx.annotation.Keep
 import io.legado.app.R
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.BookInfoRule
@@ -10,6 +11,7 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.help.RuleComplete
 
+@Keep
 internal data class BookSourceEditField(
     val key: String,
     val value: String,
@@ -25,6 +27,7 @@ internal data class BookSourceEditField(
         )
 }
 
+@Keep
 internal data class BookSourceEditOptions(
     val enabled: Boolean,
     val enabledExplore: Boolean,
@@ -35,6 +38,7 @@ internal data class BookSourceEditOptions(
     val customButton: Boolean,
 )
 
+@Keep
 internal data class BookSourceEditForm(
     val options: BookSourceEditOptions,
     val tabs: List<List<BookSourceEditField>>,
