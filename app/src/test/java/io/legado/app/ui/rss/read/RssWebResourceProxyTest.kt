@@ -18,15 +18,22 @@ class RssWebResourceProxyTest {
     @Test
     fun webViewCanQueryAndReadAfterEofUntilItClosesTheResponse() {
         var closeCount = 0
-        val source = object : ForwardingSource(Buffer().writeUtf8("complete image bytes")) {
-            override fun close() {
-                closeCount++
-                super.close()
+        val source =
+            object : ForwardingSource(Buffer().writeUtf8("complete image bytes")) {
+                override fun close() {
+                    closeCount++
+                    super.close()
+                }
             }
-        }
         val body = source.buffer().asResponseBody()
-        val response = Response.Builder().request(Request.Builder().url("https://example.com/image.png").build())
-            .protocol(Protocol.HTTP_1_1).code(200).message("OK").body(body).build()
+        val response =
+            Response.Builder()
+                .request(Request.Builder().url("https://example.com/image.png").build())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body(body)
+                .build()
         val stream = RssProxyResponseInputStream(response, body)
 
         assertEquals("complete image bytes", stream.readBytes().toString(Charsets.UTF_8))
@@ -90,21 +97,24 @@ class RssWebResourceProxyTest {
 
     @Test
     fun keepsSourceAndWebViewHeadersWhileRemovingTransportHeaders() {
-        val headers = RssWebResourceProxy.requestHeaders(
-            sourceHeaders = mapOf(
-                "Referer" to "https://source.example/",
-                "CookieJar" to "true",
-                "Cookie" to "source=one",
-                "user-agent" to "source-agent",
-            ),
-            webViewHeaders = mapOf(
-                "Range" to "bytes=0-99",
-                "Accept-Encoding" to "gzip",
-                "Cookie" to "web=two",
-                "User-Agent" to "web-agent",
-            ),
-            cookie = "source=one; web=two",
-        )
+        val headers =
+            RssWebResourceProxy.requestHeaders(
+                sourceHeaders =
+                    mapOf(
+                        "Referer" to "https://source.example/",
+                        "CookieJar" to "true",
+                        "Cookie" to "source=one",
+                        "user-agent" to "source-agent",
+                    ),
+                webViewHeaders =
+                    mapOf(
+                        "Range" to "bytes=0-99",
+                        "Accept-Encoding" to "gzip",
+                        "Cookie" to "web=two",
+                        "User-Agent" to "web-agent",
+                    ),
+                cookie = "source=one; web=two",
+            )
 
         assertEquals("https://source.example/", headers["Referer"])
         assertEquals("bytes=0-99", headers["Range"])
@@ -117,15 +127,21 @@ class RssWebResourceProxyTest {
 
     @Test
     fun preservesRangeMetadataAndDoesNotExposeHopByHopHeaders() {
-        val result = RssWebResourceProxy.responseHeaders(
-            Headers.headersOf(
-                "Content-Range", "bytes 0-99/200",
-                "Content-Length", "100",
-                "Accept-Ranges", "bytes",
-                "Content-Encoding", "gzip",
-                "Set-Cookie", "session=one",
+        val result =
+            RssWebResourceProxy.responseHeaders(
+                Headers.headersOf(
+                    "Content-Range",
+                    "bytes 0-99/200",
+                    "Content-Length",
+                    "100",
+                    "Accept-Ranges",
+                    "bytes",
+                    "Content-Encoding",
+                    "gzip",
+                    "Set-Cookie",
+                    "session=one",
+                )
             )
-        )
 
         assertEquals("bytes 0-99/200", result["Content-Range"])
         assertEquals("100", result["Content-Length"])
@@ -138,9 +154,8 @@ class RssWebResourceProxyTest {
 
     @Test
     fun activityUsesTheCronetSubresourceProxyContract() {
-        val source = java.io.File(
-            "src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt"
-        ).readText()
+        val source =
+            java.io.File("src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt").readText()
         assertTrue(source.contains("RssWebResourceProxy.shouldProxy"))
         assertTrue(source.contains("RssProxyResponseInputStream(response, body)"))
         assertTrue(source.contains("webResponse.setStatusCodeAndReasonPhrase"))
@@ -148,12 +163,12 @@ class RssWebResourceProxyTest {
 
     @Test
     fun activityDoesNotReadWebViewStateFromTheResourceInterceptorThread() {
-        val source = java.io.File(
-            "src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt"
-        ).readText()
-        val interceptor = source.substringAfter(
-            "private suspend fun getProxiedResource",
-        ).substringBefore("private suspend fun getModifiedContentWithJs")
+        val source =
+            java.io.File("src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt").readText()
+        val interceptor =
+            source
+                .substringAfter("private suspend fun getProxiedResource")
+                .substringBefore("private suspend fun getModifiedContentWithJs")
 
         assertTrue(source.contains("@Volatile\n    private var currentPageUrl: String? = null"))
         assertTrue(source.contains("currentPageUrl = url"))
