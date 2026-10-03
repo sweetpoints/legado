@@ -1029,3 +1029,5 @@ RSS 文章页数据与状态层复用既有 await 解析器和分页状态机，
 高亮规则管理 A2：筛选名称、完整选择集合、删除确认和导出分享载荷保存到私有 AtomicFile 会话，SavedState 仅持有小 UUID 与关闭状态。拖拽及滑动选择取消恢复原始状态，原生操作先持久化消费再交付，取消或暂停时回滚凭据。关闭写入持久化栅栏并校验文件清理。新增 16 个 JVM 状态用例与 5 个实际文件 Android 用例；Android 用例仅编译验证。
 
 高亮规则管理 B：实际 Activity 切换 BaseComposeActivity 和独立 Route/Screen，筛选、全选/反选、启停、删除确认、排序、滑动选择、拖拽、快速滚动及菜单均使用 Compose。保留导入编辑分组与完整导出分享，生命周期限定原生交付，文档选择器用小 token 恢复。移除旧列表 Adapter/ViewModel、两份布局和独占菜单 XML。增加 8 个界面与 6 个 Route Android 用例，JVM 状态用例增至 20；Android 用例仅编译验证。
+
+RSS 文章 B1：新增五种 Compose 卡片样式及独立图片仓库，保留已读标题颜色、来源请求头、GIF 动画租约、瀑布流自然高宽比与 20 天比例缓存，释放时取消绘制回调并清理 Glide 请求。新增 2 个 JVM 比例用例、7 个 Compose 卡片和 3 个真实图片加载 Android 用例；Android 用例仅编译验证。
