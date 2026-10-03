@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.toc
 
+import io.legado.app.model.book.toc.*
+
 import android.annotation.SuppressLint
 import android.app.Activity.RESULT_OK
 import android.content.Intent

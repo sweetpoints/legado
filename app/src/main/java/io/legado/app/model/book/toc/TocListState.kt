@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.toc
+package io.legado.app.model.book.toc
 
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.model.localBook.EpubTocNode
@@ -22,6 +22,9 @@ class TocListState {
 
     var visibleItems: List<TocListItem> = emptyList()
         private set
+
+    fun collapsedIndexes(): Set<Int> = collapsedVolumeIndexes.toSet()
+    fun restoreCollapsed(indexes: Set<Int>) { collapsedVolumeIndexes.clear(); collapsedVolumeIndexes.addAll(indexes.intersect(descendantCounts.keys)) }
 
     fun hasFullChapters(): Boolean = fullChapters.isNotEmpty()
 

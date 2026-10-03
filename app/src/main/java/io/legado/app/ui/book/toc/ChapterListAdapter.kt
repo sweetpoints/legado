@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.toc
 
+import io.legado.app.model.book.toc.*
+
 import android.content.Context
 import android.graphics.Rect
 import android.os.Handler

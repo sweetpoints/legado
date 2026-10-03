@@ -973,3 +973,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 书内搜索页面改为 Compose Activity/Route/Screen，保留输入、替换/正则开关、逐章进度、停止、上下滚动、电子墨水高亮与全部阅读器 ABI 字段。完成标志绑定已落盘结果修订，恢复不把部分结果误报完成；真实关闭清理 AtomicFile 的 base/bak/new，旋转保留完整会话。旧 VM/Adapter、两个专属布局和菜单删除，新增 9 个 Compose、2 个宿主与 1 个阅读器 ABI 回归，状态层另补两个恢复/跨页设置用例。隔离全量 JVM 与 Android 测试编译通过；设备测试尚未执行。
 
 规则订阅管理的数据层拆为不可变投影与 Room Repository：新增按 maxOrder 追加，编辑在事务中合并最新调度/脚本字段，空 URL、重复 URL 与并发删除均拒绝覆盖。拖拽提交保留唯一排序值，旧重复值只在显式提交时归一，并纳入并发新增记录；原订阅更新调度器继续使用同一 Room 表。新增 6 个实际 Room 事务回归；隔离全量 JVM 与 Android 测试编译通过。
+
+章节目录基础迁移：普通分卷、EPUB 层级与 PDF outline 算法移至 model/book/toc，原调用仅更新 import；新增专属 Repository/ViewModel，有界不可变行投影、150ms 搜索、定位/折叠/排序、最新 URL 导航与 PDF 原始页码合同。完整书籍/查询/折叠状态存私有会话，SavedState 只保留小票据。审查补齐 host ReadConfig 深复制及 text/audio 缓存枚举期间事件合并和树隔离，新增 13 个 JVM 与 6 个实际 Room/文件回归；隔离全量 JVM 与 Android 测试编译通过。

@@ -27,7 +27,7 @@ import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.toc.ChapterListAdapter
 import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.ui.book.toc.TocListItem
+import io.legado.app.model.book.toc.TocListItem
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith

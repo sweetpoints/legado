@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.toc
+package io.legado.app.model.book.toc
 
 import io.legado.app.model.localBook.PdfOutlineNode
 
@@ -13,6 +13,9 @@ internal class PdfOutlineListState(val nodes: List<PdfOutlineNode>, expanded: Bo
         collapsed.clear()
         if (!expanded) collapsed.addAll(parents)
     }
+
+    fun collapsedIndexes(): Set<Int> = collapsed.toSet()
+    fun restoreCollapsed(indexes: Set<Int>) { collapsed.clear(); collapsed.addAll(indexes.intersect(parents)) }
 
     fun toggle(id: Int) {
         if (id in parents && !collapsed.add(id)) collapsed.remove(id)

@@ -26,7 +26,7 @@ import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.toc.ChapterListAdapter
 import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.ui.book.toc.TocListItem
+import io.legado.app.model.book.toc.TocListItem
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.HtmlFormatter

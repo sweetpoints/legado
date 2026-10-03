@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.toc
 
+import io.legado.app.model.book.toc.*
+
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.model.localBook.EpubTocNode
 import org.junit.Assert.*
