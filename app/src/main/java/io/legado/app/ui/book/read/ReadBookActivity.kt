@@ -53,6 +53,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.rule.ReviewRule
+import io.legado.app.data.repository.BookDetailIdentity
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.HighlightColors
@@ -100,6 +101,7 @@ import io.legado.app.ui.book.bookmark.BookmarkDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.info.BookInfoActivity
+import io.legado.app.ui.book.info.BookInfoNavigation
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.REVIEW_ICON_COLOR
@@ -172,9 +174,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -280,6 +285,8 @@ class ReadBookActivity :
     private val composeReaderMenu by lazy {
         MenuBuilder(this).also { menuInflater.inflate(R.menu.book_read, it) }
     }
+    private var bookInfoNavigationJob: Job? = null
+    private var bookInfoNavigationEpoch = 0L
     private var backupJob: Job? = null
     private var bookmarkJob: Job? = null
     private var replacePreviewJob: Job? = null
@@ -1859,10 +1866,41 @@ class ReadBookActivity :
     }
 
     override fun openBookInfoActivity() {
-        ReadBook.book?.let {
-            bookInfoActivity.launch {
-                putExtra("name", it.name)
-                putExtra("author", it.author)
+        val book = ReadBook.book ?: return
+        val identity = BookDetailIdentity(book.name, book.author, book.bookUrl)
+        val origin = book.origin
+        val epoch = ++bookInfoNavigationEpoch
+        bookInfoNavigationJob?.cancel()
+        bookInfoNavigationJob = lifecycleScope.launch {
+            var ticket: String? = null
+            var delivered = false
+            try {
+                val prepared = BookInfoNavigation.prepare(this@ReadBookActivity, identity)
+                ticket = prepared
+                lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+                currentCoroutineContext().ensureActive()
+                if (
+                    epoch != bookInfoNavigationEpoch ||
+                        isFinishing ||
+                        supportFragmentManager.isStateSaved ||
+                        ReadBook.book?.bookUrl != identity.bookUrl ||
+                        ReadBook.book?.origin != origin
+                )
+                    return@launch
+                // Launch and ownership transfer stay in one uninterrupted Main turn.
+                bookInfoActivity.launch(BookInfoNavigation.intent(this@ReadBookActivity, prepared))
+                delivered = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                toastOnUi(error.localizedMessage ?: getString(R.string.error))
+            } finally {
+                if (!delivered)
+                    ticket?.let { owned ->
+                        withContext(NonCancellable) {
+                            BookInfoNavigation.abandon(this@ReadBookActivity, owned)
+                        }
+                    }
             }
         }
     }
@@ -3031,6 +3069,8 @@ class ReadBookActivity :
     }
 
     override fun onDestroy() {
+        bookInfoNavigationEpoch++
+        bookInfoNavigationJob?.cancel()
         super.onDestroy()
         aloudControls.dispose()
         tts?.clearTts()
