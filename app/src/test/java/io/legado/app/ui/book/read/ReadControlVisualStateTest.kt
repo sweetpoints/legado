@@ -1,8 +1,8 @@
 package io.legado.app.ui.book.read
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReadControlVisualStateTest {
 
@@ -18,8 +18,10 @@ class ReadControlVisualStateTest {
     @Test
     fun runningReadAloudOpensControlsInsteadOfTogglingPlayback() {
         val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
-        val clickBlock = source.substringAfter("llReadAloud.setOnClickListener")
-            .substringBefore("llReadAloud.onLongClick")
+        val clickBlock =
+            source
+                .substringAfter("llReadAloud.setOnClickListener")
+                .substringBefore("llReadAloud.onLongClick")
 
         assertTrue(clickBlock.contains("if (BaseReadAloudService.isRun)"))
         assertTrue(clickBlock.contains("callBack.showReadAloudDialog()"))
@@ -29,9 +31,10 @@ class ReadControlVisualStateTest {
 
     private fun readProjectFile(pathInApp: String): String = projectFile(pathInApp).readText()
 
-    private fun projectFile(pathInApp: String): File = sequenceOf(
-        File(pathInApp),
-        File("app/$pathInApp")
-    ).first(File::isFile)
-
+    private fun projectFile(pathInApp: String): File =
+        sequenceOf(
+                File(pathInApp),
+                File("app/$pathInApp"),
+            )
+            .first(File::isFile)
 }
