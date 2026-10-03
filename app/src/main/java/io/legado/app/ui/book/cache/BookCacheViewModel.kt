@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -27,17 +28,20 @@ data class BookCacheSection(val ticket: String, val path: String, val all: Boole
     val size: String = "1", val scope: String = "", val name: String = "",
     val preview: String? = null, val invalidScope: Boolean = false, val revision: Long = 0)
 data class BookCacheFolder(val ticket: String, val path: String?, val delivered: Boolean = false)
+data class BookCacheSettings(val ticket: String, val kind: String, val draft: String, val revision: Long = 1)
+enum class BookCacheIssue { NoBook, SettingsNotSaved, ExportInterrupted }
+private class BookCacheSettingsNotSaved : Exception()
 data class BookCacheState(val group: Long = -1, val groups: List<BookCacheGroup> = emptyList(),
     val rows: List<BookCacheRow> = emptyList(), val loading: Boolean = true,
-    val running: Boolean = false, val preferencesLoaded: Boolean = false, val busy: Boolean = false,
+    val running: Boolean = false, val closed: Boolean = false, val preferencesLoaded: Boolean = false, val busy: Boolean = false,
     val preferences: BookCachePreferences = BookCachePreferences(),
-    val folder: BookCacheFolder? = null, val section: BookCacheSection? = null,
-    val confirmAfterCurrent: Boolean? = null, val preferencesDirty: Boolean = false, val error: String? = null)
+    val folder: BookCacheFolder? = null, val settings: BookCacheSettings? = null, val section: BookCacheSection? = null,
+    val confirmAfterCurrent: Boolean? = null, val preferencesDirty: Boolean = false, val issue: BookCacheIssue? = null, val error: String? = null)
 
 /** SavedState holds small UI drafts; export selections live in an owned disk ticket. */
 class BookCacheViewModel(private val repository: BookCacheRepository,
     private val saved: SavedStateHandle, initialGroup: Long = -1) : ViewModel() {
-    private val mutable = MutableStateFlow(BookCacheState(group = saved.get<Long>("cache.group") ?: initialGroup))
+    private val mutable = MutableStateFlow(BookCacheState(group = saved.get<Long>("cache.group") ?: initialGroup, closed = saved.get<Boolean>("cache.closed") == true))
     val state = mutable.asStateFlow()
     private var stopped = false
     private var booksJob: Job? = null
@@ -45,6 +49,9 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
     private var generation = 0L
     private var previewJob: Job? = null
     private var runtimeGeneration = 0L
+    private var preferenceRevision = 0L
+    private var dispatchingTicket: String? = null
+    private var processingFolder: String? = null
     private val scope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
     private data class PreferenceWrite(val value: BookCachePreferences, val fields: Set<BookCachePreference>, val done: CompletableDeferred<Unit>)
     private val writes = Channel<PreferenceWrite>(Channel.UNLIMITED)
@@ -55,6 +62,7 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
     private val savedDuringScan = mutableMapOf<String, Set<String>>()
     private var runtime = BookCacheRuntime(false, emptySet(), emptyMap(), emptyMap())
     init {
+        if (state.value.closed) stop()
         scope.launch {
             for (write in writes) try {
                 repository.preferences(write.value, write.fields)
@@ -73,7 +81,7 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
                 withContext(NonCancellable) { repository.writeSection(section.ticket, section.draft()) }
             } catch (error: Throwable) {
                 currentCoroutineContext().ensureActive()
-                if (state.value.section?.ticket == section.ticket) fail(error)
+                if (state.value.section?.ticket == section.ticket || state.value.settings?.ticket == section.ticket) fail(error)
             }
         }
         scope.launch {
@@ -83,6 +91,7 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
                 publish { it.copy(preferences = preferences, preferencesLoaded = true) }
                 restorePending()
                 refresh()
+                pendingFolderTicket()?.let { consumeFolderResult(it) }
             } catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
         }
         scope.launch {
@@ -92,7 +101,7 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
         observeBooks()
     }
     private fun publish(change: (BookCacheState) -> BookCacheState) { if (!stopped) mutable.value = change(mutable.value) }
-    private fun fail(error: Throwable) = publish { it.copy(busy = false, loading = false, error = error.localizedMessage ?: "ERROR") }
+    private fun fail(error: Throwable) = publish { it.copy(busy = false, loading = false, issue = if (error is BookCacheSettingsNotSaved) BookCacheIssue.SettingsNotSaved else null, error = if (error is BookCacheSettingsNotSaved) null else error.localizedMessage ?: "ERROR") }
     private fun observeBooks() {
         booksJob?.cancel(); scanJob?.cancel()
         val token = ++generation
@@ -170,21 +179,22 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
             if (old.episodeFileName != value.episodeFileName) add(BookCachePreference.EpisodeFileName)
         }
         if (fields.isEmpty()) return
+        preferenceRevision++
         publish { it.copy(preferences = value) }
         val done = CompletableDeferred<Unit>(); preferenceFence = done
         writes.trySend(PreferenceWrite(value, fields, done))
     }
-    private fun operation(block: suspend () -> Unit) {
+    private fun operation(onFinally: () -> Unit = {}, block: suspend () -> Unit) {
         if (stopped || state.value.busy) return
-        publish { it.copy(busy = true, error = null) }
+        publish { it.copy(busy = true, error = null, issue = null) }
         scope.launch {
             try {
                 preferenceFence.await()
-                check(failedPreferences.isEmpty()) { "Export settings were not saved. Retry settings." }
+                if (failedPreferences.isNotEmpty()) throw BookCacheSettingsNotSaved()
                 block(); currentCoroutineContext().ensureActive()
             }
             catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
-            finally { publish { it.copy(busy = false) } }
+            finally { onFinally(); publish { it.copy(busy = false) } }
         }
     }
     fun download(afterCurrent: Boolean) {
@@ -202,7 +212,7 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
     fun export(key: String? = null, folderOnly: Boolean = false) {
         if (!state.value.preferencesLoaded || state.value.folder != null || state.value.section != null) return
         val keys = if (folderOnly) emptyList() else if (key != null) listOf(key) else state.value.rows.map { it.book.key }
-        if (!folderOnly && keys.isEmpty()) { publish { it.copy(error = "No book") }; return }
+        if (!folderOnly && keys.isEmpty()) { publish { it.copy(issue = BookCacheIssue.NoBook, error = null) }; return }
         operation {
             var created: String? = null
             try {
@@ -231,18 +241,41 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
         publish { it.copy(folder = folder.copy(delivered = true)) }
         return true
     }
-    fun folderResult(path: String?) {
-        val folder = state.value.folder ?: return
-        operation {
-            if (path.isNullOrEmpty()) clearPending(folder.ticket)
-            else {
-                repository.rememberPath(path)
+    fun pendingFolderTicket(): String? = saved.get<String>("cache.ticket").takeIf {
+        saved.get<Boolean>("cache.folder") == true && !state.value.closed
+    }
+    fun folderResult(path: String?) { pendingFolderTicket()?.let { folderResult(it, path) } }
+    fun folderResult(ticket: String, path: String?) {
+        if (stopped || ticket != pendingFolderTicket()) return
+        scope.launch {
+            try {
+                withContext(NonCancellable) { repository.folderResult(ticket, BookCacheFolderResult(path)) }
                 currentCoroutineContext().ensureActive()
-                saved["cache.folder"] = false
-                publish { it.copy(folder = null) }
-                // The old folder result always opens custom EPUB when that preference is enabled.
-                continueExport(folder.ticket, path, customAllowed = true)
-            }
+                state.first { it.closed || (it.preferencesLoaded && !it.busy) }
+                currentCoroutineContext().ensureActive()
+                consumeFolderResult(ticket)
+            } catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
+        }
+    }
+    private suspend fun consumeFolderResult(ticket: String) {
+        if (ticket != pendingFolderTicket() || processingFolder == ticket) return
+        val result = repository.folderResult(ticket) ?: return
+        currentCoroutineContext().ensureActive()
+        state.first { it.closed || !it.busy }
+        currentCoroutineContext().ensureActive()
+        if (ticket != pendingFolderTicket() || processingFolder == ticket) return
+        processingFolder = ticket
+        operation(onFinally = { processingFolder = null }) {
+            try {
+                if (result.path.isNullOrEmpty()) clearPending(ticket)
+                else {
+                    repository.rememberPath(result.path)
+                    currentCoroutineContext().ensureActive()
+                    saved["cache.folder"] = false
+                    publish { it.copy(folder = null) }
+                    continueExport(ticket, result.path, customAllowed = true)
+                }
+            } finally { processingFolder = null }
         }
     }
     private suspend fun continueExport(ticket: String, path: String, customAllowed: Boolean) {
@@ -256,10 +289,15 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
         } else {
             val keys = repository.staged(ticket)
             currentCoroutineContext().ensureActive()
-            withContext(NonCancellable) {
+            dispatchingTicket = ticket
+            try { withContext(NonCancellable) {
                 repository.export(BookCacheExport(keys, path, state.value.preferences.exportType))
                 clearPending(ticket)
+            } } finally {
+                dispatchingTicket = null
+                if (state.value.closed) withContext(NonCancellable) { runCatching { repository.release(ticket) } }
             }
+
         }
     }
     fun section(all: Boolean? = null, size: String? = null, scope: String? = null, name: String? = null) {
@@ -301,10 +339,14 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
             val keys = repository.staged(section.ticket)
             currentCoroutineContext().ensureActive()
             // Custom sections were available only for a single row, including after folder selection.
-            withContext(NonCancellable) {
+            dispatchingTicket = section.ticket
+            try { withContext(NonCancellable) {
                 if (section.all) repository.export(BookCacheExport(keys, section.path, state.value.preferences.exportType))
                 else if (keys.size == 1) repository.export(BookCacheExport(keys, section.path, "epub", section.size.toIntOrNull() ?: 1, section.scope))
                 clearPending(section.ticket)
+            } } finally {
+                dispatchingTicket = null
+                if (state.value.closed) withContext(NonCancellable) { runCatching { repository.release(section.ticket) } }
             }
         }
     }
@@ -322,40 +364,131 @@ class BookCacheViewModel(private val repository: BookCacheRepository,
         val ticket = saved.get<String>("cache.ticket")
         if (ticket != null && saved.get<Boolean>("cache.folder") == true) {
             val path = repository.readSection(ticket)?.path
+            val returned = repository.folderResult(ticket) != null
             currentCoroutineContext().ensureActive()
-            publish { it.copy(folder = BookCacheFolder(ticket, path, saved.get<Boolean>("cache.folderDelivered") == true)) }
+            if (returned) saved["cache.folderDelivered"] = true
+            publish { it.copy(folder = BookCacheFolder(ticket, path, returned || saved.get<Boolean>("cache.folderDelivered") == true)) }
         }
         if (ticket != null && saved.get<Boolean>("cache.section") == true) {
             val draft = repository.readSection(ticket) ?: error("Export draft is missing")
             currentCoroutineContext().ensureActive()
             publish { it.copy(section = BookCacheSection(ticket, draft.path, draft.all, draft.size, draft.scope, draft.name, revision = draft.revision)) }
         }
+        saved.get<String>("cache.settingsTicket")?.let { settingsTicket ->
+            val draft = repository.readSection(settingsTicket) ?: error("Export settings draft is missing")
+            currentCoroutineContext().ensureActive()
+            publish { it.copy(settings = BookCacheSettings(settingsTicket, draft.path, draft.name, draft.revision)) }
+        }
         publish { it.copy(confirmAfterCurrent = saved.get<Boolean>("cache.confirm")) }
         if (ticket != null && state.value.folder == null && state.value.section == null) publish {
-            it.copy(error = "Export interrupted. Retry export.")
+            it.copy(issue = BookCacheIssue.ExportInterrupted, error = null)
         }
     }
     fun retryExport() {
         val ticket = saved.get<String>("cache.ticket") ?: return
         if (state.value.folder != null || state.value.section != null) return
         operation {
-            val path = repository.readSection(ticket)?.path ?: error("Export folder is missing")
+            val path = repository.folderResult(ticket)?.path ?: repository.readSection(ticket)?.path ?: error("Export folder is missing")
             currentCoroutineContext().ensureActive()
             continueExport(ticket, path, saved.get<Boolean>("cache.customAllowed") == true)
         }
     }
+    fun openSettings(kind: String) {
+        if (kind !in setOf("name", "charset") || !state.value.preferencesLoaded || state.value.settings != null) return
+        val draft = if (kind == "name") state.value.preferences.fileName.orEmpty() else state.value.preferences.charset
+        operation {
+            var created: String? = null
+            try {
+                val ticket = withContext(NonCancellable) { repository.stage(emptyList()).also { created = it } }
+                val settings = BookCacheSettings(ticket, kind, draft)
+                repository.writeSection(ticket, settings.section().draft())
+                currentCoroutineContext().ensureActive()
+                saved["cache.settingsTicket"] = ticket
+                publish { it.copy(settings = settings) }
+                created = null
+            } finally { created?.let { withContext(NonCancellable) { repository.release(it) } } }
+        }
+    }
+    fun settings(text: String) {
+        val settings = state.value.settings ?: return
+        val next = settings.copy(draft = text, revision = settings.revision + 1)
+        publish { it.copy(settings = next) }
+        sectionWrites.trySend(next.section())
+    }
+    private fun BookCacheSettings.section() = BookCacheSection(ticket, kind, name = draft, revision = revision)
+    fun confirmSettings() {
+        val settings = state.value.settings ?: return
+        preferences { if (settings.kind == "name") it.copy(fileName = settings.draft) else it.copy(charset = settings.draft) }
+        cancelSettings()
+    }
+    fun cancelSettings() {
+        val settings = state.value.settings ?: return
+        saved.remove<String>("cache.settingsTicket")
+        publish { it.copy(settings = null) }
+        scope.launch { withContext(NonCancellable) { runCatching { repository.release(settings.ticket) } } }
+    }
+    fun refreshPreferences() {
+        if (stopped) return
+        val revision = preferenceRevision
+        scope.launch {
+            try {
+                preferenceFence.await()
+                val preferences = repository.preferences()
+                currentCoroutineContext().ensureActive()
+                if (revision == preferenceRevision && failedPreferences.isEmpty()) publish { it.copy(preferences = preferences, preferencesLoaded = true) }
+            } catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
+        }
+    }
+    fun abandonFolder() {
+        val folder = state.value.folder ?: return
+        scope.launch {
+            try { clearPending(folder.ticket) }
+            catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
+        }
+    }
+    fun close() {
+        if (state.value.closed) return
+        val ticket = saved.get<String>("cache.ticket")
+        val settingsTicket = saved.remove<String>("cache.settingsTicket")
+        saved["cache.closed"] = true
+        for (key in pendingKeys) saved.remove<Any>(key)
+        publish { it.copy(closed = true, folder = null, section = null, settings = null) }
+        stop()
+        if (ticket != null && ticket != dispatchingTicket) viewModelScope.launch(NonCancellable) { runCatching { repository.release(ticket) } }
+        if (settingsTicket != null) viewModelScope.launch(NonCancellable) { runCatching { repository.release(settingsTicket) } }
+    }
     private fun BookCacheSection.draft() = BookCacheSectionDraft(path, all, size, scope, name, revision)
-    suspend fun flushSection() { state.value.section?.let { withContext(NonCancellable) { repository.writeSection(it.ticket, it.draft()) } } }
+    suspend fun flushSection() {
+        val section = state.value.section; val settings = state.value.settings
+        withContext(NonCancellable) {
+            section?.let { repository.writeSection(it.ticket, it.draft()) }
+            settings?.let { repository.writeSection(it.ticket, it.section().draft()) }
+        }
+    }
     fun retryPreferences() {
         if (stopped || failedPreferences.isEmpty()) return
         val done = CompletableDeferred<Unit>(); preferenceFence = done
         writes.trySend(PreferenceWrite(state.value.preferences, failedPreferences.toSet(), done))
+        scope.launch {
+            try { done.await(); currentCoroutineContext().ensureActive(); pendingFolderTicket()?.let { consumeFolderResult(it) } }
+            catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
+        }
     }
-    fun clearError() = publish { it.copy(error = null) }
+    fun retry() {
+        when {
+            state.value.preferencesDirty -> retryPreferences()
+            state.value.section != null -> confirmSection()
+            pendingFolderTicket() != null -> scope.launch { try { consumeFolderResult(pendingFolderTicket() ?: return@launch) } catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) } }
+            saved.get<String>("cache.ticket") != null -> retryExport()
+            else -> { clearError(); observeBooks(); refreshPreferences(); refresh() }
+        }
+    }
+    fun clearError() = publish { it.copy(error = null, issue = null) }
     fun stop() {
         if (stopped) return
         stopped = true; generation++; booksJob?.cancel(); scanJob?.cancel(); previewJob?.cancel()
         state.value.section?.let { section -> viewModelScope.launch(NonCancellable) { runCatching { repository.writeSection(section.ticket, section.draft()) } } }
+        state.value.settings?.let { settings -> viewModelScope.launch(NonCancellable) { runCatching { repository.writeSection(settings.ticket, settings.section().draft()) } } }
         scope.cancel(); writes.close(); sectionWrites.close()
     }
     override fun onCleared() { stop() }

@@ -46,7 +46,8 @@ data class BookCachePreferences(val replace: Boolean = false, val custom: Boolea
 }
 enum class BookCachePreference { Replace, Custom, NoChapterName, WebDav, Pictures, Parallel, Type, Charset, FileName, EpisodeFileName }
 data class BookCacheSectionDraft(val path: String, val all: Boolean, val size: String, val scope: String, val name: String, val revision: Long)
-private data class BookCachePayload(val keys: List<String>, val section: BookCacheSectionDraft? = null)
+data class BookCacheFolderResult(val path: String?)
+private data class BookCachePayload(val keys: List<String>, val section: BookCacheSectionDraft? = null, val folderResult: BookCacheFolderResult? = null)
 data class BookCacheExport(val keys: List<String>, val path: String, val type: String,
     val size: Int? = null, val scope: String? = null)
 
@@ -68,6 +69,8 @@ interface BookCacheRepository {
     suspend fun staged(ticket: String): List<String>
     suspend fun readSection(ticket: String): BookCacheSectionDraft?
     suspend fun writeSection(ticket: String, draft: BookCacheSectionDraft)
+    suspend fun folderResult(ticket: String): BookCacheFolderResult?
+    suspend fun folderResult(ticket: String, result: BookCacheFolderResult): Boolean
     suspend fun release(ticket: String)
     suspend fun episodeName(key: String, script: String): String?
     suspend fun validEpisodeName(script: String): Boolean
@@ -111,6 +114,22 @@ class RoomBookCacheRepository(context: Context, private val database: AppDatabas
         val stream = file.startWrite()
         try { stream.write(GSON.toJson(current.copy(section = draft)).toByteArray(Charsets.UTF_8)); file.finishWrite(stream) }
         catch (error: Throwable) { file.failWrite(stream); throw error }
+    } }
+    override suspend fun folderResult(ticket: String): BookCacheFolderResult? = withContext(IO) { gate(ticket).withLock {
+        val file = payload(ticket)
+        if (!file.baseFile.exists()) null else file.openRead().use {
+            GSON.fromJsonObject<BookCachePayload>(it.readBytes().toString(Charsets.UTF_8)).getOrThrow().folderResult
+        }
+    } }
+    override suspend fun folderResult(ticket: String, result: BookCacheFolderResult): Boolean = withContext(IO) { gate(ticket).withLock {
+        val file = payload(ticket)
+        if (!file.baseFile.exists()) return@withLock false
+        val current = file.openRead().use { GSON.fromJsonObject<BookCachePayload>(it.readBytes().toString(Charsets.UTF_8)).getOrThrow() }
+        if (current.folderResult != null) return@withLock false
+        val stream = file.startWrite()
+        try { stream.write(GSON.toJson(current.copy(folderResult = result)).toByteArray(Charsets.UTF_8)); file.finishWrite(stream) }
+        catch (error: Throwable) { file.failWrite(stream); throw error }
+        true
     } }
     override suspend fun release(ticket: String) = withContext(IO) { gate(ticket).withLock { payload(ticket).delete() } }
     override fun books(group: Long) = database.bookDao.flowByGroup(group).map { books ->

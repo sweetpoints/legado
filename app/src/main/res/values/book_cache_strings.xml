@@ -1,0 +1,4 @@
+<resources>
+    <string name="book_cache_settings_not_saved">Export settings could not be saved. Retry to sync your changes.</string>
+    <string name="book_cache_export_interrupted">The export was interrupted. Retry to export the selected books.</string>
+</resources>
