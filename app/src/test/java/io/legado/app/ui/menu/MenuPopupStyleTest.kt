@@ -38,12 +38,14 @@ class MenuPopupStyleTest {
     }
 
     @Test
-    fun `autocomplete uses the runtime popup background`() {
-        val autoComplete =
-            readProjectFile("src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt")
-
-        assertContains(autoComplete, "setDropDownBackgroundDrawable(context.popupBackground)")
-        assertFalse(autoComplete.contains("setDropDownBackgroundResource"))
+    fun `legacy autocomplete widget has been retired`() {
+        assertFalse(
+            sequenceOf(
+                    File("src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt"),
+                    File("app/src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt"),
+                )
+                .any(File::isFile)
+        )
     }
 
     @Test
