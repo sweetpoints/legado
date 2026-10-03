@@ -61,5 +61,5 @@ internal fun JsSourceEditRoute(
             }
         }
     }
-    JsSourceEditScreen(state, model::load, model::cancel)
+    JsSourceEditScreen(state, { model.load() }, model::cancel)
 }

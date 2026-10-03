@@ -1266,3 +1266,5 @@ JS书源编辑宿主迁为BaseComposeActivity与独立Screen/Route，保留原So
 书源88字段投影独立补齐原始UTF-16选区与键盘插入基础：光标按各字段原始文本长度约束，反向选区替换后折叠至插入尾部，CRLF/中文/emoji不做换行或字符归一化；同名字段跨页保持独立。新增3项真实JVM回归，连同既有5项字段回归通过。统一format/check与git diff --check已执行；最终专属worktree双任务3747 JVM用例零失败及AndroidTest Kotlin编译通过，设备端未执行，书源Compose宿主接入另批迁移。
 
 JS草稿审查修复：进程级路径锁改为固定64个striped Mutex，避免会话不断创建时无界增长；磁盘接受后只允许更大revision写入，同revision不同脚本不得覆盖已接受状态。新增真实Atomic同revision冲突/下一revision接受设备用例，设备执行仍待可用设备；格式化与编译/JVM验证另记。
+
+JS恢复审查修复：恢复SAVING/SAVE_FOR_DEBUG/SAVE_FOR_LOGIN只发布明确错误及手动重试入口，不自动重新执行用户脚本或Room写入；活会话编辑返回仍继续原保存，已接受且持久回执继续原下一阶段。为什么需要确认写入边界在VM旁注释：Room与草稿无法跨存储原子提交，中断阶段可能已产生脚本副作用。新增所有三种中断阶段的真实VM回归及真实Atomic恢复/显式重试前后Room状态设备用例，设备执行待可用设备；后续整合验证另记。

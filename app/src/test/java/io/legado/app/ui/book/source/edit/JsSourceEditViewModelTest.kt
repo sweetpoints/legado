@@ -313,6 +313,44 @@ class JsSourceEditViewModelTest {
             assertEquals(mapOf(neighborPath to "neighbor"), repository.transfers)
         }
 
+    @Test
+    fun interruptedSaveStagesRequireExplicitRetryAfterRestoration() =
+        runTest(dispatcher) {
+            val stages =
+                listOf(
+                    JsSourceEditStage.SAVING,
+                    JsSourceEditStage.SAVING_FOR_DEBUG,
+                    JsSourceEditStage.SAVING_FOR_LOGIN,
+                )
+            stages.forEach { interruptedStage ->
+                val repository = FakeRepository()
+                val sessionId = java.util.UUID.randomUUID().toString()
+                repository.drafts[sessionId] =
+                    JsSourceDraft(
+                        text = "interrupted script",
+                        sourceUrl = "old",
+                        stage = interruptedStage,
+                        revision = 5,
+                    )
+                val model =
+                    JsSourceEditViewModel(
+                        repository,
+                        SavedStateHandle(mapOf("jsSourceDraftId" to sessionId)),
+                        "old",
+                    )
+                runCurrent()
+                assertTrue(repository.saves.isEmpty())
+                assertEquals(interruptedStage, model.state.value.stage)
+                assertTrue(model.state.value.error!!.contains("点击重试"))
+                assertFalse(model.state.value.busy)
+                assertEquals(5L, repository.drafts.getValue(sessionId).revision)
+                model.load()
+                runCurrent()
+                assertEquals(listOf("interrupted script" to "old"), repository.saves)
+                assertTrue(model.state.value.saved)
+            }
+        }
+
     private fun copyState(savedState: SavedStateHandle): SavedStateHandle {
         return SavedStateHandle(savedState.keys().associateWith { savedState.get<Any?>(it) })
     }

@@ -44,7 +44,7 @@ internal class JsSourceEditViewModel(
     val state = mutableState.asStateFlow()
 
     init {
-        load()
+        load(retryInterruptedSave = false)
     }
 
     private fun publish(error: String? = null) {
@@ -87,7 +87,7 @@ internal class JsSourceEditViewModel(
         }
     }
 
-    fun load() {
+    fun load(retryInterruptedSave: Boolean = true) {
         runOperation {
             if (draft == null) {
                 draft = repository.read(sessionId)
@@ -111,12 +111,12 @@ internal class JsSourceEditViewModel(
             } else if (draft?.editorReturning == true) {
                 completeEditorReturn()
             } else {
-                resumePendingOperation()
+                resumePendingOperation(allowSave = retryInterruptedSave)
             }
         }
     }
 
-    private suspend fun resumePendingOperation() {
+    private suspend fun resumePendingOperation(allowSave: Boolean = true) {
         val currentDraft = draft ?: return
         if (currentDraft.finished) {
             releaseOwnedTransfers(currentDraft)
@@ -126,7 +126,16 @@ internal class JsSourceEditViewModel(
             JsSourceEditRestoreAction.OPEN_EDITOR -> prepareEditor(currentDraft)
             JsSourceEditRestoreAction.SAVE_AND_FINISH,
             JsSourceEditRestoreAction.SAVE_FOR_DEBUG,
-            JsSourceEditRestoreAction.SAVE_FOR_LOGIN -> saveSource()
+            JsSourceEditRestoreAction.SAVE_FOR_LOGIN -> {
+                if (allowSave) {
+                    saveSource()
+                } else {
+                    // Room and the draft file cannot commit atomically. A recovered SAVING
+                    // checkpoint may already have executed user JS or accepted a DB write.
+                    // Require an explicit retry instead of repeating those side effects on load.
+                    publish("保存已中断，请确认后点击重试；此前脚本或数据库写入可能已执行")
+                }
+            }
             else -> Unit
         }
     }

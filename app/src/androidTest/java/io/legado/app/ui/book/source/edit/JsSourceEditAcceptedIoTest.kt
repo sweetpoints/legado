@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.source.edit
 
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.appDb
 import io.legado.app.model.jsSource.JsSourceUpsert
@@ -9,6 +11,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -123,6 +126,48 @@ class JsSourceEditAcceptedIoTest {
         assertEquals(original.lastUpdateTime, unchanged.lastUpdateTime)
         assertEquals(original.mainJs, unchanged.mainJs)
         assertTrue(repository.read(sessionId)!!.saved)
+    }
+
+    @Test
+    fun realAtomicSavingCheckpointRequiresExplicitRetryBeforeRoomMutation() = runBlocking {
+        val sourceUrl = sourceUrl()
+        val sessionId = UUID.randomUUID().toString().also { sessions += it }
+        val interrupted =
+            JsSourceDraft(
+                text = script(sourceUrl),
+                sourceUrl = null,
+                stage = JsSourceEditStage.SAVING,
+                revision = 8,
+            )
+        repository.write(sessionId, interrupted)
+        val store = ViewModelStore()
+        val model =
+            withContext(Dispatchers.Main) {
+                JsSourceEditViewModel(
+                        FileJsSourceEditRepository(context),
+                        SavedStateHandle(mapOf("jsSourceDraftId" to sessionId)),
+                        null,
+                    )
+                    .also { store.put("restored", it) }
+            }
+        try {
+            val restoredState =
+                withTimeout(10_000) {
+                    model.state.first { it.loaded && !it.busy }
+                }
+            assertTrue(restoredState.error!!.contains("点击重试"))
+            assertEquals(JsSourceEditStage.SAVING, restoredState.stage)
+            assertEquals(interrupted, repository.read(sessionId))
+            assertNull(withContext(Dispatchers.IO) { appDb.bookSourceDao.getBookSource(sourceUrl) })
+            withContext(Dispatchers.Main) { model.load() }
+            withTimeout(10_000) { model.state.first { it.finished } }
+            assertNotNull(
+                withContext(Dispatchers.IO) { appDb.bookSourceDao.getBookSource(sourceUrl) }
+            )
+            assertTrue(repository.read(sessionId)!!.saved)
+        } finally {
+            withContext(Dispatchers.Main) { store.clear() }
+        }
     }
 
     private fun sourceUrl(): String {
