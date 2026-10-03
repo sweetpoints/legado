@@ -24,54 +24,116 @@ import kotlinx.coroutines.Dispatchers
 
 /** The existing ConfigActivity destination hosts an entirely Compose settings page. */
 class ThemeConfigFragment : Fragment(), ConfigSearchPage {
-    private val model by viewModels<ThemeSettingsViewModel> { viewModelFactory { initializer {
-        val application = requireContext().applicationContext
-        ThemeSettingsViewModel(DefaultThemeSettingsRepository(AppThemeSettingsStore(application), AppThemeSettingsPlatform(application)),
-            FileThemeNameDraftRepository(application), createSavedStateHandle())
-    } } }
+    private val model by
+        viewModels<ThemeSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    val application = requireContext().applicationContext
+                    ThemeSettingsViewModel(
+                        DefaultThemeSettingsRepository(
+                            AppThemeSettingsStore(application),
+                            AppThemeSettingsPlatform(application),
+                        ),
+                        FileThemeNameDraftRepository(application),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
     private var query by mutableStateOf<String?>(null)
     private var selected: (() -> Unit)? = null
-    private val selectImage = registerForActivityResult(HandleFileContract()) { value ->
-        value.uri?.let { uri -> if (uri.scheme?.lowercase() in listOf("http", "https")) toastOnUi("下载背景图片中...") }
-        model.pickedImage(value.requestCode, value.uri?.toString())
-    }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+    private val selectImage =
+        registerForActivityResult(HandleFileContract()) { value ->
+            value.uri?.let { uri ->
+                if (uri.scheme?.lowercase() in listOf("http", "https")) toastOnUi("下载背景图片中...")
+            }
+            model.pickedImage(value.requestCode, value.uri?.toString())
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme { ThemeSettingsRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::destination,
-                query, { query = null; selected?.invoke(); selected = null }, { query = null; selected = null; toastOnUi(R.string.config_search_empty) }, message = { toastOnUi(it) }) } }
+            setContent {
+                LegadoComposeTheme {
+                    ThemeSettingsRoute(
+                        model,
+                        { isAdded && !parentFragmentManager.isStateSaved },
+                        ::destination,
+                        query,
+                        {
+                            query = null
+                            selected?.invoke()
+                            selected = null
+                        },
+                        {
+                            query = null
+                            selected = null
+                            toastOnUi(R.string.config_search_empty)
+                        },
+                        message = { toastOnUi(it) },
+                    )
+                }
+            }
         }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.theme_setting)
-        parentFragmentManager.setFragmentResultListener(BackgroundBlurDialog.RESULT, viewLifecycleOwner) { _, result ->
+        parentFragmentManager.setFragmentResultListener(
+            BackgroundBlurDialog.RESULT,
+            viewLifecycleOwner,
+        ) { _, result ->
             model.blurFinished(result.getBoolean(BackgroundBlurDialog.NIGHT))
         }
     }
-    override fun searchSettings(query: String, onSelected: () -> Unit) { this.query = query; selected = onSelected }
+
+    override fun searchSettings(query: String, onSelected: () -> Unit) {
+        this.query = query
+        selected = onSelected
+    }
+
     private fun destination(value: ThemeSettingsDestination) {
         when (value) {
-            ThemeSettingsDestination.ThemeList -> ThemeListDialog().show(childFragmentManager, "themeList")
-            ThemeSettingsDestination.Welcome -> startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.WELCOME_CONFIG) }
-            ThemeSettingsDestination.Cover -> startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.COVER_CONFIG) }
+            ThemeSettingsDestination.ThemeList ->
+                ThemeListDialog().show(childFragmentManager, "themeList")
+            ThemeSettingsDestination.Welcome ->
+                startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.WELCOME_CONFIG) }
+            ThemeSettingsDestination.Cover ->
+                startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.COVER_CONFIG) }
             ThemeSettingsDestination.BottomSkin -> startActivity<BottomBarSkinActivity>()
-            ThemeSettingsDestination.BlurDay, ThemeSettingsDestination.BlurNight -> BackgroundBlurDialog.newInstance(value == ThemeSettingsDestination.BlurNight).show(parentFragmentManager, "background-blur")
-            ThemeSettingsDestination.ImageDay, ThemeSettingsDestination.ImageNight -> {
+            ThemeSettingsDestination.BlurDay,
+            ThemeSettingsDestination.BlurNight ->
+                BackgroundBlurDialog.newInstance(value == ThemeSettingsDestination.BlurNight)
+                    .show(parentFragmentManager, "background-blur")
+            ThemeSettingsDestination.ImageDay,
+            ThemeSettingsDestination.ImageNight -> {
                 val night = value == ThemeSettingsDestination.ImageNight
                 model.imagePicker(night)
-                selectImage.launch { requestCode = if (night) 122 else 121; mode = HandleFileContract.IMAGE }
+                selectImage.launch {
+                    requestCode = if (night) 122 else 121
+                    mode = HandleFileContract.IMAGE
+                }
             }
         }
     }
+
     override fun onStop() {
         val captured = model
-        Coroutine.async(context = Dispatchers.Main.immediate) { captured.flush() }.onError { AppLog.put("保存主题名称草稿失败", it) }
+        Coroutine.async(context = Dispatchers.Main.immediate) { captured.flush() }
+            .onError { AppLog.put("保存主题名称草稿失败", it) }
         super.onStop()
     }
+
     override fun onDestroy() {
         if (activity?.isFinishing == true || isRemoving) {
-            val captured = model; captured.stop()
-            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }.onError { AppLog.put("清理主题名称草稿失败", it) }
+            val captured = model
+            captured.stop()
+            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }
+                .onError { AppLog.put("清理主题名称草稿失败", it) }
         }
         selected = null
         super.onDestroy()

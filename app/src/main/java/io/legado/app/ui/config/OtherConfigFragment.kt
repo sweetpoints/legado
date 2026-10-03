@@ -40,20 +40,73 @@ import kotlinx.coroutines.delay
 
 class OtherConfigFragment : Fragment(), ConfigSearchPage {
     private val config by activityViewModels<ConfigViewModel>()
-    private val model by viewModels<OtherSettingsViewModel> { viewModelFactory { initializer {
-        val application = requireContext().applicationContext
-        OtherSettingsViewModel(DefaultOtherSettingsRepository(AppOtherSettingsStore(application)), FileOtherSettingsDraftRepository(application), createSavedStateHandle())
-    } } }
-    private var query by mutableStateOf<String?>(null); private var selected: (() -> Unit)? = null
-    private val bookTree = registerForActivityResult(HandleFileContract()) { result -> model.pickedBookTree(result.uri?.toString(), result.value ?: model.bookTreeTicket()) }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View = ComposeView(requireContext()).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent { LegadoComposeTheme { OtherSettingsRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::handleEffect,
-            { id -> bookTree.launch { title = getString(R.string.select_book_folder); mode = HandleFileContract.DIR_SYS; value = id } }, ::destination, query,
-            { query = null; selected?.invoke(); selected = null }, { query = null; selected = null; toastOnUi(R.string.config_search_empty) }) } }
+    private val model by
+        viewModels<OtherSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    val application = requireContext().applicationContext
+                    OtherSettingsViewModel(
+                        DefaultOtherSettingsRepository(AppOtherSettingsStore(application)),
+                        FileOtherSettingsDraftRepository(application),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    private var query by mutableStateOf<String?>(null)
+    private var selected: (() -> Unit)? = null
+    private val bookTree =
+        registerForActivityResult(HandleFileContract()) { result ->
+            model.pickedBookTree(result.uri?.toString(), result.value ?: model.bookTreeTicket())
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    OtherSettingsRoute(
+                        model,
+                        { isAdded && !parentFragmentManager.isStateSaved },
+                        ::handleEffect,
+                        { id ->
+                            bookTree.launch {
+                                title = getString(R.string.select_book_folder)
+                                mode = HandleFileContract.DIR_SYS
+                                value = id
+                            }
+                        },
+                        ::destination,
+                        query,
+                        {
+                            query = null
+                            selected?.invoke()
+                            selected = null
+                        },
+                        {
+                            query = null
+                            selected = null
+                            toastOnUi(R.string.config_search_empty)
+                        },
+                    )
+                }
+            }
+        }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        activity?.setTitle(R.string.other_setting)
     }
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) { super.onViewCreated(view, savedInstanceState); activity?.setTitle(R.string.other_setting) }
-    override fun searchSettings(query: String, onSelected: () -> Unit) { this.query = query; selected = onSelected }
+
+    override fun searchSettings(query: String, onSelected: () -> Unit) {
+        this.query = query
+        selected = onSelected
+    }
+
     private fun destination(value: OtherDestination) {
         when (value) {
             OtherDestination.CheckSource -> showDialogFragment<CheckSourceConfig>()
@@ -64,42 +117,90 @@ class OtherConfigFragment : Fragment(), ConfigSearchPage {
             OtherDestination.Shrink -> config.shrinkDatabase()
         }
     }
+
     private fun handleEffect(receipt: OtherEffectReceipt) {
         val application = requireContext().applicationContext
         when (receipt.effect) {
             OtherEffect.ProcessTextConfiguration -> {
                 val captured = model
-                Coroutine.async(context = Dispatchers.IO) { captured.reconcileProcessText() }.onError { AppLog.put("同步系统文本处理设置失败", it) }
+                Coroutine.async(context = Dispatchers.IO) { captured.reconcileProcessText() }
+                    .onError { AppLog.put("同步系统文本处理设置失败", it) }
             }
             OtherEffect.ThreadsChanged -> postEvent(PreferKey.threadCount, "")
-            OtherEffect.RestartWeb -> if (WebService.isRun) { WebService.stop(application); WebService.start(application) }
+            OtherEffect.RestartWeb ->
+                if (WebService.isRun) {
+                    WebService.stop(application)
+                    WebService.start(application)
+                }
             OtherEffect.RestartMcp -> if (McpService.isRun) McpService.restart(application)
             OtherEffect.StopMcp -> if (McpService.isRun) McpService.stop(application)
             OtherEffect.NotifyMain -> postEvent(EventBus.NOTIFY_MAIN, true)
-            OtherEffect.ResizeBitmapCache -> ImageProvider.bitmapLruCache.resize((model.state.value.settings?.numbers?.get(OtherNumber.BitmapCache) ?: 50).coerceIn(1, 1024) * 1024 * 1024)
-            OtherEffect.DownloadCronet -> Coroutine.async(context = Dispatchers.IO) { Cronet.preDownload() }.onError { AppLog.put("预下载 Cronet 失败", it) }
-            OtherEffect.RestartApplication -> Coroutine.async(context = Dispatchers.Main.immediate) { delay(1000); application.restart() }
+            OtherEffect.ResizeBitmapCache ->
+                ImageProvider.bitmapLruCache.resize(
+                    (model.state.value.settings?.numbers?.get(OtherNumber.BitmapCache) ?: 50)
+                        .coerceIn(1, 1024) * 1024 * 1024
+                )
+            OtherEffect.DownloadCronet ->
+                Coroutine.async(context = Dispatchers.IO) { Cronet.preDownload() }
+                    .onError { AppLog.put("预下载 Cronet 失败", it) }
+            OtherEffect.RestartApplication ->
+                Coroutine.async(context = Dispatchers.Main.immediate) {
+                    delay(1000)
+                    application.restart()
+                }
             OtherEffect.LogConfiguration -> {
-                AppConfig.recordLog = model.state.value.settings?.switches?.get(OtherSwitch.Log) ?: false
-                LogUtils.upLevel(); LiveEventBus.config().enableLogger(AppConfig.recordLog); AppFreezeMonitor.init(application); DispatchersMonitor.init()
-                Coroutine.async(context = Dispatchers.IO) { LogUtils.logDeviceInfo() }.onError { AppLog.put("记录设备信息失败", it) }
+                AppConfig.recordLog =
+                    model.state.value.settings?.switches?.get(OtherSwitch.Log) ?: false
+                LogUtils.upLevel()
+                LiveEventBus.config().enableLogger(AppConfig.recordLog)
+                AppFreezeMonitor.init(application)
+                DispatchersMonitor.init()
+                Coroutine.async(context = Dispatchers.IO) { LogUtils.logDeviceInfo() }
+                    .onError { AppLog.put("记录设备信息失败", it) }
             }
-            OtherEffect.PromotedNotificationSettings -> if (supportsPromotedNotifications() && !NotificationManagerCompat.from(application).canPostPromotedNotifications()) {
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, application.packageName)
-                val opened = try {
-                    if (intent.resolveActivity(application.packageManager) == null) false
-                    else { startActivity(intent); true }
-                } catch (_: android.content.ActivityNotFoundException) { false }
-                catch (_: SecurityException) { false }
-                if (!opened) { model.promotedNotificationUnavailable(); toastOnUi(R.string.tip_cannot_jump_setting_page) }
-            }
+            OtherEffect.PromotedNotificationSettings ->
+                if (
+                    supportsPromotedNotifications() &&
+                        !NotificationManagerCompat.from(application).canPostPromotedNotifications()
+                ) {
+                    val intent =
+                        Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, application.packageName)
+                    val opened =
+                        try {
+                            if (intent.resolveActivity(application.packageManager) == null) false
+                            else {
+                                startActivity(intent)
+                                true
+                            }
+                        } catch (_: android.content.ActivityNotFoundException) {
+                            false
+                        } catch (_: SecurityException) {
+                            false
+                        }
+                    if (!opened) {
+                        model.promotedNotificationUnavailable()
+                        toastOnUi(R.string.tip_cannot_jump_setting_page)
+                    }
+                }
         }
     }
-    override fun onStop() { val captured = model
-        Coroutine.async(context = Dispatchers.Main.immediate) { captured.flush() }.onError { AppLog.put("保存其它设置草稿失败", it) }; super.onStop() }
+
+    override fun onStop() {
+        val captured = model
+        Coroutine.async(context = Dispatchers.Main.immediate) { captured.flush() }
+            .onError { AppLog.put("保存其它设置草稿失败", it) }
+        super.onStop()
+    }
+
     override fun onDestroy() {
-        if (isRemoving || activity?.isFinishing == true) { val captured = model; captured.stop()
-            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }.onError { AppLog.put("清理其它设置草稿失败", it) } }
-        selected = null; super.onDestroy()
+        if (isRemoving || activity?.isFinishing == true) {
+            val captured = model
+            captured.stop()
+            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }
+                .onError { AppLog.put("清理其它设置草稿失败", it) }
+        }
+        selected = null
+        super.onDestroy()
     }
 }

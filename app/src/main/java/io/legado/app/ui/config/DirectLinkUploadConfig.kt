@@ -14,14 +14,35 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 
 class DirectLinkUploadConfig : BaseComposeDialogFragment() {
-    internal val model by viewModels<DirectLinkConfigViewModel> {
-        viewModelFactory { initializer { DirectLinkConfigViewModel(AppDirectLinkConfigRepository(requireContext()), createSavedStateHandle()) } }
+    internal val model by
+        viewModels<DirectLinkConfigViewModel> {
+            viewModelFactory {
+                initializer {
+                    DirectLinkConfigViewModel(
+                        AppDirectLinkConfigRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(1f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    override fun onStart() { super.onStart(); setLayout(1f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        DirectLinkConfigRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::dismiss,
-            { isCancelable = it }, { requireContext().getClipText()?.toString() }, { requireContext().sendToClip(it) })
+
+    @Composable
+    override fun Content() {
+        DirectLinkConfigRoute(
+            model,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            ::dismiss,
+            { isCancelable = it },
+            { requireContext().getClipText()?.toString() },
+            { requireContext().sendToClip(it) },
+        )
     }
+
     override fun onDismiss(dialog: DialogInterface) {
         if (activity?.isChangingConfigurations != true) model.close()
         super.onDismiss(dialog)

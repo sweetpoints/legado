@@ -16,11 +16,14 @@ import io.legado.app.data.repository.BookCoverRuleRepository
 import io.legado.app.utils.setLayout
 
 class CoverRuleConfigDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<CoverRuleViewModel> {
-        viewModelFactory {
-            initializer { CoverRuleViewModel(BookCoverRuleRepository(), createSavedStateHandle()) }
+    private val viewModel by
+        viewModels<CoverRuleViewModel> {
+            viewModelFactory {
+                initializer {
+                    CoverRuleViewModel(BookCoverRuleRepository(), createSavedStateHandle())
+                }
+            }
         }
-    }
 
     override fun onStart() {
         super.onStart()
@@ -29,7 +32,11 @@ class CoverRuleConfigDialog : BaseComposeDialogFragment() {
 
     @Composable
     override fun Content() {
-        CoverRuleRoute(viewModel, ::dismiss,
-            Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f))
+        CoverRuleRoute(
+            viewModel,
+            ::dismiss,
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 }

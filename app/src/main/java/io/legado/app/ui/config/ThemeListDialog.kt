@@ -16,16 +16,43 @@ import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
 
 class ThemeListDialog : BaseComposeDialogFragment() {
-    private val model by viewModels<ThemeListViewModel> {
-        viewModelFactory { initializer { ThemeListViewModel(DefaultThemeListRepository(AppThemeListStore(requireContext())), createSavedStateHandle()) } }
+    private val model by
+        viewModels<ThemeListViewModel> {
+            viewModelFactory {
+                initializer {
+                    ThemeListViewModel(
+                        DefaultThemeListRepository(AppThemeListStore(requireContext())),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, 0.9f)
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, 0.9f) }
-    @Composable override fun Content() {
-        ThemeListRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, { requireContext().getClipText() },
-            { requireContext().share(it, "主题分享") }, { requireContext().toastOnUi("格式不对,添加失败") },
-            { dismissAllowingStateLoss() }, Modifier.fillMaxSize())
+
+    @Composable
+    override fun Content() {
+        ThemeListRoute(
+            model,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            { requireContext().getClipText() },
+            { requireContext().share(it, "主题分享") },
+            { requireContext().toastOnUi("格式不对,添加失败") },
+            { dismissAllowingStateLoss() },
+            Modifier.fillMaxSize(),
+        )
     }
+
     fun initData() = model.reload()
-    fun delete(index: Int) { model.state.value.items.getOrNull(index)?.let { model.delete(it.key) } }
-    fun share(index: Int) { model.state.value.items.getOrNull(index)?.let { model.share(it.key) } }
+
+    fun delete(index: Int) {
+        model.state.value.items.getOrNull(index)?.let { model.delete(it.key) }
+    }
+
+    fun share(index: Int) {
+        model.state.value.items.getOrNull(index)?.let { model.share(it.key) }
+    }
 }

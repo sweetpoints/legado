@@ -21,7 +21,8 @@ data class CoverRuleUiState(
     val error: String? = null,
     val finished: Boolean = false,
 ) {
-    val isBusy get() = isLoading || isSaving
+    val isBusy
+        get() = isLoading || isSaving
 }
 
 class CoverRuleViewModel(
@@ -29,19 +30,27 @@ class CoverRuleViewModel(
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val restored = savedState.get<Boolean>("cover.initialized") == true
-    private val mutableState = MutableStateFlow(CoverRuleUiState(
-        draft = if (restored) CoverRuleDraft(
-            savedState["cover.enabled"] ?: true,
-            savedState["cover.searchUrl"] ?: "",
-            savedState["cover.rule"] ?: "",
-        ) else CoverRuleDraft(),
-        isLoading = !restored,
-    ))
+    private val mutableState =
+        MutableStateFlow(
+            CoverRuleUiState(
+                draft =
+                    if (restored)
+                        CoverRuleDraft(
+                            savedState["cover.enabled"] ?: true,
+                            savedState["cover.searchUrl"] ?: "",
+                            savedState["cover.rule"] ?: "",
+                        )
+                    else CoverRuleDraft(),
+                isLoading = !restored,
+            )
+        )
     val state = mutableState.asStateFlow()
     private var loadJob: Job? = null
     private var edited = restored
 
-    init { if (!restored) load() }
+    init {
+        if (!restored) load()
+    }
 
     fun load() {
         if (state.value.finished || state.value.isSaving || loadJob?.isActive == true) return
@@ -55,16 +64,21 @@ class CoverRuleViewModel(
                     mutableState.update { it.copy(draft = draft) }
                 }
                 mutableState.update { it.copy(isLoading = false) }
-            } catch (error: CancellationException) { throw error }
-            catch (error: Exception) {
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
                 coroutineContext.ensureActive()
-                mutableState.update { it.copy(isLoading = false, error = error.localizedMessage ?: error.toString()) }
+                mutableState.update {
+                    it.copy(isLoading = false, error = error.localizedMessage ?: error.toString())
+                }
             }
         }
     }
 
     fun setEnabled(enabled: Boolean) = edit { it.copy(enabled = enabled) }
+
     fun setSearchUrl(searchUrl: String) = edit { it.copy(searchUrl = searchUrl) }
+
     fun setCoverRule(coverRule: String) = edit { it.copy(coverRule = coverRule) }
 
     private fun edit(change: (CoverRuleDraft) -> CoverRuleDraft) {
@@ -104,10 +118,13 @@ class CoverRuleViewModel(
                 operation()
                 coroutineContext.ensureActive()
                 mutableState.update { it.copy(isSaving = false, finished = true) }
-            } catch (error: CancellationException) { throw error }
-            catch (error: Exception) {
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
                 coroutineContext.ensureActive()
-                mutableState.update { it.copy(isSaving = false, error = error.localizedMessage ?: error.toString()) }
+                mutableState.update {
+                    it.copy(isSaving = false, error = error.localizedMessage ?: error.toString())
+                }
             }
         }
     }

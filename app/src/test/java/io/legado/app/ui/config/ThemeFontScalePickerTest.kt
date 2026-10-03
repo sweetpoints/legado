@@ -5,7 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ThemeFontScalePickerTest {
-    @Test fun fontScalePickerKeepsConfiguredOrEffectiveSystemValueBeforeClamping() {
+    @Test
+    fun fontScalePickerKeepsConfiguredOrEffectiveSystemValueBeforeClamping() {
         assertEquals(13, ThemeSettingsSnapshot(fontScale = 13, systemFontScale = 1.1f).fontPicker)
         assertEquals(12, ThemeSettingsSnapshot(fontScale = 0, systemFontScale = 1.16f).fontPicker)
         assertEquals(9, ThemeSettingsSnapshot(fontScale = 99, systemFontScale = .91f).fontPicker)

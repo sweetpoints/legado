@@ -11,7 +11,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-fun CoverRuleRoute(viewModel: CoverRuleViewModel, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun CoverRuleRoute(
+    viewModel: CoverRuleViewModel,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val close by rememberUpdatedState(onClose)
@@ -20,7 +24,15 @@ fun CoverRuleRoute(viewModel: CoverRuleViewModel, onClose: () -> Unit, modifier:
             viewModel.state.collect { if (it.finished) close() }
         }
     }
-    CoverRuleScreen(state, viewModel::setEnabled, viewModel::setSearchUrl,
-        viewModel::setCoverRule, viewModel::save, viewModel::delete, viewModel::cancel,
-        viewModel::load, modifier)
+    CoverRuleScreen(
+        state,
+        viewModel::setEnabled,
+        viewModel::setSearchUrl,
+        viewModel::setCoverRule,
+        viewModel::save,
+        viewModel::delete,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+    )
 }
