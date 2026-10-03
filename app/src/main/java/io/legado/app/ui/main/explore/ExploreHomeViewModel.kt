@@ -157,18 +157,25 @@ internal class ExploreHomeViewModel(
         }
     }
 
-    private suspend fun persist() {
+    private suspend fun persist(
+        base: ExploreHomeSession = session,
+        effect: ExploreHomeEffect? = state.value.effect,
+    ) {
         val current = state.value
-        session =
-            session.copy(
+        val snapshot =
+            base.copy(
+                revision = session.revision + 1,
                 query = current.query,
                 expandedUrl = current.expandedUrl,
                 deleteUrl = current.deleteUrl,
                 errorText = current.errorText,
-                effect = current.effect,
+                effect = effect,
             )
-        val snapshot = session
-        withContext(ioDispatcher + NonCancellable) { storage.write(snapshot) }
+        // Only a committed revision becomes the accepted session. A superseded receipt must
+        // never clear a pending effect or authorize native/business work.
+        val accepted = withContext(ioDispatcher + NonCancellable) { storage.write(snapshot) }
+        check(accepted) { "发现会话写入已由新的页面取代，请重新加载" }
+        session = snapshot
     }
 
     private fun edit(transform: (ExploreHomeState) -> ExploreHomeState) {
@@ -354,11 +361,9 @@ internal class ExploreHomeViewModel(
             operationMutex.withLock {
                 try {
                     withContext(NonCancellable) {
-                        session = session.copy(pendingOperation = true)
-                        persist()
+                        persist(session.copy(pendingOperation = true))
                         action()
-                        session = session.copy(pendingOperation = false)
-                        persist()
+                        persist(session.copy(pendingOperation = false))
                     }
                 } catch (failure: Exception) {
                     fail(failure)
@@ -377,19 +382,25 @@ internal class ExploreHomeViewModel(
         ready: () -> Boolean,
         launch: () -> Unit,
     ): Boolean = operationMutex.withLock {
-        if (terminated || state.value.effect?.id != effect.id || effect.id in session.receipts)
+        if (
+            !restored ||
+                terminated ||
+                state.value.effect?.id != effect.id ||
+                effect.id in session.receipts
+        )
             return@withLock false
         withContext(NonCancellable) {
             val previous = session
+            var receiptAccepted = false
             var launched = false
+            mutableState.update { it.copy(busy = true) }
             try {
-                session = session.copy(receipts = session.receipts + effect.id)
-                mutableState.update { it.copy(effect = null, busy = true) }
-                persist()
+                persist(session.copy(receipts = session.receipts + effect.id), effect = null)
+                receiptAccepted = true
+                mutableState.update { it.copy(effect = null) }
                 if (!ready() || terminated) {
-                    session = previous
+                    persist(previous, effect = effect)
                     mutableState.update { it.copy(effect = effect) }
-                    persist()
                     false
                 } else {
                     launched = true
@@ -397,10 +408,9 @@ internal class ExploreHomeViewModel(
                     true
                 }
             } catch (failure: Exception) {
-                if (!launched) {
-                    session = previous
+                if (receiptAccepted && !launched) {
+                    persist(previous, effect = effect)
                     mutableState.update { it.copy(effect = effect) }
-                    persist()
                 }
                 throw failure
             } finally {

@@ -92,8 +92,9 @@ class ExploreHomeLifecycleTest {
 
         override fun read() = snapshot
 
-        override fun write(snapshot: ExploreHomeSession) {
+        override fun write(snapshot: ExploreHomeSession): Boolean {
             this.snapshot = snapshot
+            return true
         }
 
         override fun delete() = Unit

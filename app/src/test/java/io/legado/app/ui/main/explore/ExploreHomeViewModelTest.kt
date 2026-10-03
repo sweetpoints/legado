@@ -209,15 +209,36 @@ class ExploreHomeViewModelTest {
             assertEquals("a", manager.state.value.expandedUrl)
         }
 
+    @Test
+    fun rejectedDurableReceiptKeepsEffectAndNeverLaunchesNativeWork() =
+        runTest(dispatcher) {
+            val storage = Storage()
+            val manager = model(Repository(), storage)
+            runCurrent()
+            manager.effect("search", "a")
+            runCurrent()
+            val effect = manager.state.value.effect!!
+            storage.rejectWrite = true
+            var launches = 0
+            val failure = runCatching { manager.deliver(effect, { true }, { launches++ }) }
+            assertTrue(failure.isFailure)
+            assertEquals(0, launches)
+            assertEquals(effect, manager.state.value.effect)
+            assertFalse(effect.id in storage.snapshot.receipts)
+        }
+
     private class Storage : ExploreHomeSessionStorage {
         var snapshot = ExploreHomeSession()
         var onWrite: ((ExploreHomeSession) -> Unit)? = null
+        var rejectWrite = false
 
         override fun read() = snapshot
 
-        override fun write(snapshot: ExploreHomeSession) {
+        override fun write(snapshot: ExploreHomeSession): Boolean {
+            if (rejectWrite) return false
             this.snapshot = snapshot
             onWrite?.invoke(snapshot)
+            return true
         }
 
         override fun delete() = Unit
