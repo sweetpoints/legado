@@ -37,13 +37,25 @@ class BookDetailCommands(
         expectedPrompt: BookDetailPrompt? = null,
         block: (BookDetailPreferences) -> Unit,
     ) {
+        val clickedData = viewModel.state.value.data ?: return
         commandScope.launch {
             try {
                 val committedPreferences = preferencesViewModel.requireCommitted()
                 ensureActive()
                 val currentState = viewModel.state.value
+                val currentData = currentState.data
+                // Preferences may wait for disk writes. A source change or renamed book must not
+                // turn the original click into an operation against the replacement identity.
+                val sameIdentity =
+                    currentData != null &&
+                        currentData.book.bookUrl == clickedData.book.bookUrl &&
+                        currentData.book.origin == clickedData.book.origin &&
+                        currentData.book.name == clickedData.book.name &&
+                        currentData.book.author == clickedData.book.author &&
+                        currentData.source == clickedData.source
                 if (
-                    currentState.canInteract &&
+                    sameIdentity &&
+                        currentState.canInteract &&
                         (expectedPrompt == null || currentState.session?.prompt == expectedPrompt)
                 )
                     block(committedPreferences)

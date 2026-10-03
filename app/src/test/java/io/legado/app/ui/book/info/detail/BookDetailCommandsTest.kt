@@ -76,7 +76,7 @@ class BookDetailCommandsTest {
                     type = if (web) BookType.webFile else BookType.text,
                 )
             )
-        val data =
+        var data =
             BookDetailData(
                 book,
                 BookDetailSource.from(
@@ -241,6 +241,61 @@ class BookDetailCommandsTest {
                 fixture.preferences.gate?.complete(Unit)
                 fixture.stop()
                 runCurrent()
+            }
+        }
+
+    @Test
+    fun preferenceWaitCannotApplyOriginalUploadClickToChangedBookOrSource() =
+        runTest(dispatcher) {
+            for (replaceBook in listOf(true, false)) {
+                val fixture = Fixture(this)
+                val gate = CompletableDeferred<Unit>()
+                try {
+                    runCurrent()
+                    fixture.preferences.gate = gate
+                    fixture.commands.uploadImported(true)
+                    runCurrent()
+                    fixture.commands.action(BookDetailAction.Upload)
+                    runCurrent()
+                    assertTrue(fixture.services.isEmpty())
+
+                    fixture.data =
+                        fixture.data.copy(
+                            book =
+                                BookDetailBook.from(
+                                    Book(
+                                        bookUrl = if (replaceBook) "replacement-book" else "book",
+                                        name = "Name",
+                                        author = "Author",
+                                        origin = "replacement-source",
+                                        tocUrl = "toc",
+                                        coverUrl = "cover",
+                                    )
+                                ),
+                            source =
+                                BookDetailSource.from(
+                                    BookSource(
+                                        bookSourceUrl = "replacement-source",
+                                        bookSourceName = "Replacement source",
+                                    )
+                                ),
+                        )
+                    fixture.model.reload()
+                    runCurrent()
+                    assertEquals(fixture.data.book, fixture.model.state.value.data!!.book)
+                    gate.complete(Unit)
+                    runCurrent()
+                    assertTrue(fixture.services.isEmpty())
+                    assertTrue(fixture.errors.isEmpty())
+
+                    fixture.commands.action(BookDetailAction.Upload)
+                    runCurrent()
+                    assertEquals(BookDetailServiceKind.UploadCheck, fixture.services.single().kind)
+                } finally {
+                    gate.complete(Unit)
+                    fixture.stop()
+                    runCurrent()
+                }
             }
         }
 
