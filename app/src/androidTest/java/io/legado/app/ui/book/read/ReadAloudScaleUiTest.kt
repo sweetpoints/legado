@@ -12,9 +12,9 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -197,7 +197,7 @@ class ReadAloudScaleUiTest {
                 density = activity.resources.displayMetrics.density
             }
             val bar = actualBounds
-            val hostBounds = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            val hostBounds = compose.onNodeWithTag("reader-host").fetchSemanticsNode().boundsInRoot
             val expectedWidth =
                 minOf(
                     (widthDp * density).roundToInt(),
@@ -365,7 +365,7 @@ class ReadAloudScaleUiTest {
         }
         // Gesture the actual Compose control; its production pointer handler stores normalized
         // coordinates on ACTION_UP.
-        drag(-48.dpToPx(), -72.dpToPx())
+        drag(-48.dpToPx().toFloat(), -72.dpToPx().toFloat())
         var movedX = 0f
         var movedY = 0f
         var storedX = 0f
@@ -397,7 +397,7 @@ class ReadAloudScaleUiTest {
 
         // With dragging disabled the same real gesture must leave both the view and stored
         // coordinates unchanged.
-        drag(48.dpToPx(), 48.dpToPx())
+        drag(48.dpToPx().toFloat(), 48.dpToPx().toFloat())
         scenario!!.onActivity { activity ->
             val bar = activity.readAloudControlsBounds
             assertEquals("Disabled drag must ignore movement on X", movedX, bar.x, 1f)
