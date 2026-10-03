@@ -4,6 +4,13 @@ The target is a Compose UI for all application screens, with no generated ViewBi
 or XML page/preference layouts. AndroidManifest.xml, strings, colors, drawable resources,
 backup rules, and app-widget metadata are Android resources and remain valid in a Compose app.
 
+Pending legacy XML: `activity_translucence.xml` remains for the Association host migration.
+`dialog_recycler_view.xml` also remains because `SharedFileImportTest` still observes its
+`tv_cancel`, `rotate_loading`, and `recycler_view` IDs through real native controls.
+The layout name, generated binding, `tool_bar`, and `tv_footer_left` have no callers;
+that narrower audit does not establish that all child-ID consumers have exited.
+Retire the layout after the Association fixture migrates, without adding compatibility IDs.
+
 ## Package structure
 
 Keep features together under `io.legado.app.ui`, with shared UI in explicit packages:
@@ -1692,7 +1699,10 @@ SourceImportFilterUiTest独立完整迁移：五原case全部保留。bookFilter
 先独立pure style/显式import提交89e1d2393，实际统一两pass后check稳定；后行为移除全部旧R.id点击/menu路由、RecyclerAdapter/indices/View/Toolbar/closeMenus helper，直接typed Compose controls/menu，实际ActivityScenario.use仍负责成功/失败宿主清理。全部case与真实Room/HTTP/Code preview/screenshots保留，不mock UI；formatter/check/diff通过，Android编译/JVM gate待ready排队，无device不宣称Android实际执行。dialog_recycler XML当时保留待最终消费者审计；后续逐一核对SourceManual实际调用，确认其tool_bar分支是不可达legacy fallback，并非替换child仍有原生菜单。
 
 
-SourceManualReplacementUiTest精准收口：所有原case及reader-rule/configbackup断言不变。menu/manualEnabled实际调用只接受Book/RSS父导入页或CodeDialog，保持现有Compose菜单visibility、enabled/disabled、automatic状态与held query直接Semantics OnClick行为；删除无调用者的Toolbar/AdapterView弹出菜单fallback和unused View helper。Manual/Effective child原真实manual-all/rule/confirm及effective-close交互已有Compose，本批不虚构child overflow。原fixture预格式化已稳定零diff，不造空style commit；实际修改后统一format/check及diff-check通过。全仓排除build/docs的layout/Binding/tool_bar/tv_footer_left审计只剩布局自身声明，资源退休待正常审批；Android设备执行未进行。
+SourceManualReplacementUiTest精准收口：所有原case及reader-rule/configbackup断言不变。menu/manualEnabled实际调用只接受Book/RSS父导入页或CodeDialog，保持现有Compose菜单visibility、enabled/disabled、automatic状态与held query直接Semantics OnClick行为；删除无调用者的Toolbar/AdapterView弹出菜单fallback和unused View helper。Manual/Effective child原真实manual-all/rule/confirm及effective-close交互已有Compose，本批不虚构child overflow。原fixture预格式化已稳定零diff，不造空style commit；实际修改后统一format/check及diff-check通过。全仓排除build/docs的layout/Binding/tool_bar/tv_footer_left名称审计只剩布局自身声明；这不证明child IDs无消费者，SharedFile实际依赖后续审计发现后保留资源，详见下述边界。Android设备执行未进行。
 
 
 最后ID声明审计补充：SourceManual确认/取消改typed ImportControl实际Compose节点，完全退出tv_ok/tv_cancel布局ID依赖，保留原persist/cancel断言。虽然dialog_recycler_view布局/Binding及tool_bar/tv_footer_left已无消费者，SharedFileImportTest仍用该布局声明的tv_cancel、rotate_loading、recycler_view真实旧Host/native观察，当前不删除布局、不补兼容ID；等待该fixture所属Association lane真实退出后才能退休。
+
+
+SourceImport/SourceManual最终冻结验证：eaab7747043504a1da8e02ad1fc28ff79eeb76df基于正式671fcd8ce（cecd生产相同），显式ANDROID_HOME SDK、offline/max-workers=2的compileAppDebugAndroidTestKotlin EXIT0/1m14s，65 tasks执行，日志/private/tmp/legado-source-import-final-android-01.log。SourceImport五原case与SourceManual六原case（含bookManualAndEffectiveMenusUseRawCandidates/rssManualAndEffectiveMenusUseRawCandidates两个expression-body）名称和数量逐一对照正式完全相同；所有原metadata/Room/selection/recreate/reader/configbackup断言保留，实际两fixture formatter --check与diff-check通过。仅Android fixtures/docs变更，生产/resources相对正式671无差异，不重复正式cecd已通过3918 JVM；无device，十一Android cases只编译未运行。slot2已释放。dialog_recycler_view保留，SharedFile真实附带ID依赖未退出；此证据提交仅docs，无需再Gradle。
