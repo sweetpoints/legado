@@ -1221,3 +1221,4 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 正文阅读器及听书回归 fixture 按用户要求整文件执行 ktfmt 0.64 Kotlin style（4 空格、100 列）；兼容三处仅依赖源码空白排版的回归断言。格式整理独立提交，随后听书控件功能批次只呈现行为变化。完整功能工作树的 Android 测试 Kotlin 编译与 3722 项 JVM 回归已通过；独立格式提交无设备端执行。
 
 正文阅读器的听书漂浮控件改为独立 Compose 内容与 Compose 手势，保留暂停/继续、长按停止、回到朗读位置和从当前页重新朗读。原控件 XML 与背景 drawable 已移除，宿主目前使用小型 ComposeView 定位桥接；主正文 canvas 与完整阅读菜单迁移后续独立批次继续。保留宽度 clamp、紧凑标签、完整标签大字体适配、透明度/eInk 边框、按安全区归一化坐标、拖动锁定/边缘吸附、移动阈值自动隐藏与轻量恢复。拖动以屏幕坐标差分处理，避免移动宿主后重复计算局部位置偏移；隐藏与销毁释放父视图拦截。原 reader 听书设备 fixture 改用 Compose semantics 操作；新增暂停/长按/最小宽度双动作/拖动取消点击 Android 回归。本批所有触达 Kotlin 文件实际执行 ktfmt 0.64 Kotlin style；Android 测试 Kotlin 编译与全部 3722 项 JVM 回归通过，Android 设备端尚未执行。
+书籍详情私有会话仓库按统一 Kotlin formatter 展开声明、分支和数据结构，并将 coroutine 通配导入改为显式导入；本批仅可读性调整，持久化和取消行为保持。Android 测试 Kotlin 编译与全部 JVM 回归通过，设备端未执行；交互和 Host 迁移分别提交。
