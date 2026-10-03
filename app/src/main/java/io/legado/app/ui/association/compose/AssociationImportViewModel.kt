@@ -179,6 +179,9 @@ open class AssociationImportViewModel(
         operation = viewModelScope.launch { inspect(ticket, session) }
     }
 
+    val ownedTicket: String?
+        get() = savedState.get(TICKET_KEY)
+
     suspend fun awaitCommands() {
         val currentJob = currentCoroutineContext()[Job]
         operation?.takeIf { it != currentJob }?.join()
@@ -414,7 +417,12 @@ open class AssociationImportViewModel(
         val executor = actions ?: return
         // Reconciliation is itself the initial restore Job. It may hand ownership to a confirmed
         // import; another active command still cannot authorize a second accepted mutation.
-        if (closed || current.busy || (operation?.isActive == true && operation != restoringJob))
+        if (
+            closed ||
+                current.busy ||
+                session.phase == AssociationPhase.Finished ||
+                (operation?.isActive == true && operation != restoringJob)
+        )
             return
         mutableState.value = current.copy(busy = true)
         operation = viewModelScope.launch {
@@ -450,6 +458,7 @@ open class AssociationImportViewModel(
                         controller(ticket).update(accepted.generation) {
                             it.copy(
                                 phase = AssociationPhase.Finished,
+                                completionMessage = result.message,
                                 operation = null,
                                 effects =
                                     listOf(
@@ -497,7 +506,18 @@ open class AssociationImportViewModel(
                 accepted = true
                 val acknowledged = it.copy(claimedEffects = it.claimedEffects - receipt)
                 if (granted) acknowledged.copy(storagePermissionGranted = true)
-                else finish(acknowledged)
+                else
+                    finish(acknowledged)
+                        .copy(
+                            effects =
+                                listOf(
+                                    receipt(
+                                        acknowledged,
+                                        AssociationNativeKind.Finish,
+                                        type = "permissionDenied",
+                                    )
+                                )
+                        )
             } ?: return
         currentCoroutineContext().ensureActive()
         if (!accepted) return

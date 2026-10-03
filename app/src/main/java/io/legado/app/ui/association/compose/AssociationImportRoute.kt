@@ -31,6 +31,7 @@ fun AssociationImportRoute(
     onDeliveryError: (Throwable) -> Unit,
     onChoosePrivateDirectory: () -> Unit,
     onClose: () -> Unit,
+    showSessionErrors: Boolean = true,
 ) {
     val state by model.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -107,5 +108,6 @@ fun AssociationImportRoute(
         onChoosePrivateDirectory = onChoosePrivateDirectory,
         onCancelDirectory = model::cancelDirectory,
         onClose = onClose,
+        showSessionErrors = showSessionErrors,
     )
 }

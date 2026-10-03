@@ -113,6 +113,7 @@ data class AssociationSession(
     val effects: List<AssociationNativeReceipt> = emptyList(),
     val claimedEffects: List<AssociationNativeReceipt> = emptyList(),
     val error: String? = null,
+    val completionMessage: String? = null,
 ) {
     /** A stale native result cannot acknowledge a replacement request, even with the same kind. */
     fun claim(token: String, ownerGeneration: Long): AssociationSession? {

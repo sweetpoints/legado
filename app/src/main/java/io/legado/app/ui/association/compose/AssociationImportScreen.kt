@@ -27,6 +27,7 @@ fun AssociationImportScreen(
     onChoosePrivateDirectory: () -> Unit,
     onCancelDirectory: () -> Unit,
     onClose: () -> Unit,
+    showSessionErrors: Boolean = true,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (!state.loaded || state.busy || state.nativeResultPending)
@@ -76,9 +77,20 @@ fun AssociationImportScreen(
                         },
                     )
                 }
+            AssociationPhase.Finished ->
+                session.completionMessage?.let { message ->
+                    AlertDialog(
+                        onDismissRequest = onClose,
+                        title = { Text(stringResource(R.string.success)) },
+                        text = { Text(message) },
+                        confirmButton = {
+                            TextButton(onClick = onClose) { Text(stringResource(R.string.ok)) }
+                        },
+                    )
+                }
             else -> Unit
         }
-        (state.restoreError ?: session?.error)?.let { error ->
+        (state.restoreError ?: session?.error?.takeIf { showSessionErrors })?.let { error ->
             AlertDialog(
                 onDismissRequest = onClose,
                 title = { Text(stringResource(R.string.error)) },

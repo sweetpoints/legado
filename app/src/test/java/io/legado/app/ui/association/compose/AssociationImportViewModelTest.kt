@@ -630,6 +630,55 @@ class AssociationImportViewModelTest {
             }
         }
 
+    @Test
+    fun completedImportRetainsFinalMessageAndRejectsSecondConfirmation() =
+        runTest(dispatcher) {
+            val sessions =
+                MemorySessions().apply {
+                    current = AssociationSession(input, phase = AssociationPhase.ReadConfig)
+                }
+            var imports = 0
+            val actions =
+                object : AssociationImportOperations {
+                    override suspend fun execute(
+                        ticket: String,
+                        session: AssociationSession,
+                        operation: AssociationOperation,
+                    ): AssociationOperationResult {
+                        imports++
+                        return AssociationOperationResult(message = "Imported configuration")
+                    }
+                }
+            val saved = SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket"))
+            val model =
+                model(saved, sessions, Files(AssociationFileInspection(finished = true)), actions)
+            try {
+                runCurrent()
+                model.confirmOperation("read-config")
+                runCurrent()
+                assertEquals("Imported configuration", sessions.current!!.completionMessage)
+                model.confirmOperation("read-config")
+                runCurrent()
+                assertEquals(1, imports)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+            val restored =
+                model(saved, sessions, Files(AssociationFileInspection(finished = true)), actions)
+            try {
+                runCurrent()
+                assertEquals(
+                    "Imported configuration",
+                    restored.state.value.session!!.completionMessage,
+                )
+                assertEquals(1, imports)
+            } finally {
+                clear(restored)
+                runCurrent()
+            }
+        }
+
     private fun model(
         saved: SavedStateHandle,
         sessions: MemorySessions,
