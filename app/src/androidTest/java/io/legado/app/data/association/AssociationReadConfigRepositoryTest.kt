@@ -26,7 +26,7 @@ class AssociationReadConfigRepositoryTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun acceptedSaveWithFailedReceiptRecoversExactTargetWithoutApplyingAgain() = runBlocking {
+    fun acceptedSaveWithFailedReceiptRequiresFreshConfirmationWithoutApplyingAgain() = runBlocking {
         val fixture = fixture()
         val engine = Engine()
         try {
@@ -43,8 +43,13 @@ class AssociationReadConfigRepositoryTest {
             assertEquals(engine.target, engine.actual)
             assertEquals(1, engine.applyCalls)
             val restored = AssociationReadConfigRepository(fixture.sessions, engine, Any())
-            assertEquals("Imported", restored.import(fixture.ticket, fixture.token))
-            assertEquals("Imported", restored.import(fixture.ticket, fixture.token))
+            repeat(2) {
+                val failure = runCatching {
+                    restored.import(fixture.ticket, fixture.token)
+                }
+                    .exceptionOrNull()
+                assertTrue(failure?.message.orEmpty().contains("uncertain"))
+            }
             assertEquals(1, engine.applyCalls)
         } finally {
             fixture.close()
@@ -92,6 +97,59 @@ class AssociationReadConfigRepositoryTest {
                 fixture.close()
             }
         }
+
+    @Test
+    fun firstConfigFileAcceptedThenShareWriteFailsCannotReplayFromRolledBackMemory() = runBlocking {
+        val fixture = fixture()
+        val configFile = File(fixture.directory, "actual-config.json")
+        val shareFile = File(fixture.directory, "actual-share.json")
+        val baseline = AssociationReadConfigSnapshot("old full config", "old full share")
+        val target = AssociationReadConfigSnapshot("new full config", "new full share")
+        configFile.writeText(baseline.configsJson)
+        shareFile.writeText(baseline.shareJson)
+        var memory = baseline
+        var writes = 0
+        val engine =
+            object : AssociationReadConfigEngine {
+                override fun snapshot() = memory
+
+                override fun prepare(bytes: ByteArray) =
+                    AssociationReadConfigPlan(
+                        baseline,
+                        target,
+                        "imported",
+                        "defaults",
+                        "Imported",
+                    )
+
+                override fun apply(plan: AssociationReadConfigPlan) {
+                    writes++
+                    memory = target
+                    configFile.writeText(target.configsJson)
+                    // Match the legacy helper rollback after saveNow's second file fails.
+                    memory = baseline
+                    throw IOException("Share write failed after config accepted")
+                }
+            }
+        try {
+            val repository = AssociationReadConfigRepository(fixture.sessions, engine, Any())
+            assertTrue(runCatching { repository.import(fixture.ticket, fixture.token) }.isFailure)
+            assertEquals(baseline, engine.snapshot())
+            assertEquals(target.configsJson, configFile.readText())
+            assertEquals(baseline.shareJson, shareFile.readText())
+            val restored = AssociationReadConfigRepository(fixture.sessions, engine, Any())
+            val failure = runCatching {
+                restored.import(fixture.ticket, fixture.token)
+            }
+                .exceptionOrNull()
+            assertTrue(failure?.message.orEmpty().contains("uncertain"))
+            assertEquals(1, writes)
+            assertEquals(target.configsJson, configFile.readText())
+            assertEquals(baseline.shareJson, shareFile.readText())
+        } finally {
+            fixture.close()
+        }
+    }
 
     @Test
     fun realConfigZipPlanMatchesSaveNormalizationAndFailedSaveRestoresOriginalValuesAndAliases() =

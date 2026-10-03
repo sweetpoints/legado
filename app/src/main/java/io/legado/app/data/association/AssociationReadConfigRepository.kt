@@ -26,6 +26,7 @@ data class AssociationReadConfigPlan(
     val defaultsJson: String,
     val importedName: String,
     val completed: Boolean = false,
+    val saveAttempted: Boolean? = false,
 )
 
 interface AssociationReadConfigEngine {
@@ -142,10 +143,18 @@ class AssociationReadConfigRepository(
                 synchronized(transactionLock) {
                     val plan = readPlan(file) ?: engine.prepare(bytes).also { writePlan(file, it) }
                     if (plan.completed) return@synchronized plan.importedName
+                    // saveNow writes two separate files and can roll memory back after the first
+                    // file was accepted. In-memory equality is not proof of durable acceptance.
+                    // A missing flag in an older pending plan is equally unverifiable.
+                    check(plan.saveAttempted == false) {
+                        "Read configuration save result is uncertain; close and confirm a new import"
+                    }
                     val actual = engine.snapshot()
                     when (actual) {
-                        plan.target -> Unit
                         plan.previous -> {
+                            // Persist this fence before the first global write. Any failure after
+                            // it requires a fresh user confirmation, never automatic reapplication.
+                            writePlan(file, plan.copy(saveAttempted = true))
                             engine.apply(plan)
                             check(engine.snapshot() == plan.target) {
                                 "Read configuration save differs from its plan"
@@ -156,10 +165,9 @@ class AssociationReadConfigRepository(
                                 "Read configuration changed elsewhere; close and confirm a new import"
                             )
                     }
-                    // This write is paired with the accepted save. If it fails, the exact full
-                    // target
-                    // permits retry without reapplying; an external change never gets overwritten.
-                    writePlan(file, plan.copy(completed = true))
+                    // Only successful return from both legacy writes authorizes completion. A
+                    // failed completion receipt stays uncertain even if memory matches the target.
+                    writePlan(file, plan.copy(completed = true, saveAttempted = true))
                     plan.importedName
                 }
             }
