@@ -1,3 +1,4 @@
+import de.undercouch.gradle.tasks.download.Download
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -15,7 +16,6 @@ import org.objectweb.asm.tree.FieldInsnNode
 import org.objectweb.asm.tree.InsnList
 import org.objectweb.asm.tree.InsnNode
 import org.objectweb.asm.tree.MethodInsnNode
-import de.undercouch.gradle.tasks.download.Download
 
 plugins {
     alias(libs.plugins.android.application)
@@ -42,17 +42,31 @@ var versionCodeValue = 30000
 // Preserve the published code at this point, then ignore GitHub wrapper merge commits.
 val versionCodeBaseCommit = "9639f027fbc8cfdf57ce136a9e0c98829a235aef"
 val versionCodeAtBase = 37540
+
 try {
-    val gitCount = providers.exec {
-        commandLine("git", "rev-list", "$versionCodeBaseCommit..HEAD", "--count", "--no-merges")
-        isIgnoreExitValue = true
-    }.standardOutput.asText.get().trim()
+    val gitCount =
+        providers
+            .exec {
+                commandLine(
+                    "git",
+                    "rev-list",
+                    "$versionCodeBaseCommit..HEAD",
+                    "--count",
+                    "--no-merges",
+                )
+                isIgnoreExitValue = true
+            }
+            .standardOutput
+            .asText
+            .get()
+            .trim()
     if (gitCount.isNotEmpty()) {
         versionCodeValue = versionCodeAtBase + gitCount.toInt()
     }
 } catch (ignored: Exception) {
     // Keep source archives buildable when Git is unavailable.
 }
+
 val armOnly = (project.findProperty("armOnly") as String?)?.toBoolean() ?: false
 
 // ---------------------------------------------------------------------------
@@ -67,15 +81,16 @@ val cronetAssetsDir = "$projectDir/src/main/assets"
 val cronetLibPath = "$projectDir/cronetlib"
 val cronetSoPath = "$projectDir/so"
 // cronet_impl_util_java.jar is already merged into impl-common and would duplicate classes.
-val cronetJars = listOf(
-    "cronet_api.jar",
-    "cronet_impl_common_java.jar",
-    "cronet_impl_native_java.jar",
-    "cronet_impl_native_sentinel_java.jar",
-    "cronet_impl_platform_java.jar",
-    "cronet_shared_java.jar",
-    "httpengine_native_provider_java.jar"
-)
+val cronetJars =
+    listOf(
+        "cronet_api.jar",
+        "cronet_impl_common_java.jar",
+        "cronet_impl_native_java.jar",
+        "cronet_impl_native_sentinel_java.jar",
+        "cronet_impl_platform_java.jar",
+        "cronet_shared_java.jar",
+        "httpengine_native_provider_java.jar",
+    )
 val cronetAbis = listOf("armeabi-v7a", "arm64-v8a", "riscv64", "x86", "x86_64")
 
 /** 从文件生成 MD5 */
@@ -100,11 +115,15 @@ tasks.register<Download>("downloadJar") {
     onlyIfModified(false)
 
     doLast {
-        project.fileTree(cronetLibPath) {
-            include("*.jar", "*.aar")
-        }.files.filter { it.name !in cronetJars }.forEach {
-            project.delete(it)
-        }
+        project
+            .fileTree(cronetLibPath) {
+                include("*.jar", "*.aar")
+            }
+            .files
+            .filter { it.name !in cronetJars }
+            .forEach {
+                project.delete(it)
+            }
     }
 }
 
@@ -144,11 +163,7 @@ tasks.register<Download>("downloadX86") {
     onlyIfModified(true)
 }
 
-/**
- * 更新 Cronet 版本时执行这个 task
- * 先更改 gradle.properties 里面的版本号，然后再执行
- * gradlew app:downloadCronet
- */
+/** 更新 Cronet 版本时执行这个 task 先更改 gradle.properties 里面的版本号，然后再执行 gradlew app:downloadCronet */
 tasks.register("downloadCronet") {
     dependsOn(
         "downloadJar",
@@ -156,7 +171,7 @@ tasks.register("downloadCronet") {
         "downloadARMv7",
         "downloadRISCV64",
         "downloadX86_64",
-        "downloadX86"
+        "downloadX86",
     )
 
     doLast {
@@ -173,9 +188,10 @@ tasks.register("downloadCronet") {
         }
         hashes["version"] = cronetVersion
         // 原先用 groovy.json.JsonOutput.toJson；这里是等价的扁平字符串 map 输出
-        val metadata = hashes.entries.joinToString(prefix = "{", postfix = "}") { (k, v) ->
-            "\"$k\":\"$v\""
-        }
+        val metadata =
+            hashes.entries.joinToString(prefix = "{", postfix = "}") { (k, v) ->
+                "\"$k\":\"$v\""
+            }
         println(metadata)
 
         println(cronetAssetsDir)
@@ -193,101 +209,111 @@ tasks.register("downloadCronet") {
 val cronetOriginalJar = file("cronetlib/cronet_impl_native_java.jar")
 val cronetAdaptedJar = layout.buildDirectory.file("cronet-dynamic/cronet_impl_native_java.jar")
 
-val adaptCronetLoader = tasks.register("adaptCronetLoader") {
-    inputs.file(cronetOriginalJar)
-    inputs.file("build.gradle.kts")
-    inputs.property("version", cronetVersion)
-    outputs.file(cronetAdaptedJar)
+val adaptCronetLoader =
+    tasks.register("adaptCronetLoader") {
+        inputs.file(cronetOriginalJar)
+        inputs.file("build.gradle.kts")
+        inputs.property("version", cronetVersion)
+        outputs.file(cronetAdaptedJar)
 
-    doLast {
-        val sha256 = MessageDigest.getInstance("SHA-256")
-            .digest(cronetOriginalJar.readBytes())
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-        // 注意：这里原本是 Groovy 的 assert。Kotlin 的 assert 默认不启用，必须用 check()。
-        check(
-            cronetVersion == "153.0.8010.27" &&
-                sha256 == "775d145e5f33fd6157078a574f788b850bda5a0e7195aa9ec93e67afe6f64127"
-        ) {
-            "Review the dynamic loader against the new official Cronet JAR first"
-        }
-        val owner = "org/chromium/net/impl/CronetLibraryLoader"
-        val destination = cronetAdaptedJar.get().asFile
-        destination.parentFile.mkdirs()
-        ZipFile(cronetOriginalJar).use { source ->
-            JarOutputStream(destination.outputStream()).use { output ->
-                val entries = source.entries()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    var bytes: ByteArray = source.getInputStream(entry).use { it.readBytes() }
-                    if (entry.name == "$owner.class") {
-                        val node = ClassNode()
-                        val reader = ClassReader(bytes)
-                        reader.accept(node, 0)
-                        val method = node.methods.find {
-                            it.name == "loadLibrary" && it.desc == "()V"
-                        } ?: error("loadLibrary()V not found in $owner")
-                        val instructions = method.instructions.toArray()
-                        val calls = instructions.filter {
-                            it is MethodInsnNode &&
-                                it.owner == "java/lang/System" && it.name == "loadLibrary"
-                        }
-                        val flag = instructions.filter {
-                            it is FieldInsnNode &&
-                                it.opcode == Opcodes.PUTSTATIC && it.name == "sLibAlreadyLoaded"
-                        }
-                        check(calls.size == 3 && flag.size == 1) {
-                            "Unexpected Cronet loader shape: calls=${calls.size} flag=${flag.size}"
-                        }
-                        check(flag[0].previous.opcode == Opcodes.ICONST_1) {
-                            "Unexpected sLibAlreadyLoaded flag sequence"
-                        }
-                        // Keep the AOSP branch unchanged; redirect only the two standalone Cronet names.
-                        calls.drop(1).forEach { call ->
-                            val route = InsnList()
-                            route.add(
-                                FieldInsnNode(
-                                    Opcodes.GETSTATIC,
-                                    "io/legado/app/lib/cronet/CronetLoader", "INSTANCE",
-                                    "Lio/legado/app/lib/cronet/CronetLoader;"
+        doLast {
+            val sha256 =
+                MessageDigest.getInstance("SHA-256")
+                    .digest(cronetOriginalJar.readBytes())
+                    .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            // 注意：这里原本是 Groovy 的 assert。Kotlin 的 assert 默认不启用，必须用 check()。
+            check(
+                cronetVersion == "153.0.8010.27" &&
+                    sha256 == "775d145e5f33fd6157078a574f788b850bda5a0e7195aa9ec93e67afe6f64127"
+            ) {
+                "Review the dynamic loader against the new official Cronet JAR first"
+            }
+            val owner = "org/chromium/net/impl/CronetLibraryLoader"
+            val destination = cronetAdaptedJar.get().asFile
+            destination.parentFile.mkdirs()
+            ZipFile(cronetOriginalJar).use { source ->
+                JarOutputStream(destination.outputStream()).use { output ->
+                    val entries = source.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        var bytes: ByteArray = source.getInputStream(entry).use { it.readBytes() }
+                        if (entry.name == "$owner.class") {
+                            val node = ClassNode()
+                            val reader = ClassReader(bytes)
+                            reader.accept(node, 0)
+                            val method =
+                                node.methods.find {
+                                    it.name == "loadLibrary" && it.desc == "()V"
+                                } ?: error("loadLibrary()V not found in $owner")
+                            val instructions = method.instructions.toArray()
+                            val calls = instructions.filter {
+                                it is MethodInsnNode &&
+                                    it.owner == "java/lang/System" &&
+                                    it.name == "loadLibrary"
+                            }
+                            val flag = instructions.filter {
+                                it is FieldInsnNode &&
+                                    it.opcode == Opcodes.PUTSTATIC &&
+                                    it.name == "sLibAlreadyLoaded"
+                            }
+                            check(calls.size == 3 && flag.size == 1) {
+                                "Unexpected Cronet loader shape: calls=${calls.size} flag=${flag.size}"
+                            }
+                            check(flag[0].previous.opcode == Opcodes.ICONST_1) {
+                                "Unexpected sLibAlreadyLoaded flag sequence"
+                            }
+                            // Keep the AOSP branch unchanged; redirect only the two standalone
+                            // Cronet names.
+                            calls.drop(1).forEach { call ->
+                                val route = InsnList()
+                                route.add(
+                                    FieldInsnNode(
+                                        Opcodes.GETSTATIC,
+                                        "io/legado/app/lib/cronet/CronetLoader",
+                                        "INSTANCE",
+                                        "Lio/legado/app/lib/cronet/CronetLoader;",
+                                    )
                                 )
-                            )
-                            route.add(InsnNode(Opcodes.SWAP))
-                            route.add(
-                                MethodInsnNode(
-                                    Opcodes.INVOKEVIRTUAL,
-                                    "io/legado/app/lib/cronet/CronetLoader", "loadLibrary",
-                                    "(Ljava/lang/String;)V", false
+                                route.add(InsnNode(Opcodes.SWAP))
+                                route.add(
+                                    MethodInsnNode(
+                                        Opcodes.INVOKEVIRTUAL,
+                                        "io/legado/app/lib/cronet/CronetLoader",
+                                        "loadLibrary",
+                                        "(Ljava/lang/String;)V",
+                                        false,
+                                    )
                                 )
-                            )
-                            method.instructions.insertBefore(call, route)
-                            method.instructions.remove(call)
+                                method.instructions.insertBefore(call, route)
+                                method.instructions.remove(call)
+                            }
+                            // A failed download/load must not tell normal initialization that
+                            // loading succeeded.
+                            method.instructions.remove(flag[0].previous)
+                            method.instructions.remove(flag[0])
+                            val returns = instructions.filter { it.opcode == Opcodes.RETURN }
+                            check(returns.size == 1) { "Unexpected RETURN count: ${returns.size}" }
+                            val loaded = InsnList()
+                            loaded.add(InsnNode(Opcodes.ICONST_1))
+                            loaded.add(flag[0])
+                            method.instructions.insertBefore(returns[0], loaded)
+                            val writer = ClassWriter(reader, ClassWriter.COMPUTE_MAXS)
+                            node.accept(writer)
+                            bytes = writer.toByteArray()
                         }
-                        // A failed download/load must not tell normal initialization that loading succeeded.
-                        method.instructions.remove(flag[0].previous)
-                        method.instructions.remove(flag[0])
-                        val returns = instructions.filter { it.opcode == Opcodes.RETURN }
-                        check(returns.size == 1) { "Unexpected RETURN count: ${returns.size}" }
-                        val loaded = InsnList()
-                        loaded.add(InsnNode(Opcodes.ICONST_1))
-                        loaded.add(flag[0])
-                        method.instructions.insertBefore(returns[0], loaded)
-                        val writer = ClassWriter(reader, ClassWriter.COMPUTE_MAXS)
-                        node.accept(writer)
-                        bytes = writer.toByteArray()
+                        val target = ZipEntry(entry.name)
+                        target.time = 0
+                        output.putNextEntry(target)
+                        output.write(bytes)
+                        output.closeEntry()
                     }
-                    val target = ZipEntry(entry.name)
-                    target.time = 0
-                    output.putNextEntry(target)
-                    output.write(bytes)
-                    output.closeEntry()
                 }
             }
+            logger.lifecycle(
+                "Cronet 153: adapted only Java library loading; official native/JNI initialization unchanged"
+            )
         }
-        logger.lifecycle(
-            "Cronet 153: adapted only Java library loading; official native/JNI initialization unchanged"
-        )
     }
-}
 
 android {
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -334,7 +360,7 @@ android {
                 // AndroidX stores Simplified Chinese switch labels under zh-rCN.
                 "zh-rCN",
                 "zh-rHK",
-                "zh-rTW"
+                "zh-rTW",
             )
         )
         extensions.extraProperties.set("archivesBaseName", "${appName}_$appVersion")
@@ -354,7 +380,7 @@ android {
                     mapOf(
                         "room.incremental" to "true",
                         "room.expandProjection" to "true",
-                        "room.schemaLocation" to "$projectDir/schemas"
+                        "room.schemaLocation" to "$projectDir/schemas",
                     )
                 )
             }
@@ -393,7 +419,7 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
-                "cronet-proguard-rules.pro"
+                "cronet-proguard-rules.pro",
             )
         }
         debug {
@@ -408,7 +434,7 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
-                "cronet-proguard-rules.pro"
+                "cronet-proguard-rules.pro",
             )
         }
     }
@@ -448,7 +474,7 @@ android {
                 "src/**",
                 // kotlin-reflect and its builtins loaders are not part of the release runtime.
                 "kotlin/*.kotlin_builtins",
-                "kotlin/**/*.kotlin_builtins"
+                "kotlin/**/*.kotlin_builtins",
             )
         )
         jniLibs {
@@ -461,7 +487,7 @@ android {
                     "**/libimage_processing_util_jni.so",
                     "**/librenderscript-toolkit.so",
                     "**/librtmp-jni.so",
-                    "**/libsurface_util_jni.so"
+                    "**/libsurface_util_jni.so",
                 )
             )
         }
@@ -473,7 +499,7 @@ android {
     }
     lint {
         checkDependencies = true
-        //忽略string翻译缺失，后面需要翻译时去掉，todo
+        // 忽略string翻译缺失，后面需要翻译时去掉，todo
         disable += "MissingTranslation"
     }
 }
@@ -483,18 +509,18 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.bundles.androidTest)
-    //kotlin
+    // kotlin
     implementation(libs.kotlin.stdlib)
-    //Kotlin反射（刻意排除，见 app/proguard-rules.pro 中的说明）
-    //implementation(libs.kotlin.reflect)
+    // Kotlin反射（刻意排除，见 app/proguard-rules.pro 中的说明）
+    // implementation(libs.kotlin.reflect)
 
-    //协程
+    // 协程
     implementation(libs.bundles.coroutines)
 
-    //图像处理库Toolkit
+    // 图像处理库Toolkit
     implementation(libs.renderscript.intrinsics.replacement.toolkit)
 
-    //androidX
+    // androidX
     implementation(libs.core.ktx)
     implementation(libs.appcompat.appcompat)
     implementation(libs.activity.ktx)
@@ -507,7 +533,7 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
 
-    //Compose（渐进式迁移脚手架：老 View 页面保持不变，新页面按需使用）
+    // Compose（渐进式迁移脚手架：老 View 页面保持不变，新页面按需使用）
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
@@ -524,52 +550,52 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
 
-    //google
+    // google
     implementation(libs.material)
     implementation(libs.flexbox)
     implementation(libs.gson)
 
-    //lifecycle
+    // lifecycle
     implementation(libs.lifecycle.common.java8)
     implementation(libs.lifecycle.service)
 
-    //media
+    // media
     implementation(libs.media.media)
     // For media playback using ExoPlayer
     implementation(libs.media3.exoplayer)
     // For loading data using the OkHttp network stack
     implementation(libs.media3.datasource.okhttp)
 
-    //videoPlayer
+    // videoPlayer
     implementation(libs.gsyVideoPlayer.java)
     implementation(libs.gsyVideoPlayer.exo2) {
         exclude(group = "androidx.media3", module = "media3-cast")
     }
-    //弹幕
+    // 弹幕
     implementation(libs.danmakuFlameMaster)
 
-    //Splitties
+    // Splitties
     implementation(libs.splitties.appctx)
     implementation(libs.splitties.systemservices)
     implementation(libs.splitties.views)
 
-    //room sql语句不高亮解决方法https://issuetracker.google.com/issues/234612964#comment6
+    // room sql语句不高亮解决方法https://issuetracker.google.com/issues/234612964#comment6
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     androidTestImplementation(libs.room.testing)
 
-    //liveEventBus
+    // liveEventBus
     implementation(libs.liveeventbus)
 
-    //规则相关
+    // 规则相关
     implementation(libs.jsoup)
     implementation(libs.json.path)
     implementation(libs.jsoupxpath)
     implementation(project(":modules:book"))
     implementation(project(":modules:rhino"))
 
-    //网络
+    // 网络
     implementation(libs.okhttp)
     implementation(libs.brotli.dec)
     implementation(
@@ -583,21 +609,21 @@ dependencies {
 
     implementation(libs.protobuf.javalite)
 
-    //Glide
+    // Glide
     implementation(libs.glide.glide)
     implementation(libs.glide.okhttp)
     ksp(libs.glide.ksp)
 
-    //Svg
+    // Svg
     implementation(libs.androidsvg)
-    //Glide svg plugin
+    // Glide svg plugin
     implementation(libs.glide.svg)
 
-    //webServer
+    // webServer
     implementation(libs.nanohttpd.nanohttpd)
     implementation(libs.nanohttpd.websocket)
 
-    //MCP server (Streamable HTTP)
+    // MCP server (Streamable HTTP)
     implementation(libs.mcp.sdk.server) {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
     }
@@ -608,28 +634,28 @@ dependencies {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
     }
 
-    //二维码
+    // 二维码
     implementation(libs.zxing.lite)
 
-    //颜色选择
+    // 颜色选择
     implementation(libs.colorpicker)
 
-    //压缩解压
+    // 压缩解压
     implementation(libs.libarchive)
 
-    //apache
+    // apache
     implementation(libs.commons.text)
 
-    //MarkDown
+    // MarkDown
     implementation(libs.markwon.core)
     implementation(libs.markwon.image.glide)
     implementation(libs.markwon.ext.tables)
     implementation(libs.markwon.html)
 
-    //转换繁体
+    // 转换繁体
     implementation(libs.quick.chinese.transfer.core)
 
-    //加解密类库,有些书源使用
+    // 加解密类库,有些书源使用
     implementation(libs.hutool.crypto)
     implementation(libs.bouncycastle.provider)
     implementation(libs.bouncycastle.pkix)
@@ -638,7 +664,7 @@ dependencies {
         exclude(group = "org.bouncycastle")
     }
 
-    //firebase, 崩溃统计和性能统计
+    // firebase, 崩溃统计和性能统计
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.perf)

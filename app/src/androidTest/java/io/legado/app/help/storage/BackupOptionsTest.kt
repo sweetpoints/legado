@@ -4,10 +4,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.SystemClock
-import androidx.core.net.toUri
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import org.junit.Rule
+import androidx.core.net.toUri
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,26 +19,26 @@ import io.legado.app.data.entities.Book
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.ui.config.BackupConfigFragment
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Assert.*
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BackupOptionsTest {
@@ -51,7 +50,13 @@ class BackupOptionsTest {
     private val savedLocal = HashMap(LocalConfig.all)
     private val savedIgnore = HashMap(BackupConfig.ignoreConfig)
     private val directory = File(context.cacheDir, "backup-options-${UUID.randomUUID()}")
-    private val book = Book(bookUrl = "backup-options:${UUID.randomUUID()}", name = "Backup options", author = "Test", durChapterIndex = 7)
+    private val book =
+        Book(
+            bookUrl = "backup-options:${UUID.randomUUID()}",
+            name = "Backup options",
+            author = "Test",
+            durChapterIndex = 7,
+        )
     private val requests = CopyOnWriteArrayList<String>()
     @Volatile private var upload: ByteArray? = null
     @Volatile private var failUpload = false
@@ -59,47 +64,81 @@ class BackupOptionsTest {
     private var scenario: ActivityScenario<ConfigActivity>? = null
     private val defaultArchive = File(context.externalFiles, "backup.zip")
     private var savedDefaultArchive: ByteArray? = null
-    private val server = object : NanoHTTPD("127.0.0.1", 0) {
-        override fun serve(session: IHTTPSession): Response {
-            requests += "${session.method} ${session.uri}"
-            if (failAuthorization) return newFixedLengthResponse(Response.Status.UNAUTHORIZED, "text/plain", "invalid credentials")
-            val files = HashMap<String, String>()
-            session.parseBody(files)
-            if (session.method == Method.PUT) {
-                upload = files["content"]?.let { File(it).readBytes() }
-                return newFixedLengthResponse(if (failUpload) Response.Status.INTERNAL_ERROR else Response.Status.CREATED,
-                    "text/plain", "upload")
+    private val server =
+        object : NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response {
+                requests += "${session.method} ${session.uri}"
+                if (failAuthorization)
+                    return newFixedLengthResponse(
+                        Response.Status.UNAUTHORIZED,
+                        "text/plain",
+                        "invalid credentials",
+                    )
+                val files = HashMap<String, String>()
+                session.parseBody(files)
+                if (session.method == Method.PUT) {
+                    upload = files["content"]?.let { File(it).readBytes() }
+                    return newFixedLengthResponse(
+                        if (failUpload) Response.Status.INTERNAL_ERROR else Response.Status.CREATED,
+                        "text/plain",
+                        "upload",
+                    )
+                }
+                return newFixedLengthResponse(
+                    Response.Status.OK,
+                    "application/xml",
+                    """<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>""",
+                )
             }
-            return newFixedLengthResponse(Response.Status.OK, "application/xml",
-                """<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>""")
         }
-    }
 
-    @Before fun setUp() {
+    @Before
+    fun setUp() {
         directory.mkdirs()
         savedDefaultArchive = defaultArchive.takeIf { it.exists() }?.readBytes()
         server.start()
-        preferences.edit().putString(PreferKey.backupPath, directory.path)
-            .putBoolean(PreferKey.autoBackup, true).putBoolean(PreferKey.autoBackupWebDav, false)
-            .putInt(PreferKey.autoBackupIntervalDays, 7).putBoolean(PreferKey.onlyLatestBackup, true)
+        preferences
+            .edit()
+            .putString(PreferKey.backupPath, directory.path)
+            .putBoolean(PreferKey.autoBackup, true)
+            .putBoolean(PreferKey.autoBackupWebDav, false)
+            .putInt(PreferKey.autoBackupIntervalDays, 7)
+            .putBoolean(PreferKey.onlyLatestBackup, true)
             .putString(PreferKey.webDavUrl, "http://127.0.0.1:${server.listeningPort}/")
-            .putString(PreferKey.webDavDir, "").putString(PreferKey.webDavAccount, "test")
-            .putString(PreferKey.webDavPassword, "test").commit()
+            .putString(PreferKey.webDavDir, "")
+            .putString(PreferKey.webDavAccount, "test")
+            .putString(PreferKey.webDavPassword, "test")
+            .commit()
         LocalConfig.edit().putInt("backupHelpVersion", 1).putLong("lastBackup", 0).commit()
         BackupConfig.contentKeys.forEach { BackupConfig.ignoreConfig[it] = true }
-        listOf(BackupConfig.bookshelfContentKey, BackupConfig.settingContentKey, BackupConfig.backgroundContentKey)
+        listOf(
+                BackupConfig.bookshelfContentKey,
+                BackupConfig.settingContentKey,
+                BackupConfig.backgroundContentKey,
+            )
             .forEach { BackupConfig.ignoreConfig[it] = false }
         appDb.bookDao.insert(book)
         runBlocking(Dispatchers.IO) { AppWebDav.upConfig() }
-        assertTrue("The fake WebDav must be configured before checking for zero requests", AppWebDav.isOk)
+        assertTrue(
+            "The fake WebDav must be configured before checking for zero requests",
+            AppWebDav.isOk,
+        )
         requests.clear()
     }
 
-    @After fun tearDown() {
+    @After
+    fun tearDown() {
         scenario?.close()
         appDb.bookDao.delete(book)
-        preferences.edit().clear().apply { savedPreferences.forEach { (key, value) -> putValue(key, value) } }.commit()
-        LocalConfig.edit().clear().apply { savedLocal.forEach { (key, value) -> putValue(key, value) } }.commit()
+        preferences
+            .edit()
+            .clear()
+            .apply { savedPreferences.forEach { (key, value) -> putValue(key, value) } }
+            .commit()
+        LocalConfig.edit()
+            .clear()
+            .apply { savedLocal.forEach { (key, value) -> putValue(key, value) } }
+            .commit()
         BackupConfig.ignoreConfig.clear()
         BackupConfig.ignoreConfig.putAll(savedIgnore)
         runBlocking(Dispatchers.IO) { AppWebDav.upConfig() }
@@ -108,7 +147,8 @@ class BackupOptionsTest {
         savedDefaultArchive?.let { defaultArchive.writeBytes(it) } ?: defaultArchive.delete()
     }
 
-    @Test fun manualChoiceConfirmsBeforeCreatingLocalAndWebDavArchives() {
+    @Test
+    fun manualChoiceConfirmsBeforeCreatingLocalAndWebDavArchives() {
         defaultArchive.delete()
         preferences.edit().remove(PreferKey.backupPath).commit()
         launchSettings()
@@ -125,7 +165,10 @@ class BackupOptionsTest {
         compose.onNodeWithTag("backup-destination-local").performClick()
         await { LocalConfig.lastBackup > 0 }
         assertArchive(defaultArchive)
-        assertTrue("Local choice must not check, upload or sync backgrounds: $requests", requests.isEmpty())
+        assertTrue(
+            "Local choice must not check, upload or sync backgrounds: $requests",
+            requests.isEmpty(),
+        )
         clickPreference("web_dav_backup")
         compose.onNodeWithTag("backup-destination-webdav").performClick()
         await { upload != null && !File(Backup.zipFilePath).exists() }
@@ -135,29 +178,53 @@ class BackupOptionsTest {
         assertArrayEquals(defaultArchive.readBytes(), received.readBytes())
     }
 
-    @Test fun settingsDialogKeepsTargetsIntervalAndEnablementAndMovesPasswordAboveActualPath() {
-        preferences.edit().remove(PreferKey.autoBackup).remove(PreferKey.autoBackupWebDav)
-            .remove(PreferKey.autoBackupIntervalDays).remove(PreferKey.backupPath).commit()
+    @Test
+    fun settingsDialogKeepsTargetsIntervalAndEnablementAndMovesPasswordAboveActualPath() {
+        preferences
+            .edit()
+            .remove(PreferKey.autoBackup)
+            .remove(PreferKey.autoBackupWebDav)
+            .remove(PreferKey.autoBackupIntervalDays)
+            .remove(PreferKey.backupPath)
+            .commit()
         launchSettings()
-        compose.onNodeWithTag("backup-settings-list").performScrollToNode(hasTestTag("backup-row-localPassword"))
+        compose
+            .onNodeWithTag("backup-settings-list")
+            .performScrollToNode(hasTestTag("backup-row-localPassword"))
         compose.onNodeWithTag("backup-row-localPassword").assertIsDisplayed()
-        compose.onNodeWithTag("backup-settings-list").performScrollToNode(hasTestTag("backup-row-backupUri"))
-        compose.onNodeWithTag("backup-row-backupUri").assertTextContains(context.externalFiles.absolutePath, substring = true)
+        compose
+            .onNodeWithTag("backup-settings-list")
+            .performScrollToNode(hasTestTag("backup-row-backupUri"))
+        compose
+            .onNodeWithTag("backup-row-backupUri")
+            .assertTextContains(context.externalFiles.absolutePath, substring = true)
         clickPreference("localPassword")
         compose.onNodeWithTag("backup-text").performTextReplacement("backup-options-password")
         compose.onNodeWithTag("backup-form-ok").performClick()
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
+        }
         assertEquals("backup-options-password", LocalConfig.password)
         assertFalse(preferences.contains("password"))
-        compose.onNodeWithTag("backup-settings-list").performScrollToNode(hasTestTag("backup-row-backupUri"))
-        compose.onNodeWithTag("backup-row-backupUri").assertIsDisplayed().assertTextContains(context.externalFiles.absolutePath, substring = true)
+        compose
+            .onNodeWithTag("backup-settings-list")
+            .performScrollToNode(hasTestTag("backup-row-backupUri"))
+        compose
+            .onNodeWithTag("backup-row-backupUri")
+            .assertIsDisplayed()
+            .assertTextContains(context.externalFiles.absolutePath, substring = true)
         screenshot("backup-password-and-default-directory")
         clickPreference(PreferKey.backupPath)
         compose.onNodeWithTag("backup-path-default").assertIsDisplayed()
-        compose.onNodeWithTag("backup-path-default").assertTextEquals(context.getString(R.string.default_path))
+        compose
+            .onNodeWithTag("backup-path-default")
+            .assertTextEquals(context.getString(R.string.default_path))
         screenshot("backup-default-directory-selector")
         compose.onNodeWithTag("backup-path-default").performClick()
-        compose.onNodeWithTag("backup-row-backupUri").assertIsDisplayed().assertTextContains(context.externalFiles.absolutePath, substring = true)
+        compose
+            .onNodeWithTag("backup-row-backupUri")
+            .assertIsDisplayed()
+            .assertTextContains(context.externalFiles.absolutePath, substring = true)
         clickPreference(PreferKey.autoBackup)
         assertTrue(AppConfig.autoBackup)
         assertTrue(AppConfig.autoBackupWebDav)
@@ -170,7 +237,9 @@ class BackupOptionsTest {
         assertEquals(1, AppConfig.autoBackupIntervalDays)
         compose.onNodeWithTag("backup-auto-days").performTextReplacement("7")
         compose.onNodeWithTag("backup-form-ok").performClick()
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
+        }
         assertFalse(AppConfig.autoBackupWebDav)
         assertEquals(7, AppConfig.autoBackupIntervalDays)
         scenario!!.recreate()
@@ -178,195 +247,277 @@ class BackupOptionsTest {
         screenshot("backup-auto-local-seven-days")
         compose.onNodeWithTag("backup-auto-enabled").performClick()
         compose.onNodeWithTag("backup-form-ok").performClick()
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
+        }
         assertFalse(AppConfig.autoBackup)
         clickPreference(PreferKey.autoBackup)
         compose.onNodeWithTag("backup-auto-enabled").performClick()
         compose.onNodeWithTag("backup-auto-webdav").performClick()
         compose.onNodeWithTag("backup-form-cancel").performClick()
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-form-cancel").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-form-cancel").fetchSemanticsNodes().isEmpty()
+        }
         assertFalse(AppConfig.autoBackup)
         assertFalse(AppConfig.autoBackupWebDav)
         assertEquals(7, AppConfig.autoBackupIntervalDays)
         assertTrue(requests.isEmpty())
     }
 
-    @Test fun automaticLocalBackupRespectsIntervalAndFailuresDoNotAdvanceSuccessTime() = runBlocking(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(7) + 1
-        assertFalse(Backup.shouldBackup(now))
-        assertTrue(Backup.shouldBackup(now + 1))
-        LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(6)
-        Backup.autoBackupLocked(context)
-        assertFalse(File(directory, "backup.zip").exists())
-        LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(8)
-        preferences.edit().putBoolean(PreferKey.autoBackup, false).commit()
-        Backup.autoBackupLocked(context)
-        assertFalse(File(directory, "backup.zip").exists())
-        preferences.edit().putBoolean(PreferKey.autoBackup, true).commit()
-        Backup.autoBackupLocked(context)
-        assertArchive(File(directory, "backup.zip"))
-        val firstSuccess = LocalConfig.lastBackup
-        assertTrue(firstSuccess >= now)
-        Backup.autoBackupLocked(context)
-        assertEquals(firstSuccess, LocalConfig.lastBackup)
-        assertTrue("Automatic local mode must make zero WebDav requests: $requests", requests.isEmpty())
+    @Test
+    fun automaticLocalBackupRespectsIntervalAndFailuresDoNotAdvanceSuccessTime() =
+        runBlocking(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(7) + 1
+            assertFalse(Backup.shouldBackup(now))
+            assertTrue(Backup.shouldBackup(now + 1))
+            LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(6)
+            Backup.autoBackupLocked(context)
+            assertFalse(File(directory, "backup.zip").exists())
+            LocalConfig.lastBackup = now - TimeUnit.DAYS.toMillis(8)
+            preferences.edit().putBoolean(PreferKey.autoBackup, false).commit()
+            Backup.autoBackupLocked(context)
+            assertFalse(File(directory, "backup.zip").exists())
+            preferences.edit().putBoolean(PreferKey.autoBackup, true).commit()
+            Backup.autoBackupLocked(context)
+            assertArchive(File(directory, "backup.zip"))
+            val firstSuccess = LocalConfig.lastBackup
+            assertTrue(firstSuccess >= now)
+            Backup.autoBackupLocked(context)
+            assertEquals(firstSuccess, LocalConfig.lastBackup)
+            assertTrue(
+                "Automatic local mode must make zero WebDav requests: $requests",
+                requests.isEmpty(),
+            )
 
-        val blocked = File(directory, "not-a-directory").apply { writeText("keep me") }
-        preferences.edit().putString(PreferKey.backupPath, blocked.path).commit()
-        LocalConfig.lastBackup = 123
-        assertTrue(runCatching { Backup.autoBackupLocked(context) }.isFailure)
-        assertEquals(123L, LocalConfig.lastBackup)
-        assertEquals("keep me", blocked.readText())
-        preferences.edit().putString(PreferKey.backupPath, directory.path)
-            .putBoolean(PreferKey.autoBackupWebDav, true).commit()
-        failUpload = true
-        assertTrue(runCatching { Backup.autoBackupLocked(context) }.isFailure)
-        assertArchive(File(directory, "backup.zip"))
-        assertEquals("A failed cloud upload must remain due for retry", 123L, LocalConfig.lastBackup)
-        assertTrue(requests.any { it.startsWith("PUT /backup") })
-    }
+            val blocked = File(directory, "not-a-directory").apply { writeText("keep me") }
+            preferences.edit().putString(PreferKey.backupPath, blocked.path).commit()
+            LocalConfig.lastBackup = 123
+            assertTrue(runCatching { Backup.autoBackupLocked(context) }.isFailure)
+            assertEquals(123L, LocalConfig.lastBackup)
+            assertEquals("keep me", blocked.readText())
+            preferences
+                .edit()
+                .putString(PreferKey.backupPath, directory.path)
+                .putBoolean(PreferKey.autoBackupWebDav, true)
+                .commit()
+            failUpload = true
+            assertTrue(runCatching { Backup.autoBackupLocked(context) }.isFailure)
+            assertArchive(File(directory, "backup.zip"))
+            assertEquals(
+                "A failed cloud upload must remain due for retry",
+                123L,
+                LocalConfig.lastBackup,
+            )
+            assertTrue(requests.any { it.startsWith("PUT /backup") })
+        }
 
-    @Test fun selectedCloudBackupDoesNotReportSuccessWithoutAuthorization() = runBlocking(Dispatchers.IO) {
-        failAuthorization = true
-        AppWebDav.upConfig()
-        assertFalse(AppWebDav.isOk)
-        requests.clear()
-        LocalConfig.lastBackup = 123
-        assertTrue(runCatching { Backup.backupLocked(context, directory.path, uploadWebDav = true) }.isFailure)
-        assertArchive(File(directory, "backup.zip"))
-        assertEquals(123L, LocalConfig.lastBackup)
-        assertFalse(requests.any { it.startsWith("PUT ") })
-        preferences.edit().remove(PreferKey.webDavAccount).remove(PreferKey.webDavPassword).commit()
-        AppWebDav.upConfig()
-        assertTrue(runCatching { Backup.backupLocked(context, directory.path, uploadWebDav = true) }.isFailure)
-        assertEquals(123L, LocalConfig.lastBackup)
-        Backup.backupLocked(context, directory.path, uploadWebDav = false)
-        assertTrue(LocalConfig.lastBackup > 123)
-        assertTrue(requests.isEmpty())
-    }
+    @Test
+    fun selectedCloudBackupDoesNotReportSuccessWithoutAuthorization() =
+        runBlocking(Dispatchers.IO) {
+            failAuthorization = true
+            AppWebDav.upConfig()
+            assertFalse(AppWebDav.isOk)
+            requests.clear()
+            LocalConfig.lastBackup = 123
+            assertTrue(
+                runCatching { Backup.backupLocked(context, directory.path, uploadWebDav = true) }
+                    .isFailure
+            )
+            assertArchive(File(directory, "backup.zip"))
+            assertEquals(123L, LocalConfig.lastBackup)
+            assertFalse(requests.any { it.startsWith("PUT ") })
+            preferences
+                .edit()
+                .remove(PreferKey.webDavAccount)
+                .remove(PreferKey.webDavPassword)
+                .commit()
+            AppWebDav.upConfig()
+            assertTrue(
+                runCatching { Backup.backupLocked(context, directory.path, uploadWebDav = true) }
+                    .isFailure
+            )
+            assertEquals(123L, LocalConfig.lastBackup)
+            Backup.backupLocked(context, directory.path, uploadWebDav = false)
+            assertTrue(LocalConfig.lastBackup > 123)
+            assertTrue(requests.isEmpty())
+        }
 
-    @Test fun actualArchiveRestoresAllHistoryOptionsAndBothFallbackImages() = runBlocking(Dispatchers.IO) {
-        val id = UUID.randomUUID().toString()
-        val day = File(context.externalFiles, "covers/history-day-$id.png")
-        val night = File(context.externalFiles, "covers/history-night-$id.png")
-        try {
-            for ((file, color) in listOf(day to android.graphics.Color.RED, night to android.graphics.Color.BLUE)) {
-                file.parentFile!!.mkdirs()
-                Bitmap.createBitmap(32, 48, Bitmap.Config.ARGB_8888).apply {
-                    eraseColor(color)
-                    file.outputStream().use { compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    recycle()
+    @Test
+    fun actualArchiveRestoresAllHistoryOptionsAndBothFallbackImages() =
+        runBlocking(Dispatchers.IO) {
+            val id = UUID.randomUUID().toString()
+            val day = File(context.externalFiles, "covers/history-day-$id.png")
+            val night = File(context.externalFiles, "covers/history-night-$id.png")
+            try {
+                for ((file, color) in
+                    listOf(
+                        day to android.graphics.Color.RED,
+                        night to android.graphics.Color.BLUE,
+                    )) {
+                    file.parentFile!!.mkdirs()
+                    Bitmap.createBitmap(32, 48, Bitmap.Config.ARGB_8888).apply {
+                        eraseColor(color)
+                        file.outputStream().use { compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        recycle()
+                    }
                 }
+                val dayBytes = day.readBytes()
+                val nightBytes = night.readBytes()
+                BackupConfig.ignoreConfig[BackupConfig.otherCoverContentKey] = false
+                preferences
+                    .edit()
+                    .putBoolean("enableReadRecord", false)
+                    .putBoolean("readRecordSimpleLayout", false)
+                    .putBoolean("readRecordUseDays", true)
+                    .putBoolean("readRecordShowSeconds", false)
+                    .putBoolean("readRecordFixedCard", false)
+                    // The archive must be portable across application package names and storage
+                    // roots.
+                    .putString(PreferKey.readRecordCover, "/old-install/covers/${day.name}")
+                    .putString(PreferKey.readRecordCoverDark, "/old-install/covers/${night.name}")
+                    .commit()
+                LocalConfig.edit().putInt("readRecordSort", 2).commit()
+                Backup.backupLocked(context, directory.path, uploadWebDav = false)
+                val archive = File(directory, "backup.zip")
+                ZipFile(archive).use { zip ->
+                    assertArrayEquals(
+                        dayBytes,
+                        zip.getInputStream(zip.getEntry("covers/${day.name}")).use {
+                            it.readBytes()
+                        },
+                    )
+                    assertArrayEquals(
+                        nightBytes,
+                        zip.getInputStream(zip.getEntry("covers/${night.name}")).use {
+                            it.readBytes()
+                        },
+                    )
+                }
+                day.delete()
+                night.delete()
+                preferences
+                    .edit()
+                    .putBoolean("enableReadRecord", true)
+                    .putBoolean("readRecordSimpleLayout", true)
+                    .putBoolean("readRecordUseDays", false)
+                    .putBoolean("readRecordShowSeconds", true)
+                    .putBoolean("readRecordFixedCard", true)
+                    .remove(PreferKey.readRecordCover)
+                    .remove(PreferKey.readRecordCoverDark)
+                    .commit()
+                LocalConfig.edit().putInt("readRecordSort", 0).commit()
+                Restore.restoreOrThrow(context, archive.toUri(), lanTransfer = true)
+                assertFalse(AppConfig.enableReadRecord)
+                assertFalse(AppConfig.readRecordSimpleLayout)
+                assertTrue(AppConfig.readRecordUseDays)
+                assertFalse(AppConfig.readRecordShowSeconds)
+                assertFalse(AppConfig.readRecordFixedCard)
+                assertEquals(2, LocalConfig.getInt("readRecordSort", -1))
+                assertEquals(day.path, preferences.getString(PreferKey.readRecordCover, null))
+                assertEquals(night.path, preferences.getString(PreferKey.readRecordCoverDark, null))
+                assertArrayEquals(dayBytes, day.readBytes())
+                assertArrayEquals(nightBytes, night.readBytes())
+                val legacy = File(directory, "legacy-history")
+                writePreferenceSnapshot(context, legacy.path, "config") {}
+                Restore.restoreLocked(legacy.path)
+                assertTrue(AppConfig.readRecordFixedCard)
+                assertFalse(preferences.contains(PreferKey.readRecordCover))
+                assertFalse(preferences.contains(PreferKey.readRecordCoverDark))
+            } finally {
+                day.delete()
+                night.delete()
             }
-            val dayBytes = day.readBytes()
-            val nightBytes = night.readBytes()
-            BackupConfig.ignoreConfig[BackupConfig.otherCoverContentKey] = false
-            preferences.edit().putBoolean("enableReadRecord", false)
-                .putBoolean("readRecordSimpleLayout", false).putBoolean("readRecordUseDays", true)
-                .putBoolean("readRecordShowSeconds", false).putBoolean("readRecordFixedCard", false)
-                // The archive must be portable across application package names and storage roots.
-                .putString(PreferKey.readRecordCover, "/old-install/covers/${day.name}")
-                .putString(PreferKey.readRecordCoverDark, "/old-install/covers/${night.name}").commit()
-            LocalConfig.edit().putInt("readRecordSort", 2).commit()
+        }
+
+    @Test
+    fun actualArchiveRestoresExplicitAutoSettingsAndLegacyMissingKeysUseDefaults() =
+        runBlocking(Dispatchers.IO) {
+            preferences.edit().putBoolean(PreferKey.autoBackup, false).commit()
+            Backup.backupLocked(context, directory.path, uploadWebDav = false)
+            val archive = File(directory, "backup.zip")
+            assertArchive(archive)
+            preferences
+                .edit()
+                .putBoolean(PreferKey.autoBackup, true)
+                .putBoolean(PreferKey.autoBackupWebDav, true)
+                .putInt(PreferKey.autoBackupIntervalDays, 1)
+                .commit()
+            Restore.restoreOrThrow(context, archive.toUri(), lanTransfer = true)
+            assertFalse(AppConfig.autoBackup)
+            assertFalse(AppConfig.autoBackupWebDav)
+            assertEquals(7, AppConfig.autoBackupIntervalDays)
+            val legacy = File(directory, "legacy").apply { mkdirs() }
+            Restore.restoreLocked(legacy.path)
+            assertFalse("A backup without settings must leave them alone", AppConfig.autoBackup)
+            assertEquals(7, AppConfig.autoBackupIntervalDays)
+            writePreferenceSnapshot(context, legacy.path, "config") {}
+            Restore.restoreLocked(legacy.path)
+            assertTrue(AppConfig.autoBackup)
+            assertTrue(AppConfig.autoBackupWebDav)
+            assertEquals(1, AppConfig.autoBackupIntervalDays)
+            assertTrue(requests.isEmpty())
+        }
+
+    @Test
+    fun actualArchivePreservesAllReadAloudControlsIncludingExplicitFalse() =
+        runBlocking(Dispatchers.IO) {
+            val values =
+                linkedMapOf<String, Any>(
+                    PreferKey.readAloudControlsRealtime to false,
+                    PreferKey.readAloudControlsPause to false,
+                    PreferKey.readAloudControlsPosition to false,
+                    PreferKey.readAloudControlsAutoHide to true,
+                    PreferKey.readAloudControlsDrag to true,
+                    PreferKey.readAloudControlsDock to true,
+                    PreferKey.readAloudControlsWidth to 185,
+                    PreferKey.readAloudControlsSize to 60,
+                    PreferKey.readAloudControlsOpacity to 75,
+                    PreferKey.readAloudControlsThreshold to 250,
+                    PreferKey.readAloudControlsX to .25f,
+                    PreferKey.readAloudControlsY to .65f,
+                )
+            preferences
+                .edit()
+                .apply { values.forEach { (key, value) -> putValue(key, value) } }
+                .commit()
+            values.keys.forEach { assertTrue(BackupConfig.keyIsNotIgnore(it)) }
             Backup.backupLocked(context, directory.path, uploadWebDav = false)
             val archive = File(directory, "backup.zip")
             ZipFile(archive).use { zip ->
-                assertArrayEquals(dayBytes, zip.getInputStream(zip.getEntry("covers/${day.name}")).use { it.readBytes() })
-                assertArrayEquals(nightBytes, zip.getInputStream(zip.getEntry("covers/${night.name}")).use { it.readBytes() })
+                val config =
+                    zip.getInputStream(zip.getEntry("config.xml")).bufferedReader().use {
+                        it.readText()
+                    }
+                values.keys.forEach { assertTrue("Archive contains $it", config.contains(it)) }
             }
-            day.delete()
-            night.delete()
-            preferences.edit().putBoolean("enableReadRecord", true)
-                .putBoolean("readRecordSimpleLayout", true).putBoolean("readRecordUseDays", false)
-                .putBoolean("readRecordShowSeconds", true).putBoolean("readRecordFixedCard", true)
-                .remove(PreferKey.readRecordCover).remove(PreferKey.readRecordCoverDark).commit()
-            LocalConfig.edit().putInt("readRecordSort", 0).commit()
+            preferences.edit().apply { values.keys.forEach { remove(it) } }.commit()
             Restore.restoreOrThrow(context, archive.toUri(), lanTransfer = true)
-            assertFalse(AppConfig.enableReadRecord)
-            assertFalse(AppConfig.readRecordSimpleLayout)
-            assertTrue(AppConfig.readRecordUseDays)
-            assertFalse(AppConfig.readRecordShowSeconds)
-            assertFalse(AppConfig.readRecordFixedCard)
-            assertEquals(2, LocalConfig.getInt("readRecordSort", -1))
-            assertEquals(day.path, preferences.getString(PreferKey.readRecordCover, null))
-            assertEquals(night.path, preferences.getString(PreferKey.readRecordCoverDark, null))
-            assertArrayEquals(dayBytes, day.readBytes())
-            assertArrayEquals(nightBytes, night.readBytes())
-            val legacy = File(directory, "legacy-history")
-            writePreferenceSnapshot(context, legacy.path, "config") { }
-            Restore.restoreLocked(legacy.path)
-            assertTrue(AppConfig.readRecordFixedCard)
-            assertFalse(preferences.contains(PreferKey.readRecordCover))
-            assertFalse(preferences.contains(PreferKey.readRecordCoverDark))
-        } finally {
-            day.delete()
-            night.delete()
+            values.forEach { (key, value) ->
+                assertEquals("Restored $key with its original type", value, preferences.all[key])
+            }
+            assertTrue(requests.isEmpty())
         }
-    }
-
-    @Test fun actualArchiveRestoresExplicitAutoSettingsAndLegacyMissingKeysUseDefaults() = runBlocking(Dispatchers.IO) {
-        preferences.edit().putBoolean(PreferKey.autoBackup, false).commit()
-        Backup.backupLocked(context, directory.path, uploadWebDav = false)
-        val archive = File(directory, "backup.zip")
-        assertArchive(archive)
-        preferences.edit().putBoolean(PreferKey.autoBackup, true).putBoolean(PreferKey.autoBackupWebDav, true)
-            .putInt(PreferKey.autoBackupIntervalDays, 1).commit()
-        Restore.restoreOrThrow(context, archive.toUri(), lanTransfer = true)
-        assertFalse(AppConfig.autoBackup)
-        assertFalse(AppConfig.autoBackupWebDav)
-        assertEquals(7, AppConfig.autoBackupIntervalDays)
-        val legacy = File(directory, "legacy").apply { mkdirs() }
-        Restore.restoreLocked(legacy.path)
-        assertFalse("A backup without settings must leave them alone", AppConfig.autoBackup)
-        assertEquals(7, AppConfig.autoBackupIntervalDays)
-        writePreferenceSnapshot(context, legacy.path, "config") { }
-        Restore.restoreLocked(legacy.path)
-        assertTrue(AppConfig.autoBackup)
-        assertTrue(AppConfig.autoBackupWebDav)
-        assertEquals(1, AppConfig.autoBackupIntervalDays)
-        assertTrue(requests.isEmpty())
-    }
-
-    @Test fun actualArchivePreservesAllReadAloudControlsIncludingExplicitFalse() = runBlocking(Dispatchers.IO) {
-        val values = linkedMapOf<String, Any>(
-            PreferKey.readAloudControlsRealtime to false,
-            PreferKey.readAloudControlsPause to false,
-            PreferKey.readAloudControlsPosition to false,
-            PreferKey.readAloudControlsAutoHide to true,
-            PreferKey.readAloudControlsDrag to true,
-            PreferKey.readAloudControlsDock to true,
-            PreferKey.readAloudControlsWidth to 185,
-            PreferKey.readAloudControlsSize to 60,
-            PreferKey.readAloudControlsOpacity to 75,
-            PreferKey.readAloudControlsThreshold to 250,
-            PreferKey.readAloudControlsX to .25f,
-            PreferKey.readAloudControlsY to .65f,
-        )
-        preferences.edit().apply { values.forEach { (key, value) -> putValue(key, value) } }.commit()
-        values.keys.forEach { assertTrue(BackupConfig.keyIsNotIgnore(it)) }
-        Backup.backupLocked(context, directory.path, uploadWebDav = false)
-        val archive = File(directory, "backup.zip")
-        ZipFile(archive).use { zip ->
-            val config = zip.getInputStream(zip.getEntry("config.xml")).bufferedReader().use { it.readText() }
-            values.keys.forEach { assertTrue("Archive contains $it", config.contains(it)) }
-        }
-        preferences.edit().apply { values.keys.forEach { remove(it) } }.commit()
-        Restore.restoreOrThrow(context, archive.toUri(), lanTransfer = true)
-        values.forEach { (key, value) -> assertEquals("Restored $key with its original type", value, preferences.all[key]) }
-        assertTrue(requests.isEmpty())
-    }
 
     private fun launchSettings() {
-        scenario = ActivityScenario.launch(Intent(context, ConfigActivity::class.java)
-            .putExtra("configTag", ConfigTag.BACKUP_CONFIG))
+        scenario =
+            ActivityScenario.launch(
+                Intent(context, ConfigActivity::class.java)
+                    .putExtra("configTag", ConfigTag.BACKUP_CONFIG)
+            )
     }
 
     private fun clickPreference(key: String) {
         val actual = if (key == PreferKey.backupPath) "backupUri" else key
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-settings-list").fetchSemanticsNodes().isNotEmpty() }
-        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("backup-task-stop").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithTag("backup-settings-list").performScrollToNode(hasTestTag("backup-row-$actual"))
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-settings-list").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(timeoutMillis = 10000) {
+            compose.onAllNodesWithTag("backup-task-stop").fetchSemanticsNodes().isEmpty()
+        }
+        compose
+            .onNodeWithTag("backup-settings-list")
+            .performScrollToNode(hasTestTag("backup-row-$actual"))
         compose.onNodeWithTag("backup-row-$actual").performClick()
         compose.waitForIdle()
     }
@@ -374,9 +525,12 @@ class BackupOptionsTest {
     private fun assertArchive(file: File) {
         assertTrue("Actual archive missing: $file", file.isFile && file.length() > 0)
         ZipFile(file).use { zip ->
-            val books = zip.getInputStream(checkNotNull(zip.getEntry("bookshelf.json"))).bufferedReader().use {
-                GSON.fromJsonArray<Book>(it.readText()).getOrThrow()
-            }
+            val books =
+                zip.getInputStream(checkNotNull(zip.getEntry("bookshelf.json")))
+                    .bufferedReader()
+                    .use {
+                        GSON.fromJsonArray<Book>(it.readText()).getOrThrow()
+                    }
             assertEquals(7, books.single { it.bookUrl == book.bookUrl }.durChapterIndex)
             assertNotNull(zip.getEntry("config.xml"))
         }
@@ -402,7 +556,9 @@ class BackupOptionsTest {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
                 assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-        } finally { image.recycle() }
+        } finally {
+            image.recycle()
+        }
     }
 }
 

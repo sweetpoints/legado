@@ -2,8 +2,8 @@ package io.legado.app.help.storage
 
 import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
-import android.net.Uri
 import android.graphics.Typeface
+import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.JsonElement
 import io.legado.app.BuildConfig
@@ -22,11 +22,10 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.data.entities.Cache
 import io.legado.app.data.entities.Cookie
 import io.legado.app.data.entities.DictRule
-import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.HighlightRule
+import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.ReadRecord
-import io.legado.app.data.entities.mergeRestoredReadRecord
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
@@ -34,6 +33,8 @@ import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
 import io.legado.app.data.entities.TxtTocRule
+import io.legado.app.data.entities.mergeRestoredReadRecord
+import io.legado.app.data.file.installFontFile
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppCacheManager
 import io.legado.app.help.DirectLinkUpload
@@ -49,11 +50,10 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.lib.theme.WallpaperTheme
-import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
+import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.service.AutoTaskScheduler
-import io.legado.app.data.file.installFontFile
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
@@ -71,6 +71,9 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.openInputStream
 import io.legado.app.utils.toastOnUi
+import java.io.File
+import java.io.FileInputStream
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -79,9 +82,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
-import java.io.File
-import java.io.FileInputStream
-import java.util.UUID
 
 internal fun parseCookieBackup(json: String): List<Cookie> {
     return GSONStrict.fromJsonArray<JsonElement>(json).getOrThrow().map { element ->
@@ -94,13 +94,14 @@ internal fun parseCookieBackup(json: String): List<Cookie> {
     }
 }
 
-private val runtimeSourceCachePrefixes = arrayOf(
-    "v_",
-    "userInfo_",
-    "loginHeader_",
-    "sourceVariable_",
-    "infoMap_",
-)
+private val runtimeSourceCachePrefixes =
+    arrayOf(
+        "v_",
+        "userInfo_",
+        "loginHeader_",
+        "sourceVariable_",
+        "infoMap_",
+    )
 
 internal fun isRuntimeSourceCacheKey(key: String): Boolean {
     return runtimeSourceCachePrefixes.any { prefix ->
@@ -114,53 +115,61 @@ internal fun parseRuntimeSourceCacheBackup(json: String): List<Cache> {
         require(element.isJsonObject)
         val objectElement = element.asJsonObject
         val keyElement = objectElement.get("key")
-        require(keyElement != null && keyElement.isJsonPrimitive && keyElement.asJsonPrimitive.isString)
+        require(
+            keyElement != null && keyElement.isJsonPrimitive && keyElement.asJsonPrimitive.isString
+        )
         val key = keyElement.asString
         require(isRuntimeSourceCacheKey(key))
 
         val valueElement = objectElement.get("value")
         require(
-            valueElement != null && (valueElement.isJsonNull ||
-                (valueElement.isJsonPrimitive && valueElement.asJsonPrimitive.isString))
+            valueElement != null &&
+                (valueElement.isJsonNull ||
+                    (valueElement.isJsonPrimitive && valueElement.asJsonPrimitive.isString))
         )
         val deadlineElement = objectElement.get("deadline")
         require(
-            deadlineElement != null && deadlineElement.isJsonPrimitive &&
+            deadlineElement != null &&
+                deadlineElement.isJsonPrimitive &&
                 deadlineElement.asJsonPrimitive.isNumber
         )
-        val deadline = deadlineElement.asJsonPrimitive.asString.toLongOrNull()
-            ?: throw IllegalArgumentException("deadline must be an integer")
+        val deadline =
+            deadlineElement.asJsonPrimitive.asString.toLongOrNull()
+                ?: throw IllegalArgumentException("deadline must be an integer")
         require(deadline >= 0L)
-        latestByKey[key] = Cache(
-            key = key,
-            value = if (valueElement.isJsonNull) null else valueElement.asString,
-            deadline = deadline,
-        )
+        latestByKey[key] =
+            Cache(
+                key = key,
+                value = if (valueElement.isJsonNull) null else valueElement.asString,
+                deadline = deadline,
+            )
     }
     return latestByKey.values.toList()
 }
 
-/**
- * 恢复
- */
+/** 恢复 */
 object Restore {
 
     private const val TAG = "Restore"
 
     suspend fun restore(context: Context, uri: Uri): Unit = backupRestoreMutex.withLock {
         LogUtils.d(TAG, "开始恢复备份 uri:$uri")
-        kotlin.runCatching {
-            extractBackup(context, uri)
-        }.onFailure {
-            AppLog.put("复制解压文件出错\n${it.localizedMessage}", it)
-            return
-        }
-        kotlin.runCatching {
-            restoreUnpacked(Backup.backupPath)
-        }.onFailure {
-            appCtx.toastOnUi("恢复备份出错\n${it.localizedMessage}")
-            AppLog.put("恢复备份出错\n${it.localizedMessage}", it)
-        }
+        kotlin
+            .runCatching {
+                extractBackup(context, uri)
+            }
+            .onFailure {
+                AppLog.put("复制解压文件出错\n${it.localizedMessage}", it)
+                return
+            }
+        kotlin
+            .runCatching {
+                restoreUnpacked(Backup.backupPath)
+            }
+            .onFailure {
+                appCtx.toastOnUi("恢复备份出错\n${it.localizedMessage}")
+                AppLog.put("恢复备份出错\n${it.localizedMessage}", it)
+            }
     }
 
     suspend fun restoreOrThrow(
@@ -169,11 +178,12 @@ object Restore {
         lanTransfer: Boolean = false,
     ) = backupRestoreMutex.withLock {
         LogUtils.d(TAG, "开始恢复备份 uri:$uri")
-        val restorePath = if (lanTransfer) {
-            File(context.cacheDir, "lan_backup/restore/${UUID.randomUUID()}").absolutePath
-        } else {
-            Backup.backupPath
-        }
+        val restorePath =
+            if (lanTransfer) {
+                File(context.cacheDir, "lan_backup/restore/${UUID.randomUUID()}").absolutePath
+            } else {
+                Backup.backupPath
+            }
         try {
             extractBackup(context, uri, restorePath)
             if (lanTransfer) {
@@ -228,38 +238,43 @@ object Restore {
         val backupRoot = File(path)
         val restoredPreferences = readPreferenceSnapshot(appCtx, path, "config")
         val restoredVideoPreferences = readPreferenceSnapshot(appCtx, path, "videoConfig")
-        val restoredCookies = if (!lanTransfer && !BackupConfig.ignoreCookies) {
-            File(path, BackupConfig.cookieFileName).takeIf { it.exists() }?.let { file ->
-                if (password.isNullOrBlank()) {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.cookie_backup_password_required)
-                    )
-                }
-                parseCookieBackup(aes.decryptStr(file.readText()))
+        val restoredCookies =
+            if (!lanTransfer && !BackupConfig.ignoreCookies) {
+                File(path, BackupConfig.cookieFileName)
+                    .takeIf { it.exists() }
+                    ?.let { file ->
+                        if (password.isNullOrBlank()) {
+                            throw NoStackTraceException(
+                                appCtx.getString(R.string.cookie_backup_password_required)
+                            )
+                        }
+                        parseCookieBackup(aes.decryptStr(file.readText()))
+                    }
+            } else {
+                null
             }
-        } else {
-            null
-        }
-        val restoredRuntimeSourceCaches = if (!lanTransfer &&
-            !BackupConfig.ignoreSourceVariables
-        ) {
-            File(path, BackupConfig.runtimeSourceCacheFileName).takeIf { it.exists() }?.let { file ->
-                if (password.isNullOrBlank()) {
-                    throw NoStackTraceException(
-                        appCtx.getString(R.string.source_variables_backup_password_required)
-                    )
-                }
-                val raw = file.readText()
-                val json = if (raw.isJsonArray()) {
-                    raw
-                } else {
-                    aes.decryptStr(raw)
-                }
-                parseRuntimeSourceCacheBackup(json)
+        val restoredRuntimeSourceCaches =
+            if (!lanTransfer && !BackupConfig.ignoreSourceVariables) {
+                File(path, BackupConfig.runtimeSourceCacheFileName)
+                    .takeIf { it.exists() }
+                    ?.let { file ->
+                        if (password.isNullOrBlank()) {
+                            throw NoStackTraceException(
+                                appCtx.getString(R.string.source_variables_backup_password_required)
+                            )
+                        }
+                        val raw = file.readText()
+                        val json =
+                            if (raw.isJsonArray()) {
+                                raw
+                            } else {
+                                aes.decryptStr(raw)
+                            }
+                        parseRuntimeSourceCacheBackup(json)
+                    }
+            } else {
+                null
             }
-        } else {
-            null
-        }
         val restoredAutoTasks = fileToListT<AutoTaskRule>(path, "autoTask.json")
         val restoredBookUrls = hashSetOf<String>()
         fileToListT<Book>(path, "bookshelf.json")?.let {
@@ -267,12 +282,14 @@ object Restore {
                 if (lanTransfer) book.variable = null
                 book.upType()
                 book.normalizeLegacyPersistedCover()
-                book.customCoverUrl = book.customCoverUrl?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
-                }
-                book.persistedCoverUrl = book.persistedCoverUrl?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
-                }
+                book.customCoverUrl =
+                    book.customCoverUrl?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
+                book.persistedCoverUrl =
+                    book.persistedCoverUrl?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
             }
             it.filter { book -> book.isLocal }
                 .forEach { book ->
@@ -308,38 +325,44 @@ object Restore {
             appDb.bookmarkDao.insert(*it.toTypedArray())
         }
         fileToListT<BookHighlight>(path, "highlight.json")?.let { highlights ->
-            kotlin.runCatching {
-                applyLegacyHighlightStyles(File(path, "highlight.json").readText(), highlights)
-                applyLegacyHighlightOwners(highlights)
-                appDb.bookHighlightDao.insert(*highlights.toTypedArray())
-            }.onFailure {
-                AppLog.put("恢复高亮出错\n${it.localizedMessage}", it)
-            }
+            kotlin
+                .runCatching {
+                    applyLegacyHighlightStyles(File(path, "highlight.json").readText(), highlights)
+                    applyLegacyHighlightOwners(highlights)
+                    appDb.bookHighlightDao.insert(*highlights.toTypedArray())
+                }
+                .onFailure {
+                    AppLog.put("恢复高亮出错\n${it.localizedMessage}", it)
+                }
         }
         fileToListT<HighlightRule>(path, "highlightRule.json")?.let { rules ->
-            kotlin.runCatching {
-                appDb.highlightRuleDao.replaceAll(rules.map(HighlightRule::normalizeForRestore))
-            }.onFailure {
-                AppLog.put("恢复高亮规则出错\n${it.localizedMessage}", it)
-            }
+            kotlin
+                .runCatching {
+                    appDb.highlightRuleDao.replaceAll(rules.map(HighlightRule::normalizeForRestore))
+                }
+                .onFailure {
+                    AppLog.put("恢复高亮规则出错\n${it.localizedMessage}", it)
+                }
         }
         fileToListT<BookGroup>(path, "bookGroup.json")?.let { groups ->
             groups.forEach { group ->
-                group.cover = group.cover?.let { coverPath ->
-                    remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
-                }
+                group.cover =
+                    group.cover?.let { coverPath ->
+                        remapRestoredCoverPath(coverPath, backupRoot, appCtx.externalFiles)
+                    }
             }
             appDb.bookGroupDao.insert(*groups.toTypedArray())
         }
         fileToListT<BookSource>(path, "bookSource.json")?.let {
             appDb.bookSourceDao.insert(*it.toTypedArray())
-        } ?: run {
-            val bookSourceFile = File(path, "bookSource.json")
-            if (bookSourceFile.exists()) {
-                val json = bookSourceFile.readText()
-                ImportOldData.importOldSource(json)
-            }
         }
+            ?: run {
+                val bookSourceFile = File(path, "bookSource.json")
+                if (bookSourceFile.exists()) {
+                    val json = bookSourceFile.readText()
+                    ImportOldData.importOldSource(json)
+                }
+            }
         fileToListT<RssSource>(path, "rssSources.json")?.let {
             appDb.rssSourceDao.insert(*it.toTypedArray())
         }
@@ -366,168 +389,230 @@ object Restore {
             appDb.dictRuleDao.insert(*it.toTypedArray())
         }
         fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
-            appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
+            appDb.keyboardAssistsDao.deleteAll() // 先删除所有,保证和备份数据一样
             appDb.keyboardAssistsDao.insert(*it.toTypedArray())
         }
         fileToListT<ReadRecord>(path, "readRecord.json")?.let {
             it.forEach { readRecord ->
                 // Older backups omitted the device id; treat them as local records.
-                val normalizedRecord = if (readRecord.deviceId.isBlank()) {
-                    readRecord.copy(deviceId = androidId)
-                } else {
-                    readRecord
-                }
-                val restoredRecord = normalizedRecord.copy(coverUrl = remapReadRecordCover(
-                    normalizedRecord.coverUrl?.let { remapRestoredCoverPath(it, File(path), appCtx.externalFiles) },
-                    File(path), appCtx.externalFiles,
-                ))
+                val normalizedRecord =
+                    if (readRecord.deviceId.isBlank()) {
+                        readRecord.copy(deviceId = androidId)
+                    } else {
+                        readRecord
+                    }
+                val restoredRecord =
+                    normalizedRecord.copy(
+                        coverUrl =
+                            remapReadRecordCover(
+                                normalizedRecord.coverUrl?.let {
+                                    remapRestoredCoverPath(it, File(path), appCtx.externalFiles)
+                                },
+                                File(path),
+                                appCtx.externalFiles,
+                            )
+                    )
                 appDb.runInTransaction {
-                    val current = appDb.readRecordDao.getRecord(restoredRecord.deviceId, restoredRecord.bookName, restoredRecord.author)
-                    appDb.readRecordDao.insert(mergeRestoredReadRecord(
-                        current, restoredRecord, restoredRecord.deviceId == androidId,
-                    ))
+                    val current =
+                        appDb.readRecordDao.getRecord(
+                            restoredRecord.deviceId,
+                            restoredRecord.bookName,
+                            restoredRecord.author,
+                        )
+                    appDb.readRecordDao.insert(
+                        mergeRestoredReadRecord(
+                            current,
+                            restoredRecord,
+                            restoredRecord.deviceId == androidId,
+                        )
+                    )
                 }
             }
         }
-        File(path, "servers.json").takeIf {
-            !lanTransfer && it.exists()
-        }?.runCatching {
-            var json = readText()
-            if (!json.isJsonArray()) {
-                json = aes.decryptStr(json)
+        File(path, "servers.json")
+            .takeIf {
+                !lanTransfer && it.exists()
             }
-            GSON.fromJsonArray<Server>(json).getOrNull()?.let {
-                appDb.serverDao.insert(*it.toTypedArray())
+            ?.runCatching {
+                var json = readText()
+                if (!json.isJsonArray()) {
+                    json = aes.decryptStr(json)
+                }
+                GSON.fromJsonArray<Server>(json).getOrNull()?.let {
+                    appDb.serverDao.insert(*it.toTypedArray())
+                }
             }
-        }?.onFailure {
-            AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
-        }
-        restoredCookies?.filter { cookie -> cookie.url.isNotBlank() }?.forEach { cookie ->
-            if ('|' in cookie.url) {
-                appDb.cookieDao.insert(cookie)
-            } else {
-                CookieStore.restoreCookie(cookie.url, cookie.cookie)
+            ?.onFailure {
+                AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
             }
-        }
-        restoredRuntimeSourceCaches?.takeIf { it.isNotEmpty() }?.let { caches ->
-            // REPLACE updates matching keys while leaving local-only runtime entries intact.
-            appDb.cacheDao.insert(*caches.toTypedArray())
-            AppCacheManager.clearSourceVariables()
-        }
-        File(path, DirectLinkUpload.ruleFileName).takeIf {
-            !lanTransfer && it.exists()
-        }?.runCatching {
-            val json = readText()
-            ACache.get(cacheDir = false).put(DirectLinkUpload.ruleFileName, json)
-        }?.onFailure {
-            AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
-        }
-        //恢复主题配置
-        File(path, ThemeConfig.configFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            FileUtils.delete(ThemeConfig.configFilePath)
-            copyTo(File(ThemeConfig.configFilePath))
-            ThemeConfig.upConfig()
-        }?.onFailure {
-            AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
-        }
-        File(path, BookCover.configFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            val json = readText()
-            BookCover.saveCoverRule(json)
-        }?.onFailure {
-            AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
-        }
+        restoredCookies
+            ?.filter { cookie -> cookie.url.isNotBlank() }
+            ?.forEach { cookie ->
+                if ('|' in cookie.url) {
+                    appDb.cookieDao.insert(cookie)
+                } else {
+                    CookieStore.restoreCookie(cookie.url, cookie.cookie)
+                }
+            }
+        restoredRuntimeSourceCaches
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { caches ->
+                // REPLACE updates matching keys while leaving local-only runtime entries intact.
+                appDb.cacheDao.insert(*caches.toTypedArray())
+                AppCacheManager.clearSourceVariables()
+            }
+        File(path, DirectLinkUpload.ruleFileName)
+            .takeIf {
+                !lanTransfer && it.exists()
+            }
+            ?.runCatching {
+                val json = readText()
+                ACache.get(cacheDir = false).put(DirectLinkUpload.ruleFileName, json)
+            }
+            ?.onFailure {
+                AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
+            }
+        // 恢复主题配置
+        File(path, ThemeConfig.configFileName)
+            .takeIf {
+                it.exists()
+            }
+            ?.runCatching {
+                FileUtils.delete(ThemeConfig.configFilePath)
+                copyTo(File(ThemeConfig.configFilePath))
+                ThemeConfig.upConfig()
+            }
+            ?.onFailure {
+                AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
+            }
+        File(path, BookCover.configFileName)
+            .takeIf {
+                it.exists()
+            }
+            ?.runCatching {
+                val json = readText()
+                BookCover.saveCoverRule(json)
+            }
+            ?.onFailure {
+                AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
+            }
         if (!BackupConfig.ignoreReadConfig) {
-            //恢复阅读界面配置
-            File(path, ReadBookConfig.configFileName).takeIf {
-                it.exists()
-            }?.runCatching {
-                FileUtils.delete(ReadBookConfig.configFilePath)
-                copyTo(File(ReadBookConfig.configFilePath))
-                ReadBookConfig.initConfigs()
-            }?.onFailure {
-                AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
-            }
-            File(path, ReadBookConfig.shareConfigFileName).takeIf {
-                it.exists()
-            }?.runCatching {
-                FileUtils.delete(ReadBookConfig.shareConfigFilePath)
-                copyTo(File(ReadBookConfig.shareConfigFilePath))
-                ReadBookConfig.initShareConfig()
-            }?.onFailure {
-                AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
-            }
+            // 恢复阅读界面配置
+            File(path, ReadBookConfig.configFileName)
+                .takeIf {
+                    it.exists()
+                }
+                ?.runCatching {
+                    FileUtils.delete(ReadBookConfig.configFilePath)
+                    copyTo(File(ReadBookConfig.configFilePath))
+                    ReadBookConfig.initConfigs()
+                }
+                ?.onFailure {
+                    AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
+                }
+            File(path, ReadBookConfig.shareConfigFileName)
+                .takeIf {
+                    it.exists()
+                }
+                ?.runCatching {
+                    FileUtils.delete(ReadBookConfig.shareConfigFilePath)
+                    copyTo(File(ReadBookConfig.shareConfigFilePath))
+                    ReadBookConfig.initShareConfig()
+                }
+                ?.onFailure {
+                    AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
+                }
         }
-        //AppWebDav.downBgs()
+        // AppWebDav.downBgs()
         restoredPreferences?.let { map ->
             val edit = appCtx.defaultSharedPreferences.edit()
 
             map.forEach { (key, value) ->
-                if (BackupConfig.keyIsNotIgnore(key) &&
-                    (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
+                if (
+                    BackupConfig.keyIsNotIgnore(key) &&
+                        (!lanTransfer || key !in lanTransferIgnoredPrefKeys)
                 ) {
                     when (key) {
-                        "readRecordSort" -> (value as? Int)?.let {
-                            LocalConfig.edit().putInt(key, it.coerceIn(0, 2)).apply()
-                        }
+                        "readRecordSort" ->
+                            (value as? Int)?.let {
+                                LocalConfig.edit().putInt(key, it.coerceIn(0, 2)).apply()
+                            }
                         PreferKey.readRecordCover,
                         PreferKey.readRecordCoverDark -> {
-                            val coverPath = (value as? String)?.let {
-                                remapRestoredCoverPath(it, File(path), appCtx.externalFiles)
-                            }
-                            if (coverPath == null) edit.remove(key) else edit.putString(key, coverPath)
+                            val coverPath =
+                                (value as? String)?.let {
+                                    remapRestoredCoverPath(it, File(path), appCtx.externalFiles)
+                                }
+                            if (coverPath == null) edit.remove(key)
+                            else edit.putString(key, coverPath)
                         }
                         PreferKey.coverFont -> {
                             val fontBackup = File(path, BookCover.fontBackupFileName)
-                            val fontPath = if (value is String && value.isNotBlank() && fontBackup.isFile) {
-                                fontBackup.inputStream().use { input ->
-                                    installFontFile(input, BookCover.fontBackupFileName,
-                                        File(appCtx.externalFiles, "font")) {
-                                        runCatching { Typeface.createFromFile(it) }.isSuccess
-                                    }.absolutePath
-                                }
-                            } else (value as? String).orEmpty().takeIf { File(it).isFile }.orEmpty()
+                            val fontPath =
+                                if (value is String && value.isNotBlank() && fontBackup.isFile) {
+                                    fontBackup.inputStream().use { input ->
+                                        installFontFile(
+                                                input,
+                                                BookCover.fontBackupFileName,
+                                                File(appCtx.externalFiles, "font"),
+                                            ) {
+                                                runCatching { Typeface.createFromFile(it) }
+                                                    .isSuccess
+                                            }
+                                            .absolutePath
+                                    }
+                                } else
+                                    (value as? String)
+                                        .orEmpty()
+                                        .takeIf { File(it).isFile }
+                                        .orEmpty()
                             edit.putString(key, fontPath)
                         }
                         PreferKey.webDavPassword -> {
-                            kotlin.runCatching {
-                                aes.decryptStr(value.toString())
-                            }.getOrNull()?.let {
-                                edit.putString(key, it)
-                            } ?: let {
-                                if (appCtx.getPrefString(PreferKey.webDavPassword)
-                                        .isNullOrBlank()
-                                ) {
-                                    edit.putString(key, value.toString())
+                            kotlin
+                                .runCatching {
+                                    aes.decryptStr(value.toString())
                                 }
-                            }
+                                .getOrNull()
+                                ?.let {
+                                    edit.putString(key, it)
+                                }
+                                ?: let {
+                                    if (
+                                        appCtx
+                                            .getPrefString(PreferKey.webDavPassword)
+                                            .isNullOrBlank()
+                                    ) {
+                                        edit.putString(key, value.toString())
+                                    }
+                                }
                         }
 
-                        else -> when (value) {
-                            is Int -> edit.putInt(key, value)
-                            is Boolean -> edit.putBoolean(key, value)
-                            is Long -> edit.putLong(key, value)
-                            is Float -> edit.putFloat(key, value)
-                            is String -> edit.putString(key, value)
-                            is Set<*> -> {
-                                @Suppress("UNCHECKED_CAST")
-                                edit.putStringSet(key, value as Set<String>)
+                        else ->
+                            when (value) {
+                                is Int -> edit.putInt(key, value)
+                                is Boolean -> edit.putBoolean(key, value)
+                                is Long -> edit.putLong(key, value)
+                                is Float -> edit.putFloat(key, value)
+                                is String -> edit.putString(key, value)
+                                is Set<*> -> {
+                                    @Suppress("UNCHECKED_CAST")
+                                    edit.putStringSet(key, value as Set<String>)
+                                }
                             }
-                        }
                     }
                 }
             }
-            if (PreferKey.bookshelfReadProgressMode !in map &&
-                PreferKey.showBookshelfReadProgress in map
+            if (
+                PreferKey.bookshelfReadProgressMode !in map &&
+                    PreferKey.showBookshelfReadProgress in map
             ) {
-                val legacyEnabled = when (val value = map[PreferKey.showBookshelfReadProgress]) {
-                    is Boolean -> value
-                    is String -> value.toBooleanStrictOrNull()
-                    else -> null
-                }
+                val legacyEnabled =
+                    when (val value = map[PreferKey.showBookshelfReadProgress]) {
+                        is Boolean -> value
+                        is String -> value.toBooleanStrictOrNull()
+                        else -> null
+                    }
                 legacyEnabled?.let { enabled ->
                     edit.putInt(
                         PreferKey.bookshelfReadProgressMode,
@@ -539,21 +624,21 @@ object Restore {
                     )
                 }
             }
-            if (!BackupConfig.ignoreReadConfig &&
-                PreferKey.showReadTitleChapterNameOnly !in map
-            ) {
+            if (!BackupConfig.ignoreReadConfig && PreferKey.showReadTitleChapterNameOnly !in map) {
                 edit.putBoolean(PreferKey.showReadTitleChapterNameOnly, false)
             }
             if (PreferKey.showExploreCategories !in map) {
                 edit.putBoolean(PreferKey.showExploreCategories, false)
             }
-            if (BackupConfig.keyIsNotIgnore(PreferKey.coverTitleAdaptive) &&
-                PreferKey.coverTitleAdaptive !in map
+            if (
+                BackupConfig.keyIsNotIgnore(PreferKey.coverTitleAdaptive) &&
+                    PreferKey.coverTitleAdaptive !in map
             ) {
                 edit.putBoolean(PreferKey.coverTitleAdaptive, true)
             }
-            if (BackupConfig.keyIsNotIgnore(PreferKey.coverCustomFontSize) &&
-                PreferKey.coverCustomFontSize !in map
+            if (
+                BackupConfig.keyIsNotIgnore(PreferKey.coverCustomFontSize) &&
+                    PreferKey.coverCustomFontSize !in map
             ) {
                 edit.putBoolean(PreferKey.coverCustomFontSize, false)
             }
@@ -562,8 +647,10 @@ object Restore {
             }
             if (PreferKey.myMoreItems !in map) edit.remove(PreferKey.myMoreItems)
             if (PreferKey.autoBackup !in map) edit.putBoolean(PreferKey.autoBackup, true)
-            if (PreferKey.autoBackupWebDav !in map) edit.putBoolean(PreferKey.autoBackupWebDav, true)
-            if (PreferKey.autoBackupIntervalDays !in map) edit.putInt(PreferKey.autoBackupIntervalDays, 1)
+            if (PreferKey.autoBackupWebDav !in map)
+                edit.putBoolean(PreferKey.autoBackupWebDav, true)
+            if (PreferKey.autoBackupIntervalDays !in map)
+                edit.putInt(PreferKey.autoBackupIntervalDays, 1)
             if ("readRecordSimpleLayout" !in map) edit.putBoolean("readRecordSimpleLayout", true)
             if ("readRecordUseDays" !in map) edit.putBoolean("readRecordUseDays", false)
             if ("readRecordShowSeconds" !in map) edit.putBoolean("readRecordShowSeconds", true)
@@ -586,8 +673,7 @@ object Restore {
                         is Float -> putFloat(key, value)
                         is String -> putString(key, value)
                         is Set<*> -> {
-                            @Suppress("UNCHECKED_CAST")
-                            putStringSet(key, value as Set<String>)
+                            @Suppress("UNCHECKED_CAST") putStringSet(key, value as Set<String>)
                         }
                     }
                 }
@@ -603,20 +689,20 @@ object Restore {
             autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, 46)
         }
         val coverRestoreResult =
-            restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "covers")
-            .onFailure {
+            restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "covers").onFailure {
                 AppLog.put("恢复封面图片出错\n${it.localizedMessage}", it)
             }
-        val backgroundRestoreResult = if (!BackupConfig.ignoreReadConfig) {
-            restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "bg")
-                .onFailure {
+        val backgroundRestoreResult =
+            if (!BackupConfig.ignoreReadConfig) {
+                restoreBackupMediaDirectory(File(path), appCtx.externalFiles, "bg").onFailure {
                     AppLog.put("恢复阅读背景图片出错\n${it.localizedMessage}", it)
                 }
-        } else {
-            null
-        }
+            } else {
+                null
+            }
         coverRestoreResult.getOrThrow()
-        restoreBackupMediaDirectory(File(path), appCtx.externalFiles, readRecordCoverDirectory).getOrThrow()
+        restoreBackupMediaDirectory(File(path), appCtx.externalFiles, readRecordCoverDirectory)
+            .getOrThrow()
         backgroundRestoreResult?.getOrThrow()
         if (!restoredAutoTasks.isNullOrEmpty()) {
             appDb.autoTaskRuleDao.upsert(*restoredAutoTasks.toTypedArray())
@@ -655,19 +741,24 @@ object Restore {
 
     private fun applyLegacyHighlightOwners(highlights: List<BookHighlight>) {
         highlights.forEach { highlight ->
-            val bookUrl = highlight.bookUrl.ifBlank {
-                appDb.bookDao.getBook(highlight.bookName, highlight.bookAuthor)?.bookUrl.orEmpty()
-            }
-            val chapterUrl = highlight.chapterUrl.ifBlank {
-                appDb.bookChapterDao.getChapter(bookUrl, highlight.chapterIndex)
-                    ?.takeIf { it.title == highlight.chapterName }
-                    ?.url
-                    .orEmpty()
-            }
+            val bookUrl =
+                highlight.bookUrl.ifBlank {
+                    appDb.bookDao
+                        .getBook(highlight.bookName, highlight.bookAuthor)
+                        ?.bookUrl
+                        .orEmpty()
+                }
+            val chapterUrl =
+                highlight.chapterUrl.ifBlank {
+                    appDb.bookChapterDao
+                        .getChapter(bookUrl, highlight.chapterIndex)
+                        ?.takeIf { it.title == highlight.chapterName }
+                        ?.url
+                        .orEmpty()
+                }
             highlight.bindLegacyOwner(bookUrl, chapterUrl)
         }
     }
-
 }
 
 internal fun applyLegacyHighlightStyles(json: String, highlights: List<BookHighlight>) {

@@ -27,8 +27,7 @@ abstract class BaseComposeActivity(
         }
     }
 
-    @Composable
-    abstract fun Content(savedInstanceState: Bundle?)
+    @Composable abstract fun Content(savedInstanceState: Bundle?)
 
     open fun onComposeCreated(savedInstanceState: Bundle?) = Unit
 }

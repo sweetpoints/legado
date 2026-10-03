@@ -6,12 +6,12 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
-import splitties.init.appCtx
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import splitties.init.appCtx
 
 data class AppLogEntry(
     val id: Long,
@@ -101,5 +101,4 @@ object AppLog {
             put(message, throwable)
         }
     }
-
 }

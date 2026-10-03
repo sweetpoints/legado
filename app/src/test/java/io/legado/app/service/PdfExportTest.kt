@@ -1,12 +1,12 @@
 package io.legado.app.service
 
 import io.legado.app.exception.NoStackTraceException
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class PdfExportTest {
 
@@ -23,9 +23,8 @@ class PdfExportTest {
 
     @Test
     fun `mixed content keeps image order and duplicate occurrences`() {
-        val blocks = splitPdfContentBlocks(
-            "text-a<img src=\"image-a\">text-b<img src=\"image-a\">text-c"
-        )
+        val blocks =
+            splitPdfContentBlocks("text-a<img src=\"image-a\">text-b<img src=\"image-a\">text-c")
 
         assertEquals(
             listOf(
@@ -33,25 +32,26 @@ class PdfExportTest {
                 PdfContentBlock.Image("image-a"),
                 PdfContentBlock.Text("text-b"),
                 PdfContentBlock.Image("image-a"),
-                PdfContentBlock.Text("text-c")
+                PdfContentBlock.Text("text-c"),
             ),
-            blocks
+            blocks,
         )
     }
 
     @Test
     fun `image book keeps raw image order and duplicates while ignoring text`() {
-        val blocks = imagePdfContentBlocks(
-            "ignored<img src=\"image-a\">more<img src=\"image-a\">",
-            isVolume = false
-        )
+        val blocks =
+            imagePdfContentBlocks(
+                "ignored<img src=\"image-a\">more<img src=\"image-a\">",
+                isVolume = false,
+            )
 
         assertEquals(
             listOf(
                 PdfContentBlock.Image("image-a"),
-                PdfContentBlock.Image("image-a")
+                PdfContentBlock.Image("image-a"),
             ),
-            blocks
+            blocks,
         )
     }
 
@@ -94,13 +94,13 @@ class PdfExportTest {
                     operations.add("restore:$it")
                     "target"
                 },
-                deleteBackup = { operations.add("delete:$it") }
+                deleteBackup = { operations.add("delete:$it") },
             )
         }
 
         assertEquals(
             listOf("backup:target", "activate", "restore:backup", "delete:backup"),
-            operations
+            operations,
         )
     }
 
@@ -108,24 +108,25 @@ class PdfExportTest {
     fun `failed restore keeps the backup available`() {
         val operations = arrayListOf<String>()
 
-        val error = assertThrows(IllegalStateException::class.java) {
-            replaceStagedExport(
-                current = "target",
-                backupCurrent = {
-                    operations.add("backup:$it")
-                    "backup"
-                },
-                activateStaged = {
-                    operations.add("activate")
-                    null
-                },
-                restoreCurrent = {
-                    operations.add("restore:$it")
-                    null
-                },
-                deleteBackup = { operations.add("delete:$it") }
-            )
-        }
+        val error =
+            assertThrows(IllegalStateException::class.java) {
+                replaceStagedExport(
+                    current = "target",
+                    backupCurrent = {
+                        operations.add("backup:$it")
+                        "backup"
+                    },
+                    activateStaged = {
+                        operations.add("activate")
+                        null
+                    },
+                    restoreCurrent = {
+                        operations.add("restore:$it")
+                        null
+                    },
+                    deleteBackup = { operations.add("delete:$it") },
+                )
+            }
 
         assertEquals(listOf("backup:target", "activate", "restore:backup"), operations)
         assertEquals(1, error.suppressed.size)
@@ -133,12 +134,15 @@ class PdfExportTest {
 
     @Test
     fun `pdf export stays wired to the cache screen and closes documents`() {
-        val service = projectFile(
-            "src/main/java/io/legado/app/service/ExportBookService.kt"
-        ).readText().replace("\r\n", "\n")
+        val service =
+            projectFile("src/main/java/io/legado/app/service/ExportBookService.kt")
+                .readText()
+                .replace("\r\n", "\n")
         val webDav = projectFile("src/main/java/io/legado/app/help/AppWebDav.kt").readText()
-        val exportPdf = service.substringAfter("private suspend fun exportPdf(fileDoc")
-            .substringBefore("private fun decodePdfBitmap")
+        val exportPdf =
+            service
+                .substringAfter("private suspend fun exportPdf(fileDoc")
+                .substringBefore("private fun decodePdfBitmap")
 
         assertEquals("pdf", io.legado.app.data.repository.BookCachePreferences(type = 2).exportType)
         assertTrue(service.contains("\"pdf\" -> exportPdf(exportConfig.path, book)"))
@@ -165,19 +169,25 @@ class PdfExportTest {
         assertTrue(exportPdf.contains("finally {"))
         assertTrue(exportPdf.contains("pdf.close()"))
 
-        val imageBlock = exportPdf.substringAfter("is PdfContentBlock.Image -> {")
-            .substringBefore("\n                                }")
+        val imageBlock =
+            exportPdf
+                .substringAfter("is PdfContentBlock.Image -> {")
+                .substringBefore("\n                                }")
         assertTrue(imageBlock.contains("currentCoroutineContext().ensureActive()"))
         assertTrue(imageBlock.contains("image.exists() && drawImage(image.absolutePath)"))
 
-        val installPdf = service.substringAfter("private fun installPdfExport(")
-            .substringBefore("private fun cleanupExportFile")
+        val installPdf =
+            service
+                .substringAfter("private fun installPdfExport(")
+                .substringBefore("private fun cleanupExportFile")
         assertTrue(installPdf.contains("renameExportFile(staging, filename)"))
         assertTrue(installPdf.contains("renameExportFile(it, filename)"))
         assertFalse(service.contains("private fun copyExportFile"))
 
-        val renameExport = service.substringAfter("private fun renameExportFile(")
-            .substringBefore("private fun installPdfExport")
+        val renameExport =
+            service
+                .substringAfter("private fun renameExportFile(")
+                .substringBefore("private fun installPdfExport")
         assertTrue(renameExport.contains("runCatching"))
         assertTrue(renameExport.contains("DocumentsContract.renameDocument("))
         assertTrue(renameExport.contains("FileDoc.fromUri(renamedUri, false)"))
@@ -185,7 +195,6 @@ class PdfExportTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .first { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
     }
 }

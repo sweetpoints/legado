@@ -1,8 +1,8 @@
 package io.legado.app.base
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BackgroundImageThreadingTest {
 

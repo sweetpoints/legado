@@ -6,10 +6,18 @@ import org.junit.Before
 import org.junit.Test
 
 class AppLogStateTest {
-    @Before fun setUp() { AppLog.clear() }
-    @After fun tearDown() { AppLog.clear() }
+    @Before
+    fun setUp() {
+        AppLog.clear()
+    }
 
-    @Test fun bothWritePathsPublishNewestFirstAndKeepLegacySnapshots() {
+    @After
+    fun tearDown() {
+        AppLog.clear()
+    }
+
+    @Test
+    fun bothWritePathsPublishNewestFirstAndKeepLegacySnapshots() {
         val error = IllegalStateException("test failure")
         AppLog.put("saved")
         AppLog.putNotSave("memory", error)
@@ -19,7 +27,8 @@ class AppLogStateTest {
         assertEquals(entries.map { Triple(it.time, it.message, it.throwable) }, AppLog.logs)
     }
 
-    @Test fun existingIdsSurvivePrependingAndAreNotReusedAfterClear() {
+    @Test
+    fun existingIdsSurvivePrependingAndAreNotReusedAfterClear() {
         AppLog.putNotSave("same message")
         val first = AppLog.entries.value.single()
         AppLog.putNotSave("same message")
@@ -33,7 +42,8 @@ class AppLogStateTest {
         assertTrue(AppLog.entries.value.single().id > second.id)
     }
 
-    @Test fun boundedStorageDoesNotMutatePreviouslyPublishedLists() {
+    @Test
+    fun boundedStorageDoesNotMutatePreviouslyPublishedLists() {
         AppLog.putNotSave("first")
         val previousSnapshot = AppLog.entries.value
         repeat(120) { AppLog.putNotSave("entry $it") }
@@ -45,7 +55,8 @@ class AppLogStateTest {
         assertEquals(listOf("first"), previousSnapshot.map { it.message })
     }
 
-    @Test fun nullMessagesDoNotChangeTheCurrentSnapshot() {
+    @Test
+    fun nullMessagesDoNotChangeTheCurrentSnapshot() {
         AppLog.putNotSave("retained")
         val before = AppLog.entries.value
         AppLog.put(null)

@@ -21,18 +21,18 @@ abstract class BaseComposeDialogFragment : BaseDialogFragment(0) {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View = ComposeView(requireContext()).apply {
-        id = R.id.compose_dialog_content
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent { LegadoComposeTheme { Content() } }
-    }
+    ): View =
+        ComposeView(requireContext()).apply {
+            id = R.id.compose_dialog_content
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent { LegadoComposeTheme { Content() } }
+        }
 
     final override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         onComposeCreated(savedInstanceState)
     }
 
-    @Composable
-    protected abstract fun Content()
+    @Composable protected abstract fun Content()
 
     protected open fun onComposeCreated(savedInstanceState: Bundle?) = Unit
 }
