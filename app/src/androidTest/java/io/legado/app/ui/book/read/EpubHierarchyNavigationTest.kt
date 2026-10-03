@@ -23,14 +23,17 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListAdapter
 import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.model.book.toc.TocListItem
+import io.legado.app.ui.book.toc.TocChapterRow
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.HtmlFormatter
 import org.junit.Assert.*
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.semantics.SemanticsProperties
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -38,6 +41,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class EpubHierarchyNavigationTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val titles = listOf("第一卷", "第一章", "第一节", "第二卷", "第一章", "番外 一", "第三卷", "第一章", "番外 二", "番外 三")
@@ -136,7 +140,7 @@ class EpubHierarchyNavigationTest {
             val identities = identities(book)
             try {
                 ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
-                    await { rows()?.map { it.chapter.title } == titles }
+                    await { rows()?.map { it.title } == titles }
                     assertEquals(depths, rows()!!.map { it.depth })
                     assertVisibleIndent(-1, 0); assertVisibleIndent(-2, 1); assertVisibleIndent(-3, 2)
                     scrollToTop()
@@ -145,25 +149,25 @@ class EpubHierarchyNavigationTest {
                     await { rows()?.size == 9 }
                     clickNode(-1, arrow = true)
                     await { rows()?.size == 8 }
-                    assertTrue((rows()!!.first() as TocListItem.Volume).containsCurrentChapter)
-                    assertTrue(rows()!!.filter { it.chapter.title.startsWith("番外") }.all { it.depth == 0 })
+                    assertTrue(rows()!!.first().current)
+                    assertTrue(rows()!!.filter { it.title.startsWith("番外") }.all { it.depth == 0 })
                     screenshot("epub-hierarchy-collapsed")
                     search(scenario, "第一节")
-                    await { rows()?.map { it.chapter.title } == titles.take(3) }
+                    await { rows()?.map { it.title } == titles.take(3) }
                     screenshot("epub-hierarchy-search")
                     closeSearch(scenario)
                     await { rows()?.size == 8 }
-                    scenario.onActivity { assertTrue(it.findViewById<View>(R.id.tv_current_chapter_info).performClick()) }
+                    compose.onNodeWithTag("toc-chapter-current-info").performClick()
                     await { rows()?.size == 10 }
-                    assertTrue(rows()!!.filterIsInstance<TocListItem.Volume>().take(2).all { !it.collapsed })
+                    assertTrue(rows()!!.filter { it.volume }.take(2).all { !it.collapsed })
                     screenshot("epub-hierarchy-current-revealed")
                     reverse(scenario)
                     val reversedTitles = listOf(9, 8, 6, 7, 5, 3, 4, 0, 1, 2).map(titles::get)
-                    await { rows()?.map { it.chapter.title } == reversedTitles }
+                    await { rows()?.map { it.title } == reversedTitles }
                     scrollToTop()
                     screenshot("epub-hierarchy-reversed")
                     scenario.recreate()
-                    await { rows()?.map { it.chapter.title } == reversedTitles }
+                    await { rows()?.map { it.title } == reversedTitles }
                     assertEquals(2, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
                     assertEquals(1, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
                     assertEquals(identities, identities(book))
@@ -196,16 +200,16 @@ class EpubHierarchyNavigationTest {
             appDb.bookDao.update(book)
             val identities = identities(book)
             ActivityScenario.launch<TocActivity>(tocIntent(book)).use { scenario ->
-                await { rows()?.map { it.chapter.title } == listOf("Next", "Container", "First", "Second", "Alias") }
-                assertNull(rows()!![1].readingChapter)
-                assertEquals(1, rows()!![3].readingChapter!!.index)
+                await { rows()?.map { it.title } == listOf("Next", "Container", "First", "Second", "Alias") }
+                assertNull(rows()!![1].readingIndex)
+                assertEquals(1, rows()!![3].readingIndex)
                 clickNode(-1)
-                await { rows()?.map { it.chapter.title } == listOf("Next", "Container") }
+                await { rows()?.map { it.title } == listOf("Next", "Container") }
                 scenario.onActivity { assertFalse(it.isFinishing) }
                 clickNode(-1)
                 await { rows()?.size == 5 }
                 reverse(scenario)
-                await { rows()?.map { it.chapter.title } == listOf("Container", "First", "Alias", "Second", "Next") }
+                await { rows()?.map { it.title } == listOf("Container", "First", "Alias", "Second", "Next") }
                 assertEquals(identities, identities(book))
                 assertEquals(7, appDb.bookDao.getBook(book.bookUrl)!!.durChapterPos)
                 screenshot("epub-hierarchy-resource-less-parent")
@@ -260,50 +264,28 @@ class EpubHierarchyNavigationTest {
     private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
     private fun readerIntent(book: Book) = Intent(context, ReadBookActivity::class.java).putExtra("bookUrl", book.bookUrl)
 
-    private fun rows(): List<TocListItem>? {
-        var items: List<TocListItem>? = null
-        instrumentation.runOnMainSync { items = (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.toList() }
-        return items
-    }
-
-    private fun recycler(): RecyclerView? = ActivityLifecycleMonitorRegistry.getInstance()
+    private fun chapterHost(): ChapterListFragment? = ActivityLifecycleMonitorRegistry.getInstance()
         .getActivitiesInStage(Stage.RESUMED).filterIsInstance<TocActivity>().firstOrNull()
         ?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()?.firstOrNull()
-        ?.view?.findViewById(R.id.recycler_view)
-
+    private fun rows(): List<TocChapterRow>? {
+        var items: List<TocChapterRow>? = null
+        instrumentation.runOnMainSync { items = chapterHost()?.model?.state?.value?.takeIf { it.loaded }?.rows }
+        return items
+    }
     private fun clickNode(index: Int, arrow: Boolean = false) {
-        await {
-            var clicked = false
-            instrumentation.runOnMainSync {
-                val list = recycler() ?: return@runOnMainSync
-                val adapter = list.adapter as? ChapterListAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.chapter.index == index }
-                if (position < 0) return@runOnMainSync
-                list.scrollToPosition(position)
-                val row = list.findViewHolderForAdapterPosition(position)?.itemView ?: return@runOnMainSync
-                clicked = (if (arrow) row.findViewById<View>(R.id.end_actions) else row).performClick()
-            }
-            clicked
-        }
+        await { rows()?.any { it.index == index } == true }
+        val rows = rows()!!; val position = rows.indexOfFirst { it.index == index }; val key = rows[position].key
+        compose.onNodeWithTag("toc-chapter-list").performScrollToIndex(position)
+        compose.onNodeWithTag(if (arrow) "toc-chapter-toggle-$key" else "toc-chapter-row-$key").performClick()
     }
-
     private fun assertVisibleIndent(index: Int, depth: Int) {
-        await {
-            var ready = false
-            instrumentation.runOnMainSync {
-                val list = recycler() ?: return@runOnMainSync
-                val adapter = list.adapter as? ChapterListAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.chapter.index == index }
-                list.scrollToPosition(position)
-                val row = list.findViewHolderForAdapterPosition(position)?.itemView ?: return@runOnMainSync
-                assertEquals(12.dpToPx() + depth * 10.dpToPx(), row.findViewById<View>(R.id.tv_chapter_item).paddingStart)
-                ready = true
-            }
-            ready
-        }
+        val rows = rows()!!; val position = rows.indexOfFirst { it.index == index }; val key = rows[position].key
+        compose.onNodeWithTag("toc-chapter-list").performScrollToIndex(position)
+        val left = compose.onNodeWithTag("toc-chapter-list").fetchSemanticsNode().boundsInRoot.left
+        val titleLeft = compose.onNodeWithTag("toc-chapter-title-$key", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        assertEquals((12.dpToPx() + depth * 10.dpToPx()).toFloat(), titleLeft - left, 1f)
     }
-
-    private fun scrollToTop() = instrumentation.runOnMainSync { recycler()?.scrollToPosition(0) }
+    private fun scrollToTop() = compose.onNodeWithTag("toc-chapter-top").performClick()
     private fun reverse(scenario: ActivityScenario<TocActivity>) = scenario.onActivity { activity ->
         val menu = PopupMenu(activity, activity.window.decorView).menu
         activity.onCompatOptionsItemSelected(menu.add(0, R.id.menu_reverse_toc, 0, "Reverse"))
@@ -325,14 +307,7 @@ class EpubHierarchyNavigationTest {
     }
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
-        await {
-            var settled = false
-            instrumentation.runOnMainSync {
-                val list = recycler()
-                settled = list == null || (!list.isComputingLayout && list.itemAnimator?.isRunning != true)
-            }
-            settled
-        }
+        compose.waitForIdle()
         SystemClock.sleep(100)
         instrumentation.waitForIdleSync()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())

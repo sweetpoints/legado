@@ -23,7 +23,7 @@ data class TocChapterRow(val key: String, val index: Int, val readingIndex: Int?
     val volume: Boolean = false, val collapsed: Boolean = false, val canToggle: Boolean = false,
     val chapterCount: Int = 0, val matchedCount: Int? = null, val matchedSelf: Boolean = false,
     val current: Boolean = false, val tag: String? = null, val words: String? = null, val locked: Boolean = false,
-    val cached: Boolean = true, val pdfPage: Int? = null)
+    val cached: Boolean = true, val pdfPage: Int? = null, val parentVolumeIndex: Int? = null)
 data class TocChapterOpen(val key: String, val longPress: Boolean, val owner: String, val nonce: String = UUID.randomUUID().toString())
 data class TocChapterDelivery(val navigation: TocChapterNavigation? = null, val title: String? = null)
 data class TocChapterState(val loaded: Boolean = false, val rows: List<TocChapterRow> = emptyList(), val currentInfo: String = "",
@@ -155,7 +155,7 @@ class TocChapterViewModel(private val repository: TocChapterRepository, private 
                     volume = volume != null, collapsed = volume?.collapsed == true, canToggle = volume?.canToggle == true,
                     chapterCount = volume?.chapterCount ?: 0, matchedCount = volume?.matchedCount, matchedSelf = volume?.matchedSelf == true,
                     current = item.readingChapter?.index == book.durChapterIndex || volume?.containsCurrentChapter == true,
-                    tag = chapter.tag, words = chapter.wordCount.takeIf { params.countWords && volume == null }, locked = chapter.isVip && !chapter.isPay && volume == null,
+                    parentVolumeIndex = (item as? TocListItem.Chapter)?.parentVolumeIndex, tag = chapter.tag, words = chapter.wordCount.takeIf { params.countWords && volume == null }, locked = chapter.isVip && !chapter.isPay && volume == null,
                     cached = book.isLocal || volume != null || if (book.isAudio) !cacheReady || AudioCacheKey.from(chapter) in cache.audio else chapter.getFileName() in cache.files)
             }
         mutable.value = state.value.copy(rows = rows, loaded = loaded, pdf = pdf != null)

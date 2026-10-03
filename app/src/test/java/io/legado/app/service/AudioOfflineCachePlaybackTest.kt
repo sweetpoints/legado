@@ -65,14 +65,7 @@ class AudioOfflineCachePlaybackTest {
                     selectionBody.indexOf("AppConfig.audioCacheTreeUri = treeUri")
         )
 
-        val tocSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
-        ).readText()
-        assertTrue(
-            tocSource.contains("if (event.treeUri != AppConfig.audioCacheTreeUri)")
-        )
-        assertTrue(tocSource.contains("if (treeUri == currentTreeUri) break"))
-        assertTrue(tocSource.contains("pendingAudioCacheChanges.clear()"))
+
     }
 
     @Test

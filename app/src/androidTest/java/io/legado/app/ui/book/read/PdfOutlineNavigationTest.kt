@@ -35,12 +35,13 @@ import io.legado.app.ui.book.manga.recyclerview.MangaAdapter
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.toc.ChapterListFragment
-import io.legado.app.ui.book.toc.ChapterListAdapter
-import io.legado.app.ui.book.toc.PdfOutlineAdapter
 import io.legado.app.ui.book.toc.TocActivity
 import io.legado.app.ui.widget.TitleBar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -48,6 +49,7 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class PdfOutlineNavigationTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
@@ -205,9 +207,8 @@ class PdfOutlineNavigationTest {
                 waitUntil {
                     var fallback = false
                     instrumentation.runOnMainSync {
-                        val adapter = outlineRecycler()?.adapter
-                        fallback = adapter is ChapterListAdapter &&
-                            adapter.getItems().map { it.chapter.index } == listOf(1, 0)
+                        val state = chapterHost()?.model?.state?.value
+                        fallback = state?.loaded == true && !state.pdf && state.rows.map { it.index } == listOf(1, 0)
                     }
                     fallback
                 }
@@ -253,18 +254,11 @@ class PdfOutlineNavigationTest {
     }
 
     private fun clickOutline(title: String) {
-        waitUntil {
-            var clicked = false
-            instrumentation.runOnMainSync {
-                val recycler = outlineRecycler() ?: return@runOnMainSync
-                val adapter = recycler.adapter as? PdfOutlineAdapter ?: return@runOnMainSync
-                val position = adapter.getItems().indexOfFirst { it.node.title == title }
-                if (position < 0) return@runOnMainSync
-                recycler.scrollToPosition(position)
-                clicked = recycler.findViewHolderForAdapterPosition(position)?.itemView?.performClick() == true
-            }
-            clicked
-        }
+        waitUntil { outlineRows()?.contains(title) == true }
+        var position = -1; var key = ""
+        instrumentation.runOnMainSync { val rows = chapterHost()!!.model.state.value.rows; position = rows.indexOfFirst { it.title == title }; key = rows[position].key }
+        compose.onNodeWithTag("toc-chapter-list").performScrollToIndex(position)
+        compose.onNodeWithTag("toc-chapter-row-$key").performClick()
     }
 
     private fun screenshot(name: String) {
@@ -277,18 +271,14 @@ class PdfOutlineNavigationTest {
         } finally { bitmap.recycle() }
     }
 
-    private fun outlineRecycler(): RecyclerView? {
+    private fun chapterHost(): ChapterListFragment? {
         val toc = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
             .filterIsInstance<TocActivity>().firstOrNull() ?: return null
-        return toc.supportFragmentManager.fragments.filterIsInstance<ChapterListFragment>()
-            .firstOrNull()?.view?.findViewById(R.id.recycler_view)
+        return toc.supportFragmentManager.fragments.filterIsInstance<ChapterListFragment>().firstOrNull()
     }
-
     private fun outlineRows(): List<String>? {
         var rows: List<String>? = null
-        instrumentation.runOnMainSync {
-            rows = (outlineRecycler()?.adapter as? PdfOutlineAdapter)?.getItems()?.map { it.node.title }
-        }
+        instrumentation.runOnMainSync { rows = chapterHost()?.model?.state?.value?.takeIf { it.loaded && it.pdf }?.rows?.map { it.title } }
         return rows
     }
 

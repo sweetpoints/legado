@@ -24,17 +24,22 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
-import io.legado.app.ui.book.toc.ChapterListAdapter
 import io.legado.app.ui.book.toc.ChapterListFragment
 import io.legado.app.ui.book.toc.TocActivity
-import io.legado.app.model.book.toc.TocListItem
+import io.legado.app.ui.book.toc.TocChapterRow
 import org.junit.Assert.*
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class TocReverseNavigationTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
@@ -45,7 +50,7 @@ class TocReverseNavigationTest {
                 for (reversed in listOf(true, false)) {
                     reverse()
                     val expected = if (reversed) fixture.titles.reversed() else fixture.titles
-                    await { rows()?.map { it.chapter.title } == expected }
+                    await { rows()?.map { it.title } == expected }
                     instrumentation.waitForIdleSync()
                     screenshot("toc-flat-reversed-$reversed")
                     assertEquals("Displayed titles must match the new row identities without reopening", expected, visibleTitles())
@@ -65,29 +70,29 @@ class TocReverseNavigationTest {
         val titles = listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "A1", "A2", "Volume B", "B1", "B2")
         fixture(titles, setOf(3, 6), current = 7, expanded = false).use { fixture ->
             ActivityScenario.launch<TocActivity>(tocIntent(fixture.book)).use { scenario ->
-                await { rows()?.map { it.chapter.title } == listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "Volume B", "B1", "B2") }
+                await { rows()?.map { it.title } == listOf("Prologue 1", "Prologue 2", "Prologue 3", "Volume A", "Volume B", "B1", "B2") }
                 reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Volume B" }
+                await { rows()?.firstOrNull()?.title == "Volume B" }
                 screenshot("toc-current-volume-reversed")
                 val current = appDb.bookDao.getBook(fixture.book.bookUrl)!!
                 assertEquals("Current chapter identity must survive reversal", "B1",
                     appDb.bookChapterDao.getChapter(current.bookUrl, current.durChapterIndex)!!.title)
                 assertEquals(147, current.durChapterPos)
                 val expected = listOf("Volume B", "B2", "B1", "Volume A", "Prologue 3", "Prologue 2", "Prologue 1")
-                assertEquals(expected, rows()!!.map { it.chapter.title })
+                assertEquals(expected, rows()!!.map { it.title })
                 val items = rows()!!
-                val volumeB = items.filterIsInstance<TocListItem.Volume>().single { it.chapter.title == "Volume B" }
-                assertTrue(volumeB.containsCurrentChapter)
+                val volumeB = items.filter { it.volume }.single { it.title == "Volume B" }
+                assertTrue(volumeB.current)
                 assertFalse(volumeB.collapsed)
-                items.filterIsInstance<TocListItem.Chapter>().forEach { item ->
-                    assertEquals(item.chapter.title,
-                        if (item.chapter.title.startsWith("Prologue")) null else volumeB.chapter.index,
+                items.filter { !it.volume }.forEach { item ->
+                    assertEquals(item.title,
+                        if (item.title.startsWith("Prologue")) null else volumeB.index,
                         item.parentVolumeIndex)
                 }
                 scenario.recreate()
-                await { rows()?.map { it.chapter.title } == expected }
+                await { rows()?.map { it.title } == expected }
                 reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Prologue 1" }
+                await { rows()?.firstOrNull()?.title == "Prologue 1" }
                 val restored = appDb.bookDao.getBook(current.bookUrl)!!
                 assertEquals("B1", appDb.bookChapterDao.getChapter(restored.bookUrl, restored.durChapterIndex)!!.title)
                 assertEquals(147, restored.durChapterPos)
@@ -128,14 +133,14 @@ class TocReverseNavigationTest {
                         snapshot.appendLine("readChapter=" + ReadBook.curTextChapter?.chapter?.bookUrl)
                         snapshot.appendLine("readerTotal=" + ReadBook.book?.totalChapterNum)
                         snapshot.appendLine("fragments=" + activity?.supportFragmentManager?.fragments?.map { it.javaClass.simpleName + ":" + it.lifecycle.currentState })
-                        snapshot.appendLine("adapter=" + recycler()?.adapter?.javaClass?.simpleName)
-                        snapshot.appendLine("rows=" + (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.map { it.chapter.index to it.chapter.title })
+                        snapshot.appendLine("composeLoaded=" + chapterHost()?.model?.state?.value?.loaded)
+                        snapshot.appendLine("rows=" + chapterHost()?.model?.state?.value?.rows?.map { it.index to it.title })
                     }
                     File(context.getExternalFilesDir("ui-regression"), "toc-reader-open-state.txt").writeText(snapshot.toString())
                     screenshot("toc-reader-open-state")
                 }
                 reverse()
-                await { rows()?.firstOrNull()?.chapter?.title == "Chapter 5" }
+                await { rows()?.firstOrNull()?.title == "Chapter 5" }
                 instrumentation.runOnMainSync { toc()!!.onBackPressedDispatcher.onBackPressed() }
                 await {
                     var readerResumed = false
@@ -225,23 +230,15 @@ class TocReverseNavigationTest {
     private fun tocIntent(book: Book) = Intent(context, TocActivity::class.java).putExtra("bookUrl", book.bookUrl)
     private fun toc() = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
         .filterIsInstance<TocActivity>().firstOrNull()
-    private fun recycler() = toc()?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()
-        ?.firstOrNull()?.view?.findViewById<RecyclerView>(R.id.recycler_view)
-    private fun rows(): List<TocListItem>? {
-        var result: List<TocListItem>? = null
-        instrumentation.runOnMainSync { result = (recycler()?.adapter as? ChapterListAdapter)?.getItems()?.toList() }
+    private fun chapterHost() = toc()?.supportFragmentManager?.fragments?.filterIsInstance<ChapterListFragment>()?.firstOrNull()
+    private fun rows(): List<TocChapterRow>? {
+        var result: List<TocChapterRow>? = null
+        instrumentation.runOnMainSync { result = chapterHost()?.model?.state?.value?.takeIf { it.loaded }?.rows }
         return result
     }
-    private fun visibleTitles(): List<String>? {
-        var result: List<String>? = null
-        instrumentation.runOnMainSync {
-            val list = recycler() ?: return@runOnMainSync
-            result = (0 until (list.adapter?.itemCount ?: 0)).mapNotNull { position ->
-                list.findViewHolderForAdapterPosition(position)?.itemView?.findViewById<TextView>(R.id.tv_chapter_name)?.text?.toString()
-            }
-        }
-        return result
-    }
+    private fun visibleTitles(): List<String>? = compose.onAllNodes(SemanticsMatcher("chapter titles") {
+        it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("toc-chapter-title-") == true
+    }, useUnmergedTree = true).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }.takeIf { it.isNotEmpty() }
     private fun reverse() = instrumentation.runOnMainSync {
         val activity = checkNotNull(toc())
         val menu = PopupMenu(activity, activity.window.decorView).menu

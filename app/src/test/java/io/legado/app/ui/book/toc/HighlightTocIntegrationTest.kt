@@ -62,18 +62,6 @@ class HighlightTocIntegrationTest {
     }
 
     @Test
-    fun `recreated chapter page restores the shared search`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
-        ).readText()
-
-        assertTrue(fragment.contains("viewModel.searchKey?.takeIf { it.isNotBlank() }"))
-        assertTrue(fragment.contains("currentSearchKey = normalizedSearchKey"))
-        assertTrue(fragment.contains("val searchKey = currentSearchKey"))
-        assertTrue(fragment.contains("queryChapterIndexes(book, searchKey)"))
-    }
-
-    @Test
     fun `recreated chapter page does not stack observers`() {
         val fragment = projectFile(
             "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"

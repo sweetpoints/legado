@@ -1,71 +1,22 @@
 package io.legado.app.ui.book.toc
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.model.book.toc.*
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
+/** Stable identities and fold restoration survive identical display titles. Async title races are in TocChapterViewModelTest. */
 class ChapterListAdapterContractTest {
-
-    @Test
-    fun `display title cache uses the unique toc item key`() {
-        val source = sequenceOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/book/toc/ChapterListAdapter.kt")
-            .readText()
-
-        assertTrue(source.contains("displayTitleMap[item.key]"))
-        assertTrue(source.contains("private fun getDisplayTitle(item: TocListItem)"))
-        assertTrue(source.contains("getDisplayTitle(item)"))
-        assertFalse(source.contains("displayTitleMap[chapter.title]"))
+    @Test fun identicalTitlesKeepDistinctVolumeAndReadingKeysAcrossSearch() {
+        val chapters = listOf(BookChapter(index = 0, title = "Same", isVolume = true), BookChapter(index = 1, title = "Same"), BookChapter(index = 2, title = "Same"))
+        val state = TocListState(); state.setFullChapters(chapters, false)
+        assertEquals(listOf("volume:0", "chapter:1", "chapter:2"), state.showNormal(1).map { it.key })
+        assertEquals(listOf("volume:0", "chapter:2"), state.showSearch(listOf(2), 1).map { it.key })
     }
-
-    @Test
-    fun `full chapter reload clears display title cache before resetting items`() {
-        val source = sequenceOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/book/toc/ChapterListFragment.kt")
-            .readText()
-        val initBook = source.substringAfter("private fun initBook(book: Book)")
-            .substringBefore("private fun submitChapterItems")
-        val clearCache = initBook.indexOf("adapter.clearDisplayTitle()")
-        val resetItems = initBook.indexOf("adapter.setItems(emptyList())")
-
-        assertTrue(clearCache in 0 until resetItems)
-    }
-
-    @Test
-    fun `display title workers keep an isolated cache snapshot`() {
-        val source = sequenceOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/book/toc/ChapterListAdapter.kt")
-            .readText()
-        val clearCache = source.substringAfter("fun clearDisplayTitle()")
-            .substringBefore("fun upDisplayTitles")
-        val updateTitles = source.substringAfter("fun upDisplayTitles")
-            .substringBefore("private suspend fun updateDisplayTitle")
-
-        assertTrue(source.contains("@Volatile\n    private var displayTitleMap"))
-        assertTrue(clearCache.contains("displayTitleMap = ConcurrentHashMap()"))
-        assertFalse(clearCache.contains("displayTitleMap.clear()"))
-        assertTrue(
-            updateTitles.indexOf("val displayTitleMap = displayTitleMap") in
-                    0 until updateTitles.indexOf("Coroutine.async")
-        )
-        assertTrue(source.contains("displayTitleMap: ConcurrentHashMap<String, String>"))
-        assertTrue(source.contains("displayTitleMap === this.displayTitleMap"))
-    }
-
-    @Test
-    fun `stale worker writes stay in the replaced cache`() {
-        var activeCache = ConcurrentHashMap<String, String>()
-        val staleWorkerCache = activeCache
-
-        activeCache = ConcurrentHashMap()
-        staleWorkerCache["chapter:0"] = "old title"
-
-        assertNull(activeCache["chapter:0"])
+    @Test fun collapseCheckpointUsesOnlyExistingParentIdentitiesAndLocateExpandsCurrentPath() {
+        val chapters = listOf(BookChapter(index = 0, isVolume = true), BookChapter(index = 1), BookChapter(index = 2, isVolume = true), BookChapter(index = 3))
+        val state = TocListState(); state.setFullChapters(chapters, false); state.restoreCollapsed(setOf(0, 2, 99))
+        assertEquals(setOf(0, 2), state.collapsedIndexes()); assertEquals(listOf("volume:0", "volume:2"), state.showNormal(1).map { it.key })
+        assertTrue(state.expandVolumeContainingChapter(1)); assertEquals(listOf("volume:0", "chapter:1", "volume:2"), state.showNormal(1).map { it.key })
     }
 }
