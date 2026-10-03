@@ -1245,3 +1245,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 
 漫画 private checkpoint 的 3 个 DTO 与 2 个枚举补 AndroidX @Keep，保护 minify release 中完整 Gson 字段与枚举名称，避免跨版本恢复依赖被改名字段。rebase 候选 5626e1e1 的 AndroidTest Kotlin 与全部 3738 JVM 回归已通过；本保名小修后再次冻结增量完整验证。这里只具备源码保名审计与 debug 编译证据，未实际执行 release/R8 打包或设备测试。
 搜索页完整查询、选择位置、scope、结果/HTML、筛选草稿、确认与原生回执迁移到独立 filesDir Atomic 会话；磁盘 revision 和终止标记备份阻止迟到写入复活，锁使用固定路径 stripes。新增实际大载荷、Atomic恢复和邻居会话保留测试编译覆盖；完整 JVM 与 AndroidTest Kotlin 编译通过，设备端未执行。
+
+搜索不可变模型、私有Atomic仓库与大载荷文件测试按人类可读要求展开为多行声明、具名参数和显式 imports；补充关闭标记及revision的原因说明，行为不变。纯可读性单独提交，完整验证与下一基础整理共用一次构建。

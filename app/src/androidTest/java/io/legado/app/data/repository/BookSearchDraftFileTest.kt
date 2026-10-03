@@ -1,38 +1,88 @@
 package io.legado.app.data.repository
 
 import android.content.Context
-import android.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.entities.SearchBook
-import io.legado.app.model.webBook.*
-import io.legado.app.utils.GSON
+import io.legado.app.model.webBook.BookSearchDraft
+import io.legado.app.model.webBook.BookSearchEffect
+import io.legado.app.model.webBook.BookSearchReceipt
+import io.legado.app.model.webBook.BookSearchResult
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.Assert.*
 import java.io.File
 import java.util.UUID
 
 class BookSearchDraftFileTest {
-    @Test fun largeResultsAndEditableQueryRestoreWithoutBundleAndCloseRejectsLateWriters() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>(); val repository = FileBookSearchDraftRepository(context)
-        val owned = UUID.randomUUID().toString(); val neighbor = UUID.randomUUID().toString()
+    @Test
+    fun largeResultsAndEditableQueryRestoreWithoutBundleAndCloseRejectsLateWriters() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = FileBookSearchDraftRepository(context)
+        val ownedSession = UUID.randomUUID().toString()
+        val neighboringSession = UUID.randomUUID().toString()
         val directory = File(context.filesDir, "book-search-drafts")
         try {
-            repository.open(owned); repository.open(neighbor)
-            val huge = "synthetic-search-content".repeat(60000)
-            val result = BookSearchResult.from(SearchBook(bookUrl = huge, name = "Title", variable = huge).apply { infoHtml = huge; addOrigin("another") })
-            val draft = BookSearchDraft(revision = 10, query = huge, scope = huge, results = listOf(result), filterDraft = huge,
-                effects = listOf(BookSearchReceipt("receipt", BookSearchEffect.BookInfo, resultId = result.id)), interrupted = true)
-            repository.write(owned, draft); repository.write(owned, draft.copy(revision = 9, query = "stale"))
-            assertEquals(draft, FileBookSearchDraftRepository(context).open(owned))
-            val file = File(directory, "$owned.json"); file.renameTo(File(file.path + ".bak")); assertEquals(draft, repository.open(owned))
-            repository.release(owned); assertTrue(File(file.path + ".closed").exists()); assertFalse(file.exists())
-            assertTrue(runCatching { repository.write(owned, draft.copy(revision = 20)) }.isFailure); assertTrue(runCatching { repository.open(owned) }.isFailure)
-            assertEquals(BookSearchDraft(), repository.open(neighbor))
-            val marker = File(file.path + ".closed"); marker.renameTo(File(marker.path + ".bak")); assertTrue(runCatching { repository.open(owned) }.isFailure)
+            repository.open(ownedSession)
+            repository.open(neighboringSession)
+            val largePayload = "synthetic-search-content".repeat(60000)
+            val book = SearchBook(
+                bookUrl = largePayload,
+                name = "Title",
+                variable = largePayload,
+            ).apply {
+                infoHtml = largePayload
+                addOrigin("another")
+            }
+            val result = BookSearchResult.from(book)
+            val draft = BookSearchDraft(
+                revision = 10,
+                query = largePayload,
+                scope = largePayload,
+                results = listOf(result),
+                filterDraft = largePayload,
+                effects = listOf(
+                    BookSearchReceipt("receipt", BookSearchEffect.BookInfo, resultId = result.id)
+                ),
+                interrupted = true,
+            )
+            repository.write(ownedSession, draft)
+            repository.write(ownedSession, draft.copy(revision = 9, query = "stale"))
+            assertEquals(draft, FileBookSearchDraftRepository(context).open(ownedSession))
+
+            val sessionFile = File(directory, "$ownedSession.json")
+            sessionFile.renameTo(File(sessionFile.path + ".bak"))
+            assertEquals(draft, repository.open(ownedSession))
+
+            repository.release(ownedSession)
+            assertTrue(File(sessionFile.path + ".closed").exists())
+            assertFalse(sessionFile.exists())
+            assertTrue(
+                runCatching {
+                    repository.write(ownedSession, draft.copy(revision = 20))
+                }.isFailure
+            )
+            assertTrue(runCatching { repository.open(ownedSession) }.isFailure)
+            assertEquals(BookSearchDraft(), repository.open(neighboringSession))
+
+            val marker = File(sessionFile.path + ".closed")
+            marker.renameTo(File(marker.path + ".bak"))
+            assertTrue(runCatching { repository.open(ownedSession) }.isFailure)
         } finally {
-            repository.release(neighbor)
-            listOf(owned, neighbor).forEach { id -> listOf(".json", ".json.bak", ".json.new", ".json.closed", ".json.closed.bak", ".json.closed.new").forEach { File(directory, id + it).delete() } }
+            repository.release(neighboringSession)
+            listOf(ownedSession, neighboringSession).forEach { session ->
+                listOf(
+                    ".json",
+                    ".json.bak",
+                    ".json.new",
+                    ".json.closed",
+                    ".json.closed.bak",
+                    ".json.closed.new",
+                ).forEach { suffix ->
+                    File(directory, session + suffix).delete()
+                }
+            }
         }
     }
 }
