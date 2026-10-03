@@ -11,10 +11,14 @@ import android.os.SystemClock
 import android.text.Spanned
 import android.text.style.TtsSpan
 import android.view.ViewGroup
-import android.widget.TextView
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -2356,23 +2360,23 @@ class TitleFontWeightRenderingTest {
             it.bottomDialog == 0 &&
                 ReadTipConfig.tipHeaderLeftTemplate == ReaderInfoTemplate.BATTERY_NUMBER_ICON
         }
-        scenario!!.onActivity { activity ->
-            val readView = activity.findViewById<ReadView>(R.id.read_view)
-            val imageDir = context.getExternalFilesDir("ui-regression")
-            // Check the legacy icon on real Android Paint, independent of helper signatures.
-            val ordinarySpan = BatteryLevelSpan(50)
-            val legacyPaint = Paint().apply { textSize = 20f }
-            val defaultWidth = ordinarySpan.getSize(legacyPaint, "", 0, 0, null)
-            legacyPaint.typeface = Typeface.MONOSPACE
-            assertEquals(defaultWidth, ordinarySpan.getSize(legacyPaint, "", 0, 0, null))
-            legacyPaint.textSize = 40f
-            assertTrue(ordinarySpan.getSize(legacyPaint, "", 0, 0, null) > defaultWidth)
-            val widths = mutableListOf<Int>()
-            var previous: IntArray? = null
-            for (level in listOf(0, 7, 85, 100)) {
+        val ordinarySpan = BatteryLevelSpan(50)
+        val legacyPaint = Paint().apply { textSize = 20f }
+        val defaultWidth = ordinarySpan.getSize(legacyPaint, "", 0, 0, null)
+        legacyPaint.typeface = Typeface.MONOSPACE
+        assertEquals(defaultWidth, ordinarySpan.getSize(legacyPaint, "", 0, 0, null))
+        legacyPaint.textSize = 40f
+        assertTrue(ordinarySpan.getSize(legacyPaint, "", 0, 0, null) > defaultWidth)
+        val widths = mutableListOf<Int>()
+        val composePixels = mutableListOf<IntArray>()
+        var capturedTipWidth: Int? = null
+        for (level in listOf(0, 7, 85, 100)) {
+            scenario!!.onActivity { activity ->
+                val readView = activity.findViewById<ReadView>(R.id.read_view)
+                val imageDir = context.getExternalFilesDir("ui-regression")
                 readView.upBattery(level)
-                val view = readView.curPage.findViewById<TextView>(R.id.tv_header_left)
-                val text = view.text as Spanned
+                val page = readView.curPage
+                val text = page.readerInfoText(0) as Spanned
                 val span = text.getSpans(0, text.length, BatteryLevelSpan::class.java).single()
                 assertEquals(BatteryLevelSpan(level, true), span)
                 assertEquals(
@@ -2383,17 +2387,23 @@ class TitleFontWeightRenderingTest {
                         .args
                         .getString(TtsSpan.ARG_TEXT),
                 )
-                val ordinary =
-                    readView.curPage.findViewById<TextView>(R.id.tv_header_middle).text as Spanned
+                val ordinary = page.readerInfoText(1) as Spanned
                 assertEquals(
                     BatteryLevelSpan(level),
                     ordinary.getSpans(0, ordinary.length, BatteryLevelSpan::class.java).single(),
                 )
-                assertEquals(
-                    "$level%",
-                    readView.curPage.findViewById<TextView>(R.id.tv_header_right).text.toString(),
-                )
-                val paint = Paint(view.paint).apply { color = Color.BLACK }
+                assertEquals("$level%", page.readerInfoText(2).toString())
+                assertTrue(page.readerTipTextSizeSp > 0)
+                val paint =
+                    Paint().apply {
+                        color = Color.BLACK
+                        textSize =
+                            page.readerTipTextSizeSp *
+                                context.resources.displayMetrics.scaledDensity
+                        typeface = page.readerTipTypeface
+                        isAntiAlias = true
+                        isSubpixelText = true
+                    }
                 val fm = Paint.FontMetricsInt()
                 val width = span.getSize(paint, text, 0, text.length, fm)
                 widths.add(width)
@@ -2417,26 +2427,60 @@ class TitleFontWeightRenderingTest {
                         "Even zero battery must draw its outline and readable number",
                         pixels.count { Color.alpha(it) > 100 } > 8,
                     )
-                    previous?.let {
-                        assertFalse(
-                            "Live battery values must change actual pixels",
-                            it.contentEquals(pixels),
-                        )
-                    }
+                    assertTrue(
+                        "Paint span must draw actual battery glyph pixels",
+                        pixels.any { Color.alpha(it) > 0 },
+                    )
                     File(imageDir, "battery-number-$level.png").outputStream().use {
                         assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
                     }
                 } finally {
                     bitmap.recycle()
                 }
-                previous = pixels
             }
-            assertEquals(
-                "Changing digit count must not move neighbouring reader information",
-                1,
-                widths.distinct().size,
+            instrumentation.waitForIdleSync()
+            val currentPage = hasTestTag("reader-current-page")
+            val currentTip = hasTestTag("reader-tip-header-left").and(hasAnyAncestor(currentPage))
+            val renderedTip = compose.onNode(currentTip).captureToImage()
+            val renderedPixels =
+                renderedTip.toPixelMap().let { pixelMap ->
+                    IntArray(pixelMap.width * pixelMap.height) { index ->
+                        val color = pixelMap[index % pixelMap.width, index / pixelMap.width]
+                        android.graphics.Color.argb(
+                            (color.alpha * 255).toInt(),
+                            (color.red * 255).toInt(),
+                            (color.green * 255).toInt(),
+                            (color.blue * 255).toInt(),
+                        )
+                    }
+                }
+            assertTrue(
+                "The current Compose tip slot must render visible battery text",
+                renderedPixels.any { Color.alpha(it) > 0 },
             )
+            capturedTipWidth?.let {
+                assertEquals(
+                    "Digit changes must keep the Compose slot geometry stable",
+                    it,
+                    renderedTip.width,
+                )
+            }
+            capturedTipWidth = renderedTip.width
+            composePixels += renderedPixels
         }
+        assertEquals(
+            "Changing digit count must not move neighbouring reader information",
+            1,
+            widths.distinct().size,
+        )
+        assertTrue(
+            "The actual current tip slot must have measured geometry",
+            checkNotNull(capturedTipWidth) > 0,
+        )
+        assertTrue(
+            "Live battery values must change actual Compose Canvas pixels",
+            composePixels.drop(1).any { next -> !composePixels.first().contentEquals(next) },
+        )
         screenshot("battery-number-reader")
         ReadBookConfig.saveNow()
         scenario!!.recreate()
@@ -2445,15 +2489,16 @@ class TitleFontWeightRenderingTest {
         scenario!!.onActivity {
             it.findViewById<ReadView>(R.id.read_view).upBattery(85)
             val text =
-                it.findViewById<ReadView>(R.id.read_view)
-                    .curPage
-                    .findViewById<TextView>(R.id.tv_header_left)
-                    .text as Spanned
+                it.findViewById<ReadView>(R.id.read_view).curPage.readerInfoText(0) as Spanned
             assertEquals(
                 BatteryLevelSpan(85, true),
                 text.getSpans(0, text.length, BatteryLevelSpan::class.java).single(),
             )
         }
+        val restoredPage = hasTestTag("reader-current-page")
+        compose
+            .onNode(hasTestTag("reader-tip-header-left").and(hasAnyAncestor(restoredPage)))
+            .assertIsDisplayed()
         screenshot("battery-number-reader-restored")
     }
 
