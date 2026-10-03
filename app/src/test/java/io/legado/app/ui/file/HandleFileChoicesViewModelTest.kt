@@ -13,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
@@ -125,6 +126,29 @@ class HandleFileChoicesViewModelTest {
         assertNull(disk.value)
     }
 
+    @Test
+    fun registryResultDuringBusyClaimIsBufferedWithoutDuplicateOrStaleReplacement() = test {
+        val disk = Disk()
+        val model = model(disk = disk)
+        model.load(HandleFileSeed(HandleFileInput(mode = 1)))
+        runCurrent()
+        model.choose(1)
+        runCurrent()
+        val nonce = model.state.value.pending!!.nonce
+        disk.writeGate = CompletableDeferred()
+        val claiming = launch { model.nativeDelivered(nonce) }
+        runCurrent()
+        assertTrue(model.state.value.busy)
+        model.returned(nonce, "content://first")
+        model.returned(nonce, "content://duplicate")
+        model.returned("stale", "content://stale")
+        disk.writeGate!!.complete(Unit)
+        claiming.join()
+        runCurrent()
+        assertEquals("content://first", model.state.value.result)
+        assertEquals("content://first", disk.value!!.result)
+    }
+
     private class Files : HandleFileChoicesRepository {
 
         var uploads = 0
@@ -185,6 +209,7 @@ class HandleFileChoicesViewModelTest {
         var value: HandleFileCheckpoint? = null
         var failStage = false
         var failResult = false
+        var writeGate: CompletableDeferred<Unit>? = null
         var readGate: CompletableDeferred<Unit>? = null
 
         override suspend fun stage(id: String, seed: HandleFileSeed): HandleFileInput {
@@ -209,6 +234,7 @@ class HandleFileChoicesViewModelTest {
         override suspend fun read(id: String) = value
 
         override suspend fun write(id: String, value: HandleFileCheckpoint) {
+            writeGate?.await()
 
             if (failResult && value.phase == "Result") error("Receipt failed")
             if ((this.value?.revision ?: -1) <= value.revision) this.value = value

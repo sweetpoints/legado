@@ -1335,3 +1335,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 - Audio persistent receipt consistency: AtomicFile writes now accept only strictly increasing revisions and return an explicit acceptance result. A stale controller invalidates its cached checkpoint on rejection, throws before effect publication and reloads the newer durable snapshot. Skip-credits launch claims also propagate durable acceptance. Added a gated two-controller JVM regression and a real two-repository AtomicFile regression covering equal-revision overwrite plus a late old claim after a replacement snapshot; Android execution remains device-dependent.
 
 文件选择宿主改为透明 BaseComposeActivity 与独立 Compose Route/Screen，保留所有目录/文件/图片/上传/自定义动作、手工输入与原权限入口。按请求 nonce 注册系统结果并恢复 app picker，首次 IntentData 载荷只读一次后由私有 UUID 会话接管；EXPORT 结果继续不带 value。成功结果的持久回执可在宿主暂停/重建后补交付，不重复传输，原生失败重试建立新 nonce，加载失败仍可取消。旧 HandleFileViewModel 删除，共享透明布局/输入布局仍保留其他消费者。新增 3 个 Screen 与 2 个实际 Host 编译用例、3 个 VM 回归，并将旧 MIME 源码断言迁为真实模型行为；全部触达 Kotlin 执行统一 formatter/check，最终完整 JVM 与 AndroidTest 编译正在排队，设备端与 release R8 未执行。
+
+文件选择 registry 在 launch 回执写入期间同步返回时，VM 缓冲第一个匹配 nonce 的结果，busy 解除后消费；重复与旧 nonce 不替换待处理结果。新增真实 gated JVM 用例，完整验证在本批最终恢复修复合并后统一执行。

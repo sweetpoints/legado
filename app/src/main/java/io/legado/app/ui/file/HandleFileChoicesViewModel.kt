@@ -97,11 +97,7 @@ class HandleFileChoicesViewModel(
                         result = checkpoint.result,
                         finished = checkpoint.finished,
                     )
-                val early = earlyResult
-                earlyResult = null
-                if (early != null) {
-                    returned(early.first, early.second)
-                }
+                drainResult()
             } catch (error: Throwable) {
                 currentCoroutineContext().ensureActive()
                 if (loadGeneration == currentGeneration && !stopped) failure(error)
@@ -145,7 +141,10 @@ class HandleFileChoicesViewModel(
             persist(checkpoint.copy(pending = pending.copy(delivered = true)))
             return true
         } finally {
-            if (!stopped) mutableState.value = state.value.copy(busy = false)
+            if (!stopped) {
+                mutableState.value = state.value.copy(busy = false)
+                drainResult()
+            }
         }
     }
 
@@ -210,7 +209,19 @@ class HandleFileChoicesViewModel(
             return
         }
         val pending = state.value.pending ?: return
-        if (!ready() || pending.nonce != nonce || state.value.phase != "Native") return
+        if (
+            stopped ||
+                state.value.finished ||
+                pending.nonce != nonce ||
+                state.value.phase != "Native"
+        )
+            return
+        if (state.value.busy) {
+            // Registry delivery can happen synchronously while its launch receipt is still saving.
+            // Keep the first matching result; duplicates and another nonce cannot replace it.
+            if (earlyResult == null) earlyResult = nonce to uri
+            return
+        }
         operation {
             if (uri == null) {
                 finish()
@@ -218,6 +229,13 @@ class HandleFileChoicesViewModel(
                 accept(uri)
             }
         }
+    }
+
+    private fun drainResult() {
+        if (!state.value.loaded || state.value.busy || stopped) return
+        val result = earlyResult ?: return
+        earlyResult = null
+        returned(result.first, result.second)
     }
 
     /** System-picker failures use the original app-picker fallback with a distinct owner nonce. */
@@ -411,10 +429,16 @@ class HandleFileChoicesViewModel(
                 draftWriteJob?.join()
                 block()
                 currentCoroutineContext().ensureActive()
-                if (!stopped) mutableState.value = state.value.copy(busy = false)
+                if (!stopped) {
+                    mutableState.value = state.value.copy(busy = false)
+                    drainResult()
+                }
             } catch (error: Throwable) {
                 currentCoroutineContext().ensureActive()
-                if (!stopped) failure(error)
+                if (!stopped) {
+                    failure(error)
+                    drainResult()
+                }
             }
         }
     }
