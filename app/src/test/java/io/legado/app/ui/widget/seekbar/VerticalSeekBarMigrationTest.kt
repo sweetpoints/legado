@@ -1,9 +1,9 @@
 package io.legado.app.ui.widget.seekbar
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class VerticalSeekBarMigrationTest {
 
@@ -21,8 +21,7 @@ class VerticalSeekBarMigrationTest {
     @Test
     fun obsoleteReflectiveSeekBarImplementationIsRemoved() {
         assertFalse(
-            projectFile("src/main/java/io/legado/app/ui/widget/seekbar/VerticalSeekBar.kt")
-                .exists()
+            projectFile("src/main/java/io/legado/app/ui/widget/seekbar/VerticalSeekBar.kt").exists()
         )
         val attrs = projectFile("src/main/res/values/attrs.xml").readText()
         assertFalse(attrs.contains("name=\"VerticalSeekBar\""))
@@ -31,12 +30,11 @@ class VerticalSeekBarMigrationTest {
 
     @Test
     fun wrapperKeepsDirectionAndCompactMeasurementRules() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/widget/seekbar/VerticalSeekBarWrapper.kt"
-        ).readText()
-        val readMenu = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReadMenu.kt"
-        ).readText()
+        val source =
+            projectFile("src/main/java/io/legado/app/ui/widget/seekbar/VerticalSeekBarWrapper.kt")
+                .readText()
+        val readMenu =
+            projectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt").readText()
 
         assertTrue(source.contains("ViewCompat.LAYOUT_DIRECTION_LTR"))
         assertTrue(source.contains("MeasureSpec.makeMeasureSpec(contentHeight"))
@@ -45,8 +43,8 @@ class VerticalSeekBarMigrationTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.exists() || it.parentFile?.exists() == true }
-            ?: File(pathInApp)
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull {
+            it.exists() || it.parentFile?.exists() == true
+        } ?: File(pathInApp)
     }
 }

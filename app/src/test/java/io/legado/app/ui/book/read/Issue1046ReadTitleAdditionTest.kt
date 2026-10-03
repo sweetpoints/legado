@@ -1,8 +1,8 @@
 package io.legado.app.ui.book.read
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class Issue1046ReadTitleAdditionTest {
 
@@ -16,30 +16,37 @@ class Issue1046ReadTitleAdditionTest {
 
         assertTrue(preferKey.contains("const val showReadTitleChapterNameOnly"))
         assertTrue(
-            appConfig.contains(
-                "getPrefBoolean(PreferKey.showReadTitleChapterNameOnly, false)"
-            )
+            appConfig.contains("getPrefBoolean(PreferKey.showReadTitleChapterNameOnly, false)")
         )
         assertTrue(preferences.contains("android:key=\"showReadTitleChapterNameOnly\""))
-        val titleOnlyPreference = Regex(
-            "(?s)<io\\.legado\\.app\\.lib\\.prefs\\.SwitchPreference\\b.*?" +
-                "android:key=\"showReadTitleChapterNameOnly\".*?/>"
-        ).find(preferences)?.value.orEmpty()
+        val titleOnlyPreference =
+            Regex(
+                    "(?s)<io\\.legado\\.app\\.lib\\.prefs\\.SwitchPreference\\b.*?" +
+                        "android:key=\"showReadTitleChapterNameOnly\".*?/>"
+                )
+                .find(preferences)
+                ?.value
+                .orEmpty()
         assertTrue(titleOnlyPreference.contains("android:defaultValue=\"false\""))
         assertTrue(backupConfig.contains("PreferKey.showReadTitleChapterNameOnly"))
         assertTrue(restore.contains("PreferKey.showReadTitleChapterNameOnly !in map"))
-        assertTrue(restore.contains("edit.putBoolean(PreferKey.showReadTitleChapterNameOnly, false)"))
+        assertTrue(
+            restore.contains("edit.putBoolean(PreferKey.showReadTitleChapterNameOnly, false)")
+        )
     }
 
     @Test
     fun `changing the preference refreshes both title menus without losing URL actions`() {
-        val moreConfig = source(
-            "app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt"
-        )
+        val moreConfig =
+            source("app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt")
         val readMenu = source("app/src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
 
         assertTrue(moreConfig.contains("PreferKey.showReadTitleChapterNameOnly"))
-        assertTrue(readMenu.contains("tvChapterUrl.alpha = if (chapterNameOnly && hasChapterUrl) 0f else 1f"))
+        assertTrue(
+            readMenu.contains(
+                "tvChapterUrl.alpha = if (chapterNameOnly && hasChapterUrl) 0f else 1f"
+            )
+        )
         assertTrue(readMenu.contains("titleBarAddition.doOnLayout"))
         assertTrue(readMenu.contains("tvChapterName.translationY"))
         assertTrue(readMenu.contains("R.id.tv_source_action, ConstraintSet.BOTTOM"))
