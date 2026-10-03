@@ -47,7 +47,7 @@ internal interface ChapterSourceSearchRepository {
 }
 internal class DefaultChapterSourceSearchRepository(private val store: ChapterSourceSearchStore,
     private val io: CoroutineDispatcher = Dispatchers.IO, private val timeoutMillis: Long = 60000,
-    private val concurrency: Int? = null) : ChapterSourceSearchRepository {
+    private val concurrency: Int? = null, private val pinCurrentSource: Boolean = true) : ChapterSourceSearchRepository {
     override suspend fun cached(request: ChapterSourceSearchRequest) = withContext(io) {
         val rows = store.cached(request); val reference = store.reference(request)
         ChapterSourceSearchUpdate(order(request, rows, reference), false, effectiveGroup = request.group, referenceWordCount = reference, allRows = rows)
@@ -132,7 +132,7 @@ internal class DefaultChapterSourceSearchRepository(private val store: ChapterSo
             request.loadWordCount -> measured
             else -> default
         }
-        return ChangeSourceResultOptions.apply(books, filter, request.minimum, request.maximum, reference, comparator, request.currentBookUrl)
+        return ChangeSourceResultOptions.apply(books, filter, request.minimum, request.maximum, reference, comparator, request.currentBookUrl.takeIf { pinCurrentSource })
             .mapNotNull { byId[it.bookUrl] }
     }
 }
