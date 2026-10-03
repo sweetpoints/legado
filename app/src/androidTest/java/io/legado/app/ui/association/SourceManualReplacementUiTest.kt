@@ -5,10 +5,6 @@ import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.MenuItem
-import android.view.View
-import android.widget.AdapterView
-import androidx.appcompat.widget.Toolbar
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,9 +19,6 @@ import androidx.core.net.toUri
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onData
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -57,8 +50,6 @@ import java.io.File
 import java.util.UUID
 import java.util.zip.ZipFile
 import kotlinx.coroutines.runBlocking
-import org.hamcrest.Description
-import org.hamcrest.TypeSafeMatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -712,8 +703,6 @@ class SourceManualReplacementUiTest {
         val feed
             get() = ViewModelProvider(parent)[RssImportViewModel::class.java]
 
-        fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
-
         fun findParent() =
             await("Missing import preview") {
                 scenario.onActivity { activity ->
@@ -780,7 +769,7 @@ class SourceManualReplacementUiTest {
                         else -> error("Unknown code action")
                     }
                 compose.onNodeWithTag("code-menu").performClick()
-                val item = compose.onNodeWithTag("code-action-$action")
+                val item = compose.onNodeWithTag("code-action-$action").assertIsDisplayed()
                 if (waitForIdleAfterClick) item.performClick()
                 else {
                     val click =
@@ -801,7 +790,10 @@ class SourceManualReplacementUiTest {
                         R.id.menu_effective_replaces -> RssImportMenu.Effective
                         else -> error("Unsupported RSS menu $id")
                     }
-                compose.onNodeWithTag("rss-import-menu-${menu.name}").performClick()
+                compose
+                    .onNodeWithTag("rss-import-menu-${menu.name}")
+                    .assertIsDisplayed()
+                    .performClick()
                 return
             }
             if (!rss && dialog === parent) {
@@ -813,7 +805,8 @@ class SourceManualReplacementUiTest {
                         R.id.menu_effective_replaces -> BookImportMenu.Effective
                         else -> error("Unsupported book menu $id")
                     }
-                val item = compose.onNodeWithTag("book-import-menu-${menu.name}")
+                val item =
+                    compose.onNodeWithTag("book-import-menu-${menu.name}").assertIsDisplayed()
                 if (waitForIdleAfterClick) item.performClick()
                 else {
                     val action =
@@ -825,43 +818,7 @@ class SourceManualReplacementUiTest {
                 }
                 return
             }
-            val toolbar = main { dialog.requireView().findViewById<Toolbar>(R.id.tool_bar) }
-            main {
-                assertTrue(toolbar.menu.findItem(id).isVisible)
-                toolbar.showOverflowMenu()
-            }
-            await("Missing overflow") { main { toolbar.isOverflowMenuShowing } }
-            val item =
-                onData(
-                        object : TypeSafeMatcher<Any>() {
-                            override fun describeTo(description: Description) {
-                                description.appendText("menu $id")
-                            }
-
-                            override fun matchesSafely(item: Any) =
-                                item is MenuItem && item.itemId == id
-                        }
-                    )
-                    .inRoot(isPlatformPopup())
-            if (waitForIdleAfterClick) item.perform(click())
-            else {
-                // A held query keeps the progress animation running. Dispatch the real popup
-                // item without Espresso waiting for that query before this test can release it.
-                var row: View? = null
-                item.check { view, error ->
-                    if (error != null) throw error
-                    row = view
-                }
-                main {
-                    val view = checkNotNull(row)
-                    val list = view.parent as AdapterView<*>
-                    val position = list.getPositionForView(view)
-                    assertTrue(position >= 0)
-                    assertTrue(
-                        list.performItemClick(view, position, list.getItemIdAtPosition(position))
-                    )
-                }
-            }
+            error("Unsupported menu host ${dialog::class.java.simpleName}")
         }
 
         fun manualEnabled(enabled: Boolean, dialog: DialogFragment = parent) {
@@ -890,17 +847,7 @@ class SourceManualReplacementUiTest {
                 main { assertEquals(!enabled, book.state.value.automatic) }
                 return
             }
-            main {
-                val toolbar = dialog.requireView().findViewById<Toolbar>(R.id.tool_bar)
-                val item = toolbar.menu.findItem(R.id.menu_manual_replace_rule)
-                assertTrue("Manual source replacement remains visible", item.isVisible)
-                assertEquals(enabled, item.isEnabled)
-                if (dialog == parent) {
-                    val automatic = toolbar.menu.findItem(R.id.menu_replace_source)
-                    assertTrue(automatic.isVisible)
-                    assertEquals(!enabled, automatic.isChecked)
-                }
-            }
+            error("Unsupported manual replacement host ${dialog::class.java.simpleName}")
         }
 
         fun query(value: String) {
