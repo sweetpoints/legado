@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.bookshelf
 
+import android.os.Bundle
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -119,7 +120,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
             val host = activity as? MainBookshelfHost
             if (host != null)
                 host.acceptLegacyExportResult(this, requestId, path, result.uri?.toString())
-            else result.uri?.let { showExportLinkDialog(it) }
+            else result.uri?.let { showExportLinkDialog(it.toString()) }
         }
     private var importRequestId: String? = null
     private var exportRequestId: String? = null
