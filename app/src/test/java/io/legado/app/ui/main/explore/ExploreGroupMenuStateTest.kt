@@ -52,7 +52,7 @@ class ExploreGroupMenuStateTest {
         val screen =
             readProjectFile("src/main/java/io/legado/app/ui/main/explore/ExploreHomeScreen.kt")
         assertTrue(fragment.contains("startActivity<BookSourceActivity>()"))
-        assertTrue(screen.contains("Icons.Default.Settings"))
+        assertTrue(screen.contains("painterResource(R.drawable.ic_settings)"))
         assertTrue(screen.contains("R.string.book_source_manage"))
     }
 
