@@ -1619,3 +1619,15 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
   scenario verifying page-one restoration without another previous request.
 - Actual formatter/check and diff checks passed. This minimal follow-up awaits the next complete
   build slot; the added Android scenario has not been executed on a device.
+
+### Explore results final integration proof
+
+- Exact code candidate 0075d73bea3cac219fe27decb46e1df45da9f70d is based on formal Search/Popup
+  integration 236cfc5d2a5166ca9edf62f17125e9c36527b8ce. The final standard offline build with two
+  workers passed compileAppDebugAndroidTestKotlin and testAppDebugUnitTest in 33 seconds:
+  3,877 JVM tests, zero failures and zero errors.
+- Final log: /private/tmp/legado-explore-compose-final-top-build.log. The state foundation has
+  17 JVM cases and the shared native delivery implementation has four gated JVM cases. Added or
+  migrated Android coverage is compiled only; no device test or this candidate's R8 run is claimed.
+- Production/tests remained frozen throughout final validation. This record-only commit changes
+  no Kotlin or resources; the dedicated worktree is clean and ready for exact review/integration.
