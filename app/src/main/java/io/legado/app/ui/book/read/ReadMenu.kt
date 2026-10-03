@@ -17,10 +17,12 @@ import android.view.animation.Animation
 import android.widget.FrameLayout
 import android.widget.SeekBar
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
+import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.databinding.ViewReadMenuBinding
@@ -47,8 +49,9 @@ import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.ConstraintModify
 import io.legado.app.utils.activity
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyTint
+import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
@@ -61,19 +64,18 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import splitties.views.onClick
 import splitties.views.onLongClick
-import androidx.core.graphics.toColorInt
-import io.legado.app.constant.BookType
-import io.legado.app.utils.buildMainHandler
 
-/**
- * 阅读界面菜单
- */
-class ReadMenu @JvmOverloads constructor(
+/** 阅读界面菜单 */
+class ReadMenu
+@JvmOverloads
+constructor(
     context: Context,
-    attrs: AttributeSet? = null
+    attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
     var canShowMenu: Boolean = false
-    private val callBack: CallBack get() = activity as CallBack
+    private val callBack: CallBack
+        get() = activity as CallBack
+
     private val binding = ViewReadMenuBinding.inflate(LayoutInflater.from(context), this, true)
     private val chapterNameTextSize = binding.tvChapterName.textSize
     private var confirmSkipToChapter: Boolean = false
@@ -92,72 +94,82 @@ class ReadMenu @JvmOverloads constructor(
     }
     private val immersiveMenu: Boolean
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
-    private var bgColor: Int = if (immersiveMenu) {
-        kotlin.runCatching {
-            ReadBookConfig.durConfig.curBgStr().toColorInt()
-        }.getOrDefault(context.bottomBackground)
-    } else {
-        context.bottomBackground
-    }
-    private var textColor: Int = if (immersiveMenu) {
-        ReadBookConfig.durConfig.curTextColor()
-    } else {
-        context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
-    }
 
-    private var bottomBackgroundList: ColorStateList = Selector.colorBuild()
-        .setDefaultColor(bgColor)
-        .setPressedColor(ColorUtils.darkenColor(bgColor))
-        .create()
+    private var bgColor: Int =
+        if (immersiveMenu) {
+            kotlin
+                .runCatching {
+                    ReadBookConfig.durConfig.curBgStr().toColorInt()
+                }
+                .getOrDefault(context.bottomBackground)
+        } else {
+            context.bottomBackground
+        }
+    private var textColor: Int =
+        if (immersiveMenu) {
+            ReadBookConfig.durConfig.curTextColor()
+        } else {
+            context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+        }
+
+    private var bottomBackgroundList: ColorStateList =
+        Selector.colorBuild()
+            .setDefaultColor(bgColor)
+            .setPressedColor(ColorUtils.darkenColor(bgColor))
+            .create()
     private var onMenuOutEnd: (() -> Unit)? = null
     private val showBrightnessView
-        get() = context.getPrefBoolean(
-            PreferKey.showBrightnessView,
-            true
-        )
-    private val menuInListener = object : Animation.AnimationListener {
-        override fun onAnimationStart(animation: Animation) {
-            binding.tvSourceAction.text =
-                ReadBook.bookSource?.bookSourceName ?: context.getString(R.string.book_source)
-            binding.tvSourceAction.isGone = ReadBook.isLocalBook
-            ReadBook.bookSource?.let {
-                if (it.customButton) {
-                    binding.tvCustomBtn.visibility = VISIBLE
+        get() =
+            context.getPrefBoolean(
+                PreferKey.showBrightnessView,
+                true,
+            )
+
+    private val menuInListener =
+        object : Animation.AnimationListener {
+            override fun onAnimationStart(animation: Animation) {
+                binding.tvSourceAction.text =
+                    ReadBook.bookSource?.bookSourceName ?: context.getString(R.string.book_source)
+                binding.tvSourceAction.isGone = ReadBook.isLocalBook
+                ReadBook.bookSource?.let {
+                    if (it.customButton) {
+                        binding.tvCustomBtn.visibility = VISIBLE
+                    }
+                }
+                callBack.upSystemUiVisibility()
+                binding.llBrightness.visible(showBrightnessView)
+            }
+
+            @SuppressLint("RtlHardcoded")
+            override fun onAnimationEnd(animation: Animation) {
+                binding.vwMenuBg.setOnClickListener { runMenuOut() }
+                callBack.upSystemUiVisibility()
+                if (!LocalConfig.readMenuHelpVersionIsLast) {
+                    callBack.showHelp()
                 }
             }
-            callBack.upSystemUiVisibility()
-            binding.llBrightness.visible(showBrightnessView)
-        }
 
-        @SuppressLint("RtlHardcoded")
-        override fun onAnimationEnd(animation: Animation) {
-            binding.vwMenuBg.setOnClickListener { runMenuOut() }
-            callBack.upSystemUiVisibility()
-            if (!LocalConfig.readMenuHelpVersionIsLast) {
-                callBack.showHelp()
+            override fun onAnimationRepeat(animation: Animation) = Unit
+        }
+    private val menuOutListener =
+        object : Animation.AnimationListener {
+            override fun onAnimationStart(animation: Animation) {
+                isMenuOutAnimating = true
+                binding.vwMenuBg.setOnClickListener(null)
             }
-        }
 
-        override fun onAnimationRepeat(animation: Animation) = Unit
-    }
-    private val menuOutListener = object : Animation.AnimationListener {
-        override fun onAnimationStart(animation: Animation) {
-            isMenuOutAnimating = true
-            binding.vwMenuBg.setOnClickListener(null)
-        }
+            override fun onAnimationEnd(animation: Animation) {
+                this@ReadMenu.invisible()
+                binding.titleBar.invisible()
+                binding.bottomMenu.invisible()
+                canShowMenu = false
+                isMenuOutAnimating = false
+                onMenuOutEnd?.invoke()
+                callBack.upSystemUiVisibility()
+            }
 
-        override fun onAnimationEnd(animation: Animation) {
-            this@ReadMenu.invisible()
-            binding.titleBar.invisible()
-            binding.bottomMenu.invisible()
-            canShowMenu = false
-            isMenuOutAnimating = false
-            onMenuOutEnd?.invoke()
-            callBack.upSystemUiVisibility()
+            override fun onAnimationRepeat(animation: Animation) = Unit
         }
-
-        override fun onAnimationRepeat(animation: Animation) = Unit
-    }
 
     init {
         initView()
@@ -207,10 +219,11 @@ class ReadMenu @JvmOverloads constructor(
         fabReplaceRule.setColorFilter(textColor)
         fabNightTheme.backgroundTintList = bottomBackgroundList
         fabNightTheme.setColorFilter(textColor)
-        val chapterTextColor = Selector.colorBuild()
-            .setDefaultColor(textColor)
-            .setDisabledColor(ColorUtils.withAlpha(textColor, 0.4f))
-            .create()
+        val chapterTextColor =
+            Selector.colorBuild()
+                .setDefaultColor(textColor)
+                .setDisabledColor(ColorUtils.withAlpha(textColor, 0.4f))
+                .create()
         tvPre.setTextColor(chapterTextColor)
         tvNext.setTextColor(chapterTextColor)
         ivCatalog.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
@@ -236,9 +249,7 @@ class ReadMenu @JvmOverloads constructor(
         }
         updateTitleAdditionLayout()
         upBrightnessVwPos()
-        /**
-         * 确保视图不被导航栏遮挡
-         */
+        /** 确保视图不被导航栏遮挡 */
         applyNavigationBarPadding()
     }
 
@@ -254,22 +265,27 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     private fun upColorConfig() {
-        bgColor = if (immersiveMenu) {
-            kotlin.runCatching {
-                ReadBookConfig.durConfig.curBgStr().toColorInt()
-            }.getOrDefault(context.bottomBackground)
-        } else {
-            context.bottomBackground
-        }
-        textColor = if (immersiveMenu) {
-            ReadBookConfig.durConfig.curTextColor()
-        } else {
-            context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
-        }
-        bottomBackgroundList = Selector.colorBuild()
-            .setDefaultColor(bgColor)
-            .setPressedColor(ColorUtils.darkenColor(bgColor))
-            .create()
+        bgColor =
+            if (immersiveMenu) {
+                kotlin
+                    .runCatching {
+                        ReadBookConfig.durConfig.curBgStr().toColorInt()
+                    }
+                    .getOrDefault(context.bottomBackground)
+            } else {
+                context.bottomBackground
+            }
+        textColor =
+            if (immersiveMenu) {
+                ReadBookConfig.durConfig.curTextColor()
+            } else {
+                context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+            }
+        bottomBackgroundList =
+            Selector.colorBuild()
+                .setDefaultColor(bgColor)
+                .setPressedColor(ColorUtils.darkenColor(bgColor))
+                .create()
     }
 
     fun upBrightnessState() {
@@ -283,13 +299,10 @@ class ReadMenu @JvmOverloads constructor(
         setScreenBrightness(AppConfig.readBrightness.toFloat())
     }
 
-    /**
-     * 系统亮度监听，在高阳光亮度时启用
-     */
+    /** 系统亮度监听，在高阳光亮度时启用 */
     private var contentObserver: ContentObserver? = null
-    /**
-     * 设置屏幕亮度
-     */
+
+    /** 设置屏幕亮度 */
     fun setScreenBrightness(value: Float) {
         activity?.run {
             fun setBrightness(value: Float) {
@@ -311,31 +324,34 @@ class ReadMenu @JvmOverloads constructor(
                 }
             }
             if (isSunMax) {
-                contentObserver = object : ContentObserver(buildMainHandler()) {
-                    override fun onChange(selfChange: Boolean, uri: Uri?) {
-                        super.onChange(selfChange, uri)
-                        if (contentObserver == null) return
-                        if (uri == Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS)) {
-                            val sysBrightness = getCurrentBrightness(context)
-                            if (sysBrightness < 200) {
-                                setBrightness(brightness)
-                                contentObserver?.let {
-                                    context.contentResolver.unregisterContentObserver(it)
+                contentObserver =
+                    object : ContentObserver(buildMainHandler()) {
+                        override fun onChange(selfChange: Boolean, uri: Uri?) {
+                            super.onChange(selfChange, uri)
+                            if (contentObserver == null) return
+                            if (
+                                uri == Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS)
+                            ) {
+                                val sysBrightness = getCurrentBrightness(context)
+                                if (sysBrightness < 200) {
+                                    setBrightness(brightness)
+                                    contentObserver?.let {
+                                        context.contentResolver.unregisterContentObserver(it)
+                                    }
+                                    contentObserver = null
+                                } else if (sysBrightness < 255) {
+                                    setBrightness(brightness)
+                                } else {
+                                    setBrightness(autoBrightness)
                                 }
-                                contentObserver = null
-                            } else if (sysBrightness < 255) {
-                                setBrightness(brightness)
-                            } else {
-                                setBrightness(autoBrightness)
                             }
                         }
                     }
-                }
                 val brightnessUri = Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS)
                 context.contentResolver.registerContentObserver(
                     brightnessUri,
                     false,
-                    contentObserver!!
+                    contentObserver!!,
                 )
                 setBrightness(autoBrightness)
             } else {
@@ -344,14 +360,12 @@ class ReadMenu @JvmOverloads constructor(
         }
     }
 
-    /**
-     * 获取系统亮度值
-     */
+    /** 获取系统亮度值 */
     private fun getCurrentBrightness(context: Context): Int {
         return try {
             Settings.System.getInt(
                 context.contentResolver,
-                Settings.System.SCREEN_BRIGHTNESS
+                Settings.System.SCREEN_BRIGHTNESS,
             )
         } catch (_: Settings.SettingNotFoundException) {
             -1
@@ -458,7 +472,7 @@ class ReadMenu @JvmOverloads constructor(
                     ReadBook.bookSource,
                     book,
                     chapter,
-                    BookType.text
+                    BookType.text,
                 )
             }
         }
@@ -472,125 +486,129 @@ class ReadMenu @JvmOverloads constructor(
                     ReadBook.bookSource,
                     book,
                     chapter,
-                    BookType.text
+                    BookType.text,
                 )
             }
             true
         }
-        //书源操作
+        // 书源操作
         tvSourceAction.onClick {
             val hasLogin = ReadBook.bookSource?.hasLogin() == true
-            val canPay = hasLogin
-                    && ReadBook.curTextChapter?.isVip == true
-                    && ReadBook.curTextChapter?.isPay != true
+            val canPay =
+                hasLogin &&
+                    ReadBook.curTextChapter?.isVip == true &&
+                    ReadBook.curTextChapter?.isPay != true
             popupActionMenu(context) {
-                item(context.getString(R.string.login), "login", hasLogin)
-                item(context.getString(R.string.chapter_pay), "chapterPay", canPay)
-                item(context.getString(R.string.edit_book_source), "editSource")
-                item(context.getString(R.string.disable_book_source), "disableSource")
-            }.show(tvSourceAction) { action ->
-                when (action) {
-                    "login" -> callBack.showLogin()
-                    "chapterPay" -> callBack.payAction()
-                    "editSource" -> callBack.openSourceEditActivity()
-                    "disableSource" -> callBack.disableSource()
+                    item(context.getString(R.string.login), "login", hasLogin)
+                    item(context.getString(R.string.chapter_pay), "chapterPay", canPay)
+                    item(context.getString(R.string.edit_book_source), "editSource")
+                    item(context.getString(R.string.disable_book_source), "disableSource")
                 }
-            }
+                .show(tvSourceAction) { action ->
+                    when (action) {
+                        "login" -> callBack.showLogin()
+                        "chapterPay" -> callBack.payAction()
+                        "editSource" -> callBack.openSourceEditActivity()
+                        "disableSource" -> callBack.disableSource()
+                    }
+                }
         }
-        //亮度跟随
+        // 亮度跟随
         ivBrightnessAuto.setOnClickListener {
             context.putPrefBoolean("brightnessAuto", !brightnessAuto())
             upBrightnessState()
         }
-        //亮度调节
-        seekBrightness.setOnSeekBarChangeListener(object : SeekBarChangeListener {
+        // 亮度调节
+        seekBrightness.setOnSeekBarChangeListener(
+            object : SeekBarChangeListener {
 
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    setScreenBrightness(progress.toFloat())
+                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        setScreenBrightness(progress.toFloat())
+                    }
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar) {
+                    AppConfig.readBrightness = seekBar.progress
                 }
             }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                AppConfig.readBrightness = seekBar.progress
-            }
-
-        })
+        )
         vwBrightnessPosAdjust.setOnClickListener {
             AppConfig.brightnessVwPos = !AppConfig.brightnessVwPos
             upBrightnessVwPos()
         }
-        //阅读进度
-        seekReadPage.setOnSeekBarChangeListener(object : SeekBarChangeListener {
+        // 阅读进度
+        seekReadPage.setOnSeekBarChangeListener(
+            object : SeekBarChangeListener {
 
-            override fun onStartTrackingTouch(seekBar: SeekBar) {
-                binding.vwMenuBg.setOnClickListener(null)
-            }
+                override fun onStartTrackingTouch(seekBar: SeekBar) {
+                    binding.vwMenuBg.setOnClickListener(null)
+                }
 
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                binding.vwMenuBg.setOnClickListener { runMenuOut() }
-                when (AppConfig.progressBarBehavior) {
-                    "page" -> ReadBook.skipToPage(seekBar.progress)
-                    "chapter" -> {
-                        if (confirmSkipToChapter) {
-                            callBack.skipToChapter(seekBar.progress)
-                        } else {
-                            context.alert("章节跳转确认", "确定要跳转章节吗？") {
-                                yesButton {
-                                    confirmSkipToChapter = true
-                                    callBack.skipToChapter(seekBar.progress)
-                                }
-                                noButton {
-                                    upSeekBar()
-                                }
-                                onCancelled {
-                                    upSeekBar()
+                override fun onStopTrackingTouch(seekBar: SeekBar) {
+                    binding.vwMenuBg.setOnClickListener { runMenuOut() }
+                    when (AppConfig.progressBarBehavior) {
+                        "page" -> ReadBook.skipToPage(seekBar.progress)
+                        "chapter" -> {
+                            if (confirmSkipToChapter) {
+                                callBack.skipToChapter(seekBar.progress)
+                            } else {
+                                context.alert("章节跳转确认", "确定要跳转章节吗？") {
+                                    yesButton {
+                                        confirmSkipToChapter = true
+                                        callBack.skipToChapter(seekBar.progress)
+                                    }
+                                    noButton {
+                                        upSeekBar()
+                                    }
+                                    onCancelled {
+                                        upSeekBar()
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        )
 
-        })
-
-        //搜索
+        // 搜索
         fabSearch.setOnClickListener {
             runMenuOut {
                 callBack.openSearchActivity(null)
             }
         }
 
-        //自动翻页
+        // 自动翻页
         fabAutoPage.setOnClickListener {
             runMenuOut {
                 callBack.autoPage()
             }
         }
 
-        //替换
+        // 替换
         fabReplaceRule.setOnClickListener { callBack.openReplaceRule() }
 
-        //夜间模式
+        // 夜间模式
         fabNightTheme.setOnClickListener {
             AppConfig.isNightTheme = !AppConfig.isNightTheme
             ThemeConfig.applyDayNight(context)
         }
 
-        //上一章
+        // 上一章
         tvPre.setOnClickListener { ReadBook.moveToPrevChapter(upContent = true, toLast = false) }
 
-        //下一章
+        // 下一章
         tvNext.setOnClickListener { ReadBook.moveToNextChapter(true) }
 
-        //目录
+        // 目录
         llCatalog.setOnClickListener {
             runMenuOut {
                 callBack.openChapterList()
             }
         }
 
-        //朗读
+        // 朗读
         llReadAloud.setOnClickListener {
             runMenuOut {
                 if (BaseReadAloudService.isRun) {
@@ -605,14 +623,14 @@ class ReadMenu @JvmOverloads constructor(
                 callBack.showReadAloudDialog()
             }
         }
-        //界面
+        // 界面
         llFont.setOnClickListener {
             runMenuOut {
                 callBack.showReadStyle()
             }
         }
 
-        //设置
+        // 设置
         llSetting.setOnClickListener {
             runMenuOut {
                 callBack.showMoreSetting()
@@ -645,10 +663,11 @@ class ReadMenu @JvmOverloads constructor(
             upSeekBar()
             binding.tvPre.isEnabled = ReadBook.durChapterIndex != 0
             binding.tvNext.isEnabled = ReadBook.durChapterIndex != ReadBook.simulatedChapterSize - 1
-        } ?: let {
-            binding.tvChapterName.gone()
-            binding.tvChapterUrl.gone()
         }
+            ?: let {
+                binding.tvChapterName.gone()
+                binding.tvChapterUrl.gone()
+            }
     }
 
     private fun updateTitleAdditionLayout() = binding.run {
@@ -659,7 +678,7 @@ class ReadMenu @JvmOverloads constructor(
         tvChapterUrl.gravity = Gravity.CENTER_VERTICAL
         tvChapterName.setTextSize(
             TypedValue.COMPLEX_UNIT_PX,
-            chapterNameTextSize + if (chapterNameOnly) 2f * scaledDensity else 0f
+            chapterNameTextSize + if (chapterNameOnly) 2f * scaledDensity else 0f,
         )
         tvChapterUrl.alpha = if (chapterNameOnly && hasChapterUrl) 0f else 1f
         if (hasChapterUrl) {
@@ -669,11 +688,12 @@ class ReadMenu @JvmOverloads constructor(
         }
         ConstraintSet().apply {
             clone(titleBarAddition)
-            val bottomTarget = if (tvChapterUrl.isGone) {
-                R.id.tv_chapter_name
-            } else {
-                R.id.tv_chapter_url
-            }
+            val bottomTarget =
+                if (tvChapterUrl.isGone) {
+                    R.id.tv_chapter_name
+                } else {
+                    R.id.tv_chapter_url
+                }
             connect(R.id.tv_custom_btn, ConstraintSet.BOTTOM, bottomTarget, ConstraintSet.BOTTOM)
             connect(R.id.tv_source_action, ConstraintSet.BOTTOM, bottomTarget, ConstraintSet.BOTTOM)
             applyTo(titleBarAddition)
@@ -722,12 +742,14 @@ class ReadMenu @JvmOverloads constructor(
 
     private fun upBrightnessVwPos() {
         if (AppConfig.brightnessVwPos) {
-            binding.root.modifyBegin()
+            binding.root
+                .modifyBegin()
                 .clear(R.id.ll_brightness, ConstraintModify.Anchor.LEFT)
                 .rightToRightOf(R.id.ll_brightness, R.id.vw_menu_root)
                 .commit()
         } else {
-            binding.root.modifyBegin()
+            binding.root
+                .modifyBegin()
                 .clear(R.id.ll_brightness, ConstraintModify.Anchor.RIGHT)
                 .leftToLeftOf(R.id.ll_brightness, R.id.vw_menu_root)
                 .commit()
@@ -736,24 +758,41 @@ class ReadMenu @JvmOverloads constructor(
 
     interface CallBack {
         fun autoPage()
+
         fun openReplaceRule()
+
         fun openChapterList()
+
         fun openSearchActivity(searchWord: String?)
+
         fun openSourceEditActivity()
+
         fun openBookInfoActivity()
+
         fun showReadStyle()
+
         fun showMoreSetting()
+
         fun showBookMemo()
+
         fun showReadAloudDialog()
+
         fun upSystemUiVisibility()
+
         fun onClickReadAloud()
+
         fun showHelp()
+
         fun showLogin()
+
         fun payAction()
+
         fun disableSource()
+
         fun skipToChapter(index: Int)
+
         fun onMenuShow()
+
         fun onMenuHide()
     }
-
 }
