@@ -150,7 +150,13 @@ class HandleFileChoicesViewModel(
 
     fun manualReady(nonce: String) {
         val pending = state.value.pending ?: return
-        if (!ready() || pending.nonce != nonce || pending.action !in listOf(112, 113)) return
+        if (
+            !ready() ||
+                state.value.phase != "Native" ||
+                pending.nonce != nonce ||
+                pending.action !in listOf(112, 113)
+        )
+            return
         operation { persist(checkpoint.copy(phase = "Manual")) }
     }
 
@@ -216,7 +222,13 @@ class HandleFileChoicesViewModel(
     /** System-picker failures use the original app-picker fallback with a distinct owner nonce. */
     fun fallback(nonce: String) {
         val pending = state.value.pending ?: return
-        if (!ready() || pending.nonce != nonce || pending.action !in listOf(0, 1)) return
+        if (
+            !ready() ||
+                state.value.phase != "Native" ||
+                pending.nonce != nonce ||
+                pending.action !in listOf(0, 1)
+        )
+            return
         operation {
             val fallbackAction = if (pending.action == 0) 10 else 11
             val fallback = HandleFilePending(fallbackAction, UUID.randomUUID().toString())

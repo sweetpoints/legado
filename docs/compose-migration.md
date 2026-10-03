@@ -1273,3 +1273,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 文件选择新增独立不可变 VM：选择器 nonce、早到/迟到结果、手工草稿光标与取消/恢复由私有 checkpoint 管理，SavedState 仅保存会话 ID 与 revision。上传/保存接受成功后在 IO 内用短 NonCancellable 写结果回执，再返回 Main；回执写失败保留已接受结果，重试不重复当前已成功传输，停止后的迟到返回不发布 UI。原手工输入无效提示后关闭行为与 EXPORT 返回合同保留。新增 10 个 JVM 与 2 个真实 IO 返回取消 Android 编译用例；统一 Kotlin formatter/check、AndroidTest Kotlin 编译及全 JVM 回归通过，设备端未执行，Compose 宿主接入另批提交。
 
 文件选择的 File 上传保留原 basename：来源名称写入私有 Input，恢复后使用独占临时副本沿用 DirectLinkUpload 的 File 压缩分支，保持 ZIP entry 名称，并避免帮助类删除稳定载荷；ByteArray/String/Gson 来源仍沿原 bytes 分支。取消或失败只清自身上传副本，Session 基础展开为明确的多行 Atomic/stripe/release helper。新增 1 个 JVM 和 2 个真实文件/ZIP/取消 Android 用例，统一格式检查通过；本兼容批次完整 JVM 与 Android 测试编译按队列在整合前验证。
+
+文件选择的迟到权限完成与系统选择器失败回调现在同时验证 nonce 和 Native 阶段，已接受 Result 后忽略旧回调，避免重新打开手工编辑或替换当前回执。新增 2 个真实 VM 状态回归，验证结果与私有 checkpoint 均不回滚；格式检查通过，完整测试将在最终整合前同批复验。

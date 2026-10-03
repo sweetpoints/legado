@@ -449,4 +449,49 @@ class HandleFileChoicesViewModelTest {
         assertEquals("https://accepted", restored.state.value.result)
         assertEquals(1, files.uploads)
     }
+
+    @Test
+    fun latePermissionCompletionCannotReopenManualEditorAfterAcceptedResult() = test {
+        val disk = Disk()
+        val viewModel = model(disk = disk)
+        viewModel.load(HandleFileSeed(HandleFileInput(4)))
+        runCurrent()
+        viewModel.choose(113)
+        runCurrent()
+        val nonce = viewModel.state.value.pending!!.nonce
+        viewModel.manualReady(nonce)
+        runCurrent()
+        viewModel.text("Exact image", 3, 3)
+        runCurrent()
+        viewModel.confirmManual()
+        runCurrent()
+        val accepted = disk.value
+
+        viewModel.manualReady(nonce)
+        runCurrent()
+        assertEquals("Result", viewModel.state.value.phase)
+        assertEquals("file://Exact image", viewModel.state.value.result)
+        assertEquals(accepted, disk.value)
+    }
+
+    @Test
+    fun latePickerLaunchFailureCannotReplacePendingOwnerAfterAcceptedResult() = test {
+        val disk = Disk()
+        val viewModel = model(disk = disk)
+        viewModel.load(HandleFileSeed(HandleFileInput(1)))
+        runCurrent()
+        viewModel.choose(1)
+        runCurrent()
+        val nonce = viewModel.state.value.pending!!.nonce
+        viewModel.returned(nonce, "content://accepted")
+        runCurrent()
+        val accepted = disk.value
+
+        viewModel.fallback(nonce)
+        runCurrent()
+        assertEquals("Result", viewModel.state.value.phase)
+        assertEquals("content://accepted", viewModel.state.value.result)
+        assertEquals(nonce, viewModel.state.value.pending!!.nonce)
+        assertEquals(accepted, disk.value)
+    }
 }
