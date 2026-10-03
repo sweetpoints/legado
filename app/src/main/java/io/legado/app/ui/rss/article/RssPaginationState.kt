@@ -47,6 +47,17 @@ internal class RssPaginationState {
     val hasNextPage: Boolean
         get() = !nextPageUrl.isNullOrBlank()
 
+    /** Restore an owned disk checkpoint only while idle, invalidating every prior result token. */
+    @Synchronized
+    fun restore(page: Int, nextPageUrl: String?, retryTarget: RssRetryTarget? = null) {
+        check(!isLoading && activeRequestId == null)
+        require(page >= 1)
+        requestSequence++
+        this.page = page
+        this.nextPageUrl = nextPageUrl.normalizedPageUrl()
+        this.retryTarget = retryTarget
+    }
+
     @Synchronized
     fun startRefresh(): RssRefreshAction {
         if (isLoading) return RssRefreshAction.InProgress
