@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  actions: write
+  pull-requests: write
   contents: write
 
 jobs:
@@ -63,25 +63,26 @@ jobs:
             modules/web/src/components.d.ts
           if-no-files-found: error
 
-      - name: Commit web assets
-        id: web-commit
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.ENABLE_WEB_ASSET_PUSH == 'true' }}
-        uses: stefanzweifel/git-auto-commit-action@v7.2.0
-        with:
-          commit_message: Bump web ${{ env.APP_VER}}
-          file_pattern: app/src/main/assets/web/vue/ modules/web/src/components.d.ts
-          skip_fetch: true
-          skip_push: true
-
-      - name: Push web assets
-        if: ${{ steps.web-commit.outputs.changes_detected == 'true' }}
-        run: bash .github/scripts/push-web-assets.sh
-
-      - name: Dispatch Test Release
-        if: ${{ steps.web-commit.outputs.changes_detected == 'true' && vars.ENABLE_TEST_RELEASE == 'true' }}
+      - name: Verify web asset PR credentials
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.ENABLE_WEB_ASSET_PR == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          WEB_ASSET_TOKEN: ${{ secrets.WEB_ASSET_TOKEN }}
         run: |
-          gh workflow run TestRelease.yml --ref master \
-            -f commit_sha="$(git rev-parse HEAD)"
+          if [[ -z "$WEB_ASSET_TOKEN" ]]; then
+            echo "WEB_ASSET_TOKEN is required to trigger CI on generated asset PRs"
+            exit 1
+          fi
 
+      - name: Create web asset pull request
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.ENABLE_WEB_ASSET_PR == 'true' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.WEB_ASSET_TOKEN }}
+          branch: codex/web-assets
+          base: master
+          title: 'build(web): update bundled web assets'
+          commit-message: 'build(web): update bundled web assets'
+          body: '更新 Web 构建产物。此 PR 必须通过统一 CI 检查后才能合并。'
+          add-paths: |
+            app/src/main/assets/web/vue/
+            modules/web/src/components.d.ts
