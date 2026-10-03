@@ -12,11 +12,28 @@ import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.repository.RoomRemoteServerEditorRepository
 
 class ServerConfigDialog() : BaseComposeDialogFragment() {
-    constructor(id: Long) : this() { arguments = Bundle().apply { putLong("id", id) } }
-    private val viewModel by viewModels<ServerConfigViewModel> {
-        viewModelFactory { initializer { ServerConfigViewModel(RoomRemoteServerEditorRepository(), createSavedStateHandle(), arguments?.getLong("id")) } }
+    constructor(id: Long) : this() {
+        arguments = Bundle().apply { putLong("id", id) }
     }
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); isCancelable = false }
+
+    private val viewModel by
+        viewModels<ServerConfigViewModel> {
+            viewModelFactory {
+                initializer {
+                    ServerConfigViewModel(
+                        RoomRemoteServerEditorRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getLong("id"),
+                    )
+                }
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        isCancelable = false
+    }
+
     override fun onStart() {
         super.onStart()
         dialog?.window?.run {
@@ -24,6 +41,13 @@ class ServerConfigDialog() : BaseComposeDialogFragment() {
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
     }
-    @Composable override fun Content() { ServerConfigRoute(viewModel, ::dismissAllowingStateLoss) }
-    override fun dismiss() { viewModel.close() }
+
+    @Composable
+    override fun Content() {
+        ServerConfigRoute(viewModel, ::dismissAllowingStateLoss)
+    }
+
+    override fun dismiss() {
+        viewModel.close()
+    }
 }

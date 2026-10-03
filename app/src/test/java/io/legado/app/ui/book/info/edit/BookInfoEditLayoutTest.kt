@@ -1,11 +1,11 @@
 package io.legado.app.ui.book.info.edit
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.w3c.dom.Document
 import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class BookInfoEditLayoutTest {
 
@@ -17,9 +17,12 @@ class BookInfoEditLayoutTest {
     }
 
     private fun parse(path: String): Document =
-        DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder().parse(File(repositoryRoot, path))
+        DocumentBuilderFactory.newInstance()
+            .apply {
+                isNamespaceAware = true
+            }
+            .newDocumentBuilder()
+            .parse(File(repositoryRoot, path))
 
     private fun stringValue(path: String): String {
         val nodes = parse(path).getElementsByTagName("string")
@@ -34,5 +37,4 @@ class BookInfoEditLayoutTest {
         generateSequence(File(userDir)) { it.parentFile }
             .first { File(it, "app/src/main").isDirectory }
     }
-
 }
