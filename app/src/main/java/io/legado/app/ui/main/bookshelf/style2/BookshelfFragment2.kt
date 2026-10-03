@@ -26,57 +26,131 @@ import io.legado.app.utils.startActivityForBook
 import kotlinx.coroutines.launch
 
 class BookshelfFragment2() : BaseBookshelfFragment(0) {
-    constructor(position: Int) : this() { arguments = Bundle().apply { putInt("position", position) } }
-    private val repository by lazy { RoomBookshelfFolderRepository(requireContext()) }
-    private val folderModel by viewModels<BookshelfFolderViewModel> {
-        viewModelFactory { initializer { BookshelfFolderViewModel(repository, createSavedStateHandle()) } }
+    constructor(position: Int) : this() {
+        arguments = Bundle().apply { putInt("position", position) }
     }
+
+    private val repository by lazy { RoomBookshelfFolderRepository(requireContext()) }
+    private val folderModel by
+        viewModels<BookshelfFolderViewModel> {
+            viewModelFactory {
+                initializer { BookshelfFolderViewModel(repository, createSavedStateHandle()) }
+            }
+        }
     override var groupId: Long
         get() = folderModel.state.value.groupId
-        set(value) { if (value == BookGroup.IdRoot) folderModel.back() else folderModel.openGroup(value) }
-    override val books: List<Book> get() = folderModel.getBooks()
+        set(value) {
+            if (value == BookGroup.IdRoot) folderModel.back() else folderModel.openGroup(value)
+        }
+
+    override val books: List<Book>
+        get() = folderModel.getBooks()
+
     override var onlyUpdateRead: Boolean
         get() = folderModel.state.value.onlyRead
-        set(value) { folderModel.setOnlyRead(value) }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        set(value) {
+            folderModel.setOnlyRead(value)
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme {
-                BookshelfFolderRoute(folderModel, { id -> viewLifecycleOwner.lifecycleScope.launch {
-                    repository.group(id)?.let { showDialogFragment(GroupEditDialog(it)) }
-                } }, { key -> folderModel.getBook(key)?.let { startActivityForBook(it) } }, { key ->
-                    folderModel.getBook(key)?.let { book -> startActivity<BookInfoActivity> { putExtra("name", book.name); putExtra("author", book.author) } }
-                }, ::handleBookshelfMenu, {
-                    if (folderModel.state.value.canRefresh) activityViewModel.upToc(books, onlyUpdateRead)
-                }, { openRecent(false) }, { openRecent(true) }, { keys ->
-                    folderModel.replaceUpdating(keys.filter { activityViewModel.isUpdate(it) }.toSet())
-                })
-            } }
+            setContent {
+                LegadoComposeTheme {
+                    BookshelfFolderRoute(
+                        folderModel,
+                        { id ->
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                repository.group(id)?.let {
+                                    showDialogFragment(GroupEditDialog(it))
+                                }
+                            }
+                        },
+                        { key -> folderModel.getBook(key)?.let { startActivityForBook(it) } },
+                        { key ->
+                            folderModel.getBook(key)?.let { book ->
+                                startActivity<BookInfoActivity> {
+                                    putExtra("name", book.name)
+                                    putExtra("author", book.author)
+                                }
+                            }
+                        },
+                        ::handleBookshelfMenu,
+                        {
+                            if (folderModel.state.value.canRefresh)
+                                activityViewModel.upToc(books, onlyUpdateRead)
+                        },
+                        { openRecent(false) },
+                        { openRecent(true) },
+                        { keys ->
+                            folderModel.replaceUpdating(
+                                keys.filter { activityViewModel.isUpdate(it) }.toSet()
+                            )
+                        },
+                    )
+                }
+            }
         }
+
     private fun openRecent(info: Boolean) {
         val key = folderModel.state.value.header.recent?.key ?: return
-        viewLifecycleOwner.lifecycleScope.launch { repository.book(key)?.let { book ->
-            if (info) startActivity<BookInfoActivity> { putExtra("name", book.name); putExtra("author", book.author) }
-            else startActivityForBook(book)
-        } }
-    }
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
-    override fun upGroup(data: List<BookGroup>) = Unit
-    override fun upSort() { folderModel.refresh() }
-    override fun gotoTop() { folderModel.gotoTop() }
-    fun back(): Boolean = folderModel.back()
-    fun getItemCount(): Int = folderModel.state.value.itemCount
-    override fun observeLiveBus() {
-        super.observeLiveBus()
-        observeEvent<String>(EventBus.UP_BOOKSHELF) { key -> folderModel.setUpdating(key, activityViewModel.isUpdate(key)); folderModel.refreshTimes() }
-        observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
-            folderModel.replaceUpdating(books.filter { activityViewModel.isUpdate(it.bookUrl) }.map { it.bookUrl }.toSet()); folderModel.refreshTimes()
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.book(key)?.let { book ->
+                if (info)
+                    startActivity<BookInfoActivity> {
+                        putExtra("name", book.name)
+                        putExtra("author", book.author)
+                    }
+                else startActivityForBook(book)
+            }
         }
     }
-    override fun onDestroyView() { folderModel.stop(); super.onDestroyView() }
+
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
+
+    override fun upGroup(data: List<BookGroup>) = Unit
+
+    override fun upSort() {
+        folderModel.refresh()
+    }
+
+    override fun gotoTop() {
+        folderModel.gotoTop()
+    }
+
+    fun back(): Boolean = folderModel.back()
+
+    fun getItemCount(): Int = folderModel.state.value.itemCount
+
+    override fun observeLiveBus() {
+        super.observeLiveBus()
+        observeEvent<String>(EventBus.UP_BOOKSHELF) { key ->
+            folderModel.setUpdating(key, activityViewModel.isUpdate(key))
+            folderModel.refreshTimes()
+        }
+        observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
+            folderModel.replaceUpdating(
+                books.filter { activityViewModel.isUpdate(it.bookUrl) }.map { it.bookUrl }.toSet()
+            )
+            folderModel.refreshTimes()
+        }
+    }
+
+    override fun onDestroyView() {
+        folderModel.stop()
+        super.onDestroyView()
+    }
 }
 
-internal fun adjacentBookshelfGroupId(groups: List<BookGroup>, currentGroupId: Long, offset: Int): Long? {
+internal fun adjacentBookshelfGroupId(
+    groups: List<BookGroup>,
+    currentGroupId: Long,
+    offset: Int,
+): Long? {
     val index = groups.indexOfFirst { it.groupId == currentGroupId }
     return if (index < 0) null else groups.getOrNull(index + offset)?.groupId
 }

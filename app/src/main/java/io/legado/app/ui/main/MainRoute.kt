@@ -29,28 +29,41 @@ fun MainRoute(
     val context = LocalContext.current
     val sizePx = with(LocalDensity.current) { 30.dp.roundToPx() }
     val transparentNavigation = remember(context) { context.transparentNavBar }
-    val icons by produceState<Map<MainDestination, MainSkinIcon>>(
-        initialValue = emptyMap(), state.skinName, state.skinRevision, sizePx,
-    ) {
-        // Decode skin files outside composition and off the main thread.
-        value = emptyMap()
-        value = withContext(Dispatchers.IO) {
-            if (state.skinName.isEmpty() || !BottomBarSkinManager.hasSkin(state.skinName)) {
-                emptyMap()
-            } else {
-                MainDestination.entries.mapNotNull { destination ->
-                    BottomBarSkinManager.getStateDrawable(state.skinName, destination.skinSlot, sizePx)
-                        ?.let { drawable ->
-                            drawable.state = intArrayOf(android.R.attr.state_checked)
-                            val selected = drawable.toBitmap(sizePx, sizePx).asImageBitmap()
-                            drawable.state = intArrayOf()
-                            val unselected = drawable.toBitmap(sizePx, sizePx).asImageBitmap()
-                            destination to MainSkinIcon(selected, unselected)
-                        }
-                }.toMap()
-            }
+    val icons by
+        produceState<Map<MainDestination, MainSkinIcon>>(
+            initialValue = emptyMap(),
+            state.skinName,
+            state.skinRevision,
+            sizePx,
+        ) {
+            // Decode skin files outside composition and off the main thread.
+            value = emptyMap()
+            value =
+                withContext(Dispatchers.IO) {
+                    if (state.skinName.isEmpty() || !BottomBarSkinManager.hasSkin(state.skinName)) {
+                        emptyMap()
+                    } else {
+                        MainDestination.entries
+                            .mapNotNull { destination ->
+                                BottomBarSkinManager.getStateDrawable(
+                                        state.skinName,
+                                        destination.skinSlot,
+                                        sizePx,
+                                    )
+                                    ?.let { drawable ->
+                                        drawable.state = intArrayOf(android.R.attr.state_checked)
+                                        val selected =
+                                            drawable.toBitmap(sizePx, sizePx).asImageBitmap()
+                                        drawable.state = intArrayOf()
+                                        val unselected =
+                                            drawable.toBitmap(sizePx, sizePx).asImageBitmap()
+                                        destination to MainSkinIcon(selected, unselected)
+                                    }
+                            }
+                            .toMap()
+                    }
+                }
         }
-    }
     MainScreen(
         state = state,
         updatingBooks = updatingBooks,
@@ -60,5 +73,7 @@ fun MainRoute(
             if (destination == state.selectedDestination) onDestinationReselected(destination)
             else viewModel.selectDestination(destination)
         },
-    ) { content(state) }
+    ) {
+        content(state)
+    }
 }

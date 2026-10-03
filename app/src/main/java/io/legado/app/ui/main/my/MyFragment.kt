@@ -17,20 +17,33 @@ import io.legado.app.utils.showHelp
 
 /** Temporary Fragment entry point; the destination's content is entirely Compose. */
 class MyFragment() : Fragment(), MainFragmentInterface {
-    constructor(position: Int) : this() { arguments = Bundle().apply { putInt("position", position) } }
-    override val position: Int? get() = arguments?.getInt("position")
+    constructor(position: Int) : this() {
+        arguments = Bundle().apply { putInt("position", position) }
+    }
+
+    override val position: Int?
+        get() = arguments?.getInt("position")
+
     private val viewModel by viewModels<MyViewModel>()
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoComposeTheme {
                     MyRoute(
-                        viewModel, isMore = false,
+                        viewModel,
+                        isMore = false,
                         onItemClick = { (requireActivity() as AppCompatActivity).openMyItem(it) },
-                        onLongClick = { (requireActivity() as AppCompatActivity).showMyServiceActions(it) },
-                        onHelp = { showHelp("appHelp") }, onBack = {},
+                        onLongClick = {
+                            (requireActivity() as AppCompatActivity).showMyServiceActions(it)
+                        },
+                        onHelp = { showHelp("appHelp") },
+                        onBack = {},
                     )
                 }
             }
@@ -38,6 +51,8 @@ class MyFragment() : Fragment(), MainFragmentInterface {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) { viewModel.refreshRuntimeState() }
+        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) {
+            viewModel.refreshRuntimeState()
+        }
     }
 }

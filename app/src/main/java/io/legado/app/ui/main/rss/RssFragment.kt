@@ -30,32 +30,86 @@ import io.legado.app.utils.startActivity
 
 /** Keep Main's Fragment/position entry point while the entire destination is Compose. */
 class RssFragment() : Fragment(), MainFragmentInterface {
-    constructor(position: Int) : this() { arguments = Bundle().apply { putInt("position", position) } }
-    override val position: Int? get() = arguments?.getInt("position")
-    internal val homeModel by viewModels<MainRssViewModel> {
-        viewModelFactory { initializer { MainRssViewModel(AppMainRssRepository(), FileMainRssSessionRepository(),
-            createSavedStateHandle().apply { keys().filterNot { it.startsWith("mainRss.") }.forEach { remove<Any?>(it) } }) } }
+    constructor(position: Int) : this() {
+        arguments = Bundle().apply { putInt("position", position) }
     }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+
+    override val position: Int?
+        get() = arguments?.getInt("position")
+
+    internal val homeModel by
+        viewModels<MainRssViewModel> {
+            viewModelFactory {
+                initializer {
+                    MainRssViewModel(
+                        AppMainRssRepository(),
+                        FileMainRssSessionRepository(),
+                        createSavedStateHandle().apply {
+                            keys()
+                                .filterNot { it.startsWith("mainRss.") }
+                                .forEach { remove<Any?>(it) }
+                        },
+                    )
+                }
+            }
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme {
-                val context = LocalContext.current
-                val images = remember(context) { GlideRssArticleImageRepository(context) }
-                MainRssRoute(homeModel, images, ::ready, ::native)
-            } }
+            setContent {
+                LegadoComposeTheme {
+                    val context = LocalContext.current
+                    val images = remember(context) { GlideRssArticleImageRepository(context) }
+                    MainRssRoute(homeModel, images, ::ready, ::native)
+                }
+            }
         }
-    private fun ready() = isAdded && isResumed && activity?.isFinishing == false && !parentFragmentManager.isStateSaved
+
+    private fun ready() =
+        isAdded &&
+            isResumed &&
+            activity?.isFinishing == false &&
+            !parentFragmentManager.isStateSaved
+
     private fun native(request: MainRssPrepared, readerTicket: String?) {
         when (MainRssAction.valueOf(request.action)) {
-            MainRssAction.Open -> request.navigation?.let { navigation -> when (navigation.destination) {
-                MainRssDestination.Categories -> startActivity<RssSortActivity> { putExtra("sourceUrl", navigation.sourceUrl) }
-                MainRssDestination.ReaderLink -> ReadRssActivity.startPrepared(requireContext(), requireNotNull(readerTicket))
-                MainRssDestination.ReaderHtml -> ReadRssActivity.startPrepared(requireContext(), requireNotNull(readerTicket))
-                MainRssDestination.External -> navigation.value?.let { requireContext().openUrl(it) }
-            } }
-            MainRssAction.Edit -> request.sourceUrl?.let { url -> startActivity<RssSourceEditActivity> { putExtra("sourceUrl", url) } }
-            MainRssAction.Login -> request.sourceUrl?.let { url -> startActivity<SourceLoginActivity> { putExtra("type", "rssSource"); putExtra("key", url) } }
+            MainRssAction.Open ->
+                request.navigation?.let { navigation ->
+                    when (navigation.destination) {
+                        MainRssDestination.Categories ->
+                            startActivity<RssSortActivity> {
+                                putExtra("sourceUrl", navigation.sourceUrl)
+                            }
+                        MainRssDestination.ReaderLink ->
+                            ReadRssActivity.startPrepared(
+                                requireContext(),
+                                requireNotNull(readerTicket),
+                            )
+                        MainRssDestination.ReaderHtml ->
+                            ReadRssActivity.startPrepared(
+                                requireContext(),
+                                requireNotNull(readerTicket),
+                            )
+                        MainRssDestination.External ->
+                            navigation.value?.let { requireContext().openUrl(it) }
+                    }
+                }
+            MainRssAction.Edit ->
+                request.sourceUrl?.let { url ->
+                    startActivity<RssSourceEditActivity> { putExtra("sourceUrl", url) }
+                }
+            MainRssAction.Login ->
+                request.sourceUrl?.let { url ->
+                    startActivity<SourceLoginActivity> {
+                        putExtra("type", "rssSource")
+                        putExtra("key", url)
+                    }
+                }
             MainRssAction.Subscriptions -> startActivity<RuleSubActivity>()
             MainRssAction.History -> showDialogFragment<ReadRecordDialog>()
             MainRssAction.Favorites -> startActivity<RssFavoritesActivity>()

@@ -32,26 +32,39 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 
-abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfViewModel>(layoutId),
-    MainFragmentInterface {
+abstract class BaseBookshelfFragment(layoutId: Int) :
+    VMBaseFragment<BookshelfViewModel>(layoutId), MainFragmentInterface {
 
-    override val position: Int? get() = arguments?.getInt("position")
+    override val position: Int?
+        get() = arguments?.getInt("position")
 
     val activityViewModel by activityViewModels<MainViewModel>()
     override val viewModel by viewModels<BookshelfViewModel>()
 
-    private val importBookshelf = registerForActivityResult(HandleFileContract()) { result ->
-        val targetGroup = viewModel.transfer.importReturned() ?: return@registerForActivityResult
-        val uri = result.uri ?: return@registerForActivityResult
-        viewModel.importBookshelfFile(uri.toString(), targetGroup)
-    }
-    private val exportResult = registerForActivityResult(HandleFileContract()) { result ->
-        result.uri?.let { uri -> showDialogFragment(BookshelfInputDialog.create(2, value = uri.toString(),
-            summary = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else "")) }
-    }
+    private val importBookshelf =
+        registerForActivityResult(HandleFileContract()) { result ->
+            val targetGroup =
+                viewModel.transfer.importReturned() ?: return@registerForActivityResult
+            val uri = result.uri ?: return@registerForActivityResult
+            viewModel.importBookshelfFile(uri.toString(), targetGroup)
+        }
+    private val exportResult =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { uri ->
+                showDialogFragment(
+                    BookshelfInputDialog.create(
+                        2,
+                        value = uri.toString(),
+                        summary =
+                            if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else "",
+                    )
+                )
+            }
+        }
     abstract val groupId: Long
     abstract val books: List<Book>
     abstract var onlyUpdateRead: Boolean
+
     abstract fun gotoTop()
 
     protected fun handleBookshelfMenu(itemId: Int) {
@@ -63,13 +76,15 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
             R.id.menu_add_local -> startActivity<ImportBookActivity>()
             R.id.menu_add_url -> showAddBookByUrlAlert()
-            R.id.menu_bookshelf_manage -> startActivity<BookshelfManageActivity> {
-                putExtra("groupId", groupId)
-            }
+            R.id.menu_bookshelf_manage ->
+                startActivity<BookshelfManageActivity> {
+                    putExtra("groupId", groupId)
+                }
 
-            R.id.menu_download -> startActivity<CacheActivity> {
-                putExtra("groupId", groupId)
-            }
+            R.id.menu_download ->
+                startActivity<CacheActivity> {
+                    putExtra("groupId", groupId)
+                }
 
             R.id.menu_export_bookshelf -> viewModel.exportBookshelf(books)
 
@@ -88,11 +103,18 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 launch {
                     viewModel.transfer.addProgress.collect { count ->
                         if (count < 0) return@collect
-                        // Resume after the host FragmentManager has completed its lifecycle transaction.
+                        // Resume after the host FragmentManager has completed its lifecycle
+                        // transaction.
                         kotlinx.coroutines.yield()
-                        if (viewModel.transfer.addProgress.value >= 0 && !childFragmentManager.isStateSaved &&
-                            childFragmentManager.findFragmentByTag("BookshelfAddProgressDialog") == null) {
-                            BookshelfAddProgressDialog().showNow(childFragmentManager, "BookshelfAddProgressDialog")
+                        if (
+                            viewModel.transfer.addProgress.value >= 0 &&
+                                !childFragmentManager.isStateSaved &&
+                                childFragmentManager.findFragmentByTag(
+                                    "BookshelfAddProgressDialog"
+                                ) == null
+                        ) {
+                            BookshelfAddProgressDialog()
+                                .showNow(childFragmentManager, "BookshelfAddProgressDialog")
                         }
                     }
                 }
@@ -103,7 +125,12 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                         if (file.exists()) {
                             exportResult.launch {
                                 mode = HandleFileContract.EXPORT
-                                fileData = HandleFileContract.FileData("bookshelf.json", file, "application/json")
+                                fileData =
+                                    HandleFileContract.FileData(
+                                        "bookshelf.json",
+                                        file,
+                                        "application/json",
+                                    )
                             }
                         } else toastOnUi(getString(R.string.error))
                         viewModel.transfer.exportLaunched(path)
@@ -113,19 +140,33 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
     }
 
-    fun showAddBookByUrlAlert() { showDialogFragment(BookshelfInputDialog.create(0, groupId)) }
-    fun configBookshelf() { showDialogFragment<BookshelfSettingsDialog>() }
-    private fun importBookshelfAlert(groupId: Long) { showDialogFragment(BookshelfInputDialog.create(1, groupId)) }
+    fun showAddBookByUrlAlert() {
+        showDialogFragment(BookshelfInputDialog.create(0, groupId))
+    }
+
+    fun configBookshelf() {
+        showDialogFragment<BookshelfSettingsDialog>()
+    }
+
+    private fun importBookshelfAlert(groupId: Long) {
+        showDialogFragment(BookshelfInputDialog.create(1, groupId))
+    }
+
     internal fun submitShelfInput(kind: Int, result: BookshelfInputResult) {
         when (kind) {
             0 -> viewModel.addBookByUrl(result.text, result.groupId)
             1 -> viewModel.importBookshelf(result.text, result.groupId)
         }
     }
+
     internal fun selectBookshelfImportFile(groupId: Long) {
         viewModel.transfer.importRequested(groupId)
-        importBookshelf.launch { mode = HandleFileContract.FILE; allowExtensions = arrayOf("txt", "json") }
+        importBookshelf.launch {
+            mode = HandleFileContract.FILE
+            allowExtensions = arrayOf("txt", "json")
+        }
     }
+
     internal fun applySettingsEffects(effects: BookshelfSettingsEffects) {
         if (effects.updateWaitCount) activityViewModel.postUpBooksLiveData(true)
         if (effects.updateSort) upSort()
