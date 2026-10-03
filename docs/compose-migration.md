@@ -1187,3 +1187,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 替换规则导入新增 prepared UUID 入口：调用原 parser 在 IO 准备并保存既有私有 import session，Dialog 仅传 UUID；恢复缺失会话明确报错，不解析别的 fallback source。取消准备或终止 owner 只释放自身 stage，等待旧写入结束再清理，保留旧 source 入口及解析深度/缓存规则。新增 4 个 JVM 与 2 个实际 parser/Atomic 大载荷编译用例。
 
 远程书库阅读准备抽离为独立 IO repository，保留原文件名查书、压缩包缺失下载、单文件确认、多文件选择与不支持格式分支；存储帮助、tree 配置、压缩读取和导入离开 Main。原生交付前重读当前书籍快照，覆盖 3 个 JVM 与实际 Room metadata 编译用例，页面接入另批迁移。
+
+远程书库完整路径、列表、查询、选择、压缩确认与已接受任务回执保存为独立私有 Atomic 草稿；磁盘 revision 拒绝旧写入，关闭标记及其备份阻止迟到写入复活。新增实际大载荷、Atomic 备份和独立会话释放测试编译覆盖，SavedState 仅保留小票据。
