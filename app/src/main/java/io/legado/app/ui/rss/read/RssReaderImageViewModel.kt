@@ -29,6 +29,12 @@ class RssReaderImageViewModel(private val repository: RssReaderImageRepository,
     private var job: Job? = null
     private var earlyResult: Pair<String, String?>? = null
     private val cleanup = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** Fence the previous reader immediately, before an asynchronous full-request fingerprint is ready. */
+    fun invalidateOwner() {
+        generation++; job?.cancel(); job = null; owner = null
+        mutable.value = state.value.copy(loaded = false, busy = false, pending = null, error = null)
+        // Preserve the disk ticket and picker nonce. A result arriving now is buffered until bind verifies its owner.
+    }
     fun bind(currentOwner: String) {
         if (owner == currentOwner && (state.value.loaded || job?.isActive == true)) return
         owner = currentOwner; job?.cancel(); val epoch = ++generation

@@ -110,6 +110,23 @@ class RssReaderImageViewModelTest {
         sessions.failure = false; model.retry(); runCurrent(); assertEquals("exact image", sessions.value!!.image)
         assertEquals(RssReaderImageEffectKind.Picker, model.state.value.pending!!.kind)
     }
+    @Test fun earlyOldPickerResultDuringOwnerFingerprintCannotCopyIntoNewReader() = test {
+        val images = Images(); val sessions = Sessions(); val model = model(images, sessions)
+        model.bind("old"); runCurrent(); model.save("image", "old"); runCurrent()
+        val nonce = model.state.value.pending!!.nonce; model.pickerDelivered(nonce)
+        model.invalidateOwner(); model.picked(nonce, "wrong target"); runCurrent()
+        assertTrue(images.names.isEmpty()); assertFalse(model.state.value.loaded)
+        model.bind("new"); runCurrent(); assertTrue(images.names.isEmpty()); assertNull(model.state.value.pending)
+    }
+    @Test fun earlyPickerResultDuringSameOwnerFingerprintRestoresAndCopiesOnce() = test {
+        val images = Images(); val sessions = Sessions(); val model = model(images, sessions)
+        model.bind("same"); runCurrent(); model.save("image", "same"); runCurrent()
+        val nonce = model.state.value.pending!!.nonce; model.pickerDelivered(nonce)
+        model.invalidateOwner(); model.picked(nonce, "correct target"); runCurrent()
+        assertTrue(images.names.isEmpty()); model.bind("same"); runCurrent()
+        assertEquals(listOf("fixed.jpg"), images.names); assertEquals("correct target", images.directory)
+        assertEquals(RssReaderImageEffectKind.Saved, model.state.value.pending!!.kind)
+    }
     @Test fun choosingDirectoryWithoutImageUpdatesPreferenceWithoutSavedImageEffect() = test {
         val images = Images(); val model = model(images); model.bind("owner"); runCurrent(); model.chooseDirectory("owner"); runCurrent()
         val nonce = model.state.value.pending!!.nonce; model.pickerDelivered(nonce); model.picked(nonce, "directory"); runCurrent()

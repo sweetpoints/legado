@@ -15,24 +15,8 @@ class Issue1008MenuContractTest {
             "ic_add_online"
         )
 
-        val rssMenu = readProjectFile("src/main/res/menu/rss_read.xml")
-        val aloud = itemBlock(rssMenu, "menu_aloud")
-        assertFalse(aloud.contains("android:icon="))
-        assertContains("rss_read.xml", aloud, """app:showAsAction="never"""")
+        // RSS overflow behavior is covered by RssReaderScreenTest using the real Compose menu.
 
-        val rssActivity = readProjectFile(
-            "src/main/java/io/legado/app/ui/rss/read/ReadRssActivity.kt"
-        )
-        assertContains(
-            "ReadRssActivity.kt",
-            rssActivity,
-            "class ReadRssActivity :"
-        )
-        assertContains(
-            "ReadRssActivity.kt",
-            rssActivity,
-            "showOpenMenuIcon = false"
-        )
     }
 
     private fun assertItemIcon(path: String, id: String, drawable: String) {
