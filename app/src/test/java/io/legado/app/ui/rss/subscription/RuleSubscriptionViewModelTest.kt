@@ -89,6 +89,15 @@ class RuleSubscriptionViewModelTest {
         val vm=model(rules,store,saved);runCurrent();assertFalse(vm.state.value.loaded);vm.create();assertNull(vm.state.value.editor);assertEquals(original,store.records["ticket"])
         store.failRead=false;vm.retry();runCurrent();assertTrue(vm.state.value.loaded);assertEquals("original",vm.state.value.editor!!.url)
     }
+    @Test fun pendingImportIsConsumedBeforeDeliveryAndCannotRepeatAfterDiskRestore()=runTest(dispatcher) {
+        val rules=Rules();rules.rows.value=listOf(row(1));val store=Store(rules);val saved=SavedStateHandle();val vm=model(rules,store,saved);runCurrent();vm.open(1);runCurrent();val token=vm.state.value.navigation!!.token
+        assertEquals("https://1",vm.consumeOpen(token){true}!!.url);assertNull(vm.consumeOpen(token){true});vm.stop();val restored=model(rules,store,snapshot(saved));runCurrent();assertNull(restored.state.value.navigation)
+    }
+    @Test fun canceledOrPausedNonCooperativeDiskClaimRollsBackOriginalPendingImport()=runTest(dispatcher) {
+        val rules=Rules();rules.rows.value=listOf(row(1));val store=Store(rules);val vm=model(rules,store);runCurrent();vm.open(1);runCurrent();val pending=vm.state.value.navigation!!
+        val gate=CompletableDeferred<Unit>();store.claimGate=gate;val job=launch { vm.consumeOpen(pending.token){true};error("Canceled claim delivered") };runCurrent();job.cancel();gate.complete(Unit);runCurrent();assertTrue(job.isCancelled);assertEquals(pending,vm.state.value.navigation);assertEquals(pending,store.records.values.single().navigation)
+        assertNull(vm.consumeOpen(pending.token){false});assertEquals(pending,vm.consumeOpen(pending.token){true});assertNull(vm.state.value.navigation)
+    }
     private class Rules:RuleSubscriptionRepository {
         val rows=MutableStateFlow<List<RuleSubscription>>(emptyList());val reorders=mutableListOf<List<Long>>();var saves=0
         override fun rows()=rows
@@ -107,9 +116,11 @@ class RuleSubscriptionViewModelTest {
     }
     private class Store(val rules:Rules):RuleSubscriptionDraftRepository {
         val records=mutableMapOf<String,RuleSubscriptionDraft>();val released=mutableSetOf<String>();var failFinal=false;var failRead=false
-        var readGate:CompletableDeferred<Unit>?=null;var saveGate:CompletableDeferred<Unit>?=null
+        var readGate:CompletableDeferred<Unit>?=null;var saveGate:CompletableDeferred<Unit>?=null;var claimGate:CompletableDeferred<Unit>?=null
         override suspend fun read(ticket:String):RuleSubscriptionDraft? { readGate?.let { withContext(NonCancellable) { it.await() } };if(failRead) error("read failed");return records[ticket] }
-        override suspend fun write(ticket:String,draft:RuleSubscriptionDraft) { check(ticket !in released);if((records[ticket]?.revision ?: -1)<=draft.revision) records[ticket]=draft }
+        override suspend fun write(ticket:String,draft:RuleSubscriptionDraft) {
+            if(draft.navigation==null && records[ticket]?.navigation!=null) { val gate=claimGate;claimGate=null;gate?.let { withContext(NonCancellable) { it.await() } } }
+            check(ticket !in released);if((records[ticket]?.revision ?: -1)<=draft.revision) records[ticket]=draft }
         override suspend fun save(ticket:String,draft:RuleSubscriptionDraft):RuleSubscriptionDraft {
             saveGate?.await();var current=records[ticket]?.takeIf { it.pendingSave!=null } ?: draft;val editor=current.editor!!
             if(current.pendingSave!=null) rules.recoverSave(current.pendingSave!!)

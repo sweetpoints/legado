@@ -7,6 +7,8 @@ import io.legado.app.data.repository.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 enum class RuleSubscriptionIssue { EmptyUrl, DuplicateUrl, Missing, Conflict, Failure }
@@ -25,6 +27,7 @@ class RuleSubscriptionViewModel(private val rules: RuleSubscriptionRepository,
     private var record=RuleSubscriptionDraft()
     private var baseline=emptyList<RuleSubscription>();private var preview: List<Long>?=null
     private var stopped=false
+    private val navigationGate=Mutex()
     private val writes=Channel<RuleSubscriptionDraft>(Channel.CONFLATED)
     private val writer=viewModelScope.launch {
         for (draft in writes) try { drafts.write(ticket,draft) } catch(error:Exception) { currentCoroutineContext().ensureActive();failure(error) }
@@ -142,6 +145,35 @@ class RuleSubscriptionViewModel(private val rules: RuleSubscriptionRepository,
         val row=baseline.find { it.id==id } ?: return
         if(row.type !in 0..2) return
         update(record.copy(navigation=RuleSubscriptionOpen(UUID.randomUUID().toString(),row.type,row.url)))
+    }
+    fun openFailure(error:Exception) { failure(error) }
+    suspend fun consumeOpen(token:String,canDeliver:()->Boolean):RuleSubscriptionOpen? = navigationGate.withLock {
+        currentCoroutineContext().ensureActive()
+        val navigation=record.navigation?.takeIf { it.token==token } ?: return@withLock null
+        if(stopped || !canDeliver()) return@withLock null
+        flush();currentCoroutineContext().ensureActive()
+        if(stopped || !canDeliver() || record.navigation?.token!=token) return@withLock null
+        val before=record
+        val claimed=before.copy(navigation=null,revision=before.revision+1)
+        var committed=false
+        try {
+            drafts.write(ticket,claimed);committed=true
+            currentCoroutineContext().ensureActive()
+            if(stopped || !canDeliver()) {
+                val rollback=before.copy(revision=claimed.revision+1)
+                withContext(NonCancellable) { drafts.write(ticket,rollback) }
+                if(!stopped) { record=rollback;mutable.value=state.value.copy(navigation=navigation) }
+                return@withLock null
+            }
+            record=claimed;mutable.value=state.value.copy(navigation=null);navigation
+        } catch(error:Exception) {
+            if(committed || error is CancellationException) {
+                val rollback=before.copy(revision=claimed.revision+1)
+                withContext(NonCancellable) { runCatching { drafts.write(ticket,rollback) } }
+                if(!stopped) { record=rollback;mutable.value=state.value.copy(navigation=navigation) }
+            }
+            throw error
+        }
     }
     fun beginDrag():Boolean {
         if(blocked() || state.value.editor!=null) return false

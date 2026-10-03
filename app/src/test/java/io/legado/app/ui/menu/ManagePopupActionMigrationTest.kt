@@ -119,7 +119,6 @@ class ManagePopupActionMigrationTest {
             "callBack.del(source)",
             "selected.remove(source)"
         )
-        assertActions(RULE_SUB, "callBack.delSubscription(source)")
         assertActions(
             REPLACE_RULE,
             "\"top\" -> callBack.toTop(item)",
@@ -140,10 +139,6 @@ class ManagePopupActionMigrationTest {
                 "item(context.getString(R.string.delete), \"delete\")"
             )
         }
-        assertOrdered(
-            RULE_SUB,
-            "item(context.getString(R.string.delete), \"delete\")"
-        )
     }
 
     private fun assertActions(path: String, vararg expected: String) {
@@ -173,8 +168,7 @@ class ManagePopupActionMigrationTest {
 
     private companion object {
         const val RSS_SOURCE = "src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt"
-        const val RULE_SUB = "src/main/java/io/legado/app/ui/rss/subscription/RuleSubAdapter.kt"
         const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        val adapterFiles = listOf(RSS_SOURCE, RULE_SUB, REPLACE_RULE)
+        val adapterFiles = listOf(RSS_SOURCE, REPLACE_RULE)
     }
 }
