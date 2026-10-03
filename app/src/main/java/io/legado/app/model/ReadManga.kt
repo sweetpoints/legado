@@ -62,6 +62,7 @@ object ReadManga : CoroutineScope by MainScope() {
     var readStartTime: Long = System.currentTimeMillis()
     private val readRecordLock = Any()
     private var readRecord = ReadRecord()
+    private val contentOwners = MangaContentOwnerGate<Book>(this)
     private val loadingChapters = arrayListOf<Int>()
     var simulatedChapterSize = 0
     var mCallback: Callback? = null
@@ -77,7 +78,9 @@ object ReadManga : CoroutineScope by MainScope() {
     val hasNextChapter
         get() = durChapterIndex < simulatedChapterSize - 1
 
+    @Synchronized
     fun resetData(book: Book) {
+        invalidateContentLoads()
         synchronized(readRecordLock) {
             ReadManga.book = book
             resetReadRecord(book)
@@ -100,7 +103,9 @@ object ReadManga : CoroutineScope by MainScope() {
         }
     }
 
+    @Synchronized
     fun upData(book: Book) {
+        invalidateContentLoads()
         synchronized(readRecordLock) {
             if (readRecord.bookName != book.name || readRecord.author != book.author) {
                 upReadTime()
@@ -139,10 +144,27 @@ object ReadManga : CoroutineScope by MainScope() {
             }
     }
 
+    private fun invalidateContentLoads() {
+        // Reset the index-only loading flags together with the epoch so a replacement can load.
+        contentOwners.invalidate { loadingChapters.clear() }
+    }
+
     fun clearMangaChapter() {
-        prevMangaChapter = null
-        curMangaChapter = null
-        nextMangaChapter = null
+        contentOwners.invalidate {
+            loadingChapters.clear()
+            prevMangaChapter = null
+            curMangaChapter = null
+            nextMangaChapter = null
+        }
+    }
+
+    private fun acceptContentOwner(
+        owner: MangaContentOwnerGate.Token<Book>,
+        chapter: BookChapter,
+        action: () -> Unit,
+    ): Boolean {
+        if (chapter.bookUrl != owner.owner.bookUrl) return false
+        return contentOwners.accept(owner, { book }, action)
     }
 
     private fun resetReadRecord(book: Book) {
@@ -216,70 +238,68 @@ object ReadManga : CoroutineScope by MainScope() {
     }
 
     private fun loadContent(index: Int) {
+        val readingBook = book ?: return
+        val owner = contentOwners.capture(readingBook)
         Coroutine.async {
-                val book = book!!
-                val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@async
-                if (addLoading(index)) {
-                    BookHelp.getContent(book, chapter)?.let {
-                        contentLoadFinish(chapter, it)
-                    }
-                        ?: run {
-                            download(downloadScope, chapter)
-                        }
+                val chapter =
+                    appDb.bookChapterDao.getChapter(readingBook.bookUrl, index) ?: return@async
+                var accepted = false
+                acceptContentOwner(owner, chapter) { accepted = addLoading(index) }
+                if (!accepted) return@async
+                val content = BookHelp.getContent(readingBook, chapter)
+                if (content != null) {
+                    contentLoadFinish(chapter, content, owner = owner)
+                } else {
+                    download(downloadScope, chapter, owner = owner)
                 }
             }
-            .onError {
-                AppLog.put("加载正文出错\n${it.localizedMessage}")
-            }
+            .onError { AppLog.put("加载正文出错\n${it.localizedMessage}") }
     }
 
-    /** 内容加载完成 */
+    /** Compatibility entry point for callers delivering content for the current reader. */
     suspend fun contentLoadFinish(
         chapter: BookChapter,
         content: String?,
         errorMsg: String = "加载内容失败",
         canceled: Boolean = false,
     ) {
-        removeLoading(chapter.index)
-        if (canceled || chapter.index !in durChapterIndex - 1..durChapterIndex + 1) {
+        val readingBook = book ?: return
+        contentLoadFinish(chapter, content, errorMsg, canceled, contentOwners.capture(readingBook))
+    }
+
+    private suspend fun contentLoadFinish(
+        chapter: BookChapter,
+        content: String?,
+        errorMsg: String = "加载内容失败",
+        canceled: Boolean = false,
+        owner: MangaContentOwnerGate.Token<Book>,
+    ) {
+        // An obsolete completion must not clear a replacement request's loading flag.
+        if (!acceptContentOwner(owner, chapter) { removeLoading(chapter.index) }) return
+        if (canceled || chapter.index !in durChapterIndex - 1..durChapterIndex + 1) return
+        if (content == null || (content.isEmpty() && !chapter.isVolume)) {
+            acceptContentOwner(owner, chapter) {
+                if (chapter.index == durChapterIndex) {
+                    mCallback?.loadFail(if (content == null) errorMsg else "正文内容为空")
+                }
+            }
             return
         }
-        when (val offset = chapter.index - durChapterIndex) {
-            0 -> {
-                if (content == null) {
-                    mCallback?.loadFail(errorMsg)
-                    return
-                }
-                if (content.isEmpty() && !chapter.isVolume) {
-                    mCallback?.loadFail("正文内容为空")
-                    return
-                }
-                val mangaChapter = getManageChapter(chapter, content)
-                if (mangaChapter.imageCount == 0 && !chapter.isVolume) {
-                    mCallback?.loadFail("正文没有图片")
-                    return
-                }
-                curMangaChapter = mangaChapter
-                mCallback?.upContent()
+        val mangaChapter = getManageChapter(chapter, content)
+        // Parsing can suspend across a reset; validate again immediately before publication.
+        acceptContentOwner(owner, chapter) {
+            val offset = chapter.index - durChapterIndex
+            if (offset !in -1..1) return@acceptContentOwner
+            if (mangaChapter.imageCount == 0 && !chapter.isVolume) {
+                if (offset == 0) mCallback?.loadFail("正文没有图片")
+                return@acceptContentOwner
             }
-
-            -1,
-            1 -> {
-                if (content == null || (!chapter.isVolume && content.isEmpty())) {
-                    return
-                }
-                val mangaChapter = getManageChapter(chapter, content)
-                if (mangaChapter.imageCount == 0 && !chapter.isVolume) {
-                    return
-                }
-
-                when (offset) {
-                    -1 -> prevMangaChapter = mangaChapter
-                    1 -> nextMangaChapter = mangaChapter
-                }
-
-                mCallback?.upContent()
+            when (offset) {
+                -1 -> prevMangaChapter = mangaChapter
+                0 -> curMangaChapter = mangaChapter
+                1 -> nextMangaChapter = mangaChapter
             }
+            mCallback?.upContent()
         }
     }
 
@@ -480,15 +500,16 @@ object ReadManga : CoroutineScope by MainScope() {
             upToc()
             return
         }
-        val book = book ?: return
-        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return
-        if (BookHelp.hasContent(book, chapter)) {
-            downloadedChapters.add(chapter.index)
+        val readingBook = book ?: return
+        val owner = contentOwners.capture(readingBook)
+        val chapter = appDb.bookChapterDao.getChapter(readingBook.bookUrl, index) ?: return
+        if (BookHelp.hasContent(readingBook, chapter)) {
+            acceptContentOwner(owner, chapter) { downloadedChapters.add(chapter.index) }
         } else {
             delay(1000)
-            if (addLoading(index)) {
-                download(downloadScope, chapter, preDownloadSemaphore)
-            }
+            var accepted = false
+            acceptContentOwner(owner, chapter) { accepted = addLoading(index) }
+            if (accepted) download(downloadScope, chapter, preDownloadSemaphore, owner)
         }
     }
 
@@ -497,32 +518,38 @@ object ReadManga : CoroutineScope by MainScope() {
         scope: CoroutineScope,
         chapter: BookChapter,
         semaphore: Semaphore? = null,
+        owner: MangaContentOwnerGate.Token<Book>,
     ) {
-        val book = book ?: return removeLoading(chapter.index)
-        val bookSource = bookSource
-        if (bookSource != null) {
+        var readingSource: BookSource? = null
+        if (!acceptContentOwner(owner, chapter) { readingSource = bookSource }) return
+        val source = readingSource
+        if (source != null) {
             downloadNetworkContent(
-                bookSource,
+                source,
                 scope,
                 chapter,
-                book,
+                owner.owner,
                 semaphore,
                 success = {
-                    downloadedChapters.add(chapter.index)
-                    downloadFailChapters.remove(chapter.index)
-                    contentLoadFinish(chapter, it)
+                    val accepted =
+                        acceptContentOwner(owner, chapter) {
+                            downloadedChapters.add(chapter.index)
+                            downloadFailChapters.remove(chapter.index)
+                        }
+                    if (accepted) contentLoadFinish(chapter, it, owner = owner)
                 },
                 error = {
-                    downloadFailChapters[chapter.index] =
-                        (downloadFailChapters[chapter.index] ?: 0) + 1
-                    contentLoadFinish(chapter, null)
+                    val accepted =
+                        acceptContentOwner(owner, chapter) {
+                            downloadFailChapters[chapter.index] =
+                                (downloadFailChapters[chapter.index] ?: 0) + 1
+                        }
+                    if (accepted) contentLoadFinish(chapter, null, owner = owner)
                 },
-                cancel = {
-                    contentLoadFinish(chapter, null, canceled = true)
-                },
+                cancel = { contentLoadFinish(chapter, null, canceled = true, owner = owner) },
             )
         } else {
-            contentLoadFinish(chapter, null, "加载内容失败 没有书源")
+            contentLoadFinish(chapter, null, "加载内容失败 没有书源", owner = owner)
         }
     }
 
