@@ -1364,3 +1364,8 @@ BookInfo 最终编译准备增量：补齐纯格式整理后漏掉的显式 impo
 BookInfo 回归收尾：prepared 入口用例等待真实 IO bootstrap 的 Main 返回后断言首次请求，并在重置 Main 前 clear/join 整个 VM，防真实 dispatcher 迟到退出串扰下一个用例；移除 Compose member assertDoesNotExist 的错误 extension import。完整首轮 JVM 3805 项暴露 1 个该等待竞态及 1 个派生串扰，本独立测试修复后按同 slot 重跑全量；生产行为不改。
 
 BookInfo 全页最终验证：clean 源码候选 b191736b6 在 ae5cfc089 整合基线上执行标准 :app:compileAppDebugAndroidTestKotlin + :app:testAppDebugUnitTest（offline、max-workers=2），27 秒 EXIT0；XML 汇总 3805 项 JVM、零 failure/error/skipped，Android 用例完成 Kotlin 编译、未在设备执行。所有本 lane 触达 Kotlin 的统一 formatter check 与 git diff --check 通过。prepared UUID API 与完整宿主现已具备，消费者切换仍由 Root 正式 FF 后统一通知；本记录提交只改文档，不改变已经验证的代码树。
+### Local book import migration: IO foundation
+
+- Audited the local import Activity as the sole BaseImportBookActivity consumer and its two exclusive layouts/menus. Saved pinned formatting separately before behavior work.
+- Added an IO repository for preferences, provider directory metadata/listing/recursive scans, archive lookup, existing-book URI rebinding and local parser imports. It retains LocalBook parser calls and the original Room transaction for directory groups, including partial imported-file receipt semantics and custom book identity preservation. Recursive scan cancellation checks isolate future owner state publication; accepted synchronous parser/Room writes finish before returning their receipt.
+- This foundation is not yet wired into the old host; immutable ViewModel and Compose host follow in separate commits. Formatter/check and whitespace checks passed; full Gradle validation waits for the complete host candidate.
