@@ -11,21 +11,25 @@ import android.text.style.ReplacementSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.findViewTreeLifecycleOwner
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.utils.runToastCallbackOnApi30
 import io.legado.app.utils.toToastMessage
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -36,7 +40,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ToastComposeContentTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun androidCharacterAndReplacementSpansBecomeComposeTextAndInlinePixels() {
@@ -54,7 +58,7 @@ class ToastComposeContentTest {
         val message =
             source.toToastMessage(
                 baseTextSizePx = 32f,
-                scaledDensity = 2f,
+                density = Density(2f, 1f),
                 color = AndroidColor.BLACK,
             )
         assertEquals(1, message.inlineImages.size)
@@ -124,7 +128,8 @@ class ToastComposeContentTest {
         lateinit var owner: Lifecycle
         var attachedEvents = 0
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val message = "independent owner".toToastMessage(32f, 2f, AndroidColor.BLACK)
+            val message =
+                "independent owner".toToastMessage(32f, Density(2f, 1f), AndroidColor.BLACK)
             presentation =
                 ToastComposePresentation(
                     context,
@@ -138,9 +143,7 @@ class ToastComposeContentTest {
             assertNotNull(viewOwner)
             owner = requireNotNull(viewOwner).lifecycle
             assertEquals(Lifecycle.State.CREATED, owner.currentState)
-            val contentRoot = FrameLayout(ApplicationProvider.getApplicationContext())
-            assertEquals(Lifecycle.State.CREATED, owner.currentState)
-            contentRoot.addView(
+            compose.activity.addContentView(
                 presentation.view,
                 FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -149,11 +152,44 @@ class ToastComposeContentTest {
             )
             assertEquals(Lifecycle.State.RESUMED, owner.currentState)
             assertEquals(1, attachedEvents)
-            contentRoot.removeView(presentation.view)
+            (compose.activity.window.decorView as android.view.ViewGroup).removeView(
+                presentation.view
+            )
             assertEquals(Lifecycle.State.DESTROYED, owner.currentState)
             presentation.close()
             presentation.close()
         }
+    }
+
+    @Test
+    fun pendingAttachmentTimeoutCancelsToastAndReleasesPresentationResources() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        lateinit var owner: Lifecycle
+        val timeoutFinished = CountDownLatch(1)
+        val toastCancelled = booleanArrayOf(false)
+        val leaseClosed = booleanArrayOf(false)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val message = "pending timeout".toToastMessage(32f, Density(2f, 1f), AndroidColor.BLACK)
+            val presentation =
+                ToastComposePresentation(context, message, AndroidColor.DKGRAY, AndroidColor.WHITE)
+            owner = requireNotNull(presentation.view.findViewTreeLifecycleOwner()).lifecycle
+            val nativeToast = Toast(context)
+            val watchdog =
+                ToastSessionTimeouts(
+                    onTimeout = {
+                        nativeToast.cancel()
+                        toastCancelled[0] = true
+                        presentation.close()
+                        leaseClosed[0] = true
+                        timeoutFinished.countDown()
+                    }
+                )
+            watchdog.startPendingAttachmentTimeout(timeoutMillis = 10L)
+        }
+        assertTrue(timeoutFinished.await(2, TimeUnit.SECONDS))
+        assertTrue(toastCancelled[0])
+        assertTrue(leaseClosed[0])
+        assertEquals(Lifecycle.State.DESTROYED, owner.currentState)
     }
 
     @Test

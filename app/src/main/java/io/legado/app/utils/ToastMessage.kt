@@ -20,7 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextGeometricTransform
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Density
 import kotlin.math.abs
 
 internal data class ToastMessage(
@@ -37,7 +37,7 @@ internal data class ToastInlineImage(
 /** Converts Android spans to Compose styles and rasterizes replacement spans as inline content. */
 internal fun CharSequence?.toToastMessage(
     baseTextSizePx: Float,
-    scaledDensity: Float,
+    density: Density,
     color: Int,
 ): ToastMessage {
     val source = this ?: ""
@@ -98,7 +98,7 @@ internal fun CharSequence?.toToastMessage(
         val start = spanned.getSpanStart(span)
         val end = spanned.getSpanEnd(span)
         if (start < 0 || end <= start || end > text.length) return@forEach
-        val style = span.toComposeSpanStyle(basePaint, scaledDensity) ?: return@forEach
+        val style = span.toComposeSpanStyle(basePaint, density) ?: return@forEach
         text.addStyle(style, start, end)
     }
 
@@ -125,7 +125,7 @@ private data class ReplacementRange(val span: ReplacementSpan, val start: Int, v
 
 private fun CharacterStyle.toComposeSpanStyle(
     basePaint: TextPaint,
-    scaledDensity: Float,
+    density: Density,
 ): SpanStyle? {
     val paint = TextPaint(basePaint)
     if (this is MetricAffectingSpan) updateMeasureState(paint)
@@ -136,7 +136,7 @@ private fun CharacterStyle.toComposeSpanStyle(
     val changedSize =
         paint.textSize
             .takeIf { abs(it - basePaint.textSize) > 0.01f }
-            ?.let { (it / scaledDensity).sp }
+            ?.let { with(density) { it.toDp().toSp() } }
     val changedTypeface = paint.typeface
     val changedWeight =
         changedTypeface

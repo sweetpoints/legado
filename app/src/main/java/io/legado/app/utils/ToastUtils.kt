@@ -5,16 +5,16 @@ package io.legado.app.utils
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.util.TypedValue
 import android.widget.Toast
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import io.legado.app.BuildConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.widget.toast.ToastComposePresentation
+import io.legado.app.ui.widget.toast.ToastSessionTimeouts
 
 private var toastSession: CustomToastSession? = null
 
@@ -95,15 +95,15 @@ private class CustomToastSession(
     private val duration: Int,
     private val onClosed: (CustomToastSession) -> Unit,
 ) {
-    private val handler = Handler(Looper.getMainLooper())
     private val toast = Toast(context)
     private val backgroundColor = context.bottomBackground
     private val textColor = context.getPrimaryTextColor(ColorUtils.isColorLight(backgroundColor))
     private val metrics = context.resources.displayMetrics
+    private val composeDensity = Density(metrics.density, context.resources.configuration.fontScale)
     private val toastMessage =
         message.toToastMessage(
-            baseTextSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16f, metrics),
-            scaledDensity = metrics.scaledDensity,
+            baseTextSizePx = with(composeDensity) { 16.sp.toPx() },
+            density = composeDensity,
             color = textColor,
         )
     private val presentation =
@@ -112,11 +112,10 @@ private class CustomToastSession(
             message = toastMessage,
             backgroundColor = backgroundColor,
             textColor = textColor,
-            onAttached = ::onPresentationAttached,
+            onAttached = { timeouts.onAttached(duration) },
         )
     private var closed = false
-    private val pendingAttachmentTimeout = Runnable { cancel() }
-    private val visibleTimeout = Runnable { cancel() }
+    private val timeouts = ToastSessionTimeouts(::cancel)
     private var toastCallbackRegistration: AutoCloseable? = null
 
     init {
@@ -130,19 +129,7 @@ private class CustomToastSession(
 
     fun show() {
         toast.show()
-        handler.postDelayed(pendingAttachmentTimeout, MAX_PENDING_ATTACHMENT_MILLIS)
-    }
-
-    private fun onPresentationAttached() {
-        if (closed) return
-        handler.removeCallbacks(pendingAttachmentTimeout)
-        val visibleDuration =
-            if (duration == Toast.LENGTH_LONG) {
-                LONG_VISIBLE_FALLBACK_MILLIS
-            } else {
-                SHORT_VISIBLE_FALLBACK_MILLIS
-            }
-        handler.postDelayed(visibleTimeout, visibleDuration)
+        timeouts.startPendingAttachmentTimeout()
     }
 
     fun cancel() {
@@ -156,8 +143,7 @@ private class CustomToastSession(
     private fun close() {
         if (closed) return
         closed = true
-        handler.removeCallbacks(pendingAttachmentTimeout)
-        handler.removeCallbacks(visibleTimeout)
+        timeouts.close()
         runCatching { toast.cancel() }
         runCatching { toastCallbackRegistration?.close() }
         toastCallbackRegistration = null
@@ -165,10 +151,6 @@ private class CustomToastSession(
         onClosed(this)
     }
 }
-
-private const val SHORT_VISIBLE_FALLBACK_MILLIS = 2_500L
-private const val LONG_VISIBLE_FALLBACK_MILLIS = 4_000L
-private const val MAX_PENDING_ATTACHMENT_MILLIS = 10_000L
 
 internal fun <T> runToastCallbackOnApi30(sdkInt: Int, register: () -> T): T? =
     if (sdkInt >= 30) register() else null
