@@ -6,6 +6,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.preferences.AppMangaReaderSettingsRepository
+import io.legado.app.data.preferences.MangaReaderSetting
+import io.legado.app.data.preferences.MangaReaderSettingsValues
 import io.legado.app.data.repository.DefaultMangaReaderOperationsRepository
 import io.legado.app.data.repository.FileMangaReaderSessionRepository
 import io.legado.app.data.repository.MangaChapterRefreshRequest
@@ -30,6 +33,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -65,6 +69,9 @@ internal data class MangaReaderUiState(
     val scrollCommand: MangaScrollCommand? = null,
     val nativeRequests: List<MangaNativeRequest> = emptyList(),
     val pendingCloudProgress: BookProgress? = null,
+    val settings: MangaReaderSettingsValues = MangaReaderSettingsValues(),
+    val autoPage: Boolean = false,
+    val autoScroll: Boolean = false,
 )
 
 /**
@@ -75,6 +82,7 @@ internal class MangaReaderComposeViewModel(
     private val savedState: SavedStateHandle,
 ) : AndroidViewModel(application) {
     private val repository = FileMangaReaderSessionRepository()
+    private val settingsRepository = AppMangaReaderSettingsRepository()
     private val operations = DefaultMangaReaderOperationsRepository()
     private val transition = Mutex()
     private val mutableState = MutableStateFlow(MangaReaderUiState())
@@ -129,6 +137,7 @@ internal class MangaReaderComposeViewModel(
                     )
                 engine = readerEngine
                 scope.launch {
+                    reloadSettings()
                     controller.state.collect { value ->
                         if (generation == requestedGeneration && value != null) {
                             mutableState.value =
@@ -299,6 +308,63 @@ internal class MangaReaderComposeViewModel(
         ownerScope?.launch {
             controller.checkpoint(captured.menuVisible, captured.chapterIndex, captured.pageIndex)
         }
+    }
+
+    suspend fun reloadSettings() {
+        val owner = generation
+        val settings = settingsRepository.load()
+        if (generation == owner) mutableState.value = state.value.copy(settings = settings)
+    }
+
+    fun setSetting(setting: MangaReaderSetting, enabled: Boolean) {
+        val owner = generation
+        ownerScope?.launch {
+            val settings = settingsRepository.set(setting, enabled)
+            if (owner == generation) {
+                mutableState.value = state.value.copy(settings = settings)
+                if (setting == MangaReaderSetting.HideChapterTitle) ReadManga.loadContent()
+            }
+        }
+    }
+
+    fun setPreload(count: Int) {
+        val owner = generation
+        ownerScope?.launch {
+            val settings = settingsRepository.setPreload(count)
+            if (owner == generation) mutableState.value = state.value.copy(settings = settings)
+        }
+    }
+
+    fun setAutoSpeed(speed: Int) {
+        val owner = generation
+        ownerScope?.launch {
+            val settings = settingsRepository.setAutoSpeed(speed)
+            if (owner == generation) mutableState.value = state.value.copy(settings = settings)
+        }
+    }
+
+    fun setAutomaticPaging(page: Boolean) {
+        mutableState.value =
+            state.value.copy(
+                autoPage = if (page) !state.value.autoPage else false,
+                autoScroll = if (!page) !state.value.autoScroll else false,
+            )
+    }
+
+    fun skipToPage(index: Int) {
+        val current = state.value
+        val itemIndex =
+            current.items.indexOfFirst {
+                it.chapterIndex == current.chapterIndex && it.pageIndex == index
+            }
+        if (itemIndex < 0) return
+        ReadManga.durChapterPos = index
+        mutableState.value =
+            current.copy(
+                pageIndex = index,
+                scrollCommand = MangaScrollCommand.Jump(++commandId, itemIndex),
+            )
+        checkpoint()
     }
 
     fun openChapter(index: Int, page: Int = 0) = engine?.openChapter(index, page)
