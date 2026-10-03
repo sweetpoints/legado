@@ -612,7 +612,13 @@ internal class BookSearchViewModel(
 
     private fun enqueueReceipt(receipt: BookSearchReceipt) {
         if (!usable() || state.value.draft.effects.isNotEmpty()) return
+        mutableState.value = state.value.copy(nativeError = null)
         updateDraft { it.copy(effects = listOf(receipt.copy(sequence = revision + 1))) }
+    }
+
+    fun preparationFailed(error: Throwable) {
+        if (usable())
+            mutableState.value = state.value.copy(nativeError = error.message ?: error.toString())
     }
 
     /** Host invokes this only after RESUMED and any cancellable IO preparation has completed. */
@@ -734,6 +740,7 @@ internal class BookSearchViewModel(
 
     fun retry() {
         if (stopped || state.value.draftConflict) return
+        mutableState.value = state.value.copy(nativeError = null)
         if (state.value.initializationFailed) initialize()
         else if (state.value.ready) {
             pendingSettings?.let { operation ->

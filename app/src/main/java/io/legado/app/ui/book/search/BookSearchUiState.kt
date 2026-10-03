@@ -24,6 +24,7 @@ internal data class BookSearchUiState(
     val draftConflict: Boolean = false,
     val metadataError: String? = null,
     val commandError: String? = null,
+    val nativeError: String? = null,
     val settingsBusy: Boolean = false,
     val settingsError: String? = null,
 ) {

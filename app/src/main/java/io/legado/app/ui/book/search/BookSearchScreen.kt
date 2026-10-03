@@ -207,6 +207,7 @@ internal fun BookSearchScreen(state: BookSearchUiState, actions: BookSearchActio
                             state.metadataError,
                             state.settingsError,
                             state.commandError,
+                            state.nativeError,
                         )
                         .distinct()
                 if (errors.isNotEmpty()) {
