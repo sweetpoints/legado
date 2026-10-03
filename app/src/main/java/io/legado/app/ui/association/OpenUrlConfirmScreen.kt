@@ -58,37 +58,61 @@ fun OpenUrlConfirmScreen(
                             enabled = enabled,
                             modifier = Modifier.testTag("open-url-menu"),
                         ) {
-                            Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.more_menu))
+                            Icon(
+                                painterResource(R.drawable.ic_more_vert),
+                                stringResource(R.string.more_menu),
+                            )
                         }
                         DropdownMenu(menuExpanded && enabled, { menuExpanded = false }) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.disable_source)) },
-                                onClick = { menuExpanded = false; onDisableSource() },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDisableSource()
+                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.delete_source)) },
-                                onClick = { menuExpanded = false; onRequestDelete() },
+                                onClick = {
+                                    menuExpanded = false
+                                    onRequestDelete()
+                                },
                             )
                         }
                     }
                 },
             )
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state.sourceName.isNotBlank()) Text(state.sourceName, style = MaterialTheme.typography.titleMedium)
+            Column(
+                Modifier.weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (state.sourceName.isNotBlank())
+                    Text(state.sourceName, style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.open_url_confirm_message))
-                if (state.isWorking) CircularProgressIndicator(Modifier.testTag("open-url-progress"))
+                if (state.isWorking)
+                    CircularProgressIndicator(Modifier.testTag("open-url-progress"))
                 state.error?.let {
-                    Text(stringResource(R.string.error) + ": " + it, color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.testTag("open-url-error"))
+                    Text(
+                        stringResource(R.string.error) + ": " + it,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("open-url-error"),
+                    )
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
                 TextButton(onClick = onClose, modifier = Modifier.testTag("open-url-cancel")) {
                     Text(stringResource(R.string.cancel))
                 }
-                TextButton(onClick = onOpen, enabled = enabled && state.uri.isNotBlank(),
-                    modifier = Modifier.testTag("open-url-confirm")) {
+                TextButton(
+                    onClick = onOpen,
+                    enabled = enabled && state.uri.isNotBlank(),
+                    modifier = Modifier.testTag("open-url-confirm"),
+                ) {
                     Text(stringResource(R.string.ok))
                 }
             }
@@ -100,8 +124,13 @@ fun OpenUrlConfirmScreen(
             title = { Text(stringResource(R.string.draw)) },
             text = { Text(stringResource(R.string.sure_del) + "\n" + state.sourceName) },
             confirmButton = {
-                TextButton(onClick = onConfirmDelete, enabled = enabled,
-                    modifier = Modifier.testTag("open-url-delete-confirm")) { Text(stringResource(R.string.yes)) }
+                TextButton(
+                    onClick = onConfirmDelete,
+                    enabled = enabled,
+                    modifier = Modifier.testTag("open-url-delete-confirm"),
+                ) {
+                    Text(stringResource(R.string.yes))
+                }
             },
             dismissButton = {
                 TextButton(onClick = onCancelDelete) { Text(stringResource(R.string.no)) }

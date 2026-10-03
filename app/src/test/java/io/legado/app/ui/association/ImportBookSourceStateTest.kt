@@ -62,27 +62,54 @@ class ImportBookSourceStateTest {
 
     @Test
     fun `book import status labels resolve localized resources`() {
-        assertEquals(io.legado.app.R.string.import_status_new, bookImportStatus(io.legado.app.data.repository.BookImportStatus.New))
-        assertEquals(io.legado.app.R.string.import_status_update, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Update))
-        assertEquals(io.legado.app.R.string.import_status_exist, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Existing))
-        assertEquals(io.legado.app.R.string.import_status_error, bookImportStatus(io.legado.app.data.repository.BookImportStatus.Error))
+        assertEquals(
+            io.legado.app.R.string.import_status_new,
+            bookImportStatus(io.legado.app.data.repository.BookImportStatus.New),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_update,
+            bookImportStatus(io.legado.app.data.repository.BookImportStatus.Update),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_exist,
+            bookImportStatus(io.legado.app.data.repository.BookImportStatus.Existing),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_error,
+            bookImportStatus(io.legado.app.data.repository.BookImportStatus.Error),
+        )
     }
 
     @Test
     fun `rss status labels preserve all import states`() {
         // RSS's mutable legacy source assertions are covered by RssImportViewModelTest
         // and the real mixed Book/RSS CodeSelectionUiTest callbacks.
-        assertEquals(io.legado.app.R.string.import_status_new, rssImportStatus(io.legado.app.data.repository.RssImportStatus.New))
-        assertEquals(io.legado.app.R.string.import_status_update, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Update))
-        assertEquals(io.legado.app.R.string.import_status_exist, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Existing))
-        assertEquals(io.legado.app.R.string.import_status_error, rssImportStatus(io.legado.app.data.repository.RssImportStatus.Error))
+        assertEquals(
+            io.legado.app.R.string.import_status_new,
+            rssImportStatus(io.legado.app.data.repository.RssImportStatus.New),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_update,
+            rssImportStatus(io.legado.app.data.repository.RssImportStatus.Update),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_exist,
+            rssImportStatus(io.legado.app.data.repository.RssImportStatus.Existing),
+        )
+        assertEquals(
+            io.legado.app.R.string.import_status_error,
+            rssImportStatus(io.legado.app.data.repository.RssImportStatus.Error),
+        )
     }
 
     @Test
     fun `reimport explicitly selects same timestamp source while allowing cancellation`() {
         val same = ImportBookSourceStatus(isNew = false, isUpdate = false)
-        assertTrue(resolveImportSourceSelection(same, manualSelection = null, selectExisting = true))
-        assertFalse(resolveImportSourceSelection(same, manualSelection = false, selectExisting = true))
+        assertTrue(
+            resolveImportSourceSelection(same, manualSelection = null, selectExisting = true)
+        )
+        assertFalse(
+            resolveImportSourceSelection(same, manualSelection = false, selectExisting = true)
+        )
     }
-
 }

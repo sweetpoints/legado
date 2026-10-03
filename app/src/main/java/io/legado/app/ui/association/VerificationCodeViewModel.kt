@@ -24,9 +24,11 @@ internal data class VerificationCodeUiState(
 )
 
 /** Keeps drafts and pending completion across recreation; never retains a Fragment callback. */
-class VerificationCodeViewModel internal constructor(
+class VerificationCodeViewModel
+internal constructor(
     private val savedState: SavedStateHandle,
-    private val sourceRepository: VerificationSourceRepository = DefaultVerificationSourceRepository,
+    private val sourceRepository: VerificationSourceRepository =
+        DefaultVerificationSourceRepository,
     private val submitResult: (String?, String) -> Unit = { key, code ->
         SourceVerificationHelp.setResult(key, code)
     },
@@ -35,14 +37,15 @@ class VerificationCodeViewModel internal constructor(
     val sourceOrigin: String? = savedState["sourceOrigin"]
     private val sourceType: Int = savedState["sourceType"] ?: SourceType.book
     private val resultKey: String? = savedState["verificationResultKey"]
-    private val mutableState = MutableStateFlow(
-        VerificationCodeUiState(
-            code = savedState["code"] ?: "",
-            sourceName = savedState["sourceName"] ?: "",
-            deleteConfirmation = savedState["deleteConfirmation"] ?: false,
-            closeRequested = savedState["closeRequested"] ?: false,
+    private val mutableState =
+        MutableStateFlow(
+            VerificationCodeUiState(
+                code = savedState["code"] ?: "",
+                sourceName = savedState["sourceName"] ?: "",
+                deleteConfirmation = savedState["deleteConfirmation"] ?: false,
+                closeRequested = savedState["closeRequested"] ?: false,
+            )
         )
-    )
     internal val state = mutableState.asStateFlow()
 
     fun updateCode(code: String) {
@@ -69,6 +72,7 @@ class VerificationCodeViewModel internal constructor(
     }
 
     fun disableSource() = changeSource(delete = false)
+
     fun deleteSource() {
         if (!state.value.deleteConfirmation) return
         cancelDelete()
@@ -89,7 +93,11 @@ class VerificationCodeViewModel internal constructor(
                 throw error
             } catch (error: Exception) {
                 currentCoroutineContext().ensureActive()
-                mutableState.value = state.value.copy(busy = false, error = error.localizedMessage ?: error.toString())
+                mutableState.value =
+                    state.value.copy(
+                        busy = false,
+                        error = error.localizedMessage ?: error.toString(),
+                    )
             }
         }
     }

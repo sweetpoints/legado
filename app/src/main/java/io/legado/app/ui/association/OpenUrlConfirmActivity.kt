@@ -9,19 +9,20 @@ import io.legado.app.utils.showDialogFragment
 
 /** Transparent host; FragmentManager restores the existing dialog on recreation. */
 class OpenUrlConfirmActivity : BaseComposeActivity(theme = Theme.Transparent, imageBg = false) {
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) = Unit
+    @Composable override fun Content(savedInstanceState: Bundle?) = Unit
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         if (savedInstanceState != null) return
         intent.getStringExtra("uri")?.let {
-            showDialogFragment(OpenUrlConfirmDialog(
-                it,
-                intent.getStringExtra("mimeType"),
-                intent.getStringExtra("sourceOrigin"),
-                intent.getStringExtra("sourceName"),
-                intent.getIntExtra("sourceType", SourceType.book),
-            ))
+            showDialogFragment(
+                OpenUrlConfirmDialog(
+                    it,
+                    intent.getStringExtra("mimeType"),
+                    intent.getStringExtra("sourceOrigin"),
+                    intent.getStringExtra("sourceName"),
+                    intent.getIntExtra("sourceType", SourceType.book),
+                )
+            )
         } ?: finish()
     }
 }

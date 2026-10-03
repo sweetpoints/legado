@@ -33,8 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -73,48 +73,72 @@ internal fun VerificationCodeScreen(
                 backLabel = stringResource(R.string.close),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
-                    IconButton(onClick = onSubmit, enabled = enabled, modifier = Modifier.testTag("verification-submit")) {
+                    IconButton(
+                        onClick = onSubmit,
+                        enabled = enabled,
+                        modifier = Modifier.testTag("verification-submit"),
+                    ) {
                         Icon(painterResource(R.drawable.ic_check), stringResource(R.string.ok))
                     }
                     Box {
                         IconButton(onClick = { menuExpanded = true }, enabled = enabled) {
-                            Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.more_menu))
+                            Icon(
+                                painterResource(R.drawable.ic_more_vert),
+                                stringResource(R.string.more_menu),
+                            )
                         }
                         DropdownMenu(menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                            DropdownMenuItem(text = { Text(stringResource(R.string.disable_source)) }, onClick = {
-                                menuExpanded = false
-                                onDisable()
-                            })
-                            DropdownMenuItem(text = { Text(stringResource(R.string.delete_source)) }, onClick = {
-                                menuExpanded = false
-                                onRequestDelete()
-                            })
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.disable_source)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDisable()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.delete_source)) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onRequestDelete()
+                                },
+                            )
                         }
                     }
                 },
             )
             Column(
-                Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                Modifier.weight(1f, fill = false)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (state.sourceName.isNotEmpty()) Text(state.sourceName, style = MaterialTheme.typography.titleSmall)
+                if (state.sourceName.isNotEmpty())
+                    Text(state.sourceName, style = MaterialTheme.typography.titleSmall)
                 Box(
-                    Modifier.fillMaxWidth().height(100.dp).testTag("verification-image")
-                        .clickable(enabled = image.bitmap != null && image.previewSrc != null, onClick = onShowImage),
+                    Modifier.fillMaxWidth()
+                        .height(100.dp)
+                        .testTag("verification-image")
+                        .clickable(
+                            enabled = image.bitmap != null && image.previewSrc != null,
+                            onClick = onShowImage,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        image.bitmap != null -> Image(
-                            bitmap = image.bitmap.asImageBitmap(),
-                            contentDescription = stringResource(R.string.verification_code),
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        image.bitmap != null ->
+                            Image(
+                                bitmap = image.bitmap.asImageBitmap(),
+                                contentDescription = stringResource(R.string.verification_code),
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         image.loading -> CircularProgressIndicator()
-                        else -> Image(
-                            painterResource(R.drawable.image_loading_error),
-                            stringResource(R.string.error),
-                        )
+                        else ->
+                            Image(
+                                painterResource(R.drawable.image_loading_error),
+                                stringResource(R.string.error),
+                            )
                     }
                 }
                 if (image.error != null) {
@@ -139,8 +163,12 @@ internal fun VerificationCodeScreen(
             onDismissRequest = onCancelDelete,
             title = { Text(stringResource(R.string.draw)) },
             text = { Text(stringResource(R.string.sure_del) + "\n" + state.sourceName) },
-            confirmButton = { TextButton(onClick = onConfirmDelete) { Text(stringResource(R.string.yes)) } },
-            dismissButton = { TextButton(onClick = onCancelDelete) { Text(stringResource(R.string.no)) } },
+            confirmButton = {
+                TextButton(onClick = onConfirmDelete) { Text(stringResource(R.string.yes)) }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelDelete) { Text(stringResource(R.string.no)) }
+            },
         )
     }
 }

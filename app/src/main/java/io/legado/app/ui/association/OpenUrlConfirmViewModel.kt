@@ -1,18 +1,17 @@
 package io.legado.app.ui.association
 
-import io.legado.app.data.repository.OpenUrlSourceRepository
-
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.constant.SourceType
+import io.legado.app.data.repository.OpenUrlSourceRepository
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.coroutines.coroutineContext
 
 data class OpenUrlConfirmUiState(
     val uri: String,
@@ -30,15 +29,18 @@ class OpenUrlConfirmViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val repository: OpenUrlSourceRepository,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(OpenUrlConfirmUiState(
-        uri = savedStateHandle["uri"] ?: "",
-        mimeType = savedStateHandle["mimeType"],
-        sourceOrigin = savedStateHandle["sourceOrigin"] ?: "",
-        sourceName = savedStateHandle["sourceName"] ?: "",
-        sourceType = savedStateHandle["sourceType"] ?: SourceType.book,
-        showDeleteConfirmation = savedStateHandle[DELETE_CONFIRMATION] ?: false,
-        shouldClose = savedStateHandle[CLOSE] ?: false,
-    ))
+    private val mutableState =
+        MutableStateFlow(
+            OpenUrlConfirmUiState(
+                uri = savedStateHandle["uri"] ?: "",
+                mimeType = savedStateHandle["mimeType"],
+                sourceOrigin = savedStateHandle["sourceOrigin"] ?: "",
+                sourceName = savedStateHandle["sourceName"] ?: "",
+                sourceType = savedStateHandle["sourceType"] ?: SourceType.book,
+                showDeleteConfirmation = savedStateHandle[DELETE_CONFIRMATION] ?: false,
+                shouldClose = savedStateHandle[CLOSE] ?: false,
+            )
+        )
     val state = mutableState.asStateFlow()
 
     fun requestDelete() {
@@ -73,7 +75,9 @@ class OpenUrlConfirmViewModel(
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 coroutineContext.ensureActive()
-                mutableState.update { it.copy(isWorking = false, error = error.localizedMessage.orEmpty()) }
+                mutableState.update {
+                    it.copy(isWorking = false, error = error.localizedMessage.orEmpty())
+                }
             }
         }
     }

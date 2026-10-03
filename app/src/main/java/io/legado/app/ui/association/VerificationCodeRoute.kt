@@ -38,13 +38,20 @@ internal fun VerificationCodeRoute(
                 image = VerificationImageState()
                 try {
                     val loaded = loader.load(viewModel.imageUrl, viewModel.sourceOrigin)
-                    image = VerificationImageState(
-                        bitmap = loaded.bitmap, previewSrc = loaded.previewSrc, loading = false,
-                    )
+                    image =
+                        VerificationImageState(
+                            bitmap = loaded.bitmap,
+                            previewSrc = loaded.previewSrc,
+                            loading = false,
+                        )
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    image = VerificationImageState(loading = false, error = error.localizedMessage ?: error.toString())
+                    image =
+                        VerificationImageState(
+                            loading = false,
+                            error = error.localizedMessage ?: error.toString(),
+                        )
                 }
             }
         }

@@ -9,8 +9,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-internal fun ImportThemeRoute(viewModel: ImportThemeViewModel, canHandle: () -> Boolean,
-    onCode: (ImportThemeCode) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ImportThemeRoute(
+    viewModel: ImportThemeViewModel,
+    canHandle: () -> Boolean,
+    onCode: (ImportThemeCode) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ready by rememberUpdatedState(canHandle)
     val code by rememberUpdatedState(onCode)
@@ -22,11 +27,23 @@ internal fun ImportThemeRoute(viewModel: ImportThemeViewModel, canHandle: () -> 
             viewModel.state.collect { value ->
                 if (ready()) {
                     if (value.finished) close()
-                    else value.code?.let { event -> viewModel.consumeCode(event.key); code(event) }
+                    else
+                        value.code?.let { event ->
+                            viewModel.consumeCode(event.key)
+                            code(event)
+                        }
                 }
             }
         }
     }
-    ImportThemeScreen(state, viewModel::toggle, viewModel::toggleAll, viewModel::openCode,
-        viewModel::confirm, viewModel::cancel, viewModel::load, modifier)
+    ImportThemeScreen(
+        state,
+        viewModel::toggle,
+        viewModel::toggleAll,
+        viewModel::openCode,
+        viewModel::confirm,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+    )
 }

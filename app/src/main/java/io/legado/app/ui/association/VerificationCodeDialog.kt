@@ -22,18 +22,20 @@ class VerificationCodeDialog() : BaseComposeDialogFragment() {
         sourceType: Int,
         verificationResultKey: String? = null,
     ) : this() {
-        arguments = Bundle().apply {
-            putString("imageUrl", imageUrl)
-            putString("sourceOrigin", sourceOrigin)
-            putString("sourceName", sourceName)
-            putInt("sourceType", sourceType)
-            putString("verificationResultKey", verificationResultKey)
-        }
+        arguments =
+            Bundle().apply {
+                putString("imageUrl", imageUrl)
+                putString("sourceOrigin", sourceOrigin)
+                putString("sourceName", sourceName)
+                putInt("sourceType", sourceType)
+                putString("verificationResultKey", verificationResultKey)
+            }
     }
 
-    private val viewModel by viewModels<VerificationCodeViewModel> {
-        viewModelFactory { initializer { VerificationCodeViewModel(createSavedStateHandle()) } }
-    }
+    private val viewModel by
+        viewModels<VerificationCodeViewModel> {
+            viewModelFactory { initializer { VerificationCodeViewModel(createSavedStateHandle()) } }
+        }
     private val verificationResultKey: String?
         get() = arguments?.getString("verificationResultKey")
 
@@ -76,7 +78,10 @@ class VerificationCodeDialog() : BaseComposeDialogFragment() {
 
     override fun onDestroy() {
         // A configuration change destroys this Fragment but keeps the request and draft alive.
-        if (activity?.isChangingConfigurations != true && (isRemoving || activity?.isFinishing == true)) {
+        if (
+            activity?.isChangingConfigurations != true &&
+                (isRemoving || activity?.isFinishing == true)
+        ) {
             finishVerification()
         }
         super.onDestroy()

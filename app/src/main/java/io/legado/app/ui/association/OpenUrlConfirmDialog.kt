@@ -1,7 +1,5 @@
 package io.legado.app.ui.association
 
-import io.legado.app.data.repository.DefaultOpenUrlSourceRepository
-
 import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup
@@ -19,6 +17,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
 import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
+import io.legado.app.data.repository.DefaultOpenUrlSourceRepository
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 
@@ -30,20 +29,27 @@ class OpenUrlConfirmDialog() : BaseComposeDialogFragment() {
         sourceName: String? = null,
         sourceType: Int,
     ) : this() {
-        arguments = Bundle().apply {
-            putString("uri", uri)
-            putString("mimeType", mimeType)
-            putString("sourceOrigin", sourceOrigin)
-            putString("sourceName", sourceName)
-            putInt("sourceType", sourceType)
-        }
+        arguments =
+            Bundle().apply {
+                putString("uri", uri)
+                putString("mimeType", mimeType)
+                putString("sourceOrigin", sourceOrigin)
+                putString("sourceName", sourceName)
+                putInt("sourceType", sourceType)
+            }
     }
 
-    private val viewModel by viewModels<OpenUrlConfirmViewModel> {
-        viewModelFactory {
-            initializer { OpenUrlConfirmViewModel(createSavedStateHandle(), DefaultOpenUrlSourceRepository()) }
+    private val viewModel by
+        viewModels<OpenUrlConfirmViewModel> {
+            viewModelFactory {
+                initializer {
+                    OpenUrlConfirmViewModel(
+                        createSavedStateHandle(),
+                        DefaultOpenUrlSourceRepository(),
+                    )
+                }
+            }
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // BaseDialogFragment only finishes a dismissed host when it is not being recreated.
@@ -62,8 +68,9 @@ class OpenUrlConfirmDialog() : BaseComposeDialogFragment() {
             viewModel = viewModel,
             onOpenUrl = ::openUrl,
             onClose = ::dismiss,
-            modifier = Modifier.fillMaxWidth()
-                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
         )
     }
 
@@ -81,7 +88,8 @@ class OpenUrlConfirmDialog() : BaseComposeDialogFragment() {
     }
 }
 
-internal fun createOpenUrlIntent(url: String, mimeType: String?): Intent = Intent(Intent.ACTION_VIEW).apply {
-    if (!mimeType.isNullOrBlank()) setDataAndType(url.toUri(), mimeType) else data = url.toUri()
-    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-}
+internal fun createOpenUrlIntent(url: String, mimeType: String?): Intent =
+    Intent(Intent.ACTION_VIEW).apply {
+        if (!mimeType.isNullOrBlank()) setDataAndType(url.toUri(), mimeType) else data = url.toUri()
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }

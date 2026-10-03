@@ -27,7 +27,10 @@ fun OpenUrlConfirmRoute(
     }
     OpenUrlConfirmScreen(
         state = state,
-        onOpen = { onOpenUrl(state.uri, state.mimeType); close() },
+        onOpen = {
+            onOpenUrl(state.uri, state.mimeType)
+            close()
+        },
         onClose = onClose,
         onDisableSource = viewModel::disableSource,
         onRequestDelete = viewModel::requestDelete,

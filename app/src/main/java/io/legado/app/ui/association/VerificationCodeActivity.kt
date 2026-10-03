@@ -12,15 +12,20 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit.SECONDS
 
 /** Transparent Compose host for the request-scoped verification dialog. */
-class VerificationCodeActivity : BaseComposeActivity(theme = Theme.Transparent, transparent = true, imageBg = false) {
+class VerificationCodeActivity :
+    BaseComposeActivity(theme = Theme.Transparent, transparent = true, imageBg = false) {
     private val verificationResultKey: String?
         get() = intent.getStringExtra("verificationResultKey")
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) = Unit
+    @Composable override fun Content(savedInstanceState: Bundle?) = Unit
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
-        if (!SourceVerificationHelp.attachVerificationUi(verificationResultKey, ::finishVerificationUi)) {
+        if (
+            !SourceVerificationHelp.attachVerificationUi(
+                verificationResultKey,
+                ::finishVerificationUi,
+            )
+        ) {
             finish()
             return
         }
@@ -50,7 +55,11 @@ class VerificationCodeActivity : BaseComposeActivity(theme = Theme.Transparent, 
         }
         val finished = CountDownLatch(1)
         runOnUiThread {
-            try { finish() } finally { finished.countDown() }
+            try {
+                finish()
+            } finally {
+                finished.countDown()
+            }
         }
         finished.await(5, SECONDS)
     }

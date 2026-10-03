@@ -9,8 +9,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-internal fun ImportReplaceRuleRoute(viewModel: ImportReplaceRuleViewModel, canHandle: () -> Boolean,
-    onCode: (ImportReplaceRuleCode) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ImportReplaceRuleRoute(
+    viewModel: ImportReplaceRuleViewModel,
+    canHandle: () -> Boolean,
+    onCode: (ImportReplaceRuleCode) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ready by rememberUpdatedState(canHandle)
     val code by rememberUpdatedState(onCode)
@@ -22,12 +27,28 @@ internal fun ImportReplaceRuleRoute(viewModel: ImportReplaceRuleViewModel, canHa
             viewModel.state.collect { value ->
                 if (ready()) {
                     if (value.finished) close()
-                    else value.code?.let { event -> viewModel.consumeCode(event.key); code(event) }
+                    else
+                        value.code?.let { event ->
+                            viewModel.consumeCode(event.key)
+                            code(event)
+                        }
                 }
             }
         }
     }
-    ImportReplaceRuleScreen(state, viewModel::toggle, viewModel::toggleAll, viewModel::openCode,
-        viewModel::confirm, viewModel::cancel, viewModel::load, modifier,
-        viewModel::openGroup, viewModel::groupDraft, viewModel::addGroupDraft, viewModel::acceptGroup, viewModel::closeGroup)
+    ImportReplaceRuleScreen(
+        state,
+        viewModel::toggle,
+        viewModel::toggleAll,
+        viewModel::openCode,
+        viewModel::confirm,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+        viewModel::openGroup,
+        viewModel::groupDraft,
+        viewModel::addGroupDraft,
+        viewModel::acceptGroup,
+        viewModel::closeGroup,
+    )
 }
