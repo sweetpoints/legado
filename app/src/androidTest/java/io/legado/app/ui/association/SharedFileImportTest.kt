@@ -11,10 +11,9 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.os.Environment
 import android.os.SystemClock
-import android.view.View
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.content.FileProvider
@@ -38,7 +37,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -1235,6 +1234,6 @@ class SharedFileImportTest {
     }
 }
 
-class SharedImportTagTestDialog : BaseDialogFragment(R.layout.dialog_recycler_view) {
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
+class SharedImportTagTestDialog : BaseComposeDialogFragment() {
+    @Composable override fun Content() = Unit
 }
