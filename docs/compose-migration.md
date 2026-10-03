@@ -1161,3 +1161,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 共享书源登录初始化抽离为 IO repository，保留文本/音频/视频阅读器上下文，以及 Book/RSS/TTS/AutoTask 分支；书籍查找保留已存书籍优先于搜索记录。请求只读存储表单值，header 脚本和登录 header 按原引擎加载，原登录表单接口保持兼容，新增 JVM/真实 Room 脚本测试编译覆盖。
 
 共享登录入口完整 key/type/bookUrl 改存私有 Atomic 会话，SavedState 仅保留 UUID；宿主 VM 只发布不可变加载/路由/标题状态，实体保留在兼容脚本边界。重复绑定不重复初始化，加载失败显式重试；更换请求立即清旧 snapshot，inputs 仅在新请求 loaded 后可取，覆盖 7 个 JVM 与实际大载荷文件恢复编译用例。
+
+公共设置搜索新增私有草稿仓库和不可变 VM，完整查询、选择位置及待交付请求不进入 SavedState；精确 trimmed 查询先持久化再交付，重复回执被裁剪，旧结果不会清空新输入。初始化/落盘失败显式重试，跨 IO 返回时取消会恢复 durable 请求，覆盖 5 个 JVM 与实际 Atomic 大载荷/关闭栅栏编译用例；宿主迁移另批接入。
