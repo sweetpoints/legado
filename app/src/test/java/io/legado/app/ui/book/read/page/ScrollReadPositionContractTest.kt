@@ -1,19 +1,22 @@
 package io.legado.app.ui.book.read.page
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ScrollReadPositionContractTest {
 
     // Preset/share-layout callback ordering is tested as real state/effect behavior in
-    // ReadStyleSettingsViewModelTest and ReadingLayoutTransitionTest, rather than radio source text.
+    // ReadStyleSettingsViewModelTest and ReadingLayoutTransitionTest, rather than radio source
+    // text.
 
     @Test
     fun `initial content waits for the reader layout`() {
         val activity = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        val onPostCreate = activity.substringAfter("override fun onPostCreate")
-            .substringBefore("override fun onNewIntent")
+        val onPostCreate =
+            activity
+                .substringAfter("override fun onPostCreate")
+                .substringBefore("override fun onNewIntent")
         val layout = onPostCreate.indexOf("binding.readView.doOnLayout")
         val idle = onPostCreate.indexOf("Looper.myQueue().addIdleHandler")
         val init = onPostCreate.indexOf("viewModel.initData(intent)")
@@ -26,45 +29,48 @@ class ScrollReadPositionContractTest {
     @Test
     fun `scroll reading saves and restores the first visible line`() {
         val activity = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        val onPause = activity.substringAfter("override fun onPause()")
-            .substringBefore("override fun onCompatCreateOptionsMenu")
+        val onPause =
+            activity
+                .substringAfter("override fun onPause()")
+                .substringBefore("override fun onCompatCreateOptionsMenu")
         assertTrue(onPause.contains("updateScrollReadPosition()"))
         assertTrue(onPause.contains("ReadBook.saveRead()"))
         assertTrue(
-            onPause.indexOf("updateScrollReadPosition()") <
-                onPause.indexOf("ReadBook.saveRead()")
+            onPause.indexOf("updateScrollReadPosition()") < onPause.indexOf("ReadBook.saveRead()")
         )
         val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
-        val savePosition = readView.substringAfter("fun updateScrollReadPosition(")
-            .substringBefore("fun getReadAloudPos()")
+        val savePosition =
+            readView
+                .substringAfter("fun updateScrollReadPosition(")
+                .substringBefore("fun getReadAloudPos()")
         assertTrue(savePosition.contains("getReadPosition()"))
         assertTrue(savePosition.contains("ReadBook.msg != null || !ReadBook.isLayoutAvailable"))
         assertTrue(savePosition.contains("if (isScroll || (preserveText && ReadBook.isScroll))"))
         assertTrue(savePosition.contains("ReadBook.durChapterPos = line.chapterPosition"))
-        assertTrue(savePosition.contains("curPage.textPage.textChapter !== ReadBook.curTextChapter"))
-        assertTrue(savePosition.contains("!preserveText || ReadBook.durChapterPos !in line.chapterIndices"))
+        assertTrue(
+            savePosition.contains("curPage.textPage.textChapter !== ReadBook.curTextChapter")
+        )
+        assertTrue(
+            savePosition.contains("!preserveText || ReadBook.durChapterPos !in line.chapterIndices")
+        )
         assertTrue(activity.contains("resetPageOffset = ReadBook.isScroll"))
-        val configUpdate = activity.substringAfter(
-            "observeEvent<ArrayList<Int>>(EventBus.UP_CONFIG)"
-        ).substringBefore("observeEvent<Int>(EventBus.ALOUD_STATE)")
+        val configUpdate =
+            activity
+                .substringAfter("observeEvent<ArrayList<Int>>(EventBus.UP_CONFIG)")
+                .substringBefore("observeEvent<Int>(EventBus.ALOUD_STATE)")
         assertTrue(configUpdate.contains("if (5 in values && isInitFinish)"))
         val capturePosition = configUpdate.indexOf("updateScrollReadPosition(")
         val applyConfig = configUpdate.indexOf("values.forEach")
         assertTrue(capturePosition >= 0)
         assertTrue(applyConfig > capturePosition)
-        assertTrue(
-            configUpdate.contains(
-                "readPositionVersion = readView.getReadPositionVersion()"
-            )
-        )
+        assertTrue(configUpdate.contains("readPositionVersion = readView.getReadPositionVersion()"))
 
         val pageView = source("app/src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
         assertTrue(pageView.contains("chapterPosition: Int = ReadBook.durChapterPos"))
         assertTrue(pageView.contains("restorePageOffset(chapterPosition)"))
 
-        val contentView = source(
-            "app/src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt"
-        )
+        val contentView =
+            source("app/src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
         assertTrue(contentView.contains("firstOrNull { it.chapterPosition == chapterPos }"))
         assertTrue(
             contentView.contains(
@@ -72,9 +78,13 @@ class ScrollReadPositionContractTest {
             )
         )
         assertTrue(contentView.contains("line === textPage.lines.firstOrNull()"))
-        assertTrue(contentView.contains("scroll((ChapterProvider.paddingTop - line.lineTop).toInt())"))
-        val readPosition = contentView.substringAfter("fun getReadPosition()")
-            .substringBefore("fun getReadAloudPos()")
+        assertTrue(
+            contentView.contains("scroll((ChapterProvider.paddingTop - line.lineTop).toInt())")
+        )
+        val readPosition =
+            contentView
+                .substringAfter("fun getReadPosition()")
+                .substringBefore("fun getReadAloudPos()")
         assertTrue(readPosition.contains("if (textPage.isMsgPage) return null"))
         assertTrue(readPosition.contains("firstOrNull { it.isVisible(offset) }"))
         assertTrue(readPosition.contains("?: textPage.lines.lastOrNull()"))
@@ -82,8 +92,9 @@ class ScrollReadPositionContractTest {
 
     private fun source(relativePath: String): String {
         val userDir = requireNotNull(System.getProperty("user.dir"))
-        val root = generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+        val root =
+            generateSequence(File(userDir)) { it.parentFile }
+                .first { File(it, "app/src/main").isDirectory }
         return File(root, relativePath).readText()
     }
 }

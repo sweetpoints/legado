@@ -30,12 +30,12 @@ import io.legado.app.ui.book.read.page.PdfZoomRenderer
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.utils.defaultSharedPreferences
+import java.io.File
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class PdfZoomNavigationTest {
@@ -43,7 +43,8 @@ class PdfZoomNavigationTest {
     private val context = instrumentation.targetContext
     private val preferences = context.defaultSharedPreferences
     private val savedDoublePage = preferences.getString(PreferKey.doublePageHorizontal, null)
-    private val savedActions = listOf(AppConfig.clickActionBR, AppConfig.clickActionBL, AppConfig.clickActionMC)
+    private val savedActions =
+        listOf(AppConfig.clickActionBR, AppConfig.clickActionBL, AppConfig.clickActionMC)
     private val savedOptimize = AppConfig.optimizeRender
     private val savedTitleModes = ReadBookConfig.configList.map { it.titleMode }
     private val savedSharedTitleMode = ReadBookConfig.shareConfig.titleMode
@@ -51,8 +52,11 @@ class PdfZoomNavigationTest {
     private lateinit var file: File
     private var scenario: ActivityScenario<ReadBookActivity>? = null
     private var lastEventTime = 0L
-    private val ReadBookActivity.reader: ReadView get() = findViewById(R.id.read_view)
-    private val ReadView.content: ContentTextView get() = curPage.findViewById(R.id.content_text_view)
+    private val ReadBookActivity.reader: ReadView
+        get() = findViewById(R.id.read_view)
+
+    private val ReadView.content: ContentTextView
+        get() = curPage.findViewById(R.id.content_text_view)
 
     @Before
     fun setUp() {
@@ -60,20 +64,29 @@ class PdfZoomNavigationTest {
         val document = PdfDocument()
         try {
             repeat(14) { index ->
-                val page = document.startPage(PdfDocument.PageInfo.Builder(600, 900, index + 1).create())
+                val page =
+                    document.startPage(PdfDocument.PageInfo.Builder(600, 900, index + 1).create())
                 val canvas = page.canvas
                 canvas.drawColor(Color.WHITE)
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-                paint.color = if (index % 2 == 0) Color.rgb(20, 100, 170) else Color.rgb(170, 50, 30)
+                paint.color =
+                    if (index % 2 == 0) Color.rgb(20, 100, 170) else Color.rgb(170, 50, 30)
                 canvas.drawRect(24f, 24f, 576f, 100f, paint)
-                paint.color = Color.WHITE; paint.textSize = 32f
+                paint.color = Color.WHITE
+                paint.textSize = 32f
                 canvas.drawText("MATHEMATICS / PAGE ${index + 1}", 35f, 70f, paint)
-                paint.color = Color.BLACK; paint.textSize = 10f
+                paint.color = Color.BLACK
+                paint.textSize = 10f
                 repeat(30) { row ->
-                    canvas.drawText("${row + 1}. Measure the diagram. 12 x 8 = 96. Fine vector text ABC 123.",
-                        35f, 145f + row * 21f, paint)
+                    canvas.drawText(
+                        "${row + 1}. Measure the diagram. 12 x 8 = 96. Fine vector text ABC 123.",
+                        35f,
+                        145f + row * 21f,
+                        paint,
+                    )
                 }
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 0.3f
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 0.3f
                 repeat(81) { n ->
                     val p = 180f + n * 3f
                     canvas.drawLine(p, 260f, p, 500f, paint)
@@ -85,8 +98,14 @@ class PdfZoomNavigationTest {
         } finally {
             document.close()
         }
-        book = Book(bookUrl = file.absolutePath, originName = file.name, name = file.name,
-            type = BookType.local or BookType.text, totalChapterNum = 2)
+        book =
+            Book(
+                bookUrl = file.absolutePath,
+                originName = file.name,
+                name = file.name,
+                type = BookType.local or BookType.text,
+                totalChapterNum = 2,
+            )
         book.setImageStyle(Book.imgStyleSingle)
         book.setPageAnim(PageAnim.noAnim)
         appDb.bookDao.insert(book)
@@ -113,7 +132,9 @@ class PdfZoomNavigationTest {
             AppConfig.clickActionBL = savedActions[1]
             AppConfig.clickActionMC = savedActions[2]
             AppConfig.optimizeRender = savedOptimize
-            ReadBookConfig.configList.forEachIndexed { index, config -> config.titleMode = savedTitleModes[index] }
+            ReadBookConfig.configList.forEachIndexed { index, config ->
+                config.titleMode = savedTitleModes[index]
+            }
             ReadBookConfig.shareConfig.titleMode = savedSharedTitleMode
         }
     }
@@ -131,8 +152,10 @@ class PdfZoomNavigationTest {
         await { it.reader.pdfZoom.scale > 2f && it.reader.content.pdfRenderCount > 0 }
         scenario!!.onActivity {
             val detail = captureContent(it.reader)
-            assertFalse("Native PDF rendering must replace the enlarged screen-resolution preview",
-                preview!!.sameAs(detail))
+            assertFalse(
+                "Native PDF rendering must replace the enlarged screen-resolution preview",
+                preview!!.sameAs(detail),
+            )
             saveBitmap(preview!!, "pdf-zoom-scaled-preview")
             saveBitmap(detail, "pdf-zoom-native-detail")
             preview!!.recycle()
@@ -154,7 +177,10 @@ class PdfZoomNavigationTest {
         screenshot("pdf-zoom-configured-menu")
         scenario!!.onActivity { it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(false) }
         // Swap the lower-right action to previous: the zoom path must use the configured value.
-        scenario!!.onActivity { AppConfig.clickActionBR = 2; tap(it.reader, .85f, .85f) }
+        scenario!!.onActivity {
+            AppConfig.clickActionBR = 2
+            tap(it.reader, .85f, .85f)
+        }
         assertEquals(initial, images())
         scenario!!.onActivity { AppConfig.clickActionBR = 1 }
         repeat(11) {
@@ -167,7 +193,9 @@ class PdfZoomNavigationTest {
         await { it.reader.content.pdfRenderedPages.contains(11) }
         screenshot("pdf-zoom-page-12")
         scenario!!.recreate()
-        await { it.reader.pdfZoom.scale == scale && it.reader.content.pdfRenderedPages.contains(11) }
+        await {
+            it.reader.pdfZoom.scale == scale && it.reader.content.pdfRenderedPages.contains(11)
+        }
         assertTrue(images().contains(11))
     }
 
@@ -217,17 +245,24 @@ class PdfZoomNavigationTest {
         val scale = zoomScale()
         val previous = images()
         scenario!!.onActivity { tap(it.reader, .85f, .85f) }
-        await { images(it) != previous && it.reader.content.pdfRenderedPages.any { index -> index in images(it) } }
+        await {
+            images(it) != previous &&
+                it.reader.content.pdfRenderedPages.any { index -> index in images(it) }
+        }
         assertEquals(scale, zoomScale(), .001f)
-        scenario!!.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+        scenario!!.onActivity {
+            it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
         await { it.reader.width > it.reader.height && images(it).size == 2 }
         var rendersBeforePan = 0
         scenario!!.onActivity { activity ->
             rendersBeforePan = activity.reader.content.pdfRenderCount
             repeat(3) { drag(activity.reader, -activity.reader.width * .4f, 0f) }
         }
-        await { it.reader.content.pdfRenderCount > rendersBeforePan &&
-            it.reader.content.pdfRenderedPages.contains(images(it).last()) }
+        await {
+            it.reader.content.pdfRenderCount > rendersBeforePan &&
+                it.reader.content.pdfRenderedPages.contains(images(it).last())
+        }
         assertEquals(scale, zoomScale(), .001f)
         screenshot("pdf-zoom-reporter-textbook-spread-detail")
     }
@@ -252,46 +287,67 @@ class PdfZoomNavigationTest {
                 val before = activity.reader.pdfZoom.scale
                 if (before > 1f) {
                     pinch(activity.reader, false)
-                    assertTrue("Inward pinch must reduce $before on ${activity.reader.width}px reader",
-                        activity.reader.pdfZoom.scale < before)
+                    assertTrue(
+                        "Inward pinch must reduce $before on ${activity.reader.width}px reader",
+                        activity.reader.pdfZoom.scale < before,
+                    )
                 }
             }
         }
         assertEquals(1f, zoomScale(), .001f)
-        val offset = ContentTextView::class.java.getDeclaredField("pageOffset").apply { isAccessible = true }
+        val offset =
+            ContentTextView::class.java.getDeclaredField("pageOffset").apply { isAccessible = true }
         scenario!!.onActivity { activity ->
             val before = offset.getInt(activity.reader.content)
             drag(activity.reader, 0f, -150f)
-            assertTrue("Ordinary scroll resumes at 1x", offset.getInt(activity.reader.content) < before)
+            assertTrue(
+                "Ordinary scroll resumes at 1x",
+                offset.getInt(activity.reader.content) < before,
+            )
         }
     }
 
     private fun launch(landscape: Boolean = false) {
         assertTrue(preferences.edit().putString(PreferKey.doublePageHorizontal, "2").commit())
-        scenario = ActivityScenario.launch(Intent(context, ReadBookActivity::class.java).putExtra("bookUrl", book.bookUrl))
+        scenario =
+            ActivityScenario.launch(
+                Intent(context, ReadBookActivity::class.java).putExtra("bookUrl", book.bookUrl)
+            )
         scenario!!.onActivity { activity ->
-            activity.requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            activity.requestedOrientation =
+                if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            activity.supportFragmentManager.fragments.filterIsInstance<ClickActionConfigDialog>()
+            activity.supportFragmentManager.fragments
+                .filterIsInstance<ClickActionConfigDialog>()
                 .forEach { it.dismiss() }
         }
-        await { ReadBook.book?.bookUrl == book.bookUrl && images(it).isNotEmpty() &&
-            ReadBook.curTextChapter?.isCompleted == true && it.bottomDialog == 0 &&
-            (it.reader.width > it.reader.height) == landscape }
+        await {
+            ReadBook.book?.bookUrl == book.bookUrl &&
+                images(it).isNotEmpty() &&
+                ReadBook.curTextChapter?.isCompleted == true &&
+                it.bottomDialog == 0 &&
+                (it.reader.width > it.reader.height) == landscape
+        }
     }
 
-    private fun images(activity: ReadBookActivity): List<Int> = activity.reader.curPage.textPage.lines
-        .flatMap { it.columns }.filterIsInstance<ImageColumn>().mapNotNull { it.src.toIntOrNull() }
+    private fun images(activity: ReadBookActivity): List<Int> =
+        activity.reader.curPage.textPage.lines
+            .flatMap { it.columns }
+            .filterIsInstance<ImageColumn>()
+            .mapNotNull { it.src.toIntOrNull() }
+
     private fun images(): List<Int> {
         var result = emptyList<Int>()
         scenario!!.onActivity { result = images(it) }
         return result
     }
+
     private fun zoomScale(): Float {
         var result = 0f
         scenario!!.onActivity { result = it.reader.pdfZoom.scale }
         return result
     }
+
     private fun await(condition: (ReadBookActivity) -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + 30_000
         do {
@@ -302,11 +358,15 @@ class PdfZoomNavigationTest {
         } while (SystemClock.elapsedRealtime() < deadline)
         scenario!!.onActivity {
             saveBitmap(captureContent(it.reader), "pdf-zoom-failure-content")
-            assertTrue("PDF reader state: images=${images(it)}, scale=${it.reader.pdfZoom.scale}, " +
-                "rendered=${it.reader.content.pdfRenderedPages}, chapter=${ReadBook.durChapterIndex}, " +
-                "position=${ReadBook.durChapterPos}, size=${it.reader.width}x${it.reader.height}", condition(it))
+            assertTrue(
+                "PDF reader state: images=${images(it)}, scale=${it.reader.pdfZoom.scale}, " +
+                    "rendered=${it.reader.content.pdfRenderedPages}, chapter=${ReadBook.durChapterIndex}, " +
+                    "position=${ReadBook.durChapterPos}, size=${it.reader.width}x${it.reader.height}",
+                condition(it),
+            )
         }
     }
+
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
         val screenshot = instrumentation.uiAutomation.takeScreenshot()
@@ -316,22 +376,71 @@ class PdfZoomNavigationTest {
             assertTrue(it.reader.content.pdfRenderedPixelCount <= PdfZoomRenderer.MAX_PIXELS)
         }
     }
-    private fun captureContent(view: ReadView): Bitmap = Bitmap.createBitmap(view.content.width,
-        view.content.height, Bitmap.Config.ARGB_8888).also { view.content.draw(Canvas(it)) }
+
+    private fun captureContent(view: ReadView): Bitmap =
+        Bitmap.createBitmap(
+                view.content.width,
+                view.content.height,
+                Bitmap.Config.ARGB_8888,
+            )
+            .also { view.content.draw(Canvas(it)) }
+
     private fun saveBitmap(bitmap: Bitmap, name: String) {
         val output = File(context.getExternalFilesDir(null), "ui-regression/$name.png")
         output.parentFile!!.mkdirs()
         output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
-    private fun dispatch(view: ReadView, down: Long, time: Long, action: Int, points: List<Pair<Float, Float>>) {
+
+    private fun dispatch(
+        view: ReadView,
+        down: Long,
+        time: Long,
+        action: Int,
+        points: List<Pair<Float, Float>>,
+    ) {
         lastEventTime = time
-        val event = MotionEvent.obtain(down, time, action, points.size,
-            points.indices.map { MotionEvent.PointerProperties().apply { id = it; toolType = MotionEvent.TOOL_TYPE_FINGER } }.toTypedArray(),
-            points.map { p -> MotionEvent.PointerCoords().apply { x = p.first; y = p.second; pressure = 1f; size = 1f } }.toTypedArray(),
-            0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-        try { assertTrue(view.dispatchTouchEvent(event)) } finally { event.recycle() }
+        val event =
+            MotionEvent.obtain(
+                down,
+                time,
+                action,
+                points.size,
+                points.indices
+                    .map {
+                        MotionEvent.PointerProperties().apply {
+                            id = it
+                            toolType = MotionEvent.TOOL_TYPE_FINGER
+                        }
+                    }
+                    .toTypedArray(),
+                points
+                    .map { p ->
+                        MotionEvent.PointerCoords().apply {
+                            x = p.first
+                            y = p.second
+                            pressure = 1f
+                            size = 1f
+                        }
+                    }
+                    .toTypedArray(),
+                0,
+                0,
+                1f,
+                1f,
+                0,
+                0,
+                InputDevice.SOURCE_TOUCHSCREEN,
+                0,
+            )
+        try {
+            assertTrue(view.dispatchTouchEvent(event))
+        } finally {
+            event.recycle()
+        }
     }
+
     private fun nextEventTime(): Long = maxOf(SystemClock.uptimeMillis(), lastEventTime + 30)
+
     private fun pinch(view: ReadView, out: Boolean, cancelAfterMoves: Int = 0) {
         val time = nextEventTime()
         val center = view.width / 2f
@@ -340,32 +449,66 @@ class PdfZoomNavigationTest {
         val end = view.width * if (out) .4f else .015f
         fun points(radius: Float) = listOf(center - radius to y, center + radius to y)
         dispatch(view, time, time, MotionEvent.ACTION_DOWN, points(start).take(1))
-        dispatch(view, time, time + 20, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), points(start))
+        dispatch(
+            view,
+            time,
+            time + 20,
+            MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            points(start),
+        )
         var cancelledScale: Float? = null
         repeat(16) { i ->
-            dispatch(view, time, time + 40 + i * 20L, MotionEvent.ACTION_MOVE, points(start + (end - start) * (i + 1) / 16))
+            dispatch(
+                view,
+                time,
+                time + 40 + i * 20L,
+                MotionEvent.ACTION_MOVE,
+                points(start + (end - start) * (i + 1) / 16),
+            )
             if (i + 1 == cancelAfterMoves) {
                 view.cancelTouchGestures()
                 cancelledScale = view.pdfZoom.scale
             }
         }
-        dispatch(view, time, time + 380, MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), points(end))
+        dispatch(
+            view,
+            time,
+            time + 380,
+            MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            points(end),
+        )
         dispatch(view, time, time + 400, MotionEvent.ACTION_UP, points(end).take(1))
-        cancelledScale?.let { assertEquals("Cancelled fingers must not keep changing the new view", it, view.pdfZoom.scale, .001f) }
+        cancelledScale?.let {
+            assertEquals(
+                "Cancelled fingers must not keep changing the new view",
+                it,
+                view.pdfZoom.scale,
+                .001f,
+            )
+        }
     }
+
     private fun tap(view: ReadView, x: Float, y: Float) {
         val time = nextEventTime()
         val point = listOf(view.width * x to view.height * y)
         dispatch(view, time, time, MotionEvent.ACTION_DOWN, point)
         dispatch(view, time, time + 70, MotionEvent.ACTION_UP, point)
     }
+
     private fun drag(view: ReadView, dx: Float, dy: Float) {
         val time = nextEventTime()
         val x = view.width / 2f
         val y = view.height / 2f
         dispatch(view, time, time, MotionEvent.ACTION_DOWN, listOf(x to y))
-        repeat(8) { i -> dispatch(view, time, time + 30 + i * 20L, MotionEvent.ACTION_MOVE,
-            listOf(x + dx * (i + 1) / 8 to y + dy * (i + 1) / 8)) }
+        repeat(8) { i ->
+            dispatch(
+                view,
+                time,
+                time + 30 + i * 20L,
+                MotionEvent.ACTION_MOVE,
+                listOf(x + dx * (i + 1) / 8 to y + dy * (i + 1) / 8),
+            )
+        }
         dispatch(view, time, time + 210, MotionEvent.ACTION_UP, listOf(x + dx to y + dy))
     }
 }
