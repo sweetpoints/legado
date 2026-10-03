@@ -1200,3 +1200,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 远程书库页面改为直接 BaseComposeActivity 与独立 Screen/Route，保留目录、排序、搜索、隐藏多选导入、压缩选择确认及服务器/帮助/日志入口；原生文件选择按小 ticket 恢复，RESUMED 后先认领再交付阅读回执。删除旧远程 Adapter/ViewModel/排序类与专属菜单 XML，本地导入共享布局继续保留。新增 Compose、真实宿主与生命周期测试编译覆盖，完整 JVM 通过，设备端未执行。
 
 搜索范围纯模型移至 model/webBook，保留旧 UI typealias、LiveData 与公开 ScopeDialog 调用；搜索引擎不再依赖 UI 包。纯结果过滤移入 model 并保留原公开薄委托，大小写、trim、空白列表身份和字段过滤规则保持；新增 2 个 JVM 回归，完整 JVM 与 Android 测试编译通过。
+
+搜索页历史、书架提示、阅读记录与启用书源分组抽离为独立 IO 元数据仓库，发布 detached 不可变值并保留原 SQL wildcard/排序及书架身份规则；历史使用次数在 Room 事务内重读递增。新增 3 个 JVM 回归与实际 Room 并发计数/查询/快照测试编译覆盖，完整 JVM 与 Android 测试编译通过，设备端未执行；旧搜索引擎及宿主暂保持兼容。
