@@ -3,7 +3,6 @@ package io.legado.app.ui.book.source.manage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.legado.app.help.config.AppConfig
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
 import io.legado.app.utils.moveRelativeTo
@@ -29,38 +28,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-internal interface SourceManagerPreferences {
-    var showStatus: Boolean
-    var blockNavigation: Boolean
-}
-
-internal class AppSourceManagerPreferences : SourceManagerPreferences {
-    override var showStatus: Boolean
-        get() = AppConfig.showSourceCheckStatus
-        set(value) {
-            AppConfig.showSourceCheckStatus = value
-        }
-
-    override var blockNavigation: Boolean
-        get() = AppConfig.blockSourceNavigation
-        set(value) {
-            AppConfig.blockSourceNavigation = value
-        }
-}
-
 internal class BookSourceManagerViewModel(
     private val repository: BookSourceManagerRepository,
     private val store: SourceManagerSessionStorage,
     private val preferences: SourceManagerPreferences = AppSourceManagerPreferences(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
-    private val mutableState =
-        MutableStateFlow(
-            SourceManagerState(
-                showStatus = preferences.showStatus,
-                blockNavigation = preferences.blockNavigation,
-            )
-        )
+    private val mutableState = MutableStateFlow(SourceManagerState())
     val state: StateFlow<SourceManagerState> = mutableState.asStateFlow()
     private val operationMutex = Mutex()
     private var session = SourceManagerSession()
@@ -116,6 +90,7 @@ internal class BookSourceManagerViewModel(
 
     private suspend fun restoreSession() {
         try {
+            val restoredPreferences = withContext(ioDispatcher) { preferences.read() }
             session = withContext(ioDispatcher) { store.read() }
             val export =
                 session.exportPath?.let { path ->
@@ -139,12 +114,14 @@ internal class BookSourceManagerViewModel(
                     }
             mutableState.update {
                 it.copy(
+                    showStatus = restoredPreferences.showStatus,
+                    blockNavigation = restoredPreferences.blockNavigation,
                     query = session.query,
                     selected = session.selected.toSet(),
                     sort = session.sort,
                     ascending = session.ascending,
                     byDomain = session.domain,
-                    status = if (it.showStatus) session.status else "",
+                    status = if (restoredPreferences.showStatus) session.status else "",
                     dialog = session.dialog,
                     draft = session.draft,
                     effect = pendingEffect,
@@ -234,6 +211,13 @@ internal class BookSourceManagerViewModel(
         val previous = state.value
         mutableState.update(transform)
         val updated = state.value
+        val preferenceSnapshot =
+            if (
+                previous.showStatus != updated.showStatus ||
+                    previous.blockNavigation != updated.blockNavigation
+            )
+                SourceManagerPreferenceSnapshot(updated.showStatus, updated.blockNavigation)
+            else null
         if (previous.query != updated.query) {
             watchQuery()
         } else if (
@@ -250,6 +234,11 @@ internal class BookSourceManagerViewModel(
         viewModelScope.launch {
             operationMutex.withLock {
                 try {
+                    // Capture preferences before suspension. Serialized IO acceptance prevents an
+                    // older completion from overwriting a later toggle's immutable snapshot.
+                    preferenceSnapshot?.let { snapshot ->
+                        withContext(ioDispatcher + NonCancellable) { preferences.write(snapshot) }
+                    }
                     persist()
                 } catch (failure: Exception) {
                     showFailure(failure)
@@ -269,12 +258,10 @@ internal class BookSourceManagerViewModel(
     fun status(value: String) = edit { it.copy(status = value) }
 
     fun showStatus() = edit {
-        preferences.showStatus = !it.showStatus
         it.copy(showStatus = !it.showStatus, status = "")
     }
 
     fun blockNavigation() = edit {
-        preferences.blockNavigation = !it.blockNavigation
         it.copy(blockNavigation = !it.blockNavigation)
     }
 

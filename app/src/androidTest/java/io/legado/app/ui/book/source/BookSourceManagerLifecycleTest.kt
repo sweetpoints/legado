@@ -10,6 +10,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.ui.book.source.manage.AppBookSourceManagerRepository
 import io.legado.app.ui.book.source.manage.BookSourceManagerRepository
 import io.legado.app.ui.book.source.manage.BookSourceManagerViewModel
+import io.legado.app.ui.book.source.manage.SourceManagerPreferenceSnapshot
 import io.legado.app.ui.book.source.manage.SourceManagerPreferences
 import io.legado.app.ui.book.source.manage.SourceManagerSession
 import io.legado.app.ui.book.source.manage.SourceManagerSessionStorage
@@ -107,8 +108,9 @@ class BookSourceManagerLifecycleTest {
     }
 
     private class Preferences : SourceManagerPreferences {
-        override var showStatus = false
-        override var blockNavigation = false
+        override suspend fun read() = SourceManagerPreferenceSnapshot()
+
+        override suspend fun write(value: SourceManagerPreferenceSnapshot) = Unit
     }
 
     private class MemoryStorage : SourceManagerSessionStorage {

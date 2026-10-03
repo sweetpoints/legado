@@ -45,8 +45,9 @@ class BookSourceManagerViewModelTest {
     private fun model(
         repository: FakeRepository,
         store: MemoryStore = MemoryStore(),
+        preferences: FakePreferences = FakePreferences(),
     ): BookSourceManagerViewModel {
-        return BookSourceManagerViewModel(repository, store, FakePreferences(), dispatcher).also {
+        return BookSourceManagerViewModel(repository, store, preferences, dispatcher).also {
             models += it
         }
     }
@@ -336,6 +337,36 @@ class BookSourceManagerViewModelTest {
             assertFalse(manager.deliverEffect(effect.id, { resumed }, { launches++ }))
         }
 
+    @Test
+    fun constructorDoesNotReadPreferencesAndTogglesPublishBeforeSerializedIo() =
+        runTest(dispatcher) {
+            val preferences = FakePreferences()
+            preferences.snapshot = SourceManagerPreferenceSnapshot(showStatus = true)
+            val manager = model(FakeRepository(), preferences = preferences)
+            assertEquals(0, preferences.readCount)
+            runCurrent()
+            assertEquals(1, preferences.readCount)
+            assertTrue(manager.state.value.showStatus)
+            val gate = CompletableDeferred<Unit>()
+            preferences.writeGate = gate
+            manager.showStatus()
+            assertFalse(manager.state.value.showStatus)
+            runCurrent()
+            assertTrue(preferences.writes.isEmpty())
+            manager.blockNavigation()
+            assertTrue(manager.state.value.blockNavigation)
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals(
+                listOf(
+                    SourceManagerPreferenceSnapshot(false, false),
+                    SourceManagerPreferenceSnapshot(false, true),
+                ),
+                preferences.writes,
+            )
+            assertEquals(SourceManagerPreferenceSnapshot(false, true), preferences.snapshot)
+        }
+
     private class MemoryStore : SourceManagerSessionStorage {
         var session = SourceManagerSession()
         var deletions = 0
@@ -357,8 +388,21 @@ class BookSourceManagerViewModelTest {
     }
 
     private class FakePreferences : SourceManagerPreferences {
-        override var showStatus = false
-        override var blockNavigation = false
+        var readCount = 0
+        var snapshot = SourceManagerPreferenceSnapshot()
+        var writeGate: CompletableDeferred<Unit>? = null
+        val writes = mutableListOf<SourceManagerPreferenceSnapshot>()
+
+        override suspend fun read(): SourceManagerPreferenceSnapshot {
+            readCount++
+            return snapshot
+        }
+
+        override suspend fun write(value: SourceManagerPreferenceSnapshot) {
+            writeGate?.await()
+            snapshot = value
+            writes += value
+        }
     }
 
     private data class Mutation(
