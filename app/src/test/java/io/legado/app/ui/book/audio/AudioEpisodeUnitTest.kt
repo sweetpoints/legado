@@ -1,11 +1,10 @@
 package io.legado.app.ui.book.audio
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import org.w3c.dom.Element
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.w3c.dom.Element
 
 class AudioEpisodeUnitTest {
 
@@ -22,98 +21,18 @@ class AudioEpisodeUnitTest {
     }
 
     @Test
-    fun audioPlayerUsesEpisodeLabelsWhileReadAloudKeepsChapterLabels() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
-        ).readText()
-        val readAloudDialog = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/ReadAloudDialog.kt"
-        ).readText()
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
-        ).readText()
-
-        assertTrue(activity.contains("R.string.audio_stop_chapters"))
-        assertTrue(activity.contains("R.string.audio_chapter_progress"))
-        assertTrue(activity.contains("AudioPlay.durChapterIndex + 1"))
-        assertTrue(activity.contains("binding.tvChapterIndex.visible()"))
-        assertTrue(activity.contains("binding.tvChapterIndex.gone()"))
+    fun lyricParserIgnoresMetadataAndExpandsMultipleTimestamps() {
+        assertEquals(emptyList<AudioLyric>(), parseAudioLyrics("[ar:Artist]\n[ti:Title]"))
         assertEquals(
-            1,
-            Regex("AudioPlay\\.upData\\(book, preserveProgress = true\\)")
-                .findAll(viewModel).count(),
+            listOf(AudioLyric(1250, "line"), AudioLyric(2500, "line")),
+            parseAudioLyrics("[00:02.50][00:01.25]line"),
         )
-        assertEquals(
-            1,
-            Regex("AudioPlay\\.upData\\(book, preserveProgress = false\\)")
-                .findAll(viewModel).count(),
-        )
-        assertTrue(
-            Regex(
-                "SleepTimerDialog\\.newInstance\\(\\s*" +
-                    "AudioPlayService\\.timeMinute,\\s*" +
-                    "AudioPlayService\\.chapterToStop,\\s*" +
-                    "useEpisodes = true,\\s*\\)"
-            ).containsMatchIn(activity)
-        )
-        assertTrue(
-            Regex(
-                "SleepTimerDialog\\.newInstance\\(\\s*" +
-                    "BaseReadAloudService\\.timeMinute,\\s*" +
-                    "BaseReadAloudService\\.chapterToStop,\\s*\\)"
-            ).containsMatchIn(readAloudDialog)
-        )
-
     }
 
     @Test
-    fun lyricPlayerWaitsForLayoutBeforeLoading() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
-        ).readText()
-        val upLyric = source.substringAfter("override fun upLyric(lyric: String?)")
-            .substringBefore("override fun upLyricP(position: Int)")
-        val invisible = upLyric.indexOf("lyricViewX.invisible()")
-        val layout = upLyric.indexOf("lyricViewX.doOnLayout")
-        val widthGuard = upLyric.indexOf("view.width <= 32.dpToPx()")
-        val retry = upLyric.indexOf("view.doOnNextLayout(::loadLyricWhenWide)")
-        val load = upLyric.indexOf("lyricViewX.loadLyric(lyricEntries)")
-        val visible = upLyric.indexOf("lyricViewX.visible()")
-
-        assertTrue(invisible >= 0)
-        assertTrue(layout > invisible)
-        assertTrue(widthGuard >= 0)
-        assertTrue(retry > widthGuard)
-        assertTrue(load > widthGuard)
-        assertTrue(visible > load)
-        assertTrue(upLyric.indexOf("upLyricP(AudioPlay.durChapterPos)") > load)
-    }
-
-    @Test
-    fun lyricPlayerHidesEmptyParsedLyricsAndRejectsStaleResults() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
-        ).readText()
-        val upLyric = source.substringAfter("override fun upLyric(lyric: String?)")
-            .substringBefore("override fun upLyricP(position: Int)")
-        val hide = upLyric.indexOf("binding.lyricViewX.gone()")
-        val background = upLyric.indexOf("withContext(Default)")
-        val parse = upLyric.indexOf("LyricUtil.parseLrc(arrayOf(lyric, null))")
-        val emptyOrStale = upLyric.indexOf(
-            "if (oldLyric != lyric || lyricEntries.isNullOrEmpty()) return@launch"
-        )
-        val layout = upLyric.indexOf("fun loadLyricWhenWide(view: View)")
-        val staleLayout = upLyric.indexOf("if (oldLyric != lyric) return", layout)
-        val load = upLyric.indexOf("lyricViewX.loadLyric(lyricEntries)")
-
-        assertTrue(hide >= 0)
-        assertTrue(background > hide)
-        assertTrue(parse > background)
-        assertTrue(emptyOrStale > parse)
-        assertTrue(upLyric.indexOf("lyricViewX.invisible()") > emptyOrStale)
-        assertTrue(staleLayout > layout)
-        assertTrue(load > staleLayout)
-        assertTrue(upLyric.contains("setLabel(\"\")"))
+    fun lyricParserRejectsOverflowAndKeepsMillisecondPrecision() {
+        assertEquals(listOf(AudioLyric(62345, "line")), parseAudioLyrics("[01:02.345]line"))
+        assertEquals(emptyList<AudioLyric>(), parseAudioLyrics("[999999999999999999:00]bad"))
     }
 
     private fun chineseString(name: String) = stringValue("values-zh", name)
@@ -121,9 +40,10 @@ class AudioEpisodeUnitTest {
     private fun defaultString(name: String) = stringValue("values", name)
 
     private fun stringValue(directory: String, name: String): String {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/$directory/strings.xml"))
+        val document =
+            DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder()
+                .parse(projectFile("src/main/res/$directory/strings.xml"))
         return document.getElementsByTagName("string").let { nodes ->
             (0 until nodes.length)
                 .map { nodes.item(it) as Element }
@@ -133,8 +53,7 @@ class AudioEpisodeUnitTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }

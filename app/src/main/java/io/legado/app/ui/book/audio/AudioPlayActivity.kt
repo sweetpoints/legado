@@ -2,163 +2,79 @@ package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.widget.SeekBar
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.doOnLayout
-import androidx.core.view.doOnNextLayout
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.Status
 import io.legado.app.constant.Theme
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.ActivityAudioPlayBinding
-import io.legado.app.help.audio.AudioCacheManager
-import io.legado.app.ui.book.download.ChapterDownloadDialog
-import io.legado.app.ui.book.download.showChapterDownloadDialog
-import io.legado.app.model.download.ChapterDownloadMode
 import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.AudioPlay
-import io.legado.app.model.AudioCacheKey
-import io.legado.app.model.AudioCacheStateChanged
-import io.legado.app.model.BookCover
+import io.legado.app.model.SourceCallBack
+import io.legado.app.model.download.ChapterDownloadMode
 import io.legado.app.service.AudioCacheService
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.book.audio.config.AudioSkipCredits
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
+import io.legado.app.ui.book.download.ChapterDownloadDialog
+import io.legado.app.ui.book.download.showChapterDownloadDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.widget.dialog.SleepTimerDialog
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.invisible
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
-import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
-import io.legado.app.utils.toDurationTime
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Default
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import splitties.views.onLongClick
-import java.util.Locale
-import io.legado.app.ui.book.audio.config.AudioSkipCredits
-import io.legado.app.ui.widget.dialog.SleepTimerDialog
-import com.dirror.lyricviewx.OnPlayClickListener
-import com.dirror.lyricviewx.LyricUtil
-import io.legado.app.lib.theme.ThemeStore.Companion.accentColor
-import io.legado.app.ui.book.audio.SliderPopup.Companion.SPEED
-import io.legado.app.model.SourceCallBack
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 
-/**
- * 音频播放
- */
+/** 音频播放 */
 @SuppressLint("ObsoleteSdkInt")
 class AudioPlayActivity :
-    VMBaseActivity<ActivityAudioPlayBinding, AudioPlayViewModel>(toolBarTheme = Theme.Dark),
+    BaseComposeActivity(toolBarTheme = Theme.Dark),
     ChangeBookSourceDialog.CallBack,
     AudioPlay.CallBack,
     SleepTimerDialog.CallBack,
     ChapterDownloadDialog.AudioHost {
 
-    override val binding by viewBinding(ActivityAudioPlayBinding::inflate)
-    override val viewModel by viewModels<AudioPlayViewModel>()
-    private val speedControlPopup by lazy { SliderPopup(this, SPEED) }
-    private var adjustProgress = false
-    private var playMode = AudioPlay.PlayMode.LIST_END_STOP
-    private val lyricViewX by lazy { binding.lyricViewX }
-    private var lyricOn = false
-    private var oldLyric: String? = null
-    private var menuCustomBtn: MenuItem? = null
-    private var pendingAudioCacheAction: (() -> Unit)? = null
+    private val viewModel by viewModels<AudioPlayViewModel>()
 
-    private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
-        it?.let {
-            if (it[0] != AudioPlay.book?.durChapterIndex
-                || it[1] == 0
-            ) {
-                AudioPlay.skipTo(it[0] as Int)
+    private val tocActivityResult =
+        registerForActivityResult(TocActivityResult()) {
+            it?.let {
+                if (it[0] != AudioPlay.book?.durChapterIndex || it[1] == 0) {
+                    AudioPlay.skipTo(it[0] as Int)
+                }
             }
         }
-    }
     private val sourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
                 viewModel.upSource()
             }
         }
-    private val audioCacheDirSelect = registerForActivityResult(HandleFileContract()) { result ->
-        val treeUri = result.uri?.toString()
-        if (treeUri == null) {
-            pendingAudioCacheAction = null
-            return@registerForActivityResult
+    private val audioCacheDirSelect =
+        registerForActivityResult(HandleFileContract()) { result ->
+            viewModel.selectedCacheFolder(result.uri?.toString())
         }
-        lifecycleScope.launch {
-            val available = withContext(IO) {
-                runCatching { AudioCacheManager.isCacheDirAvailable(treeUri) }
-                    .getOrDefault(false)
-            }
-            if (available) {
-                if (AppConfig.audioCacheTreeUri != treeUri) {
-                    AudioCacheService.stop(this@AudioPlayActivity)
-                }
-                AppConfig.audioCacheTreeUri = treeUri
-                toastOnUi(R.string.audio_cache_folder_selected)
-                pendingAudioCacheAction?.invoke()
-            } else {
-                toastOnUi(R.string.audio_cache_folder_invalid)
-            }
-            pendingAudioCacheAction = null
-        }
-    }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
         onBackPressedDispatcher.addCallback(this) { finish() }
-        binding.titleBar.setBackgroundResource(R.color.transparent)
         AudioPlay.register(this)
-        viewModel.titleData.observe(this) { name ->
-            binding.titleBar.title = name
-            val lyric = AudioPlay.durChapter?.getVariable("lyric")?.takeIf { it.isNotBlank() }
-            upLyric(lyric ?: AudioPlay.durLyric)
-        }
-        viewModel.coverData.observe(this) {
-            upCover(it)
-        }
-        viewModel.customBtnListData.observe(this) { menuCustomBtn?.isVisible = it }
-        viewModel.initData(
-            intent = intent,
-            success = ::initListener,
-            error = ::finishAfterInitError,
-        )
+        viewModel.initialize(intent.getStringExtra("bookUrl"))
         initView()
     }
 
@@ -171,31 +87,13 @@ class AudioPlayActivity :
         setIntent(intent)
         val requestedBookUrl = intent.getStringExtra("bookUrl")
         if (shouldReuseCurrentAudioPlay(requestedBookUrl, AudioPlay.book?.bookUrl)) return
-        viewModel.initData(
-            intent = intent,
-            success = ::initListener,
-            error = ::finishAfterInitError,
-        )
+        viewModel.initialize(requestedBookUrl)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.audio_play, menu)
-        menuCustomBtn = menu.findItem(R.id.menu_custom_btn)?.also {
-            it.isVisible = viewModel.customBtnListData.value == true
-        }
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = AudioPlay.bookSource?.hasLogin() == true
-        menu.findItem(R.id.menu_wake_lock)?.isChecked = AppConfig.audioPlayUseWakeLock
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    private fun menuAction(id: Int) {
+        when (id) {
             R.id.menu_custom_btn -> {
-                AudioPlay.bookSource?.let {source ->
+                AudioPlay.bookSource?.let { source ->
                     AudioPlay.book?.let { book ->
                         SourceCallBack.callBackBtn(
                             this,
@@ -203,27 +101,33 @@ class AudioPlayActivity :
                             source,
                             book,
                             AudioPlay.durChapter,
-                            BookType.audio
+                            BookType.audio,
                         )
                     }
                 }
             }
-            R.id.menu_change_source -> AudioPlay.book?.let {
-                showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
-            }
-
-            R.id.menu_login -> AudioPlay.bookSource?.let {
-                startActivity<SourceLoginActivity> {
-                    putExtra("bookType", BookType.audio)
+            R.id.menu_change_source ->
+                AudioPlay.book?.let {
+                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
                 }
-            }
 
-            R.id.menu_wake_lock -> AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
+            R.id.menu_login ->
+                AudioPlay.bookSource?.let {
+                    startActivity<SourceLoginActivity> {
+                        putExtra("bookType", BookType.audio)
+                    }
+                }
+
+            R.id.menu_wake_lock -> {
+                AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
+                viewModel.snapshot()
+            }
             R.id.menu_copy_audio_url -> {
                 AudioPlay.book?.let {
-                    val url = AudioPlay.durPlayUrl.ifBlank {
-                        AudioPlay.durChapter?.resourceUrl.orEmpty()
-                    }
+                    val url =
+                        AudioPlay.durPlayUrl.ifBlank {
+                            AudioPlay.durChapter?.resourceUrl.orEmpty()
+                        }
                     SourceCallBack.callBackBtn(
                         this,
                         SourceCallBack.CLICK_COPY_PLAY_URL,
@@ -231,7 +135,7 @@ class AudioPlayActivity :
                         it,
                         AudioPlay.durChapter,
                         BookType.audio,
-                        url
+                        url,
                     ) {
                         sendToClip(url)
                     }
@@ -240,215 +144,143 @@ class AudioPlayActivity :
             R.id.menu_audio_cache_folder -> selectAudioCacheFolder()
             R.id.menu_audio_cache_range -> showAudioCacheRange()
             R.id.menu_clear_current_audio_cache -> clearCurrentAudioCache()
-            R.id.menu_edit_source -> AudioPlay.bookSource?.let {
-                sourceEditResult.launch {
-                    putExtra("sourceUrl", it.bookSourceUrl)
+            R.id.menu_edit_source ->
+                AudioPlay.bookSource?.let {
+                    sourceEditResult.launch {
+                        putExtra("sourceUrl", it.bookSourceUrl)
+                    }
                 }
-            }
 
             /* 跳过片头片尾设定按钮 */
-            R.id.menu_skip_credits -> AudioPlay.book?.let {
-                showDialogFragment(AudioSkipCredits.newInstance(it))
-            }
+            R.id.menu_skip_credits ->
+                AudioPlay.book?.let {
+                    showDialogFragment(AudioSkipCredits.newInstance(it))
+                }
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
-    private fun selectAudioCacheFolder(onSelected: (() -> Unit)? = null) {
-        pendingAudioCacheAction = onSelected
+    private fun selectAudioCacheFolder() {
+        viewModel.requestCacheFolder()
+    }
+
+    private fun launchCacheFolder() {
         audioCacheDirSelect.launch {
             title = getString(R.string.audio_cache_select_folder)
             mode = HandleFileContract.DIR_SYS
         }
     }
 
-    private fun ensureAudioCacheFolder(action: () -> Unit) {
-        val treeUri = AppConfig.audioCacheTreeUri
-        lifecycleScope.launch {
-            val available = withContext(IO) {
-                runCatching { AudioCacheManager.isCacheDirAvailable(treeUri) }
-                    .getOrDefault(false)
+    private fun acceptCacheAction(session: String, selectedFolder: String?) {
+        val action = viewModel.claimCacheAction(session)
+        if (selectedFolder != null) {
+            if (AppConfig.audioCacheTreeUri != selectedFolder) AudioCacheService.stop(this)
+            AppConfig.audioCacheTreeUri = selectedFolder
+            toastOnUi(R.string.audio_cache_folder_selected)
+        }
+        when (action) {
+            is AudioCacheAction.Download -> {
+                AudioCacheService.start(this, action.bookUrl, action.start, action.endInclusive)
+                toastOnUi(R.string.audio_cache_start_range)
             }
-            if (available) {
-                action()
-            } else {
-                toastOnUi(
-                    if (treeUri.isNullOrBlank()) R.string.audio_cache_folder_not_set
-                    else R.string.audio_cache_folder_invalid
-                )
-                selectAudioCacheFolder(action)
-            }
+            is AudioCacheAction.Clear -> viewModel.clearCache(action)
+            null -> Unit
         }
     }
 
     private fun showAudioCacheRange() {
         val book = AudioPlay.book ?: return
-        val count = AudioPlay.simulatedChapterSize.takeIf { it > 0 } ?: book.simulatedTotalChapterNum()
-        if (count > 0) showChapterDownloadDialog(book, ChapterDownloadMode.Audio, AudioPlay.durChapterIndex + 1, count)
+        val count =
+            AudioPlay.simulatedChapterSize.takeIf { it > 0 } ?: book.simulatedTotalChapterNum()
+        if (count > 0)
+            showChapterDownloadDialog(
+                book,
+                ChapterDownloadMode.Audio,
+                AudioPlay.durChapterIndex + 1,
+                count,
+            )
     }
 
     override fun downloadAudioRange(bookUrl: String, start: Int, endInclusive: Int) {
-        ensureAudioCacheFolder {
-            AudioCacheService.start(this, bookUrl, start, endInclusive)
-            toastOnUi(R.string.audio_cache_start_range)
-        }
+        viewModel.ensureCache(AudioCacheAction.Download(bookUrl, start, endInclusive))
     }
 
     private fun clearCurrentAudioCache() {
         val book = AudioPlay.book ?: return
         val chapter = AudioPlay.durChapter ?: return
-        ensureAudioCacheFolder {
-            val treeUri = AppConfig.audioCacheTreeUri
-            lifecycleScope.launch {
-                val removed = withContext(IO) {
-                    runCatching {
-                        AudioCacheManager.removeCachedChapter(
-                            treeUri,
-                            book.bookUrl,
-                            chapter,
-                        )
-                    }.getOrDefault(false)
-                }
-                if (removed) {
-                    postEvent(
-                        EventBus.AUDIO_CACHE_CHANGED,
-                        AudioCacheStateChanged(
-                            bookUrl = book.bookUrl,
-                            key = AudioCacheKey.from(chapter),
-                            cached = false,
-                            treeUri = treeUri,
-                        )
-                    )
-                    toastOnUi(R.string.audio_cache_current_chapter_cleared)
-                } else {
-                    toastOnUi(R.string.audio_cache_current_chapter_not_found)
-                }
-            }
-        }
+        viewModel.ensureCache(AudioCacheAction.Clear(book.bookUrl, chapter.copy()))
     }
 
     private fun initView() {
-        observeEventSticky<AudioPlay.PlayMode>(EventBus.PLAY_MODE_CHANGED) {
-            playMode = it
-            updatePlayModeIcon()
+        observeEventSticky<AudioPlay.PlayMode>(EventBus.PLAY_MODE_CHANGED) { mode ->
+            viewModel.update { copy(playMode = mode.iconRes) }
         }
-        binding.playerProgress.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                binding.tvDurTime.text = progress.toDurationTime()
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {
-                adjustProgress = true
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                adjustProgress = false
-                AudioPlay.adjustProgress(seekBar.progress)
-            }
-        })
-        /* 低于安卓6不显示调速按钮 */
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            binding.ivSpeedControl.invisible()
-        }
-        
-        binding.ivSpeedControl.setOnClickListener {
-            speedControlPopup.showAsDropDown(it, 0, (-100).dpToPx(), Gravity.TOP)
-        }
-
-        binding.ivTimer.setOnClickListener {
-            showDialogFragment(
-                SleepTimerDialog.newInstance(
-                    AudioPlayService.timeMinute,
-                    AudioPlayService.chapterToStop,
-                    useEpisodes = true,
-                )
-            )
-        }
-        binding.llPlayMenu.applyNavigationBarPadding()
-    }
-
-    private fun initListener() {
-        binding.ivPlayMode.setOnClickListener {
-            AudioPlay.changePlayMode()
-        }
-        binding.fabPlayStop.setOnClickListener {
-            playButton()
-        }
-        binding.fabPlayStop.onLongClick {
-            AudioPlay.stop()
-        }
-        binding.ivSkipNext.setOnClickListener {
-            AudioPlay.next()
-        }
-        binding.ivSkipPrevious.setOnClickListener {
-            AudioPlay.prev()
-        }
-        binding.ivChapter.setOnClickListener {
-            AudioPlay.book?.let {
-                tocActivityResult.launch(it.bookUrl)
-            }
-        }
-    }
-
-    private fun updatePlayModeIcon() {
-        binding.ivPlayMode.setImageResource(playMode.iconRes)
-    }
-
-    private fun upCover(path: String?) {
-        val sourceOrigin = AudioPlay.book?.getCoverSourceOrigin()
-        BookCover.load(this, path, sourceOrigin = sourceOrigin) {
-            BookCover.loadBlur(this, path, sourceOrigin = sourceOrigin)
-                .into(binding.ivBg)
-        }.into(binding.ivCover)
     }
 
     override fun upLyric(lyric: String?) {
-        if (oldLyric == lyric) return
-        oldLyric = lyric
-        binding.lyricViewX.gone()
-        if (lyric.isNullOrBlank()) return
-        lifecycleScope.launch {
-            // Sources may return only LRC metadata when no subtitles are available.
-            val lyricEntries = withContext(Default) {
-                LyricUtil.parseLrc(arrayOf(lyric, null))
-            }
-            if (oldLyric != lyric || lyricEntries.isNullOrEmpty()) return@launch
-            if (!lyricOn) {
-                lyricOn = true
-                lyricViewX.apply {
-                    setLabel("")
-                    setNormalTextSize(50F)
-                    setCurrentTextSize(60F)
-                    setTimelineTextColor(accentColor)
-                    setDraggable(true, object : OnPlayClickListener {
-                        override fun onPlayClick(time: Long): Boolean {
-                            AudioPlay.adjustProgress(time.toInt())
-                            playButton(false)
-                            return true
-                        }
-                    })
-                }
-            }
-            // Keep lyrics out of the draw pass until ConstraintLayout has assigned their width.
-            lyricViewX.invisible()
-            fun loadLyricWhenWide(view: View) {
-                if (oldLyric != lyric) return
-                // LyricViewX subtracts 16dp padding on both sides before building StaticLayout.
-                if (view.width <= 32.dpToPx()) {
-                    view.doOnNextLayout(::loadLyricWhenWide)
-                } else {
-                    lyricViewX.loadLyric(lyricEntries)
-                    lyricViewX.visible()
-                    upLyricP(AudioPlay.durChapterPos)
-                }
-            }
-            lyricViewX.doOnLayout(::loadLyricWhenWide)
+        viewModel.lyrics(lyric)
+    }
+
+    override fun upLyricP(position: Int) {
+        viewModel.update { copy(progress = position) }
+    }
+
+    @androidx.compose.runtime.Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        AudioPlayRoute(
+            model = viewModel,
+            close = ::finishAfterInitError,
+            folder = ::launchCacheFolder,
+            cache = ::acceptCacheAction,
+            navigate = ::navigateToBook,
+            back = ::finish,
+            menu = ::menuAction,
+            shelfResult = { setResult(RESULT_OK) },
+            addShelf = viewModel::addToShelf,
+            discardShelf = ::discardBook,
+            action = ::playbackAction,
+            seek = AudioPlay::adjustProgress,
+            speed = AudioPlay::setSpeed,
+            lyricSeek = ::seekToLyric,
+        )
+    }
+
+    private fun navigateToBook(key: String) {
+        viewModel.claimNavigation(key)?.let { book ->
+            startActivityForBook(book)
+            finish()
         }
     }
-    override fun upLyricP(position: Int) {
-        lyricViewX.updateTime(position.toLong(),false)
+
+    private fun discardBook() {
+        viewModel.update { copy(askShelf = false) }
+        callBackBookEnd()
+        viewModel.removeFromBookshelf()
+    }
+
+    private fun playbackAction(action: AudioPlayAction) {
+        when (action) {
+            AudioPlayAction.Play -> playButton()
+            AudioPlayAction.Stop -> AudioPlay.stop()
+            AudioPlayAction.Next -> AudioPlay.next()
+            AudioPlayAction.Previous -> AudioPlay.prev()
+            AudioPlayAction.Mode -> AudioPlay.changePlayMode()
+            AudioPlayAction.Chapters -> AudioPlay.book?.let { tocActivityResult.launch(it.bookUrl) }
+            AudioPlayAction.Timer ->
+                showDialogFragment(
+                    SleepTimerDialog.newInstance(
+                        AudioPlayService.timeMinute,
+                        AudioPlayService.chapterToStop,
+                        useEpisodes = true,
+                    )
+                )
+        }
+    }
+
+    private fun seekToLyric(position: Int) {
+        AudioPlay.adjustProgress(position)
+        playButton(false)
     }
 
     private fun playButton(noLyr: Boolean = true) {
@@ -479,16 +311,7 @@ class AudioPlayActivity :
             viewModel.changeTo(source, book, toc, onSuccess)
         } else {
             AudioPlay.stop()
-            lifecycleScope.launch {
-                withContext(IO) {
-                    AudioPlay.book?.migrateTo(book, toc)
-                    book.removeType(BookType.updateError)
-                    replaceBookAfterSourceChange(AudioPlay.book, book, toc)
-                }
-                onSuccess()
-                startActivityForBook(book)
-                finish()
-            }
+            viewModel.changeToText(book, toc, onSuccess)
         }
     }
 
@@ -500,33 +323,25 @@ class AudioPlayActivity :
         }
         if (!AppConfig.showAddToShelfAlert) {
             callBackBookEnd()
-            viewModel.removeFromBookshelf { super.finish() }
+            viewModel.removeFromBookshelf()
         } else {
-            alert(title = getString(R.string.add_to_bookshelf)) {
-                setMessage(getString(R.string.check_add_bookshelf, book.name))
-                okButton {
-                    AudioPlay.book?.removeType(BookType.notShelf)
-                    AudioPlay.book?.save()
-                    SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, AudioPlay.bookSource, AudioPlay.book)
-                    AudioPlay.inBookshelf = true
-                    setResult(RESULT_OK)
-                }
-                noButton {
-                    callBackBookEnd()
-                    viewModel.removeFromBookshelf { super.finish() }
-                }
-            }
+            viewModel.update { copy(askShelf = true) }
         }
     }
 
     private fun callBackBookEnd() {
-        SourceCallBack.callBackBook(SourceCallBack.END_READ, AudioPlay.bookSource, AudioPlay.book, AudioPlay.durChapter)
+        SourceCallBack.callBackBook(
+            SourceCallBack.END_READ,
+            AudioPlay.bookSource,
+            AudioPlay.book,
+            AudioPlay.durChapter,
+        )
     }
 
     override fun onDestroy() {
         super.onDestroy()
         if (AudioPlay.status != Status.PLAY) {
-            AudioPlay.stop()
+            if (AudioPlay.callback === this) AudioPlay.stop()
         }
         AudioPlay.unregister(this)
     }
@@ -541,46 +356,32 @@ class AudioPlayActivity :
         observeEventSticky<Int>(EventBus.AUDIO_STATE) {
             AudioPlay.status = it
             if (it == Status.PLAY) {
-                binding.fabPlayStop.setImageResource(R.drawable.ic_pause_24dp)
+                viewModel.update { copy(playing = true) }
             } else {
-                binding.fabPlayStop.setImageResource(R.drawable.ic_play_24dp)
+                viewModel.update { copy(playing = false) }
             }
         }
         observeEventSticky<String>(EventBus.AUDIO_SUB_TITLE) {
-            binding.tvSubTitle.text = it
-            val chapterSize = AudioPlay.simulatedChapterSize
-            if (chapterSize > 0) {
-                binding.tvChapterIndex.text = getString(
-                    R.string.audio_chapter_progress,
-                    AudioPlay.durChapterIndex + 1,
-                    chapterSize,
+            viewModel.snapshot()
+            viewModel.update {
+                copy(
+                    subtitle = it,
+                    chapterIndex = AudioPlay.durChapterIndex,
+                    chapterCount = AudioPlay.simulatedChapterSize,
                 )
-                binding.tvChapterIndex.visible()
-            } else {
-                binding.tvChapterIndex.gone()
             }
-            binding.ivSkipPrevious.isEnabled = AudioPlay.durChapterIndex > 0
-            binding.ivSkipNext.isEnabled =
-                AudioPlay.durChapterIndex < AudioPlay.simulatedChapterSize - 1
         }
-        observeEventSticky<Int>(EventBus.AUDIO_SIZE) {
-            binding.playerProgress.max = it
-            binding.tvAllTime.text = it.toDurationTime()
+        observeEventSticky<Int>(EventBus.AUDIO_SIZE) { size ->
+            viewModel.update { copy(duration = size) }
         }
-        observeEventSticky<Int>(EventBus.AUDIO_PROGRESS) {
-            if (!adjustProgress) binding.playerProgress.progress = it
-            binding.tvDurTime.text = it.toDurationTime()
+        observeEventSticky<Int>(EventBus.AUDIO_PROGRESS) { progress ->
+            viewModel.update { copy(progress = progress) }
         }
-        observeEventSticky<Int>(EventBus.AUDIO_BUFFER_PROGRESS) {
-            binding.playerProgress.secondaryProgress = it
+        observeEventSticky<Int>(EventBus.AUDIO_BUFFER_PROGRESS) { buffer ->
+            viewModel.update { copy(buffer = buffer) }
         }
-        observeEventSticky<Float>(EventBus.AUDIO_SPEED) {
-            if (it == 1f) {
-                binding.tvSpeed.invisible()
-            } else {
-                binding.tvSpeed.text = String.format(Locale.ROOT, "%.1fX", it)
-                binding.tvSpeed.visible()
-            }
+        observeEventSticky<Float>(EventBus.AUDIO_SPEED) { speed ->
+            viewModel.update { copy(speed = speed) }
         }
         observeEventSticky<Int>(EventBus.AUDIO_DS) { upTimerText() }
         observeEventSticky<Int>(EventBus.AUDIO_CHAPTER_STOP) { upTimerText() }
@@ -589,19 +390,7 @@ class AudioPlayActivity :
     private fun upTimerText() {
         val chapter = AudioPlayService.chapterToStop
         val minute = AudioPlayService.timeMinute
-        when {
-            chapter > 0 -> {
-                binding.tvTimer.text = getString(R.string.audio_stop_chapters, chapter)
-                binding.tvTimer.visible()
-            }
-
-            minute > 0 -> {
-                binding.tvTimer.text = getString(R.string.timer_m, minute)
-                binding.tvTimer.visible()
-            }
-
-            else -> binding.tvTimer.gone()
-        }
+        viewModel.update { copy(timerMinutes = minute, timerChapters = chapter) }
     }
 
     override fun onSleepTimerMinute(minute: Int) {
@@ -614,7 +403,7 @@ class AudioPlayActivity :
 
     override fun upLoading(loading: Boolean) {
         runOnUiThread {
-            binding.progressLoading.visible(loading)
+            viewModel.update { copy(loading = loading) }
         }
     }
 }

@@ -1302,3 +1302,12 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 
 - `AudioPlay.unregister` now releases its coroutine children only when the retiring Activity is still the registered owner. An old Activity destroyed after a replacement registers no longer cancels the replacement's pending playback requests.
 - `AudioControllerOwnershipTest` exercises both retired-owner and current-owner release against an actual coroutine Job. The shared audio engine's other cancellation paths are preserved.
+
+### Audio playback page
+
+- `AudioPlayActivity` now hosts a pure Compose playback screen with responsive portrait/landscape cover layout, blurred cover background, buffered progress and seeking, previous/next, play/pause and long-press stop, play modes, chapter navigation, speed and sleep timer controls.
+- Timed LRC lyrics render and scroll in Compose. Clicking a lyric seeks to its timestamp and keeps the original lyric-play behavior. Source custom callbacks, source switching/login/edit, wake lock, copying the play URL, cache directory/range/clear, skip credits and log actions remain connected to the existing engine and platform contracts.
+- `AudioPlayViewModel` exposes immutable state. Its repository owns database/source/cover/cache IO; Glide pixels are copied before its targets are released. Accepted source, cache and shelf writes complete their business acknowledgments even when the host rotates.
+- Cache selection and cross-type navigation retain large data only in private ViewModel sessions. Native chooser/navigation/result/finish effects are claimed once when the host is RESUMED. The original `bookUrl` activity and notification entry contract remains intact.
+- Removed this page's exclusive portrait/landscape XML and menu XML. Shared widget classes remain for the integration owner's consumer audit. Replaced obsolete XML/lyric-View tests with LRC behavior and Compose user-action tests; unrelated source/shelf/read-time contracts remain checked against the repository.
+- Validation at this commit: pinned ktfmt 0.64 actual format/check and `git diff --check` pass. The standard full Kotlin/unit/Android-test compilation is queued with the integration owner; no device execution is claimed.

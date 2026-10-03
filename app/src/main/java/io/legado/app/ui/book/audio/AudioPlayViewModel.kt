@@ -1,200 +1,222 @@
 package io.legado.app.ui.book.audio
 
 import android.app.Application
-import android.content.Intent
-import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import io.legado.app.R
-import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.BookType
-import io.legado.app.constant.EventBus
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.replaceBookAfterSourceChange
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.saveReadRecordSnapshot
-import io.legado.app.help.book.addType
-import io.legado.app.help.book.getBookSource
-import io.legado.app.help.book.isNotShelf
-import io.legado.app.help.book.removeType
-import io.legado.app.help.book.simulatedTotalChapterNum
-import io.legado.app.help.book.update
-import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.AudioPlay
-import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.AudioPlayService
-import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class AudioPlayViewModel(application: Application) : BaseViewModel(application) {
-    val titleData = MutableLiveData<String>()
-    val coverData = MutableLiveData<String>()
-    val customBtnListData = MutableLiveData<Boolean>()
-    private val initSemaphore = Semaphore(1)
-    private var initTask: Coroutine<Boolean?>? = null
+class AudioPlayViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = AudioPlayRepository(application)
+    private val mutableState =
+        MutableStateFlow(
+            AudioPlayUiState(
+                supportsSpeed = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+            )
+        )
+    internal val state = mutableState.asStateFlow()
 
-    fun initData(intent: Intent, success: () -> Unit, error: () -> Unit) {
-        val requestedBookUrl = intent.getStringExtra("bookUrl")
-        val cachedBook = AudioPlay.book
-        val cachedInBookshelf = AudioPlay.inBookshelf
-        initTask?.cancel()
-        initTask = execute(semaphore = initSemaphore) {
-            var databaseBook = requestedBookUrl
-                ?.takeIf { it.isNotBlank() }
-                ?.let(appDb.bookDao::getBook)
-            val resolvedBook = resolveAudioPlayBook(
-                requestedBookUrl = requestedBookUrl,
-                cachedBook = cachedBook,
-                bookUrlOf = Book::bookUrl,
-                findBook = { databaseBook },
-            ) ?: return@execute null
-            var targetBook = databaseBook
-                ?.takeIf { resolvedBook === cachedBook }
-                ?: resolvedBook
-            if (!requestedBookUrl.isNullOrBlank()
-                && databaseBook == null
-                && targetBook === cachedBook
-            ) {
-                val temporaryBook = targetBook.copy().apply {
-                    addType(BookType.notShelf)
-                }
-                if (appDb.bookDao.insertIgnore(temporaryBook) == -1L) {
-                    val concurrentBook = appDb.bookDao.getBook(requestedBookUrl)
-                        ?: return@execute null
-                    databaseBook = concurrentBook
-                    targetBook = concurrentBook
-                } else {
-                    targetBook = temporaryBook
-                }
-            }
-            AudioPlay.inBookshelf = when {
-                requestedBookUrl.isNullOrBlank() -> cachedInBookshelf
-                else -> !(databaseBook ?: targetBook).isNotShelf
-            }
-            initBook(targetBook)
-        }.onSuccess { initialized ->
-            when (initialized) {
-                true -> {
-                    success()
-                    AudioPlay.saveRead(true)
-                }
+    internal fun update(change: AudioPlayUiState.() -> AudioPlayUiState) {
+        mutableState.update { it.change() }
+    }
 
-                false -> {
-                    context.toastOnUi(R.string.error_load_toc)
-                    error()
-                }
+    private var initTask: Job? = null
+    private var lyricTask: Job? = null
+    private var coverTask: Job? = null
+    private var cacheAction: AudioCacheAction? = null
+    private var cacheSession: String? = null
 
-                null -> {
-                    context.toastOnUi(R.string.no_book)
-                    AppLog.put("未找到音频书籍\nbookUrl:$requestedBookUrl")
-                    error()
-                }
-            }
-        }.onError {
-            error()
-            AppLog.put("音频播放初始化失败\n${it.localizedMessage}", it, true)
+    internal fun requestCacheFolder(action: AudioCacheAction? = null) {
+        if (cacheSession != null) return
+        cacheSession = java.util.UUID.randomUUID().toString()
+        cacheAction = action
+        update { copy(folderRequest = cacheSession) }
+    }
+
+    internal fun ensureCache(action: AudioCacheAction) {
+        if (cacheSession != null) return
+        val session = java.util.UUID.randomUUID().toString()
+        cacheSession = session
+        cacheAction = action
+        viewModelScope.launch {
+            val available = repository.cacheFolderAvailable(AppConfig.audioCacheTreeUri)
+            if (cacheSession != session) return@launch
+            if (available) update { copy(cacheReady = session) }
+            else update { copy(folderRequest = session) }
         }
     }
 
-    private suspend fun initBook(book: Book): Boolean {
-        val isSameBook = AudioPlay.book?.bookUrl == book.bookUrl
-        if (isSameBook) {
-            AudioPlay.upData(book, preserveProgress = true)
-        } else {
-            AudioPlay.resetData(book)
+    internal fun selectedCacheFolder(uri: String?) {
+        val session = cacheSession ?: return
+        if (uri == null) {
+            cacheSession = null
+            cacheAction = null
+            return
         }
-        customBtnListData.postValue(AudioPlay.bookSource?.customButton == true)
-        titleData.postValue(book.name)
-        coverData.postValue(book.getDisplayCover())
-        if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
-            return false
-        }
-        if (AudioPlay.chapterSize == 0 && !loadChapterList(book)) {
-            return false
-        }
-        return AudioPlay.chapterSize > 0
-    }
-
-    private suspend fun loadBookInfo(book: Book): Boolean {
-        val bookSource = AudioPlay.bookSource ?: return false
-        try {
-            WebBook.getBookInfoAwait(bookSource, book)
-            return true
-        } catch (e: Exception) {
-            AppLog.put("详情页出错: ${e.localizedMessage}", e, true)
-            return false
-        }
-    }
-
-    private suspend fun loadChapterList(book: Book): Boolean {
-        val bookSource = AudioPlay.bookSource ?: return false
-        try {
-            val oldBook = book.copy()
-            val cList = WebBook.getChapterListAwait(bookSource, book).getOrThrow()
-            if (cList.isEmpty()) return false
-            if (oldBook.bookUrl == book.bookUrl) {
-                book.update()
+        viewModelScope.launch {
+            if (repository.cacheFolderAvailable(uri)) {
+                update { copy(selectedCacheFolder = uri, cacheReady = session) }
             } else {
-                appDb.bookDao.replace(oldBook, book)
+                getApplication<Application>().toastOnUi(R.string.audio_cache_folder_invalid)
+                cacheSession = null
+                cacheAction = null
             }
-            appDb.bookChapterDao.delByBook(book.bookUrl)
-            appDb.bookChapterDao.insert(*cList.toTypedArray())
-            AudioPlay.chapterSize = cList.size
-            AudioPlay.simulatedChapterSize = book.simulatedTotalChapterNum()
-            AudioPlay.upDurChapter()
-            return true
-        } catch (_: Exception) {
-            return false
+        }
+    }
+
+    internal fun claimCacheAction(session: String): AudioCacheAction? {
+        if (cacheSession != session) return null
+        val action = cacheAction
+        cacheAction = null
+        cacheSession = null
+        return action
+    }
+
+    internal fun clearCache(action: AudioCacheAction.Clear) {
+        val treeUri = AppConfig.audioCacheTreeUri
+        viewModelScope.launch(NonCancellable) {
+            val removed = repository.clearCachedChapter(action, treeUri)
+            getApplication<Application>()
+                .toastOnUi(
+                    if (removed) R.string.audio_cache_current_chapter_cleared
+                    else R.string.audio_cache_current_chapter_not_found
+                )
+        }
+    }
+
+    internal fun addToShelf() {
+        val book = AudioPlay.book ?: return
+        val source = AudioPlay.bookSource
+        update { copy(askShelf = false) }
+        viewModelScope.launch(NonCancellable) {
+            repository.addToShelf(book, source)
+            if (AudioPlay.book?.bookUrl == book.bookUrl) update { copy(shelfAdded = true) }
+        }
+    }
+
+    internal fun lyrics(text: String?) {
+        lyricTask?.cancel()
+        lyricTask = viewModelScope.launch {
+            val lines = withContext(Dispatchers.Default) { parseAudioLyrics(text) }
+            update { copy(lyrics = lines) }
+        }
+    }
+
+    internal fun snapshot() {
+        val book = AudioPlay.book
+        update {
+            copy(
+                title = book?.name.orEmpty(),
+                cover = book?.getDisplayCover(),
+                coverOrigin = book?.getCoverSourceOrigin(),
+                customButton = AudioPlay.bookSource?.customButton == true,
+                hasLogin = AudioPlay.bookSource?.hasLogin() == true,
+                wakeLock = AppConfig.audioPlayUseWakeLock,
+                chapterIndex = AudioPlay.durChapterIndex,
+                chapterCount = AudioPlay.simulatedChapterSize,
+                playMode = AudioPlay.playMode.iconRes,
+                speed = AudioPlayService.playSpeed,
+            )
+        }
+        coverTask?.cancel()
+        coverTask = viewModelScope.launch {
+            val path = state.value.cover
+            val origin = state.value.coverOrigin
+            val cover = runCatching { repository.cover(path, origin) }.getOrNull()
+            ensureActive()
+            val backdrop = runCatching { repository.cover(path, origin, blur = true) }.getOrNull()
+            ensureActive()
+            update { copy(coverImage = cover, backdropImage = backdrop) }
+        }
+        lyrics(
+            AudioPlay.durChapter?.getVariable("lyric")?.takeIf(String::isNotBlank)
+                ?: AudioPlay.durLyric
+        )
+    }
+
+    internal fun initialize(bookUrl: String?) {
+        initTask?.cancel()
+        update { copy(ready = false, closeRequested = false) }
+        initTask = viewModelScope.launch {
+            try {
+                when (repository.initialize(bookUrl)) {
+                    true -> {
+                        snapshot()
+                        update { copy(ready = true) }
+                        AudioPlay.saveRead(true)
+                    }
+                    false -> {
+                        getApplication<Application>().toastOnUi(R.string.error_load_toc)
+                        update { copy(closeRequested = true) }
+                    }
+                    null -> {
+                        getApplication<Application>().toastOnUi(R.string.no_book)
+                        update { copy(closeRequested = true) }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                AppLog.put("音频播放初始化失败", failure, true)
+                update { copy(closeRequested = true) }
+            }
         }
     }
 
     fun upSource() {
-        execute {
-            val book = AudioPlay.book ?: return@execute
-            val source = book.getBookSource()
-            AudioPlay.setBookSource(source)
-            customBtnListData.postValue(source?.customButton == true)
+        viewModelScope.launch {
+            repository.source()
+            snapshot()
         }
     }
 
-    fun changeTo(
-        source: BookSource,
-        book: Book,
-        toc: List<BookChapter>,
-        onSuccess: () -> Unit = {},
-    ) {
-        execute {
-            val oldBook = AudioPlay.book
-            val wasNotShelf = oldBook?.let {
-                appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true
-            } ?: !AudioPlay.inBookshelf
-            oldBook?.migrateTo(book, toc)
-            book.removeType(BookType.updateError)
-            if (wasNotShelf) book.addType(BookType.notShelf)
-            replaceBookAfterSourceChange(oldBook, book, toc)
-            AudioPlay.replaceBook(book)
-            AudioPlay.inBookshelf = !wasNotShelf
-            AudioPlay.setBookSource(source)
-            AudioPlay.upData(book, preserveProgress = false)
-            AudioPlayService.updateNotification(context)
-        }.onSuccess {
+    fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
+        // Once a source migration is accepted, deliver its business completion even if the host
+        // rotates.
+        viewModelScope.launch(NonCancellable) {
+            repository.changeSource(source, book, toc)
+            snapshot()
             onSuccess()
-        }.onFinally {
-            postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
         }
     }
 
-    fun removeFromBookshelf(success: (() -> Unit)?) {
-        execute {
-            AudioPlay.book?.let {
-                it.saveReadRecordSnapshot()
-                appDb.bookDao.delete(it)
-            }
-        }.onSuccess {
-            success?.invoke()
+    private val navigationSessions = mutableMapOf<String, Book>()
+
+    internal fun claimNavigation(key: String): Book? = navigationSessions.remove(key)
+
+    internal fun changeToText(book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
+        val oldBook = AudioPlay.book
+        viewModelScope.launch(NonCancellable) {
+            repository.changeToText(oldBook, book, toc)
+            onSuccess()
+            val key = java.util.UUID.randomUUID().toString()
+            navigationSessions[key] = book
+            update { copy(bookNavigation = key) }
         }
     }
 
+    fun removeFromBookshelf() {
+        val book = AudioPlay.book ?: return
+        viewModelScope.launch(NonCancellable) {
+            repository.removeFromBookshelf(book)
+            if (AudioPlay.book?.bookUrl == book.bookUrl) update { copy(closeRequested = true) }
+        }
+    }
 }
