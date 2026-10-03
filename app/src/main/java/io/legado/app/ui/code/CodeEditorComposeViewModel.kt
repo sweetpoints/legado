@@ -45,6 +45,7 @@ internal class CodeEditorComposeViewModel(
     val state = mutableState.asStateFlow()
 
     init {
+        clearCodeEditorLaunchDefaults(savedState)
         retryInternal(manual = false)
         viewModelScope.launch {
             try {

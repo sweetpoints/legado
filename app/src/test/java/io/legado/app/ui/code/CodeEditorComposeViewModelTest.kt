@@ -33,6 +33,52 @@ class CodeEditorComposeViewModelTest {
     }
 
     @Test
+    fun defaultIntentArgumentsNeverRemainInSavedStateOrOverridePrivateRestore() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val raw = "function raw(){ return '😀'; }\r\n".repeat(10_000)
+            val saved =
+                SavedStateHandle(
+                    mapOf(
+                        "text" to raw,
+                        "unknownLegacyPayload" to raw,
+                        "cacheKey" to "legacy-cache",
+                        "textFile" to "legacy-file",
+                        "title" to raw,
+                        "languageName" to "source.js",
+                        "cursorPosition" to 12,
+                        "readOnly" to false,
+                        "returnUnchangedText" to true,
+                        "useTextFile" to true,
+                        CodeEditActivity.EXTRA_SHOW_DEBUG_SOURCE to true,
+                        CodeEditActivity.EXTRA_SHOW_LOGIN_SOURCE to true,
+                        CodeEditActivity.EXTRA_CHECK_JAVASCRIPT_SYNTAX to true,
+                    )
+                )
+            val model = CodeEditorComposeViewModel(repository, saved, CodeEditorLaunch(text = raw))
+            assertEquals(setOf("codeEditorSessionId"), saved.keys())
+            runCurrent()
+            assertEquals(raw, model.state.value.session!!.text)
+            val restoredSaved =
+                SavedStateHandle(
+                    mapOf(
+                        "codeEditorSessionId" to saved.get<String>("codeEditorSessionId"),
+                        "text" to "wrong incoming",
+                    )
+                )
+            val restored =
+                CodeEditorComposeViewModel(
+                    repository,
+                    restoredSaved,
+                    CodeEditorLaunch(text = "wrong incoming"),
+                )
+            runCurrent()
+            assertEquals(setOf("codeEditorSessionId"), restoredSaved.keys())
+            assertEquals(raw, restored.state.value.session!!.text)
+            assertEquals(1, repository.loads)
+        }
+
+    @Test
     fun privateUuidBootstrapRestoresRawDraftWithoutReadingLaunchAgain() =
         runTest(dispatcher) {
             val repository = FakeRepository()

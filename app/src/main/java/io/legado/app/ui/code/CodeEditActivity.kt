@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.base.BaseComposeActivity
@@ -18,6 +19,9 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /** Platform launch values, public result contract and existing Compose dialog hosts only. */
 class CodeEditActivity :
@@ -40,10 +44,13 @@ class CodeEditActivity :
         viewModels<CodeEditorComposeViewModel> {
             viewModelFactory {
                 initializer {
+                    val launch = legacyLaunch()
+                    val savedState = createSavedStateHandle()
+                    clearCodeEditorLaunchDefaults(savedState)
                     CodeEditorComposeViewModel(
                         FileCodeEditorSessionRepository(applicationContext),
-                        createSavedStateHandle(),
-                        legacyLaunch(),
+                        savedState,
+                        launch,
                     )
                 }
             }
@@ -68,6 +75,17 @@ class CodeEditActivity :
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         model.keyboardRows(AppConfig.showBoardLine)
         observeEvent<Int>(PreferKey.showBoardLine) { model.keyboardRows(it) }
+        lifecycleScope.launch {
+            model.state
+                .map { it.session != null }
+                .distinctUntilChanged()
+                .collect { accepted ->
+                    // Clear the carrier only after private bootstrap was accepted. Failed IO still
+                    // owns its immutable seed; a restored session uses its UUID, never these
+                    // extras.
+                    if (accepted) clearCodeEditorLaunchIntent(intent)
+                }
+        }
     }
 
     @Composable
