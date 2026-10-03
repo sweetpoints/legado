@@ -17,17 +17,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.repository.*
 import io.legado.app.databinding.ActivityBookReadBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.book.cacheLocalUri
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.bottomBackground
@@ -318,20 +315,10 @@ abstract class BaseReadBookActivity :
     }
 
     fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding =
-                DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = "charset"
-                    editView.setFilterValues(charsets)
-                    editView.setText(ReadBook.book?.charset)
-                }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    ReadBook.setCharset(it)
-                }
-            }
-            cancelButton()
+        if (
+            supportFragmentManager.findFragmentByTag(ReaderCharsetDialog::class.simpleName) == null
+        ) {
+            showDialogFragment(ReaderCharsetDialog.create())
         }
     }
 
