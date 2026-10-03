@@ -1401,3 +1401,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 书源完整候选首次冻结验证：生产Kotlin通过，AndroidTest编译暴露 Screen 用例旧extension import与DpRect高度API兼容问题；独立修为成员assert及bottom-top实际触摸边界，断言含义保留，同slot标准双task复验待完成，未宣称通过。
 
 书源完整页面最终验证：clean候选f0565f312在e77a03e73基线上执行标准AndroidTest Kotlin编译及全量JVM双task（offline/max-workers2），29秒EXIT0，625 suites/3814 JVM/零failure/error/skipped；BookVM15、Document3、Form8真实运行。7Room/Atomic、7Screen、1Route、2Registry设备用例完成Kotlin编译，未设备执行。全部触达Kotlin统一actualformat/check及diff check通过，本候选新增书源页面尚未实际release/R8打包，整合旧release证据不覆盖此页面。日志/private/tmp/legado-compose-source-editor-book-full-06.log。
+
+书源最后接受分界审查修复：私有writeDraft显式Boolean接受，完整不可变document同revision同payload幂等，旧revision/异payload/closed拒绝。VM的flush/checkpoint拒绝即作废cached generation及旧native回执/rollback，仅手动retry读取durable最新owner；拒绝不能授权launch或覆盖新草稿。已接受save的fixed journal被更高稿supersede时保留immutablejournal，read返回新稿/closed，绝不发布旧导航回执。新增gated旧VM claim及真实双Room/Atomic同revision异raw字段、owner和journal/closed回归；统一实际format/check与diff check通过，最终双task待本修复完成。

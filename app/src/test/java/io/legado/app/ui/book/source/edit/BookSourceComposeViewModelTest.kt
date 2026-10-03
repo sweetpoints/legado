@@ -4,8 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.entities.BookSource
 import io.legado.app.utils.GSON
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -438,9 +440,56 @@ class BookSourceComposeViewModelTest {
             )
         }
 
+    @Test
+    fun rejectedOldNativeClaimCannotLaunchOrOverwriteNewOwnerAndRetryLoadsDurableDraft() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val handle = SavedStateHandle()
+            val model = BookSourceComposeViewModel(repository, handle, "old")
+            runCurrent()
+            model.requestAction(BookSourceNativeAction.QR)
+            runCurrent()
+            val stale = model.state.value.document!!
+            val replacement =
+                stale.copy(
+                    revision = stale.revision + 1,
+                    nativeRequest =
+                        BookSourceNativeRequest(
+                            UUID.randomUUID().toString(),
+                            BookSourceNativeAction.QR,
+                        ),
+                    form = stale.form.updateField(0, "bookSourceName", "new owner", 0, 0),
+                )
+            val entered = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            repository.beforeWrite = {
+                entered.complete(Unit)
+                resume.await()
+            }
+            var launches = 0
+            val oldClaim = async {
+                model.deliverNative(stale.nativeRequest!!.id, { true }, { launches++ })
+            }
+            runCurrent()
+            entered.await()
+            repository.drafts[handle.get<String>("bookSourceDraftId")!!] = replacement
+            repository.beforeWrite = {}
+            resume.complete(Unit)
+            assertFalse(oldClaim.await())
+            assertEquals(0, launches)
+            assertEquals(replacement, repository.drafts[handle.get<String>("bookSourceDraftId")!!])
+            assertEquals(null, model.state.value.document)
+            assertTrue(model.state.value.error!!.contains("其他编辑会话"))
+            model.retry()
+            runCurrent()
+            assertEquals(replacement, model.state.value.document)
+            assertEquals(null, model.state.value.error)
+        }
+
     private class FakeRepository : BookSourceEditorRepository {
         val drafts = mutableMapOf<String, BookSourceEditDocument>()
         val transfers = mutableMapOf<String, String>()
+        var beforeWrite: suspend () -> Unit = {}
         var failWrites = false
         var failHandoffReceipt = false
         var failRead = false
@@ -461,11 +510,19 @@ class BookSourceComposeViewModelTest {
             return drafts[sessionId]
         }
 
-        override suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument) {
+        override suspend fun writeDraft(
+            sessionId: String,
+            document: BookSourceEditDocument,
+        ): Boolean {
             if (failWrites || (failHandoffReceipt && document.nativeRequest?.handedOff == true))
                 error("disk failed")
-            if ((drafts[sessionId]?.revision ?: -1) < document.revision)
-                drafts[sessionId] = document
+            beforeWrite()
+            val previous = drafts[sessionId]
+            if (previous == document) return true
+            if (previous?.finished == true || (previous?.revision ?: -1) >= document.revision)
+                return false
+            drafts[sessionId] = document
+            return true
         }
 
         override suspend fun save(

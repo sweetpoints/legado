@@ -40,6 +40,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal class BookSourceDraftConflict : IllegalStateException("书源草稿已由其他编辑会话更新，请点击重试读取已保存的草稿")
+
 internal data class BookSourceKeyboardAssist(val key: String, val value: String)
 
 internal interface BookSourceEditorRepository {
@@ -49,7 +51,7 @@ internal interface BookSourceEditorRepository {
 
     suspend fun readDraft(sessionId: String): BookSourceEditDocument?
 
-    suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument)
+    suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument): Boolean
 
     suspend fun save(
         sessionId: String,
@@ -150,24 +152,34 @@ internal class RoomBookSourceEditorRepository(
                 readFile<PendingSave>(file(sessionId, journal = true))?.let { pending ->
                     // The journal contains a fixed plan, not executable JS. Completing its receipt
                     // never re-materializes rules or overwrites a concurrent source edit.
-                    withContext(NonCancellable) { finishSave(sessionId, pending) }
+                    withContext(NonCancellable) {
+                        try {
+                            finishSave(sessionId, pending)
+                        } catch (_: BookSourceDraftConflict) {
+                            // The accepted save plan remains durable in its journal. A newer owner
+                            // controls navigation; reading must never publish the obsolete receipt.
+                        }
+                    }
                 }
                 draftLock(sessionId).withLock { readFile(file(sessionId)) }
             }
         }
 
-    override suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument) {
+    override suspend fun writeDraft(sessionId: String, document: BookSourceEditDocument): Boolean =
         withContext(Dispatchers.IO + NonCancellable) {
             draftLock(sessionId).withLock {
                 val previous = readFile<BookSourceEditDocument>(file(sessionId))
+                // Compare the entire immutable document, including native owner and raw fields.
+                // Entity equality only checks the URL and cannot prove checkpoint acceptance.
+                if (previous == document) return@withLock true
                 if (previous?.finished == true || (previous?.revision ?: -1) >= document.revision) {
-                    return@withLock
+                    return@withLock false
                 }
                 beforeDraftWrite()
                 writeFile(file(sessionId), document)
+                true
             }
         }
-    }
 
     @Keep
     private data class PendingSave(
@@ -271,7 +283,7 @@ internal class RoomBookSourceEditorRepository(
             }
         }
         invalidate(previous, source)
-        writeDraft(sessionId, pending.result)
+        if (!writeDraft(sessionId, pending.result)) throw BookSourceDraftConflict()
         file(sessionId, journal = true).delete()
         return pending.result
     }

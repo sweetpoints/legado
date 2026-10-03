@@ -86,13 +86,29 @@ internal class BookSourceComposeViewModel(
 
     private suspend fun flush() {
         writeMutex.withLock {
-            draft?.let { repository.writeDraft(sessionId, it) }
+            draft?.let { requireAccepted(repository.writeDraft(sessionId, it)) }
         }
+    }
+
+    private fun requireAccepted(accepted: Boolean) {
+        if (accepted) return
+        // The private writer rejected this cached generation. Never use it to authorize a
+        // launch, replay a result, or roll back the newer durable owner's payload.
+        invalidateCachedDraft()
+        throw BookSourceDraftConflict()
+    }
+
+    private fun invalidateCachedDraft() {
+        draft = null
+        pendingNativeRollback = null
+        pendingNativeReceipt = null
+        pendingNativeResult = null
+        mutableState.value = mutableState.value.copy(document = null)
     }
 
     private suspend fun checkpoint(updated: BookSourceEditDocument) {
         val next = updated.copy(revision = (draft?.revision ?: -1) + 1)
-        writeMutex.withLock { repository.writeDraft(sessionId, next) }
+        writeMutex.withLock { requireAccepted(repository.writeDraft(sessionId, next)) }
         draft = next
     }
 
@@ -122,6 +138,7 @@ internal class BookSourceComposeViewModel(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
+                    if (error is BookSourceDraftConflict) invalidateCachedDraft()
                     publish(error.localizedMessage ?: "Error")
                 }
             }
@@ -414,7 +431,10 @@ internal class BookSourceComposeViewModel(
                     }
                     launch(request)
                 } catch (error: Exception) {
-                    runCatching { checkpoint(current) }.onSuccess { pendingNativeRollback = null }
+                    if (error !is BookSourceDraftConflict) {
+                        runCatching { checkpoint(current) }
+                            .onSuccess { pendingNativeRollback = null }
+                    }
                     publish(error.localizedMessage)
                     return@withLock false
                 }

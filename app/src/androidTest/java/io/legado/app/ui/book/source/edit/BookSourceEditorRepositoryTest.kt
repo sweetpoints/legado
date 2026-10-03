@@ -193,8 +193,25 @@ class BookSourceEditorRepositoryTest {
         val repository = repository()
         val sessionId = UUID.randomUUID().toString()
         val original = repository.load(null).copy(revision = 4)
-        repository.writeDraft(sessionId, original)
-        repository.writeDraft(sessionId, original.copy(focusedKey = "other"))
+        val secondRepository = repository()
+        assertTrue(repository.writeDraft(sessionId, original))
+        assertTrue(secondRepository.writeDraft(sessionId, original.copy()))
+        assertFalse(secondRepository.writeDraft(sessionId, original.copy(focusedKey = "other")))
+        assertFalse(
+            secondRepository.writeDraft(
+                sessionId,
+                original.copy(
+                    form =
+                        original.form.updateField(
+                            0,
+                            "bookSourceName",
+                            "same revision different payload",
+                            0,
+                            0,
+                        )
+                ),
+            )
+        )
         assertEquals(original, repository.readDraft(sessionId))
         withContext(Dispatchers.IO) {
             AtomicFile(File(directory, "$sessionId.json")).startWrite().use {
@@ -204,8 +221,37 @@ class BookSourceEditorRepositoryTest {
         assertEquals(original, repository.readDraft(sessionId))
         val closed = original.copy(finished = true, revision = 5)
         repository.writeDraft(sessionId, closed)
-        repository.writeDraft(sessionId, original.copy(revision = 99))
+        assertFalse(secondRepository.writeDraft(sessionId, original.copy(revision = 99)))
         assertEquals(closed, repository.readDraft(sessionId))
+    }
+
+    @Test
+    fun acceptedSaveJournalCannotReplaceNewerPrivateOwnerOrItsClosedTombstone() = runBlocking {
+        insert(BookSource("old", "name"))
+        val failing = repository(beforeDraft = { error("receipt failed") })
+        val sessionId = UUID.randomUUID().toString()
+        val original = failing.load("old")
+        assertTrue(
+            runCatching { failing.save(sessionId, original, BookSourceSaveAction.DEBUG) }.isFailure
+        )
+        val second = repository()
+        val replacement =
+            original.copy(
+                revision = 4,
+                nativeRequest =
+                    BookSourceNativeRequest(
+                        UUID.randomUUID().toString(),
+                        BookSourceNativeAction.QR,
+                    ),
+            )
+        assertTrue(second.writeDraft(sessionId, replacement))
+        assertEquals(replacement, second.readDraft(sessionId))
+        assertEquals("name", source("old")!!.bookSourceName)
+        assertTrue(File(directory, "$sessionId-save.json").exists())
+        val closed = replacement.copy(revision = 5, nativeRequest = null, finished = true)
+        assertTrue(second.writeDraft(sessionId, closed))
+        assertEquals(closed, failing.readDraft(sessionId))
+        assertTrue(File(directory, "$sessionId-save.json").exists())
     }
 
     @Test
