@@ -86,6 +86,21 @@ object ThemeConfig {
         }
     }
 
+    /** Prepare cover files away from Main before the same UI transition as [applyDayNight]. */
+    suspend fun applyDayNightAsync(context: Context) {
+        val application = context.applicationContext
+        asyncApplyLock.withLock {
+            withContext(NonCancellable) {
+                withContext(Dispatchers.IO) { BookCover.upDefaultCover() }
+                withContext(Dispatchers.Main.immediate) {
+                    applyTheme(application)
+                    initNightMode()
+                    postEvent(EventBus.RECREATE, "")
+                }
+            }
+        }
+    }
+
     fun applyDayNightInit(context: Context) {
         applyTheme(context)
         initNightMode()
