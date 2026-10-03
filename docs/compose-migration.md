@@ -981,3 +981,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 章节列表 Fragment 改为 Compose Route/Screen，完整保留普通/EPUB/PDF 行、分卷箭头与锚点、搜索、当前章节和上下定位、标题/字数/VIP/缓存状态、快速滚动与视频/PDF 返回参数。解析最新目标后核对 RESUMED/宿主再消费票据，完整标题提示保持。删除两个 Adapter 与两个专属布局，新增 7 个 Compose 与 3 个宿主测试；既有 EPUB/PDF/逆序阅读操作改为 Compose，保留 reader/cache/bookmark 业务断言，共享源码镜像仅替换 Chapter 分支。隔离全量 JVM 与 Android 测试编译通过；设备测试尚未执行。
 
 书源调试数据层独立迁移：完整书源/发现规则不可变快照，复用原 Debug 所属 channel lease，后继执行等待原解析及 JS 任务结束。10/20/30/40 完整 HTML 保存在私有会话，展示日志限 20000 字符；固定锁条带、修订保护、关闭围栏与 AtomicFile 清理阻止迟到任务复活。新增 7 个实际 Room/HTTP 四阶段/全量 HTML/关闭文件回归；隔离全量 JVM 与 Android 测试编译通过。
+
+书源调试状态层迁入专属 ViewModel：首次显示帮助而不执行，运行/重跑按所属 lease 取消并等待；完整四阶段响应留私有会话，恢复中断任务不会自动重跑，迟到日志/HTML 不覆盖新执行。保留关键字/发现/详情/++目录/--正文/QR 输入合同，关闭清理独立于宿主生命周期；最新草稿写失败可重试而不执行网络。新增 17 个 JVM 回归；隔离全量 JVM 与 Android 测试编译通过。
