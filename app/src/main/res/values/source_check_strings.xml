@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources><string name="source_check_timeout_invalid">Enter a positive number of seconds no greater than 9223372036854775.</string></resources>

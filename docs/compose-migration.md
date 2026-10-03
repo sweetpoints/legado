@@ -913,3 +913,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 音频片头片尾页面迁移至 Compose Dialog/Route/Screen 和不可变状态 ViewModel，保留本书/全局、0–180 秒、加减和滑块松手提交。切换范围前串行落盘并读取最新全局值，过期读取不覆盖新的操作；旋转保留草稿且不保存书籍，真实关闭进入持久写入并合并最新书籍配置。删除独占 dialog_audio_skip_credits.xml，新增 6 个 JVM、3 个 Compose 和 1 个真实宿主/Room Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
 
 书源校验配置的数据层与不可变状态 ViewModel 独立迁移：读取和保存移至 IO，保留入口检查项的互斥回退及详情、目录、正文联动，取消不保存。超时输入限制为小型数字草稿，确认时检查空值、非正值和毫秒乘法溢出；进程恢复保留未保存选择，重复保存被阻止，失败后可修改并重试。新增 5 个 JVM 行为测试，完整 JVM 测试及 Android 测试编译验证。
+
+书源校验配置页面迁移至 Compose Dialog/Route/Screen，使用可访问的整行复选控件、自动换行和可滚动输入区；确认保存完成后仅在 RESUMED 交付关闭，保存期间禁止取消，普通取消不写设置。旧 dialog_check_source_config.xml 与 ViewBinding 删除，调用者无须改变。新增 2 个实际 Compose Route 交互测试，覆盖联动保存、溢出后纠正及取消不写；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
