@@ -20,11 +20,17 @@ fun MyRoute(
         onPauseOrDispose { viewModel.stopObserving() }
     }
     MyScreen(
-        state = state, isMore = isMore,
-        onItemClick = onItemClick, onLongClick = onLongClick,
-        onSwitchChange = viewModel::setSwitch, onThemeModeChange = viewModel::setThemeMode,
-        onCustomize = viewModel::openCustomization, onCustomizationToggle = viewModel::toggleCustomization,
-        onCustomizationConfirm = viewModel::confirmCustomization, onCustomizationDismiss = viewModel::dismissCustomization,
-        onHelp = onHelp, onBack = onBack,
+        state = state,
+        isMore = isMore,
+        onItemClick = onItemClick,
+        onLongClick = onLongClick,
+        onSwitchChange = viewModel::setSwitch,
+        onThemeModeChange = viewModel::setThemeMode,
+        onCustomize = viewModel::openCustomization,
+        onCustomizationToggle = viewModel::toggleCustomization,
+        onCustomizationConfirm = viewModel::confirmCustomization,
+        onCustomizationDismiss = viewModel::dismissCustomization,
+        onHelp = onHelp,
+        onBack = onBack,
     )
 }

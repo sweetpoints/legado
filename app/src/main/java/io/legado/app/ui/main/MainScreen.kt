@@ -50,7 +50,9 @@ fun MainScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         Column(
             Modifier.fillMaxWidth()
-                .background(if (transparentNavigation) Color.Transparent else colors.bottomBackground)
+                .background(
+                    if (transparentNavigation) Color.Transparent else colors.bottomBackground
+                )
                 .windowInsetsPadding(WindowInsets.navigationBars)
         ) {
             if (state.isEInkMode) HorizontalDivider(color = colors.textPrimary, thickness = 1.dp)
@@ -58,7 +60,8 @@ fun MainScreen(
                 state.destinations.forEach { destination ->
                     val selected = destination == state.selectedDestination
                     Box(
-                        Modifier.weight(1f).height(50.dp)
+                        Modifier.weight(1f)
+                            .height(50.dp)
                             .selectable(
                                 selected = selected,
                                 role = Role.Tab,
@@ -66,14 +69,22 @@ fun MainScreen(
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        BadgedBox(badge = {
-                            if (destination == MainDestination.Bookshelf && updatingBooks != 0) {
-                                Badge(
-                                    containerColor = colors.accent,
-                                    contentColor = if (colors.accent.luminance() > 0.5f) Color.Black else Color.White,
-                                ) { Text(updatingBooks.toString()) }
+                        BadgedBox(
+                            badge = {
+                                if (
+                                    destination == MainDestination.Bookshelf && updatingBooks != 0
+                                ) {
+                                    Badge(
+                                        containerColor = colors.accent,
+                                        contentColor =
+                                            if (colors.accent.luminance() > 0.5f) Color.Black
+                                            else Color.White,
+                                    ) {
+                                        Text(updatingBooks.toString())
+                                    }
+                                }
                             }
-                        }) {
+                        ) {
                             val title = stringResource(destination.titleRes)
                             val skin = skinIcons[destination]
                             if (skin != null) {
@@ -101,17 +112,19 @@ fun MainScreen(
 data class MainSkinIcon(val selected: ImageBitmap, val unselected: ImageBitmap)
 
 private val MainDestination.titleRes: Int
-    get() = when (this) {
-        MainDestination.Bookshelf -> R.string.bookshelf
-        MainDestination.Explore -> R.string.discovery
-        MainDestination.Rss -> R.string.rss
-        MainDestination.My -> R.string.my
-    }
+    get() =
+        when (this) {
+            MainDestination.Bookshelf -> R.string.bookshelf
+            MainDestination.Explore -> R.string.discovery
+            MainDestination.Rss -> R.string.rss
+            MainDestination.My -> R.string.my
+        }
 
 private val MainDestination.iconRes: Int
-    get() = when (this) {
-        MainDestination.Bookshelf -> R.drawable.ic_bottom_books
-        MainDestination.Explore -> R.drawable.ic_bottom_explore
-        MainDestination.Rss -> R.drawable.ic_bottom_rss_feed
-        MainDestination.My -> R.drawable.ic_bottom_person
-    }
+    get() =
+        when (this) {
+            MainDestination.Bookshelf -> R.drawable.ic_bottom_books
+            MainDestination.Explore -> R.drawable.ic_bottom_explore
+            MainDestination.Rss -> R.drawable.ic_bottom_rss_feed
+            MainDestination.My -> R.drawable.ic_bottom_person
+        }
