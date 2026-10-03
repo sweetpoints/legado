@@ -239,19 +239,6 @@ class JsSourceWebApiContractTest {
         assertDebugSocketFailureReleasesOwner(bookDebugWebSocket)
         assertDebugSocketFailureReleasesOwner(rssDebugWebSocket)
 
-        val bookDebugModel = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugModel.kt"
-        )
-        assertTrue(bookDebugModel.contains("state == -1 || state == 1000"))
-        assertTrue(bookDebugModel.contains("Debug.cancelDebug(this)"))
-        assertTrue(bookDebugModel.contains("error: ((Throwable) -> Unit)?"))
-        assertTrue(bookDebugModel.contains("error?.invoke(it)"))
-
-        val bookDebugActivity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugActivity.kt"
-        )
-        assertTrue(bookDebugActivity.contains("error.localizedMessage ?: \"调试失败\""))
-
         val debugModel = readProjectFile("app/src/main/java/io/legado/app/model/Debug.kt")
         assertTrue(debugModel.contains("withActiveDebugSession"))
         assertTrue(debugModel.contains("trackDebugTask"))

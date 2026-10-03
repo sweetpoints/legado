@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="book_debug_busy">调试通道占用中，请稍后重试</string>
+    <string name="book_debug_interrupted">上次调试已中断，请提交输入重新运行。</string>
+    <string name="book_debug_search_help">调试搜索：输入关键字，例如：</string>
+    <string name="book_debug_category_help">调试发现：输入发现 URL，例如：</string>
+    <string name="book_debug_info_help">调试详情：输入详情页 URL，例如：</string>
+    <string name="book_debug_toc_help">调试目录：输入以 ++ 开头的目录页 URL：</string>
+    <string name="book_debug_content_help">调试正文：输入以 -- 开头的正文页 URL：</string>
+    <string name="book_debug_choose_category">选择发现</string>
+</resources>
