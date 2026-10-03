@@ -7,7 +7,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNode
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Rule
@@ -22,7 +22,8 @@ class VideoFeedbackScreenTest {
         compose.setContent { LegadoComposeTheme { VideoFeedbackScreen(feedback) } }
         compose.onNodeWithText("音量 120%").assertExists()
         compose
-            .onNode(
+            .onNodeWithTag("video-feedback-progress")
+            .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.ProgressBarRangeInfo,
                     ProgressBarRangeInfo(1f, 0f..1f),
@@ -33,7 +34,8 @@ class VideoFeedbackScreenTest {
         compose.onNodeWithText("亮度 0%").assertExists()
         compose.onNodeWithText("音量 120%").assertDoesNotExist()
         compose
-            .onNode(
+            .onNodeWithTag("video-feedback-progress")
+            .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.ProgressBarRangeInfo,
                     ProgressBarRangeInfo(0f, 0f..1f),

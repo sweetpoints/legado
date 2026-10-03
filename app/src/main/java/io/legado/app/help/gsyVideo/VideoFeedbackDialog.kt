@@ -83,7 +83,10 @@ internal fun VideoFeedbackScreen(state: VideoFeedbackState, modifier: Modifier =
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(state.label)
-                LinearProgressIndicator(progress = { state.fraction.coerceIn(0f, 1f) })
+                LinearProgressIndicator(
+                    progress = { state.fraction.coerceIn(0f, 1f) },
+                    modifier = Modifier.testTag("video-feedback-progress"),
+                )
             }
         }
     }

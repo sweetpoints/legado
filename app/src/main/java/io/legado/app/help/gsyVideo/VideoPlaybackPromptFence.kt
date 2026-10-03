@@ -4,7 +4,7 @@ package io.legado.app.help.gsyVideo
 internal class VideoPlaybackPromptFence {
     private var version = 0L
 
-    data class Ticket internal constructor(internal val version: Long, internal val url: String?)
+    class Ticket internal constructor(internal val version: Long, internal val url: String?)
 
     fun capture(url: String?): Ticket = Ticket(version, url)
 
