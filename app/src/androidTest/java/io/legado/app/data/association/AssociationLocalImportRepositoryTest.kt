@@ -32,8 +32,7 @@ class AssociationLocalImportRepositoryTest {
                     AssociationLocalImportRepository(
                         fixture.sessions,
                         beforeJournalWrite = { journal ->
-                            if (journal.copies.any { it.imported })
-                                throw IOException("receipt disk unavailable")
+                            if (journal.completed) throw IOException("receipt disk unavailable")
                         },
                     )
                 assertTrue(
@@ -182,6 +181,81 @@ class AssociationLocalImportRepositoryTest {
             assertEquals(2, restored.bookJson.size)
             assertEquals(2, importCalls)
             assertEquals(2, fixture.destination.listFiles()!!.size)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun perBookReceiptFailureRollsBackRoomButRetainsOwnedCopyForExplicitRetry() = runBlocking {
+        val fixture = fixture()
+        var copiedUrl: String? = null
+        try {
+            val failing =
+                AssociationLocalImportRepository(
+                    fixture.sessions,
+                    beforeJournalWrite = { journal ->
+                        if (journal.copies.any { it.imported })
+                            throw IOException("observer unavailable")
+                    },
+                )
+            assertTrue(
+                runCatching {
+                    failing.import(fixture.ticket, fixture.token, fixture.destinationUri)
+                }
+                    .isFailure
+            )
+            copiedUrl = fixture.destination.listFiles()!!.single().path
+            withContext(Dispatchers.IO) { assertFalse(appDb.bookDao.has(copiedUrl!!)) }
+            val result =
+                AssociationLocalImportRepository(fixture.sessions)
+                    .import(fixture.ticket, fixture.token, fixture.destinationUri)
+            assertEquals(
+                copiedUrl,
+                GSON.fromJsonObject<Book>(result.bookJson.single()).getOrThrow().bookUrl,
+            )
+            assertEquals(1, fixture.destination.listFiles()!!.size)
+        } finally {
+            copiedUrl?.let { url ->
+                withContext(Dispatchers.IO) {
+                    appDb.bookDao.getBook(url)?.let { book -> appDb.bookDao.delete(book) }
+                }
+            }
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun closeBeforeAcceptanceRejectsRoomInsertWithoutHoldingFileGateDuringEngine() = runBlocking {
+        val fixture = fixture()
+        val actual = LocalAssociationBookImportEngine()
+        val engine =
+            object : AssociationBookImportEngine {
+                override fun current(bookUrl: String): Book? = actual.current(bookUrl)
+
+                override fun import(uri: Uri, preview: Book): Book = actual.import(uri, preview)
+
+                override suspend fun accept(
+                    uri: Uri,
+                    preview: Book,
+                    onAccepted: suspend (Book) -> Unit,
+                ): Book {
+                    // This release would deadlock if the caller held the session gate around Room.
+                    fixture.sessions.release(fixture.ticket)
+                    return actual.accept(uri, preview, onAccepted)
+                }
+            }
+        try {
+            assertTrue(
+                runCatching {
+                    AssociationLocalImportRepository(fixture.sessions, engine)
+                        .import(fixture.ticket, fixture.token, fixture.destinationUri)
+                }
+                    .isFailure
+            )
+            val copiedUrl = fixture.destination.listFiles()!!.single().path
+            withContext(Dispatchers.IO) { assertFalse(appDb.bookDao.has(copiedUrl)) }
+            assertFalse(File(fixture.root, "sessions/${fixture.ticket}").exists())
         } finally {
             fixture.close()
         }

@@ -3,6 +3,7 @@ package io.legado.app.data.association
 import android.net.Uri
 import android.util.AtomicFile
 import androidx.annotation.Keep
+import androidx.room.withTransaction
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -13,7 +14,10 @@ import io.legado.app.utils.delete
 import io.legado.app.utils.fromJsonObject
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 @Keep
@@ -39,12 +43,30 @@ interface AssociationBookImportEngine {
     fun current(bookUrl: String): Book?
 
     fun import(uri: Uri, preview: Book): Book
+
+    suspend fun accept(uri: Uri, preview: Book, onAccepted: suspend (Book) -> Unit): Book {
+        val book = current(preview.bookUrl) ?: import(uri, preview)
+        onAccepted(book)
+        return book
+    }
 }
 
 class LocalAssociationBookImportEngine : AssociationBookImportEngine {
     override fun current(bookUrl: String): Book? = appDb.bookDao.getBook(bookUrl)
 
     override fun import(uri: Uri, preview: Book): Book = LocalBook.importFile(uri, preview)
+
+    override suspend fun accept(
+        uri: Uri,
+        preview: Book,
+        onAccepted: suspend (Book) -> Unit,
+    ): Book = appDb.withTransaction {
+        // Metadata is already parsed and copied. Only the short Room insert and private receipt
+        // run here, in Room -> session-file order; no extraction or stream copy holds SQL locks.
+        val book = current(preview.bookUrl) ?: import(uri, preview)
+        onAccepted(book)
+        book
+    }
 }
 
 /**
@@ -60,9 +82,18 @@ class AssociationLocalImportRepository(
         operationToken: String,
         directoryUri: String,
     ): AssociationLocalImportResult =
-        withContext(NonCancellable) {
+        withContext(Dispatchers.IO + NonCancellable) {
             require(runCatching { UUID.fromString(operationToken) }.isSuccess)
-            sessions.withOwnedSession(ticket) { ownedDirectory, session ->
+            val (ownedDirectory, session) =
+                sessions.withOwnedSession(ticket) { directory, current ->
+                    directory to current
+                }
+            // Recreated owners share this operation gate, independently of the short file gate.
+            // Release never waits here, and no command acquires these locks in reverse order.
+            val operationLock =
+                operationLocks[
+                    Math.floorMod(ownedDirectory.canonicalPath.hashCode(), operationLocks.size)]
+            operationLock.withLock {
                 check(session.operation?.token == operationToken) {
                     "Local import belongs to another request"
                 }
@@ -70,9 +101,9 @@ class AssociationLocalImportRepository(
                 check(previews.isNotEmpty()) { "No books selected" }
                 val file = AtomicFile(File(ownedDirectory, "local-import-$operationToken.json"))
                 var journal =
-                    readJournal(file)
+                    sessions.withOwnedSession(ticket) { _, _ -> readJournal(file) }
                         ?: AssociationLocalImportJournal(previews.map { it.id }, directoryUri)
-                            .also { writeJournal(file, it) }
+                            .also { writeOwnedJournal(ticket, operationToken, it) }
                 check(
                     journal.selectedIds == previews.map { it.id } &&
                         journal.directoryUri == directoryUri
@@ -92,7 +123,7 @@ class AssociationLocalImportRepository(
                         } catch (failure: Throwable) {
                             AppLog.put("复制分享书籍失败\n${failure.localizedMessage}", failure)
                             journal = journal.copy(failedIds = journal.failedIds + preview.id)
-                            writeJournal(file, journal)
+                            writeOwnedJournal(ticket, operationToken, journal)
                             continue
                         }
                     var destinationCover: File? = null
@@ -112,7 +143,7 @@ class AssociationLocalImportRepository(
                         val record =
                             AssociationCopiedBook(preview.id, copied.toString(), GSON.toJson(book))
                         val updated = journal.copy(copies = journal.copies + record)
-                        writeJournal(file, updated)
+                        writeOwnedJournal(ticket, operationToken, updated)
                         journal = updated
                     } catch (failure: Throwable) {
                         // Room has not seen this newly reserved destination. Only our own copy can
@@ -125,46 +156,70 @@ class AssociationLocalImportRepository(
                 val books = mutableListOf<String>()
                 var firstFailure: Throwable? = null
                 for (copy in journal.copies) {
+                    var receiptStarted = false
                     val book =
                         try {
                             val preview = GSON.fromJsonObject<Book>(copy.bookJson).getOrThrow()
                             val existing = engine.current(preview.bookUrl)
                             check(!copy.imported || existing != null) {
-                                "An imported book was deleted"
+                                "The accepted result cannot be verified; close and confirm a new import"
                             }
-                            // A failed receipt write after Room acceptance is recovered by this
-                            // exact
-                            // reserved URL. Never rerun importFile on an existing reading-position
-                            // row.
-                            existing ?: engine.import(Uri.parse(copy.destinationUri), preview)
+                            if (copy.imported) checkNotNull(existing)
+                            else
+                                engine.accept(Uri.parse(copy.destinationUri), preview) {
+                                    receiptStarted = true
+                                    val updated =
+                                        journal.copy(
+                                            copies =
+                                                journal.copies.map {
+                                                    if (it.previewId == copy.previewId)
+                                                        it.copy(imported = true)
+                                                    else it
+                                                }
+                                        )
+                                    // This short file gate is acquired after Room. A closed owner
+                                    // rejects
+                                    // acceptance and rolls back SQL, rather than inserting after
+                                    // close.
+                                    writeOwnedJournal(ticket, operationToken, updated)
+                                    journal = updated
+                                }
                         } catch (failure: Throwable) {
+                            // A receipt or post-receipt SQL failure is uncertain, not a rejected
+                            // book.
+                            // Stop the batch; restoration verifies accepted rows without
+                            // recreating.
+                            if (receiptStarted || copy.imported) throw failure
                             if (firstFailure == null) firstFailure = failure
                             AppLog.put("导入分享书籍失败\n${failure.localizedMessage}", failure)
                             continue
                         }
-                    if (!copy.imported) {
-                        val updated =
-                            journal.copy(
-                                copies =
-                                    journal.copies.map {
-                                        if (it.previewId == copy.previewId) it.copy(imported = true)
-                                        else it
-                                    }
-                            )
-                        // A receipt failure is not a rejected book. Stop before any success UI
-                        // or next import; restoration reconciles the already accepted Room row.
-                        writeJournal(file, updated)
-                        journal = updated
-                    }
                     books += GSON.toJson(book)
                 }
                 if (books.isEmpty())
                     throw firstFailure ?: IllegalStateException("No books could be imported")
                 journal = journal.copy(completed = true)
-                writeJournal(file, journal)
+                writeOwnedJournal(ticket, operationToken, journal)
                 AssociationLocalImportResult(previews.size, books)
             }
         }
+
+    private companion object {
+        val operationLocks = Array(64) { Mutex() }
+    }
+
+    private suspend fun writeOwnedJournal(
+        ticket: String,
+        operationToken: String,
+        journal: AssociationLocalImportJournal,
+    ) {
+        sessions.withOwnedSession(ticket) { directory, session ->
+            check(session.operation?.token == operationToken) {
+                "Local import belongs to another request"
+            }
+            writeJournal(AtomicFile(File(directory, "local-import-$operationToken.json")), journal)
+        }
+    }
 
     private fun readJournal(file: AtomicFile): AssociationLocalImportJournal? {
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return null

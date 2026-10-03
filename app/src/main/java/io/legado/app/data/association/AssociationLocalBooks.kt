@@ -122,3 +122,11 @@ internal fun clearAssociationStagingResources(directory: File) {
             if (cover.exists()) check(cover.delete()) { "Staged cover cleanup failed" }
         }
 }
+
+/** Known private paths remain sufficient for cleanup even when release already removed the file. */
+internal fun clearAssociationPreviewResources(file: File) {
+    val uri = Uri.fromFile(file)
+    LocalBook.withParserCacheInvalidated(uri, file.name) {}
+    val cover = File(LocalBook.getCoverPath(Book(bookUrl = file.absolutePath)))
+    if (cover.exists()) check(cover.delete()) { "Staged cover cleanup failed" }
+}
