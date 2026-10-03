@@ -505,8 +505,15 @@ class AudioPlayViewModel(application: Application, saved: SavedStateHandle) :
         initTask = viewModelScope.launch {
             try {
                 val stored = session.load()
+                // A process-restored host still carries its original Intent. Accepted source
+                // changes belong to the durable session and must win over that stale URL.
                 val target =
-                    bookUrl?.takeIf(String::isNotBlank) ?: stored.bookUrl ?: AudioPlay.book?.bookUrl
+                    if (restoringSession && !freshRequest) stored.bookUrl
+                    else
+                        bookUrl?.takeIf(String::isNotBlank)
+                            ?: stored.bookUrl
+                            ?: AudioPlay.book?.bookUrl
+                lastEntryBookUrl = target
                 session.update {
                     it.copy(
                         bookUrl = target,
