@@ -1640,3 +1640,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 共享书籍简介 WebView renderer 的 source contract 扩展为 BaseSource，保留书源与 RSS 源的 useweb JavaScript bridge；新增 RSS source.getKey() 的 Android 行为回归。视频简介 Compose 宿主接入另批提交。
 
 视频播放 Activity 信息面板合并为单个纯 Compose Screen：封面、书名作者、可选择纯文本简介及滚动布局由 Compose 渲染；HTML、Markdown 与 useweb 复用独立生命周期管理的 WebView 内容 renderer，保留图片预览/点击脚本/来源 JS bridge 和链接路由。Activity XML 不再承载封面与简介 View 树。
+
+GSY 全屏控制栏的下一集、弹幕开关、选集与倍速按钮改为生命周期绑定的 Compose 操作条，保留原 VideoPlayer 操作回调、播放状态可见性、倍速选择和弹幕状态更新；GSY start/seek/time、字幕/弹幕渲染及紧凑窗控制仍由播放器原生实现。按钮文案使用资源并覆盖英文。

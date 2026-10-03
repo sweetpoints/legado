@@ -98,54 +98,14 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/progress" />
 
-        <ImageView
-            android:id="@+id/next"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_centerHorizontal="true"
-            android:layout_centerVertical="true"
-            android:layout_gravity="center_vertical"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/video_actions_compose"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
             android:layout_marginStart="12dp"
-            android:src="@drawable/ic_skip_next"
-            app:layout_constraintStart_toEndOf="@+id/start"
-            app:layout_constraintTop_toBottomOf="@+id/progress" />
-
-        <TextView
-            android:id="@+id/toggle_danmaku"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="16dp"
-            android:gravity="center"
-            android:minEms="2"
-            android:text="关弹幕"
-            android:textColor="#ffffff"
-            android:visibility="invisible"
-            app:layout_constraintEnd_toStartOf="@+id/episode_list"
-            app:layout_constraintTop_toBottomOf="@+id/progress"
-            tools:visibility="visible" />
-
-        <TextView
-            android:id="@+id/episode_list"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:gravity="center"
-            android:minEms="2"
-            android:text="选集"
-            android:textColor="#ffffff"
-            app:layout_constraintEnd_toStartOf="@+id/playback_speed"
-            app:layout_constraintTop_toBottomOf="@+id/progress" />
-
-        <TextView
-            android:id="@+id/playback_speed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="32dp"
-            android:gravity="center"
-            android:minEms="2"
-            android:text="倍速"
-            android:textColor="#ffffff"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/start"
             app:layout_constraintTop_toBottomOf="@+id/progress" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 

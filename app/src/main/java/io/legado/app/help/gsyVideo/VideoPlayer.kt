@@ -12,12 +12,18 @@ import android.view.ViewGroup
 import android.view.Window
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.shuyu.gsyvideoplayer.listener.LockClickListener
 import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.theme.LegadoComposeTheme
 import java.io.File
 import java.io.FileInputStream
 import master.flame.danmaku.controller.DrawHandler
@@ -147,10 +153,8 @@ class VideoPlayer : StandardGSYVideoPlayer {
         dismissGestureFeedback()
     }
 
-    private var episodeList: TextView? = null
-    private var playbackSpeed: TextView? = null
+    private var actionControlsState by mutableStateOf(VideoPlayerActionControlsState())
     private var playSpeed: Float = 1.0f
-    private var btnNext: ImageView? = null
     private var tipView: TextView? = null
     private var isChanging = false
     private var isLongPressSpeed = false
@@ -355,31 +359,41 @@ class VideoPlayer : StandardGSYVideoPlayer {
 
     private fun initView() {
         isNeedLockFull = true // 使用锁定按钮
-        playbackSpeed = findViewById(R.id.playback_speed)
-        playbackSpeed?.setOnClickListener {
-            if (mHadPlay && !isChanging) {
-                showSpeedDialog()
-            }
-        }
+        setupActionControls()
         tipView = findViewById(R.id.tip_view)
         if (mIfCurrentIsFullscreen && !VideoPlay.fullBottomProgressBar) {
             mBottomProgressBar = null
         }
         // 切换选集
-        episodeList = findViewById(R.id.episode_list)
-        btnNext = findViewById(R.id.next)
+        actionControlsState =
+            actionControlsState.copy(episodeControlsVisible = VideoPlay.episodes != null)
         if (VideoPlay.episodes == null) {
-            episodeList?.visibility = GONE
-            btnNext?.visibility = GONE
             return
         }
-        episodeList?.setOnClickListener {
-            if (mHadPlay && !isChanging) {
-                showEpisodeDialog()
+    }
+
+    private fun setupActionControls() {
+        val controls = findViewById<ComposeView>(R.id.video_actions_compose) ?: return
+        controls.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        controls.setContent {
+            LegadoComposeTheme {
+                VideoPlayerActionControls(
+                    state = actionControlsState,
+                    onNext = { VideoPlay.upDurIndex(1, this) },
+                    onToggleDanmaku = {
+                        VideoPlay.danmakuShow = !VideoPlay.danmakuShow
+                        resolveDanmakuShow()
+                    },
+                    onOpenEpisodes = {
+                        if (mHadPlay && !isChanging) showEpisodeDialog()
+                    },
+                    onOpenSpeed = {
+                        if (mHadPlay && !isChanging) showSpeedDialog()
+                    },
+                )
             }
-        }
-        btnNext?.setOnClickListener {
-            VideoPlay.upDurIndex(1, this)
         }
     }
 
@@ -400,6 +414,7 @@ class VideoPlayer : StandardGSYVideoPlayer {
         val danmakuStr = VideoPlay.danmakuStr
         if (danmakuFile == null && danmakuStr.isNullOrBlank()) {
             mToggleDanmaku?.visibility = GONE
+            actionControlsState = actionControlsState.copy(danmakuVisible = false)
             return
         }
         mDanmakuView =
@@ -415,6 +430,11 @@ class VideoPlayer : StandardGSYVideoPlayer {
                     resolveDanmakuShow()
                 }
             }
+        actionControlsState =
+            actionControlsState.copy(
+                danmakuVisible = true,
+                danmakuEnabled = VideoPlay.danmakuShow,
+            )
         if (mDanmakuView != null) {
             // 设置最大显示行数
             val maxLinesPair = HashMap<Int?, Int?>()
@@ -478,11 +498,12 @@ class VideoPlayer : StandardGSYVideoPlayer {
         post {
             if (VideoPlay.danmakuShow) {
                 if (!mDanmakuView!!.isShown) mDanmakuView!!.show()
-                mToggleDanmaku?.text = "关弹幕"
+                mToggleDanmaku?.setText(R.string.video_danmaku_disable)
             } else {
                 if (mDanmakuView!!.isShown) mDanmakuView!!.hide()
-                mToggleDanmaku?.text = "开弹幕"
+                mToggleDanmaku?.setText(R.string.video_danmaku_enable)
             }
+            actionControlsState = actionControlsState.copy(danmakuEnabled = VideoPlay.danmakuShow)
         }
     }
 
@@ -556,11 +577,10 @@ class VideoPlayer : StandardGSYVideoPlayer {
                     if (!playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) return
                     playSpeed = value
                     setSpeed(playSpeed, true)
+                    actionControlsState =
+                        actionControlsState.copy(selectedSpeed = value.takeUnless { it == 1.0f })
                     if (playSpeed != 1.0f) {
-                        playbackSpeed?.text = "${playSpeed}X"
                         showOverlayTip("${playSpeed}倍播放中", 2000)
-                    } else {
-                        playbackSpeed?.text = "倍速"
                     }
                 }
 
