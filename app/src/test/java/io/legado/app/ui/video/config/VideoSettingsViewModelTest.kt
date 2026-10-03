@@ -12,11 +12,21 @@ class VideoSettingsViewModelTest {
         var current = VideoSettings()
         val toggles = mutableListOf<Pair<VideoSetting, Boolean>>()
         val speeds = mutableListOf<Int>()
+
         override fun load() = current
-        override fun setEnabled(setting: VideoSetting, enabled: Boolean) { toggles += setting to enabled }
-        override fun setPressSpeed(value: Int) { speeds += value; current = current.copy(pressSpeed = value) }
+
+        override fun setEnabled(setting: VideoSetting, enabled: Boolean) {
+            toggles += setting to enabled
+        }
+
+        override fun setPressSpeed(value: Int) {
+            speeds += value
+            current = current.copy(pressSpeed = value)
+        }
     }
-    @Test fun togglesWriteOnlyChangedFieldAndKeepFullScreenChoiceWhileAutoplayDisabled() {
+
+    @Test
+    fun togglesWriteOnlyChangedFieldAndKeepFullScreenChoiceWhileAutoplayDisabled() {
         val repository = Repository()
         val model = VideoSettingsViewModel(repository, SavedStateHandle())
         model.setEnabled(VideoSetting.StartFull, true)
@@ -26,10 +36,19 @@ class VideoSettingsViewModelTest {
         model.setEnabled(VideoSetting.FullBottomProgress, false)
         assertFalse(model.state.value.settings.autoPlay)
         assertTrue(model.state.value.settings.startFull)
-        assertEquals(listOf(VideoSetting.StartFull to true, VideoSetting.AutoPlay to false,
-            VideoSetting.DefaultFloatWindow to true, VideoSetting.FullBottomProgress to false), repository.toggles)
+        assertEquals(
+            listOf(
+                VideoSetting.StartFull to true,
+                VideoSetting.AutoPlay to false,
+                VideoSetting.DefaultFloatWindow to true,
+                VideoSetting.FullBottomProgress to false,
+            ),
+            repository.toggles,
+        )
     }
-    @Test fun speedDraftIsBoundedAndCancellationDoesNotPersist() {
+
+    @Test
+    fun speedDraftIsBoundedAndCancellationDoesNotPersist() {
         val repository = Repository()
         val model = VideoSettingsViewModel(repository, SavedStateHandle())
         model.openSpeedPicker()
@@ -44,14 +63,19 @@ class VideoSettingsViewModelTest {
         model.openSpeedPicker()
         assertEquals(30, model.state.value.speedDraft)
     }
-    @Test fun recreationRetainsUncommittedSpeedAndConfirmationPersistsOnce() {
+
+    @Test
+    fun recreationRetainsUncommittedSpeedAndConfirmationPersistsOnce() {
         val repository = Repository()
         val handle = SavedStateHandle()
         val model = VideoSettingsViewModel(repository, handle)
         model.openSpeedPicker()
         model.setSpeedDraft(43)
-        val restored = VideoSettingsViewModel(repository,
-            SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }))
+        val restored =
+            VideoSettingsViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
         assertTrue(restored.state.value.speedPickerVisible)
         assertEquals(43, restored.state.value.speedDraft)
         assertTrue(repository.speeds.isEmpty())
@@ -60,7 +84,9 @@ class VideoSettingsViewModelTest {
         assertEquals(listOf(43), repository.speeds)
         assertFalse(restored.state.value.speedPickerVisible)
     }
-    @Test fun defaultSpeedCommitsThirtyAndClosesPicker() {
+
+    @Test
+    fun defaultSpeedCommitsThirtyAndClosesPicker() {
         val repository = Repository().apply { current = current.copy(pressSpeed = 60) }
         val model = VideoSettingsViewModel(repository, SavedStateHandle())
         model.openSpeedPicker()

@@ -19,22 +19,36 @@ import org.junit.Test
 
 class FontSelectionThemeTest {
     @get:Rule val compose = createComposeRule()
+
     private fun renderAndSelect(theme: Int) {
-        val context = ContextThemeWrapper(ApplicationProvider.getApplicationContext<Context>(), theme)
+        val context =
+            ContextThemeWrapper(ApplicationProvider.getApplicationContext<Context>(), theme)
         val entry = FontEntry("/font/theme.ttf", "file:///font/theme.ttf", "theme.ttf", true)
         var selected: String? = null
         compose.setContent {
             CompositionLocalProvider(LocalContext provides context) {
                 LegadoComposeTheme {
-                    FontSelectScreen(FontSelectUiState(listOf(entry), loading = false), entry.path,
-                        { selected = it }, {}, {}, {}, {}, {}, {}, {},
-                        { _, label, modifier -> Text(label, modifier) })
+                    FontSelectScreen(
+                        FontSelectUiState(listOf(entry), loading = false),
+                        entry.path,
+                        { selected = it },
+                        {},
+                        {},
+                        {},
+                        {},
+                        {},
+                        {},
+                        {},
+                        { _, label, modifier -> Text(label, modifier) },
+                    )
                 }
             }
         }
         compose.onNodeWithTag("font-entry-${entry.path}").assertIsSelected().performClick()
         compose.runOnIdle { assertEquals(entry.path, selected) }
     }
+
     @Test fun fontRowRendersAndSelectsWithLightContext() = renderAndSelect(R.style.AppTheme_Light)
+
     @Test fun fontRowRendersAndSelectsWithDarkContext() = renderAndSelect(R.style.AppTheme_Dark)
 }

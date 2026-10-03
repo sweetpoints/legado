@@ -17,16 +17,37 @@ import io.legado.app.utils.toastOnUi
 
 /** The existing word constructor and fragment restoration API remain available. */
 class DictDialog() : BaseComposeDialogFragment() {
-    constructor(word: String) : this() { arguments = Bundle().apply { putString("word", word) } }
-    private val model by viewModels<DictionaryLookupViewModel> {
-        viewModelFactory { initializer { DictionaryLookupViewModel(RoomDictionaryLookupRepository(requireContext().applicationContext), createSavedStateHandle(), arguments?.getString("word")) } }
+    constructor(word: String) : this() {
+        arguments = Bundle().apply { putString("word", word) }
     }
+
+    private val model by
+        viewModels<DictionaryLookupViewModel> {
+            viewModelFactory {
+                initializer {
+                    DictionaryLookupViewModel(
+                        RoomDictionaryLookupRepository(requireContext().applicationContext),
+                        createSavedStateHandle(),
+                        arguments?.getString("word"),
+                    )
+                }
+            }
+        }
+
     override fun onStart() {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    @Composable override fun Content() {
-        DictionaryLookupRoute(model, { toastOnUi(R.string.cannot_empty); dismissAllowingStateLoss() },
-            { showDialogFragment(PhotoDialog(it)) })
+
+    @Composable
+    override fun Content() {
+        DictionaryLookupRoute(
+            model,
+            {
+                toastOnUi(R.string.cannot_empty)
+                dismissAllowingStateLoss()
+            },
+            { showDialogFragment(PhotoDialog(it)) },
+        )
     }
 }

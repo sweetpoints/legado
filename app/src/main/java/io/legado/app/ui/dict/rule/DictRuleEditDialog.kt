@@ -23,17 +23,40 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 
 class DictRuleEditDialog() : BaseComposeDialogFragment() {
-    constructor(name: String) : this() { arguments = Bundle().apply { putString("name", name) } }
-    val viewModel by viewModels<DictionaryRuleEditViewModel> {
-        viewModelFactory { initializer { DictionaryRuleEditViewModel(RoomDictionaryRuleRepository(), createSavedStateHandle(), arguments?.getString("name")) } }
+    constructor(name: String) : this() {
+        arguments = Bundle().apply { putString("name", name) }
     }
-    private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            if (!viewModel.fullEditResult(result.data?.getStringExtra("text"), result.data?.getIntExtra("cursorPosition", 0)))
-                toastOnUi(R.string.focus_lost_on_textbox)
-        } else viewModel.fullEditCancelled()
+
+    val viewModel by
+        viewModels<DictionaryRuleEditViewModel> {
+            viewModelFactory {
+                initializer {
+                    DictionaryRuleEditViewModel(
+                        RoomDictionaryRuleRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getString("name"),
+                    )
+                }
+            }
+        }
+    private val textEditLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                if (
+                    !viewModel.fullEditResult(
+                        result.data?.getStringExtra("text"),
+                        result.data?.getIntExtra("cursorPosition", 0),
+                    )
+                )
+                    toastOnUi(R.string.focus_lost_on_textbox)
+            } else viewModel.fullEditCancelled()
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        isCancelable = false
     }
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); isCancelable = false }
+
     override fun onStart() {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -48,16 +71,43 @@ class DictRuleEditDialog() : BaseComposeDialogFragment() {
             } else false
         }
     }
-    override fun onComposeCreated(savedInstanceState: Bundle?) { view?.setBackgroundColor(Color.TRANSPARENT) }
-    override fun onResume() { super.onResume(); view?.setBackgroundColor(Color.TRANSPARENT) }
-    override fun dismiss() { viewModel.requestClose() }
-    @Composable override fun Content() {
-        DictionaryRuleEditRoute(viewModel, { request ->
-            val title = when (request.field) { DictionaryRuleField.Name -> R.string.name; DictionaryRuleField.UrlRule -> R.string.url_rule; DictionaryRuleField.ShowRule -> R.string.show_rule }
-            textEditLauncher.launch(Intent(requireActivity(), CodeEditActivity::class.java).apply {
-                putExtra("text", request.text); putExtra("title", getString(title)); putExtra("cursorPosition", request.cursor)
-            })
-        }, { requireContext().sendToClip(it) }, { requireContext().getClipText() },
-            { toastOnUi(R.string.please_focus_cursor_on_textbox) }, ::dismissAllowingStateLoss)
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        view?.setBackgroundColor(Color.TRANSPARENT)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        view?.setBackgroundColor(Color.TRANSPARENT)
+    }
+
+    override fun dismiss() {
+        viewModel.requestClose()
+    }
+
+    @Composable
+    override fun Content() {
+        DictionaryRuleEditRoute(
+            viewModel,
+            { request ->
+                val title =
+                    when (request.field) {
+                        DictionaryRuleField.Name -> R.string.name
+                        DictionaryRuleField.UrlRule -> R.string.url_rule
+                        DictionaryRuleField.ShowRule -> R.string.show_rule
+                    }
+                textEditLauncher.launch(
+                    Intent(requireActivity(), CodeEditActivity::class.java).apply {
+                        putExtra("text", request.text)
+                        putExtra("title", getString(title))
+                        putExtra("cursorPosition", request.cursor)
+                    }
+                )
+            },
+            { requireContext().sendToClip(it) },
+            { requireContext().getClipText() },
+            { toastOnUi(R.string.please_focus_cursor_on_textbox) },
+            ::dismissAllowingStateLoss,
+        )
     }
 }

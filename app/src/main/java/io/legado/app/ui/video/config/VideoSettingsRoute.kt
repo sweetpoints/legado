@@ -8,7 +8,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun VideoSettingsRoute(viewModel: VideoSettingsViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    VideoSettingsScreen(state, viewModel::setEnabled, viewModel::openSpeedPicker,
-        viewModel::setSpeedDraft, viewModel::cancelSpeedPicker,
-        { viewModel.confirmSpeed() }, { viewModel.confirmSpeed(default = true) }, modifier)
+    VideoSettingsScreen(
+        state,
+        viewModel::setEnabled,
+        viewModel::openSpeedPicker,
+        viewModel::setSpeedDraft,
+        viewModel::cancelSpeedPicker,
+        { viewModel.confirmSpeed() },
+        { viewModel.confirmSpeed(default = true) },
+        modifier,
+    )
 }
