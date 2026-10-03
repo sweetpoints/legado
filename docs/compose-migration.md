@@ -1709,3 +1709,5 @@ SourceImport/SourceManual最终冻结验证：eaab7747043504a1da8e02ad1fc28ff79e
 文件关联/网络导入透明宿主迁移第一步：仅对 FileAssociationActivity/ViewModel 与 OnLineImportActivity/ViewModel 四文件执行统一 Kotlin 多行格式，并把旧 utils 通配 import 展开为显式 import；公开 API、分享 MIME/URI、目录确认、导入及网络规则保持。本纯可读性提交不触共享 BaseAssociationViewModel 或已 Compose Import dialogs；formatter check 和 diff check 通过，完整编译与真实回归将在 Host 候选完成后统一排队。
 
 透明关联导入的 JSON 首条记录类型识别独立移至 data/association，BaseAssociationViewModel 保留原 internal jsonImportType 薄委托签名，success/error/execute 行为保持；判别优先顺序、typed 高亮覆盖、不完整样式拒绝与原所有格式不变。新增 3 个真实分类表/重叠优先级/无效记录 JVM 回归，仅把 AutoTask/Highlight 两测试的 Base 源位置断言替换实际函数结果，其余引擎/存储/分享/宿主合同保留。改前共享测试快照保存在 /private/tmp/legado-association-type-before；formatter/diff 检查通过，完整回归随最终 Host 排队。
+
+关联导入新增独立 private AssociationSession 数据基础：完整 Intent 内容、大 URI/JSON、preview/selection 和原生交付 receipt 留在 UUID 自有 Atomic 会话；写入只接受严格递增 revision，跨仓库实例共享 64 个有界 canonical-path gate。二进制载荷一经接受不可覆盖，恢复坏文件不写回默认空草稿，关闭先 durable fence 再仅清自身目录，base/bak 栅栏拒绝迟到 writer。新分配会话取消在 IO return 后也清理未交付 ticket，DTO/enum 精确 @Keep。新增 2 个真实 receipt owner JVM 用例与 4 个实际 Atomic/IO Android 回归（大输入、revision、关闭备份、坏恢复/写失败、取消邻居保留）；formatter/diff 检查通过，生产接入和完整验证后续批次继续，设备端未执行。
