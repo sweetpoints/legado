@@ -23,16 +23,17 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.init.appCtx
 import java.io.File
+import splitties.init.appCtx
 
 class FileAssociationActivity :
     VMBaseActivity<ActivityTranslucenceBinding, FileAssociationViewModel>() {
 
-    private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { directory -> AppConfig.defaultBookTreeUri = directory.toString() }
-        viewModel.selectLocalBookDirectory(it.uri)
-    }
+    private val localBookTreeSelect =
+        registerForActivityResult(HandleFileContract()) {
+            it.uri?.let { directory -> AppConfig.defaultBookTreeUri = directory.toString() }
+            viewModel.selectLocalBookDirectory(it.uri)
+        }
     override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
 
     override val viewModel by viewModels<FileAssociationViewModel>()
@@ -61,8 +62,10 @@ class FileAssociationActivity :
         viewModel.mixedLocalTypes.observe(this) { mixed ->
             if (mixed) {
                 binding.rotateLoading.gone()
-                alert(title = getString(R.string.wrong_format),
-                    message = getString(R.string.shared_local_books_mixed_types)) {
+                alert(
+                    title = getString(R.string.wrong_format),
+                    message = getString(R.string.shared_local_books_mixed_types),
+                ) {
                     yesButton { finish() }
                     onCancelled { finish() }
                 }
@@ -90,7 +93,8 @@ class FileAssociationActivity :
                 "txtRule" -> showDialogFragment(ImportTxtTocRuleDialog(it.second, true))
                 "dictRule" -> showDialogFragment(ImportDictRuleDialog(it.second, true))
                 "autoTask" -> showDialogFragment(ImportAutoTaskDialog(it.second, true))
-                "bookshelf", "backup" -> showDialogFragment(ImportDataDialog(it.first, it.second))
+                "bookshelf",
+                "backup" -> showDialogFragment(ImportDataDialog(it.first, it.second))
             }
         }
         viewModel.errorLive.observe(this) {
@@ -109,7 +113,7 @@ class FileAssociationActivity :
             binding.rotateLoading.gone()
             alert(
                 title = appCtx.getString(R.string.draw),
-                message = appCtx.getString(R.string.file_not_supported, data.second)
+                message = appCtx.getString(R.string.file_not_supported, data.second),
             ) {
                 yesButton {
                     viewModel.importBook(data.first)
@@ -135,29 +139,38 @@ class FileAssociationActivity :
     private fun dispatchIntent(intent: Intent) {
         binding.rotateLoading.visible()
         when (intent.action) {
-            Intent.ACTION_SEND_MULTIPLE -> viewModel.dispatchSharedUris(
-                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-            )
-            Intent.ACTION_SEND -> if (isSupportedSharedImportMimeType(intent.type)) {
-                dispatchSharedIntent(intent)
-            } else {
-                viewModel.reportInvalidSharedContent()
-            }
+            Intent.ACTION_SEND_MULTIPLE ->
+                viewModel.dispatchSharedUris(
+                    IntentCompat.getParcelableArrayListExtra(
+                            intent,
+                            Intent.EXTRA_STREAM,
+                            Uri::class.java,
+                        )
+                        .orEmpty()
+                )
+            Intent.ACTION_SEND ->
+                if (isSupportedSharedImportMimeType(intent.type)) {
+                    dispatchSharedIntent(intent)
+                } else {
+                    viewModel.reportInvalidSharedContent()
+                }
 
-            Intent.ACTION_VIEW -> intent.data?.let { data ->
-                dispatchUri(data) { viewModel.dispatchIntent(data) }
-            } ?: finish()
+            Intent.ACTION_VIEW ->
+                intent.data?.let { data ->
+                    dispatchUri(data) { viewModel.dispatchIntent(data) }
+                } ?: finish()
 
             else -> viewModel.reportInvalidSharedContent()
         }
     }
 
     private fun dispatchSharedIntent(intent: Intent) {
-        val uri = IntentCompat.getParcelableExtra(
-            intent,
-            Intent.EXTRA_STREAM,
-            Uri::class.java
-        )
+        val uri =
+            IntentCompat.getParcelableExtra(
+                intent,
+                Intent.EXTRA_STREAM,
+                Uri::class.java,
+            )
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
         when {
             uri != null -> viewModel.dispatchSharedUri(uri)
@@ -182,7 +195,8 @@ class FileAssociationActivity :
                     handler.postDelayed(2000) {
                         finish()
                     }
-                }.request()
+                }
+                .request()
         }
     }
 
@@ -197,8 +211,11 @@ class FileAssociationActivity :
         binding.rotateLoading.gone()
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.select_book_folder)
-            .setMessage(getString(R.string.shared_local_books_storage) +
-                if (viewModel.importAfterDirectorySelection) "" else "\n\n${configured ?: privateBookDirectory().path}")
+            .setMessage(
+                getString(R.string.shared_local_books_storage) +
+                    if (viewModel.importAfterDirectorySelection) ""
+                    else "\n\n${configured ?: privateBookDirectory().path}"
+            )
             .setPositiveButton(R.string.select_folder) { _, _ ->
                 viewModel.choosingLocalBookDirectory = true
                 localBookTreeSelect.launch {

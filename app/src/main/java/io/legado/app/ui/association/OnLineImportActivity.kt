@@ -13,12 +13,8 @@ import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-/**
- * 网络一键导入
- * 格式: legado://import/{path}?src={url}
- */
-class OnLineImportActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, OnLineImportViewModel>() {
+/** 网络一键导入 格式: legado://import/{path}?src={url} */
+class OnLineImportActivity : VMBaseActivity<ActivityTranslucenceBinding, OnLineImportViewModel>() {
 
     override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
     override val viewModel by viewModels<OnLineImportViewModel>()
@@ -29,34 +25,21 @@ class OnLineImportActivity :
                 return@observe
             }
             when (it.first) {
-                "bookSource" -> showDialogFragment(
-                    ImportBookSourceDialog(it.second, true)
-                )
-                "rssSource" -> showDialogFragment(
-                    ImportRssSourceDialog(it.second, true)
-                )
-                "replaceRule" -> showDialogFragment(
-                    ImportReplaceRuleDialog(it.second, true)
-                )
+                "bookSource" -> showDialogFragment(ImportBookSourceDialog(it.second, true))
+                "rssSource" -> showDialogFragment(ImportRssSourceDialog(it.second, true))
+                "replaceRule" -> showDialogFragment(ImportReplaceRuleDialog(it.second, true))
                 "highlightRule" -> showImportHighlightRuleDialog(it.second, true)
-                "httpTts" -> showDialogFragment(
-                    ImportHttpTtsDialog(it.second, true)
-                )
-                "theme" -> showDialogFragment(
-                    ImportThemeDialog(it.second, true)
-                )
-                "txtRule" -> showDialogFragment(
-                    ImportTxtTocRuleDialog(it.second, true)
-                )
-                "dictRule" -> showDialogFragment(
-                    ImportDictRuleDialog(it.second, true)
-                )
-                "autoTask" -> showDialogFragment(
-                    ImportAutoTaskDialog(it.second, true)
-                )
+                "httpTts" -> showDialogFragment(ImportHttpTtsDialog(it.second, true))
+                "theme" -> showDialogFragment(ImportThemeDialog(it.second, true))
+                "txtRule" -> showDialogFragment(ImportTxtTocRuleDialog(it.second, true))
+                "dictRule" -> showDialogFragment(ImportDictRuleDialog(it.second, true))
+                "autoTask" -> showDialogFragment(ImportAutoTaskDialog(it.second, true))
                 "bookshelf" -> {
-                    startActivity(Intent(this, FileAssociationActivity::class.java)
-                        .setAction(Intent.ACTION_VIEW).setData(Uri.parse(it.second)))
+                    startActivity(
+                        Intent(this, FileAssociationActivity::class.java)
+                            .setAction(Intent.ACTION_VIEW)
+                            .setData(Uri.parse(it.second))
+                    )
                     finish()
                 }
                 "readConfig" -> finallyDialog(getString(R.string.success), it.second)
@@ -79,51 +62,28 @@ class OnLineImportActivity :
                 return
             }
             when (it.path) {
-                "/bookSource" -> showDialogFragment(
-                    ImportBookSourceDialog(url, true)
-                )
+                "/bookSource" -> showDialogFragment(ImportBookSourceDialog(url, true))
 
-                "/rssSource" -> showDialogFragment(
-                    ImportRssSourceDialog(url, true)
-                )
+                "/rssSource" -> showDialogFragment(ImportRssSourceDialog(url, true))
 
-                "/replaceRule" -> showDialogFragment(
-                    ImportReplaceRuleDialog(url, true)
-                )
-                "/textTocRule" -> showDialogFragment(
-                    ImportTxtTocRuleDialog(url, true)
-                )
-                "/httpTTS" -> showDialogFragment(
-                    ImportHttpTtsDialog(url, true)
-                )
-                "/dictRule" -> showDialogFragment(
-                    ImportDictRuleDialog(url, true)
-                )
-                "/theme" -> showDialogFragment(
-                    ImportThemeDialog(url, true)
-                )
-                "/autoTask" -> showDialogFragment(
-                    ImportAutoTaskDialog(url, true)
-                )
+                "/replaceRule" -> showDialogFragment(ImportReplaceRuleDialog(url, true))
+                "/textTocRule" -> showDialogFragment(ImportTxtTocRuleDialog(url, true))
+                "/httpTTS" -> showDialogFragment(ImportHttpTtsDialog(url, true))
+                "/dictRule" -> showDialogFragment(ImportDictRuleDialog(url, true))
+                "/theme" -> showDialogFragment(ImportThemeDialog(url, true))
+                "/autoTask" -> showDialogFragment(ImportAutoTaskDialog(url, true))
                 "/auto" -> viewModel.determineType(url)
                 "/readConfig" -> viewModel.getReadConfig(url)
-                "/addToBookshelf" -> showDialogFragment(
-                    AddToBookshelfDialog(url, true)
-                )
-                "/importonline" -> when (it.host) {
-                    "booksource" -> showDialogFragment(
-                        ImportBookSourceDialog(url, true)
-                    )
-                    "rsssource" -> showDialogFragment(
-                        ImportRssSourceDialog(url, true)
-                    )
-                    "replace" -> showDialogFragment(
-                        ImportReplaceRuleDialog(url, true)
-                    )
-                    else -> {
-                        viewModel.determineType(url)
+                "/addToBookshelf" -> showDialogFragment(AddToBookshelfDialog(url, true))
+                "/importonline" ->
+                    when (it.host) {
+                        "booksource" -> showDialogFragment(ImportBookSourceDialog(url, true))
+                        "rsssource" -> showDialogFragment(ImportRssSourceDialog(url, true))
+                        "replace" -> showDialogFragment(ImportReplaceRuleDialog(url, true))
+                        else -> {
+                            viewModel.determineType(url)
+                        }
                     }
-                }
                 else -> viewModel.determineType(url)
             }
         }
@@ -132,7 +92,7 @@ class OnLineImportActivity :
     private fun confirmReadConfigImport() {
         alert(
             titleResource = R.string.import_str,
-            messageResource = R.string.confirm_read_config_import
+            messageResource = R.string.confirm_read_config_import,
         ) {
             yesButton {
                 viewModel.importReadConfig()
@@ -156,5 +116,4 @@ class OnLineImportActivity :
             }
         }
     }
-
 }

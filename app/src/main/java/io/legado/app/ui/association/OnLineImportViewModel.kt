@@ -23,40 +23,49 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
 
     fun getText(url: String, success: (text: String) -> Unit) {
         execute {
-            okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
+            okHttpClient
+                .newCallResponseBody {
+                    if (url.endsWith("#requestWithoutUA")) {
+                        url(url.substringBeforeLast("#requestWithoutUA"))
+                        header(AppConst.UA_NAME, "null")
+                    } else {
+                        url(url)
+                    }
                 }
-            }.decompressed().text("utf-8")
-        }.onSuccess {
-            success.invoke(it)
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
+                .decompressed()
+                .text("utf-8")
         }
+            .onSuccess {
+                success.invoke(it)
+            }
+            .onError {
+                errorLive.postValue(
+                    it.localizedMessage ?: context.getString(R.string.unknown_error)
+                )
+            }
     }
 
     fun getReadConfig(url: String) {
         execute {
-            okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
+            okHttpClient
+                .newCallResponseBody {
+                    if (url.endsWith("#requestWithoutUA")) {
+                        url(url.substringBeforeLast("#requestWithoutUA"))
+                        header(AppConst.UA_NAME, "null")
+                    } else {
+                        url(url)
+                    }
                 }
-            }.bytes()
-        }.onSuccess {
-            readConfigLive.value = it
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
+                .bytes()
         }
+            .onSuccess {
+                readConfigLive.value = it
+            }
+            .onError {
+                errorLive.postValue(
+                    it.localizedMessage ?: context.getString(R.string.unknown_error)
+                )
+            }
     }
 
     fun importReadConfig() {
@@ -71,12 +80,14 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
                 save = ReadBookConfig::saveNow,
                 transactionLock = ReadBookConfig,
             )
-        }.onSuccess {
-            successLive.value = "readConfig" to context.getString(R.string.read_config_import_success)
-        }.onError {
-            errorLive.value =
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
         }
+            .onSuccess {
+                successLive.value =
+                    "readConfig" to context.getString(R.string.read_config_import_success)
+            }
+            .onError {
+                errorLive.value = it.localizedMessage ?: context.getString(R.string.unknown_error)
+            }
     }
 
     fun cancelReadConfigImport() {
@@ -100,11 +111,12 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
                 }
                 else -> {
                     val inputStream = rs.byteStream()
-                    val file = FileUtils.createFileIfNotExist(
-                        appCtx.externalCache,
-                        "download",
-                        "scheme_import_cache.json"
-                    )
+                    val file =
+                        FileUtils.createFileIfNotExist(
+                            appCtx.externalCache,
+                            "download",
+                            "scheme_import_cache.json",
+                        )
                     file.outputStream().use { out ->
                         inputStream.use {
                             it.copyTo(out)
@@ -114,15 +126,16 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
                     null
                 }
             }
-        }.onSuccess {
-            if (it != null) {
-                readConfigLive.value = it
-            }
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
         }
+            .onSuccess {
+                if (it != null) {
+                    readConfigLive.value = it
+                }
+            }
+            .onError {
+                errorLive.postValue(
+                    it.localizedMessage ?: context.getString(R.string.unknown_error)
+                )
+            }
     }
-
 }
