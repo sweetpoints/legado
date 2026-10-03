@@ -27,6 +27,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -72,6 +74,7 @@ internal fun CodeEditorScreen(
     safe: Boolean,
     keyboardVisible: Boolean,
     keyboardRows: Int,
+    autoWrap: Boolean = false,
     assists: List<CodeEditorAssist>,
     onAction: (CodeEditorAction) -> Unit,
     onSearch: (CodeEditorSearch) -> Unit,
@@ -85,11 +88,24 @@ internal fun CodeEditorScreen(
     modifier: Modifier = Modifier,
 ) {
     val session = state.session
-    val enabled = !state.busy && !status.reading && !status.replacing && status.ready
+    val enabled =
+        !state.busy &&
+            session?.returnReceipt == null &&
+            !status.reading &&
+            !status.replacing &&
+            status.ready
     var menuVisible by remember { mutableStateOf(false) }
     var helpVisible by remember { mutableStateOf(false) }
     var focusedSearch by remember(state.engineOwner) { mutableStateOf<Int?>(null) }
     val search = session?.search ?: CodeEditorSearch()
+    val queryFocus = remember { FocusRequester() }
+    val replacementFocus = remember { FocusRequester() }
+    LaunchedEffect(search.visible, search.replaceVisible) {
+        if (search.visible && !safe) {
+            if (search.replaceVisible) replacementFocus.requestFocus()
+            else queryFocus.requestFocus()
+        }
+    }
     var query by
         remember(state.engineOwner) {
             mutableStateOf(TextFieldValue(search.query, search.querySelection.range()))
@@ -140,7 +156,7 @@ internal fun CodeEditorScreen(
             Row(Modifier.fillMaxWidth()) {
                 TextButton(onClick = onExit, enabled = !state.busy) { Text("‹") }
                 Text(
-                    session?.title ?: stringResource(R.string.safe_code_editor),
+                    session?.title ?: stringResource(R.string.edit_code),
                     modifier = Modifier.weight(1f).padding(vertical = 16.dp),
                     maxLines = 1,
                 )
@@ -206,9 +222,14 @@ internal fun CodeEditorScreen(
                             CodeEditorMenuItem(R.string.config_settings, enabled) {
                                 action(CodeEditorAction.SETTINGS)
                             }
-                            CodeEditorMenuItem(R.string.auto_wrap, enabled) {
-                                action(CodeEditorAction.WRAP)
-                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.auto_wrap)) },
+                                leadingIcon = {
+                                    Checkbox(checked = autoWrap, onCheckedChange = null)
+                                },
+                                enabled = enabled,
+                                onClick = { action(CodeEditorAction.WRAP) },
+                            )
                         }
                         CodeEditorMenuItem(R.string.curl_analyze_url_converter, enabled) {
                             action(CodeEditorAction.CURL)
@@ -272,10 +293,13 @@ internal fun CodeEditorScreen(
                             label = { Text(stringResource(R.string.search)) },
                             singleLine = true,
                             modifier =
-                                Modifier.weight(1f).testTag("code-query").onFocusChanged {
-                                    if (it.isFocused) focusedSearch = 0
-                                    else if (focusedSearch == 0) focusedSearch = null
-                                },
+                                Modifier.weight(1f)
+                                    .testTag("code-query")
+                                    .focusRequester(queryFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) focusedSearch = 0
+                                        else if (focusedSearch == 0) focusedSearch = null
+                                    },
                         )
                         TextButton(onClick = { onSearch(search.copy(visible = false)) }) {
                             Text("×")
@@ -320,10 +344,13 @@ internal fun CodeEditorScreen(
                                 singleLine = true,
                                 label = { Text(stringResource(R.string.replace)) },
                                 modifier =
-                                    Modifier.weight(1f).testTag("code-replacement").onFocusChanged {
-                                        if (it.isFocused) focusedSearch = 1
-                                        else if (focusedSearch == 1) focusedSearch = null
-                                    },
+                                    Modifier.weight(1f)
+                                        .testTag("code-replacement")
+                                        .focusRequester(replacementFocus)
+                                        .onFocusChanged {
+                                            if (it.isFocused) focusedSearch = 1
+                                            else if (focusedSearch == 1) focusedSearch = null
+                                        },
                             )
                             TextButton(
                                 onClick = { onAction(CodeEditorAction.REPLACE_ALL) },

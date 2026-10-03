@@ -48,8 +48,6 @@ import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.RootMatchers.withDecorView
-import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
@@ -122,9 +120,14 @@ class CodeSelectionUiTest {
                     // A failed edit assertion must not leave a discard dialog blocking later tests.
                     activity
                         .findViewById<CodeEditor>(R.id.editText)
-                        .takeIf { it.isShown }
+                        .takeIf { it?.isShown == true }
                         ?.setText(
-                            ViewModelProvider(activity)[CodeEditViewModel::class.java].initialText
+                            ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+                                .state
+                                .value
+                                .session
+                                ?.initialText
+                                .orEmpty()
                         )
                 }
         }
@@ -266,15 +269,8 @@ class CodeSelectionUiTest {
     @Test
     fun searchResultLongPressThenOutsideReselects() {
         launchEditor()
-        scenario!!.onActivity { activity ->
-            val search = CodeEditActivity::class.java.getDeclaredMethod("search")
-            search.isAccessible = true
-            search.invoke(activity)
-            val searchTxt =
-                CodeEditActivity::class.java.getDeclaredMethod("searchTxt", String::class.java)
-            searchTxt.isAccessible = true
-            searchTxt.invoke(activity, "function")
-        }
+        compose.onNodeWithTag("code-search-toggle").performClick()
+        compose.onNodeWithTag("code-query").performTextReplacement("function")
         closeSoftKeyboard()
         awaitEditor { it.searcher.hasQuery() && it.searcher.matchedPositionCount > 0 }
         withEditor { assertTrue(it.searcher.gotoNext()) }
@@ -408,12 +404,8 @@ class CodeSelectionUiTest {
                 // The hosted emulator reports a hardware keyboard; allow the phone's IME path.
                 setDisableSoftKbdIfHardKbdAvailable(false)
             }
-            CodeEditActivity::class
-                .java
-                .getDeclaredMethod("search")
-                .apply { isAccessible = true }
-                .invoke(activity)
         }
+        compose.onNodeWithTag("code-search-toggle").performClick()
         onView(withId(R.id.editText)).perform(click())
         withEditor { it.showSoftInput() }
         awaitEditor {
@@ -613,7 +605,7 @@ class CodeSelectionUiTest {
                 launchEditor(forResult = true, fileMode = fileMode)
                 withEditor { it.setText(expected) }
                 awaitEditor { it.text.toString() == expected }
-                onView(withId(R.id.menu_save)).perform(click())
+                compose.onNodeWithTag("code-save").performClick()
                 val result = scenario!!.result
                 assertEquals(Activity.RESULT_OK, result.resultCode)
                 val data = checkNotNull(result.resultData)
@@ -842,7 +834,7 @@ class CodeSelectionUiTest {
                             }
                             ready
                         }
-                        onView(withId(R.id.menu_save)).perform(click())
+                        compose.onNodeWithTag("code-save").performClick()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -951,7 +943,7 @@ class CodeSelectionUiTest {
                                         editorActivity!!.findViewById<CodeEditor>(R.id.editText)
                                     editor.text.replace(0, editor.text.length, draft)
                                 }
-                                onView(withId(R.id.menu_save)).perform(click())
+                                compose.onNodeWithTag("code-save").performClick()
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
@@ -1145,16 +1137,16 @@ class CodeSelectionUiTest {
             var ready = false
             scenario!!.onActivity {
                 ready =
-                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text == code
+                    ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                        .state
+                        .value
+                        .session
+                        ?.text == code
             }
             ready
         }
         scenario!!.onActivity { activity ->
-            activity
-                .findViewById<ViewGroup>(R.id.editorContainer)
-                .children
-                .filterIsInstance<WebView>()
-                .single()
+            nativeWebView(activity)
                 .evaluateJavascript(
                     "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
                         "editor.dispatchEvent(new Event('input'));",
@@ -1165,9 +1157,13 @@ class CodeSelectionUiTest {
             var ready = false
             scenario!!.onActivity {
                 ready =
-                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.let { draft ->
-                        draft.text == edited && draft.cursorPosition == cursor
-                    } == true
+                    ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                        .state
+                        .value
+                        .session
+                        ?.let { draft ->
+                            draft.text == edited && draft.selection.start == cursor
+                        } == true
             }
             ready
         }
@@ -1176,22 +1172,19 @@ class CodeSelectionUiTest {
             var ready = false
             scenario!!.onActivity {
                 ready =
-                    ViewModelProvider(it)[CodeEditViewModel::class.java].editorDraft?.text ==
-                        edited &&
-                        it.findViewById<ViewGroup>(R.id.editorContainer)
-                            .children
-                            .filterIsInstance<WebView>()
-                            .any { web -> web.isShown }
+                    ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                        .state
+                        .value
+                        .session
+                        ?.text == edited &&
+                        nativeWebViews(it.window.decorView).any { web -> web.isShown }
             }
             ready
         }
         val restored = AtomicReference<String>()
         await {
             scenario!!.onActivity {
-                it.findViewById<ViewGroup>(R.id.editorContainer)
-                    .children
-                    .filterIsInstance<WebView>()
-                    .single()
+                nativeWebView(it)
                     .evaluateJavascript(
                         "window.__getEditorState && window.__getEditorState();",
                         restored::set,
@@ -1201,7 +1194,7 @@ class CodeSelectionUiTest {
                 it.text == edited && it.cursorPosition == cursor && it.dirty
             } == true
         }
-        onView(withId(R.id.menu_save)).perform(click())
+        compose.onNodeWithTag("code-save").performClick()
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
         assertEquals(edited, scenario!!.result.resultData.getStringExtra("text"))
         assertEquals(cursor, scenario!!.result.resultData.getIntExtra("cursorPosition", -1))
@@ -1616,24 +1609,17 @@ class CodeSelectionUiTest {
             visibleScreenBounds(panel, menuBounds)
         }
         val toolBounds = Rect()
-        onView(withId(R.id.recycler_view))
-            .inRoot(withDecorView(hasDescendant(withId(R.id.recycler_view))))
-            .check { view, failure ->
-                if (failure != null) throw failure
-                visibleScreenBounds(view!!, toolBounds)
-            }
+        composeScreenBounds("code-keyboard", toolBounds)
         assertFalse(
             "Native menu $menuBounds overlaps keyboard tools $toolBounds",
             Rect.intersects(menuBounds, toolBounds),
         )
         val keyboardBounds = Rect(toolBounds)
-        scenario!!.onActivity { activity ->
-            visibleScreenBounds(activity.findViewById(R.id.search_group), toolBounds)
-            assertFalse(
-                "Native menu $menuBounds overlaps search tools $toolBounds",
-                Rect.intersects(menuBounds, toolBounds),
-            )
-        }
+        composeScreenBounds("code-search", toolBounds)
+        assertFalse(
+            "Native menu $menuBounds overlaps search tools $toolBounds",
+            Rect.intersects(menuBounds, toolBounds),
+        )
         File(context.getExternalFilesDir("ui-regression"), "code-selection-native-menu-bounds.txt")
             .appendText("menu=$menuBounds; keyboard=$keyboardBounds; search=$toolBounds\n")
     }
@@ -1687,9 +1673,44 @@ class CodeSelectionUiTest {
 
     private fun awaitEditor(condition: (CodeEditor) -> Boolean) = await {
         var ready = false
-        withEditor { ready = condition(it) }
+        scenario!!.onActivity { activity ->
+            activity.findViewById<CodeEditor>(R.id.editText)?.let { ready = condition(it) }
+        }
         ready
     }
+
+    private fun nativeWebViews(view: View): List<WebView> =
+        when (view) {
+            is WebView -> listOf(view)
+            is ViewGroup -> view.children.flatMap { nativeWebViews(it).asSequence() }.toList()
+            else -> emptyList()
+        }
+
+    private fun nativeWebView(activity: CodeEditActivity): WebView =
+        nativeWebViews(activity.window.decorView).single()
+
+    private fun composeScreenBounds(tag: String, bounds: Rect) {
+        val rootBounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        scenario!!.onActivity { activity ->
+            val composeView =
+                nativeViews(activity.window.decorView).first {
+                    it.javaClass.name == "androidx.compose.ui.platform.AndroidComposeView"
+                }
+            val origin = IntArray(2)
+            composeView.getLocationOnScreen(origin)
+            bounds.set(
+                rootBounds.left.toInt() + origin[0],
+                rootBounds.top.toInt() + origin[1],
+                rootBounds.right.toInt() + origin[0],
+                rootBounds.bottom.toInt() + origin[1],
+            )
+        }
+    }
+
+    private fun nativeViews(view: View): List<View> =
+        listOf(view) +
+            if (view is ViewGroup) view.children.flatMap { nativeViews(it).asSequence() }.toList()
+            else emptyList()
 
     private fun await(
         message: () -> String = { "Code editor did not reach the expected state" },

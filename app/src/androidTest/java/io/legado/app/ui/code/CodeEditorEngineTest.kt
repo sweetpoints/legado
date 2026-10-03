@@ -137,7 +137,9 @@ class CodeEditorEngineTest {
         compose.waitUntil(10_000) { started.get() }
         compose.runOnIdle { currentOwner.set(false) }
         gate.complete(Unit)
-        compose.waitUntil(10_000) { finished.get() }
+        compose.waitUntil(10_000) {
+            finished.get() && !(engine as SoraCodeEditorEngine).isReplacing
+        }
         compose.runOnIdle {
             assertEquals(session.text, (engine as SoraCodeEditorEngine).view.text.toString())
         }

@@ -20,6 +20,8 @@ internal data class CodeEditorComposeState(
     val confirmDiscard: Boolean = false,
     val editorReady: Boolean = false,
     val engineOwner: String? = null,
+    val assists: List<CodeEditorAssist> = emptyList(),
+    val keyboardRows: Int = 2,
 )
 
 /** Owns private text snapshots; Sora and safe WebView algorithms remain in their engine bridges. */
@@ -44,6 +46,21 @@ internal class CodeEditorComposeViewModel(
 
     init {
         retryInternal(manual = false)
+        viewModelScope.launch {
+            try {
+                repository.assists().collect { assists ->
+                    mutableState.value = mutableState.value.copy(assists = assists.toList())
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                mutableState.value = mutableState.value.copy(error = failure.localizedMessage)
+            }
+        }
+    }
+
+    fun keyboardRows(rows: Int) {
+        mutableState.value = mutableState.value.copy(keyboardRows = rows.coerceIn(1, 5))
     }
 
     private fun publish(error: String? = mutableState.value.error) {
@@ -191,7 +208,8 @@ internal class CodeEditorComposeViewModel(
         if (owner != state.value.engineOwner) return
         val current = session ?: return
         if (state.value.busy || current.finished || current.returnReceipt != null) return
-        edit(current.copy(search = search))
+        val updated = current.copy(search = search)
+        if (updated != current) edit(updated)
     }
 
     fun keepEditing() {

@@ -51,6 +51,9 @@ internal class SoraCodeEditorEngine(
     private var cachedText = session.text
     private var cachedRevision = 0L
     private var replacing = false
+    val isReplacing: Boolean
+        get() = replacing
+
     private var replacementError: String? = null
     private val active: Boolean
         get() = !disposed && isCurrentOwner()
@@ -211,7 +214,14 @@ internal class SoraCodeEditorEngine(
                     content.getColumnCount(content.lineCount - 1),
                     replaced,
                 )
-                view.setSelectionAround(cursor.line, cursor.column)
+                // setSelectionAround is protected in pinned Sora. Apply its public-API clamp
+                // so the original cursor remains as close as the new document permits.
+                val line = cursor.line.coerceAtMost(content.lineCount - 1)
+                val column =
+                    if (line == cursor.line)
+                        cursor.column.coerceAtMost(content.getColumnCount(line))
+                    else content.getColumnCount(line)
+                view.setSelection(line, column)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -302,6 +312,10 @@ internal class SoraCodeEditorEngine(
     override fun cancelRead(restoreEditing: Boolean) = Unit
 
     override fun restoreEditing() = Unit
+
+    override fun setInputEnabled(enabled: Boolean) {
+        if (active) view.editable = enabled && session.writable && !replacing
+    }
 
     override fun insert(text: String, onResult: (Boolean) -> Unit) {
         if (!active || !view.isEditable) onResult(false)

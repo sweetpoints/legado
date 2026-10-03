@@ -2,6 +2,7 @@ package io.legado.app.ui.code
 
 import android.content.Context
 import android.util.AtomicFile
+import io.legado.app.data.appDb
 import io.legado.app.help.CacheManager
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -12,11 +13,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal interface CodeEditorSessionRepository {
+    fun assists(): Flow<List<CodeEditorAssist>> = emptyFlow()
+
     suspend fun loadLaunch(launch: CodeEditorLaunch): CodeEditorSession
 
     suspend fun read(sessionId: String): CodeEditorSession?
@@ -38,6 +45,12 @@ internal class FileCodeEditorSessionRepository(
     private val directory: File = File(context.applicationContext.filesDir, "code-editor-sessions"),
 ) : CodeEditorSessionRepository {
     private val context = context.applicationContext
+
+    override fun assists(): Flow<List<CodeEditorAssist>> =
+        appDb.keyboardAssistsDao
+            .flowByType(0)
+            .map { rows -> rows.map { CodeEditorAssist(it.key, it.value) } }
+            .flowOn(Dispatchers.IO)
 
     override suspend fun loadLaunch(launch: CodeEditorLaunch): CodeEditorSession =
         withContext(Dispatchers.IO) {

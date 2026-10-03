@@ -349,6 +349,15 @@ internal class SafeCodeEditorEngine(
         )
     }
 
+    override fun setInputEnabled(enabled: Boolean) {
+        if (!active || destroyed || !status.ready) return
+        val readOnly = !enabled || !session.writable || status.reading
+        view.evaluateJavascript(
+            "window.__setEditorReadOnly && window.__setEditorReadOnly($readOnly);",
+            null,
+        )
+    }
+
     override fun insert(text: String, onResult: (Boolean) -> Unit) {
         if (!active || destroyed || !status.ready || status.reading || !session.writable) {
             onResult(false)

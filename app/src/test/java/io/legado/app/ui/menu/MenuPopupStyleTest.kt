@@ -1,17 +1,16 @@
 package io.legado.app.ui.menu
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class MenuPopupStyleTest {
 
     @Test
     fun `popup background follows the custom theme surface`() {
-        val materialValues = readProjectFile(
-            "src/main/java/io/legado/app/lib/theme/MaterialValueHelper.kt"
-        )
+        val materialValues =
+            readProjectFile("src/main/java/io/legado/app/lib/theme/MaterialValueHelper.kt")
 
         assertContains(materialValues, "val Context.popupBackground: GradientDrawable")
         assertContains(materialValues, "background.cornerRadius = 12f.dpToPx()")
@@ -20,9 +19,8 @@ class MenuPopupStyleTest {
 
     @Test
     fun `custom popup windows apply the shared runtime background`() {
-        val extension = readProjectFile(
-            "src/main/java/io/legado/app/utils/PopupWindowExtensions.kt"
-        )
+        val extension =
+            readProjectFile("src/main/java/io/legado/app/utils/PopupWindowExtensions.kt")
 
         assertContains(extension, "fun PopupWindow.applyMd3PopupStyle()")
         assertContains(extension, "setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))")
@@ -31,19 +29,18 @@ class MenuPopupStyleTest {
         assertFalse(extension.contains("contentView?.background == null"))
 
         listOf(
-            "src/main/java/io/legado/app/ui/widget/PopupAction.kt",
-            "src/main/java/io/legado/app/ui/widget/keyboard/KeyboardToolPop.kt",
-            "src/main/java/io/legado/app/ui/book/audio/SliderPopup.kt",
-        ).forEach { path ->
-            assertContains(readProjectFile(path), "applyMd3PopupStyle()")
-        }
+                "src/main/java/io/legado/app/ui/widget/PopupAction.kt",
+                "src/main/java/io/legado/app/ui/book/audio/SliderPopup.kt",
+            )
+            .forEach { path ->
+                assertContains(readProjectFile(path), "applyMd3PopupStyle()")
+            }
     }
 
     @Test
     fun `autocomplete uses the runtime popup background`() {
-        val autoComplete = readProjectFile(
-            "src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt"
-        )
+        val autoComplete =
+            readProjectFile("src/main/java/io/legado/app/ui/widget/text/AutoCompleteTextView.kt")
 
         assertContains(autoComplete, "setDropDownBackgroundDrawable(context.popupBackground)")
         assertFalse(autoComplete.contains("setDropDownBackgroundResource"))
@@ -55,7 +52,10 @@ class MenuPopupStyleTest {
         val styles = readProjectFile("src/main/res/values/styles.xml")
 
         assertContains(background, "<solid android:color=\"@color/background_menu\"")
-        assertContains(styles, "<item name=\"android:popupBackground\">@drawable/bg_popup_menu</item>")
+        assertContains(
+            styles,
+            "<item name=\"android:popupBackground\">@drawable/bg_popup_menu</item>",
+        )
     }
 
     private fun assertContains(text: String, expected: String) {

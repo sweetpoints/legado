@@ -28,6 +28,8 @@ internal interface CodeEditorEngine {
 
     fun restoreEditing()
 
+    fun setInputEnabled(enabled: Boolean)
+
     fun insert(text: String, onResult: (Boolean) -> Unit = {})
 
     fun undo()

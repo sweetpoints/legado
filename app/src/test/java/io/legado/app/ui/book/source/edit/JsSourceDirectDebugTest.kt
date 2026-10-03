@@ -119,7 +119,8 @@ class JsSourceDirectDebugTest {
 
     @Test
     fun `source editor wires hidden optional action and persisted flow state`() {
-        val codeEditorMenu = projectFile("app/src/main/res/menu/code_edit_activity.xml").readText()
+        val codeEditorMenu =
+            projectFile("app/src/main/java/io/legado/app/ui/code/CodeEditorScreen.kt").readText()
         val sourceEditor =
             projectFile(
                     "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
@@ -128,23 +129,12 @@ class JsSourceDirectDebugTest {
         val debugLauncher = sourceEditor.indexOf("private val debugResult")
         val editorLauncher = sourceEditor.indexOf("private val editorResult")
         val loginLauncher = sourceEditor.indexOf("private val loginResult")
-        val debugMenuItem =
-            codeEditorMenu
-                .substringAfter("android:id=\"@+id/menu_debug_source\"")
-                .substringBefore("/>")
-        val loginMenuItem =
-            codeEditorMenu.substringAfter("android:id=\"@+id/menu_login\"").substringBefore("/>")
-        val syntaxMenuItem =
-            codeEditorMenu
-                .substringAfter("android:id=\"@+id/menu_check_javascript_syntax\"")
-                .substringBefore("/>")
-
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_debug_source\""))
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_login\""))
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_check_javascript_syntax\""))
-        assertTrue(debugMenuItem.contains("android:visible=\"false\""))
-        assertTrue(loginMenuItem.contains("android:visible=\"false\""))
-        assertTrue(syntaxMenuItem.contains("android:visible=\"false\""))
+        assertTrue(codeEditorMenu.contains("session.showDebugSource"))
+        assertTrue(codeEditorMenu.contains("session.showLoginSource"))
+        assertTrue(codeEditorMenu.contains("session?.checkJavaScriptSyntax == true"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.DEBUG"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.LOGIN"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.SYNTAX"))
         assertTrue(debugLauncher >= 0 && debugLauncher < editorLauncher)
         assertTrue(editorLauncher < loginLauncher)
         assertTrue(
