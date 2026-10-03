@@ -14,15 +14,27 @@ import org.junit.rules.TemporaryFolder
 
 class AppLogsRepositoryTest {
     @get:Rule val folder = TemporaryFolder()
-    @Before fun setUp() { AppLog.clear(); HttpLogStore.clear() }
-    @After fun tearDown() { AppLog.clear(); HttpLogStore.clear() }
 
-    @Test fun emptyLogDoesNotProduceASharePayload() = runTest {
+    @Before
+    fun setUp() {
+        AppLog.clear()
+        HttpLogStore.clear()
+    }
+
+    @After
+    fun tearDown() {
+        AppLog.clear()
+        HttpLogStore.clear()
+    }
+
+    @Test
+    fun emptyLogDoesNotProduceASharePayload() = runTest {
         assertNull(repository().prepareExport())
         assertTrue(folder.root.listFiles().orEmpty().isEmpty())
     }
 
-    @Test fun exportAtTheTextLimitUsesTextAndIncludesTheEntireSnapshot() = runTest {
+    @Test
+    fun exportAtTheTextLimitUsesTextAndIncludesTheEntireSnapshot() = runTest {
         val text = setExportLength(DefaultAppLogsRepository.MAX_SHARE_TEXT)
         val export = repository().prepareExport() as AppLogExport.Text
         assertEquals(text, export.text)
@@ -30,7 +42,8 @@ class AppLogsRepositoryTest {
         assertTrue(folder.root.listFiles().orEmpty().isEmpty())
     }
 
-    @Test fun exportAboveTheLimitUsesAFileAndNeverOverwritesAnEarlierShare() = runTest {
+    @Test
+    fun exportAboveTheLimitUsesAFileAndNeverOverwritesAnEarlierShare() = runTest {
         val firstText = setExportLength(DefaultAppLogsRepository.MAX_SHARE_TEXT + 1)
         val first = repository().prepareExport() as AppLogExport.Document
         assertEquals(firstText, first.file.readText())
@@ -43,9 +56,23 @@ class AppLogsRepositoryTest {
         assertEquals(firstText, first.file.readText())
     }
 
-    @Test fun httpDetailsFallbackToTheSummaryAfterRecordEviction() = runTest {
-        val record = HttpLogRecord(102, 0, "POST", "/test", "https://example.com/test",
-            200, 10, "", "payload", "", "response", null)
+    @Test
+    fun httpDetailsFallbackToTheSummaryAfterRecordEviction() = runTest {
+        val record =
+            HttpLogRecord(
+                102,
+                0,
+                "POST",
+                "/test",
+                "https://example.com/test",
+                200,
+                10,
+                "",
+                "payload",
+                "",
+                "response",
+                null,
+            )
         HttpLogStore.add(record)
         val repository = repository()
         val row = repository.logs.first().single()
@@ -55,7 +82,8 @@ class AppLogsRepositoryTest {
         assertEquals(AppLogDetail(row.id, "HTTP", record.summary), repository.readDetail(row.id))
     }
 
-    @Test fun throwableDetailsKeepTheStackTraceAndPlainLogsHaveNoDetailAction() = runTest {
+    @Test
+    fun throwableDetailsKeepTheStackTraceAndPlainLogsHaveNoDetailAction() = runTest {
         val throwable = IllegalArgumentException("bad input")
         AppLog.putNotSave("failure", throwable)
         AppLog.putNotSave("plain message")
@@ -68,7 +96,8 @@ class AppLogsRepositoryTest {
         assertNull(repository.readDetail(Long.MAX_VALUE))
     }
 
-    @Test fun exportedErrorsIncludeTheStackTraceInChronologicalOrder() = runTest {
+    @Test
+    fun exportedErrorsIncludeTheStackTraceInChronologicalOrder() = runTest {
         val throwable = IllegalStateException("sample failure")
         AppLog.putNotSave("first message", throwable)
         AppLog.putNotSave("second message")
@@ -77,7 +106,8 @@ class AppLogsRepositoryTest {
         assertTrue(text.contains(throwable.stackTraceToString().trimEnd().prependIndent("    ")))
     }
 
-    @Test fun fileCreationFailureDoesNotSilentlyDropTheShare() = runTest {
+    @Test
+    fun fileCreationFailureDoesNotSilentlyDropTheShare() = runTest {
         setExportLength(64_001)
         val notADirectory = folder.newFile("file")
         try {
