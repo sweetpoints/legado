@@ -78,7 +78,9 @@ class HighlightTocIntegrationTest {
             io.legado.app.model.book.tocHighlightAnchorText(highlight.copy(chapterPosEnd = 23)),
         )
         assertTrue(readBook.contains("if (hasPendingHighlightJump()) return"))
-        assertTrue(readBook.countMatches("positionReady && !available") >= 2)
+        val positionReadyChecks =
+            Regex("positionReady\\s*&&\\s*!available").findAll(readBook).count()
+        assertTrue(positionReadyChecks >= 2)
         assertTrue(readBook.contains("if (curTextChapter !== textChapter) return false"))
         assertEquals(2, readBook.countMatches("resolvePendingHighlightAnchor(book, textChapter)"))
         assertTrue(readBook.contains("if (!chapter.isCompleted)"))

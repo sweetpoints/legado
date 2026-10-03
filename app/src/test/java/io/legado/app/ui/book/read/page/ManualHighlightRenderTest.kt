@@ -39,9 +39,11 @@ class ManualHighlightRenderTest {
             readBook
                 .substringAfter("fun anchoredHighlightsOfChapter(")
                 .substringBefore("fun addHighlight(")
-        val emptyHighlights = anchors.indexOf("val anchors = if (chapterHighlights.isEmpty())")
-        val rebuild = anchors.indexOf("chapterText(chapter)")
-        val cache = anchors.indexOf("chapter.manualHighlightAnchors = anchors")
+        val normalizedAnchors = anchors.replace(Regex("\\s+"), " ")
+        val emptyHighlights =
+            normalizedAnchors.indexOf("val anchors = if (chapterHighlights.isEmpty())")
+        val rebuild = normalizedAnchors.indexOf("chapterText(chapter)")
+        val cache = normalizedAnchors.indexOf("chapter.manualHighlightAnchors = anchors")
 
         assertTrue(emptyHighlights in 0 until rebuild)
         assertTrue(rebuild in 0 until cache)

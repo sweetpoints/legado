@@ -297,7 +297,7 @@ class ImportBookPathMigrationTest {
 
         val remoteBook =
             readProjectFile("src/main/java/io/legado/app/model/remote/RemoteBookWebDav.kt")
-        assertTrue(remoteBook.contains("val localBookUri = if (book.isArchive)"))
+        assertTrue(remoteBook.containsCode("val localBookUri = if (book.isArchive)"))
         assertTrue(remoteBook.contains("book.getArchiveUri()"))
         assertTrue(remoteBook.contains("remoteBookUploadFileName(book)"))
         assertFalse(remoteBook.contains("Uri.parse(book.bookUrl)"))
