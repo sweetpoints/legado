@@ -105,6 +105,7 @@ class DirectLinkConfigViewModel(private val repository: DirectLinkConfigReposito
             catch (error: Exception) { currentCoroutineContext().ensureActive(); mutable.value = state.value.copy(saving = false, error = error.localizedMessage ?: "ERROR") }
         }
     }
+    fun retry() { if (draftFailure != null) retryDraft() else load() }
     fun retryDraft() {
         if (state.value.busy || stopped) return
         state.value.session?.let { update(it.copy(revision = it.revision + 1)) }

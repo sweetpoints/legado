@@ -16,10 +16,10 @@ class DirectLinkConfigViewModelTest {
     private val valid = DirectLinkDraft("https://upload", "$.url", "Fixture", false, "0")
     private inner class Fake : DirectLinkConfigRepository {
         val id = UUID.randomUUID().toString(); var session = DirectLinkSession(id, valid)
-        var writes = 0; var failWrite = false; var failSave = false; var failTest = false; var tests = 0; var released = false
+        var writes = 0; var failWrite = false; var failSave = false; var failTest = false; var failDefaults = false; var tests = 0; var released = false
         var gate: CompletableDeferred<Unit>? = null; val saves = mutableListOf<DirectLinkDraft>()
         override suspend fun open(id: String?) = session
-        override suspend fun defaults() = listOf(valid.copy(summary = "Default"))
+        override suspend fun defaults(): List<DirectLinkDraft> { if (failDefaults) error("Defaults failed"); return listOf(valid.copy(summary = "Default")) }
         override suspend fun write(value: DirectLinkSession) { if (failWrite) error("Disk failed"); check(!released); if (value.revision > session.revision) { session = value; writes++ } }
         override suspend fun save(draft: DirectLinkDraft) { withContext(NonCancellable) { gate?.await() }; if (failSave) error("Save failed"); saves += draft }
         override suspend fun test(draft: DirectLinkDraft): String { tests++; withContext(NonCancellable) { gate?.await() }; if (failTest) error("Upload failed"); return "Result" }
@@ -27,6 +27,11 @@ class DirectLinkConfigViewModelTest {
     }
     private fun model(repo: Fake, saved: SavedStateHandle = SavedStateHandle()) = DirectLinkConfigViewModel(repo, saved).also { models += it }
     private fun copy(saved: SavedStateHandle) = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
+    @Test fun retryDefaultsKeepsExistingEditedDraftAndLoadsPresetsWithoutSaving() = runTest(dispatcher) {
+        val repo = Fake(); repo.failDefaults = true; val vm = model(repo); runCurrent(); assertNotNull(vm.state.value.error)
+        vm.edit { it.copy(summary = "Keep") }; runCurrent(); repo.failDefaults = false; vm.retry(); runCurrent()
+        assertEquals("Keep", vm.state.value.session!!.draft.summary); assertEquals("Default", vm.state.value.defaults.single().summary); assertTrue(repo.saves.isEmpty())
+    }
     @Test fun validationPreservesOrderedRequiredFieldsAndExactExpiryBoundaries() {
         assertEquals(DirectLinkIssue.Upload, DirectLinkDraft().issue())
         assertEquals(DirectLinkIssue.Download, DirectLinkDraft(uploadUrl = "url").issue())

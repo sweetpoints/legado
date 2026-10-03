@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="direct_link_upload_required">上传Url不能为空</string>
+    <string name="direct_link_download_required">下载Url规则不能为空</string>
+    <string name="direct_link_summary_required">注释不能为空</string>
+    <string name="direct_link_clipboard_invalid">剪贴板为空或格式不对</string>
+    <string name="direct_link_test_result">结果</string>
+</resources>

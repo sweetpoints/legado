@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="direct_link_upload_required">Upload URL is required</string>
+    <string name="direct_link_download_required">Download URL rule is required</string>
+    <string name="direct_link_summary_required">Summary is required</string>
+    <string name="direct_link_clipboard_invalid">Clipboard is empty or has an invalid rule</string>
+    <string name="direct_link_test_result">Result</string>
+</resources>
