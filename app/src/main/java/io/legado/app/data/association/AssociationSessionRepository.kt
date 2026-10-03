@@ -101,6 +101,7 @@ data class AssociationSession(
     val previews: List<AssociationBookPreview> = emptyList(),
     val selectedIds: List<String> = emptyList(),
     val openSingleBook: Boolean = false,
+    val storagePermissionGranted: Boolean = false,
     val importAfterDirectory: Boolean = true,
     val choosingDirectory: Boolean = false,
     val importType: String? = null,

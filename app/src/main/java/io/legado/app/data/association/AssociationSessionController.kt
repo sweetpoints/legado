@@ -76,6 +76,11 @@ class AssociationSessionController(
         }
     }
 
+    /** Return a successful IO claim if the native owner stopped before accepting dispatch. */
+    suspend fun returnUndelivered(receipt: AssociationNativeReceipt) = commands.withLock {
+        restoreUndeliveredClaim(receipt)
+    }
+
     suspend fun acknowledge(token: String, expectedGeneration: Long): Boolean = commands.withLock {
         val current = repository.read(ticket)
         val acknowledged = current.acknowledge(token, expectedGeneration) ?: return@withLock false

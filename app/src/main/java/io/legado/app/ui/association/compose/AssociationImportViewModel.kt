@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.data.association.AssociationFileInspection
 import io.legado.app.data.association.AssociationFileRepository
 import io.legado.app.data.association.AssociationHostKind
+import io.legado.app.data.association.AssociationImportOperations
 import io.legado.app.data.association.AssociationInput
+import io.legado.app.data.association.AssociationInputKind
 import io.legado.app.data.association.AssociationNativeKind
 import io.legado.app.data.association.AssociationNativeReceipt
 import io.legado.app.data.association.AssociationOnlinePayload
@@ -37,16 +39,23 @@ data class AssociationImportState(
 )
 
 /** Each host owns one private UUID; providers, JSON and complete book metadata stay off Bundle. */
-class AssociationImportViewModel(
+open class AssociationImportViewModel(
     private val savedState: SavedStateHandle,
     private val sessions: AssociationSessionRepository,
     private val files: AssociationFileRepository,
     private val online: AssociationOnlineRepository,
+    private val actions: AssociationImportOperations? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(AssociationImportState())
     val state = mutableState.asStateFlow()
     private var operation: Job? = null
     private var closed = false
+    private var sessionController: AssociationSessionController? = null
+
+    private fun controller(ticket: String): AssociationSessionController {
+        return sessionController?.takeIf { it.ticket == ticket }
+            ?: AssociationSessionController(ticket, sessions).also { sessionController = it }
+    }
 
     init {
         savedState.get<String>(TICKET_KEY)?.let { ticket ->
@@ -83,6 +92,31 @@ class AssociationImportViewModel(
                 }
             }
         } ?: run { mutableState.value = AssociationImportState(loaded = true) }
+    }
+
+    /** The Host captured its large launch on IO before clearing Intent defaults. */
+    fun attachPrepared(ticket: String) {
+        if (closed || operation?.isActive == true || state.value.ticket != null) return
+        savedState[TICKET_KEY] = ticket
+        mutableState.value = AssociationImportState(ticket = ticket, busy = true)
+        operation = viewModelScope.launch {
+            try {
+                val initial = sessions.read(ticket)
+                currentCoroutineContext().ensureActive()
+                if (closed) return@launch
+                publish(ticket, initial, busy = true)
+                inspect(ticket, initial)
+            } catch (failure: Throwable) {
+                currentCoroutineContext().ensureActive()
+                if (!closed)
+                    mutableState.value =
+                        state.value.copy(
+                            loaded = true,
+                            busy = false,
+                            restoreError = failure.message ?: "Unable to restore import",
+                        )
+            }
+        }
     }
 
     fun start(input: AssociationInput) {
@@ -132,9 +166,213 @@ class AssociationImportViewModel(
         operation = viewModelScope.launch { inspect(ticket, session) }
     }
 
+    fun updateSelection(ids: Set<String>) = command { session ->
+        session.copy(selectedIds = session.previews.map { it.id }.filter { it in ids })
+    }
+
+    fun requestDirectory() = command { session ->
+        check(session.selectedIds.isNotEmpty()) { "No books selected" }
+        session.copy(phase = AssociationPhase.Directory, importAfterDirectory = true)
+    }
+
+    fun cancelDirectory() = command { session ->
+        session.copy(phase = AssociationPhase.Preview, choosingDirectory = false)
+    }
+
+    fun finishRequest() = command(::finish)
+
+    fun chooseSystemDirectory() = command { session ->
+        session.copy(
+            choosingDirectory = true,
+            effects = session.effects + receipt(session, AssociationNativeKind.SelectDirectory),
+        )
+    }
+
+    private fun command(transform: (AssociationSession) -> AssociationSession) {
+        val current = state.value
+        val ticket = current.ticket ?: return
+        val session = current.session ?: return
+        if (closed || current.busy || operation?.isActive == true) return
+        mutableState.value = current.copy(busy = true)
+        operation = viewModelScope.launch {
+            try {
+                controller(ticket).update(session.generation, transform)?.let {
+                    publish(ticket, it, busy = false)
+                }
+            } catch (failure: Throwable) {
+                currentCoroutineContext().ensureActive()
+                if (!closed)
+                    mutableState.value =
+                        state.value.copy(
+                            busy = false,
+                            restoreError = failure.message ?: "Unable to update import",
+                        )
+            }
+        }
+    }
+
+    suspend fun claimNative(receipt: AssociationNativeReceipt): AssociationNativeReceipt? {
+        val current = state.value
+        val ticket = current.ticket ?: return null
+        if (closed || current.busy || current.session?.generation != receipt.generation) return null
+        return controller(ticket).claim(receipt.token, receipt.generation)
+    }
+
+    suspend fun returnNative(receipt: AssociationNativeReceipt) {
+        val ticket = state.value.ticket ?: return
+        controller(ticket).returnUndelivered(receipt)
+        val current = controller(ticket).read()
+        publish(ticket, current, busy = state.value.busy)
+    }
+
+    suspend fun acknowledgeNative(receipt: AssociationNativeReceipt) {
+        val ticket = state.value.ticket ?: return
+        controller(ticket).acknowledge(receipt.token, receipt.generation)
+        currentCoroutineContext().ensureActive()
+        publish(ticket, controller(ticket).read(), busy = state.value.busy)
+    }
+
+    fun confirmOperation(kind: String, payload: String? = null) {
+        val current = state.value
+        val ticket = current.ticket ?: return
+        val session = current.session ?: return
+        val executor = actions ?: return
+        if (closed || current.busy || operation?.isActive == true) return
+        mutableState.value = current.copy(busy = true)
+        operation = viewModelScope.launch {
+            try {
+                val accepted =
+                    controller(ticket).update(session.generation) {
+                        val pending = it.operation
+                        check(pending == null || pending.kind == kind) {
+                            "Another import is pending"
+                        }
+                        check(pending == null || kind in REPLAY_SAFE_OPERATIONS) {
+                            "The previous result is uncertain; close and confirm a new import"
+                        }
+                        it.copy(
+                            error = null,
+                            operation =
+                                pending
+                                    ?: AssociationOperation(
+                                        UUID.randomUUID().toString(),
+                                        it.generation,
+                                        kind,
+                                        payload,
+                                        accepted = true,
+                                    ),
+                        )
+                    } ?: return@launch
+                publish(ticket, accepted, busy = true)
+                val result = executor.execute(ticket, accepted, checkNotNull(accepted.operation))
+                // Accepted engine results must reach private state even if the native owner stops
+                // at the IO return. Only publishing UI remains cancellable after durable delivery.
+                withContext(NonCancellable) {
+                    val completed =
+                        controller(ticket).update(accepted.generation) {
+                            it.copy(
+                                phase = AssociationPhase.Finished,
+                                operation = null,
+                                effects =
+                                    listOf(
+                                        if (result.bookJson != null)
+                                            receipt(
+                                                it,
+                                                AssociationNativeKind.OpenBook,
+                                                payload = result.bookJson,
+                                            )
+                                        else
+                                            receipt(
+                                                it,
+                                                AssociationNativeKind.Finish,
+                                                payload = result.message,
+                                            )
+                                    ),
+                            )
+                        }
+                    completed?.let { publish(ticket, it, busy = false) }
+                }
+                currentCoroutineContext().ensureActive()
+            } catch (failure: Throwable) {
+                currentCoroutineContext().ensureActive()
+                if (!closed) {
+                    controller(ticket)
+                        .update(session.generation) {
+                            it.copy(
+                                phase = AssociationPhase.Failed,
+                                error = failure.message ?: "Import failed",
+                            )
+                        }
+                        ?.let { publish(ticket, it, busy = false) }
+                }
+            }
+        }
+    }
+
+    suspend fun permissionResult(receipt: AssociationNativeReceipt, granted: Boolean) {
+        val ticket = state.value.ticket ?: return
+        if (closed || receipt.kind != AssociationNativeKind.StoragePermission) return
+        val persisted =
+            controller(ticket).update(receipt.generation) {
+                if (receipt !in it.claimedEffects) return@update it
+                val acknowledged = it.copy(claimedEffects = it.claimedEffects - receipt)
+                if (granted) acknowledged.copy(storagePermissionGranted = true)
+                else finish(acknowledged)
+            } ?: return
+        currentCoroutineContext().ensureActive()
+        if (!accepted) return
+        publish(ticket, persisted, busy = granted)
+        if (granted && persisted.storagePermissionGranted) inspect(ticket, persisted)
+    }
+
+    suspend fun directoryResult(receipt: AssociationNativeReceipt, directory: String?) {
+        val ticket = state.value.ticket ?: return
+        if (closed || receipt.kind != AssociationNativeKind.SelectDirectory) return
+        var accepted = false
+        val persisted =
+            controller(ticket).update(receipt.generation) {
+                if (receipt !in it.claimedEffects) return@update it
+                accepted = true
+                it.copy(
+                    phase = AssociationPhase.Preview,
+                    choosingDirectory = false,
+                    claimedEffects = it.claimedEffects - receipt,
+                )
+            } ?: return
+        currentCoroutineContext().ensureActive()
+        if (!accepted) return
+        publish(ticket, persisted, busy = false)
+        if (directory != null) confirmOperation("local-import", directory)
+    }
+
     private suspend fun inspect(ticket: String, original: AssociationSession) {
-        val controller = AssociationSessionController(ticket, sessions)
+        val controller = controller(ticket)
         try {
+            val needsStorage =
+                original.input.host == AssociationHostKind.File &&
+                    original.input.kind == AssociationInputKind.View &&
+                    original.input.uris.firstOrNull()?.let { Uri.parse(it).scheme != "content" } ==
+                        true
+            if (needsStorage && !original.storagePermissionGranted) {
+                val waiting =
+                    controller.update(original.generation) {
+                        val hasRequest =
+                            (it.effects + it.claimedEffects).any { request ->
+                                request.kind == AssociationNativeKind.StoragePermission
+                            }
+                        it.copy(
+                            phase = AssociationPhase.Ready,
+                            operation = null,
+                            effects =
+                                if (hasRequest) it.effects
+                                else
+                                    it.effects +
+                                        receipt(it, AssociationNativeKind.StoragePermission),
+                        )
+                    }
+                waiting?.let { publish(ticket, it, busy = false) }
+                return
+            }
             val inspecting =
                 controller.update(original.generation) {
                     it.copy(
@@ -286,5 +524,6 @@ class AssociationImportViewModel(
     companion object {
         const val TICKET_KEY = "association.ticket"
         private const val INSPECT_OPERATION = "inspect"
+        private val REPLAY_SAFE_OPERATIONS = setOf("local-import", "bookshelf", "read-config")
     }
 }

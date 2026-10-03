@@ -6,10 +6,13 @@ import io.legado.app.data.association.AssociationBookPreview
 import io.legado.app.data.association.AssociationFileInspection
 import io.legado.app.data.association.AssociationFileRepository
 import io.legado.app.data.association.AssociationHostKind
+import io.legado.app.data.association.AssociationImportOperations
 import io.legado.app.data.association.AssociationInput
 import io.legado.app.data.association.AssociationInputKind
 import io.legado.app.data.association.AssociationOnlinePayload
 import io.legado.app.data.association.AssociationOnlineRepository
+import io.legado.app.data.association.AssociationOperation
+import io.legado.app.data.association.AssociationOperationResult
 import io.legado.app.data.association.AssociationPhase
 import io.legado.app.data.association.AssociationSession
 import io.legado.app.data.association.AssociationSessionRepository
@@ -196,7 +199,191 @@ class AssociationImportViewModelTest {
             }
         }
 
-    private fun model(saved: SavedStateHandle, sessions: MemorySessions, files: Files) =
+    @Test
+    fun selectionDirectoryCancellationAndNativeReturnPersistBeforeRecreation() =
+        runTest(dispatcher) {
+            val sessions = MemorySessions()
+            val files =
+                Files(
+                    AssociationFileInspection(
+                        staging = AssociationStagingResult(previews = listOf(preview))
+                    )
+                )
+            val model = model(SavedStateHandle(), sessions, files)
+            try {
+                model.start(input)
+                runCurrent()
+                model.updateSelection(emptySet())
+                runCurrent()
+                assertTrue(sessions.current!!.selectedIds.isEmpty())
+                model.updateSelection(setOf(preview.id, "unknown"))
+                runCurrent()
+                assertEquals(listOf(preview.id), sessions.current!!.selectedIds)
+                model.requestDirectory()
+                runCurrent()
+                assertEquals(AssociationPhase.Directory, sessions.current!!.phase)
+                model.cancelDirectory()
+                runCurrent()
+                assertEquals(AssociationPhase.Preview, sessions.current!!.phase)
+                model.chooseSystemDirectory()
+                runCurrent()
+                val pending = sessions.current!!.effects.single()
+                assertNotNull(model.claimNative(pending))
+                assertTrue(sessions.current!!.effects.isEmpty())
+                model.returnNative(pending)
+                assertEquals(listOf(pending), sessions.current!!.effects)
+                assertNotNull(model.claimNative(pending))
+                model.acknowledgeNative(pending)
+                assertTrue(sessions.current!!.effects.isEmpty())
+                assertTrue(sessions.current!!.claimedEffects.isEmpty())
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun restoredAcceptedBackupRequiresNewConfirmationWithoutRunningEngineAgain() =
+        runTest(dispatcher) {
+            val sessions =
+                MemorySessions().apply {
+                    current =
+                        AssociationSession(
+                            input,
+                            phase = AssociationPhase.Preview,
+                            operation =
+                                AssociationOperation("accepted", 0, "backup", accepted = true),
+                        )
+                }
+            var calls = 0
+            val actions =
+                object : AssociationImportOperations {
+                    override suspend fun execute(
+                        ticket: String,
+                        session: AssociationSession,
+                        operation: AssociationOperation,
+                    ): AssociationOperationResult {
+                        calls++
+                        return AssociationOperationResult()
+                    }
+                }
+            val model =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    Files(AssociationFileInspection()),
+                    actions,
+                )
+            try {
+                runCurrent()
+                model.confirmOperation("backup")
+                runCurrent()
+                assertEquals(0, calls)
+                assertEquals(AssociationPhase.Failed, sessions.current!!.phase)
+                assertTrue(sessions.current!!.error!!.contains("uncertain"))
+                assertEquals("accepted", sessions.current!!.operation!!.token)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun successfulOperationPersistsOneNativeReceiptAndConsumedRestoreDoesNotReplay() =
+        runTest(dispatcher) {
+            val sessions = MemorySessions()
+            var calls = 0
+            val actions =
+                object : AssociationImportOperations {
+                    override suspend fun execute(
+                        ticket: String,
+                        session: AssociationSession,
+                        operation: AssociationOperation,
+                    ): AssociationOperationResult {
+                        calls++
+                        return AssociationOperationResult(bookJson = "large complete book")
+                    }
+                }
+            val files =
+                Files(
+                    AssociationFileInspection(
+                        staging = AssociationStagingResult(previews = listOf(preview))
+                    )
+                )
+            val model = model(SavedStateHandle(), sessions, files, actions)
+            try {
+                model.start(input)
+                runCurrent()
+                model.confirmOperation("local-import", "file:///destination")
+                model.confirmOperation("local-import", "ignored")
+                runCurrent()
+                assertEquals(1, calls)
+                assertEquals(AssociationPhase.Finished, sessions.current!!.phase)
+                assertEquals(null, sessions.current!!.operation)
+                val pending = sessions.current!!.effects.single()
+                assertEquals("large complete book", pending.payload)
+                assertNotNull(model.claimNative(pending))
+                model.acknowledgeNative(pending)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+            val restored =
+                model(
+                    SavedStateHandle(mapOf(AssociationImportViewModel.TICKET_KEY to "ticket")),
+                    sessions,
+                    files,
+                    actions,
+                )
+            try {
+                runCurrent()
+                assertTrue(restored.state.value.session!!.effects.isEmpty())
+                assertEquals(1, calls)
+                assertEquals(1, files.calls)
+            } finally {
+                clear(restored)
+                runCurrent()
+            }
+        }
+
+    @Test
+    fun storagePermissionPrecedesNonContentInspectionAndDuplicateResultsDoNotRestart() =
+        runTest(dispatcher) {
+            val sessions = MemorySessions()
+            val files =
+                Files(
+                    AssociationFileInspection(
+                        staging = AssociationStagingResult(previews = listOf(preview))
+                    )
+                )
+            val model = model(SavedStateHandle(), sessions, files)
+            try {
+                model.start(input.copy(uris = listOf("file:///external/book.txt")))
+                runCurrent()
+                assertEquals(0, files.calls)
+                val request = sessions.current!!.effects.single()
+                assertNotNull(model.claimNative(request))
+                model.permissionResult(request, true)
+                runCurrent()
+                assertEquals(1, files.calls)
+                assertTrue(sessions.current!!.storagePermissionGranted)
+                assertEquals(AssociationPhase.Preview, model.state.value.session!!.phase)
+                model.permissionResult(request, true)
+                runCurrent()
+                assertEquals(1, files.calls)
+                assertFalse(model.state.value.busy)
+            } finally {
+                clear(model)
+                runCurrent()
+            }
+        }
+
+    private fun model(
+        saved: SavedStateHandle,
+        sessions: MemorySessions,
+        files: Files,
+        actions: AssociationImportOperations? = null,
+    ) =
         AssociationImportViewModel(
             saved,
             sessions,
@@ -214,6 +401,7 @@ class AssociationImportViewModelTest {
 
                 override suspend fun text(url: String): String = error("Unused")
             },
+            actions,
         )
 
     private fun clear(model: AssociationImportViewModel) {
