@@ -306,7 +306,7 @@ class VideoPlayerActivity :
         updateChapterRail()
     }
 
-    private fun toggleFullScreen() {
+    internal fun toggleFullScreen() {
         isFullScreen = !isFullScreen
         toggleSystemBar(!isFullScreen)
         if (isFullScreen) {
@@ -378,7 +378,6 @@ class VideoPlayerActivity :
         layoutParams.height = if (height < screenHeight / 2) height else screenHeight / 2
         playerView.layoutParams = layoutParams
         playerView.isNeedOrientationUtils = false // 关闭自带的屏幕方向控制
-        playerView.fullscreenButton.setOnClickListener { toggleFullScreen() }
         playerView.setBackFromFullScreenListener { toggleFullScreen() }
         playerView.setVideoAllCallBack(
             object : GSYSampleCallBack() {
@@ -565,6 +564,7 @@ class VideoPlayerActivity :
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             binding.titleBar.title = it
+            playerView.updateOverlayTitle(it)
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {

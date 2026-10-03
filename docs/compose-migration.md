@@ -1642,3 +1642,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 视频播放 Activity 信息面板合并为单个纯 Compose Screen：封面、书名作者、可选择纯文本简介及滚动布局由 Compose 渲染；HTML、Markdown 与 useweb 复用独立生命周期管理的 WebView 内容 renderer，保留图片预览/点击脚本/来源 JS bridge 和链接路由。Activity XML 不再承载封面与简介 View 树。
 
 GSY 全屏控制栏的下一集、弹幕开关、选集与倍速按钮改为生命周期绑定的 Compose 操作条，保留原 VideoPlayer 操作回调、播放状态可见性、倍速选择和弹幕状态更新；GSY start/seek/time、字幕/弹幕渲染及紧凑窗控制仍由播放器原生实现。按钮文案使用资源并覆盖英文。
+
+视频播放器控制宿主进一步改为 Compose：播放/暂停、加载反馈、章节标题、全屏/锁定、时间、缓冲与播放进度、拖动 seek、弹幕/选集/倍速和短提示全部由 Compose 投影与回调驱动；seek 继续走 GSY manager、字幕刷新、进度/隐藏计时器及全屏回调。删除 GSY 全屏/紧凑控制布局，播放器 native layout 仅保留 surface、danmaku renderer 与 Compose 宿主，字幕继续由 GSY 创建。初始化移至子类构造字段完成后，避免 GSY 构造期间虚调用造成 Compose 状态尚未初始化。新增 overlay 行为用例；最终集成构建待排队验证。
