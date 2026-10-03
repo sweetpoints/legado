@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -21,7 +22,6 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
@@ -212,6 +212,12 @@ class HighlightTriggerUiTest {
             MoreConfigDialog().showNow(it.supportFragmentManager, "highlight-settings")
         }
         instrumentation.waitForIdleSync()
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithTag("more-reader-settings-list")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         compose
             .onNodeWithTag("more-reader-setting-${PreferKey.highlightActionTrigger}")
             .performScrollTo()

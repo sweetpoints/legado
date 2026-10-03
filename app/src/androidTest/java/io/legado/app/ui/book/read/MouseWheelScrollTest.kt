@@ -9,6 +9,7 @@ import android.view.MotionEvent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -194,6 +195,12 @@ class MouseWheelScrollTest {
         scenario!!.onActivity {
             MoreConfigDialog().showNow(it.supportFragmentManager, "mouse-wheel-settings")
         }
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithTag("more-reader-settings-list")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         compose
             .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
             .performScrollTo()
@@ -205,6 +212,12 @@ class MouseWheelScrollTest {
         screenshot("mouse-wheel-speed-settings")
         scenario!!.recreate()
         awaitReader { it.bottomDialog == 1 && AppConfig.mouseWheelScrollSpeed == 200 }
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodesWithTag("more-reader-settings-list")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         compose
             .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
             .performScrollTo()

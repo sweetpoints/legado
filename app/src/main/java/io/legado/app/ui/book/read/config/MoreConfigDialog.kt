@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -23,9 +24,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.preferences.MoreReaderSetting
 import io.legado.app.data.preferences.MoreReaderSettings
 import io.legado.app.data.preferences.MoreReaderSettingsRepository
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
@@ -62,7 +61,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         acquireBottomDialogCount()
         if (!CanvasRecorderFactory.isSupport) {
-            settingsRepository.remove(PreferKey.optimizeRender)
+            settingsViewModel.remove(PreferKey.optimizeRender)
         }
     }
 
@@ -82,12 +81,15 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
 
     override fun onResume() {
         super.onResume()
-        settingsViewModel.refresh()
+        if (!settingsViewModel.state.value.isLoading) settingsViewModel.refresh()
         preferenceObservation?.close()
         preferenceObservation = settingsRepository.observe { key ->
-            activity?.runOnUiThread {
-                settingsViewModel.refresh()
-                if (isResumed) handlePreferenceChange(key)
+            val observedOwner = bottomDialogOwner
+            observedOwner?.runOnUiThread {
+                if (isResumed && activity === observedOwner) {
+                    settingsViewModel.refresh()
+                    handlePreferenceChange(key)
+                }
             }
         }
     }
@@ -137,43 +139,42 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
             KEY_CUSTOM_READER_MENU -> (activity as? ReadBookActivity)?.showReaderMenuConfig()
             PreferKey.pageTouchSlop ->
                 showNumberPicker(
+                    setting = setting,
                     title = R.string.page_touch_slop_dialog_title,
-                    value = AppConfig.pageTouchSlop,
-                    maximum = 9999,
-                ) { value ->
-                    AppConfig.pageTouchSlop = value
+                ) {
                     postEvent(EventBus.UP_CONFIG, arrayListOf(4))
-                    settingsViewModel.refresh()
                 }
             PreferKey.pullBookmarkDistance ->
                 showNumberPicker(
+                    setting = setting,
                     title = R.string.pull_bookmark_distance_dialog_title,
-                    value = AppConfig.pullBookmarkDistance,
-                    maximum = 9999,
-                ) { value ->
-                    AppConfig.pullBookmarkDistance = value
-                    settingsViewModel.refresh()
-                }
+                ) {}
             PreferKey.pageTouchClick ->
                 showNumberPicker(
+                    setting = setting,
                     title = R.string.page_touch_click_dialog_title,
-                    value = AppConfig.pageTouchClick,
-                    maximum = 399,
-                ) { value ->
-                    AppConfig.pageTouchClick = value
+                ) {
                     postEvent(EventBus.UP_CONFIG, arrayListOf(12))
-                    settingsViewModel.refresh()
                 }
         }
     }
 
-    private fun showNumberPicker(title: Int, value: Int, maximum: Int, onSelected: (Int) -> Unit) {
+    private fun showNumberPicker(
+        setting: MoreReaderSetting.Action,
+        title: Int,
+        onSaved: () -> Unit,
+    ) {
+        val maximum = requireNotNull(setting.numericMaximum)
         NumberPickerDialog(requireContext())
             .setTitle(getString(title))
             .setMaxValue(maximum)
             .setMinValue(0)
-            .setValue(value)
-            .show(onSelected)
+            .setValue(settingsViewModel.numericValue(setting.key))
+            .show { value ->
+                settingsViewModel.saveNumber(setting, value) {
+                    if (isResumed && activity === bottomDialogOwner) onSaved()
+                }
+            }
     }
 
     private fun handlePreferenceChange(key: String) {
@@ -246,9 +247,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
     }
 
     /** Compatibility shell solely for retiring restored fragments created by older versions. */
-    class ReadPreferenceFragment : PreferenceFragment() {
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) = Unit
-    }
+    class ReadPreferenceFragment : Fragment()
 
     private companion object {
         const val LEGACY_PREFERENCE_TAG = "readPreferenceFragment"

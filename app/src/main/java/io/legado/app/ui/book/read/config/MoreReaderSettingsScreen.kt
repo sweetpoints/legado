@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -47,25 +49,44 @@ fun MoreReaderSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier.fillMaxSize(), color = background) {
-        LazyColumn(Modifier.fillMaxSize().testTag("more-reader-settings-list")) {
-            items(visibleSettings, key = MoreReaderSetting::key) { setting ->
-                when (setting) {
-                    is MoreReaderSetting.Toggle -> ToggleSettingRow(setting, state.values, onToggle)
-                    is MoreReaderSetting.Choice -> ChoiceSettingRow(setting, state.values, onChoice)
-                    is MoreReaderSetting.SeekBar ->
-                        SeekBarSettingRow(setting, state.values, onSeekBar)
-                    is MoreReaderSetting.Action ->
-                        ActionSettingRow(
-                            setting,
-                            when (setting.key) {
-                                "pageTouchSlop" -> slopSummary
-                                "pullBookmarkDistance" -> bookmarkSummary
-                                else -> null
-                            },
-                            onAction,
-                        )
+        when {
+            state.isLoading ->
+                Box(
+                    Modifier.fillMaxSize().testTag("more-reader-settings-loading"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
                 }
-            }
+            state.error != null ->
+                Box(
+                    Modifier.fillMaxSize().padding(16.dp).testTag("more-reader-settings-error"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                }
+            else ->
+                LazyColumn(Modifier.fillMaxSize().testTag("more-reader-settings-list")) {
+                    items(visibleSettings, key = MoreReaderSetting::key) { setting ->
+                        when (setting) {
+                            is MoreReaderSetting.Toggle ->
+                                ToggleSettingRow(setting, state.values, onToggle)
+                            is MoreReaderSetting.Choice ->
+                                ChoiceSettingRow(setting, state.values, onChoice)
+                            is MoreReaderSetting.SeekBar ->
+                                SeekBarSettingRow(setting, state.values, onSeekBar)
+                            is MoreReaderSetting.Action ->
+                                ActionSettingRow(
+                                    setting,
+                                    when (setting.key) {
+                                        "pageTouchSlop" -> slopSummary
+                                        "pullBookmarkDistance" -> bookmarkSummary
+                                        else -> null
+                                    },
+                                    onAction,
+                                )
+                        }
+                    }
+                }
         }
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.constant.PreferKey
+import io.legado.app.data.preferences.MoreReaderSetting
 import io.legado.app.data.preferences.MoreReaderSettings
 import io.legado.app.data.preferences.MoreReaderSettingsRepository
 import io.legado.app.help.config.AppConfig
@@ -42,6 +43,7 @@ class MoreReaderSettingsScreenTest {
             PreferKey.highlightActionTrigger,
             PreferKey.mouseWheelPage,
             PreferKey.mouseWheelScrollSpeed,
+            PreferKey.pageTouchSlop,
         )
     private val savedValues = keys.associateWith { preferences.all[it] }
     private var observation: AutoCloseable? = null
@@ -54,6 +56,7 @@ class MoreReaderSettingsScreenTest {
             .putString(PreferKey.highlightActionTrigger, "click")
             .putBoolean(PreferKey.mouseWheelPage, true)
             .remove(PreferKey.mouseWheelScrollSpeed)
+            .putInt(PreferKey.pageTouchSlop, 15)
             .commit()
     }
 
@@ -94,12 +97,13 @@ class MoreReaderSettingsScreenTest {
             }
         }
 
+        compose.waitUntil(5_000) { !viewModel.state.value.isLoading }
         compose
             .onNodeWithTag("more-reader-setting-${PreferKey.hideNavigationBar}")
             .performScrollTo()
             .performClick()
-        compose.runOnIdle {
-            assertTrue(preferences.getBoolean(PreferKey.hideNavigationBar, false))
+        compose.waitUntil(5_000) {
+            preferences.getBoolean(PreferKey.hideNavigationBar, false)
         }
 
         preferences.edit().putBoolean(PreferKey.hideNavigationBar, false).commit()
@@ -120,26 +124,40 @@ class MoreReaderSettingsScreenTest {
         compose
             .onNodeWithTag("more-reader-option-${PreferKey.highlightActionTrigger}-doubleTap")
             .performClick()
-        compose.runOnIdle {
-            assertEquals("doubleTap", preferences.getString(PreferKey.highlightActionTrigger, null))
-            assertEquals("doubleTap", AppConfig.highlightActionTrigger)
+        compose.waitUntil(5_000) {
+            preferences.getString(PreferKey.highlightActionTrigger, null) == "doubleTap"
         }
+        assertEquals("doubleTap", AppConfig.highlightActionTrigger)
 
         compose
             .onNodeWithTag("more-reader-slider-${PreferKey.mouseWheelScrollSpeed}")
             .performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(200f)) }
-        compose.runOnIdle {
-            assertEquals(200, preferences.getInt(PreferKey.mouseWheelScrollSpeed, 0))
-            assertEquals(200, AppConfig.mouseWheelScrollSpeed)
+        compose.waitUntil(5_000) {
+            preferences.getInt(PreferKey.mouseWheelScrollSpeed, 0) == 200
         }
+        assertEquals(200, AppConfig.mouseWheelScrollSpeed)
         compose
             .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelPage}")
             .performScrollTo()
             .performClick()
-        compose.runOnIdle { assertFalse(AppConfig.mouseWheelPage) }
+        compose.waitUntil(5_000) { !AppConfig.mouseWheelPage }
         compose
             .onNodeWithTag("more-reader-slider-${PreferKey.mouseWheelScrollSpeed}")
             .assertIsNotEnabled()
+
+        var savedCallback = false
+        viewModel.saveNumber(
+            MoreReaderSettings.all
+                .filterIsInstance<io.legado.app.data.preferences.MoreReaderSetting.Action>()
+                .first { it.key == PreferKey.pageTouchSlop },
+            42,
+        ) {
+            savedCallback = true
+        }
+        compose.waitUntil(5_000) {
+            preferences.getInt(PreferKey.pageTouchSlop, 0) == 42 && savedCallback
+        }
+        assertEquals("42", viewModel.state.value.values[PreferKey.pageTouchSlop])
     }
 }

@@ -9,6 +9,8 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 sealed interface MoreReaderSetting {
     val key: String
@@ -45,6 +47,8 @@ sealed interface MoreReaderSetting {
         override val key: String,
         override val title: Int,
         override val summary: Int? = null,
+        val numericDefault: Int? = null,
+        val numericMaximum: Int? = null,
     ) : MoreReaderSetting
 }
 
@@ -137,16 +141,22 @@ object MoreReaderSettings {
                 PreferKey.pullBookmarkDistance,
                 R.string.pull_bookmark_distance_title,
                 R.string.pull_bookmark_distance_summary,
+                numericDefault = 0,
+                numericMaximum = 9999,
             ),
             MoreReaderSetting.Action(
                 PreferKey.pageTouchSlop,
                 R.string.page_touch_slop_title,
                 R.string.page_touch_slop_summary,
+                numericDefault = 0,
+                numericMaximum = 9999,
             ),
             MoreReaderSetting.Action(
                 PreferKey.pageTouchClick,
                 R.string.page_touch_click_title,
                 R.string.page_touch_click_summary,
+                numericDefault = 0,
+                numericMaximum = 399,
             ),
             MoreReaderSetting.Toggle(PreferKey.autoChangeSource, R.string.auto_change_source, true),
             MoreReaderSetting.Toggle(PreferKey.textSelectAble, R.string.selectText, true),
@@ -240,27 +250,47 @@ class MoreReaderSettingsRepository(context: Context) {
         }
     }
 
-    fun load(): Map<String, String> =
-        MoreReaderSettings.all.associate { setting ->
-            setting.key to readValue(setting)
+    suspend fun load(): Map<String, String> =
+        withContext(Dispatchers.IO) {
+            MoreReaderSettings.all.associate { setting ->
+                setting.key to readValue(setting)
+            }
         }
 
-    fun save(setting: MoreReaderSetting, value: String) {
-        when (setting) {
-            is MoreReaderSetting.Toggle ->
-                applicationContext.putPrefBoolean(setting.key, value.toBoolean())
-            is MoreReaderSetting.Choice -> applicationContext.putPrefString(setting.key, value)
-            is MoreReaderSetting.SeekBar ->
-                preferences
-                    .edit()
-                    .putInt(setting.key, value.toInt().coerceIn(setting.minimum, setting.maximum))
-                    .apply()
-            is MoreReaderSetting.Action -> Unit
+    suspend fun save(setting: MoreReaderSetting, value: String) {
+        withContext(Dispatchers.IO) {
+            when (setting) {
+                is MoreReaderSetting.Toggle ->
+                    applicationContext.putPrefBoolean(setting.key, value.toBoolean())
+                is MoreReaderSetting.Choice -> applicationContext.putPrefString(setting.key, value)
+                is MoreReaderSetting.SeekBar ->
+                    preferences
+                        .edit()
+                        .putInt(
+                            setting.key,
+                            value.toInt().coerceIn(setting.minimum, setting.maximum),
+                        )
+                        .apply()
+                is MoreReaderSetting.Action -> Unit
+            }
         }
     }
 
-    fun remove(key: String) {
-        preferences.edit().remove(key).apply()
+    suspend fun saveNumber(setting: MoreReaderSetting.Action, value: Int) {
+        withContext(Dispatchers.IO) {
+            val maximum =
+                requireNotNull(setting.numericMaximum) {
+                    "${setting.key} does not store a numeric preference"
+                }
+            requireNotNull(setting.numericDefault) {
+                "${setting.key} does not store a numeric preference"
+            }
+            preferences.edit().putInt(setting.key, value.coerceIn(0, maximum)).apply()
+        }
+    }
+
+    suspend fun remove(key: String) {
+        withContext(Dispatchers.IO) { preferences.edit().remove(key).apply() }
     }
 
     private fun readValue(setting: MoreReaderSetting): String =
@@ -272,6 +302,9 @@ class MoreReaderSettingsRepository(context: Context) {
                     ?: setting.defaultValue
             is MoreReaderSetting.SeekBar ->
                 preferences.getInt(setting.key, setting.defaultValue).toString()
-            is MoreReaderSetting.Action -> ""
+            is MoreReaderSetting.Action ->
+                setting.numericDefault
+                    ?.let { preferences.getInt(setting.key, it).toString() }
+                    .orEmpty()
         }
 }
