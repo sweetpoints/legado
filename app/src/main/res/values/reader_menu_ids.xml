@@ -5,4 +5,6 @@
     <item name="cursor_right" type="id" />
     <!-- Native canvas ID is retained for integrations and real paging regression tests. -->
     <item name="read_view" type="id" />
+    <!-- The retained Canvas supports existing native integration lookup. -->
+    <item name="content_text_view" type="id" />
 </resources>

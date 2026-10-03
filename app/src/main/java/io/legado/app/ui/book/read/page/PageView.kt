@@ -8,9 +8,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.core.content.ContextCompat
@@ -57,7 +59,7 @@ class PageView(context: Context) : FrameLayout(context) {
     private val readBookActivity
         get() = activity as? ReadBookActivity
 
-    private val contentView = ContentTextView(context, null)
+    private val contentView = ContentTextView(context, null).apply { id = R.id.content_text_view }
     private val pageRoot = FrameLayout(context)
     private val composeView = ComposeView(context)
 
@@ -90,8 +92,20 @@ class PageView(context: Context) : FrameLayout(context) {
     private data class CanvasReadyCallback(val isCurrent: () -> Boolean, val action: () -> Unit)
 
     private val canvasReadyCallbacks = mutableListOf<CanvasReadyCallback>()
-    private var isMainView = false
+    private var isMainView by mutableStateOf(false)
     var isScroll = false
+
+    internal fun readerInfoText(slot: Int): CharSequence =
+        ReaderInfoTemplateRenderer.render(
+            readerInfoTemplates.getOrElse(slot) { "" },
+            readerInfoValues,
+        )
+
+    internal val readerTipTextSizeSp: Int
+        get() = tipTextSize
+
+    internal val readerTipTypeface
+        get() = readerInfoTypeface
 
     internal val contentViewTop: Float
         get() = pageRoot.top + pageRoot.paddingTop + contentBounds.top.toFloat()
@@ -151,6 +165,10 @@ class PageView(context: Context) : FrameLayout(context) {
         composeView.setContent {
             val templates = readerInfoTemplates
             ReaderPageChrome(
+                modifier =
+                    Modifier.testTag(
+                        if (isMainView) "reader-current-page" else "reader-neighbor-page"
+                    ),
                 statusBarHeight = statusBarInset,
                 navigationBarHeight = navigationBarInset,
                 showStatusBar = statusBarVisible,

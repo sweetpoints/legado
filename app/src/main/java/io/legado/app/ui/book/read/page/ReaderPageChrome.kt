@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.IntOffset
@@ -66,10 +67,11 @@ internal fun ReaderPageChrome(
     onContentBounds: (IntRect) -> Unit,
     onHeaderMeasured: (Int) -> Unit,
     onHeaderRightGeometry: (Offset, Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Box(Modifier.fillMaxSize()) {
+        Box(modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 if (showStatusBar)
                     Spacer(Modifier.fillMaxWidth().height(with(density) { statusBarHeight.toDp() }))
@@ -184,6 +186,9 @@ private fun ReaderTipBand(
                     typeface = typeface,
                     modifier =
                         Modifier.weight(1f)
+                            .testTag(
+                                if (footer) "reader-tip-footer-left" else "reader-tip-header-left"
+                            )
                             .then(
                                 if (leftTemplate.isEmpty())
                                     Modifier.alpha(0f).clearAndSetSemantics {}
@@ -203,9 +208,12 @@ private fun ReaderTipBand(
                     textSizeSp = textSizeSp,
                     typeface = typeface,
                     modifier =
-                        Modifier.then(
-                            if (bookmarkInHeader) Modifier.widthIn(min = 32.dp) else Modifier
-                        ),
+                        Modifier.testTag(
+                                if (footer) "reader-tip-footer-right" else "reader-tip-header-right"
+                            )
+                            .then(
+                                if (bookmarkInHeader) Modifier.widthIn(min = 32.dp) else Modifier
+                            ),
                     contentDescription = if (bookmarkInHeader) bookmarkDescription else null,
                     onGeometry = onRightGeometry,
                 )
@@ -219,7 +227,11 @@ private fun ReaderTipBand(
                 color = color,
                 textSizeSp = textSizeSp,
                 typeface = typeface,
-                modifier = Modifier.align(Alignment.Center),
+                modifier =
+                    Modifier.align(Alignment.Center)
+                        .testTag(
+                            if (footer) "reader-tip-footer-middle" else "reader-tip-header-middle"
+                        ),
             )
         }
     }

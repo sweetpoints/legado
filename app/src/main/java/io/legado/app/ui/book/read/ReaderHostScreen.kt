@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.ui.book.read.page.ReadView
@@ -57,7 +58,7 @@ internal fun ReaderHostScreen(
     SideEffect {
         aloudControls.updateViewport(viewport.width, viewport.height, left, top, right, bottom)
     }
-    Box(Modifier.fillMaxSize().onSizeChanged { viewport = it }) {
+    Box(Modifier.fillMaxSize().testTag("reader-host").onSizeChanged { viewport = it }) {
         AndroidView(factory = { readView }, modifier = Modifier.fillMaxSize())
         ReaderSelectionCursorsScreen(
             state = selection,
