@@ -5,7 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
@@ -43,6 +45,10 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /** 音频播放 */
 @SuppressLint("ObsoleteSdkInt")
@@ -169,8 +175,25 @@ class AudioPlayActivity :
 
             /* 跳过片头片尾设定按钮 */
             R.id.menu_skip_credits ->
-                AudioPlay.book?.let {
-                    showDialogFragment(AudioSkipCredits.newInstance(it))
+                AudioPlay.book?.let { book ->
+                    lifecycleScope.launch {
+                        try {
+                            val dialog = AudioSkipCredits.prepare(this@AudioPlayActivity, book)
+                            lifecycle.currentStateFlow.first {
+                                it.isAtLeast(Lifecycle.State.RESUMED)
+                            }
+                            ensureActive()
+                            if (!dialog.claimLaunch(this@AudioPlayActivity)) return@launch
+                            ensureActive()
+                            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                                showDialogFragment(dialog)
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            toastOnUi(error.localizedMessage.orEmpty())
+                        }
+                    }
                 }
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
