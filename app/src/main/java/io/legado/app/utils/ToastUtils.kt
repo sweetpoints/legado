@@ -112,9 +112,11 @@ private class CustomToastSession(
             message = toastMessage,
             backgroundColor = backgroundColor,
             textColor = textColor,
+            onAttached = ::onPresentationAttached,
         )
     private var closed = false
-    private val cleanup = Runnable { close() }
+    private val pendingAttachmentTimeout = Runnable { cancel() }
+    private val visibleTimeout = Runnable { cancel() }
     private var toastCallbackRegistration: AutoCloseable? = null
 
     init {
@@ -128,9 +130,19 @@ private class CustomToastSession(
 
     fun show() {
         toast.show()
-        presentation.onShown()
-        val timeoutMillis = if (duration == Toast.LENGTH_LONG) 4_000L else 2_500L
-        handler.postDelayed(cleanup, timeoutMillis)
+        handler.postDelayed(pendingAttachmentTimeout, MAX_PENDING_ATTACHMENT_MILLIS)
+    }
+
+    private fun onPresentationAttached() {
+        if (closed) return
+        handler.removeCallbacks(pendingAttachmentTimeout)
+        val visibleDuration =
+            if (duration == Toast.LENGTH_LONG) {
+                LONG_VISIBLE_FALLBACK_MILLIS
+            } else {
+                SHORT_VISIBLE_FALLBACK_MILLIS
+            }
+        handler.postDelayed(visibleTimeout, visibleDuration)
     }
 
     fun cancel() {
@@ -144,13 +156,19 @@ private class CustomToastSession(
     private fun close() {
         if (closed) return
         closed = true
-        handler.removeCallbacks(cleanup)
+        handler.removeCallbacks(pendingAttachmentTimeout)
+        handler.removeCallbacks(visibleTimeout)
+        runCatching { toast.cancel() }
         runCatching { toastCallbackRegistration?.close() }
         toastCallbackRegistration = null
         presentation.close()
         onClosed(this)
     }
 }
+
+private const val SHORT_VISIBLE_FALLBACK_MILLIS = 2_500L
+private const val LONG_VISIBLE_FALLBACK_MILLIS = 4_000L
+private const val MAX_PENDING_ATTACHMENT_MILLIS = 10_000L
 
 internal fun <T> runToastCallbackOnApi30(sdkInt: Int, register: () -> T): T? =
     if (sdkInt >= 30) register() else null

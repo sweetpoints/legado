@@ -38,11 +38,11 @@ internal fun ToastComposeContent(
                         Placeholder(
                             width =
                                 with(density) {
-                                    (image.widthPx.toFloat().toDp().value / fontScale).sp
+                                    image.widthPx.toFloat().toDp().toSp()
                                 },
                             height =
                                 with(density) {
-                                    (image.heightPx.toFloat().toDp().value / fontScale).sp
+                                    image.heightPx.toFloat().toDp().toSp()
                                 },
                             placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
                         )

@@ -122,15 +122,24 @@ class ToastComposeContentTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         lateinit var presentation: ToastComposePresentation
         lateinit var owner: Lifecycle
+        var attachedEvents = 0
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val message = "independent owner".toToastMessage(32f, 2f, AndroidColor.BLACK)
             presentation =
-                ToastComposePresentation(context, message, AndroidColor.DKGRAY, AndroidColor.WHITE)
+                ToastComposePresentation(
+                    context,
+                    message,
+                    AndroidColor.DKGRAY,
+                    AndroidColor.WHITE,
+                ) {
+                    attachedEvents++
+                }
             val viewOwner = presentation.view.findViewTreeLifecycleOwner()
             assertNotNull(viewOwner)
             owner = requireNotNull(viewOwner).lifecycle
             assertEquals(Lifecycle.State.CREATED, owner.currentState)
             val contentRoot = FrameLayout(ApplicationProvider.getApplicationContext())
+            assertEquals(Lifecycle.State.CREATED, owner.currentState)
             contentRoot.addView(
                 presentation.view,
                 FrameLayout.LayoutParams(
@@ -138,8 +147,8 @@ class ToastComposeContentTest {
                     FrameLayout.LayoutParams.MATCH_PARENT,
                 ),
             )
-            presentation.onShown()
             assertEquals(Lifecycle.State.RESUMED, owner.currentState)
+            assertEquals(1, attachedEvents)
             contentRoot.removeView(presentation.view)
             assertEquals(Lifecycle.State.DESTROYED, owner.currentState)
             presentation.close()

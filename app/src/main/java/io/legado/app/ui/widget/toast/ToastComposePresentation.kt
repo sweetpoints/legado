@@ -32,6 +32,7 @@ internal class ToastComposePresentation(
     private val message: ToastMessage,
     backgroundColor: Int,
     textColor: Int,
+    private val onAttached: () -> Unit = {},
 ) {
     private val owner = ToastPresentationOwner()
     private val scope = CoroutineScope(AndroidUiDispatcher.Main + SupervisorJob())
@@ -39,7 +40,10 @@ internal class ToastComposePresentation(
     private var closed = false
     private val detachListener =
         object : OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(view: View) = Unit
+            override fun onViewAttachedToWindow(view: View) {
+                owner.moveTo(Lifecycle.State.RESUMED)
+                onAttached()
+            }
 
             override fun onViewDetachedFromWindow(view: View) {
                 close()
@@ -70,10 +74,6 @@ internal class ToastComposePresentation(
 
     init {
         scope.launch { recomposer.runRecomposeAndApplyChanges() }
-    }
-
-    fun onShown() {
-        owner.moveTo(Lifecycle.State.RESUMED)
     }
 
     fun close() {
