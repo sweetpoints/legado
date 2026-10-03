@@ -16,20 +16,28 @@ import io.legado.app.utils.showHelp
 class MyMoreActivity : BaseComposeActivity() {
     private val viewModel by viewModels<MyViewModel>()
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) { setTitle(R.string.reader_menu_more) }
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        setTitle(R.string.reader_menu_more)
+    }
 
     @Composable
     override fun Content(savedInstanceState: Bundle?) {
         Box(Modifier.navigationBarsPadding()) {
             MyRoute(
-                viewModel, isMore = true, onItemClick = ::openMyItem,
-                onLongClick = ::showMyServiceActions, onHelp = { showHelp("appHelp") }, onBack = ::finish,
+                viewModel,
+                isMore = true,
+                onItemClick = ::openMyItem,
+                onLongClick = ::showMyServiceActions,
+                onHelp = { showHelp("appHelp") },
+                onBack = ::finish,
             )
         }
     }
 
     override fun observeLiveBus() {
         observeEvent<String>(EventBus.RECREATE) { recreate() }
-        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) { viewModel.refreshRuntimeState() }
+        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) {
+            viewModel.refreshRuntimeState()
+        }
     }
 }

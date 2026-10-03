@@ -65,46 +65,68 @@ fun MyScreen(
     var themePickerVisible by rememberSaveable { mutableStateOf(false) }
     val modes = stringArrayResource(R.array.theme_mode)
     val values = stringArrayResource(R.array.theme_mode_v)
-    val rows = visibleMySettings(state.preferences.moreItems, isMore).map { item ->
-        val checked = when (item.key) {
-            PreferKey.webService -> state.preferences.webEnabled
-            PreferKey.mcpService -> state.preferences.mcpEnabled
-            PreferKey.autoTaskService -> state.preferences.autoTaskEnabled
-            else -> false
-        }
-        val summary = when {
-            item.key == PreferKey.webService && checked -> state.webAddress
-            item.key == PreferKey.mcpService && checked -> state.mcpAddress
-            else -> item.summaryRes?.let { stringResource(it) }
-        }
-        MyRow(
-            item, stringResource(item.titleRes), summary,
-            item.categoryRes?.let { stringResource(it) }, checked,
-            if (item.kind == MySettingKind.ThemeChoice) modes.getOrNull(values.indexOf(state.preferences.themeMode)) else null,
-        )
-    }.filter { row ->
-        query.isBlank() || listOfNotNull(row.title, row.summary, row.category).any { it.contains(query.trim(), ignoreCase = true) }
-    }
+    val rows =
+        visibleMySettings(state.preferences.moreItems, isMore)
+            .map { item ->
+                val checked =
+                    when (item.key) {
+                        PreferKey.webService -> state.preferences.webEnabled
+                        PreferKey.mcpService -> state.preferences.mcpEnabled
+                        PreferKey.autoTaskService -> state.preferences.autoTaskEnabled
+                        else -> false
+                    }
+                val summary =
+                    when {
+                        item.key == PreferKey.webService && checked -> state.webAddress
+                        item.key == PreferKey.mcpService && checked -> state.mcpAddress
+                        else -> item.summaryRes?.let { stringResource(it) }
+                    }
+                MyRow(
+                    item,
+                    stringResource(item.titleRes),
+                    summary,
+                    item.categoryRes?.let { stringResource(it) },
+                    checked,
+                    if (item.kind == MySettingKind.ThemeChoice)
+                        modes.getOrNull(values.indexOf(state.preferences.themeMode))
+                    else null,
+                )
+            }
+            .filter { row ->
+                query.isBlank() ||
+                    listOfNotNull(row.title, row.summary, row.category).any {
+                        it.contains(query.trim(), ignoreCase = true)
+                    }
+            }
 
     Column(modifier.fillMaxSize()) {
         MyTopBar(isMore, onBack, onCustomize, onHelp)
         if (isMore) {
             OutlinedTextField(
-                value = query, onValueChange = { query = it },
-                label = { Text(stringResource(R.string.search)) }, singleLine = true,
+                value = query,
+                onValueChange = { query = it },
+                label = { Text(stringResource(R.string.search)) },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag(if (isMore) "my-more-settings-list" else "my-settings-list")) {
+        LazyColumn(
+            Modifier.weight(1f)
+                .fillMaxWidth()
+                .testTag(if (isMore) "my-more-settings-list" else "my-settings-list")
+        ) {
             var lastCategory: Int? = null
             rows.forEach { row ->
                 if (row.item.categoryRes != null && row.item.categoryRes != lastCategory) {
-                    item(key = "category-${row.item.categoryRes}") { SettingsCategoryHeader(row.category.orEmpty()) }
+                    item(key = "category-${row.item.categoryRes}") {
+                        SettingsCategoryHeader(row.category.orEmpty())
+                    }
                 }
                 lastCategory = row.item.categoryRes
                 item(key = row.item.key) {
                     MySettingsRow(
-                        row, isMore,
+                        row,
+                        isMore,
                         onClick = {
                             when (row.item.kind) {
                                 MySettingKind.Switch -> onSwitchChange(row.item.key, !row.checked)
@@ -119,7 +141,12 @@ fun MyScreen(
         }
     }
     state.customizationDraft?.let { draft ->
-        MyCustomizationDialog(draft, onCustomizationToggle, onCustomizationConfirm, onCustomizationDismiss)
+        MyCustomizationDialog(
+            draft,
+            onCustomizationToggle,
+            onCustomizationConfirm,
+            onCustomizationDismiss,
+        )
     }
     if (themePickerVisible) {
         AlertDialog(
@@ -129,28 +156,50 @@ fun MyScreen(
                 Column {
                     modes.forEachIndexed { index, label ->
                         TextButton(
-                            onClick = { themePickerVisible = false; values.getOrNull(index)?.let(onThemeModeChange) },
+                            onClick = {
+                                themePickerVisible = false
+                                values.getOrNull(index)?.let(onThemeModeChange)
+                            },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(label) }
+                        ) {
+                            Text(label)
+                        }
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { themePickerVisible = false }) { Text(stringResource(android.R.string.cancel)) } },
+            dismissButton = {
+                TextButton(onClick = { themePickerVisible = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
         )
     }
 }
 
 private data class MyRow(
-    val item: MySettingItem, val title: String, val summary: String?, val category: String?,
-    val checked: Boolean, val choiceLabel: String?,
+    val item: MySettingItem,
+    val title: String,
+    val summary: String?,
+    val category: String?,
+    val checked: Boolean,
+    val choiceLabel: String?,
 )
 
 @Composable
-private fun MySettingsRow(row: MyRow, isMore: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun MySettingsRow(
+    row: MyRow,
+    isMore: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     val colors = LocalLegadoColors.current
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag(if (isMore) "my-more-setting-${row.item.key}" else "my-setting-${row.item.key}")
+        Modifier.fillMaxWidth()
+            .heightIn(min = 60.dp)
+            .testTag(
+                if (isMore) "my-more-setting-${row.item.key}" else "my-setting-${row.item.key}"
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics(mergeDescendants = true) {
                 if (row.item.kind == MySettingKind.Switch) {
@@ -163,14 +212,28 @@ private fun MySettingsRow(row: MyRow, isMore: Boolean, onClick: () -> Unit, onLo
     ) {
         Icon(painterResource(row.item.iconRes), null, Modifier.size(24.dp), tint = colors.accent)
         Column(Modifier.weight(1f).padding(start = 16.dp)) {
-            Text(row.title, color = colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            row.summary?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = colors.textSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
-            }
+            Text(
+                row.title,
+                color = colors.textPrimary,
+                fontSize = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            row.summary
+                ?.takeIf { it.isNotEmpty() }
+                ?.let {
+                    Text(
+                        it,
+                        color = colors.textSecondary,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
         }
         when (row.item.kind) {
             MySettingKind.Switch -> Switch(row.checked, onCheckedChange = null)
-            MySettingKind.ThemeChoice -> row.choiceLabel?.let { Text(it, color = colors.textSecondary) }
+            MySettingKind.ThemeChoice ->
+                row.choiceLabel?.let { Text(it, color = colors.textSecondary) }
             else -> Unit
         }
     }
@@ -178,31 +241,48 @@ private fun MySettingsRow(row: MyRow, isMore: Boolean, onClick: () -> Unit, onLo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MyTopBar(isMore: Boolean, onBack: () -> Unit, onCustomize: () -> Unit, onHelp: () -> Unit) {
+private fun MyTopBar(
+    isMore: Boolean,
+    onBack: () -> Unit,
+    onCustomize: () -> Unit,
+    onHelp: () -> Unit,
+) {
     val colors = LocalLegadoColors.current
     TopAppBar(
         title = { Text(stringResource(if (isMore) R.string.reader_menu_more else R.string.my)) },
         navigationIcon = {
-            if (isMore) IconButton(onClick = onBack) {
-                Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.back))
-            }
+            if (isMore)
+                IconButton(onClick = onBack) {
+                    Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.back))
+                }
         },
         actions = {
             IconButton(onClick = onCustomize) {
-                Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.customize_my))
+                Icon(
+                    painterResource(R.drawable.ic_more_vert),
+                    stringResource(R.string.customize_my),
+                )
             }
-            IconButton(onClick = onHelp) { Icon(painterResource(R.drawable.ic_help), stringResource(R.string.help)) }
+            IconButton(onClick = onHelp) {
+                Icon(painterResource(R.drawable.ic_help), stringResource(R.string.help))
+            }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = colors.primary, titleContentColor = colors.onPrimary,
-            navigationIconContentColor = colors.onPrimary, actionIconContentColor = colors.onPrimary,
-        ),
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = colors.primary,
+                titleContentColor = colors.onPrimary,
+                navigationIconContentColor = colors.onPrimary,
+                actionIconContentColor = colors.onPrimary,
+            ),
     )
 }
 
 @Composable
 private fun MyCustomizationDialog(
-    draft: Set<String>, onToggle: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
+    draft: Set<String>,
+    onToggle: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -211,21 +291,33 @@ private fun MyCustomizationDialog(
             LazyColumn(Modifier.testTag("my-customization-list")) {
                 items(customizableMySettings, key = { it.key }) { item ->
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("my-option-${item.key}")
+                        Modifier.fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("my-option-${item.key}")
                             .combinedClickable(onClick = { onToggle(item.key) })
                             .semantics(mergeDescendants = true) {
                                 role = Role.Checkbox
-                                toggleableState = if (item.key in draft) ToggleableState.On else ToggleableState.Off
-                            }.padding(vertical = 8.dp),
+                                toggleableState =
+                                    if (item.key in draft) ToggleableState.On
+                                    else ToggleableState.Off
+                            }
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(item.key in draft, onCheckedChange = null)
-                        Text(stringResource(item.titleRes), Modifier.weight(1f).padding(start = 8.dp))
+                        Text(
+                            stringResource(item.titleRes),
+                            Modifier.weight(1f).padding(start = 8.dp),
+                        )
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(android.R.string.ok)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(android.R.string.ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
     )
 }

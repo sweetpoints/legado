@@ -24,17 +24,29 @@ internal suspend fun deliverMainRssRequest(
         currentCoroutineContext().ensureActive()
         if (!ready()) return
         val navigation = request?.navigation
-        val reader = if (request?.action == MainRssAction.Open.name) when (navigation?.destination) {
-            MainRssDestination.ReaderLink -> RssReaderRequest(origin = navigation.sourceUrl,
-                title = navigation.sourceName, openUrl = navigation.value)
-            MainRssDestination.ReaderHtml -> RssReaderRequest(origin = navigation.sourceUrl,
-                title = navigation.sourceName, startHtml = navigation.value)
-            else -> null
-        } else null
+        val reader =
+            if (request?.action == MainRssAction.Open.name)
+                when (navigation?.destination) {
+                    MainRssDestination.ReaderLink ->
+                        RssReaderRequest(
+                            origin = navigation.sourceUrl,
+                            title = navigation.sourceName,
+                            openUrl = navigation.value,
+                        )
+                    MainRssDestination.ReaderHtml ->
+                        RssReaderRequest(
+                            origin = navigation.sourceUrl,
+                            title = navigation.sourceName,
+                            startHtml = navigation.value,
+                        )
+                    else -> null
+                }
+            else null
         if (reader != null) ownedTicket = launches.stage(reader)
         currentCoroutineContext().ensureActive()
         if (!ready() || !acknowledge()) return
-        if (request == null) missing() else {
+        if (request == null) missing()
+        else {
             native(request, ownedTicket)
             ownedTicket = null
         }

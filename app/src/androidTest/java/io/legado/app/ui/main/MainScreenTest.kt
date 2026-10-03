@@ -17,7 +17,8 @@ import org.junit.Test
 
 class MainScreenTest {
     @get:Rule val compose = createComposeRule()
-    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun selectingATabEmitsItsStableDestination() {
@@ -45,7 +46,9 @@ class MainScreenTest {
             state.value = state.value.withVisibleDestinations(false, false)
             badge.value = 0
         }
-        compose.onNodeWithContentDescription(context.getString(R.string.discovery)).assertDoesNotExist()
+        compose
+            .onNodeWithContentDescription(context.getString(R.string.discovery))
+            .assertDoesNotExist()
         compose.onNodeWithContentDescription(context.getString(R.string.rss)).assertDoesNotExist()
         compose.onNodeWithContentDescription(context.getString(R.string.my)).assertIsSelected()
         compose.onNodeWithText("3").assertDoesNotExist()

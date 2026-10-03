@@ -4,7 +4,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MySettingsVisibilityTest {
-    @Test fun defaultUpdateActionsLiveOnlyInMore() {
+    @Test
+    fun defaultUpdateActionsLiveOnlyInMore() {
         val main = visibleMySettings(defaultMyMoreItems, false).map { it.key }
         val more = visibleMySettings(defaultMyMoreItems, true).map { it.key }
         assertEquals(defaultMyMoreItems, more.toSet())
@@ -12,9 +13,16 @@ class MySettingsVisibilityTest {
         assertTrue("exit" in main && "myMore" in main)
     }
 
-    @Test fun mainAndMorePartitionCustomizableItemsForEverySelection() {
-        val choices = listOf(emptySet(), defaultMyMoreItems, setOf("webService", "mcpService", "autoTaskService"),
-            customizableMySettings.map { it.key }.toSet(), setOf("unknown", "exit", "myMore", "autoTaskManage"))
+    @Test
+    fun mainAndMorePartitionCustomizableItemsForEverySelection() {
+        val choices =
+            listOf(
+                emptySet(),
+                defaultMyMoreItems,
+                setOf("webService", "mcpService", "autoTaskService"),
+                customizableMySettings.map { it.key }.toSet(),
+                setOf("unknown", "exit", "myMore", "autoTaskManage"),
+            )
         choices.forEach { selected ->
             val main = visibleMySettings(selected, false).map { it.key }.toSet()
             val more = visibleMySettings(selected, true).map { it.key }.toSet()
@@ -24,8 +32,15 @@ class MySettingsVisibilityTest {
         }
     }
 
-    @Test fun unknownRestoredKeysDoNotCreateRowsOrLoseExistingRows() {
-        assertEquals(visibleMySettings(defaultMyMoreItems, false), visibleMySettings(defaultMyMoreItems + "removed-key", false))
-        assertEquals(visibleMySettings(defaultMyMoreItems, true), visibleMySettings(defaultMyMoreItems + "removed-key", true))
+    @Test
+    fun unknownRestoredKeysDoNotCreateRowsOrLoseExistingRows() {
+        assertEquals(
+            visibleMySettings(defaultMyMoreItems, false),
+            visibleMySettings(defaultMyMoreItems + "removed-key", false),
+        )
+        assertEquals(
+            visibleMySettings(defaultMyMoreItems, true),
+            visibleMySettings(defaultMyMoreItems + "removed-key", true),
+        )
     }
 }

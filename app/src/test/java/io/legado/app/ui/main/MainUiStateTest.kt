@@ -13,13 +13,17 @@ class MainUiStateTest {
         assertEquals(listOf(MainDestination.Bookshelf, MainDestination.My), hidden.destinations)
         assertEquals(MainDestination.My, hidden.selectedDestination)
         assertEquals(1, hidden.selectedIndex)
-        assertEquals(MainDestination.My, hidden.withVisibleDestinations(true, true).selectedDestination)
+        assertEquals(
+            MainDestination.My,
+            hidden.withVisibleDestinations(true, true).selectedDestination,
+        )
     }
 
     @Test
     fun disablingTheSelectedTabReturnsToTheBookshelf() {
         for (destination in listOf(MainDestination.Explore, MainDestination.Rss)) {
-            val state = MainUiState(selectedDestination = destination).withVisibleDestinations(false, false)
+            val state =
+                MainUiState(selectedDestination = destination).withVisibleDestinations(false, false)
             assertEquals(MainDestination.Bookshelf, state.selectedDestination)
             assertEquals(0, state.selectedIndex)
         }
@@ -30,8 +34,9 @@ class MainUiStateTest {
         for (showDiscovery in listOf(false, true)) {
             for (showRss in listOf(false, true)) {
                 for (selected in MainDestination.entries) {
-                    val state = MainUiState(selectedDestination = selected)
-                        .withVisibleDestinations(showDiscovery, showRss)
+                    val state =
+                        MainUiState(selectedDestination = selected)
+                            .withVisibleDestinations(showDiscovery, showRss)
                     assertTrue(state.selectedDestination in state.destinations)
                     assertEquals(state.selectedDestination, state.destinations[state.selectedIndex])
                 }

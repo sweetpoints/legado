@@ -35,8 +35,10 @@ internal fun AppCompatActivity.openMyItem(key: String) {
         "txtTocRuleManage" -> startActivity<TxtTocRuleActivity>()
         "bookmark" -> startActivity<AllBookmarkActivity>()
         "setting" -> startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.OTHER_CONFIG) }
-        "web_dav_setting" -> startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.BACKUP_CONFIG) }
-        "theme_setting" -> startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.THEME_CONFIG) }
+        "web_dav_setting" ->
+            startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.BACKUP_CONFIG) }
+        "theme_setting" ->
+            startActivity<ConfigActivity> { putExtra("configTag", ConfigTag.THEME_CONFIG) }
         "fileManage" -> startActivity<FileManageActivity>()
         "readRecord" -> startActivity<ReadRecordActivity>()
         "about" -> startActivity<AboutActivity>()
@@ -46,11 +48,15 @@ internal fun AppCompatActivity.openMyItem(key: String) {
 
 internal fun AppCompatActivity.showMyServiceActions(key: String) {
     when (key) {
-        PreferKey.webService -> if (WebService.isRun) {
-            selector(arrayListOf(getString(R.string.copy_url), getString(R.string.open_in_browser))) { _, index ->
-                if (index == 0) sendToClip(WebService.hostAddress) else openUrl(WebService.hostAddress)
+        PreferKey.webService ->
+            if (WebService.isRun) {
+                selector(
+                    arrayListOf(getString(R.string.copy_url), getString(R.string.open_in_browser))
+                ) { _, index ->
+                    if (index == 0) sendToClip(WebService.hostAddress)
+                    else openUrl(WebService.hostAddress)
+                }
             }
-        }
         PreferKey.mcpService -> if (McpService.isRun) sendToClip(McpService.hostAddress)
     }
 }

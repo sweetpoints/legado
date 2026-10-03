@@ -23,6 +23,8 @@ import io.legado.app.service.McpService
 import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.utils.defaultSharedPreferences
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -31,8 +33,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import java.util.UUID
 
 /** Exercises the real Compose destination, persisted settings and More intent forwarding. */
 @RunWith(AndroidJUnit4::class)
@@ -46,24 +46,42 @@ class MyPageCustomizationTest {
     private var scenario: ActivityScenario<MainActivity>? = null
     private var moreActivity: MyMoreActivity? = null
 
-    @Before fun setUp() {
-        prefs.edit().remove(PreferKey.myMoreItems)
-            .putBoolean(PreferKey.autoRefresh, false).putBoolean(PreferKey.autoCheckNewBackup, false)
-            .putBoolean("autoUpdateVariant", false).putString(PreferKey.defaultHomePage, "my").commit()
-        LocalConfig.edit().putBoolean("privacyPolicyOk", true)
-            .putLong("appVersionCode", appInfo.versionCode).putString("password", "").commit()
+    @Before
+    fun setUp() {
+        prefs
+            .edit()
+            .remove(PreferKey.myMoreItems)
+            .putBoolean(PreferKey.autoRefresh, false)
+            .putBoolean(PreferKey.autoCheckNewBackup, false)
+            .putBoolean("autoUpdateVariant", false)
+            .putString(PreferKey.defaultHomePage, "my")
+            .commit()
+        LocalConfig.edit()
+            .putBoolean("privacyPolicyOk", true)
+            .putLong("appVersionCode", appInfo.versionCode)
+            .putString("password", "")
+            .commit()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         setting("autoTaskManage")
     }
 
-    @After fun cleanUp() {
+    @After
+    fun cleanUp() {
         instrumentation.runOnMainSync { moreActivity?.finish() }
         scenario?.close()
-        prefs.edit().clear().apply { savedPrefs.forEach { (key, value) -> putValue(key, value) } }.commit()
-        LocalConfig.edit().clear().apply { savedLocal.forEach { (key, value) -> putValue(key, value) } }.commit()
+        prefs
+            .edit()
+            .clear()
+            .apply { savedPrefs.forEach { (key, value) -> putValue(key, value) } }
+            .commit()
+        LocalConfig.edit()
+            .clear()
+            .apply { savedLocal.forEach { (key, value) -> putValue(key, value) } }
+            .commit()
     }
 
-    @Test fun actualPickerMovesOnlySelectedItemsAndMoreKeepsExistingActions() {
+    @Test
+    fun actualPickerMovesOnlySelectedItemsAndMoreKeepsExistingActions() {
         val webRunning = WebService.isRun
         val mcpRunning = McpService.isRun
         val scheduled = prefs.getBoolean(PreferKey.autoTaskService, false)
@@ -71,18 +89,41 @@ class MyPageCustomizationTest {
         choose("autoTaskManage")
         compose.onNodeWithText(context.getString(android.R.string.cancel)).performClick()
         setting("autoTaskManage")
-        assertEquals(defaultMyMoreItems, prefs.getStringSet(PreferKey.myMoreItems, defaultMyMoreItems))
+        assertEquals(
+            defaultMyMoreItems,
+            prefs.getStringSet(PreferKey.myMoreItems, defaultMyMoreItems),
+        )
 
         openPicker()
-        for (key in listOf("autoTaskManage", PreferKey.autoTaskService, PreferKey.webService,
-            PreferKey.mcpService, "txtTocRuleManage", "replaceManage", "dictRuleManage", "check_update")) choose(key)
+        for (key in
+            listOf(
+                "autoTaskManage",
+                PreferKey.autoTaskService,
+                PreferKey.webService,
+                PreferKey.mcpService,
+                "txtTocRuleManage",
+                "replaceManage",
+                "dictRuleManage",
+                "check_update",
+            )) choose(key)
         screenshot("my-customization-picker")
         scenario!!.recreate()
-        compose.onNodeWithTag("my-customization-list").performScrollToNode(hasTestTag("my-option-autoTaskManage"))
+        compose
+            .onNodeWithTag("my-customization-list")
+            .performScrollToNode(hasTestTag("my-option-autoTaskManage"))
         compose.onNodeWithTag("my-option-autoTaskManage").assertIsOn()
         compose.onNodeWithText(context.getString(android.R.string.ok)).performClick()
-        val selected = setOf("autoTaskManage", PreferKey.autoTaskService, PreferKey.webService,
-            PreferKey.mcpService, "txtTocRuleManage", "replaceManage", "dictRuleManage", "check_beta_update")
+        val selected =
+            setOf(
+                "autoTaskManage",
+                PreferKey.autoTaskService,
+                PreferKey.webService,
+                PreferKey.mcpService,
+                "txtTocRuleManage",
+                "replaceManage",
+                "dictRuleManage",
+                "check_beta_update",
+            )
         assertEquals(selected, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
         compose.onNodeWithTag("my-setting-autoTaskManage").assertDoesNotExist()
         setting("check_update")
@@ -93,7 +134,8 @@ class MyPageCustomizationTest {
         val monitor = instrumentation.addMonitor(MyMoreActivity::class.java.name, null, false)
         try {
             setting("myMore").performClick()
-            moreActivity = instrumentation.waitForMonitorWithTimeout(monitor, 5000) as? MyMoreActivity
+            moreActivity =
+                instrumentation.waitForMonitorWithTimeout(monitor, 5000) as? MyMoreActivity
             assertNotNull(moreActivity)
             selected.forEach { setting(it) }
             compose.onNodeWithTag("my-more-setting-check_update").assertDoesNotExist()
@@ -104,43 +146,59 @@ class MyPageCustomizationTest {
                 moreActivity!!.finish()
             }
             moreActivity = null
-        } finally { instrumentation.removeMonitor(monitor) }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
         setting("check_update")
         scenario!!.recreate()
         setting("check_update")
         compose.onNodeWithTag("my-setting-autoTaskManage").assertDoesNotExist()
     }
 
-    @Test fun realConfigRestoreAndLegacyBackupRestoreTheVisiblePage() {
-        val directory = File(context.cacheDir, "my-page-backup-${UUID.randomUUID()}").apply { mkdirs() }
+    @Test
+    fun realConfigRestoreAndLegacyBackupRestoreTheVisiblePage() {
+        val directory =
+            File(context.cacheDir, "my-page-backup-${UUID.randomUUID()}").apply { mkdirs() }
         val selected = setOf("autoTaskManage", PreferKey.mcpService)
         try {
-            writePreferenceSnapshot(context, directory.absolutePath, "config") { putStringSet(PreferKey.myMoreItems, selected) }
+            writePreferenceSnapshot(context, directory.absolutePath, "config") {
+                putStringSet(PreferKey.myMoreItems, selected)
+            }
             runBlocking(Dispatchers.IO) { Restore.restoreLocked(directory.absolutePath) }
             setting("check_beta_update")
             compose.onNodeWithTag("my-setting-autoTaskManage").assertDoesNotExist()
             assertEquals(selected, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
-            writePreferenceSnapshot(context, directory.absolutePath, "config") { putBoolean("enableReadRecord", true) }
+            writePreferenceSnapshot(context, directory.absolutePath, "config") {
+                putBoolean("enableReadRecord", true)
+            }
             runBlocking(Dispatchers.IO) { Restore.restoreLocked(directory.absolutePath) }
             setting("autoTaskManage")
             compose.onNodeWithTag("my-setting-check_beta_update").assertDoesNotExist()
             scenario!!.recreate()
             setting("autoTaskManage")
-        } finally { directory.deleteRecursively() }
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 
     private fun setting(key: String): androidx.compose.ui.test.SemanticsNodeInteraction {
         val prefix = if (moreActivity != null) "my-more" else "my"
-        compose.onNodeWithTag("$prefix-settings-list").performScrollToNode(hasTestTag("$prefix-setting-$key"))
+        compose
+            .onNodeWithTag("$prefix-settings-list")
+            .performScrollToNode(hasTestTag("$prefix-setting-$key"))
         return compose.onNodeWithTag("$prefix-setting-$key").assertExists()
     }
 
     private fun openPicker() {
-        compose.onNodeWithContentDescription(context.getString(R.string.customize_my)).performClick()
+        compose
+            .onNodeWithContentDescription(context.getString(R.string.customize_my))
+            .performClick()
     }
 
     private fun choose(key: String) {
-        compose.onNodeWithTag("my-customization-list").performScrollToNode(hasTestTag("my-option-$key"))
+        compose
+            .onNodeWithTag("my-customization-list")
+            .performScrollToNode(hasTestTag("my-option-$key"))
         compose.onNodeWithTag("my-option-$key").performClick()
     }
 
@@ -148,9 +206,12 @@ class MyPageCustomizationTest {
         compose.waitForIdle()
         val image = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream()
-                .use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally { image.recycle() }
+            File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
+                assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally {
+            image.recycle()
+        }
     }
 
     private fun SharedPreferences.Editor.putValue(key: String, value: Any?) {
@@ -160,7 +221,9 @@ class MyPageCustomizationTest {
             is Int -> putInt(key, value)
             is Long -> putLong(key, value)
             is Float -> putFloat(key, value)
-            is Set<*> -> { @Suppress("UNCHECKED_CAST") putStringSet(key, value as Set<String>) }
+            is Set<*> -> {
+                @Suppress("UNCHECKED_CAST") putStringSet(key, value as Set<String>)
+            }
         }
     }
 }
