@@ -26,39 +26,115 @@ import io.legado.app.utils.startActivityForBook
 /** Fragment API retained for the group pager; all book content and scrolling are Compose. */
 class BooksFragment() : BaseFragment(0) {
     constructor(position: Int, group: BookGroup) : this() {
-        arguments = Bundle().apply {
-            putInt("position", position); putLong("groupId", group.groupId); putInt("bookSort", group.getRealBookSort())
-            putBoolean("enableRefresh", group.enableRefresh); putBoolean("onlyUpdateRead", group.onlyUpdateRead)
-        }
+        arguments =
+            Bundle().apply {
+                putInt("position", position)
+                putLong("groupId", group.groupId)
+                putInt("bookSort", group.getRealBookSort())
+                putBoolean("enableRefresh", group.enableRefresh)
+                putBoolean("onlyUpdateRead", group.onlyUpdateRead)
+            }
     }
+
     private val activityViewModel by activityViewModels<MainViewModel>()
-    private val viewModel by viewModels<BookshelfPageViewModel> {
-        viewModelFactory { initializer { BookshelfPageViewModel(RoomBookshelfPageRepository(requireContext()), createSavedStateHandle()) } }
-    }
-    val position: Int get() = viewModel.state.value.parameters.position
-    val groupId: Long get() = viewModel.state.value.parameters.groupId
-    val bookSort: Int get() = viewModel.state.value.parameters.sort
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+    private val viewModel by
+        viewModels<BookshelfPageViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookshelfPageViewModel(
+                        RoomBookshelfPageRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    val position: Int
+        get() = viewModel.state.value.parameters.position
+
+    val groupId: Long
+        get() = viewModel.state.value.parameters.groupId
+
+    val bookSort: Int
+        get() = viewModel.state.value.parameters.sort
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme {
-                BookshelfPageRoute(viewModel, {
-                    if (viewModel.state.value.canRefresh) activityViewModel.upToc(getBooks(), viewModel.state.value.parameters.onlyUpdateRead)
-                }, { key -> viewModel.getBook(key)?.let { startActivityForBook(it) } }, { key ->
-                    viewModel.getBook(key)?.let { book -> startActivity<BookInfoActivity> { putExtra("name", book.name); putExtra("author", book.author) } }
-                }, { keys -> viewModel.replaceUpdating(keys.filter { activityViewModel.isUpdate(it) }.toSet()) })
-            } }
+            setContent {
+                LegadoComposeTheme {
+                    BookshelfPageRoute(
+                        viewModel,
+                        {
+                            if (viewModel.state.value.canRefresh)
+                                activityViewModel.upToc(
+                                    getBooks(),
+                                    viewModel.state.value.parameters.onlyUpdateRead,
+                                )
+                        },
+                        { key -> viewModel.getBook(key)?.let { startActivityForBook(it) } },
+                        { key ->
+                            viewModel.getBook(key)?.let { book ->
+                                startActivity<BookInfoActivity> {
+                                    putExtra("name", book.name)
+                                    putExtra("author", book.author)
+                                }
+                            }
+                        },
+                        { keys ->
+                            viewModel.replaceUpdating(
+                                keys.filter { activityViewModel.isUpdate(it) }.toSet()
+                            )
+                        },
+                    )
+                }
+            }
         }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = Unit
-    fun upBookSort(sort: Int) { arguments?.putInt("bookSort", sort); viewModel.upSort(sort) }
-    fun setEnableRefresh(enable: Boolean) { arguments?.putBoolean("enableRefresh", enable); viewModel.setEnableRefresh(enable) }
-    fun setOnlyUpdateRead(enable: Boolean) { arguments?.putBoolean("onlyUpdateRead", enable); viewModel.setOnlyUpdateRead(enable) }
-    fun getBooks(): List<Book> = viewModel.getBooks()
-    fun getBooksCount(): Int = viewModel.state.value.entries.size
-    fun gotoTop() = viewModel.gotoTop()
-    override fun observeLiveBus() {
-        observeEvent<String>(EventBus.UP_BOOKSHELF) { key -> viewModel.setUpdating(key, activityViewModel.isUpdate(key)); viewModel.refreshTimeLabels() }
-        observeEvent<String>(EventBus.BOOKSHELF_REFRESH) { viewModel.replaceUpdating(getBooks().filter { activityViewModel.isUpdate(it.bookUrl) }.map { it.bookUrl }.toSet()); viewModel.refreshTimeLabels() }
+
+    fun upBookSort(sort: Int) {
+        arguments?.putInt("bookSort", sort)
+        viewModel.upSort(sort)
     }
-    override fun onDestroyView() { viewModel.stop(); super.onDestroyView() }
+
+    fun setEnableRefresh(enable: Boolean) {
+        arguments?.putBoolean("enableRefresh", enable)
+        viewModel.setEnableRefresh(enable)
+    }
+
+    fun setOnlyUpdateRead(enable: Boolean) {
+        arguments?.putBoolean("onlyUpdateRead", enable)
+        viewModel.setOnlyUpdateRead(enable)
+    }
+
+    fun getBooks(): List<Book> = viewModel.getBooks()
+
+    fun getBooksCount(): Int = viewModel.state.value.entries.size
+
+    fun gotoTop() = viewModel.gotoTop()
+
+    override fun observeLiveBus() {
+        observeEvent<String>(EventBus.UP_BOOKSHELF) { key ->
+            viewModel.setUpdating(key, activityViewModel.isUpdate(key))
+            viewModel.refreshTimeLabels()
+        }
+        observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
+            viewModel.replaceUpdating(
+                getBooks()
+                    .filter { activityViewModel.isUpdate(it.bookUrl) }
+                    .map { it.bookUrl }
+                    .toSet()
+            )
+            viewModel.refreshTimeLabels()
+        }
+    }
+
+    override fun onDestroyView() {
+        viewModel.stop()
+        super.onDestroyView()
+    }
 }

@@ -21,10 +21,18 @@ import io.legado.app.ui.theme.LocalLegadoColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun BookshelfHomeScreen(state: BookshelfHomeState, onSelect: (Long) -> Unit,
-    onReselect: (Long) -> Unit, onGroupInfo: (Long) -> Unit, onMenu: (Int) -> Unit,
-    onContinue: () -> Unit, onRecentInfo: () -> Unit, onRetry: () -> Unit,
-    page: @Composable (BookshelfHomeGroup, Int, Boolean, Modifier) -> Unit) {
+@Composable
+internal fun BookshelfHomeScreen(
+    state: BookshelfHomeState,
+    onSelect: (Long) -> Unit,
+    onReselect: (Long) -> Unit,
+    onGroupInfo: (Long) -> Unit,
+    onMenu: (Int) -> Unit,
+    onContinue: () -> Unit,
+    onRecentInfo: () -> Unit,
+    onRetry: () -> Unit,
+    page: @Composable (BookshelfHomeGroup, Int, Boolean, Modifier) -> Unit,
+) {
     val pages = rememberSaveableStateHolder()
     val colors = LocalLegadoColors.current
     Surface(color = MaterialTheme.colorScheme.surface) {
@@ -33,38 +41,80 @@ import kotlinx.coroutines.flow.distinctUntilChanged
             BookshelfHeader(state.header, onContinue, onRecentInfo)
             if (state.groups.isEmpty()) {
                 if (state.loading) CircularProgressIndicator(Modifier.padding(24.dp))
-                state.error?.let { Text(it); TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) } }
+                state.error?.let {
+                    Text(it)
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+                }
                 return@Column
             }
             val pager = rememberPagerState(initialPage = state.selectedIndex) { state.groups.size }
             val select by rememberUpdatedState(onSelect)
             val groups by rememberUpdatedState(state.groups)
             LaunchedEffect(state.selectedId, state.groups.map { it.id }) {
-                if (pager.currentPage != state.selectedIndex) pager.scrollToPage(state.selectedIndex)
+                if (pager.currentPage != state.selectedIndex)
+                    pager.scrollToPage(state.selectedIndex)
             }
             LaunchedEffect(pager) {
-                snapshotFlow { pager.settledPage }.distinctUntilChanged().collect { index ->
-                    groups.getOrNull(index)?.let { select(it.id) }
-                }
+                snapshotFlow { pager.settledPage }
+                    .distinctUntilChanged()
+                    .collect { index ->
+                        groups.getOrNull(index)?.let { select(it.id) }
+                    }
             }
-            ScrollableTabRow(selectedTabIndex = state.selectedIndex, edgePadding = 0.dp,
-                containerColor = colors.primary, contentColor = colors.onPrimary, indicator = { positions ->
-                    TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[state.selectedIndex]), color = colors.accent)
-                }) {
+            ScrollableTabRow(
+                selectedTabIndex = state.selectedIndex,
+                edgePadding = 0.dp,
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary,
+                indicator = { positions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(positions[state.selectedIndex]),
+                        color = colors.accent,
+                    )
+                },
+            ) {
                 state.groups.forEach { group ->
-                    // One click target supports both reselect and group editing with accessibility actions.
-                    Box(Modifier.heightIn(min = 48.dp).testTag("shelf-tab-${group.id}")
-                        .semantics { selected = state.selectedId == group.id; role = Role.Tab }
-                        .combinedClickable(onClick = { if (state.selectedId == group.id) onReselect(group.id) else onSelect(group.id) },
-                            onLongClick = { onGroupInfo(group.id) }).padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text(group.name, color = colors.onPrimary, fontWeight = if (state.selectedId == group.id) FontWeight.Bold else FontWeight.Normal)
+                    // One click target supports both reselect and group editing with accessibility
+                    // actions.
+                    Box(
+                        Modifier.heightIn(min = 48.dp)
+                            .testTag("shelf-tab-${group.id}")
+                            .semantics {
+                                selected = state.selectedId == group.id
+                                role = Role.Tab
+                            }
+                            .combinedClickable(
+                                onClick = {
+                                    if (state.selectedId == group.id) onReselect(group.id)
+                                    else onSelect(group.id)
+                                },
+                                onLongClick = { onGroupInfo(group.id) },
+                            )
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            group.name,
+                            color = colors.onPrimary,
+                            fontWeight =
+                                if (state.selectedId == group.id) FontWeight.Bold
+                                else FontWeight.Normal,
+                        )
                     }
                 }
             }
-            HorizontalPager(pager, Modifier.weight(1f).testTag("shelf-pager"), beyondViewportPageCount = 1,
-                key = { state.groups[it].id }) { index ->
+            HorizontalPager(
+                pager,
+                Modifier.weight(1f).testTag("shelf-pager"),
+                beyondViewportPageCount = 1,
+                key = { state.groups[it].id },
+            ) { index ->
                 pages.SaveableStateProvider(state.groups[index].id) {
-                    page(state.groups[index], index, index == pager.currentPage, Modifier.fillMaxSize())
+                    page(
+                        state.groups[index],
+                        index,
+                        index == pager.currentPage,
+                        Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

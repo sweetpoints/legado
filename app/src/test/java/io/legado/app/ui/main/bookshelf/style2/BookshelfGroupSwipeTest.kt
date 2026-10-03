@@ -10,11 +10,12 @@ import org.junit.Test
 
 class BookshelfGroupSwipeTest {
 
-    private val groups = listOf(
-        BookGroup(groupId = 1, groupName = "First"),
-        BookGroup(groupId = 2, groupName = "Second"),
-        BookGroup(groupId = 4, groupName = "Third"),
-    )
+    private val groups =
+        listOf(
+            BookGroup(groupId = 1, groupName = "First"),
+            BookGroup(groupId = 2, groupName = "Second"),
+            BookGroup(groupId = 4, groupName = "Third"),
+        )
 
     @Test
     fun `swiping left selects the next visible group`() {
@@ -41,21 +42,32 @@ class BookshelfGroupSwipeTest {
         assertEquals(0, horizontalSwipeDirection(100, 100, 70, 140, 20))
     }
 
-    @Test fun gestureCommitsOnlyAfterReleaseAndCancellationOrReversalNeverChangesGroup() {
+    @Test
+    fun gestureCommitsOnlyAfterReleaseAndCancellationOrReversalNeverChangesGroup() {
         val gesture = BookshelfFolderGesture(50f, previous = true, next = true)
-        assertFalse(gesture.move(-20f, 0f)); assertTrue(gesture.move(-70f, 5f))
+        assertFalse(gesture.move(-20f, 0f))
+        assertTrue(gesture.move(-70f, 5f))
         assertNull(gesture.finish(-70f, 5f, cancelled = true))
-        assertTrue(gesture.move(-70f, 5f)); assertNull(gesture.finish(80f, 5f, cancelled = false))
-        assertTrue(gesture.move(-70f, 5f)); assertEquals(1, gesture.finish(-100f, 5f, cancelled = false))
+        assertTrue(gesture.move(-70f, 5f))
+        assertNull(gesture.finish(80f, 5f, cancelled = false))
+        assertTrue(gesture.move(-70f, 5f))
+        assertEquals(1, gesture.finish(-100f, 5f, cancelled = false))
         assertNull(gesture.finish(-100f, 5f, cancelled = false))
     }
-    @Test fun verticalMotionRootAndGroupEdgesStayUncaptured() {
+
+    @Test
+    fun verticalMotionRootAndGroupEdgesStayUncaptured() {
         val root = BookshelfFolderGesture(50f, false, false)
-        assertFalse(root.move(-100f, 0f)); assertNull(root.finish(-100f, 0f, false))
+        assertFalse(root.move(-100f, 0f))
+        assertNull(root.finish(-100f, 0f, false))
         val first = BookshelfFolderGesture(50f, false, true)
-        assertFalse(first.move(100f, 0f)); assertFalse(first.move(-70f, 90f)); assertTrue(first.move(-100f, 0f))
+        assertFalse(first.move(100f, 0f))
+        assertFalse(first.move(-70f, 90f))
+        assertTrue(first.move(-100f, 0f))
         assertEquals(1, first.finish(-100f, 0f, false))
         val last = BookshelfFolderGesture(50f, true, false)
-        assertFalse(last.move(-100f, 0f)); assertTrue(last.move(100f, 0f)); assertEquals(-1, last.finish(100f, 0f, false))
+        assertFalse(last.move(-100f, 0f))
+        assertTrue(last.move(100f, 0f))
+        assertEquals(-1, last.finish(100f, 0f, false))
     }
 }

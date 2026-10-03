@@ -4,12 +4,12 @@ import io.legado.app.data.entities.Book
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.BookshelfReadProgressMode
 import io.legado.app.ui.main.bookshelf.components.toBookshelfCardModel
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BookshelfReadProgressTest {
 
@@ -38,7 +38,8 @@ class BookshelfReadProgressTest {
         )
     }
 
-    @Test fun `bookshelf progress modes preserve legacy settings and thickness`() {
+    @Test
+    fun `bookshelf progress modes preserve legacy settings and thickness`() {
         assertEquals(0, BookshelfReadProgressMode.resolve(null, false))
         assertEquals(1, BookshelfReadProgressMode.resolve(null, true))
         assertEquals(2, BookshelfReadProgressMode.resolve("2", false))
@@ -46,20 +47,29 @@ class BookshelfReadProgressTest {
         assertEquals(2, BookshelfReadProgressMode.thicknessDp(1))
         assertEquals(4, BookshelfReadProgressMode.thicknessDp(2))
     }
-    @Test fun `compose progress projection honors each mode without changing book identity`() {
+
+    @Test
+    fun `compose progress projection honors each mode without changing book identity`() {
         val book = Book(bookUrl = "reader", totalChapterNum = 11, durChapterIndex = 5)
         val hidden = book.toBookshelfCardModel(false, 0, false)
         val standard = book.toBookshelfCardModel(false, 1, false)
         val enhanced = book.toBookshelfCardModel(false, 2, false)
-        assertNull(hidden.readProgress); assertNull(hidden.progressPercent)
-        assertEquals("50%", standard.progressPercent); assertEquals(2, standard.progressThicknessDp)
-        assertEquals("50%", enhanced.progressPercent); assertEquals(4, enhanced.progressThicknessDp)
-        assertEquals(hidden.key, standard.key); assertEquals(standard.key, enhanced.key)
+        assertNull(hidden.readProgress)
+        assertNull(hidden.progressPercent)
+        assertEquals("50%", standard.progressPercent)
+        assertEquals(2, standard.progressThicknessDp)
+        assertEquals("50%", enhanced.progressPercent)
+        assertEquals(4, enhanced.progressThicknessDp)
+        assertEquals(hidden.key, standard.key)
+        assertEquals(standard.key, enhanced.key)
         assertNull(Book().toBookshelfCardModel(false, 2, false).readProgress)
     }
-    @Test fun `compose header defaults hide both optional sections`() {
+
+    @Test
+    fun `compose header defaults hide both optional sections`() {
         val header = io.legado.app.ui.main.bookshelf.components.BookshelfHeaderModel()
-        assertNull(header.stats); assertNull(header.recent)
+        assertNull(header.stats)
+        assertNull(header.recent)
     }
 
     @Test
@@ -89,9 +99,7 @@ class BookshelfReadProgressTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
-
 }
