@@ -84,6 +84,11 @@ class RemoteBookWebDav(
     }
 
     suspend fun upload(book: Book, overwrite: Boolean) {
+        finishRemoteBookUpload(book, overwrite, ::uploadWithoutPersist) { it.update() }
+    }
+
+    /** Performs the same transfer and origin assignment; the caller owns its fresh Room delta. */
+    suspend fun uploadWithoutPersist(book: Book, overwrite: Boolean) {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
         val fileName = remoteBookUploadFileName(book)
         val localBookUri = if (book.isArchive) {
@@ -101,7 +106,6 @@ class RemoteBookWebDav(
         book.origin = BookType.webDavTag + CustomUrl(putUrl)
             .putAttribute("serverID", serverID)
             .toString()
-        book.update()
     }
 
     suspend fun delete(book: Book): Boolean {
@@ -116,4 +120,12 @@ class RemoteBookWebDav(
         WebDav(remoteBookUrl, authorization).delete()
     }
 
+}
+
+
+/** Keep the existing upload API's persistence after a successful transfer, never after a failed one. */
+internal suspend fun finishRemoteBookUpload(book: Book, overwrite: Boolean,
+    transfer: suspend (Book, Boolean) -> Unit, persist: (Book) -> Unit) {
+    transfer(book, overwrite)
+    persist(book)
 }
