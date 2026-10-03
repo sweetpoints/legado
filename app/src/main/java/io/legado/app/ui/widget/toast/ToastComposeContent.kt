@@ -21,7 +21,6 @@ import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSp
 import io.legado.app.utils.ToastMessage
 
 @Composable
@@ -37,8 +36,14 @@ internal fun ToastComposeContent(
                 InlineTextContent(
                     placeholder =
                         Placeholder(
-                            width = with(density) { image.widthPx.toSp() },
-                            height = with(density) { image.heightPx.toSp() },
+                            width =
+                                with(density) {
+                                    (image.widthPx.toFloat().toDp().value / fontScale).sp
+                                },
+                            height =
+                                with(density) {
+                                    (image.heightPx.toFloat().toDp().value / fontScale).sp
+                                },
                             placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
                         )
                 ) {
