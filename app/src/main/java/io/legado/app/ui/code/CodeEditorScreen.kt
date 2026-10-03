@@ -178,7 +178,10 @@ internal fun CodeEditorScreen(
                         Text(stringResource(R.string.action_save))
                     }
                 }
-                if (session?.writable == true && session.showDebugSource) {
+                if (
+                    session != null &&
+                        shouldShowDebugSourceAction(session.writable, session.showDebugSource)
+                ) {
                     TextButton(
                         onClick = { onAction(CodeEditorAction.DEBUG) },
                         enabled = enabled,
@@ -199,7 +202,13 @@ internal fun CodeEditorScreen(
                             menuVisible = false
                             onAction(action)
                         }
-                        if (session?.writable == true && session.showLoginSource) {
+                        if (
+                            session != null &&
+                                shouldShowLoginSourceAction(
+                                    session.writable,
+                                    session.showLoginSource,
+                                )
+                        ) {
                             CodeEditorMenuItem(R.string.login, enabled) {
                                 action(CodeEditorAction.LOGIN)
                             }
@@ -214,7 +223,12 @@ internal fun CodeEditorScreen(
                             CodeEditorMenuItem(R.string.format_code, enabled) {
                                 action(CodeEditorAction.FORMAT)
                             }
-                            if (session?.checkJavaScriptSyntax == true) {
+                            if (
+                                shouldShowJavaScriptSyntaxAction(
+                                    safe,
+                                    session?.checkJavaScriptSyntax == true,
+                                )
+                            ) {
                                 CodeEditorMenuItem(R.string.check_javascript_syntax, enabled) {
                                     action(CodeEditorAction.SYNTAX)
                                 }

@@ -1,7 +1,6 @@
 package io.legado.app.ui.code
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
