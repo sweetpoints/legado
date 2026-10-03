@@ -67,6 +67,64 @@ class HandleFileChoicesViewModelTest {
             }
         }
 
+    @Test
+    fun acceptedFinishedResultRestoresAndDeferredClaimCanRetryWithoutTransport() = test {
+        val disk =
+            Disk().apply {
+                input = HandleFileInput(value = "Caller value")
+                value =
+                    HandleFileCheckpoint(4, "Result", result = "https://accepted", finished = true)
+            }
+        val repository = Files()
+        val restored = model(repo = repository, disk = disk)
+        restored.load()
+        runCurrent()
+        assertTrue(restored.resultDelivered())
+        assertFalse(restored.resultDelivered())
+        restored.deferResultDelivery()
+        assertTrue(restored.resultDelivered())
+        assertEquals("https://accepted", restored.state.value.result)
+        assertEquals(0, repository.uploads)
+        assertEquals(0, repository.saves)
+    }
+
+    @Test
+    fun failedNativeLaunchRetryOwnsNewNonceAndRejectsOldCallback() = test {
+        val disk = Disk()
+        val model = model(disk = disk)
+        model.load(HandleFileSeed(HandleFileInput(mode = 1)))
+        runCurrent()
+        model.choose(1)
+        runCurrent()
+        val originalNonce = model.state.value.pending!!.nonce
+        assertTrue(model.nativeDelivered(originalNonce))
+        model.nativeFailed(originalNonce, IllegalStateException("Picker unavailable"))
+        model.retry()
+        runCurrent()
+        val retryNonce = model.state.value.pending!!.nonce
+        assertNotEquals(originalNonce, retryNonce)
+        assertFalse(model.state.value.pending!!.delivered)
+        model.returned(originalNonce, "content://stale")
+        runCurrent()
+        assertNull(model.state.value.result)
+        model.returned(retryNonce, "content://current")
+        runCurrent()
+        assertEquals("content://current", model.state.value.result)
+    }
+
+    @Test
+    fun initialStageFailureStillAllowsCallerCancellation() = test {
+        val disk = Disk().apply { failStage = true }
+        val model = model(disk = disk)
+        model.load(HandleFileSeed(HandleFileInput()))
+        runCurrent()
+        assertFalse(model.state.value.loaded)
+        assertNotNull(model.state.value.error)
+        model.close()
+        assertTrue(model.state.value.finished)
+        assertNull(disk.value)
+    }
+
     private class Files : HandleFileChoicesRepository {
 
         var uploads = 0

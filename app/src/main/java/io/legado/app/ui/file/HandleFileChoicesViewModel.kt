@@ -58,6 +58,7 @@ class HandleFileChoicesViewModel(
     private var earlyResult: Pair<String, String?>? = null
     private var currentGeneration = 0L
     private var stopped = false
+    private var resultClaimed = false
 
     fun load(value: HandleFileSeed? = null) {
         if (stopped || state.value.finished || state.value.loaded || state.value.busy) return
@@ -256,20 +257,67 @@ class HandleFileChoicesViewModel(
                 operation {
                     accept(checkNotNull(checkpoint.result))
                 }
+            state.value.phase == "Native" && state.value.error != null ->
+                operation {
+                    val pending = checkNotNull(checkpoint.pending)
+                    persist(
+                        checkpoint.copy(
+                            pending =
+                                pending.copy(
+                                    nonce = UUID.randomUUID().toString(),
+                                    delivered = false,
+                                )
+                        )
+                    )
+                }
             else -> mutableState.value = state.value.copy(issue = null, error = null)
         }
     }
 
     fun close() {
-        if (ready()) operation { finish() }
+        if (stopped || state.value.busy || state.value.finished) return
+        if (!state.value.loaded) {
+            // Failed initial staging may leave no writable checkpoint. The caller can still cancel.
+            mutableState.value = state.value.copy(finished = true)
+        } else {
+            operation { finish() }
+        }
     }
 
-    /** Host acknowledges before setResult/finish, preventing a recreated host from replaying it. */
+    /** The durable receipt survives cancellation before Main can set the caller's result. */
     suspend fun resultDelivered(): Boolean {
-        if (!ready() || state.value.phase != "Result" || state.value.result == null) return false
-        draftWriteJob?.join()
-        finish()
-        return true
+        val current = state.value
+        if (
+            stopped ||
+                resultClaimed ||
+                !current.loaded ||
+                current.busy ||
+                current.phase != "Result" ||
+                current.result == null
+        )
+            return false
+        resultClaimed = true
+        try {
+            draftWriteJob?.join()
+            if (!current.finished) finish()
+            return true
+        } catch (error: Throwable) {
+            resultClaimed = false
+            throw error
+        }
+    }
+
+    fun resultDeliveryFailed(error: Throwable) {
+        if (state.value.phase == "Result") failure(error)
+    }
+
+    fun nativeFailed(nonce: String, error: Throwable) {
+        if (state.value.phase == "Native" && state.value.pending?.nonce == nonce) failure(error)
+    }
+
+    fun deferResultDelivery() {
+        // Lifecycle pause must not turn a durable accepted result into caller cancellation.
+        resultClaimed = false
     }
 
     private suspend fun accept(uri: String) {
