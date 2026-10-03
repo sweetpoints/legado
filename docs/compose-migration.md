@@ -1589,3 +1589,12 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
   removes this eliminated RecyclerView consumer; all unrelated branches are unchanged.
 - Formatter/check and diff checks passed. Full JVM and Android test compilation remain pending
   the coordinated clean integration rebase/build slot. Android scenarios have not run on a device.
+
+### Retire the last shared search/explore row XML
+
+- After the formal Search Compose integration, item_search.xml has no production consumers.
+  Removed it and migrated its four metadata/RTL/indicator/cover geometry assertions to actual
+  BookSearchResultRow Compose tests. The label wrapping XML branch is now a fifth geometry case;
+  the remaining LabelsBar flexbox business assertions stay intact.
+- Added the explicit Flow collection import required by Explore's Route. Formatter/check and
+  diff checks passed; the complete candidate is entering the coordinated final build slot.
