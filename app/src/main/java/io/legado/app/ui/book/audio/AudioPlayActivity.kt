@@ -5,6 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.BookType
@@ -50,7 +53,20 @@ class AudioPlayActivity :
     SleepTimerDialog.CallBack,
     ChapterDownloadDialog.AudioHost {
 
-    private val viewModel by viewModels<AudioPlayViewModel>()
+    private val viewModel by
+        viewModels<AudioPlayViewModel> {
+            viewModelFactory {
+                initializer {
+                    val saved =
+                        createSavedStateHandle().apply {
+                            keys()
+                                .filterNot { it == AudioPlayViewModel.SESSION_KEY }
+                                .forEach { remove<Any?>(it) }
+                        }
+                    AudioPlayViewModel(application, saved)
+                }
+            }
+        }
 
     private val tocActivityResult =
         registerForActivityResult(TocActivityResult()) {
@@ -183,9 +199,10 @@ class AudioPlayActivity :
             is AudioCacheAction.Download -> {
                 AudioCacheService.start(this, action.bookUrl, action.start, action.endInclusive)
                 toastOnUi(R.string.audio_cache_start_range)
+                viewModel.completeCacheNative(session)
             }
-            is AudioCacheAction.Clear -> viewModel.clearCache(action)
-            null -> Unit
+            is AudioCacheAction.Clear -> viewModel.clearCache(action, session)
+            null -> viewModel.completeCacheNative(session)
         }
     }
 
@@ -236,7 +253,10 @@ class AudioPlayActivity :
             navigate = ::navigateToBook,
             back = ::finish,
             menu = ::menuAction,
-            shelfResult = { setResult(RESULT_OK) },
+            shelfResult = {
+                setResult(RESULT_OK)
+                viewModel.completeShelf()
+            },
             addShelf = viewModel::addToShelf,
             discardShelf = ::discardBook,
             action = ::playbackAction,
@@ -249,6 +269,7 @@ class AudioPlayActivity :
     private fun navigateToBook(key: String) {
         viewModel.claimNavigation(key)?.let { book ->
             startActivityForBook(book)
+            viewModel.completeNavigation(key)
             finish()
         }
     }

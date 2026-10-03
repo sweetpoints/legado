@@ -1,0 +1,4 @@
+<resources>
+    <string name="audio_restore_action_title">未完成的音频操作</string>
+    <string name="audio_restore_action_message">之前的操作可能已经接受。恢复后不会自动执行；需要继续时请手动发起新的重试。</string>
+</resources>

@@ -53,6 +53,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.R
 import io.legado.app.utils.toDurationTime
+import kotlinx.coroutines.ensureActive
+
+internal enum class AudioRecovery {
+    Entry,
+    Cache,
+    Navigation,
+    Close,
+    Shelf,
+}
 
 internal data class AudioLyric(val time: Int, val text: String)
 
@@ -63,6 +72,8 @@ internal data class AudioPlayUiState(
     val coverOrigin: String? = null,
     val coverImage: Bitmap? = null,
     val backdropImage: Bitmap? = null,
+    val recovery: AudioRecovery? = null,
+    val recoveryError: String? = null,
     val bookNavigation: String? = null,
     val folderRequest: String? = null,
     val cacheReady: String? = null,
@@ -155,30 +166,61 @@ internal fun AudioPlayRoute(
         owner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
             model.state.collect { current ->
                 current.bookNavigation?.let { key ->
-                    model.update { copy(bookNavigation = null) }
-                    latestNavigate(key)
+                    deliverAudioReceipt(
+                        model,
+                        AudioRecovery.Navigation,
+                        { model.claimNavigationReceipt(key) },
+                        { latestNavigate(key) },
+                    )
                 }
-                current.folderRequest?.let {
-                    model.update { copy(folderRequest = null) }
-                    latestFolder()
+                current.folderRequest?.let { key ->
+                    deliverAudioReceipt(
+                        model,
+                        AudioRecovery.Cache,
+                        { model.claimFolder(key) },
+                        { latestFolder() },
+                    )
                 }
-                current.cacheReady?.let { session ->
-                    model.update { copy(cacheReady = null, selectedCacheFolder = null) }
-                    latestCache(session, current.selectedCacheFolder)
+                current.cacheReady?.let { key ->
+                    deliverAudioReceipt(
+                        model,
+                        AudioRecovery.Cache,
+                        { model.claimCache(key) },
+                        { latestCache(key, current.selectedCacheFolder) },
+                    )
                 }
-                if (current.shelfAdded) {
-                    model.update { copy(shelfAdded = false) }
-                    latestShelfResult()
-                }
-                if (current.closeRequested) {
-                    // Claim before delivering native finish so rotation cannot replay it.
-                    model.update { copy(closeRequested = false) }
-                    latestClose()
-                }
+                if (current.shelfAdded)
+                    deliverAudioReceipt(
+                        model,
+                        AudioRecovery.Shelf,
+                        model::claimShelf,
+                        { latestShelfResult() },
+                    )
+                if (current.closeRequested)
+                    deliverAudioReceipt(
+                        model,
+                        AudioRecovery.Close,
+                        model::claimClose,
+                        { latestClose() },
+                    )
             }
         }
     }
     AudioPlayScreen(state, back, menu, action, seek, speed, lyricSeek)
+    if (state.recovery != null)
+        AlertDialog(
+            onDismissRequest = model::dismissRecovery,
+            title = { Text(stringResource(R.string.audio_restore_action_title)) },
+            text = {
+                Text(state.recoveryError ?: stringResource(R.string.audio_restore_action_message))
+            },
+            confirmButton = {
+                TextButton(model::retryRecovery) { Text(stringResource(R.string.retry)) }
+            },
+            dismissButton = {
+                TextButton(model::dismissRecovery) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     if (state.askShelf)
         AlertDialog(
             onDismissRequest = { model.update { copy(askShelf = false) } },
@@ -187,6 +229,24 @@ internal fun AudioPlayRoute(
             confirmButton = { TextButton(addShelf) { Text(stringResource(R.string.yes)) } },
             dismissButton = { TextButton(discardShelf) { Text(stringResource(R.string.no)) } },
         )
+}
+
+private suspend fun deliverAudioReceipt(
+    model: AudioPlayViewModel,
+    recovery: AudioRecovery,
+    claim: suspend () -> Boolean,
+    deliver: () -> Unit,
+) {
+    try {
+        if (!claim()) return
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        deliver()
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        model.interruptedReceipt(recovery)
+        throw cancelled
+    } catch (error: Exception) {
+        model.interruptedReceipt(recovery, error.localizedMessage)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
