@@ -118,27 +118,8 @@ class LanBackupTransferTest {
 
     @Test
     fun `settings flow validates then backs up before restore`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/config/BackupConfigFragment.kt"
-        ).readText()
-        val flow = fragment.substringAfter("private fun receiveLanBackup")
-            .substringBefore("private fun backupIgnore")
-        val receiveIndex = flow.indexOf("LanBackupTransfer.receive")
-        val backupIndex = flow.indexOf("Backup.backupBeforeLanRestoreLocked")
-        val spaceIndex = flow.indexOf("LanBackupTransfer.requireRestoreSpace")
-        val restoreIndex = flow.indexOf("Restore.restoreOrThrow")
-        assertTrue(receiveIndex >= 0)
-        assertTrue(backupIndex >= 0)
-        assertTrue(spaceIndex >= 0)
-        assertTrue(restoreIndex >= 0)
-        assertTrue(receiveIndex < backupIndex)
-        assertTrue(backupIndex < spaceIndex)
-        assertTrue(spaceIndex < restoreIndex)
-        assertTrue(flow.contains("receivedFile?.parentFile?.deleteRecursively()"))
-        assertTrue(flow.contains("withContext(IO)"))
-        assertTrue(fragment.contains("lanBackupSession?.close()"))
-        assertTrue(fragment.contains("override fun onStop()"))
-
+        // The page operation order, cancellation and owned sessions are exercised by
+        // BackupLanRepositoryTest and BackupOperationsControllerTest through actual repositories.
         val backup = projectFile(
             "src/main/java/io/legado/app/help/storage/Backup.kt"
         ).readText()
@@ -186,7 +167,6 @@ class LanBackupTransferTest {
         assertTrue(restore.contains("readPreferenceSnapshot(appCtx, path, \"videoConfig\")"))
         assertTrue(restore.contains("!lanTransfer && !BackupConfig.ignoreCookies"))
         assertTrue(restore.contains("key !in lanTransferIgnoredPrefKeys"))
-        assertTrue(flow.contains("lanTransfer = true"))
 
         val bookDao = projectFile(
             "src/main/java/io/legado/app/data/dao/BookDao.kt"

@@ -1095,3 +1095,5 @@ RSS 阅读 B：实际宿主使用 Compose Chrome/Route/Screen，保留公开启�
 章节范围 B：普通阅读、漫画入口与音频页共同切换 Compose 范围 Dialog/Route/Screen，保留音频目录权限流程和既有服务参数。Fragment 只传小 UUID，生命周期限定待办交付，旋转恢复小输入，关闭清理私有完整书籍；删除共用 dialog_download_choice.xml 和两处 ViewBinding 使用。新增 3 个实际 Compose、3 个生命周期 Route 与 1 个真实 Fragment 宿主 Android 用例；Android 用例仅编译验证。
 
 RSS 源管理 A1：新增稳定小 ID、不可变行与类型化过滤，事务内按 ID 重读最新来源后启停、分组、排序或删除，保留既有来源删除/默认导入流程。导出完整最新 JSON 至独立私有文件，跨 IO 返回取消也清理未交付文件，释放仅限自有 UUID 文件。新增 2 个 JVM 行用例与 9 个真实 Room/导出 Android 用例；Android 用例仅编译验证。
+
+备份设置 B：完整设置宿主和表单、选项、任务及局域网对话框改用 Compose，保留既有备份/恢复引擎和公开入口；删除独占 Preference XML、两个布局和菜单。文件选择携带独立 nonce，扫码按请求注册独立 Registry key，旋转恢复原 key，迟到回执不能污染新任务。增加实际 Compose、Route、二维码图片及真实 Registry 回归；共享备份选项断言改为实际 Compose，核心归档/传输测试保留。Android 用例仅编译验证。

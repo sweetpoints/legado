@@ -58,7 +58,7 @@ class ImportBookPathMigrationTest {
         val backupConfig = readProjectFile(
             "src/main/java/io/legado/app/help/storage/BackupConfig.kt"
         )
-        val preferences = readProjectFile("src/main/res/xml/pref_config_backup.xml")
+        val settings = io.legado.app.model.backup.BackupSettingsSnapshot()
 
         assertTrue(preferKey.contains("const val webDavBookAutoRestore"))
         assertTrue(
@@ -67,8 +67,8 @@ class ImportBookPathMigrationTest {
             )
         )
         assertTrue(backupConfig.contains("PreferKey.webDavBookAutoRestore"))
-        assertTrue(preferences.contains("android:key=\"webDavBookAutoRestore\""))
-        assertTrue(preferences.contains("android:defaultValue=\"false\""))
+        assertEquals(io.legado.app.constant.PreferKey.webDavBookAutoRestore, io.legado.app.model.backup.BackupSettingSwitch.BookRestore.key)
+        assertFalse(settings.switches.getValue(io.legado.app.model.backup.BackupSettingSwitch.BookRestore))
     }
 
     @Test
