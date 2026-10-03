@@ -23,6 +23,6 @@
 2. 子分支在安全检查点保存后续在途改动，使工作区干净，再 rebase 到最新 `codex/compose-migration`。解决冲突时保留各功能已验证的行为和测试，不覆盖另一功能的改动。
 3. 对 rebase 后的代码完成对应验证，报告新的不可变 SHA。主 agent 检查验证与 SHA 一致，在整合 worktree 使用 fast-forward 合入该 SHA。
 4. 逐个分支整合；其他 subagent 可继续在自己的 worktree 开发。下一批整合前再次 rebase，不能直接合入未审查的后续提交。
-5. 需要暂存半成品以进行 rebase 时，仅对自己 worktree 创建恢复 stash；整合后恢复并解决冲突。保留恢复快照直到确认内容已迁入独立提交。
+5. 需要暂存半成品以进行 rebase 时，仅保存自己 worktree 的改动，并记录创建后的不可变 stash SHA 与文件哈希。Git stash 栈在所有 worktree 之间共享；恢复使用 `git stash apply <精确 SHA>`，不得使用动态序号 `stash@{0}` 或直接 `pop`，避免取错另一 agent 的条目。恢复后校验文件归属与哈希，解决冲突；保留 stash 和恢复快照直到确认内容已迁入独立提交。
 
 2026-10-03 开始采用独立 worktree 流程；此前共享 worktree 的在途改动已保留恢复快照与 Git stash，没有作为混合功能提交。
