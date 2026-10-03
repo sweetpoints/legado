@@ -5,11 +5,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.data.preferences.BookSearchPreferencesRepository
 import io.legado.app.data.repository.BookSearchDraftRepository
+import io.legado.app.data.repository.BookSearchEngineRepository
 import io.legado.app.data.repository.BookSearchMetadataRepository
 import io.legado.app.model.webBook.BookSearchDraft
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -30,6 +34,7 @@ internal class BookSearchViewModel(
     private val preferences: BookSearchPreferencesRepository,
     private val metadata: BookSearchMetadataRepository,
     savedState: SavedStateHandle,
+    engineFactory: ((CoroutineScope) -> BookSearchEngineRepository)? = null,
 ) : ViewModel() {
     val session: String =
         savedState.get<String>("searchSession")
@@ -47,6 +52,12 @@ internal class BookSearchViewModel(
     private var loadJob: Job? = null
     private var historyJob: Job? = null
     private var suggestionsJob: Job? = null
+    private val engine = engineFactory?.invoke(viewModelScope)
+    private var commandJob: Job? = null
+    private var commandGeneration = 0L
+    private var acceptsEngine = false
+    private var minimumEngineGeneration = Long.MAX_VALUE
+    private var lastEngineError: String? = null
 
     init {
         jobs += viewModelScope.launch {
@@ -60,6 +71,35 @@ internal class BookSearchViewModel(
                             state.value.copy(persistError = error.message ?: error.toString())
                 }
             }
+        }
+        engine?.let { searchEngine ->
+            jobs +=
+                observe(searchEngine.state) { progress ->
+                    if (
+                        !state.value.ready ||
+                            !acceptsEngine ||
+                            progress.generation < minimumEngineGeneration
+                    )
+                        return@observe
+                    if (progress.key != state.value.draft.submittedKey) return@observe
+                    mutableState.value = state.value.copy(searching = progress.searching)
+                    updateDraft { draft ->
+                        draft.copy(
+                            results = progress.results,
+                            scope = progress.scope,
+                            searched = progress.searched,
+                            total = progress.total,
+                            hasMore = progress.hasMore,
+                            interrupted = progress.searching,
+                            emptyScopeConfirmation =
+                                progress.finishedEmpty && progress.scope.isNotEmpty(),
+                        )
+                    }
+                    if (progress.error != lastEngineError) {
+                        lastEngineError = progress.error
+                        mutableState.value = state.value.copy(commandError = progress.error)
+                    }
+                }
         }
         initialize()
     }
@@ -135,11 +175,11 @@ internal class BookSearchViewModel(
         historyJob?.cancel()
         suggestionsJob?.cancel()
         historyJob =
-            observe(metadata.history(query)) { history ->
+            observe(metadata.history(query.trim())) { history ->
                 mutableState.value = state.value.copy(history = history)
             }
         suggestionsJob =
-            observe(metadata.suggestions(query)) { suggestions ->
+            observe(metadata.suggestions(query.trim())) { suggestions ->
                 mutableState.value = state.value.copy(suggestions = suggestions)
             }
     }
@@ -150,22 +190,27 @@ internal class BookSearchViewModel(
         selectionEnd: Int = selectionStart,
     ) {
         if (!usable()) return
+        val textChanged = query != state.value.draft.query
+        if (textChanged) invalidateSearch()
         updateDraft { draft ->
             draft.copy(
                 query = query,
                 selectionStart = selectionStart.coerceIn(0, query.length),
                 selectionEnd = selectionEnd.coerceIn(0, query.length),
-                inputHelp = true,
+                inputHelp = if (textChanged) true else draft.inputHelp,
+                manualStop = if (textChanged) true else draft.manualStop,
             )
         }
-        observeQuery(query)
+        if (textChanged) observeQuery(query)
     }
 
     fun focusInput(focused: Boolean) {
         if (!usable()) return
-        if (state.value.searching) return
         val visible =
-            focused || state.value.draft.results.isEmpty() || state.value.draft.query.isBlank()
+            !state.value.searching &&
+                (focused ||
+                    state.value.draft.results.isEmpty() ||
+                    state.value.draft.query.isBlank())
         updateDraft { it.copy(inputHelp = visible) }
     }
 
@@ -191,6 +236,154 @@ internal class BookSearchViewModel(
     fun confirmClearHistory(visible: Boolean) {
         if (!usable()) return
         updateDraft { it.copy(clearHistoryConfirmation = visible) }
+    }
+
+    fun submit() {
+        if (!usable()) return
+        startQuery(state.value.draft.query.trim(), saveHistory = true)
+    }
+
+    private fun startQuery(query: String, saveHistory: Boolean) {
+        invalidateSearch()
+        updateDraft { draft ->
+            draft.copy(
+                submittedKey = query,
+                results = emptyList(),
+                inputHelp = false,
+                manualStop = false,
+                interrupted = query.isNotEmpty(),
+                hasMore = true,
+                searched = 0,
+                total = 0,
+                emptyScopeConfirmation = false,
+            )
+        }
+        val generation = commandGeneration
+        commandJob = viewModelScope.launch {
+            try {
+                checkpoint()
+                if (saveHistory) metadata.saveHistory(query)
+                currentCoroutineContext().ensureActive()
+                if (stopped || generation != commandGeneration) return@launch
+                val searchEngine = engine ?: return@launch
+                minimumEngineGeneration = searchEngine.state.value.generation + 1
+                acceptsEngine = true
+                lastEngineError = null
+                mutableState.value = state.value.copy(commandError = null)
+                searchEngine.search(query, state.value.draft.scope)
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped && generation == commandGeneration)
+                    mutableState.value =
+                        state.value.copy(
+                            searching = false,
+                            commandError = error.message ?: error.toString(),
+                        )
+            }
+        }
+    }
+
+    private fun invalidateSearch() {
+        acceptsEngine = false
+        commandGeneration++
+        commandJob?.cancel()
+        mutableState.value = state.value.copy(searching = false)
+        engine?.let { searchEngine -> jobs += viewModelScope.launch { searchEngine.stop() } }
+    }
+
+    fun stopSearch() {
+        if (!usable()) return
+        invalidateSearch()
+        updateDraft { it.copy(manualStop = true, interrupted = false) }
+    }
+
+    fun continueSearch(manual: Boolean = true) {
+        if (
+            !usable() ||
+                state.value.searching ||
+                commandJob?.isActive == true ||
+                !state.value.draft.hasMore
+        )
+            return
+        val draft = state.value.draft
+        if (draft.submittedKey.isEmpty() || (!manual && draft.manualStop)) return
+        updateDraft { it.copy(manualStop = false, interrupted = true) }
+        commandJob = viewModelScope.launch {
+            try {
+                checkpoint()
+                val searchEngine = engine ?: return@launch
+                acceptsEngine = true
+                if (searchEngine.state.value.key != draft.submittedKey) {
+                    minimumEngineGeneration = searchEngine.state.value.generation + 1
+                    searchEngine.search(draft.submittedKey, draft.scope)
+                } else {
+                    minimumEngineGeneration = searchEngine.state.value.generation
+                    searchEngine.nextPage()
+                }
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped)
+                    mutableState.value =
+                        state.value.copy(commandError = error.message ?: error.toString())
+            }
+        }
+    }
+
+    fun historyClicked(word: String) {
+        if (!usable()) return
+        val sameQuery = word == state.value.draft.query
+        editQuery(word)
+        val generation = commandGeneration
+        commandJob = viewModelScope.launch {
+            try {
+                val shouldSearch = sameQuery || !metadata.hasNamedBook(word)
+                currentCoroutineContext().ensureActive()
+                if (generation == commandGeneration && !stopped && shouldSearch) submit()
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped && generation == commandGeneration)
+                    mutableState.value =
+                        state.value.copy(commandError = error.message ?: error.toString())
+            }
+        }
+    }
+
+    fun deleteHistory(word: String) {
+        if (!usable()) return
+        jobs += viewModelScope.launch {
+            try {
+                metadata.deleteHistory(word)
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped)
+                    mutableState.value =
+                        state.value.copy(commandError = error.message ?: error.toString())
+            }
+        }
+    }
+
+    fun clearHistory() {
+        if (!usable()) return
+        jobs += viewModelScope.launch {
+            try {
+                metadata.clearHistory()
+                currentCoroutineContext().ensureActive()
+                if (!stopped) updateDraft { it.copy(clearHistoryConfirmation = false) }
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!stopped)
+                    mutableState.value =
+                        state.value.copy(commandError = error.message ?: error.toString())
+            }
+        }
+    }
+
+    fun pause() {
+        engine?.pause()
+    }
+
+    fun resume() {
+        engine?.resume()
     }
 
     private fun usable(): Boolean = !stopped && state.value.ready
@@ -240,6 +433,7 @@ internal class BookSearchViewModel(
     suspend fun release() {
         stop()
         withContext(NonCancellable) {
+            engine?.close()
             writeGate.withLock { drafts.release(session) }
         }
     }
@@ -247,6 +441,10 @@ internal class BookSearchViewModel(
     fun stop() {
         if (stopped) return
         stopped = true
+        acceptsEngine = false
+        commandGeneration++
+        commandJob?.cancel()
+        engine?.let { searchEngine -> cleanupScope.launch { searchEngine.close() } }
         loadJob?.cancel()
         historyJob?.cancel()
         suggestionsJob?.cancel()
@@ -257,5 +455,10 @@ internal class BookSearchViewModel(
 
     override fun onCleared() {
         stop()
+    }
+
+    private companion object {
+        // Engine cleanup owns no Activity and must survive ViewModel scope cancellation.
+        val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
