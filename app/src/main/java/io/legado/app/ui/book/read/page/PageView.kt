@@ -2,23 +2,24 @@ package io.legado.app.ui.book.read.page
 
 import android.content.Context
 import android.graphics.drawable.LayerDrawable
-import android.view.LayoutInflater
-import android.view.View
 import android.widget.FrameLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.doOnLayout
-import androidx.core.view.isGone
-import androidx.core.view.isInvisible
-import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
 import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.ViewBookPageBinding
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -31,16 +32,10 @@ import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.TextPos
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
-import io.legado.app.ui.widget.BatteryView
 import io.legado.app.utils.activity
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.gone
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
-import io.legado.app.utils.setTextIfNotEqual
 import java.util.Date
-import splitties.views.backgroundColor
 
 internal object BookmarkIndicatorGeometry {
     fun marginRight(
@@ -56,109 +51,242 @@ internal object BookmarkIndicatorGeometry {
 /** 页面视图 */
 class PageView(context: Context) : FrameLayout(context) {
 
-    private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
     private val readBookActivity
         get() = activity as? ReadBookActivity
 
+    private val contentView = ContentTextView(context, null)
+    private val pageRoot = FrameLayout(context)
+    private val composeView = ComposeView(context)
+
     private var battery = 100
-    private var readerInfoValues = ReaderInfoValues(battery = 100)
-    private var readerInfoViews = emptyArray<ReaderInfoView>()
+    private var readerInfoValues by mutableStateOf(ReaderInfoValues(battery = 100))
+    private var readerInfoTemplates by mutableStateOf(emptyList<String>())
+    private var tipColor by mutableIntStateOf(ReadBookConfig.textColor)
+    private var tipDividerColor by
+        mutableIntStateOf(ContextCompat.getColor(context, R.color.divider))
+    private var tipTextSize by mutableIntStateOf(ReadTipConfig.tipTextSize)
+    private var readerInfoTypeface by mutableStateOf(ChapterProvider.typeface)
+    private var headerVisible by mutableStateOf(false)
+    private var footerVisible by mutableStateOf(true)
+    private var headerLineVisible by mutableStateOf(false)
+    private var footerLineVisible by mutableStateOf(false)
+    private var statusBarVisible by mutableStateOf(true)
+    private var navigationBarVisible by mutableStateOf(true)
+    private var statusBarInset by mutableIntStateOf(0)
+    private var navigationBarInset by mutableIntStateOf(0)
+    private var headerMeasuredHeight by mutableIntStateOf(0)
+    private var headerRightPosition by mutableStateOf(Offset.Zero)
+    private var headerRightBaseline by mutableIntStateOf(0)
+    private var contentBounds by mutableStateOf(IntRect.Zero)
+    private var headerPadding by mutableStateOf(ReaderTipPadding(0, 0, 0, 0))
+    private var footerPadding by mutableStateOf(ReaderTipPadding(0, 0, 0, 0))
+    private var bookmarkVisible by mutableStateOf(false)
+    private var bookmarkInHeader by mutableStateOf(false)
+    private var bookmarkOffset by mutableStateOf(IntOffset.Zero)
     private var isMainView = false
-    private var bookmarkIndicatorVisible = false
     var isScroll = false
+
     internal val contentViewTop: Float
-        get() = binding.vwRoot.top + binding.contentTextView.top.toFloat()
+        get() = pageRoot.top + pageRoot.paddingTop + contentBounds.top.toFloat()
 
-    internal fun closePdfRenderer() = binding.contentTextView.closePdfRenderer()
+    internal fun closePdfRenderer() = contentView.closePdfRenderer()
 
-    internal fun cancelHighlightTap() = binding.contentTextView.cancelHighlightTap()
+    internal fun cancelHighlightTap() = contentView.cancelHighlightTap()
 
     val headerHeight: Int
-        get() {
-            val h1 = if (binding.vwStatusBar.isGone) 0 else binding.vwStatusBar.height
-            val h2 = if (binding.llHeader.isGone) 0 else binding.llHeader.height
-            return h1 + h2 + binding.vwRoot.paddingTop
-        }
+        get() =
+            pageRoot.top +
+                pageRoot.paddingTop +
+                (if (statusBarVisible) statusBarInset else 0) +
+                (if (headerVisible) headerMeasuredHeight else 0)
 
     val imgBgPaddingStart: Int
-        get() {
-            return binding.vwRoot.paddingStart
-        }
+        get() = pageRoot.paddingStart
 
     fun bookmarkIndicatorMarginRight(indicatorPaddingRight: Int): Int =
         BookmarkIndicatorGeometry.marginRight(
-            binding.vwRoot.paddingRight,
-            binding.llHeader.paddingRight,
+            pageRoot.paddingRight,
+            ReadBookConfig.headerPaddingRight.dpToPx(),
             indicatorPaddingRight,
         )
 
-    fun bookmarkIndicatorTop(height: Int, paddingBottom: Int): Int {
-        val baseline =
-            binding.llHeader.top + binding.tvHeaderRight.top + binding.tvHeaderRight.baseline
-        return BookmarkIndicatorGeometry.top(
-            baseline,
+    fun bookmarkIndicatorTop(height: Int, paddingBottom: Int): Int =
+        BookmarkIndicatorGeometry.top(
+            pageRoot.paddingTop + headerRightPosition.y.toInt() + headerRightBaseline,
             height,
             paddingBottom,
-            binding.vwRoot.paddingTop,
+            pageRoot.paddingTop,
         )
-    }
 
     init {
+        pageRoot.addView(
+            contentView,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
+        composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+        pageRoot.addView(
+            composeView,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
+        addView(
+            pageRoot,
+            FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
+        composeView.setContent {
+            val templates = readerInfoTemplates
+            ReaderPageChrome(
+                statusBarHeight = statusBarInset,
+                navigationBarHeight = navigationBarInset,
+                showStatusBar = statusBarVisible,
+                showNavigationBar = navigationBarVisible,
+                showHeader = headerVisible,
+                showFooter = footerVisible,
+                showHeaderLine = headerLineVisible,
+                showFooterLine = footerLineVisible,
+                headerPadding = headerPadding,
+                footerPadding = footerPadding,
+                headerTemplates =
+                    templates.take(3).let { if (it.size == 3) it else listOf("", "", "") },
+                footerTemplates =
+                    templates.drop(3).let { if (it.size == 3) it else listOf("", "", "") },
+                values = readerInfoValues,
+                tipColor = tipColor,
+                dividerColor = tipDividerColor,
+                accentColor = context.accentColor,
+                textSizeSp = tipTextSize,
+                typeface = readerInfoTypeface,
+                bookmarkVisible = bookmarkVisible,
+                bookmarkInHeader = bookmarkInHeader,
+                bookmarkOffset = bookmarkOffset,
+                bookmarkDescription = context.getString(R.string.bookmark),
+                onContentBounds = ::updateContentBounds,
+                onHeaderMeasured = { measured ->
+                    if (headerMeasuredHeight != measured) {
+                        headerMeasuredHeight = measured
+                        updateBookmarkOffset()
+                    }
+                },
+                onHeaderRightGeometry = { position, baseline ->
+                    if (headerRightPosition != position || headerRightBaseline != baseline) {
+                        headerRightPosition = position
+                        headerRightBaseline = baseline
+                        updateBookmarkOffset()
+                    }
+                },
+            )
+        }
         if (!isInEditMode) {
-            binding.pageBookmarkIndicator.setColorFilter(context.accentColor)
             upStyle()
-            binding.vwStatusBar.applyStatusBarPadding()
-            binding.vwNavigationBar.applyNavigationBarPadding()
+            pageRoot.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+                val statusBars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
+                val displayCutout = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                val newNavigationBarInset = windowInsets.navigationBarHeight
+                if (statusBarInset != statusBars.top) statusBarInset = statusBars.top
+                if (navigationBarInset != newNavigationBarInset)
+                    navigationBarInset = newNavigationBarInset
+                val oldPadding =
+                    intArrayOf(
+                        pageRoot.paddingLeft,
+                        pageRoot.paddingTop,
+                        pageRoot.paddingRight,
+                        pageRoot.paddingBottom,
+                    )
+                if (!ReadBookConfig.isNineBgImg) {
+                    if (AppConfig.paddingDisplayCutouts) {
+                        pageRoot.setPadding(
+                            displayCutout.left,
+                            if (statusBarVisible) 0 else displayCutout.top,
+                            displayCutout.right,
+                            displayCutout.bottom,
+                        )
+                    } else {
+                        pageRoot.setPadding(0, 0, 0, 0)
+                    }
+                }
+                updateBookmarkOffset()
+                val paddingChanged =
+                    oldPadding[0] != pageRoot.paddingLeft ||
+                        oldPadding[1] != pageRoot.paddingTop ||
+                        oldPadding[2] != pageRoot.paddingRight ||
+                        oldPadding[3] != pageRoot.paddingBottom
+                if (paddingChanged && isMainView) readBookActivity?.upBookmarkIndicator()
+                windowInsets
+            }
+            ViewCompat.requestApplyInsets(pageRoot)
         }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         upBg()
+        updateBookmarkOffset()
     }
 
-    fun upStyle() = binding.run {
-        upTipStyle()
-        ReadBookConfig.let {
-            val textColor = it.textColor
-            val tipColor =
-                with(ReadTipConfig) {
-                    if (tipColor == 0) textColor else tipColor
-                }
-            val tipDividerColor =
-                with(ReadTipConfig) {
-                    when (tipDividerColor) {
-                        -1 -> ContextCompat.getColor(context, R.color.divider)
-                        0 -> textColor
-                        else -> tipDividerColor
-                    }
-                }
-            tvHeaderLeft.setColor(tipColor)
-            tvHeaderMiddle.setColor(tipColor)
-            tvHeaderRight.setColor(tipColor)
-            tvFooterLeft.setColor(tipColor)
-            tvFooterMiddle.setColor(tipColor)
-            tvFooterRight.setColor(tipColor)
-            vwTopDivider.backgroundColor = tipDividerColor
-            vwBottomDivider.backgroundColor = tipDividerColor
-            upStatusBar()
-            upNavigationBar()
-            upPaddingDisplayCutouts()
-            llHeader.setPadding(
-                it.headerPaddingLeft.dpToPx(),
-                it.headerPaddingTop.dpToPx(),
-                it.headerPaddingRight.dpToPx(),
-                it.headerPaddingBottom.dpToPx(),
-            )
-            llFooter.setPadding(
-                it.footerPaddingLeft.dpToPx(),
-                it.footerPaddingTop.dpToPx(),
-                it.footerPaddingRight.dpToPx(),
-                it.footerPaddingBottom.dpToPx(),
-            )
-            vwTopDivider.gone(llHeader.isGone || !it.showHeaderLine)
-            vwBottomDivider.gone(llFooter.isGone || !it.showFooterLine)
+    private fun updateContentBounds(bounds: IntRect) {
+        if (contentBounds != bounds) {
+            contentBounds = bounds
+            updateContentLayout()
         }
+    }
+
+    private fun updateContentLayout() {
+        val params = contentView.layoutParams as? FrameLayout.LayoutParams ?: return
+        val top = contentBounds.top.coerceAtLeast(0)
+        val height = contentBounds.height.coerceAtLeast(0)
+        if (params.topMargin != top || params.height != height) {
+            params.topMargin = top
+            params.height = height
+            contentView.layoutParams = params
+        }
+    }
+
+    private fun updateBookmarkOffset() {
+        if (!bookmarkVisible) return
+        val indicatorPadding = if (bookmarkInHeader) 4.dpToPx() else 0
+        val x =
+            if (bookmarkInHeader)
+                pageRoot.paddingRight - bookmarkIndicatorMarginRight(indicatorPadding)
+            else 0
+        val y =
+            if (bookmarkInHeader) {
+                bookmarkIndicatorTop(32.dpToPx(), indicatorPadding) - pageRoot.paddingTop
+            } else {
+                headerHeight - pageRoot.paddingTop
+            }
+        val offset = IntOffset(x, y)
+        if (bookmarkOffset != offset) bookmarkOffset = offset
+    }
+
+    fun upStyle() {
+        upTipStyle()
+        val textColor = ReadBookConfig.textColor
+        tipColor = if (ReadTipConfig.tipColor == 0) textColor else ReadTipConfig.tipColor
+        tipDividerColor =
+            when (ReadTipConfig.tipDividerColor) {
+                -1 -> ContextCompat.getColor(context, R.color.divider)
+                0 -> textColor
+                else -> ReadTipConfig.tipDividerColor
+            }
+        tipTextSize = ReadTipConfig.tipTextSize
+        headerPadding =
+            ReaderTipPadding(
+                ReadBookConfig.headerPaddingLeft,
+                ReadBookConfig.headerPaddingTop,
+                ReadBookConfig.headerPaddingRight,
+                ReadBookConfig.headerPaddingBottom,
+            )
+        footerPadding =
+            ReaderTipPadding(
+                ReadBookConfig.footerPaddingLeft,
+                ReadBookConfig.footerPaddingTop,
+                ReadBookConfig.footerPaddingRight,
+                ReadBookConfig.footerPaddingBottom,
+            )
+        headerLineVisible = headerVisible && ReadBookConfig.showHeaderLine
+        footerLineVisible = footerVisible && ReadBookConfig.showFooterLine
+        upStatusBar()
+        upNavigationBar()
+        upPaddingDisplayCutouts()
         readerInfoValues =
             readerInfoValues.copy(
                 time = timeFormat.format(Date(System.currentTimeMillis())),
@@ -168,179 +296,59 @@ class PageView(context: Context) : FrameLayout(context) {
     }
 
     /** 显示状态栏时隐藏header */
-    fun upStatusBar() =
-        with(binding.vwStatusBar) {
-            //        setPadding(paddingLeft, context.statusBarHeight, paddingRight, paddingBottom)
-            isGone = ReadBookConfig.hideStatusBar || readBookActivity?.isInMultiWindow == true
-        }
+    fun upStatusBar() {
+        statusBarVisible =
+            !ReadBookConfig.hideStatusBar && readBookActivity?.isInMultiWindow != true
+    }
 
     fun upNavigationBar() {
-        binding.vwNavigationBar.isGone = ReadBookConfig.hideNavigationBar
+        navigationBarVisible = !ReadBookConfig.hideNavigationBar
     }
 
     fun upPaddingDisplayCutouts() {
-        if (ReadBookConfig.isNineBgImg) {
-            ViewCompat.setOnApplyWindowInsetsListener(binding.vwRoot, null)
-            return
-        }
-        if (AppConfig.paddingDisplayCutouts) {
-            binding.vwRoot.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
-                val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
-                binding.vwRoot.setPadding(
-                    insets.left,
-                    if (binding.vwStatusBar.isGone) insets.top else 0,
-                    insets.right,
-                    insets.bottom,
-                )
-                if (isMainView) {
-                    readBookActivity?.upBookmarkIndicator()
-                }
-                windowInsets
-            }
-        } else {
-            ViewCompat.setOnApplyWindowInsetsListener(binding.vwRoot, null)
-            binding.vwRoot.setPadding(0, 0, 0, 0)
-        }
+        ViewCompat.requestApplyInsets(pageRoot)
+        updateBookmarkOffset()
     }
 
-    /** 更新阅读信息 */
-    private fun upTipStyle() = binding.run {
-        llHeader.isGone =
+    private fun upTipStyle() {
+        headerVisible =
             when (ReadTipConfig.headerMode) {
-                1 -> false
-                2 -> true
+                1 -> true
+                2 -> false
                 else -> !ReadBookConfig.hideStatusBar
             }
-        llFooter.isGone =
-            when (ReadTipConfig.footerMode) {
-                1 -> true
-                else -> false
-            }
-        readerInfoViews =
+        footerVisible = ReadTipConfig.footerMode != 1
+        readerInfoTemplates =
             with(ReadTipConfig) {
-                arrayOf(
-                    ReaderInfoView(
-                        tvHeaderLeft,
-                        effectiveTemplate(tipHeaderLeftTemplate, tipHeaderLeft),
-                    ),
-                    ReaderInfoView(
-                        tvHeaderMiddle,
-                        effectiveTemplate(tipHeaderMiddleTemplate, tipHeaderMiddle),
-                    ),
-                    ReaderInfoView(
-                        tvHeaderRight,
-                        effectiveTemplate(tipHeaderRightTemplate, tipHeaderRight),
-                    ),
-                    ReaderInfoView(
-                        tvFooterLeft,
-                        effectiveTemplate(tipFooterLeftTemplate, tipFooterLeft),
-                    ),
-                    ReaderInfoView(
-                        tvFooterMiddle,
-                        effectiveTemplate(tipFooterMiddleTemplate, tipFooterMiddle),
-                    ),
-                    ReaderInfoView(
-                        tvFooterRight,
-                        effectiveTemplate(tipFooterRightTemplate, tipFooterRight),
-                    ),
+                listOf(
+                    effectiveTemplate(tipHeaderLeftTemplate, tipHeaderLeft),
+                    effectiveTemplate(tipHeaderMiddleTemplate, tipHeaderMiddle),
+                    effectiveTemplate(tipHeaderRightTemplate, tipHeaderRight),
+                    effectiveTemplate(tipFooterLeftTemplate, tipFooterLeft),
+                    effectiveTemplate(tipFooterMiddleTemplate, tipFooterMiddle),
+                    effectiveTemplate(tipFooterRightTemplate, tipFooterRight),
                 )
             }
-        readerInfoViews.forEach { readerInfoView ->
-            readerInfoView.view.apply {
-                isBattery = false
-                typeface = ChapterProvider.typeface
-                textSize = ReadTipConfig.tipTextSize.toFloat()
-            }
-        }
+        readerInfoTypeface = ChapterProvider.typeface
+        if (!headerVisible) headerMeasuredHeight = 0
     }
 
     private fun renderReaderInfo() {
-        readerInfoViews.forEach { readerInfoView ->
-            val view = readerInfoView.view
-            val template = readerInfoView.template
-            if (view === binding.tvHeaderRight) {
-                view.minimumWidth = 0
-                if (bookmarkIndicatorVisible) {
-                    view.minimumWidth = 32.dpToPx()
-                    view.setTextIfNotEqual(" ")
-                    view.contentDescription = context.getString(R.string.bookmark)
-                    view.isGone = false
-                    return@forEach
-                }
-                view.contentDescription = null
-            }
-            if (view === binding.tvFooterLeft) {
-                view.isInvisible = template.isEmpty()
-            } else {
-                view.isGone = template.isEmpty()
-            }
-            if (template.isNotEmpty()) {
-                view.setTextIfNotEqual(
-                    ReaderInfoTemplateRenderer.render(template, readerInfoValues)
-                )
-            }
-        }
+        composeView.invalidate()
+        composeView.requestLayout()
+        updateBookmarkOffset()
     }
 
     fun showBookmarkIndicator(show: Boolean) {
-        val showInHeader = show && !binding.llHeader.isGone
-        if (bookmarkIndicatorVisible != showInHeader) {
-            bookmarkIndicatorVisible = showInHeader
-            renderReaderInfo()
-        }
-        binding.pageBookmarkIndicator.isVisible = show
-        if (show) {
-            binding.pageBookmarkIndicator.run {
-                val width = if (showInHeader) 32 else 20
-                val height = if (showInHeader) 32 else 40
-                updateLayoutParams {
-                    this.width = width.dpToPx()
-                    this.height = height.dpToPx()
-                }
-                val padding = if (showInHeader) 4.dpToPx() else 0
-                setPadding(padding, padding, padding, padding)
-                setImageResource(
-                    if (showInHeader) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark_long
-                )
-                importantForAccessibility =
-                    if (showInHeader) {
-                        View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    } else {
-                        View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-                    }
-            }
-            doOnLayout {
-                if (binding.pageBookmarkIndicator.isVisible) {
-                    binding.pageBookmarkIndicator.run {
-                        if (showInHeader) {
-                            translationX =
-                                (this@PageView.width -
-                                        bookmarkIndicatorMarginRight(paddingRight) -
-                                        right)
-                                    .toFloat()
-                            translationY =
-                                (bookmarkIndicatorTop(layoutParams.height, paddingBottom) - top)
-                                    .toFloat()
-                        } else {
-                            translationX =
-                                (this@PageView.width - binding.vwRoot.paddingRight - right)
-                                    .toFloat()
-                            translationY = (headerHeight - top).toFloat()
-                        }
-                    }
-                }
-            }
-        }
+        val showInHeader = show && headerVisible
+        bookmarkVisible = show
+        bookmarkInHeader = showInHeader
+        renderReaderInfo()
     }
-
-    private data class ReaderInfoView(
-        val view: BatteryView,
-        val template: String,
-    )
 
     /** 更新背景 */
     fun upBg() {
-        binding.vwRoot.background =
+        pageRoot.background =
             LayerDrawable(
                 arrayOf(
                     ReadBookConfig.bgMeanColor.toDrawable(),
@@ -353,7 +361,7 @@ class PageView(context: Context) : FrameLayout(context) {
     /** 更新背景透明度 */
     fun upBgAlpha() {
         ReadBookConfig.bg?.alpha = (ReadBookConfig.bgAlpha / 100f * 255).toInt()
-        binding.vwRoot.invalidate()
+        pageRoot.invalidate()
     }
 
     /** 更新时间信息 */
@@ -386,24 +394,24 @@ class PageView(context: Context) : FrameLayout(context) {
         if (resetPageOffset) {
             resetPageOffset()
         }
-        binding.contentTextView.setContent(textPage)
+        contentView.setContent(textPage)
         if (resetPageOffset && isMainView && isScroll) {
-            binding.contentTextView.restorePageOffset(chapterPosition)
+            contentView.restorePageOffset(chapterPosition)
         }
     }
 
     fun invalidateContentView() {
-        binding.contentTextView.invalidate()
+        contentView.invalidate()
     }
 
     /** 设置无障碍文本 */
     fun setContentDescription(content: String) {
-        binding.contentTextView.contentDescription = content
+        contentView.contentDescription = content
     }
 
     /** 重置滚动位置 */
     fun resetPageOffset() {
-        binding.contentTextView.resetPageOffset()
+        contentView.resetPageOffset()
     }
 
     /** 设置进度 */
@@ -430,30 +438,30 @@ class PageView(context: Context) : FrameLayout(context) {
     }
 
     fun setAutoPager(autoPager: AutoPager?) {
-        binding.contentTextView.setAutoPager(autoPager)
+        contentView.setAutoPager(autoPager)
     }
 
     fun submitRenderTask() {
-        binding.contentTextView.submitRenderTask()
+        contentView.submitRenderTask()
     }
 
     fun setIsScroll(value: Boolean) {
         isScroll = value
-        binding.contentTextView.setIsScroll(value)
+        contentView.setIsScroll(value)
     }
 
     /** 滚动事件 */
     fun scroll(offset: Int) {
-        binding.contentTextView.scroll(offset)
+        contentView.scroll(offset)
     }
 
     fun isAtChapterTop(): Boolean {
-        return binding.contentTextView.isAtChapterTop()
+        return contentView.isAtChapterTop()
     }
 
     /** 更新是否开启选择功能 */
     fun upSelectAble(selectAble: Boolean) {
-        binding.contentTextView.selectAble = selectAble
+        contentView.selectAble = selectAble
     }
 
     /**
@@ -462,7 +470,7 @@ class PageView(context: Context) : FrameLayout(context) {
      * @return true:已处理, false:未处理
      */
     fun onClick(x: Float, y: Float): Boolean {
-        return binding.contentTextView.click(x - imgBgPaddingStart, y - headerHeight)
+        return contentView.click(x - imgBgPaddingStart, y - headerHeight)
     }
 
     /** 长按事件 */
@@ -471,7 +479,7 @@ class PageView(context: Context) : FrameLayout(context) {
         y: Float,
         select: (textPos: TextPos) -> Unit,
     ) {
-        return binding.contentTextView.longPress(x - imgBgPaddingStart, y - headerHeight, select)
+        return contentView.longPress(x - imgBgPaddingStart, y - headerHeight, select)
     }
 
     /** 选择文本 */
@@ -480,28 +488,28 @@ class PageView(context: Context) : FrameLayout(context) {
         y: Float,
         select: (textPos: TextPos) -> Unit,
     ) {
-        return binding.contentTextView.selectText(x - imgBgPaddingStart, y - headerHeight, select)
+        return contentView.selectText(x - imgBgPaddingStart, y - headerHeight, select)
     }
 
     fun getCurVisiblePage(): TextPage {
-        return binding.contentTextView.getCurVisiblePage()
+        return contentView.getCurVisiblePage()
     }
 
     fun getReadPosition(): Pair<Int, TextLine>? {
-        return binding.contentTextView.getReadPosition()
+        return contentView.getReadPosition()
     }
 
     fun getReadAloudPos(): Pair<Int, TextLine>? {
-        return binding.contentTextView.getReadAloudPos()
+        return contentView.getReadAloudPos()
     }
 
     fun markAsMainView() {
         isMainView = true
-        binding.contentTextView.isMainView = true
+        contentView.isMainView = true
     }
 
     fun selectStartMove(x: Float, y: Float) {
-        binding.contentTextView.selectStartMove(x - imgBgPaddingStart, y - headerHeight)
+        contentView.selectStartMove(x - imgBgPaddingStart, y - headerHeight)
     }
 
     fun selectStartMoveIndex(
@@ -509,15 +517,15 @@ class PageView(context: Context) : FrameLayout(context) {
         lineIndex: Int,
         charIndex: Int,
     ) {
-        binding.contentTextView.selectStartMoveIndex(relativePagePos, lineIndex, charIndex)
+        contentView.selectStartMoveIndex(relativePagePos, lineIndex, charIndex)
     }
 
     fun selectStartMoveIndex(textPos: TextPos) {
-        binding.contentTextView.selectStartMoveIndex(textPos)
+        contentView.selectStartMoveIndex(textPos)
     }
 
     fun selectEndMove(x: Float, y: Float) {
-        binding.contentTextView.selectEndMove(x - imgBgPaddingStart, y - headerHeight)
+        contentView.selectEndMove(x - imgBgPaddingStart, y - headerHeight)
     }
 
     fun selectEndMoveIndex(
@@ -525,51 +533,51 @@ class PageView(context: Context) : FrameLayout(context) {
         lineIndex: Int,
         charIndex: Int,
     ) {
-        binding.contentTextView.selectEndMoveIndex(relativePagePos, lineIndex, charIndex)
+        contentView.selectEndMoveIndex(relativePagePos, lineIndex, charIndex)
     }
 
     fun selectEndMoveIndex(textPos: TextPos) {
-        binding.contentTextView.selectEndMoveIndex(textPos)
+        contentView.selectEndMoveIndex(textPos)
     }
 
     fun getReverseStartCursor(): Boolean {
-        return binding.contentTextView.reverseStartCursor
+        return contentView.reverseStartCursor
     }
 
     fun getReverseEndCursor(): Boolean {
-        return binding.contentTextView.reverseEndCursor
+        return contentView.reverseEndCursor
     }
 
     fun isLongScreenShot(): Boolean {
-        return binding.contentTextView.longScreenshot
+        return contentView.longScreenshot
     }
 
     fun resetReverseCursor() {
-        binding.contentTextView.resetReverseCursor()
+        contentView.resetReverseCursor()
     }
 
     fun cancelSelect(clearSearchResult: Boolean = false) {
-        binding.contentTextView.cancelSelect(clearSearchResult)
+        contentView.cancelSelect(clearSearchResult)
     }
 
     fun createBookmark(): Bookmark? {
-        return binding.contentTextView.createBookmark()
+        return contentView.createBookmark()
     }
 
     fun createHighlight(style: HighlightStyle): BookHighlight? {
-        return binding.contentTextView.createHighlight(style)
+        return contentView.createHighlight(style)
     }
 
     fun relativePage(relativePagePos: Int): TextPage {
-        return binding.contentTextView.relativePage(relativePagePos)
+        return contentView.relativePage(relativePagePos)
     }
 
     val textPage
-        get() = binding.contentTextView.textPage
+        get() = contentView.textPage
 
     val selectedText: String
-        get() = binding.contentTextView.getSelectedText()
+        get() = contentView.getSelectedText()
 
     val selectStartPos
-        get() = binding.contentTextView.selectStart
+        get() = contentView.selectStart
 }
