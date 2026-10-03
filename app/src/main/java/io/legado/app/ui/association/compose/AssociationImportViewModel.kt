@@ -364,8 +364,9 @@ open class AssociationImportViewModel(
             val needsStorage =
                 original.input.host == AssociationHostKind.File &&
                     original.input.kind == AssociationInputKind.View &&
-                    original.input.uris.firstOrNull()?.let { Uri.parse(it).scheme != "content" } ==
-                        true
+                    original.input.uris.firstOrNull()?.let {
+                        it.substringBefore(':') != "content"
+                    } == true
             if (needsStorage && !original.storagePermissionGranted) {
                 val waiting =
                     controller.update(original.generation) {
