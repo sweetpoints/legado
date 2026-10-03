@@ -4,16 +4,18 @@ import android.content.Context
 import android.util.AtomicFile
 import io.legado.app.model.webBook.BookSearchDraft
 import io.legado.app.utils.GSON
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 
 internal interface BookSearchDraftRepository {
     suspend fun open(session: String): BookSearchDraft
+
     suspend fun write(session: String, draft: BookSearchDraft)
+
     suspend fun release(session: String)
 }
 
@@ -55,17 +57,18 @@ internal class FileBookSearchDraftRepository(context: Context) : BookSearchDraft
         }
     }
 
-    override suspend fun open(session: String): BookSearchDraft = withContext(Dispatchers.IO) {
-        val sessionFile = file(session)
-        lock(sessionFile).withLock {
-            check(!closed(sessionFile)) { "Book search draft closed" }
-            if (sessionFile.exists() || File(sessionFile.path + ".bak").exists()) {
-                read(sessionFile)
-            } else {
-                BookSearchDraft().also { draft -> save(sessionFile, draft) }
+    override suspend fun open(session: String): BookSearchDraft =
+        withContext(Dispatchers.IO) {
+            val sessionFile = file(session)
+            lock(sessionFile).withLock {
+                check(!closed(sessionFile)) { "Book search draft closed" }
+                if (sessionFile.exists() || File(sessionFile.path + ".bak").exists()) {
+                    read(sessionFile)
+                } else {
+                    BookSearchDraft().also { draft -> save(sessionFile, draft) }
+                }
             }
         }
-    }
 
     override suspend fun write(session: String, draft: BookSearchDraft): Unit =
         withContext(Dispatchers.IO + NonCancellable) {
@@ -100,7 +103,9 @@ internal class FileBookSearchDraftRepository(context: Context) : BookSearchDraft
                     !sessionFile.exists() &&
                         !File(sessionFile.path + ".bak").exists() &&
                         !File(sessionFile.path + ".new").exists()
-                ) { "Unable to release book search draft" }
+                ) {
+                    "Unable to release book search draft"
+                }
             }
         }
 

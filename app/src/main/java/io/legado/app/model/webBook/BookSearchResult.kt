@@ -32,30 +32,31 @@ data class BookSearchResult(
 
     fun toSearchBook(): SearchBook {
         return SearchBook(
-            bookUrl = bookUrl,
-            origin = origin,
-            originName = originName,
-            type = type,
-            name = name,
-            author = author,
-            kind = kind,
-            coverUrl = coverUrl,
-            intro = intro,
-            wordCount = wordCount,
-            latestChapterTitle = latestChapterTitle,
-            tocUrl = tocUrl,
-            time = time,
-            variable = variable,
-            originOrder = originOrder,
-            chapterWordCountText = chapterWordCountText,
-            chapterWordCount = chapterWordCount,
-            respondTime = respondTime,
-        ).also { book ->
-            book.origins.clear()
-            book.origins.addAll(origins)
-            book.infoHtml = infoHtml
-            book.tocHtml = tocHtml
-        }
+                bookUrl = bookUrl,
+                origin = origin,
+                originName = originName,
+                type = type,
+                name = name,
+                author = author,
+                kind = kind,
+                coverUrl = coverUrl,
+                intro = intro,
+                wordCount = wordCount,
+                latestChapterTitle = latestChapterTitle,
+                tocUrl = tocUrl,
+                time = time,
+                variable = variable,
+                originOrder = originOrder,
+                chapterWordCountText = chapterWordCountText,
+                chapterWordCount = chapterWordCount,
+                respondTime = respondTime,
+            )
+            .also { book ->
+                book.origins.clear()
+                book.origins.addAll(origins)
+                book.infoHtml = infoHtml
+                book.tocHtml = tocHtml
+            }
     }
 
     companion object {
@@ -91,11 +92,8 @@ fun filterBookSearchSnapshots(
     results: List<BookSearchResult>,
     filter: String,
 ): List<BookSearchResult> {
-    val terms = filter.lineSequence()
-        .map(String::trim)
-        .filter(String::isNotEmpty)
-        .distinct()
-        .toList()
+    val terms =
+        filter.lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().toList()
     if (terms.isEmpty()) return results
 
     return results.filter { result ->

@@ -7,13 +7,13 @@ import io.legado.app.model.webBook.BookSearchDraft
 import io.legado.app.model.webBook.BookSearchEffect
 import io.legado.app.model.webBook.BookSearchReceipt
 import io.legado.app.model.webBook.BookSearchResult
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
-import java.util.UUID
 
 class BookSearchDraftFileTest {
     @Test
@@ -27,26 +27,34 @@ class BookSearchDraftFileTest {
             repository.open(ownedSession)
             repository.open(neighboringSession)
             val largePayload = "synthetic-search-content".repeat(60000)
-            val book = SearchBook(
-                bookUrl = largePayload,
-                name = "Title",
-                variable = largePayload,
-            ).apply {
-                infoHtml = largePayload
-                addOrigin("another")
-            }
+            val book =
+                SearchBook(
+                        bookUrl = largePayload,
+                        name = "Title",
+                        variable = largePayload,
+                    )
+                    .apply {
+                        infoHtml = largePayload
+                        addOrigin("another")
+                    }
             val result = BookSearchResult.from(book)
-            val draft = BookSearchDraft(
-                revision = 10,
-                query = largePayload,
-                scope = largePayload,
-                results = listOf(result),
-                filterDraft = largePayload,
-                effects = listOf(
-                    BookSearchReceipt("receipt", BookSearchEffect.BookInfo, resultId = result.id)
-                ),
-                interrupted = true,
-            )
+            val draft =
+                BookSearchDraft(
+                    revision = 10,
+                    query = largePayload,
+                    scope = largePayload,
+                    results = listOf(result),
+                    filterDraft = largePayload,
+                    effects =
+                        listOf(
+                            BookSearchReceipt(
+                                "receipt",
+                                BookSearchEffect.BookInfo,
+                                resultId = result.id,
+                            )
+                        ),
+                    interrupted = true,
+                )
             repository.write(ownedSession, draft)
             repository.write(ownedSession, draft.copy(revision = 9, query = "stale"))
             assertEquals(draft, FileBookSearchDraftRepository(context).open(ownedSession))
@@ -61,7 +69,8 @@ class BookSearchDraftFileTest {
             assertTrue(
                 runCatching {
                     repository.write(ownedSession, draft.copy(revision = 20))
-                }.isFailure
+                }
+                    .isFailure
             )
             assertTrue(runCatching { repository.open(ownedSession) }.isFailure)
             assertEquals(BookSearchDraft(), repository.open(neighboringSession))
@@ -73,15 +82,16 @@ class BookSearchDraftFileTest {
             repository.release(neighboringSession)
             listOf(ownedSession, neighboringSession).forEach { session ->
                 listOf(
-                    ".json",
-                    ".json.bak",
-                    ".json.new",
-                    ".json.closed",
-                    ".json.closed.bak",
-                    ".json.closed.new",
-                ).forEach { suffix ->
-                    File(directory, session + suffix).delete()
-                }
+                        ".json",
+                        ".json.bak",
+                        ".json.new",
+                        ".json.closed",
+                        ".json.closed.bak",
+                        ".json.closed.new",
+                    )
+                    .forEach { suffix ->
+                        File(directory, session + suffix).delete()
+                    }
             }
         }
     }

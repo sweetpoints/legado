@@ -1247,3 +1247,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 搜索页完整查询、选择位置、scope、结果/HTML、筛选草稿、确认与原生回执迁移到独立 filesDir Atomic 会话；磁盘 revision 和终止标记备份阻止迟到写入复活，锁使用固定路径 stripes。新增实际大载荷、Atomic恢复和邻居会话保留测试编译覆盖；完整 JVM 与 AndroidTest Kotlin 编译通过，设备端未执行。
 
 搜索不可变模型、私有Atomic仓库与大载荷文件测试按人类可读要求展开为多行声明、具名参数和显式 imports；补充关闭标记及revision的原因说明，行为不变。纯可读性单独提交，完整验证与下一基础整理共用一次构建。
+
+搜索引擎与元数据基础及其既有回归完成第二批可读性整理：显式 imports、描述性名字、展开条件和分步断言，回调抽成小函数但行为不变。两个整理批的14项Kotlin文件统一应用固定ktfmt0.64 Kotlinlang样式，formatter --check 与 git diff --check通过；完整验证在精确tip按统一构建slot执行。

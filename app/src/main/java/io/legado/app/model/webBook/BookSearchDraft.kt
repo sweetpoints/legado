@@ -1,6 +1,8 @@
 package io.legado.app.model.webBook
 
-/** Complete editable/search payload stays in private storage; SavedState owns only the session UUID. */
+/**
+ * Complete editable/search payload stays in private storage; SavedState owns only the session UUID.
+ */
 data class BookSearchDraft(
     val revision: Long = 0,
     val query: String = "",
