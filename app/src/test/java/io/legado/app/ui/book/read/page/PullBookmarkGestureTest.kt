@@ -159,7 +159,7 @@ class PullBookmarkGestureTest {
         val showInHeader =
             pageView
                 .substringAfter("fun showBookmarkIndicator(show: Boolean)")
-                .substringBefore("private fun updateReaderInfo")
+                .substringBefore("fun upBg()")
         assertTrue(showInHeader.contains("val showInHeader = show && headerVisible"))
         assertTrue(showInHeader.contains("bookmarkVisible = show"))
         assertTrue(showInHeader.contains("bookmarkInHeader = showInHeader"))
