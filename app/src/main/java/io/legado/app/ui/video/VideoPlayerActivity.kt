@@ -4,32 +4,20 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.os.Build
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
-import android.view.textclassifier.TextClassifier
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
-import com.bumptech.glide.Glide
-import com.bumptech.glide.request.RequestOptions
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -40,19 +28,9 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.CoverRequest
 import io.legado.app.databinding.ActivityVideoPlayerBinding
-import io.legado.app.help.GlideImageGetter
-import io.legado.app.help.TextViewTagHandler
-import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.gsyVideo.VideoPlayer
-import io.legado.app.help.webView.PooledWebView
-import io.legado.app.help.webView.WebJsExtensions
-import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
-import io.legado.app.help.webView.WebViewPool
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryTextColor
@@ -63,16 +41,13 @@ import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
-import io.legado.app.ui.components.cover.ComposeCover
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.longSnackbar
@@ -80,8 +55,6 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setHtml
-import io.legado.app.utils.setMarkdown
 import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
@@ -89,13 +62,6 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
-import io.noties.markwon.Markwon
-import io.noties.markwon.ext.tables.TablePlugin
-import io.noties.markwon.html.HtmlPlugin
-import io.noties.markwon.image.glide.GlideImagesPlugin
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class VideoPlayerActivity :
     VMBaseActivity<ActivityVideoPlayerBinding, VideoPlayerViewModel>(),
@@ -107,44 +73,8 @@ class VideoPlayerActivity :
     private var chapterRailState by mutableStateOf(VideoChapterRailState())
     private var bookHeaderState by mutableStateOf(VideoBookHeaderState())
     private var coverRequest by mutableStateOf(CoverRequest())
+    private var bookIntroState by mutableStateOf(VideoBookIntroState())
     private var starMenuItem: MenuItem? = null
-    private var isIntroTextViewAttached = false
-    private val introTextView by lazy {
-        val inflater = LayoutInflater.from(this)
-        val view =
-            inflater.inflate(R.layout.view_book_intro, binding.tvIntroContainer, false)
-                as ScrollTextView
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
-            view.revealOnFocusHint = false
-        }
-        view
-    }
-    private var pooledWebView: PooledWebView? = null
-    private val imgAvailableWidth by lazy {
-        val textView = introTextView
-        textView.width - textView.paddingLeft - textView.paddingRight - 8.dpToPx()
-    }
-    private var initGetter = false
-    private val glideImageGetter by lazy {
-        initGetter = true
-        GlideImageGetter(
-            this,
-            introTextView,
-            lifecycle,
-            imgAvailableWidth,
-            VideoPlay.source?.getKey(),
-        )
-    }
-
-    private val textViewTagHandler by lazy {
-        TextViewTagHandler(
-            object : TextViewTagHandler.OnButtonClickListener {
-                override fun onButtonClick(name: String, click: String) {
-                    viewModel.onButtonClick(this@VideoPlayerActivity, "info button $name", click)
-                }
-            }
-        )
-    }
     private var isNew = true
     private var forwardedToFloatingWindow = false
     private var isFullScreen = false
@@ -229,8 +159,7 @@ class VideoPlayerActivity :
         }
         setupPlayerView()
         setupChapterRail()
-        setupCover()
-        setupBookHeader()
+        setupBookInfo()
         initView()
         upView()
         onBackPressedDispatcher.addCallback(this) {
@@ -247,7 +176,7 @@ class VideoPlayerActivity :
         binding.root.setBackgroundColor(backgroundColor)
         val book = VideoPlay.book
         if (book == null) {
-            binding.data.invisible()
+            binding.dataCompose.invisible()
             binding.chaptersContainer.invisible()
             return
         }
@@ -257,191 +186,17 @@ class VideoPlayerActivity :
 
     private fun showBook(book: Book) {
         bookHeaderState = VideoBookHeaderState(book.name, book.getRealAuthor())
-        binding.run {
-            showCover(book)
-            showBookIntro(book)
-        }
-    }
-
-    inner class CustomWebViewClient : WebViewClient() {
-        private val jsStr = getInjectionString
-
-        override fun shouldOverrideUrlLoading(
-            view: WebView?,
-            request: WebResourceRequest?,
-        ): Boolean {
-            request?.let {
-                val uri = it.url
-                return when (uri.scheme) {
-                    "http",
-                    "https" -> false
-                    "legado",
-                    "yuedu" -> {
-                        startActivity<OnLineImportActivity> {
-                            data = uri
-                        }
-                        true
-                    }
-
-                    else -> {
-                        binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
-                            openUrl(uri)
-                        }
-                        true
-                    }
-                }
-            }
-            return true
-        }
-
-        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-            super.onPageStarted(view, url, favicon)
-            view?.evaluateJavascript(jsStr, null)
-        }
-
-        override fun onPageFinished(view: WebView?, url: String?) {
-            super.onPageFinished(view, url)
-            view?.post {
-                binding.tvIntroContainer.requestLayout()
-            }
-        }
-    }
-
-    private fun showBookIntro(book: Book) {
-        val intro = book.getDisplayIntro()
-        if (intro.isNullOrBlank()) {
-            destroyWeb()
-            binding.tvIntroContainer.removeAllViews()
-            isIntroTextViewAttached = false
-            binding.tvIntroContainer.gone()
-            return
-        }
-        binding.tvIntroContainer.visible()
-        if (intro.startsWith("<useweb>")) {
-            val lastIndex = intro.lastIndexOf("<")
-            if (lastIndex < 8) {
-                introTextView.text = intro
-                return
-            }
-            val html = intro.substring(8, lastIndex)
-            val pooledWebView =
-                this.pooledWebView
-                    ?: let {
-                        val pooledWebView = WebViewPool.acquire(this)
-                        val webView = pooledWebView.realWebView
-                        webView.onResume()
-                        webView.webViewClient = CustomWebViewClient()
-                        webView.addJavascriptInterface(WebCacheManager, nameCache)
-                        VideoPlay.source?.let {
-                            webView.addJavascriptInterface(it, nameSource)
-                            val webJsExtensions = WebJsExtensions(it, null, webView)
-                            webView.addJavascriptInterface(webJsExtensions, nameJava)
-                        }
-                        pooledWebView
-                    }
-            val webView = pooledWebView.realWebView
-            if (isIntroTextViewAttached || this.pooledWebView == null) {
-                isIntroTextViewAttached = false
-                this.pooledWebView = pooledWebView
-                binding.tvIntroContainer.removeAllViews()
-                binding.tvIntroContainer.addView(webView)
-            }
-            val bookUrl =
-                VideoPlay.book
-                    ?.bookUrl
-                    ?.takeIf { it.startsWith("http", true) }
-                    ?.substringBefore(",")
-            webView.loadDataWithBaseURL(bookUrl, html, "text/html", "utf-8", bookUrl)
-            return
-        }
-        val tvIntro = introTextView
-        if (!isIntroTextViewAttached || pooledWebView != null) {
-            destroyWeb()
-            binding.tvIntroContainer.removeAllViews()
-            tvIntro.text = null
-            binding.tvIntroContainer.addView(tvIntro)
-            isIntroTextViewAttached = true
-        }
-        if (intro.startsWith("<usehtml>")) {
-            val lastIndex = intro.lastIndexOf("<")
-            if (lastIndex < 9) {
-                tvIntro.text = intro
-                return
-            }
-            val html = intro.substring(9, lastIndex)
-            tvIntro.setHtml(
-                html,
-                glideImageGetter,
-                textViewTagHandler,
-                imgOnLongClickListener = {
-                    showDialogFragment(PhotoDialog(it, VideoPlay.source?.getKey()))
-                },
-                imgOnClickListener = {
-                    viewModel.onButtonClick(this@VideoPlayerActivity, "info image", it)
-                },
+        showCover(book)
+        bookIntroState =
+            VideoBookIntroState(
+                rawIntro = book.getDisplayIntro().orEmpty(),
+                bookUrl = book.bookUrl,
+                source = VideoPlay.source,
             )
-        } else if (intro.startsWith("<md>")) {
-            val lastIndex = intro.lastIndexOf("<")
-            if (lastIndex < 4) {
-                tvIntro.text = intro
-                return
-            }
-            val mark = intro.substring(4, lastIndex)
-            lifecycleScope.launch {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    tvIntro.setTextClassifier(TextClassifier.NO_OP)
-                }
-                val context = this@VideoPlayerActivity
-                val markwon: Markwon
-                val markdown =
-                    withContext(IO) {
-                        markwon =
-                            Markwon.builder(context)
-                                .usePlugin(
-                                    GlideImagesPlugin.create(
-                                        Glide.with(context)
-                                            .applyDefaultRequestOptions(
-                                                RequestOptions()
-                                                    .override(imgAvailableWidth)
-                                                    .encodeQuality(88)
-                                            )
-                                    )
-                                )
-                                .usePlugin(HtmlPlugin.create())
-                                .usePlugin(TablePlugin.create(context))
-                                .build()
-                        markwon.toMarkdown(mark)
-                    }
-                tvIntro.setMarkdown(
-                    markwon,
-                    markdown,
-                    imgOnLongClickListener = { source ->
-                        showDialogFragment(PhotoDialog(source, VideoPlay.source?.getKey()))
-                    },
-                )
-            }
-        } else {
-            tvIntro.text = intro
-        }
     }
 
     private fun showCover(book: Book) {
         coverRequest = CoverRequest.from(book)
-    }
-
-    private fun setupCover() {
-        binding.coverCompose.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.coverCompose.setContent {
-            LegadoComposeTheme {
-                ComposeCover(
-                    request = coverRequest,
-                    modifier = Modifier.fillMaxSize(),
-                    contentDescription = getString(R.string.img_cover),
-                )
-            }
-        }
     }
 
     private fun setupChapterRail() {
@@ -464,13 +219,51 @@ class VideoPlayerActivity :
         }
     }
 
-    private fun setupBookHeader() {
-        binding.bookHeaderCompose.setViewCompositionStrategy(
+    private fun setupBookInfo() {
+        binding.dataCompose.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
-        binding.bookHeaderCompose.setContent {
+        binding.dataCompose.setContent {
             LegadoComposeTheme {
-                VideoBookHeaderScreen(state = bookHeaderState)
+                VideoBookInfoScreen(
+                    coverRequest = coverRequest,
+                    coverDescription = getString(R.string.img_cover),
+                    headerState = bookHeaderState,
+                    introState = bookIntroState,
+                    onIntroAction = { action ->
+                        val name =
+                            if (action.name == "image") {
+                                "info image"
+                            } else {
+                                "info ${action.name}"
+                            }
+                        viewModel.onButtonClick(this@VideoPlayerActivity, name, action.script)
+                    },
+                    onIntroLink = ::handleIntroLink,
+                    onIntroImage = { image ->
+                        showDialogFragment(PhotoDialog(image, bookIntroState.source?.getKey()))
+                    },
+                )
+            }
+        }
+    }
+
+    private fun handleIntroLink(url: String) {
+        val uri = url.toUri()
+        when (uri.scheme) {
+            "http",
+            "https" -> openUrl(uri)
+            "legado",
+            "yuedu" -> {
+                startActivity<OnLineImportActivity> {
+                    data = uri
+                }
+            }
+
+            else -> {
+                binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                    openUrl(uri)
+                }
             }
         }
     }
@@ -526,14 +319,14 @@ class VideoPlayerActivity :
                 }
             supportActionBar?.hide()
             binding.chaptersContainer.gone()
-            binding.data.gone()
+            binding.dataCompose.gone()
             playerView.startWindowFullscreen(this, false, false)
         } else {
             requestedOrientation = orientation
             supportActionBar?.show()
             if (VideoPlay.book != null) {
                 binding.chaptersContainer.visible()
-                binding.data.visible()
+                binding.dataCompose.visible()
             }
             playerView.postDelayed(
                 {
@@ -826,36 +619,13 @@ class VideoPlayerActivity :
         viewModel.delFavorite()
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (initGetter) {
-            glideImageGetter.start()
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (initGetter) {
-            glideImageGetter.stop()
-        }
-    }
-
     override fun onDestroy() {
-        destroyWeb()
         super.onDestroy()
-        if (initGetter) {
-            glideImageGetter.clear()
-        }
         if (!forwardedToFloatingWindow) {
             VideoPlay.saveRead()
             VideoPlay.stopLoading()
             playerView.getCurrentPlayer().release()
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-    }
-
-    private fun destroyWeb() {
-        pooledWebView?.let { WebViewPool.release(it) }
-        pooledWebView = null
     }
 }

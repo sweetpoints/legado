@@ -16,47 +16,12 @@
         android:layout_height="wrap_content"
         tools:layout_height="300dp" />
 
-    <LinearLayout
-        android:id="@+id/data"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/data_compose"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_margin="8dp"
-        android:layout_weight="1"
-        android:orientation="horizontal"
-        android:paddingBottom="12dp">
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/cover_compose"
-            android:layout_width="110dp"
-            android:layout_height="160dp"
-            tools:ignore="MissingConstraints" />
-
-        <LinearLayout
-            android:id="@+id/info"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            tools:ignore="NestedWeights">
-
-            <androidx.compose.ui.platform.ComposeView
-                android:id="@+id/book_header_compose"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/scroll_view_r"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-                <FrameLayout
-                    android:id="@+id/tv_intro_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
-            </androidx.core.widget.NestedScrollView>
-
-        </LinearLayout>
-
-    </LinearLayout>
+        android:layout_weight="1" />
 
     <LinearLayout
         android:id="@+id/chapters_container"

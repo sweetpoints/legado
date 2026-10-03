@@ -1638,3 +1638,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 视频播放 Activity 封面：封面绘制迁到共享 ComposeCover，保留书籍封面地址、作者/标题叠字、来源标识、Wi-Fi 偏好配置和默认封面策略；GSY surface 与简介 renderer 不变。
 
 共享书籍简介 WebView renderer 的 source contract 扩展为 BaseSource，保留书源与 RSS 源的 useweb JavaScript bridge；新增 RSS source.getKey() 的 Android 行为回归。视频简介 Compose 宿主接入另批提交。
+
+视频播放 Activity 信息面板合并为单个纯 Compose Screen：封面、书名作者、可选择纯文本简介及滚动布局由 Compose 渲染；HTML、Markdown 与 useweb 复用独立生命周期管理的 WebView 内容 renderer，保留图片预览/点击脚本/来源 JS bridge 和链接路由。Activity XML 不再承载封面与简介 View 树。
