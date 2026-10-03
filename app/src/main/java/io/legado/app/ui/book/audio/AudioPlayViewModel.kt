@@ -159,8 +159,17 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         requestGeneration++
+        navigationSessions.clear()
         initTask?.cancel()
-        update { copy(ready = false, closeRequested = false) }
+        update {
+            copy(
+                ready = false,
+                closeRequested = false,
+                bookNavigation = null,
+                askShelf = false,
+                shelfAdded = false,
+            )
+        }
         initTask = viewModelScope.launch {
             try {
                 when (repository.initialize(bookUrl)) {
