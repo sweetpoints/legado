@@ -10,7 +10,6 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -67,7 +66,7 @@ internal class FileJsSourceEditRepository(context: Context) : JsSourceEditReposi
 
     private fun lock(sessionId: String): Mutex {
         val path = File(directory, "$sessionId.json").absolutePath
-        return locks.getOrPut(path) { Mutex() }
+        return locks[(path.hashCode() and Int.MAX_VALUE) % locks.size]
     }
 
     private fun readFile(sessionId: String): JsSourceDraft? {
@@ -93,7 +92,7 @@ internal class FileJsSourceEditRepository(context: Context) : JsSourceEditReposi
                 val previousDraft = readFile(sessionId)
                 if (
                     previousDraft?.finished == true ||
-                        (previousDraft?.revision ?: -1) > draft.revision
+                        (previousDraft?.revision ?: -1) >= draft.revision
                 ) {
                     return@withLock
                 }
@@ -134,6 +133,6 @@ internal class FileJsSourceEditRepository(context: Context) : JsSourceEditReposi
     override suspend fun release(path: String?) = transfers.delete(path)
 
     companion object {
-        private val locks = ConcurrentHashMap<String, Mutex>()
+        private val locks = Array(64) { Mutex() }
     }
 }

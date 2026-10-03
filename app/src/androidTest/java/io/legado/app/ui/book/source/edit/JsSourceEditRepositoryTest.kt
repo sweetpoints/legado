@@ -52,6 +52,23 @@ class JsSourceEditRepositoryTest {
     }
 
     @Test
+    fun sameRevisionCannotReplaceAlreadyAcceptedPayload() = runBlocking {
+        val sessionId = session()
+        val accepted =
+            JsSourceDraft("accepted", "source", JsSourceEditStage.DEBUG_READY, revision = 7)
+        repository.write(sessionId, accepted)
+        FileJsSourceEditRepository(context)
+            .write(
+                sessionId,
+                accepted.copy(text = "different script", stage = JsSourceEditStage.SAVING),
+            )
+        assertEquals(accepted, repository.read(sessionId))
+        val newer = accepted.copy(text = "newer script", revision = 8)
+        repository.write(sessionId, newer)
+        assertEquals(newer, repository.read(sessionId))
+    }
+
+    @Test
     fun resultTransferRoundTripsLargeTextAndReleasesOnlyRequestedFile() = runBlocking {
         val script = "const large = '🦉';\n".repeat(25_000)
         val ownedPath = repository.transfer(script).also { transfers += it }
