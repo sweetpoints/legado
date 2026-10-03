@@ -52,7 +52,7 @@ class MangaReaderSessionRepositoryTest {
             )
         withContext(Dispatchers.Main) { repository.write(id, value) }
         assertEquals(value, repository.read(id))
-        assertTrue(File(directory, "$id.json").length() > large.length())
+        assertTrue(File(directory, "$id.json").length() > large.length)
     }
 
     @Test
