@@ -18,10 +18,21 @@ import org.junit.rules.TemporaryFolder
 
 class AppLogDialogLiveUpdateTest {
     @get:Rule val folder = TemporaryFolder()
-    @Before fun setUp() { AppLog.clear(); HttpLogStore.clear() }
-    @After fun tearDown() { AppLog.clear(); HttpLogStore.clear() }
 
-    @Test fun writesAndClearUpdateAnAlreadySubscribedRepository() = runTest {
+    @Before
+    fun setUp() {
+        AppLog.clear()
+        HttpLogStore.clear()
+    }
+
+    @After
+    fun tearDown() {
+        AppLog.clear()
+        HttpLogStore.clear()
+    }
+
+    @Test
+    fun writesAndClearUpdateAnAlreadySubscribedRepository() = runTest {
         val repository = DefaultAppLogsRepository(folder.root)
         val updates = Channel<List<AppLogRow>>(Channel.UNLIMITED)
         backgroundScope.launch { repository.logs.collect { updates.send(it) } }
@@ -32,7 +43,8 @@ class AppLogDialogLiveUpdateTest {
         assertTrue(updates.receive().isEmpty())
     }
 
-    @Test fun clearRemovesApplicationLogsAndHttpRecords() = runTest {
+    @Test
+    fun clearRemovesApplicationLogsAndHttpRecords() = runTest {
         val record = record()
         HttpLogStore.add(record)
         val repository = DefaultAppLogsRepository(folder.root)
@@ -43,8 +55,19 @@ class AppLogDialogLiveUpdateTest {
         assertNull(HttpLogStore.get(record.id))
     }
 
-    private fun record() = HttpLogRecord(
-        101, 0, "GET", "/test", "https://example.com/test", 200, 5,
-        "", "", "", "test body", null,
-    )
+    private fun record() =
+        HttpLogRecord(
+            101,
+            0,
+            "GET",
+            "/test",
+            "https://example.com/test",
+            200,
+            5,
+            "",
+            "",
+            "",
+            "test body",
+            null,
+        )
 }

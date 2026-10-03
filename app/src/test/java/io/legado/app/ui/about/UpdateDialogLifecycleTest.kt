@@ -1,22 +1,22 @@
 package io.legado.app.ui.about
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class UpdateDialogLifecycleTest {
 
     @Test
     fun `update callbacks skip dialogs after fragment state is saved`() {
-        val main = functionBody(
-            "src/main/java/io/legado/app/ui/main/MainActivity.kt",
-            "private suspend fun upVersion()",
-            "private suspend fun setLocalPassword()"
-        )
-        val shared = projectFile(
-            "src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt"
-        ).readText()
+        val main =
+            functionBody(
+                "src/main/java/io/legado/app/ui/main/MainActivity.kt",
+                "private suspend fun upVersion()",
+                "private suspend fun setLocalPassword()",
+            )
+        val shared =
+            projectFile("src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt").readText()
 
         assertGuardBeforeDialog(main, "supportFragmentManager.isStateSaved")
         assertGuardBeforeDialog(shared, "isAdded && !childFragmentManager.isStateSaved")
@@ -30,9 +30,8 @@ class UpdateDialogLifecycleTest {
 
     @Test
     fun `manual update errors show their message without a redundant action prefix`() {
-        val shared = projectFile(
-            "src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt"
-        ).readText()
+        val shared =
+            projectFile("src/main/java/io/legado/app/ui/about/CheckAppUpdate.kt").readText()
         assertTrue(shared.contains("AppUpdate.checkBeta(lifecycleScope)"))
         assertTrue(shared.contains("AppUpdate.gitHubUpdate.check(lifecycleScope)"))
         assertTrue(shared.contains("appCtx.toastOnUi(it.localizedMessage)"))
@@ -49,8 +48,7 @@ class UpdateDialogLifecycleTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
+        return sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)
             ?: error("Project file not found: $pathInApp")
     }
 }

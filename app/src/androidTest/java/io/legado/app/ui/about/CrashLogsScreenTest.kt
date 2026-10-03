@@ -19,24 +19,36 @@ import org.junit.Test
 
 class CrashLogsScreenTest {
     @get:Rule val compose = createComposeRule()
-    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun rowsAndClearEmitTheirCallbacks() {
+    @Test
+    fun rowsAndClearEmitTheirCallbacks() {
         var opened: String? = null
         var clears = 0
         val entry = CrashLogEntry("local/log", "2026-10-02.log")
         compose.setContent {
             LegadoComposeTheme {
-                CrashLogsScreen(CrashLogsUiState(logs = listOf(entry), isLoading = false),
-                    { opened = it }, { clears++ }, {}, {}, Modifier.heightIn(max = 500.dp))
+                CrashLogsScreen(
+                    CrashLogsUiState(logs = listOf(entry), isLoading = false),
+                    { opened = it },
+                    { clears++ },
+                    {},
+                    {},
+                    Modifier.heightIn(max = 500.dp),
+                )
             }
         }
         compose.onNodeWithText(entry.name).performClick()
         compose.onNodeWithTag("crash-logs-clear").performClick()
-        compose.runOnIdle { assertEquals(entry.id, opened); assertEquals(1, clears) }
+        compose.runOnIdle {
+            assertEquals(entry.id, opened)
+            assertEquals(1, clears)
+        }
     }
 
-    @Test fun busyStateDisablesClearAndEmptyStateAppearsAfterLoad() {
+    @Test
+    fun busyStateDisablesClearAndEmptyStateAppearsAfterLoad() {
         val state = mutableStateOf(CrashLogsUiState())
         compose.setContent {
             LegadoComposeTheme {
@@ -51,14 +63,23 @@ class CrashLogsScreenTest {
         compose.onNodeWithTag("crash-logs-empty").assertExists()
     }
 
-    @Test fun errorOffersRetryWithoutLosingExistingRows() {
+    @Test
+    fun errorOffersRetryWithoutLosingExistingRows() {
         var retries = 0
         compose.setContent {
             LegadoComposeTheme {
-                CrashLogsScreen(CrashLogsUiState(
-                    logs = listOf(CrashLogEntry("id", "remaining.log")),
-                    isLoading = false, error = "Permission denied"),
-                    {}, {}, { retries++ }, {}, Modifier.heightIn(max = 500.dp))
+                CrashLogsScreen(
+                    CrashLogsUiState(
+                        logs = listOf(CrashLogEntry("id", "remaining.log")),
+                        isLoading = false,
+                        error = "Permission denied",
+                    ),
+                    {},
+                    {},
+                    { retries++ },
+                    {},
+                    Modifier.heightIn(max = 500.dp),
+                )
             }
         }
         compose.onNodeWithText("Permission denied").assertExists()

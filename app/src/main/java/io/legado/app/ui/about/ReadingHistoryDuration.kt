@@ -1,6 +1,10 @@
 package io.legado.app.ui.about
 
-internal fun formatDuring(mss: Long, useDays: Boolean = false, showSeconds: Boolean = true): String {
+internal fun formatDuring(
+    mss: Long,
+    useDays: Boolean = false,
+    showSeconds: Boolean = true,
+): String {
     val totalHours = mss / (1000 * 60 * 60)
     val days = if (useDays) totalHours / 24 else 0
     val hours = if (useDays) totalHours % 24 else totalHours

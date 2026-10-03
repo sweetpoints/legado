@@ -21,19 +21,28 @@ import org.junit.Test
 
 class AppLogsScreenTest {
     @get:Rule val compose = createComposeRule()
-    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun clearRequiresConfirmationAndCancelDoesNotEmitClear() {
+    @Test
+    fun clearRequiresConfirmationAndCancelDoesNotEmitClear() {
         val state = mutableStateOf(AppLogsUiState(isLoading = false))
         var clears = 0
         compose.setContent {
             LegadoComposeTheme {
                 AppLogsScreen(
-                    state.value, {},
+                    state.value,
+                    {},
                     { state.value = state.value.copy(showClearConfirmation = true) },
-                    { clears++; state.value = state.value.copy(showClearConfirmation = false) },
+                    {
+                        clears++
+                        state.value = state.value.copy(showClearConfirmation = false)
+                    },
                     { state.value = state.value.copy(showClearConfirmation = false) },
-                    {}, {}, {}, Modifier.heightIn(max = 500.dp),
+                    {},
+                    {},
+                    {},
+                    Modifier.heightIn(max = 500.dp),
                 )
             }
         }
@@ -48,49 +57,89 @@ class AppLogsScreenTest {
         compose.runOnIdle { assertEquals(1, clears) }
     }
 
-    @Test fun exportMenuClosesAfterSelectionAndActionsAreDisabledWhileWorking() {
+    @Test
+    fun exportMenuClosesAfterSelectionAndActionsAreDisabledWhileWorking() {
         val state = mutableStateOf(AppLogsUiState(isLoading = false))
         var exports = 0
         compose.setContent {
             LegadoComposeTheme {
-                AppLogsScreen(state.value, {}, {}, {}, {}, { exports++ }, {}, {},
-                    Modifier.heightIn(max = 500.dp))
+                AppLogsScreen(
+                    state.value,
+                    {},
+                    {},
+                    {},
+                    {},
+                    { exports++ },
+                    {},
+                    {},
+                    Modifier.heightIn(max = 500.dp),
+                )
             }
         }
         compose.onNodeWithTag("app-logs-menu").performClick()
         compose.onNodeWithText(context.getString(R.string.export)).performClick()
-        compose.runOnIdle { assertEquals(1, exports); state.value = state.value.copy(isWorking = true) }
+        compose.runOnIdle {
+            assertEquals(1, exports)
+            state.value = state.value.copy(isWorking = true)
+        }
         compose.onNodeWithText(context.getString(R.string.export)).assertDoesNotExist()
         compose.onNodeWithTag("app-logs-clear").assertIsNotEnabled()
         compose.onNodeWithTag("app-logs-menu").assertIsNotEnabled()
     }
 
-    @Test fun rowsWithDetailsEmitTheirStableIds() {
+    @Test
+    fun rowsWithDetailsEmitTheirStableIds() {
         var opened: Long? = null
-        val logs = listOf(AppLogRow(12, "details time", "error", true),
-            AppLogRow(13, "plain time", "plain", false))
+        val logs =
+            listOf(
+                AppLogRow(12, "details time", "error", true),
+                AppLogRow(13, "plain time", "plain", false),
+            )
         compose.setContent {
             LegadoComposeTheme {
-                AppLogsScreen(AppLogsUiState(logs = logs, isLoading = false),
-                    { opened = it }, {}, {}, {}, {}, {}, {}, Modifier.heightIn(max = 500.dp))
+                AppLogsScreen(
+                    AppLogsUiState(logs = logs, isLoading = false),
+                    { opened = it },
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    Modifier.heightIn(max = 500.dp),
+                )
             }
         }
         compose.onNodeWithTag("app-log-12").performClick()
         compose.runOnIdle { assertEquals(12L, opened) }
     }
 
-    @Test fun livePrependingKeepsTheVisibleLogAnchoredByItsId() {
+    @Test
+    fun livePrependingKeepsTheVisibleLogAnchoredByItsId() {
         val rows = (1L..60L).map { AppLogRow(it, "time $it", "message $it", false) }
         val state = mutableStateOf(AppLogsUiState(logs = rows, isLoading = false))
         compose.setContent {
             LegadoComposeTheme {
-                AppLogsScreen(state.value, {}, {}, {}, {}, {}, {}, {}, Modifier.heightIn(max = 500.dp))
+                AppLogsScreen(
+                    state.value,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    Modifier.heightIn(max = 500.dp),
+                )
             }
         }
         compose.onNodeWithTag("app-logs-list").performScrollToIndex(30)
         compose.onNodeWithTag("app-log-31").assertIsDisplayed()
         compose.runOnIdle {
-            state.value = state.value.copy(logs = listOf(AppLogRow(100, "new time", "new message", false)) + rows)
+            state.value =
+                state.value.copy(
+                    logs = listOf(AppLogRow(100, "new time", "new message", false)) + rows
+                )
         }
         compose.onNodeWithTag("app-log-31").assertIsDisplayed()
     }

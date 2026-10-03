@@ -47,7 +47,10 @@ fun CrashLogsScreen(
                         enabled = !state.isBusy,
                         modifier = Modifier.testTag("crash-logs-clear"),
                     ) {
-                        Icon(painterResource(R.drawable.ic_clear_all), stringResource(R.string.clear))
+                        Icon(
+                            painterResource(R.drawable.ic_clear_all),
+                            stringResource(R.string.clear),
+                        )
                     }
                 },
             )
@@ -55,25 +58,36 @@ fun CrashLogsScreen(
                 CircularProgressIndicator(Modifier.padding(16.dp).testTag("crash-logs-progress"))
             }
             state.error?.let { error ->
-                Text(error.ifBlank { stringResource(R.string.error) },
+                Text(
+                    error.ifBlank { stringResource(R.string.error) },
                     modifier = Modifier.padding(horizontal = 16.dp).testTag("crash-logs-error"),
-                    color = MaterialTheme.colorScheme.error)
+                    color = MaterialTheme.colorScheme.error,
+                )
                 TextButton(onClick = onRetry, enabled = !state.isBusy) {
                     Text(stringResource(R.string.retry))
                 }
             }
             if (state.logs.isEmpty() && !state.isBusy && state.error == null) {
-                Text(stringResource(R.string.empty), Modifier.padding(24.dp).testTag("crash-logs-empty"))
+                Text(
+                    stringResource(R.string.empty),
+                    Modifier.padding(24.dp).testTag("crash-logs-empty"),
+                )
             }
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag("crash-logs-list"),
+                modifier =
+                    Modifier.fillMaxWidth().weight(1f, fill = false).testTag("crash-logs-list"),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
                 items(state.logs, key = { it.id }) { log ->
-                    Text(log.name, style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth()
-                            .clickable(enabled = !state.isBusy, onClick = { onOpenLog(log.id) })
-                            .padding(16.dp).testTag("crash-log-${log.id}"))
+                    Text(
+                        log.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .clickable(enabled = !state.isBusy, onClick = { onOpenLog(log.id) })
+                                .padding(16.dp)
+                                .testTag("crash-log-${log.id}"),
+                    )
                     HorizontalDivider()
                 }
             }

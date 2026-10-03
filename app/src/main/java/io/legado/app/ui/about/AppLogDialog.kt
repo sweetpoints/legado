@@ -24,13 +24,17 @@ import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.setLayout
 
 class AppLogDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<AppLogsViewModel> {
-        viewModelFactory {
-            initializer {
-                AppLogsViewModel(DefaultAppLogsRepository(requireContext().cacheDir), createSavedStateHandle())
+    private val viewModel by
+        viewModels<AppLogsViewModel> {
+            viewModelFactory {
+                initializer {
+                    AppLogsViewModel(
+                        DefaultAppLogsRepository(requireContext().cacheDir),
+                        createSavedStateHandle(),
+                    )
+                }
             }
         }
-    }
 
     override fun onStart() {
         super.onStart()
@@ -44,8 +48,9 @@ class AppLogDialog : BaseComposeDialogFragment() {
             onShowLog = ::showLog,
             onShare = ::shareLogs,
             onClose = ::dismiss,
-            modifier = Modifier.fillMaxWidth()
-                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
         )
     }
 
@@ -66,19 +71,21 @@ class AppLogDialog : BaseComposeDialogFragment() {
         if (!isAdded || parentFragmentManager.isStateSaved) return false
         try {
             val context = requireContext()
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_SUBJECT, getString(R.string.log))
-                when (export) {
-                    is AppLogExport.Text -> putExtra(Intent.EXTRA_TEXT, export.text)
-                    is AppLogExport.Document -> {
-                        val uri = FileProvider.getUriForFile(context, AppConst.authority, export.file)
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        clipData = ClipData.newRawUri(getString(R.string.log), uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val intent =
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, getString(R.string.log))
+                    when (export) {
+                        is AppLogExport.Text -> putExtra(Intent.EXTRA_TEXT, export.text)
+                        is AppLogExport.Document -> {
+                            val uri =
+                                FileProvider.getUriForFile(context, AppConst.authority, export.file)
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            clipData = ClipData.newRawUri(getString(R.string.log), uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
                     }
                 }
-            }
             startActivity(Intent.createChooser(intent, getString(R.string.log)))
         } catch (_: Exception) {
             viewModel.shareFailed(export)

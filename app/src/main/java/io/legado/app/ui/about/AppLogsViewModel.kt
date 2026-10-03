@@ -7,6 +7,7 @@ import io.legado.app.data.repository.AppLogDetail
 import io.legado.app.data.repository.AppLogExport
 import io.legado.app.data.repository.AppLogRow
 import io.legado.app.data.repository.AppLogsRepository
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -14,9 +15,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.coroutines.coroutineContext
 
-enum class AppLogNotice { NoLogs, ShareFailed }
+enum class AppLogNotice {
+    NoLogs,
+    ShareFailed,
+}
 
 data class AppLogsUiState(
     val logs: List<AppLogRow> = emptyList(),
@@ -28,16 +31,18 @@ data class AppLogsUiState(
     val openedLog: AppLogDetail? = null,
     val export: AppLogExport? = null,
 ) {
-    val isBusy: Boolean get() = isLoading || isWorking
+    val isBusy: Boolean
+        get() = isLoading || isWorking
 }
 
 class AppLogsViewModel(
     private val repository: AppLogsRepository,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(AppLogsUiState(
-        showClearConfirmation = savedStateHandle[CONFIRM_CLEAR] ?: false,
-    ))
+    private val mutableState =
+        MutableStateFlow(
+            AppLogsUiState(showClearConfirmation = savedStateHandle[CONFIRM_CLEAR] ?: false)
+        )
     val state = mutableState.asStateFlow()
     private var observation: Job? = null
 
@@ -96,16 +101,18 @@ class AppLogsViewModel(
         }
     }
 
-    fun prepareExport() = operate(AppLogNotice.ShareFailed) {
-        val export = repository.prepareExport()
-        coroutineContext.ensureActive()
-        mutableState.update {
-            it.copy(export = export, notice = if (export == null) AppLogNotice.NoLogs else null)
+    fun prepareExport() =
+        operate(AppLogNotice.ShareFailed) {
+            val export = repository.prepareExport()
+            coroutineContext.ensureActive()
+            mutableState.update {
+                it.copy(export = export, notice = if (export == null) AppLogNotice.NoLogs else null)
+            }
         }
-    }
 
     private fun operate(failureNotice: AppLogNotice? = null, block: suspend () -> Unit) {
-        if (state.value.isBusy || state.value.openedLog != null || state.value.export != null) return
+        if (state.value.isBusy || state.value.openedLog != null || state.value.export != null)
+            return
         mutableState.update { it.copy(isWorking = true, error = null, notice = null) }
         viewModelScope.launch {
             try {
@@ -116,8 +123,11 @@ class AppLogsViewModel(
                 if (error is CancellationException) throw error
                 coroutineContext.ensureActive()
                 mutableState.update {
-                    it.copy(isWorking = false, notice = failureNotice,
-                        error = if (failureNotice == null) error.message.orEmpty() else null)
+                    it.copy(
+                        isWorking = false,
+                        notice = failureNotice,
+                        error = if (failureNotice == null) error.message.orEmpty() else null,
+                    )
                 }
             }
         }
@@ -133,7 +143,8 @@ class AppLogsViewModel(
 
     fun shareFailed(export: AppLogExport) {
         mutableState.update {
-            if (it.export == export) it.copy(export = null, notice = AppLogNotice.ShareFailed) else it
+            if (it.export == export) it.copy(export = null, notice = AppLogNotice.ShareFailed)
+            else it
         }
     }
 

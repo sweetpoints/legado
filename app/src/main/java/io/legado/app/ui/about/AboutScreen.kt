@@ -35,9 +35,8 @@ import io.legado.app.ui.theme.LocalLegadoColors
 /**
  * 「关于」页的 Compose 实现。
  *
- * 偏好列表原先由 `AboutFragment`（PreferenceFragmentCompat + `R.xml.about`）承载，
- * 现已改为纯 Compose 列表，作为「设置类页面」迁移的参考样板。
- * 行的内边距/字号与原先的 `view_preference.xml` 对齐。
+ * 偏好列表原先由 `AboutFragment`（PreferenceFragmentCompat + `R.xml.about`）承载， 现已改为纯 Compose
+ * 列表，作为「设置类页面」迁移的参考样板。 行的内边距/字号与原先的 `view_preference.xml` 对齐。
  */
 @Composable
 fun AboutScreen(
@@ -65,13 +64,13 @@ fun AboutScreen(
         )
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(6.dp)
-                // 原实现用 filletBackground：圆角 3dp + 背景色
-                .clip(RoundedCornerShape(3.dp))
-                .background(colors.background)
-                .padding(10.dp),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .padding(6.dp)
+                    // 原实现用 filletBackground：圆角 3dp + 背景色
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(colors.background)
+                    .padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -92,11 +91,12 @@ fun AboutScreen(
             items(aboutMainItems, key = { it.key }) { item ->
                 SettingsRow(
                     title = stringResource(item.titleRes),
-                    summary = when {
-                        item.key == "update_log" -> versionSummary
-                        item.summaryRes != null -> stringResource(item.summaryRes)
-                        else -> null
-                    },
+                    summary =
+                        when {
+                            item.key == "update_log" -> versionSummary
+                            item.summaryRes != null -> stringResource(item.summaryRes)
+                            else -> null
+                        },
                     onClick = { onItemClick(item.key) },
                 )
             }
@@ -119,25 +119,25 @@ private data class AboutItem(
     val summaryRes: Int? = null,
 )
 
-private val aboutMainItems = listOf(
-    AboutItem("contributors", R.string.contributors, R.string.contributors_summary),
-    AboutItem("update_log", R.string.update_log),
-    AboutItem("check_update", R.string.check_update),
-    AboutItem("check_beta_update", R.string.check_beta_update),
-)
+private val aboutMainItems =
+    listOf(
+        AboutItem("contributors", R.string.contributors, R.string.contributors_summary),
+        AboutItem("update_log", R.string.update_log),
+        AboutItem("check_update", R.string.check_update),
+        AboutItem("check_beta_update", R.string.check_beta_update),
+    )
 
-private val aboutOtherItems = listOf(
-    AboutItem("crashLog", R.string.crash_log),
-    AboutItem("saveLog", R.string.save_log),
-    AboutItem("createHeapDump", R.string.create_heap_dump),
-    AboutItem("privacyPolicy", R.string.privacy_policy),
-    AboutItem("license", R.string.license),
-    AboutItem("disclaimer", R.string.disclaimer),
-)
+private val aboutOtherItems =
+    listOf(
+        AboutItem("crashLog", R.string.crash_log),
+        AboutItem("saveLog", R.string.save_log),
+        AboutItem("createHeapDump", R.string.create_heap_dump),
+        AboutItem("privacyPolicy", R.string.privacy_policy),
+        AboutItem("license", R.string.license),
+        AboutItem("disclaimer", R.string.disclaimer),
+    )
 
-/**
- * 顶栏。原实现是 `TitleBar` + `R.menu.about`，这里改为纯 Compose。
- */
+/** 顶栏。原实现是 `TitleBar` + `R.menu.about`，这里改为纯 Compose。 */
 @Composable
 private fun AboutTopBar(
     onBack: () -> Unit,
@@ -165,8 +165,7 @@ private fun AboutTopBar(
 }
 
 /**
- * 原文是把 `legado_gzh` 这段文字染成强调色。原实现依赖 View 测量完成后的 `post {}`，
- * 且原文找不到时靠 `runCatching` 兜底；这里显式处理找不到的情况。
+ * 原文是把 `legado_gzh` 这段文字染成强调色。原实现依赖 View 测量完成后的 `post {}`， 且原文找不到时靠 `runCatching` 兜底；这里显式处理找不到的情况。
  */
 private fun String.withAccent(highlight: String, accent: Color): AnnotatedString {
     val start = indexOf(highlight)

@@ -17,21 +17,48 @@ import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.utils.toastOnUi
 
 class ReadRecordActivity : BaseComposeActivity() {
-    val viewModel by viewModels<ReadingHistoryViewModel> { viewModelFactory { initializer {
-        ReadingHistoryViewModel(RoomReadingHistoryRepository(applicationContext), FileReadingHistoryDraftRepository(applicationContext), createSavedStateHandle())
-    } } }
-    private val covers by lazy { GlideReadingHistoryCoverRepository(applicationContext) }
-    @Composable override fun Content(savedInstanceState: Bundle?) {
-        ReadingHistoryRoute(viewModel, covers, { super.finish() }, ::open, { toastOnUi(it) }, { !supportFragmentManager.isStateSaved })
-    }
-    private fun open(destination: ReadingHistoryDestination) {
-        if (destination.kind == ReadingHistoryReader.Search) { SearchActivity.start(this, destination.name); return }
-        val cls = when (destination.kind) {
-            ReadingHistoryReader.Audio -> AudioPlayActivity::class.java
-            ReadingHistoryReader.Video -> VideoPlayerActivity::class.java
-            ReadingHistoryReader.Manga -> ReadMangaActivity::class.java
-            else -> ReadBookActivity::class.java
+    val viewModel by
+        viewModels<ReadingHistoryViewModel> {
+            viewModelFactory {
+                initializer {
+                    ReadingHistoryViewModel(
+                        RoomReadingHistoryRepository(applicationContext),
+                        FileReadingHistoryDraftRepository(applicationContext),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
         }
-        startActivity(Intent(this, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("bookUrl", destination.key))
+    private val covers by lazy { GlideReadingHistoryCoverRepository(applicationContext) }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        ReadingHistoryRoute(
+            viewModel,
+            covers,
+            { super.finish() },
+            ::open,
+            { toastOnUi(it) },
+            { !supportFragmentManager.isStateSaved },
+        )
+    }
+
+    private fun open(destination: ReadingHistoryDestination) {
+        if (destination.kind == ReadingHistoryReader.Search) {
+            SearchActivity.start(this, destination.name)
+            return
+        }
+        val cls =
+            when (destination.kind) {
+                ReadingHistoryReader.Audio -> AudioPlayActivity::class.java
+                ReadingHistoryReader.Video -> VideoPlayerActivity::class.java
+                ReadingHistoryReader.Manga -> ReadMangaActivity::class.java
+                else -> ReadBookActivity::class.java
+            }
+        startActivity(
+            Intent(this, cls)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra("bookUrl", destination.key)
+        )
     }
 }

@@ -34,10 +34,10 @@ import splitties.init.appCtx
  *
  * 相比最初的实现：
  * * 不再需要 `activity_about.xml`（通过 Activity.setContent 创建组合）
- * * 不再需要 `AboutFragment`（PreferenceFragmentCompat）与 `R.xml.about`，
- *   偏好列表已由 [AboutScreen] 用纯 Compose 重写
- * * 「公众号高亮」由原来的 `ForegroundColorSpan` + `post {}` 改为 Compose 的
- *   `buildAnnotatedString`，不再依赖 View 测量完成时机
+ * * 不再需要 `AboutFragment`（PreferenceFragmentCompat）与 `R.xml.about`， 偏好列表已由 [AboutScreen] 用纯 Compose
+ *   重写
+ * * 「公众号高亮」由原来的 `ForegroundColorSpan` + `post {}` 改为 Compose 的 `buildAnnotatedString`，不再依赖 View
+ *   测量完成时机
  * * 右上角两个动作由 `R.menu.about` + `TitleBar` 改为 Compose 顶栏
  *
  * 原先散落在 Fragment 里的业务逻辑（Markdown 对话框、日志与堆转储导出）随之迁到这里。
@@ -52,7 +52,7 @@ class AboutActivity : BaseComposeActivity() {
             onShare = {
                 share(
                     getString(R.string.app_share_description),
-                    getString(R.string.app_name)
+                    getString(R.string.app_name),
                 )
             },
             onScoring = { openUrl("market://details?id=$packageName") },
@@ -75,9 +75,7 @@ class AboutActivity : BaseComposeActivity() {
         }
     }
 
-    /**
-     * 显示 md 文件
-     */
+    /** 显示 md 文件 */
     private fun showMdFile(title: String, fileName: String) {
         val mdText = String(assets.open(fileName).readBytes())
         showDialogFragment(TextDialog(title, mdText, TextDialog.Mode.MD))
@@ -85,45 +83,51 @@ class AboutActivity : BaseComposeActivity() {
 
     private fun saveLog() {
         Coroutine.async {
-            val backupPath = AppConfig.backupPath ?: let {
-                appCtx.toastOnUi("未设置备份目录")
-                return@async
+                val backupPath =
+                    AppConfig.backupPath
+                        ?: let {
+                            appCtx.toastOnUi("未设置备份目录")
+                            return@async
+                        }
+                if (!AppConfig.recordLog) {
+                    appCtx.toastOnUi("未开启日志记录，请去其他设置里打开记录日志")
+                    delay(3000)
+                }
+                val doc = FileDoc.fromUri(Uri.parse(backupPath), true)
+                copyLogs(doc)
+                copyHeapDump(doc)
+                appCtx.toastOnUi("已保存至备份目录")
             }
-            if (!AppConfig.recordLog) {
-                appCtx.toastOnUi("未开启日志记录，请去其他设置里打开记录日志")
-                delay(3000)
+            .onError {
+                AppLog.put("保存日志出错\n${it.localizedMessage}", it, true)
             }
-            val doc = FileDoc.fromUri(Uri.parse(backupPath), true)
-            copyLogs(doc)
-            copyHeapDump(doc)
-            appCtx.toastOnUi("已保存至备份目录")
-        }.onError {
-            AppLog.put("保存日志出错\n${it.localizedMessage}", it, true)
-        }
     }
 
     private fun createHeapDump() {
         Coroutine.async {
-            val backupPath = AppConfig.backupPath ?: let {
-                appCtx.toastOnUi("未设置备份目录")
-                return@async
+                val backupPath =
+                    AppConfig.backupPath
+                        ?: let {
+                            appCtx.toastOnUi("未设置备份目录")
+                            return@async
+                        }
+                if (!AppConfig.recordHeapDump) {
+                    appCtx.toastOnUi("未开启堆转储记录，请去其他设置里打开记录堆转储")
+                    delay(3000)
+                }
+                appCtx.toastOnUi("开始创建堆转储")
+                System.gc()
+                CrashHandler.doHeapDump(true)
+                val doc = FileDoc.fromUri(Uri.parse(backupPath), true)
+                if (!copyHeapDump(doc)) {
+                    appCtx.toastOnUi("未找到堆转储文件")
+                } else {
+                    appCtx.toastOnUi("已保存至备份目录")
+                }
             }
-            if (!AppConfig.recordHeapDump) {
-                appCtx.toastOnUi("未开启堆转储记录，请去其他设置里打开记录堆转储")
-                delay(3000)
+            .onError {
+                AppLog.put("保存堆转储失败\n${it.localizedMessage}", it)
             }
-            appCtx.toastOnUi("开始创建堆转储")
-            System.gc()
-            CrashHandler.doHeapDump(true)
-            val doc = FileDoc.fromUri(Uri.parse(backupPath), true)
-            if (!copyHeapDump(doc)) {
-                appCtx.toastOnUi("未找到堆转储文件")
-            } else {
-                appCtx.toastOnUi("已保存至备份目录")
-            }
-        }.onError {
-            AppLog.put("保存堆转储失败\n${it.localizedMessage}", it)
-        }
     }
 
     private fun copyLogs(doc: FileDoc) {
@@ -140,24 +144,23 @@ class AboutActivity : BaseComposeActivity() {
         doc.find("logs.zip")?.delete()
 
         zipFile.inputStream().use { input ->
-            doc.createFileIfNotExist("logs.zip").openOutputStream().getOrNull()
-                ?.use {
-                    input.copyTo(it)
-                }
+            doc.createFileIfNotExist("logs.zip").openOutputStream().getOrNull()?.use {
+                input.copyTo(it)
+            }
         }
         zipFile.delete()
     }
 
     private fun copyHeapDump(doc: FileDoc): Boolean {
-        val heapFile = FileDoc.fromFile(File(appCtx.externalCache, "heapDump")).list()
-            ?.firstOrNull() ?: return false
+        val heapFile =
+            FileDoc.fromFile(File(appCtx.externalCache, "heapDump")).list()?.firstOrNull()
+                ?: return false
         doc.find("heapDump")?.delete()
         val heapDumpDoc = doc.createFolderIfNotExist("heapDump")
         heapFile.openInputStream().getOrNull()?.use { input ->
-            heapDumpDoc.createFileIfNotExist(heapFile.name).openOutputStream().getOrNull()
-                ?.use {
-                    input.copyTo(it)
-                }
+            heapDumpDoc.createFileIfNotExist(heapFile.name).openOutputStream().getOrNull()?.use {
+                input.copyTo(it)
+            }
         }
         return true
     }
@@ -172,5 +175,4 @@ class AboutActivity : BaseComposeActivity() {
             AppLog.put("保存Logcat失败\n$e", e)
         }
     }
-
 }

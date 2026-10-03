@@ -16,11 +16,12 @@ import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.setLayout
 
 class CrashLogsDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<CrashLogsViewModel> {
-        viewModelFactory {
-            initializer { CrashLogsViewModel(FileCrashLogsRepository(requireContext())) }
+    private val viewModel by
+        viewModels<CrashLogsViewModel> {
+            viewModelFactory {
+                initializer { CrashLogsViewModel(FileCrashLogsRepository(requireContext())) }
+            }
         }
-    }
 
     override fun onStart() {
         super.onStart()
@@ -41,7 +42,8 @@ class CrashLogsDialog : BaseComposeDialogFragment() {
                         }
                         true
                     } catch (_: IllegalStateException) {
-                        // Keep the pending log for the next resumed lifecycle if transactions are busy.
+                        // Keep the pending log for the next resumed lifecycle if transactions are
+                        // busy.
                         false
                     }
                 } else false

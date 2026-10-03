@@ -30,5 +30,12 @@ fun CrashLogsRoute(
             }
         }
     }
-    CrashLogsScreen(state, viewModel::openLog, viewModel::clearLogs, viewModel::refresh, onClose, modifier)
+    CrashLogsScreen(
+        state,
+        viewModel::openLog,
+        viewModel::clearLogs,
+        viewModel::refresh,
+        onClose,
+        modifier,
+    )
 }

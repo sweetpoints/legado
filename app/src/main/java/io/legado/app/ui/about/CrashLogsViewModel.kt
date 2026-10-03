@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.data.repository.CrashLogContent
 import io.legado.app.data.repository.CrashLogEntry
 import io.legado.app.data.repository.CrashLogsRepository
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -12,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.coroutines.coroutineContext
 
 data class CrashLogsUiState(
     val logs: List<CrashLogEntry> = emptyList(),
@@ -22,7 +22,8 @@ data class CrashLogsUiState(
     val error: String? = null,
     val openedLog: CrashLogContent? = null,
 ) {
-    val isBusy: Boolean get() = isLoading || isClearing || loadingLogId != null
+    val isBusy: Boolean
+        get() = isLoading || isClearing || loadingLogId != null
 }
 
 class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewModel() {
@@ -31,7 +32,9 @@ class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewMode
     private var listJob: Job? = null
     private var readJob: Job? = null
 
-    init { refresh() }
+    init {
+        refresh()
+    }
 
     fun refresh() {
         if (state.value.isClearing) return
@@ -52,7 +55,12 @@ class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewMode
     }
 
     fun openLog(id: String) {
-        if (state.value.isBusy || state.value.openedLog != null || state.value.logs.none { it.id == id }) return
+        if (
+            state.value.isBusy ||
+                state.value.openedLog != null ||
+                state.value.logs.none { it.id == id }
+        )
+            return
         mutableState.update { it.copy(loadingLogId = id, error = null) }
         readJob = viewModelScope.launch {
             try {
@@ -62,7 +70,9 @@ class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewMode
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 coroutineContext.ensureActive()
-                mutableState.update { it.copy(loadingLogId = null, error = error.message.orEmpty()) }
+                mutableState.update {
+                    it.copy(loadingLogId = null, error = error.message.orEmpty())
+                }
             }
         }
     }
@@ -76,7 +86,13 @@ class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewMode
         listJob?.cancel()
         readJob?.cancel()
         mutableState.update {
-            it.copy(isLoading = false, isClearing = true, loadingLogId = null, openedLog = null, error = null)
+            it.copy(
+                isLoading = false,
+                isClearing = true,
+                loadingLogId = null,
+                openedLog = null,
+                error = null,
+            )
         }
         listJob = viewModelScope.launch {
             var failure: String? = null

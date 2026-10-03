@@ -61,21 +61,39 @@ fun AppLogsScreen(
                 backLabel = stringResource(R.string.close),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 actions = {
-                    IconButton(onClick = onRequestClear, enabled = !state.isBusy,
-                        modifier = Modifier.testTag("app-logs-clear")) {
-                        Icon(painterResource(R.drawable.ic_clear_all), stringResource(R.string.clear))
+                    IconButton(
+                        onClick = onRequestClear,
+                        enabled = !state.isBusy,
+                        modifier = Modifier.testTag("app-logs-clear"),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_clear_all),
+                            stringResource(R.string.clear),
+                        )
                     }
                     Box {
-                        IconButton(onClick = { menuExpanded = true }, enabled = !state.isBusy,
-                            modifier = Modifier.testTag("app-logs-menu")) {
-                            Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.more_menu))
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            enabled = !state.isBusy,
+                            modifier = Modifier.testTag("app-logs-menu"),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_more_vert),
+                                stringResource(R.string.more_menu),
+                            )
                         }
-                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.export)) },
                                 leadingIcon = { Icon(painterResource(R.drawable.ic_export), null) },
                                 enabled = !state.isBusy,
-                                onClick = { menuExpanded = false; onExport() },
+                                onClick = {
+                                    menuExpanded = false
+                                    onExport()
+                                },
                             )
                         }
                     }
@@ -85,23 +103,37 @@ fun AppLogsScreen(
                 CircularProgressIndicator(Modifier.padding(16.dp).testTag("app-logs-progress"))
             }
             state.error?.let { error ->
-                Text(error.ifBlank { stringResource(R.string.error) },
-                    Modifier.padding(16.dp).testTag("app-logs-error"), color = MaterialTheme.colorScheme.error)
+                Text(
+                    error.ifBlank { stringResource(R.string.error) },
+                    Modifier.padding(16.dp).testTag("app-logs-error"),
+                    color = MaterialTheme.colorScheme.error,
+                )
                 TextButton(onClick = onRetry, enabled = !state.isBusy) {
                     Text(stringResource(R.string.retry))
                 }
             }
             state.notice?.let { notice ->
-                Text(stringResource(when (notice) {
-                    AppLogNotice.NoLogs -> R.string.no_log
-                    AppLogNotice.ShareFailed -> R.string.can_not_share
-                }), Modifier.padding(16.dp).testTag("app-logs-notice"))
+                Text(
+                    stringResource(
+                        when (notice) {
+                            AppLogNotice.NoLogs -> R.string.no_log
+                            AppLogNotice.ShareFailed -> R.string.can_not_share
+                        }
+                    ),
+                    Modifier.padding(16.dp).testTag("app-logs-notice"),
+                )
             }
-            if (state.logs.isEmpty() && !state.isBusy && state.error == null && state.notice == null) {
-                Text(stringResource(R.string.no_log), Modifier.padding(24.dp).testTag("app-logs-empty"))
+            if (
+                state.logs.isEmpty() && !state.isBusy && state.error == null && state.notice == null
+            ) {
+                Text(
+                    stringResource(R.string.no_log),
+                    Modifier.padding(24.dp).testTag("app-logs-empty"),
+                )
             }
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag("app-logs-list"),
+                modifier =
+                    Modifier.fillMaxWidth().weight(1f, fill = false).testTag("app-logs-list"),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
                 items(state.logs, key = { it.id }) { log ->
@@ -131,23 +163,36 @@ fun AppLogsScreen(
 @Composable
 private fun AppLogItem(log: AppLogRow, enabled: Boolean, onOpenLog: (Long) -> Unit) {
     val linkColor = MaterialTheme.colorScheme.primary
-    val message = remember(log.message, linkColor) {
-        buildAnnotatedString {
-            append(log.message)
-            val matcher = Patterns.WEB_URL.matcher(log.message)
-            while (matcher.find()) {
-                val link = matcher.group().orEmpty()
-                val url = if (link.contains("://")) link else "https://$link"
-                addLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = linkColor))),
-                    matcher.start(), matcher.end())
+    val message =
+        remember(log.message, linkColor) {
+            buildAnnotatedString {
+                append(log.message)
+                val matcher = Patterns.WEB_URL.matcher(log.message)
+                while (matcher.find()) {
+                    val link = matcher.group().orEmpty()
+                    val url = if (link.contains("://")) link else "https://$link"
+                    addLink(
+                        LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = linkColor))),
+                        matcher.start(),
+                        matcher.end(),
+                    )
+                }
             }
         }
-    }
-    Column(Modifier.fillMaxWidth().testTag("app-log-${log.id}")
-        .then(if (log.hasDetails) Modifier.clickable(enabled = enabled) { onOpenLog(log.id) } else Modifier)
-        .padding(16.dp)) {
-        Text(log.time, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(
+        Modifier.fillMaxWidth()
+            .testTag("app-log-${log.id}")
+            .then(
+                if (log.hasDetails) Modifier.clickable(enabled = enabled) { onOpenLog(log.id) }
+                else Modifier
+            )
+            .padding(16.dp)
+    ) {
+        Text(
+            log.time,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         SelectionContainer {
             Text(message, style = MaterialTheme.typography.bodyMedium)
         }
