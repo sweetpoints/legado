@@ -2,6 +2,7 @@ package io.legado.app.ui.book.search
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.preferences.BookSearchPreferencesRepository
+import io.legado.app.data.repository.BookSearchDraftConflictException
 import io.legado.app.data.repository.BookSearchDraftRepository
 import io.legado.app.data.repository.BookSearchMetadataRepository
 import io.legado.app.help.book.ReadRecordIndex
@@ -312,11 +313,47 @@ class BookSearchViewModelTest {
             }
         }
 
+    @Test
+    fun rejectedLateWriteCannotAuthorizeNativeReceiptOrReleaseNewerOwner() =
+        runTest(dispatcher) {
+            val drafts = Drafts(BookSearchDraft(revision = 10))
+            val viewModel =
+                BookSearchViewModel(drafts, Preferences(), Metadata(), SavedStateHandle())
+            try {
+                runCurrent()
+                val gate = CompletableDeferred<Unit>()
+                drafts.writeGate = gate
+                viewModel.openLog()
+                val receipt = viewModel.state.value.draft.effects.single()
+                runCurrent()
+                val newer = BookSearchDraft(revision = 11, query = "new owner's query")
+                drafts.current = newer
+                gate.complete(Unit)
+                runCurrent()
+
+                assertTrue(viewModel.state.value.draftConflict)
+                assertFalse(viewModel.state.value.ready)
+                assertEquals(-1L, viewModel.state.value.durableRevision)
+                assertNull(viewModel.consumeReceipt(receipt.id))
+                viewModel.editQuery("stale editing")
+                viewModel.retry()
+                runCurrent()
+                assertEquals(newer, drafts.current)
+                viewModel.release()
+                assertTrue(drafts.released.isEmpty())
+                assertEquals(newer, drafts.current)
+            } finally {
+                drafts.writeGate?.complete(Unit)
+                viewModel.stop()
+            }
+        }
+
     private class Drafts(var current: BookSearchDraft = BookSearchDraft()) :
         BookSearchDraftRepository {
         var failOpen = false
         var failWrite = false
         var openGate: CompletableDeferred<Unit>? = null
+        var writeGate: CompletableDeferred<Unit>? = null
         val written = mutableListOf<BookSearchDraft>()
         val released = mutableListOf<String>()
 
@@ -327,8 +364,13 @@ class BookSearchViewModelTest {
         }
 
         override suspend fun write(session: String, draft: BookSearchDraft) {
+            writeGate?.let { gate -> withContext(NonCancellable) { gate.await() } }
             check(!failWrite) { "synthetic write failure" }
-            if (draft.revision > current.revision) current = draft
+            if (draft.revision > current.revision) {
+                current = draft
+            } else if (draft != current) {
+                throw BookSearchDraftConflictException()
+            }
             written += draft
         }
 

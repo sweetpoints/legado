@@ -21,6 +21,7 @@ internal data class BookSearchUiState(
     val searching: Boolean = false,
     val durableRevision: Long = -1,
     val persistError: String? = null,
+    val draftConflict: Boolean = false,
     val metadataError: String? = null,
     val commandError: String? = null,
     val settingsBusy: Boolean = false,
@@ -30,5 +31,5 @@ internal data class BookSearchUiState(
         get() = filterBookSearchSnapshots(draft.results, preferences.resultFilter)
 
     val ready: Boolean
-        get() = !loading && !initializationFailed
+        get() = !loading && !initializationFailed && !draftConflict
 }

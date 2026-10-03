@@ -11,11 +11,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal class BookSearchDraftConflictException :
+    IllegalStateException("Search draft changed in another owner")
+
 internal interface BookSearchDraftRepository {
     suspend fun open(session: String): BookSearchDraft
 
     suspend fun existing(session: String): BookSearchDraft = open(session)
 
+    /** Returns only after this exact payload is accepted; conflicting/older payloads throw. */
     suspend fun write(session: String, draft: BookSearchDraft)
 
     suspend fun release(session: String)
@@ -91,9 +95,9 @@ internal class FileBookSearchDraftRepository(context: Context) : BookSearchDraft
                 val exists = sessionFile.exists() || File(sessionFile.path + ".bak").exists()
                 check(!closed(sessionFile) && exists) { "Book search draft closed" }
                 // A revision identifies one accepted payload; retries cannot replace it.
-                if (draft.revision > read(sessionFile).revision) {
-                    save(sessionFile, draft)
-                }
+                val current = read(sessionFile)
+                if (draft.revision > current.revision) save(sessionFile, draft)
+                else if (draft != current) throw BookSearchDraftConflictException()
             }
         }
 

@@ -26,6 +26,7 @@ import io.legado.app.R
 
 @Composable
 internal fun BookSearchDialogs(state: BookSearchUiState, actions: BookSearchActions) {
+    if (state.draftConflict) return
     if (state.draft.filterDraft != null) {
         val text = state.draft.filterDraft
         var input by remember {

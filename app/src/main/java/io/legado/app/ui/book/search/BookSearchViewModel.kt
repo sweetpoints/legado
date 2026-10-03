@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.data.preferences.BookSearchPreferencesRepository
+import io.legado.app.data.repository.BookSearchDraftConflictException
 import io.legado.app.data.repository.BookSearchDraftRepository
 import io.legado.app.data.repository.BookSearchEngineRepository
 import io.legado.app.data.repository.BookSearchMetadataRepository
@@ -69,13 +70,17 @@ internal class BookSearchViewModel(
     init {
         jobs += viewModelScope.launch {
             for (draft in writes) {
+                if (state.value.draftConflict) continue
                 try {
                     persist(draft)
                 } catch (error: Exception) {
                     currentCoroutineContext().ensureActive()
-                    if (!stopped)
-                        mutableState.value =
-                            state.value.copy(persistError = error.message ?: error.toString())
+                    if (!stopped) {
+                        if (error is BookSearchDraftConflictException) rejectStaleOwner(error)
+                        else
+                            mutableState.value =
+                                state.value.copy(persistError = error.message ?: error.toString())
+                    }
                 }
             }
         }
@@ -647,7 +652,17 @@ internal class BookSearchViewModel(
     }
 
     private suspend fun persist(draft: BookSearchDraft) = writeGate.withLock {
-        drafts.write(session, draft)
+        check(!state.value.draftConflict) { "Search draft ownership lost" }
+        // A checkpoint can overtake this owner's buffered writer; that obsolete write is
+        // unnecessary.
+        if (draft.revision < state.value.durableRevision) return@withLock
+        try {
+            drafts.write(session, draft)
+        } catch (error: BookSearchDraftConflictException) {
+            currentCoroutineContext().ensureActive()
+            if (!stopped) rejectStaleOwner(error)
+            throw error
+        }
         currentCoroutineContext().ensureActive()
         if (!stopped)
             mutableState.value =
@@ -657,8 +672,22 @@ internal class BookSearchViewModel(
                 )
     }
 
+    private fun rejectStaleOwner(error: BookSearchDraftConflictException) {
+        acceptsEngine = false
+        commandGeneration++
+        commandJob?.cancel()
+        settingsJob?.cancel()
+        mutableState.value =
+            state.value.copy(
+                draftConflict = true,
+                searching = false,
+                persistError = error.message,
+                durableRevision = -1,
+            )
+    }
+
     fun retry() {
-        if (stopped) return
+        if (stopped || state.value.draftConflict) return
         if (state.value.initializationFailed) initialize()
         else if (state.value.ready) {
             pendingSettings?.let { operation ->
@@ -686,10 +715,12 @@ internal class BookSearchViewModel(
      * A real finish releases private payloads; Activity recreation retains the ViewModel/session.
      */
     suspend fun release() {
+        val lostOwnership = state.value.draftConflict
         stop()
         withContext(NonCancellable) {
             engine?.close()
-            writeGate.withLock { drafts.release(session) }
+            // Closing a stale Activity must not release the newer owner's durable session.
+            if (!lostOwnership) writeGate.withLock { drafts.release(session) }
         }
     }
 

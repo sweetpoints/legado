@@ -59,9 +59,14 @@ class BookSearchDraftFileTest {
             val acceptedDraft =
                 BookSearchDraft(revision = 10, query = "accepted", filterDraft = "kept")
             repository.write(session, acceptedDraft)
-            restoredRepository.write(
-                session,
-                acceptedDraft.copy(query = "late", filterDraft = "lost"),
+            assertTrue(
+                runCatching {
+                    restoredRepository.write(
+                        session,
+                        acceptedDraft.copy(query = "late", filterDraft = "lost"),
+                    )
+                }
+                    .isFailure
             )
             assertEquals(acceptedDraft, repository.open(session))
 
@@ -125,7 +130,12 @@ class BookSearchDraftFileTest {
                     interrupted = true,
                 )
             repository.write(ownedSession, draft)
-            repository.write(ownedSession, draft.copy(revision = 9, query = "stale"))
+            assertTrue(
+                runCatching {
+                    repository.write(ownedSession, draft.copy(revision = 9, query = "stale"))
+                }
+                    .isFailure
+            )
             assertEquals(draft, FileBookSearchDraftRepository(context).open(ownedSession))
 
             val sessionFile = File(directory, "$ownedSession.json")

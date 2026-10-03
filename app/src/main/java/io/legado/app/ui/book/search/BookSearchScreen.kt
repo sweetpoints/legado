@@ -220,10 +220,14 @@ internal fun BookSearchScreen(state: BookSearchUiState, actions: BookSearchActio
                             color = MaterialTheme.colorScheme.error,
                         )
                         TextButton(
-                            onClick = actions.retry,
+                            onClick = if (state.draftConflict) actions.close else actions.retry,
                             modifier = Modifier.testTag("search-retry"),
                         ) {
-                            Text(stringResource(R.string.retry))
+                            Text(
+                                stringResource(
+                                    if (state.draftConflict) R.string.close else R.string.retry
+                                )
+                            )
                         }
                     }
                 }
