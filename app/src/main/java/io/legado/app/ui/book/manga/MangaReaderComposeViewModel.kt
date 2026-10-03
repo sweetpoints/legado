@@ -5,6 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookType
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.preferences.AppMangaFooterSettingsRepository
 import io.legado.app.data.preferences.AppMangaReaderSettingsRepository
@@ -24,6 +27,7 @@ import io.legado.app.data.repository.MangaReaderLaunch
 import io.legado.app.data.repository.MangaReaderSessionController
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isPdf
+import io.legado.app.help.book.removeType
 import io.legado.app.model.ReadManga
 import io.legado.app.utils.GSON
 import java.util.UUID
@@ -80,6 +84,10 @@ internal data class MangaReaderUiState(
     val footer: MangaFooterDraft = MangaFooterDraft(),
     val colorFilter: MangaColorFilterValues = MangaColorFilterValues(),
     val footerPage: MangaReaderItem.Page? = null,
+    val exitPrompt: Boolean = false,
+    val finishRequested: Boolean = false,
+    val shelfAdded: Boolean = false,
+    val deletedResult: Boolean = false,
 )
 
 /**
@@ -496,6 +504,61 @@ internal class MangaReaderComposeViewModel(
                 engine?.openChapter(request.chapterIndex, request.pageIndex)
             }
         }
+    }
+
+    fun bookSnapshot(): Book? = synchronized(ReadManga) { ReadManga.book?.copy() }
+
+    fun changeSource(book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
+        mutableState.value = state.value.copy(loading = true, error = null)
+        engine?.changeTo(book, toc, onSuccess)
+    }
+
+    fun requestExit() {
+        if (ReadManga.book == null || ReadManga.inBookshelf) {
+            mutableState.value = state.value.copy(finishRequested = true)
+        } else if (state.value.settings.showAddToShelfAlert) {
+            mutableState.value = state.value.copy(exitPrompt = true)
+        } else resolveExit(addToShelf = false)
+    }
+
+    fun dismissExit() {
+        mutableState.value = state.value.copy(exitPrompt = false)
+    }
+
+    fun resolveExit(addToShelf: Boolean) {
+        val capturedBook = ReadManga.book ?: return requestExit()
+        val owner = generation
+        mutableState.value = state.value.copy(exitPrompt = false)
+        ownerScope?.launch {
+            if (addToShelf) {
+                val added = operations.addToBookshelf(capturedBook.bookUrl)
+                if (owner == generation && ReadManga.book === capturedBook) {
+                    if (added) {
+                        capturedBook.removeType(BookType.notShelf)
+                        ReadManga.inBookshelf = true
+                        mutableState.value = state.value.copy(shelfAdded = true)
+                    } else notify("未找到漫画书籍")
+                }
+            } else {
+                operations.removeFromBookshelf(capturedBook.bookUrl)
+                if (owner == generation)
+                    mutableState.value = state.value.copy(finishRequested = true)
+            }
+        }
+    }
+
+    fun finishFromBookInfo() {
+        mutableState.value = state.value.copy(deletedResult = true, finishRequested = true)
+    }
+
+    fun consumeShelfAdded() {
+        mutableState.value = state.value.copy(shelfAdded = false)
+    }
+
+    fun reloadContent() = ReadManga.loadOrUpContent()
+
+    fun syncProgress() {
+        if (ReadManga.inBookshelf) ReadManga.syncProgress({ callback?.sureNewProgress(it) })
     }
 
     private fun notify(message: String) {

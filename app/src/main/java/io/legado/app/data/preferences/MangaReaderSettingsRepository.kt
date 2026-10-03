@@ -21,6 +21,7 @@ data class MangaReaderSettingsValues(
     val useExternalBrowser: Boolean = false,
     val showTitleAddition: Boolean = false,
     val isEInk: Boolean = false,
+    val showAddToShelfAlert: Boolean = true,
 )
 
 enum class MangaReaderSetting {
@@ -57,6 +58,7 @@ class AppMangaReaderSettingsRepository {
                 useExternalBrowser = AppConfig.readUrlInBrowser,
                 showTitleAddition = AppConfig.showReadTitleBarAddition,
                 isEInk = AppConfig.isEInkMode,
+                showAddToShelfAlert = AppConfig.showAddToShelfAlert,
             )
         }
 

@@ -1,12 +1,15 @@
 package io.legado.app.data.repository
 
 import android.net.Uri
+import androidx.room.withTransaction
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.removeType
 import io.legado.app.help.globalExecutor
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
@@ -38,6 +41,8 @@ interface MangaReaderOperationsRepository {
     suspend fun saveImage(request: MangaImageSaveRequest)
 
     suspend fun refreshChapter(request: MangaChapterRefreshRequest): Boolean
+
+    suspend fun addToBookshelf(bookUrl: String): Boolean
 
     suspend fun removeFromBookshelf(bookUrl: String)
 }
@@ -79,6 +84,16 @@ class DefaultMangaReaderOperationsRepository : MangaReaderOperationsRepository {
                     ?: return@withContext false
             BookHelp.delContent(book, chapter)
             true
+        }
+
+    override suspend fun addToBookshelf(bookUrl: String): Boolean =
+        withContext(Dispatchers.IO + NonCancellable) {
+            appDb.withTransaction {
+                val freshBook = appDb.bookDao.getBook(bookUrl) ?: return@withTransaction false
+                freshBook.removeType(BookType.notShelf)
+                appDb.bookDao.update(freshBook)
+                true
+            }
         }
 
     override suspend fun removeFromBookshelf(bookUrl: String) {

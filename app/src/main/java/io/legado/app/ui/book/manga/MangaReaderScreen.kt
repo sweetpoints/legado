@@ -73,6 +73,8 @@ internal fun MangaReaderScreen(
     onPreload: (Int) -> Unit,
     onAutoSpeed: (Int) -> Unit,
     onCloudProgress: (Boolean) -> Unit,
+    onResolveExit: (Boolean) -> Unit,
+    onDismissExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
@@ -156,6 +158,25 @@ internal fun MangaReaderScreen(
                 onAutoSpeed = onAutoSpeed,
             )
         }
+    }
+    if (state.exitPrompt) {
+        AlertDialog(
+            onDismissRequest = onDismissExit,
+            title = { Text(stringResource(R.string.add_to_bookshelf)) },
+            text = {
+                Text(stringResource(R.string.check_add_bookshelf, state.book?.name.orEmpty()))
+            },
+            confirmButton = {
+                TextButton(onClick = { onResolveExit(true) }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onResolveExit(false) }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
     if (state.pendingCloudProgress != null) {
         AlertDialog(

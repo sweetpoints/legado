@@ -1488,3 +1488,8 @@ The new pure Compose menu includes the original book-info/catalog/source/refresh
 ### Manga reader Screen and footer
 
 The pure Compose reader Screen now combines the Compose viewport/menu with loading/retry, chapter loading/end feedback, and private cloud-progress confirmation. The footer retains each configured label, physical left/center alignment, outlined theme-aware text, and a separately supplied clock. Boundaries and volume-only chapters retain the last real image footer, matching the legacy callback. Its percentage follows the original zero-image cases and holds rounded 100 percent at 99.9 until the actual final image; a JVM regression covers that rounding edge. Footer and color-filter repositories supply immutable values to the ViewModel, including live preview entry points. Host/Route wiring is next. Formatting/check and diff checks pass; final candidate Gradle validation remains pending.
+
+
+### Manga Compose exit acceptance
+
+Exit now belongs to immutable ViewModel state. A book already on the shelf requests platform finish; a temporary book either offers the original add-to-shelf decision or completes queued progress and fresh-row deletion before finishing. Accepting the shelf decision removes only the temporary-shelf bit through a fresh Room transaction, emits RESULT_OK, and continues reading, matching the original behavior. Cancellation after an accepted database operation cannot interrupt it; generation guards prevent a receipt from closing a later Intent. A real Room Android regression verifies fresh cover/name/group/progress survive shelf acceptance and a removed row is not resurrected. It awaits device execution and final AndroidTest compilation. Formatting and diff checks pass.
