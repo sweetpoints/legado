@@ -979,3 +979,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 通用网页外壳的基础数据层独立迁移：完整请求、来源 JSON、HTML、图片与验证结果使用不可变 DTO 和私有会话；URL 分析、POST、脚本注入、Cookie、图片保存及来源操作均由 Repository 在 IO 执行。保留原验证重新请求/捕获内容协议、历史重复项/about:blank/data 返回逻辑，AtomicFile 修订与关闭围栏防止迟到覆盖/复活并清理所有临时文件。新增 8 个 JVM 与 2 个实际文件回归；隔离全量 JVM 与 Android 测试编译通过。
 
 章节列表 Fragment 改为 Compose Route/Screen，完整保留普通/EPUB/PDF 行、分卷箭头与锚点、搜索、当前章节和上下定位、标题/字数/VIP/缓存状态、快速滚动与视频/PDF 返回参数。解析最新目标后核对 RESUMED/宿主再消费票据，完整标题提示保持。删除两个 Adapter 与两个专属布局，新增 7 个 Compose 与 3 个宿主测试；既有 EPUB/PDF/逆序阅读操作改为 Compose，保留 reader/cache/bookmark 业务断言，共享源码镜像仅替换 Chapter 分支。隔离全量 JVM 与 Android 测试编译通过；设备测试尚未执行。
+
+书源调试数据层独立迁移：完整书源/发现规则不可变快照，复用原 Debug 所属 channel lease，后继执行等待原解析及 JS 任务结束。10/20/30/40 完整 HTML 保存在私有会话，展示日志限 20000 字符；固定锁条带、修订保护、关闭围栏与 AtomicFile 清理阻止迟到任务复活。新增 7 个实际 Room/HTTP 四阶段/全量 HTML/关闭文件回归；隔离全量 JVM 与 Android 测试编译通过。
