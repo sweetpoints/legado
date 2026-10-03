@@ -85,10 +85,18 @@ interface BookDetailServicesRepository {
     suspend fun sourceVariable(source:BookDetailSource?,key:String,value:String?)
     suspend fun updateTask(book:BookDetailBook,name:String):BookDetailUpdateTask
 }
+/** Mutating implementations must transfer the accepted result inside their own commit dispatcher,
+ * before any cancellable dispatcher return hop. The legacy API remains independently compatible. */
+interface BookDetailAcceptedServicesRepository:BookDetailServicesRepository {
+    suspend fun upload(book:BookDetailBook,overwrite:Boolean,accepted:suspend (BookDetailBook)->Unit):BookDetailBook
+    suspend fun delete(book:BookDetailBook,deleteOriginal:Boolean,deleteRemote:Boolean,accepted:suspend (BookDetailBook)->Unit):BookDetailBook
+    suspend fun download(book:BookDetailBook,source:BookDetailSource?,file:BookDetailWebFile,accepted:suspend (BookDetailDownload)->Unit):BookDetailDownload
+    suspend fun importArchive(book:BookDetailBook,uri:String,entry:String,accepted:suspend (BookDetailBook)->Unit):BookDetailBook
+}
 class AppBookDetailServicesRepository(private val database:AppDatabase=appDb,
     private val engine:BookDetailServiceEngine=DefaultBookDetailServiceEngine,
     private val snapshotReading:(Book)->Unit={it.saveReadRecordSnapshot()},private val clock:()->Long=System::currentTimeMillis,
-    private val io:CoroutineDispatcher=Dispatchers.IO):BookDetailServicesRepository {
+    private val io:CoroutineDispatcher=Dispatchers.IO):BookDetailAcceptedServicesRepository {
     private fun preferencesBody()=BookDetailPreferences(LocalConfig.bookInfoDeleteAlert,LocalConfig.deleteBookOriginal,
         LocalConfig.uploadImportedBookToWebDav,AppWebDav.defaultBookWebDav!=null)
     override suspend fun preferences()=withContext(io){preferencesBody()}
@@ -107,7 +115,8 @@ class AppBookDetailServicesRepository(private val database:AppDatabase=appDb,
         currentCoroutineContext().ensureActive();BookDetailRefreshInput(BookDetailBook.from(native),warning)
     }
     override suspend fun remoteExists(book:BookDetailBook)=withContext(io){engine.remoteExists(book.materializeBook())}
-    override suspend fun upload(book:BookDetailBook,overwrite:Boolean):BookDetailBook=withContext(io) {
+    override suspend fun upload(book:BookDetailBook,overwrite:Boolean):BookDetailBook=upload(book,overwrite,{})
+    override suspend fun upload(book:BookDetailBook,overwrite:Boolean,accepted:suspend (BookDetailBook)->Unit):BookDetailBook=withContext(io) {
         val before=database.bookDao.getBook(book.bookUrl) ?: throw BookDetailMissing()
         val baselineOrigin=before.origin
         try{engine.upload(before,overwrite)}catch(error:Throwable) {
@@ -117,16 +126,18 @@ class AppBookDetailServicesRepository(private val database:AppDatabase=appDb,
         }
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
-            database.runInTransaction<BookDetailBook> {
+            val result=database.runInTransaction<BookDetailBook> {
                 val latest=database.bookDao.getBook(book.bookUrl) ?: throw BookDetailMissing()
                 if(latest.origin!=baselineOrigin)throw BookDetailConflict()
                 // Upload changed only remote origin. Reading progress and all unrelated metadata are reread.
                 latest.origin=before.origin;latest.lastCheckTime=clock();database.bookDao.updatePreservingCustomCoverUrl(latest)
                 BookDetailBook.from(latest)
             }
+            accepted(result);result
         }
     }
-    override suspend fun delete(book:BookDetailBook,deleteOriginal:Boolean,deleteRemote:Boolean):BookDetailBook=withContext(io) {
+    override suspend fun delete(book:BookDetailBook,deleteOriginal:Boolean,deleteRemote:Boolean):BookDetailBook=delete(book,deleteOriginal,deleteRemote,{})
+    override suspend fun delete(book:BookDetailBook,deleteOriginal:Boolean,deleteRemote:Boolean,accepted:suspend (BookDetailBook)->Unit):BookDetailBook=withContext(io) {
         val preview=book.materializeBook();val before=database.bookDao.getBook(book.bookUrl) ?: preview
         if(deleteRemote && !engine.deleteRemote(before))throw BookDetailRemoteDeleteFailed()
         currentCoroutineContext().ensureActive()
@@ -137,17 +148,22 @@ class AppBookDetailServicesRepository(private val database:AppDatabase=appDb,
                 latest ?: before
             }
             if(deleted.isLocal)engine.deleteLocal(deleted,deleteOriginal)
-            BookDetailBook.from(deleted)
+            BookDetailBook.from(deleted).also{accepted(it)}
         }
     }
     override suspend fun clearCache(book:BookDetailBook)=withContext(io){engine.clearCache(book.materializeBook())}
-    override suspend fun download(book:BookDetailBook,source:BookDetailSource?,file:BookDetailWebFile)=withContext(io) {
+    override suspend fun download(book:BookDetailBook,source:BookDetailSource?,file:BookDetailWebFile)=download(book,source,file,{})
+    override suspend fun download(book:BookDetailBook,source:BookDetailSource?,file:BookDetailWebFile,accepted:suspend (BookDetailDownload)->Unit)=withContext(io) {
         val result=engine.download(book.materializeBook(),source?.materializeSource() ?: throw BookDetailNoSource(),file)
-        currentCoroutineContext().ensureActive();result
+        // The engine has accepted/imported the file. Transfer ownership before the cancellable dispatcher return hop.
+        withContext(NonCancellable){accepted(result)};currentCoroutineContext().ensureActive();result
     }
     override suspend fun archiveEntries(uri:String)=withContext(io){engine.archiveEntries(uri).toList()}
-    override suspend fun importArchive(book:BookDetailBook,uri:String,entry:String)=withContext(io) {
-        val native=engine.importArchive(book.materializeBook(),uri,entry);currentCoroutineContext().ensureActive();BookDetailBook.from(native)
+    override suspend fun importArchive(book:BookDetailBook,uri:String,entry:String)=importArchive(book,uri,entry,{})
+    override suspend fun importArchive(book:BookDetailBook,uri:String,entry:String,accepted:suspend (BookDetailBook)->Unit)=withContext(io) {
+        val native=engine.importArchive(book.materializeBook(),uri,entry)
+        val result=withContext(NonCancellable){BookDetailBook.from(native).also{accepted(it)}}
+        currentCoroutineContext().ensureActive();result
     }
     override suspend fun variable(book:BookDetailBook,source:BookDetailSource?,sourceVariable:Boolean,comment:String)=withContext(io) {
         val nativeSource=source?.materializeSource() ?: throw BookDetailNoSource()

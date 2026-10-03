@@ -12,7 +12,7 @@ import java.util.UUID
 
 enum class BookDetailNativeKind { EditInfo,EditSource,ChangeCover,Photo,ChangeSource,Group,Login,Share,CopyBookUrl,CopyTocUrl,
     SearchName,SearchAuthor,SearchKind,SourceVariable,BookVariable,UpdateTask,Log,Toc,Reader,OpenFile,ChooseFolder,
-    CustomButton,IntroImage,ReaderSync,ShelfAdded,SourceChanged,Deleted }
+    CustomButton,IntroImage,ReaderSync,ShelfAdded,SourceChanged,Deleted,Toast,CacheCleared,IntroAction,IntroLink }
 data class BookDetailNativeEffect(val token:String,val kind:BookDetailNativeKind,val book:BookDetailBook?=null,
     val source:BookDetailSource?=null,val value:String?=null,val flag:Boolean=false,val mutation:BookDetailMutationKind?=null,
     val position:BookDetailPosition?=null,val highlightTitleLength:Int?=null,val highlightAnchor:String?=null,
@@ -28,7 +28,8 @@ data class BookDetailPrompt(val kind:BookDetailPromptKind,val value:String?=null
 data class BookDetailSession(val identity:BookDetailIdentity,val data:BookDetailData?=null,val webFiles:List<BookDetailWebFile> = emptyList(),
     val effects:List<BookDetailNativeEffect> = emptyList(),val pendingMutation:BookDetailPendingMutation?=null,
     val pendingNetwork:BookDetailPendingNetwork?=null,val completedOperations:List<String> = emptyList(),
-    val running:Boolean=false,val prompt:BookDetailPrompt?=null,val chapterChanged:Boolean=false,val revision:Long=0)
+    val running:Boolean=false,val prompt:BookDetailPrompt?=null,val chapterChanged:Boolean=false,val revision:Long=0,
+    val pendingService:BookDetailPendingService?=null)
 
 interface BookDetailSessionRepository {
     suspend fun read(ticket:String):BookDetailSession?

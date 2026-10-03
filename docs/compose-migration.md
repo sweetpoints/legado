@@ -1171,3 +1171,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 远程书库连接、列表与导入抽离为 IO repository 和不可变行投影，保留选定服务器/默认回退、serverID 元数据、目录优先排序及大小写搜索规则。独占连接关闭后拒绝迟到连接发布，本地导入与元数据接受段保持成对；4 个 JVM 回归覆盖后台线程、detached 列表、排序及权限失败，页面接入另批迁移。
 
 公共设置宿主改为 BaseComposeActivity 与 Compose 搜索工具栏，使用私有搜索草稿/回执；精确查询仅在 RESUMED 且页面可交付时认领，写入失败可重试。六个既有 Compose 设置 Fragment 保留入口与恢复，容器采用最小 FragmentContainerView，删除 activity_config.xml 与 ViewBinding；新增大载荷查询、选择位置、页面重建和禁用编辑状态的宿主测试编译覆盖。
+
+书籍详情服务延续新增独立私有回执：刷新、上传、下载、压缩导入和删除的输入与成功结果保留稳定 token，失败的后续详情/目录解析恢复不重跑已完成传输。变更服务在自身 IO 接受段内保存成功结果，独立 dispatcher 返回时取消仍可恢复回执；原公开服务 API 兼容。新增 10 个 JVM 及 3 个实际 Room/Atomic 编译用例，宿主接入另批提交。
