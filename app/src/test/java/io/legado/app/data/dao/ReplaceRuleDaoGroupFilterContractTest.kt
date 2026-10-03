@@ -11,10 +11,6 @@ class ReplaceRuleDaoGroupFilterContractTest {
         normalizedSource("src/main/java/io/legado/app/data/dao/ReplaceRuleDao.kt")
     }
 
-    private val activitySource by lazy {
-        normalizedSource("src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
-    }
-
     private val groupQuery by lazy {
         queryBefore("fun flowGroupSearch(groupName: String)")
     }
@@ -55,14 +51,7 @@ class ReplaceRuleDaoGroupFilterContractTest {
         )
         assertFalse(groupFilter.contains(" like ", ignoreCase = true))
 
-        assertTrue(
-            activitySource.contains("val groupName = searchKey.substringAfter(\"group:\")")
-        )
-        assertTrue(activitySource.contains("replaceRuleDao.flowGroupSearch(groupName)"))
-        assertFalse(activitySource.contains("flowGroupSearch(\"%"))
-        assertTrue(
-            activitySource.contains("searchView.setQuery(\"group:\${item.title}\", true)")
-        )
+
     }
 
     private fun queryBefore(functionMarker: String): String {

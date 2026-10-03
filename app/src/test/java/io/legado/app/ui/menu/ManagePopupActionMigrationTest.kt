@@ -99,58 +99,8 @@ class ManagePopupActionMigrationTest {
         assertContains("BaseFragment.kt", fragment, "it.installMd3OverflowMenu()")
     }
 
-    @Test
-    fun `remaining management adapters use the shared vertical menu`() {
-        adapterFiles.forEach { path ->
-            val source = readProjectFile(path)
-            assertFalse("$path should not import PopupMenu", source.contains("import android.widget.PopupMenu"))
-            assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
-            assertContains(path, source, "popupActionMenu(context)")
-            assertContains(path, source, "danger(\"delete\")")
-        }
-    }
-
-    @Test
-    fun `management menu actions keep their current callbacks and side effects`() {
-        assertActions(
-            REPLACE_RULE,
-            "\"top\" -> callBack.toTop(item)",
-            "\"bottom\" -> callBack.toBottom(item)",
-            "callBack.delete(item)",
-            "selected.remove(item)"
-        )
-
-    }
-
-    @Test
-    fun `management menu labels keep their previous order`() {
-        listOf(REPLACE_RULE).forEach { path ->
-            assertOrdered(
-                path,
-                "item(context.getString(R.string.to_top), \"top\")",
-                "item(context.getString(R.string.to_bottom), \"bottom\")",
-                "item(context.getString(R.string.delete), \"delete\")"
-            )
-        }
-    }
-
-    private fun assertActions(path: String, vararg expected: String) {
-        val source = readProjectFile(path)
-        expected.forEach { assertContains(path, source, it) }
-    }
-
     private fun assertContains(path: String, source: String, expected: String) {
         assertTrue("$path should contain $expected", source.contains(expected))
-    }
-
-    private fun assertOrdered(path: String, vararg expected: String) {
-        val source = readProjectFile(path)
-        var previous = -1
-        expected.forEach { snippet ->
-            val current = source.indexOf(snippet, previous + 1)
-            assertTrue("$path should contain $snippet after the previous item", current > previous)
-            previous = current
-        }
     }
 
     private fun readProjectFile(pathInApp: String): String =
@@ -159,8 +109,4 @@ class ManagePopupActionMigrationTest {
             ?.readText()
             .orEmpty()
 
-    private companion object {
-        const val REPLACE_RULE = "src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt"
-        val adapterFiles = listOf(REPLACE_RULE)
-    }
 }

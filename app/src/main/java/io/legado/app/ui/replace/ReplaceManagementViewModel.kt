@@ -136,6 +136,10 @@ class ReplaceManagementViewModel(private val repository: ReplaceManagementReposi
         val values = ids.intersect(state.value.rows.map { it.id }.toSet())
         mutable.value = state.value.copy(selected = (baseline - values) + (values - baseline))
     }
+    fun selectionRange(first: Long, last: Long) {
+        val rows = state.value.rows; val start = rows.indexOfFirst { it.id == first }; val end = rows.indexOfFirst { it.id == last }
+        if (start >= 0 && end >= 0) previewSelection(rows.subList(minOf(start, end), maxOf(start, end) + 1).map { it.id }.toSet())
+    }
     fun finishSelection() {
         if (selecting == null) return
         checkpoint = checkpoint.copy(selected = state.value.selected.toList()); selecting = null

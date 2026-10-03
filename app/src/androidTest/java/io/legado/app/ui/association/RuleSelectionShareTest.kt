@@ -23,7 +23,6 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.replace.ReplaceRuleAdapter
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -79,6 +78,7 @@ class RuleSelectionShareTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun replacementSelectionSharesAnImportableFileIncludingItsPreviewSample() {
         val id = UUID.randomUUID().toString()
         val rule = ReplaceRule(
@@ -92,15 +92,38 @@ class RuleSelectionShareTest {
         val sample = "Title\ntarget sample & ? query"
         ReplacePreviewConfig.saveSample(rule.id, sample)
         try {
-            val json = shareSelection(ReplaceRuleActivity::class.java, R.menu.replace_rule_sel) { activity ->
-                val adapter = activity.findViewById<RecyclerView>(R.id.recycler_view).adapter as ReplaceRuleAdapter
-                val index = adapter.getItems().indexOfFirst { it.id == rule.id }
-                if (index < 0 || adapter.getItems().none { it.id == other.id }) false else {
-                    assertTrue(adapter.dragSelectCallback.onSelectChange(index, true))
-                    assertEquals(listOf(rule.id), adapter.selection.map { it.id })
-                    true
+            val chooser = AtomicReference<Intent?>()
+            val monitor = object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.action != Intent.ACTION_CHOOSER) return null
+                    chooser.set(intent); return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
                 }
             }
+            instrumentation.addMonitor(monitor)
+            var json = ""
+            var exportPath: String? = null
+            try {
+                runAndroidComposeUiTest<ReplaceRuleActivity> {
+                    waitUntil(timeoutMillis = 15000) {
+                        val rows = activity?.managementModel?.state?.value?.rows.orEmpty()
+                        rows.any { it.id == rule.id } && rows.any { it.id == other.id }
+                    }
+                    onNodeWithTag("replace-rule-selection-menu").performClick()
+                    onNodeWithTag("replace-rule-share").performClick(); waitForIdle(); assertNull(chooser.get())
+                    onNodeWithTag("replace-rule-list").performScrollToNode(hasTestTag("replace-rule-select-${rule.id}"))
+                    onNodeWithTag("replace-rule-select-${rule.id}").performClick().assertIsOn()
+                    onNodeWithTag("replace-rule-selection-menu").performClick(); onNodeWithTag("replace-rule-share").performClick()
+                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
+                    @Suppress("DEPRECATION") val intent = checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                    assertEquals(Intent.ACTION_SEND, intent.action); assertEquals("text/*", intent.type)
+                    assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                    @Suppress("DEPRECATION") val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+                    assertEquals("content", uri.scheme); json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                    exportPath = activity?.managementModel?.state?.value?.let { _ ->
+                        File(context.filesDir, "replace-management-export").listFiles()?.firstOrNull { it.readText() == json }?.path
+                    }
+                }
+            } finally { instrumentation.removeMonitor(monitor); exportPath?.let { File(it).delete() } }
             val restored = GSON.fromJsonArray<ReplaceRule>(json).getOrThrow().single()
             assertEquals(rule.id, restored.id)
             assertEquals(rule.name, restored.name)
@@ -234,55 +257,4 @@ class RuleSelectionShareTest {
         }
     }
 
-    @Suppress("DEPRECATION")
-    private fun <T : Activity> shareSelection(
-        activityClass: Class<T>, menuResource: Int, select: (T) -> Boolean,
-    ): String {
-        val chooser = AtomicReference<Intent?>()
-        val monitor = object : Instrumentation.ActivityMonitor() {
-            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
-                if (intent.action != Intent.ACTION_CHOOSER) return null
-                chooser.set(intent)
-                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
-            }
-        }
-        instrumentation.addMonitor(monitor)
-        var sharedUri: Uri? = null
-        try {
-            ActivityScenario.launch(activityClass).use { scenario ->
-                fun clickShare(activity: T) {
-                    val popup = PopupMenu(activity, activity.findViewById(android.R.id.content))
-                    activity.menuInflater.inflate(menuResource, popup.menu)
-                    val item = checkNotNull(popup.menu.findItem(R.id.menu_share_source))
-                    (activity as PopupMenu.OnMenuItemClickListener).onMenuItemClick(item)
-                }
-                scenario.onActivity(::clickShare)
-                instrumentation.waitForIdleSync()
-                assertNull("Empty selection must not launch a share", chooser.get())
-                val deadline = SystemClock.uptimeMillis() + 15000
-                var selected = false
-                while (!selected && SystemClock.uptimeMillis() < deadline) {
-                    scenario.onActivity { selected = select(it) }
-                    if (!selected) SystemClock.sleep(50)
-                }
-                assertTrue("Selected fixture was not loaded", selected)
-                scenario.onActivity(::clickShare)
-                while (chooser.get() == null && SystemClock.uptimeMillis() < deadline) {
-                    SystemClock.sleep(50)
-                }
-                val intent = checkNotNull(chooser.get()) { "No file share intent" }
-                    .getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
-                assertEquals(Intent.ACTION_SEND, intent.action)
-                assertEquals("text/*", intent.type)
-                assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-                val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
-                sharedUri = uri
-                assertEquals("content", uri.scheme)
-                return context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
-            }
-        } finally {
-            instrumentation.removeMonitor(monitor)
-            sharedUri?.lastPathSegment?.let { File(context.cacheDir, it).delete() }
-        }
-    }
 }

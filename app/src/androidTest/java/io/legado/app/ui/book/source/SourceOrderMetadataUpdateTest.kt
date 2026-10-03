@@ -1,10 +1,6 @@
 package io.legado.app.ui.book.source
 
 import android.os.SystemClock
-import android.widget.CompoundButton
-import androidx.appcompat.widget.SearchView
-import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -18,8 +14,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.replace.ReplaceRuleAdapter
-import io.legado.app.ui.replace.ReplaceRuleViewModel
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.utils.GSON
 import org.junit.Assert.assertEquals
@@ -118,10 +112,16 @@ class SourceOrderMetadataUpdateTest {
                     remove(stale[0].id)
                     add(indexOf(stale[2].id) + 1, stale[0].id)
                 }
+                waitUntil("replacement model loaded") {
+                    var loaded = false; scenario.onActivity { loaded = it.managementModel.state.value.loaded }; loaded
+                }
+                scenario.onActivity { it.managementModel.query("group:$group") }
+                waitUntil("replacement filter ready") {
+                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == stale.map { row -> row.id } }; ready
+                }
                 scenario.onActivity { activity ->
-                    ViewModelProvider(activity)[ReplaceRuleViewModel::class.java]
-                        .move(stale[0].id, stale[2].id, true)
-                    activity.findViewById<SearchView>(R.id.search_view).setQuery("group:$group", false)
+                    activity.managementModel.beginDrag(stale[0].id); activity.managementModel.dragTo(stale[2].id, true)
+                    activity.managementModel.finishDrag()
                 }
                 waitUntil("replacement move committed") {
                     appDb.replaceRuleDao.all.map { it.id } == expectedOrder
@@ -140,33 +140,15 @@ class SourceOrderMetadataUpdateTest {
                     })
                 }
                 waitUntil("replacement switch row") {
-                    var ready = false
-                    scenario.onActivity { activity ->
-                        val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                        val adapter = recycler.adapter as ReplaceRuleAdapter
-                        val position = adapter.getItems().indexOfFirst { it.id == stale[0].id }
-                        ready = adapter.getItems().map { it.id } == listOf(stale[1].id, stale[2].id, stale[0].id)
-                            && recycler.findViewHolderForAdapterPosition(position) != null
-                    }
-                    ready
+                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == listOf(stale[1].id, stale[2].id, stale[0].id) }; ready
                 }
-                scenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    val adapter = recycler.adapter as ReplaceRuleAdapter
-                    val position = adapter.getItems().indexOfFirst { it.id == stale[0].id }
-                    val row = checkNotNull(recycler.findViewHolderForAdapterPosition(position)).itemView
-                    adapter.setItem(position, stale[0])
-                    val switch = row.findViewById<CompoundButton>(R.id.swt_enabled)
-                    assertFalse(switch.isChecked)
-                    switch.performClick()
-                    assertTrue(switch.isChecked)
-                }
+                compose.onNodeWithTag("replace-rule-enabled-${stale[0].id}").performClick()
                 waitUntil("replacement switch enabled") { appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true }
                 assertState(setOf(stale[0].id))
-                scenario.onActivity { ViewModelProvider(it)[ReplaceRuleViewModel::class.java].enableSelection(stale) }
+                scenario.onActivity { it.managementModel.enabled(stale.map { row -> row.id }, true) }
                 waitUntil("replacement selection enabled") { keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true } }
                 assertState(keys)
-                scenario.onActivity { ViewModelProvider(it)[ReplaceRuleViewModel::class.java].disableSelection(stale) }
+                scenario.onActivity { it.managementModel.enabled(stale.map { row -> row.id }, false) }
                 waitUntil("replacement selection disabled") { keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false } }
                 assertState(emptySet())
             }

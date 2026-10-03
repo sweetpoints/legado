@@ -43,8 +43,6 @@ class ManualReplaceRuleContractTest {
         assertTrue(menu.contains("R.id.menu_manual_replace_rule -> showDialogFragment<ManualReplaceRulesDialog>()"))
         assertTrue(menu.contains("item.isVisible = !AppConfig.manualReplaceRule"))
 
-        val replaceActivity = source("app/src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
-        assertTrue(replaceActivity.contains("setResult(RESULT_OK)"))
     }
 
     @Test

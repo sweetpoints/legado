@@ -123,16 +123,7 @@ class SelectActionBarPopupActionMigrationTest {
                 "@+id/menu_check_selected_interval"
             ),
 
-            "replace_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            )
+            // Replace selection order is exercised in ReplaceManagementScreenTest.
 
         )
     }
