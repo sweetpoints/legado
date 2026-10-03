@@ -9,6 +9,7 @@ import android.text.TextUtils
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.FirstBaseline
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.legado.app.help.config.ReaderInfoTemplate
 import io.legado.app.help.config.ReaderInfoValues
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -122,24 +124,23 @@ private fun Modifier.drawIntoReaderInfo(
     text: CharSequence,
     paint: TextPaint,
     horizontalPadding: Int,
-): Modifier =
-    androidx.compose.ui.draw.drawWithContent {
-        drawContent()
-        if (text.isEmpty()) return@drawWithContent
-        val layout =
-            createReaderInfoLayout(
-                text,
-                paint,
-                (size.width.roundToInt() - horizontalPadding).coerceAtLeast(1),
-            )
-        drawIntoCanvas { canvas ->
-            val nativeCanvas = canvas.nativeCanvas
-            nativeCanvas.save()
-            nativeCanvas.translate(4.dp.toPx(), 3.dp.toPx())
-            layout.draw(nativeCanvas)
-            nativeCanvas.restore()
-        }
+): Modifier = drawWithContent {
+    drawContent()
+    if (text.isEmpty()) return@drawWithContent
+    val layout =
+        createReaderInfoLayout(
+            text,
+            paint,
+            (size.width.roundToInt() - horizontalPadding).coerceAtLeast(1),
+        )
+    drawIntoCanvas { canvas ->
+        val nativeCanvas = canvas.nativeCanvas
+        nativeCanvas.save()
+        nativeCanvas.translate(4.dp.toPx(), 3.dp.toPx())
+        layout.draw(nativeCanvas)
+        nativeCanvas.restore()
     }
+}
 
 private fun createReaderInfoLayout(
     text: CharSequence,
