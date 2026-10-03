@@ -33,10 +33,24 @@ import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 abstract class BaseBookshelfFragment(layoutId: Int) :
     VMBaseFragment<BookshelfViewModel>(layoutId), MainFragmentInterface {
+
+    internal data class TransferOwnerState(
+        val operations: List<BookshelfTransferOperation> = emptyList(),
+        val progress: Int? = null,
+        val hasPendingFileImport: Boolean = false,
+        val hasPendingExport: Boolean = false,
+        val hasPendingResultPicker: Boolean = false,
+    ) {
+        val needsFileImportRecovery: Boolean
+            get() = hasPendingFileImport && operations.none { it.label == "正在导入书单" }
+    }
 
     override val position: Int?
         get() = arguments?.getInt("position")
@@ -54,6 +68,29 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                 }
             }
         }
+
+    private val mutableTransferOwnerState = MutableStateFlow(TransferOwnerState())
+    internal val transferOwnerState = mutableTransferOwnerState.asStateFlow()
+
+    internal fun captureTransferOwnerState(): TransferOwnerState = transferOwnerSnapshot()
+
+    private fun transferOwnerSnapshot(): TransferOwnerState {
+        val transfer = viewModel.transfer
+        return TransferOwnerState(
+            operations = viewModel.operations.value,
+            progress = transfer.addProgress.value.takeIf { it >= 0 },
+            hasPendingFileImport = transfer.pendingFileImport.value != null,
+            hasPendingExport = transfer.pendingExport.value != null,
+            hasPendingResultPicker =
+                transfer.launchedImportRequestId != null || transfer.exportPickerInFlight,
+        )
+    }
+
+    internal fun retryPendingHostFileImport() = viewModel.retryPendingFileImport()
+
+    internal fun launchPendingHostExportPicker() {
+        viewModel.transfer.pendingExport.value?.let { launchPendingExportPicker(it) }
+    }
 
     private val importBookshelf =
         registerForActivityResult(HandleFileContract()) { result ->
@@ -82,7 +119,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
             val host = activity as? MainBookshelfHost
             if (host != null)
                 host.acceptLegacyExportResult(this, requestId, path, result.uri?.toString())
-            else result.uri?.let(::showExportLinkDialog)
+            else result.uri?.let { showExportLinkDialog(it) }
         }
     private var importRequestId: String? = null
     private var exportRequestId: String? = null
@@ -106,6 +143,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
 
     internal fun finishPendingResultBridge() {
         pendingResultBridge = false
+        mutableTransferOwnerState.value = transferOwnerSnapshot()
     }
 
     abstract val groupId: Long
@@ -172,6 +210,22 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                     }
                 }
             }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        mutableTransferOwnerState.value = transferOwnerSnapshot()
+        lifecycleScope.launch {
+            combine(
+                    viewModel.operations,
+                    viewModel.transfer.addProgress,
+                    viewModel.transfer.pendingFileImport,
+                    viewModel.transfer.pendingExport,
+                ) { _, _, _, _ ->
+                    transferOwnerSnapshot()
+                }
+                .collect { mutableTransferOwnerState.value = it }
         }
     }
 

@@ -18,16 +18,21 @@ internal fun BookshelfPageRoute(
     onInfo: (String) -> Unit,
     onBookKeys: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
+    active: Boolean = true,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val notifyBooks by rememberUpdatedState(onBookKeys)
     val keys = state.entries.map { it.key }
-    LifecycleResumeEffect(viewModel) {
-        viewModel.start()
-        notifyBooks(viewModel.state.value.entries.map { it.key })
+    LifecycleResumeEffect(viewModel, active) {
+        if (active) {
+            viewModel.start()
+            notifyBooks(viewModel.state.value.entries.map { it.key })
+        } else viewModel.stop()
         onPauseOrDispose { viewModel.stop() }
     }
-    LaunchedEffect(keys) { notifyBooks(keys) }
+    LaunchedEffect(active, keys) {
+        if (active) notifyBooks(keys)
+    }
     BookshelfPageScreen(
         state,
         onRefresh,

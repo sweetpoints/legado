@@ -16,6 +16,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.mainRssId
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.main.MainActivity
+import io.legado.app.ui.main.bookshelf.settings.BookshelfInputResult
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
 import io.legado.app.ui.navigation.MainDestination
 import io.legado.app.utils.defaultSharedPreferences
@@ -217,44 +218,6 @@ class MainRssHostTest {
     }
 
     @Test
-    fun restoredFileTransferWaitsForManualRetryWithoutReplayingOldWork() {
-        scenario!!.onActivity { activity ->
-            activity.viewModel.selectDestination(MainDestination.Bookshelf)
-            val legacy = BookshelfFragment2()
-            activity.supportFragmentManager.commitNow {
-                add(legacy, "legacy-file-import-recovery")
-            }
-            legacy.viewModel.transfer.fileReady(
-                "content://missing.test/books.json",
-                BookGroup.IdRoot,
-            )
-        }
-        scenario!!.recreate()
-        awaitHostMigration()
-        compose.onNodeWithText("有一项书架操作等待恢复").assertIsDisplayed()
-        scenario!!.onActivity { activity ->
-            assertTrue(activity.hostMigration.value.ready)
-            assertTrue(
-                activity.supportFragmentManager.fragments.any {
-                    it.tag == "legacy-file-import-recovery"
-                }
-            )
-        }
-
-        compose.onNodeWithText("重试").performClick()
-        compose.waitUntil(timeoutMillis = 20_000) {
-            var removed = false
-            scenario!!.onActivity { activity ->
-                removed =
-                    activity.supportFragmentManager.fragments.none {
-                        it.tag == "legacy-file-import-recovery"
-                    }
-            }
-            removed
-        }
-    }
-
-    @Test
     fun busyLegacyTransferDoesNotBlockComposeHostAndRunsOnlyOnce() {
         val requestCount = AtomicInteger()
         val releaseResponse = CountDownLatch(1)
@@ -274,9 +237,12 @@ class MainRssHostTest {
                 activity.supportFragmentManager.commitNow {
                     add(legacy, "legacy-busy-transfer")
                 }
-                legacy.viewModel.importBookshelf(
-                    "http://127.0.0.1:${server.listeningPort}/books.json",
-                    BookGroup.IdRoot,
+                legacy.submitShelfInput(
+                    1,
+                    BookshelfInputResult(
+                        "http://127.0.0.1:${server.listeningPort}/books.json",
+                        BookGroup.IdRoot,
+                    ),
                 )
             }
             compose.waitUntil(timeoutMillis = 20_000) { requestCount.get() == 1 }

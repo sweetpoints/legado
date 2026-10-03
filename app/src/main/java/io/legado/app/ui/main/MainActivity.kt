@@ -16,6 +16,7 @@ import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentFactory
 import androidx.fragment.app.commit
+import androidx.fragment.app.commitNow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
@@ -127,7 +128,6 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -331,21 +331,16 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
                 val retainedTransferOwners =
                     bookshelves
                         .filter { owner ->
-                            val transfer = owner.viewModel.transfer
-                            val hasPicker =
-                                transfer.launchedImportRequestId != null ||
-                                    transfer.exportPickerInFlight ||
-                                    transfer.pendingExport.value != null
-                            val hasWork = owner.viewModel.operations.value.isNotEmpty()
-                            val needsImportRecovery = transfer.pendingFileImport.value != null
-                            hasPicker || hasWork || needsImportRecovery
+                            val transfer = owner.captureTransferOwnerState()
+                            transfer.hasPendingResultPicker ||
+                                transfer.hasPendingExport ||
+                                transfer.operations.isNotEmpty() ||
+                                transfer.hasPendingFileImport
                         }
                         .toSet()
                 retainedTransferOwners.forEach { owner ->
-                    if (
-                        owner.viewModel.transfer.launchedImportRequestId != null ||
-                            owner.viewModel.transfer.exportPickerInFlight
-                    ) {
+                    val transfer = owner.captureTransferOwnerState()
+                    if (transfer.hasPendingResultPicker || transfer.hasPendingExport) {
                         owner.retainForPendingResult()
                     } else {
                         owner.retainForPendingTransfer()
@@ -379,44 +374,35 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
         val ownerId = owner.tag ?: "legacy-${System.identityHashCode(owner)}"
         legacyTransferOwners[ownerId] = owner
         if (legacyTransferCollectors.containsKey(ownerId)) return
-        val transfer = owner.viewModel.transfer
         legacyTransferCollectors[ownerId] = lifecycleScope.launch {
-            combine(
-                    owner.viewModel.operations,
-                    transfer.addProgress,
-                    transfer.pendingFileImport,
-                    transfer.pendingExport,
-                ) { operations, progress, fileImport, exportPath ->
-                    val pendingPicker =
-                        transfer.launchedImportRequestId != null || transfer.exportPickerInFlight
+            owner.transferOwnerState.collect { transfer ->
+                val state =
                     LegacyBookshelfTransferState(
                         ownerId = ownerId,
-                        operationLabel = operations.firstOrNull()?.label,
-                        progress = progress.takeIf { it >= 0 },
-                        needsFileImportRecovery = fileImport != null && operations.isEmpty(),
-                    ) to
-                        (pendingPicker ||
-                            operations.isNotEmpty() ||
-                            fileImport != null ||
-                            exportPath != null)
+                        operationLabel = transfer.operations.firstOrNull()?.label,
+                        progress = transfer.progress,
+                        needsFileImportRecovery = transfer.needsFileImportRecovery,
+                    )
+                val keepOwner =
+                    transfer.hasPendingResultPicker ||
+                        transfer.operations.isNotEmpty() ||
+                        transfer.hasPendingFileImport ||
+                        transfer.hasPendingExport
+                mutableLegacyTransferStates.value =
+                    mutableLegacyTransferStates.value
+                        .filterNot { it.ownerId == ownerId }
+                        .let { states -> if (keepOwner) states + state else states }
+                if (
+                    transfer.hasPendingExport &&
+                        !transfer.hasPendingResultPicker &&
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        !supportFragmentManager.isStateSaved
+                ) {
+                    owner.launchPendingHostExportPicker()
                 }
-                .collect { (state, keepOwner) ->
-                    mutableLegacyTransferStates.value =
-                        mutableLegacyTransferStates.value
-                            .filterNot { it.ownerId == ownerId }
-                            .let { states -> if (keepOwner) states + state else states }
-                    val exportPath = transfer.pendingExport.value
-                    if (
-                        exportPath != null &&
-                            !transfer.exportPickerInFlight &&
-                            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-                            owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-                            !supportFragmentManager.isStateSaved
-                    ) {
-                        owner.launchPendingExportPicker(exportPath)
-                    }
-                    if (!keepOwner && !owner.pendingResultBridge) removeLegacyTransferOwner(ownerId)
-                }
+                if (!keepOwner && !owner.pendingResultBridge) removeLegacyTransferOwner(ownerId)
+            }
         }
     }
 
@@ -430,7 +416,7 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
 
     internal fun retryLegacyFileImport(ownerId: String) {
         if (!destinationReady(MainDestination.Bookshelf)) return
-        legacyTransferOwners[ownerId]?.viewModel?.retryPendingFileImport()
+        legacyTransferOwners[ownerId]?.retryPendingHostFileImport()
     }
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
@@ -469,18 +455,19 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
         super.onResume()
         legacyTransferOwners.keys.toList().forEach { ownerId ->
             val owner = legacyTransferOwners[ownerId] ?: return@forEach
-            val transfer = owner.viewModel.transfer
+            val transfer = owner.captureTransferOwnerState()
             val keepOwner =
                 owner.pendingResultBridge ||
-                    owner.viewModel.operations.value.isNotEmpty() ||
-                    transfer.pendingFileImport.value != null ||
-                    transfer.pendingExport.value != null
+                    transfer.operations.isNotEmpty() ||
+                    transfer.hasPendingFileImport ||
+                    transfer.hasPendingExport
             if (!keepOwner) removeLegacyTransferOwner(ownerId)
-            else {
-                transfer.pendingExport.value
-                    ?.takeIf { !transfer.exportPickerInFlight }
-                    ?.takeIf { owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
-                    ?.let(owner::launchPendingExportPicker)
+            else if (
+                transfer.hasPendingExport &&
+                    !transfer.hasPendingResultPicker &&
+                    owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            ) {
+                owner.launchPendingHostExportPicker()
             }
         }
         if (
@@ -1128,10 +1115,11 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
         owner.finishPendingResultBridge()
         val ownerId = legacyTransferOwners.entries.firstOrNull { it.value === owner }?.key
         if (ownerId != null) {
+            val transfer = owner.captureTransferOwnerState()
             val stillBusy =
-                owner.viewModel.operations.value.isNotEmpty() ||
-                    owner.viewModel.transfer.pendingFileImport.value != null ||
-                    owner.viewModel.transfer.pendingExport.value != null
+                transfer.operations.isNotEmpty() ||
+                    transfer.hasPendingFileImport ||
+                    transfer.hasPendingExport
             if (!stillBusy) removeLegacyTransferOwner(ownerId)
         } else if (!supportFragmentManager.isStateSaved && !owner.isRemoving) {
             supportFragmentManager.commit { remove(owner) }

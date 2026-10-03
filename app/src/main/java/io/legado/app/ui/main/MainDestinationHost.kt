@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,8 +26,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.repository.GlideRssArticleImageRepository
 import io.legado.app.ui.main.bookshelf.settings.BookshelfAddProgressDialog
 import io.legado.app.ui.main.bookshelf.style1.BookshelfHomeRoute
-import io.legado.app.ui.main.bookshelf.style1.books.BookshelfGroupPageRoute
 import io.legado.app.ui.main.bookshelf.style1.books.BookshelfPageParameters
+import io.legado.app.ui.main.bookshelf.style1.books.BookshelfPageRoute
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFolderRoute
 import io.legado.app.ui.main.explore.ExploreHomeRoute
 import io.legado.app.ui.main.my.MyRoute
@@ -120,9 +119,8 @@ private fun BookshelfDestination(activity: MainActivity) {
                         )
                     )
                 }
-                BookshelfGroupPageRoute(
+                BookshelfPageRoute(
                     model,
-                    active,
                     {
                         if (model.state.value.canRefresh)
                             activity.viewModel.upToc(model.getBooks(), group.onlyRead)
@@ -133,6 +131,7 @@ private fun BookshelfDestination(activity: MainActivity) {
                         model.replaceUpdating(keys.filter(activity.viewModel::isUpdate).toSet())
                     },
                     modifier,
+                    active = active,
                 )
             }
         }
