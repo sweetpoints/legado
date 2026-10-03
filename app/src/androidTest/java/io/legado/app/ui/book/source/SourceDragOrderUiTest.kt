@@ -5,13 +5,11 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -75,7 +73,7 @@ class SourceDragOrderUiTest {
             listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
                 BookSource(
                     bookSourceUrl = "https://book-drag.invalid/$group/$index",
-                    bookSourceName = "Book source $index",
+                    bookSourceName = "Book source $index $group",
                     bookSourceGroup = if (index % 2 == 0) group else "Hidden $group",
                     customOrder = order,
                     bookSourceComment = "Metadata $index",
@@ -109,7 +107,7 @@ class SourceDragOrderUiTest {
                     compose.onNodeWithText(context.getString(R.string.menu)).performClick()
                     compose.onNodeWithTag("source-manager-action:descending").performClick()
                 }
-                filter(Kind.BOOK, "Book source 0")
+                filter(Kind.BOOK, fixtures.first().bookSourceName)
                 awaitItems(Kind.BOOK, scenario, listOf(fixtures.first().bookSourceUrl))
                 filter(Kind.BOOK, "group:$group")
                 fun waitRows(expected: List<String>) =
@@ -269,7 +267,7 @@ class SourceDragOrderUiTest {
             listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
                 RssSource(
                     sourceUrl = "https://compose-drag.invalid/$group/$index",
-                    sourceName = "Source $index",
+                    sourceName = "Source $index $group",
                     sourceGroup = if (index % 2 == 0) group else "Hidden $group",
                     customOrder = order,
                     sourceComment = "Metadata $index",
@@ -289,7 +287,7 @@ class SourceDragOrderUiTest {
                     scenario.onActivity { ready = it.managementModel.state.value.loaded }
                     ready
                 }
-                filter(Kind.RSS, "Source 0")
+                filter(Kind.RSS, fixtures.first().sourceName)
                 awaitItems(Kind.RSS, scenario, listOf(fixtures.first().sourceUrl))
                 filter(Kind.RSS, "group:$group")
                 fun waitRows(expected: List<String>) =
@@ -414,7 +412,7 @@ class SourceDragOrderUiTest {
             listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
                 ReplaceRule(
                     id = firstId + index,
-                    name = "Drag source $index",
+                    name = "Drag source $index $group",
                     group = if (index % 2 == 0) group else "Hidden $group",
                     order = order,
                     pattern = "original $index",
@@ -431,7 +429,7 @@ class SourceDragOrderUiTest {
             scenario = launch(Kind.REPLACE)
             val activeScenario = checkNotNull(scenario)
             awaitLoaded(Kind.REPLACE, activeScenario)
-            filter(Kind.REPLACE, "Drag source 0")
+            filter(Kind.REPLACE, rules.first().name)
             awaitItems(Kind.REPLACE, activeScenario, listOf(rules.first().id.toString()))
             filter(Kind.REPLACE, "group:$group")
             awaitItems(Kind.REPLACE, activeScenario, visible)
