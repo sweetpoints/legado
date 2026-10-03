@@ -6,8 +6,26 @@ import io.legado.app.utils.GSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-internal suspend fun chapterSourceSessionSeed(name: String, author: String, index: Int, title: String,
-    batch: Boolean, book: Book?, fromReader: Boolean): ChapterSourceSession = withContext(Dispatchers.IO) {
-    ChapterSourceSession(ChapterSourceSearchRequest(name, author.replace(AppPattern.authorRegex, ""),
-        originalBookJson = book?.let { GSON.toJson(it) }, fromReader = fromReader, currentBookUrl = book?.bookUrl), index, title, batch)
-}
+internal suspend fun chapterSourceSessionSeed(
+    name: String,
+    author: String,
+    index: Int,
+    title: String,
+    batch: Boolean,
+    book: Book?,
+    fromReader: Boolean,
+): ChapterSourceSession =
+    withContext(Dispatchers.IO) {
+        ChapterSourceSession(
+            ChapterSourceSearchRequest(
+                name,
+                author.replace(AppPattern.authorRegex, ""),
+                originalBookJson = book?.let { GSON.toJson(it) },
+                fromReader = fromReader,
+                currentBookUrl = book?.bookUrl,
+            ),
+            index,
+            title,
+            batch,
+        )
+    }

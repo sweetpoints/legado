@@ -9,8 +9,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /** The caller owns and cleans the staging directory; every opened font stream is closed here. */
-internal suspend fun packReaderBackgroundArchive(snapshot: ReaderBackgroundExportSnapshot, staging: File,
-    openFont: (String) -> Pair<String, InputStream>?): File {
+internal suspend fun packReaderBackgroundArchive(
+    snapshot: ReaderBackgroundExportSnapshot,
+    staging: File,
+    openFont: (String) -> Pair<String, InputStream>?,
+): File {
     val config = parseReadConfigObject(snapshot.configJson).getOrThrow()
     val files = linkedSetOf<File>()
     suspend fun font(path: String, archiveName: String? = null): String? {
@@ -26,22 +29,24 @@ internal suspend fun packReaderBackgroundArchive(snapshot: ReaderBackgroundExpor
     }
     val textFont = font(snapshot.textFont)
     config.textFont = textFont.orEmpty()
-    config.titleFont = when {
-        snapshot.titleFont == snapshot.textFont && textFont != null -> textFont
-        snapshot.titleFont.isEmpty() -> ""
-        else -> {
-            val source = openFont(snapshot.titleFont)
-            if (source == null) "" else {
-                val original = source.first
-                val name = if (original == textFont) "title_$original" else original
-                val output = File(staging, name)
-                source.second.use { input -> output.outputStream().use { input.copyTo(it) } }
-                currentCoroutineContext().ensureActive()
-                files += output
-                name
+    config.titleFont =
+        when {
+            snapshot.titleFont == snapshot.textFont && textFont != null -> textFont
+            snapshot.titleFont.isEmpty() -> ""
+            else -> {
+                val source = openFont(snapshot.titleFont)
+                if (source == null) ""
+                else {
+                    val original = source.first
+                    val name = if (original == textFont) "title_$original" else original
+                    val output = File(staging, name)
+                    source.second.use { input -> output.outputStream().use { input.copyTo(it) } }
+                    currentCoroutineContext().ensureActive()
+                    files += output
+                    name
+                }
             }
         }
-    }
     val configFile = File(staging, "readConfig.json").apply { writeText(GSON.toJson(config)) }
     files += configFile
     snapshot.backgrounds.forEach { path ->

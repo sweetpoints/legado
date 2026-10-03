@@ -1,14 +1,17 @@
 package io.legado.app.data.repository
 
-import kotlinx.coroutines.*
 import java.util.UUID
+import kotlinx.coroutines.*
 
 /** Reuses the existing parser and private import session; only its UUID crosses a host boundary. */
 interface ReplaceRulePreparedImportRepository {
     suspend fun prepare(source: String): String
+
     suspend fun release(session: String)
 }
-class AppReplaceRulePreparedImportRepository(private val repository: ReplaceRuleImportRepository) : ReplaceRulePreparedImportRepository {
+
+class AppReplaceRulePreparedImportRepository(private val repository: ReplaceRuleImportRepository) :
+    ReplaceRulePreparedImportRepository {
     override suspend fun prepare(source: String): String {
         val session = UUID.randomUUID().toString()
         try {
@@ -22,5 +25,6 @@ class AppReplaceRulePreparedImportRepository(private val repository: ReplaceRule
             throw error
         }
     }
+
     override suspend fun release(session: String) = repository.release(session)
 }
