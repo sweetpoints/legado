@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,6 +58,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import kotlin.math.max
@@ -359,15 +361,29 @@ private fun ExploreControlLayout(
     content: @Composable (ExploreHomeControl) -> Unit,
 ) {
     val visible = controls.filter { it.type in setOf("url", "button", "text", "toggle", "select") }
-    Layout(content = { visible.forEach { content(it) } }, modifier = modifier) {
-        children,
-        constraints ->
+    Layout(
+        content = {
+            visible.forEach { control -> key(control.title, control.id) { content(control) } }
+        },
+        modifier = modifier,
+    ) { children, constraints ->
         val availableWidth = constraints.maxWidth
         val spacing = 4.dp.roundToPx()
         val preferred = children.mapIndexed { index, child ->
             val basis = visible[index].style.basis
-            if (basis >= 0) (availableWidth * basis).roundToInt().coerceAtLeast(0)
-            else child.maxIntrinsicWidth(Constraints.Infinity).coerceAtMost(availableWidth)
+            if (basis >= 0)
+                (availableWidth * basis).roundToInt().coerceAtLeast(0).let { requested ->
+                    if (visible[index].style.shrink > 0) requested.coerceAtMost(availableWidth)
+                    else requested
+                }
+            else
+                runCatching { child.maxIntrinsicWidth(Constraints.Infinity) }
+                    .getOrDefault(availableWidth)
+                    .let { naturalWidth ->
+                        if (visible[index].style.shrink > 0)
+                            naturalWidth.coerceAtMost(availableWidth)
+                        else naturalWidth
+                    }
         }
         val rows = exploreControlRows(preferred, visible.map { it.style }, availableWidth, spacing)
         var y = 0
@@ -382,7 +398,10 @@ private fun ExploreControlLayout(
                     if (growth > 0) (free * visible[index].style.grow / growth).roundToInt() else 0
             }
             val rowHeight =
-                row.maxOfOrNull { children[it].maxIntrinsicHeight(widths.getValue(it)) } ?: 0
+                row.maxOfOrNull {
+                    runCatching { children[it].maxIntrinsicHeight(widths.getValue(it)) }
+                        .getOrDefault(0)
+                } ?: 0
             var x = 0
             for (index in row) {
                 val style = visible[index].style

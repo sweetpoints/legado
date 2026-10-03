@@ -174,6 +174,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                     AppLog.put("ExploreUI Button JavaScript error", failure)
                     throw failure
                 }
+                Unit
             }
         }
 
