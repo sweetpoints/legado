@@ -322,6 +322,11 @@ class BookSourceComposeViewModelTest {
             return result
         }
 
+        override suspend fun importForm(text: String): BookSourceEditForm =
+            projectBookSourceEditForm(GSON.fromJson(text, BookSource::class.java))
+
+        override suspend fun searchScope(sourceUrl: String): String = "name::$sourceUrl"
+
         override suspend fun parse(text: String): String = text
 
         override suspend fun export(document: BookSourceEditDocument): String =

@@ -43,6 +43,13 @@ internal data class BookSourceEditForm(
     val options: BookSourceEditOptions,
     val tabs: List<List<BookSourceEditField>>,
 ) {
+    fun hasLogin(): Boolean =
+        BookSource(
+                loginUrl = field(0, "loginUrl")?.value,
+                loginUi = field(0, "loginUi")?.value,
+            )
+            .hasLogin()
+
     fun field(tab: Int, key: String): BookSourceEditField? =
         tabs.getOrNull(tab)?.find { it.key == key }
 

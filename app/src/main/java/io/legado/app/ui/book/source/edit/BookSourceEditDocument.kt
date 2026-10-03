@@ -85,6 +85,8 @@ internal data class BookSourceEditDocument(
     val variableDraft: String? = null,
     val variableComment: String? = null,
     val redirectJs: Boolean = false,
+    val importPayload: String? = null,
+    val helpShown: Boolean = false,
 ) {
     fun original(): BookSource = GSON.fromJsonObject<BookSource>(originalJson).getOrThrow()
 

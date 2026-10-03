@@ -4,8 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.data.entities.BookSource
-import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -25,6 +23,7 @@ internal data class BookSourceComposeState(
     val variable: String? = null,
     val variableComment: String? = null,
     val assists: List<BookSourceKeyboardAssist> = emptyList(),
+    val keyboardRows: Int? = null,
 )
 
 internal class BookSourceComposeViewModel(
@@ -124,6 +123,8 @@ internal class BookSourceComposeViewModel(
             val current = draft ?: return@operation
             if (current.finished) {
                 repository.release(*current.ownedTransfers.toTypedArray())
+            } else if (current.importPayload != null) {
+                completeImport()
             } else if (current.nativeRequest?.returning == true) {
                 completeEditorReturn()
             } else if (current.delivery != null) {
@@ -220,14 +221,32 @@ internal class BookSourceComposeViewModel(
         operation {
             val current = draft ?: return@operation
             if (current.finished) return@operation
-            val source = GSON.fromJsonObject<BookSource>(repository.parse(text)).getOrThrow()
-            checkpoint(
-                current.copy(
-                    form = projectBookSourceEditForm(source),
-                    histories = emptyList(),
-                    nativeRequest = null,
-                )
+            checkpoint(current.copy(importPayload = text))
+            completeImport()
+        }
+    }
+
+    private suspend fun completeImport() {
+        val current = draft ?: return
+        val payload = current.importPayload ?: return
+        val form = repository.importForm(payload)
+        checkpoint(
+            current.copy(
+                form = form,
+                histories = emptyList(),
+                nativeRequest = null,
+                importPayload = null,
             )
+        )
+    }
+
+    fun showInitialHelp(needed: Boolean) {
+        operation {
+            val current = draft ?: return@operation
+            if (current.helpShown || current.redirectJs || current.nativeRequest != null)
+                return@operation
+            checkpoint(current.copy(helpShown = true))
+            if (needed) request(BookSourceNativeAction.HELP, "ruleHelp")
         }
     }
 
@@ -270,6 +289,10 @@ internal class BookSourceComposeViewModel(
                             delivery.id,
                             action,
                             sourceUrl = delivery.sourceUrl,
+                            text =
+                                if (action == BookSourceNativeAction.SEARCH)
+                                    repository.searchScope(delivery.sourceUrl)
+                                else null,
                         ),
                 )
             )
@@ -477,6 +500,10 @@ internal class BookSourceComposeViewModel(
         }
     }
 
+    fun keyboardRows(rows: Int) {
+        mutableState.value = mutableState.value.copy(keyboardRows = rows.coerceIn(1, 5))
+    }
+
     fun groups() {
         operation { mutableState.value = mutableState.value.copy(groups = repository.groups()) }
     }
@@ -528,6 +555,7 @@ internal class BookSourceComposeViewModel(
                 delivery = null,
                 variableDraft = null,
                 variableComment = null,
+                importPayload = null,
                 finished = true,
             )
         )

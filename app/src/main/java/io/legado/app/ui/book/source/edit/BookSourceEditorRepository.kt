@@ -57,6 +57,10 @@ internal interface BookSourceEditorRepository {
         action: BookSourceSaveAction,
     ): BookSourceEditDocument
 
+    suspend fun importForm(text: String): BookSourceEditForm
+
+    suspend fun searchScope(sourceUrl: String): String
+
     suspend fun parse(text: String): String
 
     suspend fun export(document: BookSourceEditDocument): String
@@ -271,6 +275,17 @@ internal class RoomBookSourceEditorRepository(
         file(sessionId, journal = true).delete()
         return pending.result
     }
+
+    override suspend fun importForm(text: String): BookSourceEditForm =
+        withContext(Dispatchers.IO) {
+            projectBookSourceEditForm(parseSource(text))
+        }
+
+    override suspend fun searchScope(sourceUrl: String): String =
+        withContext(Dispatchers.IO) {
+            val source = database.bookSourceDao.getBookSource(sourceUrl) ?: error("书源已被删除")
+            "${source.bookSourceName.replace(":", "")}::${source.bookSourceUrl}"
+        }
 
     override suspend fun parse(text: String): String =
         withContext(Dispatchers.IO) {

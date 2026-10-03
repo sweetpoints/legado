@@ -12,7 +12,6 @@ class LoginEntryRoutingTest {
             listOf(
                 "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt",
                 "src/main/java/io/legado/app/ui/book/read/ReadMenu.kt",
-                "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
                 "src/main/java/io/legado/app/ui/video/VideoPlayerActivity.kt",
                 "src/main/java/io/legado/app/ui/rss/read/RssJsExtensions.kt",
             )
