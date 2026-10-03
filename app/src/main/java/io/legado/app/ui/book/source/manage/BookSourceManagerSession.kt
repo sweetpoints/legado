@@ -32,21 +32,27 @@ internal interface SourceManagerSessionStorage {
     fun read(): SourceManagerSession
 
     fun write(session: SourceManagerSession)
+
+    fun delete()
 }
 
 internal class SourceManagerSessionStore(context: Context, token: String) :
     SourceManagerSessionStorage {
-    private val directory = File(context.filesDir, "source-manager-sessions").apply { mkdirs() }
+    private val directory = File(context.filesDir, "source-manager-sessions")
     private val file = AtomicFile(File(directory, "${UUID.fromString(token)}.json"))
 
     override fun read(): SourceManagerSession {
-        if (!file.baseFile.exists()) return SourceManagerSession()
+        // AtomicFile restores the legacy backup in openRead. A crash can leave only .bak;
+        // checking the base file alone would silently discard a recoverable session.
+        val backup = File(file.baseFile.path + ".bak")
+        if (!file.baseFile.exists() && !backup.exists()) return SourceManagerSession()
         return file.openRead().bufferedReader().use { reader ->
             GSON.fromJson(reader, SourceManagerSession::class.java)
         }
     }
 
     override fun write(session: SourceManagerSession) {
+        directory.mkdirs()
         val output = file.startWrite()
         try {
             output.write(GSON.toJson(session).toByteArray(Charsets.UTF_8))
@@ -55,5 +61,10 @@ internal class SourceManagerSessionStore(context: Context, token: String) :
             file.failWrite(output)
             throw failure
         }
+    }
+
+    override fun delete() {
+        // AtomicFile deletes this UUID's base, backup and temporary-new files only.
+        file.delete()
     }
 }

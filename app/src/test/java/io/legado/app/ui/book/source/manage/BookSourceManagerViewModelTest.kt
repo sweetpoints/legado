@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.source.manage
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewModelScope
 import io.legado.app.data.entities.BookSourcePart
 import java.io.File
@@ -255,13 +256,46 @@ class BookSourceManagerViewModelTest {
             assertEquals(listOf("a"), repository.exportKeys)
         }
 
+    @Test
+    fun ownedSessionCleanupWaitsForAcceptedIoAndFencesLateWrites() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val store = MemoryStore()
+            val manager = model(repository, store)
+            val owner = ViewModelStore().apply { put("manager", manager) }
+            runCurrent()
+            repository.mutationGate = CompletableDeferred()
+            manager.mutate(SourceMutation.TOP, listOf("a"))
+            runCurrent()
+            owner.clear()
+            runCurrent()
+            assertEquals(0, store.deletions)
+            repository.mutationGate!!.complete(Unit)
+            runCurrent()
+            assertEquals(1, store.deletions)
+            assertEquals(0, store.writesAfterDeletion)
+            manager.draft("late input")
+            manager.mutate(SourceMutation.DELETE, listOf("a"))
+            runCurrent()
+            assertEquals(1, repository.mutations.size)
+            assertEquals(0, store.writesAfterDeletion)
+        }
+
     private class MemoryStore : SourceManagerSessionStorage {
         var session = SourceManagerSession()
+        var deletions = 0
+        var writesAfterDeletion = 0
 
         override fun read() = session
 
         override fun write(session: SourceManagerSession) {
+            if (deletions > 0) writesAfterDeletion++
             this.session = session
+        }
+
+        override fun delete() {
+            deletions++
+            session = SourceManagerSession()
         }
     }
 

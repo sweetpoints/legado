@@ -9,9 +9,12 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +62,7 @@ internal class BookSourceManagerViewModel(
     private var session = SourceManagerSession()
     private var sourceJob: Job? = null
     private var restoringSession = true
+    @Volatile private var terminated = false
     private var filteredRows = emptyList<SourceManagerRow>()
     private var dragStartRows = emptyList<SourceManagerRow>()
     private var dragRows = emptyList<SourceManagerRow>()
@@ -220,7 +224,7 @@ internal class BookSourceManagerViewModel(
     }
 
     private fun edit(transform: (SourceManagerState) -> SourceManagerState) {
-        if (state.value.busy || restoringSession) return
+        if (terminated || state.value.busy || restoringSession) return
         val previous = state.value
         mutableState.update(transform)
         val updated = state.value
@@ -367,7 +371,7 @@ internal class BookSourceManagerViewModel(
     private fun operation(block: suspend () -> Unit) {
         // Reject rapid second submissions before launching. A mutex alone would queue and repeat
         // the same destructive action once the first request had completed.
-        if (state.value.busy || state.value.loading) return
+        if (terminated || state.value.busy || state.value.loading) return
         mutableState.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             operationMutex.withLock {
@@ -508,6 +512,21 @@ internal class BookSourceManagerViewModel(
 
     fun hostError(message: String) {
         mutableState.update { it.copy(error = message) }
+    }
+
+    override fun onCleared() {
+        terminated = true
+        val cleanupScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+        cleanupScope.launch {
+            try {
+                // Accepted operations own this same mutex through their final disk receipt.
+                // Cleanup runs after those writes, so no late completion can recreate the UUID.
+                operationMutex.withLock { store.delete() }
+            } finally {
+                cleanupScope.cancel()
+            }
+        }
+        super.onCleared()
     }
 
     companion object {
