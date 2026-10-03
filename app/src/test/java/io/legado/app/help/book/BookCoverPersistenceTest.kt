@@ -1,6 +1,9 @@
 package io.legado.app.help.book
 
 import io.legado.app.data.entities.Book
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,20 +11,18 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
-import java.io.IOException
-import java.nio.file.Files
 
 class BookCoverPersistenceTest {
 
     @Test
     fun `only network cover layers are eligible`() {
-        val book = Book(
-            bookUrl = "https://books.example/book",
-            origin = "https://images.example",
-            coverUrl = "https://images.example/source.jpg",
-            persistedCoverUrl = "/data/user/0/io.legado.app/files/covers/local.cover",
-        )
+        val book =
+            Book(
+                bookUrl = "https://books.example/book",
+                origin = "https://images.example",
+                coverUrl = "https://images.example/source.jpg",
+                persistedCoverUrl = "/data/user/0/io.legado.app/files/covers/local.cover",
+            )
         assertEquals("https://images.example/source.jpg", book.networkCoverForPersistence())
         assertEquals(book.origin, book.networkCoverSourceOrigin())
 
@@ -34,11 +35,12 @@ class BookCoverPersistenceTest {
 
     @Test
     fun `book migration keeps both cover overrides`() {
-        val oldBook = Book(
-            bookUrl = "old",
-            customCoverUrl = "https://images.example/custom.jpg",
-            persistedCoverUrl = "/covers/local.cover",
-        )
+        val oldBook =
+            Book(
+                bookUrl = "old",
+                customCoverUrl = "https://images.example/custom.jpg",
+                persistedCoverUrl = "/covers/local.cover",
+            )
 
         val migrated = oldBook.migrateTo(Book(bookUrl = "migrated"), emptyList())
         val updated = oldBook.updateTo(Book(bookUrl = "updated"))
@@ -64,8 +66,12 @@ class BookCoverPersistenceTest {
             val book = Book(customCoverUrl = legacy.absolutePath)
 
             assertTrue(isLegacyPersistedCoverPath(legacy.absolutePath))
-            assertFalse(isLegacyPersistedCoverPath(root.resolve("covers/manual.cover").absolutePath))
-            assertFalse(isLegacyPersistedCoverPath(root.resolve("other/${legacy.name}").absolutePath))
+            assertFalse(
+                isLegacyPersistedCoverPath(root.resolve("covers/manual.cover").absolutePath)
+            )
+            assertFalse(
+                isLegacyPersistedCoverPath(root.resolve("other/${legacy.name}").absolutePath)
+            )
             assertFalse(isLegacyPersistedCoverPath("https://images.example/covers/${legacy.name}"))
 
             book.normalizeLegacyPersistedCover()
@@ -86,7 +92,9 @@ class BookCoverPersistenceTest {
 
             assertEquals(first, second)
             assertArrayEquals(source.readBytes(), first.readBytes())
-            assertTrue(root.resolve("covers").listFiles()?.none { it.name.endsWith(".part") } == true)
+            assertTrue(
+                root.resolve("covers").listFiles()?.none { it.name.endsWith(".part") } == true
+            )
         } finally {
             root.deleteRecursively()
         }
@@ -115,26 +123,17 @@ class BookCoverPersistenceTest {
     fun `book updates preserve concurrent cover changes`() {
         val dao = readAppSource("io/legado/app/data/dao/BookDao.kt")
         val extensions = readAppSource("io/legado/app/help/book/BookExtensions.kt")
-        val infoViewModel = readAppSource("io/legado/app/ui/book/info/BookInfoViewModel.kt")
-        val infoActivity = readAppSource("io/legado/app/ui/book/info/BookInfoActivity.kt")
 
         assertTrue(dao.contains("origin = :expectedOrigin"))
         assertTrue(dao.contains("coverUrl is :expectedCoverUrl"))
         assertTrue(dao.contains("customCoverUrl is :expectedCustomCoverUrl"))
         assertTrue(dao.contains("persistedCoverUrl is :expectedPersistedCoverUrl"))
-        assertTrue(
-            dao.contains("persistedCoverUrl = getPersistedCoverUrl(book.bookUrl)")
-        )
+        assertTrue(dao.contains("persistedCoverUrl = getPersistedCoverUrl(book.bookUrl)"))
         assertTrue(dao.contains("if (has(newBook.bookUrl))"))
         assertTrue(extensions.contains("updatePreservingCustomCoverUrl(this)"))
         assertTrue(extensions.contains("savePreservingCustomCoverUrl"))
-        assertTrue(infoViewModel.contains("preserveCustomCoverUrl: Boolean = true"))
-        assertTrue(
-            infoViewModel.contains("saveBook(book, preserveCustomCoverUrl = false)")
-        )
-        assertTrue(
-            infoActivity.contains("saveBook(book, preserveCustomCoverUrl = false)")
-        )
+        // BookDetailStorageRepositoryTest exercises explicit cover replacement against Room,
+        // while BookDetailNetworkStorageRepositoryTest covers concurrent metadata/progress merges.
     }
 
     @Test
@@ -149,10 +148,12 @@ class BookCoverPersistenceTest {
         assertTrue(restore.contains("book.persistedCoverUrl = book.persistedCoverUrl?.let"))
     }
 
-    private fun readAppSource(path: String): String = sequenceOf(
-        File("src/main/java"),
-        File("app/src/main/java"),
-    ).map { it.resolve(path) }
-        .first(File::isFile)
-        .readText()
+    private fun readAppSource(path: String): String =
+        sequenceOf(
+                File("src/main/java"),
+                File("app/src/main/java"),
+            )
+            .map { it.resolve(path) }
+            .first(File::isFile)
+            .readText()
 }

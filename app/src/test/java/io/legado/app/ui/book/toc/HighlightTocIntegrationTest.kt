@@ -1,29 +1,30 @@
 package io.legado.app.ui.book.toc
 
 import io.legado.app.data.entities.BookHighlight
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class HighlightTocIntegrationTest {
 
     @Test
     fun `current chapter url wins after toc reorder`() {
-        val highlight = BookHighlight(
-            chapterUrl = "chapter-url",
-            chapterIndex = 2
-        )
+        val highlight =
+            BookHighlight(
+                chapterUrl = "chapter-url",
+                chapterIndex = 2,
+            )
 
         assertEquals(
             8,
-            resolveHighlightChapterIndex(highlight, mapOf("chapter-url" to 8))
+            resolveHighlightChapterIndex(highlight, mapOf("chapter-url" to 8)),
         )
         assertNull(resolveHighlightChapterIndex(highlight, emptyMap()))
         assertEquals(
             2,
-            resolveHighlightChapterIndex(highlight.copy(chapterUrl = ""), emptyMap())
+            resolveHighlightChapterIndex(highlight.copy(chapterUrl = ""), emptyMap()),
         )
     }
 
@@ -39,18 +40,18 @@ class HighlightTocIntegrationTest {
 
     @Test
     fun `recreated chapter page does not stack observers`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
-        ).readText()
-        val eventBusExtensions = projectFile(
-            "src/main/java/io/legado/app/utils/EventBusExtensions.kt"
-        ).readText()
-        val fragmentObserver = eventBusExtensions
-            .substringAfter("inline fun <reified EVENT> Fragment.observeEvent(")
-            .substringBefore("inline fun <reified EVENT> Fragment.observeEventSticky(")
-        val fragmentStickyObserver = eventBusExtensions
-            .substringAfter("inline fun <reified EVENT> Fragment.observeEventSticky(")
-            .substringBefore("inline fun <reified EVENT> LifecycleService.observeEvent(")
+        val fragment =
+            projectFile("src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt").readText()
+        val eventBusExtensions =
+            projectFile("src/main/java/io/legado/app/utils/EventBusExtensions.kt").readText()
+        val fragmentObserver =
+            eventBusExtensions
+                .substringAfter("inline fun <reified EVENT> Fragment.observeEvent(")
+                .substringBefore("inline fun <reified EVENT> Fragment.observeEventSticky(")
+        val fragmentStickyObserver =
+            eventBusExtensions
+                .substringAfter("inline fun <reified EVENT> Fragment.observeEventSticky(")
+                .substringBefore("inline fun <reified EVENT> LifecycleService.observeEvent(")
 
         assertTrue(fragment.contains("bookData.observe(viewLifecycleOwner)"))
         assertTrue(!fragment.contains("observe(this@ChapterListFragment)"))
@@ -60,19 +61,22 @@ class HighlightTocIntegrationTest {
 
     @Test
     fun `highlight jump waits for current layout coordinates`() {
-        val readBook = projectFile(
-            "src/main/java/io/legado/app/model/ReadBook.kt"
-        ).readText()
-        val bookInfo = projectFile(
-            "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt"
-        ).readText()
-        val readViewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt"
-        ).readText()
+        val readBook = projectFile("src/main/java/io/legado/app/model/ReadBook.kt").readText()
+        val readViewModel =
+            projectFile("src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt").readText()
 
-        val highlight = BookHighlight(chapterPos = 20, chapterPosEnd = 24, layoutTitleLength = 12, bookText = "Text")
+        val highlight =
+            BookHighlight(
+                chapterPos = 20,
+                chapterPosEnd = 24,
+                layoutTitleLength = 12,
+                bookText = "Text",
+            )
         assertEquals("Text", io.legado.app.model.book.tocHighlightAnchorText(highlight))
-        assertEquals("", io.legado.app.model.book.tocHighlightAnchorText(highlight.copy(chapterPosEnd = 23)))
+        assertEquals(
+            "",
+            io.legado.app.model.book.tocHighlightAnchorText(highlight.copy(chapterPosEnd = 23)),
+        )
         assertTrue(readBook.contains("if (hasPendingHighlightJump()) return"))
         assertTrue(readBook.countMatches("positionReady && !available") >= 2)
         assertTrue(readBook.contains("if (curTextChapter !== textChapter) return false"))
@@ -80,8 +84,6 @@ class HighlightTocIntegrationTest {
         assertTrue(readBook.contains("if (!chapter.isCompleted)"))
         assertTrue(readBook.contains("manualHighlightAnchorsVersion"))
         assertTrue(readBook.contains("val cacheResult = textChapter.isCompleted"))
-        assertTrue(bookInfo.contains("highlightLayoutTitleLength.takeIf { deferHighlightPosition }"))
-        assertTrue(bookInfo.contains("highlightAnchorText.takeIf { deferHighlightPosition }"))
         assertTrue(readViewModel.contains("|| hasHighlightTarget"))
         assertTrue(
             readViewModel.contains(
@@ -100,20 +102,16 @@ class HighlightTocIntegrationTest {
 
     @Test
     fun `highlight queries use the stable book owner`() {
-        val dao = projectFile(
-            "src/main/java/io/legado/app/data/dao/BookHighlightDao.kt"
-        ).readText()
+        val dao = projectFile("src/main/java/io/legado/app/data/dao/BookHighlightDao.kt").readText()
         assertTrue(dao.contains("where bookUrl = :bookUrl"))
         assertTrue(dao.contains("fun flowByBook(bookUrl: String)"))
         assertTrue(dao.contains("fun flowSearch(bookUrl: String, key: String)"))
     }
 
     private fun projectFile(pathInApp: String): File =
-        listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
 
     private fun String.countMatches(value: String): Int =
         windowed(value.length).count { it == value }
-
 }

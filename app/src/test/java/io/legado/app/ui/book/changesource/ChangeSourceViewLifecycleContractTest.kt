@@ -32,8 +32,6 @@ class ChangeSourceViewLifecycleContractTest {
             listOf(
                 appSource("book/read/ReadBookViewModel.kt")
                     .section("fun changeTo(", "/**\n     * 自动换源"),
-                appSource("book/info/BookInfoViewModel.kt")
-                    .section("fun changeTo(", "fun saveBook"),
                 appSource("book/manga/ReadMangaViewModel.kt")
                     .section("fun changeTo(", "private fun checkLocalBookFileExist"),
             )
@@ -57,16 +55,12 @@ class ChangeSourceViewLifecycleContractTest {
         val audioActivity =
             appSource("book/audio/AudioPlayActivity.kt")
                 .section("override fun changeTo(", "override fun finish")
-        val infoActivity =
-            appSource("book/info/BookInfoActivity.kt")
-                .section("override fun changeTo(", "override fun coverChangeTo")
         val mangaActivity =
             appSource("book/manga/ReadMangaActivity.kt")
                 .section("override fun changeTo(", "override fun updateColorFilter")
 
         assertTrue(readActivity.contains("viewModel.changeTo(book, toc, onSuccess)"))
         assertTrue(audioActivity.contains("viewModel.changeTo(source, book, toc, onSuccess)"))
-        assertTrue(infoActivity.contains("viewModel.changeTo(source, book, toc, onSuccess)"))
         assertTrue(mangaActivity.contains("viewModel.changeTo(book, toc, onSuccess)"))
         val audioTextMigration =
             appSource("book/audio/AudioPlayViewModel.kt")

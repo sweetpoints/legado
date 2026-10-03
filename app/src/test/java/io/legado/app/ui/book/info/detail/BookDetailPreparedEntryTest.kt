@@ -3,6 +3,7 @@ package io.legado.app.ui.book.info.detail
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.entities.Book
 import io.legado.app.data.repository.BookDetailBook
+import io.legado.app.data.repository.BookDetailChapter
 import io.legado.app.data.repository.BookDetailData
 import io.legado.app.data.repository.BookDetailEntryRepository
 import io.legado.app.data.repository.BookDetailIdentity
@@ -47,7 +48,15 @@ class BookDetailPreparedEntryTest {
                     coverUrl = "cover",
                 )
             )
-        val data = BookDetailData(book, null, emptyList(), emptyList(), emptyList(), false)
+        val data =
+            BookDetailData(
+                book,
+                null,
+                listOf(BookDetailChapter("{}", 0, "chapter", "Existing chapter", false)),
+                emptyList(),
+                emptyList(),
+                false,
+            )
         var infoRequests = 0
         val model =
             BookDetailViewModel(
@@ -93,6 +102,7 @@ class BookDetailPreparedEntryTest {
             assertTrue(model.state.value.loaded)
             assertEquals(expectedIdentity.bookUrl, model.state.value.data!!.book.bookUrl)
             assertEquals(1, infoRequests)
+            assertEquals(data, model.state.value.data)
             assertFalse(saved.contains("name"))
             assertFalse(saved.contains("author"))
             assertFalse(saved.contains("bookUrl"))

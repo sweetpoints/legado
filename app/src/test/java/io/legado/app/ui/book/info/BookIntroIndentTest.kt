@@ -1,9 +1,13 @@
 package io.legado.app.ui.book.info
 
+import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.sp
+import io.legado.app.ui.book.info.detail.BookDetailIntroMode
+import io.legado.app.ui.book.info.detail.bookDetailIntroDocument
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BookIntroIndentTest {
 
@@ -28,22 +32,25 @@ class BookIntroIndentTest {
     }
 
     @Test
-    fun `book info applies indentation only in plain text branch`() {
-        val source = File(
-            repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt",
-        ).readText()
-
-        assertTrue(source.contains("setPlainBookIntro(tvIntro, intro)"))
-        assertTrue(source.contains("LeadingMarginSpan.Standard(indentWidth, 0)"))
-        assertTrue(source.contains("intro.startsWith(\"<useweb>\")"))
-        assertTrue(source.contains("intro.startsWith(\"<usehtml>\")"))
-        assertTrue(source.contains("intro.startsWith(\"<md>\")"))
-    }
-
-    private val repositoryRoot: File by lazy {
-        val userDir = requireNotNull(System.getProperty("user.dir"))
-        generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+    fun `plain intro document indents each paragraph while rich modes use the renderer`() {
+        val plain = bookDetailIntroDocument("First paragraph\nSecond paragraph")
+        assertEquals(BookDetailIntroMode.Plain, plain.mode)
+        val paragraphStyles = checkNotNull(plain.plain).paragraphStyles
+        assertEquals(2, paragraphStyles.size)
+        assertTrue(
+            paragraphStyles.all {
+                it.item.textIndent == TextIndent(firstLine = 28.sp, restLine = 0.sp)
+            }
+        )
+        for (raw in
+            listOf(
+                "<usehtml><p>Text</p></usehtml>",
+                "<md>**Text**</md>",
+                "<useweb>https://example.com</useweb>",
+            )) {
+            val rich = bookDetailIntroDocument(raw)
+            assertNull(rich.plain)
+            assertTrue(rich.mode != BookDetailIntroMode.Plain)
+        }
     }
 }

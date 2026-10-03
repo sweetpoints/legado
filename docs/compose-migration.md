@@ -1356,3 +1356,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 书籍详情既有 Compose Screen/Route、简介/网页渲染、偏好状态、Reader bridge 与背景组件完成独立纯格式整理，Compose 参数和布局多行展开，全部通配导入改为显式导入；原稿的 HTML/脚本权限、生命周期和 native 认领门控保持。本批不包含 Host 功能或旧测试迁移，formatter check 与 diff check 通过，最终完整验证统一排队。
 
 书籍详情换源完成新增私有 callback 交付回执，与 Room mutation 完成独立记录；暂停或宿主身份变化时未交付 claim 回滚，重复结果与恢复后已交付结果不再回调，关闭围栏阻止迟到回执复活。兼容旧账本缺失的新字段，新增 4 个真实 Atomic 文件 Android 回归，覆盖恢复、回滚、释放和写失败；本独立基础批 formatter/diff 检查通过，全页最终 JVM/Android 测试编译待排队，设备端未执行。
+
+书籍详情宿主完整切换为 BaseComposeActivity，页面、菜单和确认流程由既有纯 Compose Screen/Route 驱动；兼容旧 name/author/bookUrl 入口并接入 private prepared UUID，会话 SavedState 移除大身份键。子页面结果在 IO 私有账本恢复，换源完成仅 RESUMED 当前 owner 一次回调，清缓存迟到来源回调保留快照身份校验。保留目录选区阅读位置、音频/视频/漫画入口、登录/编辑/分组/封面/变量和原服务算法，搜索预览封面草稿不误落书架。删除专属旧 VM、横竖两个 XML 和菜单，Video 仍使用的共享简介 XML 保留。新增 5 个实际 Activity Android 回归（prepared/legacy/recreate/早到目录/NoRoom/暂停换源），补真实小屏标签换行与触控控件尺寸；陈旧源字符串断言仅定点移除 BookInfo 分支，核心实体、Reader、WebDAV 和其它页面合同保留。全批 Kotlin formatter/diff 检查通过，完整 JVM/Android Kotlin 编译在 clean rebase 后排队，设备端未执行。

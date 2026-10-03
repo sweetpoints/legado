@@ -1,31 +1,14 @@
 package io.legado.app.ui.widget
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class LabelsBarLayoutTest {
-
-    @Test
-    fun `book details wrap and center labels without a horizontal scroller`() {
-        listOf(
-            "app/src/main/res/layout/activity_book_info.xml",
-            "app/src/main/res/layout-land/activity_book_info.xml"
-        ).forEach { path ->
-            val labels = labelsBar(path, "lb_kind")
-
-            assertEquals("match_parent", labels.androidAttribute("layout_width"))
-            assertEquals("row", labels.appAttribute("flexDirection"))
-            assertEquals("wrap", labels.appAttribute("flexWrap"))
-            assertEquals("center", labels.appAttribute("justifyContent"))
-            assertEquals("center", labels.appAttribute("alignItems"))
-            assertFalse(labels.hasAncestor("HorizontalScrollView"))
-        }
-    }
 
     @Test
     fun `search and explore results wrap labels within the available width`() {
@@ -41,10 +24,12 @@ class LabelsBarLayoutTest {
 
     @Test
     fun `labels use flexbox and logical spacing`() {
-        val source = File(
-            repositoryRoot,
-            "app/src/main/java/io/legado/app/ui/widget/LabelsBar.kt"
-        ).readText()
+        val source =
+            File(
+                    repositoryRoot,
+                    "app/src/main/java/io/legado/app/ui/widget/LabelsBar.kt",
+                )
+                .readText()
 
         assertTrue(source.contains(": FlexboxLayout(context, attrs)"))
         assertTrue(source.contains("FlexboxLayout.LayoutParams("))
@@ -55,9 +40,13 @@ class LabelsBarLayoutTest {
     }
 
     private fun labelsBar(path: String, id: String): Element {
-        val document = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder().parse(File(repositoryRoot, path))
+        val document =
+            DocumentBuilderFactory.newInstance()
+                .apply {
+                    isNamespaceAware = true
+                }
+                .newDocumentBuilder()
+                .parse(File(repositoryRoot, path))
         val nodes = document.getElementsByTagName(LABELS_BAR)
         return (0 until nodes.length)
             .map { nodes.item(it) as Element }
@@ -67,12 +56,10 @@ class LabelsBarLayoutTest {
     private fun Element.androidAttribute(name: String): String =
         getAttributeNS(ANDROID_NAMESPACE, name)
 
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(APP_NAMESPACE, name)
+    private fun Element.appAttribute(name: String): String = getAttributeNS(APP_NAMESPACE, name)
 
     private fun Element.hasAncestor(name: String): Boolean =
-        generateSequence(parentNode) { it.parentNode }
-            .any { it.nodeName.endsWith(name) }
+        generateSequence(parentNode) { it.parentNode }.any { it.nodeName.endsWith(name) }
 
     private val repositoryRoot: File by lazy {
         val userDir = requireNotNull(System.getProperty("user.dir"))

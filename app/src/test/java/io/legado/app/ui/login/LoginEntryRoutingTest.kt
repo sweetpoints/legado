@@ -10,7 +10,6 @@ class LoginEntryRoutingTest {
     fun `login entry points use unified login capability`() {
         val paths =
             listOf(
-                "src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt",
                 "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt",
                 "src/main/java/io/legado/app/ui/book/read/ReadMenu.kt",
                 "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
