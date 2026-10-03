@@ -1185,3 +1185,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 书籍详情 Route 按 RESUMED 生命周期准备原生输入、登记子页面所有者并持久认领回执，暂停和关闭后的迟到准备不能交付。恢复的 pending service 阻止旧请求准备，失败输入不会挡后续 FIFO，认领写失败显式重试；简介和书源解析先在 IO 完成。新增 4 个实际 Compose 生命周期/失败/恢复测试编译覆盖，宿主接入另批迁移。
 
 替换规则导入新增 prepared UUID 入口：调用原 parser 在 IO 准备并保存既有私有 import session，Dialog 仅传 UUID；恢复缺失会话明确报错，不解析别的 fallback source。取消准备或终止 owner 只释放自身 stage，等待旧写入结束再清理，保留旧 source 入口及解析深度/缓存规则。新增 4 个 JVM 与 2 个实际 parser/Atomic 大载荷编译用例。
+
+远程书库阅读准备抽离为独立 IO repository，保留原文件名查书、压缩包缺失下载、单文件确认、多文件选择与不支持格式分支；存储帮助、tree 配置、压缩读取和导入离开 Main。原生交付前重读当前书籍快照，覆盖 3 个 JVM 与实际 Room metadata 编译用例，页面接入另批迁移。
