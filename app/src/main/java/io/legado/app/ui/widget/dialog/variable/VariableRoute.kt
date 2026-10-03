@@ -11,8 +11,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-fun VariableRoute(viewModel: VariableViewModel, onSave: (VariableResult) -> Unit, onClose: () -> Unit,
-    modifier: Modifier = Modifier) {
+fun VariableRoute(
+    viewModel: VariableViewModel,
+    onSave: (VariableResult) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val save by rememberUpdatedState(onSave)
     val close by rememberUpdatedState(onClose)
@@ -28,7 +32,13 @@ fun VariableRoute(viewModel: VariableViewModel, onSave: (VariableResult) -> Unit
             }
         }
     }
-    VariableScreen(state, viewModel::setInput, viewModel::requestSave, {
-        viewModel.cancel()
-    }, modifier)
+    VariableScreen(
+        state,
+        viewModel::setInput,
+        viewModel::requestSave,
+        {
+            viewModel.cancel()
+        },
+        modifier,
+    )
 }

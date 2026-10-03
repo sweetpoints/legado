@@ -29,24 +29,46 @@ fun TextListScreen(state: TextListUiState, onClose: () -> Unit, modifier: Modifi
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column {
             LegadoTopAppBar(state.title, onClose, windowInsets = WindowInsets(0, 0, 0, 0))
-            LazyColumn(Modifier.weight(1f).testTag("text-list"), contentPadding = PaddingValues(vertical = 8.dp)) {
+            LazyColumn(
+                Modifier.weight(1f).testTag("text-list"),
+                contentPadding = PaddingValues(vertical = 8.dp),
+            ) {
                 items(state.entries, key = { it.id }) { entry ->
                     val color = MaterialTheme.colorScheme.primary
-                    val message = remember(entry.text, color) {
-                        buildAnnotatedString {
-                            append(entry.text)
-                            val matcher = Patterns.WEB_URL.matcher(entry.text)
-                            while (matcher.find()) {
-                                // Linkify.WEB_URLS excludes an email address's domain.
-                                if (matcher.start() > 0 && entry.text[matcher.start() - 1] == '@') continue
-                                val value = matcher.group().orEmpty()
-                                addLink(LinkAnnotation.Url(if (value.contains("://")) value else "http://$value",
-                                    TextLinkStyles(SpanStyle(color = color))), matcher.start(), matcher.end())
+                    val message =
+                        remember(entry.text, color) {
+                            buildAnnotatedString {
+                                append(entry.text)
+                                val matcher = Patterns.WEB_URL.matcher(entry.text)
+                                while (matcher.find()) {
+                                    // Linkify.WEB_URLS excludes an email address's domain.
+                                    if (
+                                        matcher.start() > 0 &&
+                                            entry.text[matcher.start() - 1] == '@'
+                                    )
+                                        continue
+                                    val value = matcher.group().orEmpty()
+                                    addLink(
+                                        LinkAnnotation.Url(
+                                            if (value.contains("://")) value else "http://$value",
+                                            TextLinkStyles(SpanStyle(color = color)),
+                                        ),
+                                        matcher.start(),
+                                        matcher.end(),
+                                    )
+                                }
                             }
                         }
-                    }
-                    SelectionContainer(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("text-list-row-${entry.id}")) {
-                        Text(message, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium)
+                    SelectionContainer(
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .testTag("text-list-row-${entry.id}")
+                    ) {
+                        Text(
+                            message,
+                            Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             }

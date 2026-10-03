@@ -1,6 +1,5 @@
 package io.legado.app.ui.widget.dialog.sleeptimer
 
-import io.legado.app.data.preferences.SleepTimerMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,8 +11,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-fun SleepTimerRoute(viewModel: SleepTimerViewModel, onSelection: (SleepTimerSelection) -> Unit,
-    onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun SleepTimerRoute(
+    viewModel: SleepTimerViewModel,
+    onSelection: (SleepTimerSelection) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val deliver by rememberUpdatedState(onSelection)
     val close by rememberUpdatedState(onClose)
@@ -29,6 +32,13 @@ fun SleepTimerRoute(viewModel: SleepTimerViewModel, onSelection: (SleepTimerSele
             }
         }
     }
-    SleepTimerScreen(state, viewModel::selectPreset, viewModel::showCustom, viewModel::setInput,
-        viewModel::confirmCustom, viewModel::turnOff, modifier)
+    SleepTimerScreen(
+        state,
+        viewModel::selectPreset,
+        viewModel::showCustom,
+        viewModel::setInput,
+        viewModel::confirmCustom,
+        viewModel::turnOff,
+        modifier,
+    )
 }
