@@ -121,6 +121,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -162,6 +165,7 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     private var imageOwnerHash by mutableStateOf<String?>(null)
     private var imageBinding: Job? = null
     private var imageGeneration = 0L
+    private val launchRequests by lazy { FileRssReaderLaunchRepository() }
     private val selectImageDir = registerForActivityResult(HandleFileContract()) {
         imagePickerResult(it.value, it.uri?.toString())
     }
@@ -186,13 +190,31 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
             if (epoch == imageGeneration) { imageModel.bind(hash); imageOwnerHash = hash }
         }
     }
+    private fun bindPreparedReader(ticket: String) {
+        // Invalidate the old image owner before private request IO can suspend.
+        imageOwnerHash = null; imageModel.invalidateOwner(); imageBinding?.cancel(); val epoch = ++imageGeneration
+        readerModel.bindPrepared(ticket, launchRequests)
+        imageBinding = lifecycleScope.launch {
+            readerModel.state.map { it.loaded }.distinctUntilChanged().collectLatest { loaded ->
+                if (!loaded) return@collectLatest
+                val input = readerModel.snapshot()?.request ?: return@collectLatest
+                val hash = withContext(IO) { rssReaderImageOwner(input) }
+                currentCoroutineContext().ensureActive()
+                if (epoch == imageGeneration) { imageModel.bind(hash); imageOwnerHash = hash }
+            }
+        }
+    }
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         pickerNonce = savedInstanceState?.getString("rssReader.pickerNonce")
         pooledWebView = WebViewPool.acquire(this); currentWebView = pooledWebView.realWebView
         customWebView = FrameLayout(this)
         initWebView(); currentWebView.clearHistory()
-        readerModel.bind(if (savedInstanceState == null) request(intent) else null)
-        bindImages(request(intent))
+        val ticket = intent.getStringExtra(PREPARED_REQUEST)
+        if (ticket != null) bindPreparedReader(ticket)
+        else {
+            readerModel.bind(if (savedInstanceState == null) request(intent) else null)
+            bindImages(request(intent))
+        }
         onBackPressedDispatcher.addCallback(this) { browserBack() }
     }
     override fun onSaveInstanceState(outState: Bundle) {
@@ -218,9 +240,14 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
         }
     }
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent); setIntent(intent); imageChoice = null; dismissedImageError = null
+        val ticket = intent.getStringExtra(PREPARED_REQUEST)
+        val duplicate = ticket != null && ticket == this.intent.getStringExtra(PREPARED_REQUEST) && readerModel.state.value.loaded
+        super.onNewIntent(intent); setIntent(intent)
+        if (duplicate) return
+        imageChoice = null; dismissedImageError = null
         currentWebView.stopLoading(); readerSnapshot = null
-        readerModel.bind(request(intent)); bindImages(request(intent))
+        if (ticket != null) bindPreparedReader(ticket)
+        else { readerModel.bind(request(intent)); bindImages(request(intent)) }
     }
     private fun refresh() {
         if (readerSnapshot?.source?.singleUrl == true) { currentWebView.reload(); return }
@@ -788,6 +815,17 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     }
 
     companion object {
+        const val PREPARED_REQUEST = "rssReader.launchTicket"
+
+        /** Complete input is staged on IO by the caller; only this canonical UUID reaches Binder. */
+        fun startPrepared(context: Context, ticket: String, singleTop: Boolean = true) {
+            require(UUID.fromString(ticket).toString() == ticket)
+            context.startActivity<ReadRssActivity> {
+                putExtra(PREPARED_REQUEST, ticket)
+                if (singleTop) addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+        }
+
         fun start(context: Context, singleTop: Boolean, origin: String, title: String? = null, url: String? = null, startHtml: String? = null) {
             context.startActivity<ReadRssActivity> {
                 putExtra("origin", origin)
