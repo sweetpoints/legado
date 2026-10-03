@@ -6,12 +6,21 @@ import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.entities.Book
-import io.legado.app.data.repository.*
-import io.legado.app.model.remote.*
+import io.legado.app.data.repository.RemoteLibraryDraftRepository
+import io.legado.app.data.repository.RemoteLibraryReadingRepository
+import io.legado.app.data.repository.RemoteLibraryRepository
+import io.legado.app.model.remote.RemoteLibraryConnection
+import io.legado.app.model.remote.RemoteLibraryDraft
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryReadTarget
+import io.legado.app.model.remote.RemoteLibraryReceipt
 import io.legado.app.ui.theme.LegadoComposeTheme
 import kotlinx.coroutines.CompletableDeferred
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class RemoteLibraryRouteTest {
     @get:Rule val compose = createComposeRule()

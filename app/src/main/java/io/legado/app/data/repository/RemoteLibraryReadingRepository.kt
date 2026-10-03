@@ -9,10 +9,10 @@ import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryReadTarget
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.find
 import kotlinx.coroutines.*
 
 internal interface RemoteLibraryReadingStore {

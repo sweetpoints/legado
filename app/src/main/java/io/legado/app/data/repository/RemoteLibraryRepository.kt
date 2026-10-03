@@ -8,7 +8,10 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.webdav.Authorization
 import io.legado.app.model.analyzeRule.CustomUrl
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteBook
+import io.legado.app.model.remote.RemoteBookWebDav
+import io.legado.app.model.remote.RemoteLibraryConnection
+import io.legado.app.model.remote.RemoteLibraryEntry
 import java.util.UUID
 import kotlinx.coroutines.*
 

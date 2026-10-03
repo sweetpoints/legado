@@ -5,7 +5,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.legado.app.data.repository.*
+import io.legado.app.data.repository.AppReplaceRuleImportRepository
+import io.legado.app.data.repository.AppReplaceRulePreparedImportRepository
+import io.legado.app.data.repository.ReplaceRulePreparedImportRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable

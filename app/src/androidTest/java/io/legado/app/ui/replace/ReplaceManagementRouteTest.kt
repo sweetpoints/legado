@@ -5,12 +5,21 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import io.legado.app.data.repository.*
+import io.legado.app.data.repository.ReplaceManagementCheckpoint
+import io.legado.app.data.repository.ReplaceManagementExport
+import io.legado.app.data.repository.ReplaceManagementFilter
+import io.legado.app.data.repository.ReplaceManagementRepository
+import io.legado.app.data.repository.ReplaceManagementRow
+import io.legado.app.data.repository.ReplaceManagementSessionRepository
+import io.legado.app.data.repository.ReplaceRulePreparedImportRepository
 import io.legado.app.ui.theme.LegadoComposeTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Test
 
 class ReplaceManagementRouteTest {
     @get:Rule val compose = createComposeRule()

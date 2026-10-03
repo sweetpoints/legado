@@ -1,9 +1,12 @@
 package io.legado.app.data.repository
 
 import io.legado.app.data.entities.Book
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryReadTarget
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RemoteLibraryReadingRepositoryTest {

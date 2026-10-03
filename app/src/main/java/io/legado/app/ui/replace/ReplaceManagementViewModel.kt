@@ -3,7 +3,16 @@ package io.legado.app.ui.replace
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.legado.app.data.repository.*
+import io.legado.app.data.repository.AppReplaceManagementSharingRepository
+import io.legado.app.data.repository.ReplaceManagementCheckpoint
+import io.legado.app.data.repository.ReplaceManagementExport
+import io.legado.app.data.repository.ReplaceManagementPrepared
+import io.legado.app.data.repository.ReplaceManagementRepository
+import io.legado.app.data.repository.ReplaceManagementRow
+import io.legado.app.data.repository.ReplaceManagementSessionRepository
+import io.legado.app.data.repository.ReplaceManagementShareFeedback
+import io.legado.app.data.repository.ReplaceManagementSharingRepository
+import io.legado.app.data.repository.replaceManagementFilter
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*

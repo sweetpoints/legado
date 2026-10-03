@@ -11,13 +11,17 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
-import io.legado.app.data.repository.*
+import io.legado.app.data.repository.AppReplaceManagementRepository
+import io.legado.app.data.repository.FileReplaceManagementSessionRepository
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
-import io.legado.app.utils.*
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.showHelp
+import io.legado.app.utils.toastOnUi
 import java.io.File
 
 /** Pure Compose management; imports and replacements keep their established business pipelines. */

@@ -9,8 +9,10 @@ import io.legado.app.R
 import io.legado.app.data.repository.ReplaceManagementRow
 import io.legado.app.data.repository.ReplaceManagementShareFeedback
 import io.legado.app.ui.theme.LegadoComposeTheme
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ReplaceManagementScreenTest {
     @get:Rule val compose = createComposeRule()

@@ -2,11 +2,21 @@ package io.legado.app.data.repository
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryConfirmation
+import io.legado.app.model.remote.RemoteLibraryDraft
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryPrompt
+import io.legado.app.model.remote.RemoteLibraryReceipt
+import io.legado.app.model.remote.RemoteLibraryTask
+import io.legado.app.model.remote.RemoteLibraryTaskKind
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class RemoteLibraryDraftRepositoryTest {

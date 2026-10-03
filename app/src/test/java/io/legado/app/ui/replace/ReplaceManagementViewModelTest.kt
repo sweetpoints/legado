@@ -1,12 +1,23 @@
 package io.legado.app.ui.replace
 
 import androidx.lifecycle.SavedStateHandle
-import io.legado.app.data.repository.*
+import io.legado.app.data.repository.ReplaceManagementCheckpoint
+import io.legado.app.data.repository.ReplaceManagementExport
+import io.legado.app.data.repository.ReplaceManagementFilter
+import io.legado.app.data.repository.ReplaceManagementRepository
+import io.legado.app.data.repository.ReplaceManagementRow
+import io.legado.app.data.repository.ReplaceManagementSessionRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReplaceManagementViewModelTest {

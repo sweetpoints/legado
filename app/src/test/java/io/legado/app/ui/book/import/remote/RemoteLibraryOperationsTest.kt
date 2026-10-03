@@ -3,8 +3,20 @@ package io.legado.app.ui.book.import.remote
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import io.legado.app.data.entities.Book
-import io.legado.app.data.repository.*
-import io.legado.app.model.remote.*
+import io.legado.app.data.repository.DefaultRemoteLibraryRepository
+import io.legado.app.data.repository.RemoteLibraryDraftRepository
+import io.legado.app.data.repository.RemoteLibraryReadingRepository
+import io.legado.app.data.repository.RemoteLibraryRepository
+import io.legado.app.data.repository.RemoteLibraryStore
+import io.legado.app.model.remote.RemoteBook
+import io.legado.app.model.remote.RemoteLibraryConnection
+import io.legado.app.model.remote.RemoteLibraryDraft
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryPrompt
+import io.legado.app.model.remote.RemoteLibraryReadTarget
+import io.legado.app.model.remote.RemoteLibraryTask
+import io.legado.app.model.remote.RemoteLibraryTaskKind
 import io.legado.app.utils.GSON
 import java.io.File
 import java.nio.file.Files
@@ -13,8 +25,13 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.*
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteLibraryOperationsTest {

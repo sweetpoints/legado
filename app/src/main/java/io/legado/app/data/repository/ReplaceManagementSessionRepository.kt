@@ -2,7 +2,6 @@ package io.legado.app.data.repository
 
 import android.util.AtomicFile
 import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*

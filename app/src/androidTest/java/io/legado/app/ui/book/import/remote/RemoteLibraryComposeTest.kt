@@ -4,10 +4,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryConfirmation
+import io.legado.app.model.remote.RemoteLibraryConnection
+import io.legado.app.model.remote.RemoteLibraryDraft
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryPrompt
+import io.legado.app.model.remote.RemoteLibrarySort
 import io.legado.app.ui.theme.LegadoComposeTheme
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class RemoteLibraryComposeTest {
     @get:Rule val compose = createComposeRule()

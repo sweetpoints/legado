@@ -7,7 +7,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.entities.Book
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryPrompt
+import io.legado.app.model.remote.RemoteLibraryReceipt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive

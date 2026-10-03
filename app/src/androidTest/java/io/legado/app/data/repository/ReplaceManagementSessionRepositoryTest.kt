@@ -4,8 +4,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Test
 
 class ReplaceManagementSessionRepositoryTest {
     private val directory =

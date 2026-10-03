@@ -17,7 +17,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.constant.AppConst
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryEffect
+import io.legado.app.model.remote.RemoteLibraryPrompt
+import io.legado.app.model.remote.RemoteLibrarySort
 import io.legado.app.utils.ConvertUtils
 
 internal data class RemoteLibraryActions(

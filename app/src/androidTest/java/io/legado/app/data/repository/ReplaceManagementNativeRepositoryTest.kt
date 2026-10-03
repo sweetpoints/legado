@@ -4,13 +4,17 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.help.SourceSharePassphrase
-import io.legado.app.ui.replace.*
+import io.legado.app.ui.replace.ReplaceManagementAction
+import io.legado.app.ui.replace.ReplaceManagementLabels
+import io.legado.app.ui.replace.ReplaceManagementViewModel
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ReplaceManagementNativeRepositoryTest {
     private val directory =

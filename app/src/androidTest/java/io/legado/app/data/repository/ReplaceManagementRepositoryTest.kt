@@ -7,15 +7,20 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonArray
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Before
+import org.junit.Test
 
 class ReplaceManagementRepositoryTest {
     private lateinit var database: AppDatabase

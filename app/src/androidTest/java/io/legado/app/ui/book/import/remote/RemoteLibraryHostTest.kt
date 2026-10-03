@@ -10,8 +10,10 @@ import androidx.test.core.app.ApplicationProvider
 import io.legado.app.help.config.AppConfig
 import java.io.File
 import kotlinx.coroutines.*
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Test
 
 class RemoteLibraryHostTest {
     @get:Rule val compose = createEmptyComposeRule()

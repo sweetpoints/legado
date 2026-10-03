@@ -7,7 +7,11 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReplacePreviewConfig
-import io.legado.app.utils.*
+import io.legado.app.utils.ACache
+import io.legado.app.utils.GSON
+import io.legado.app.utils.isAbsUrl
+import io.legado.app.utils.moveRelativeTo
+import io.legado.app.utils.splitNotBlank
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*

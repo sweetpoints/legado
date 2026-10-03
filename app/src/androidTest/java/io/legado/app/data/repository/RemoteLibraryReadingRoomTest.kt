@@ -5,10 +5,11 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.Book
-import io.legado.app.model.remote.*
+import io.legado.app.model.remote.RemoteLibraryEntry
+import io.legado.app.model.remote.RemoteLibraryReadTarget
 import kotlinx.coroutines.*
-import org.junit.*
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class RemoteLibraryReadingRoomTest {
     @Test
