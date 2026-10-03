@@ -277,13 +277,13 @@ class CoverStylePreviewUiTest {
                             android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
                         )
                         runBlocking {
-                                repo.title(
-                                    CoverRequest(name = titles[index], author = authors[index]),
-                                    config,
-                                    frame.width,
-                                    frame.height,
-                                )
-                            }
+                            repo.title(
+                                CoverRequest(name = titles[index], author = authors[index]),
+                                config,
+                                frame.width,
+                                frame.height,
+                            )
+                        }
                             ?.let { canvas.drawBitmap(it, 0f, 0f, null) }
                         // ComposeCover rounds only the outer corners; compare the full interior
                         // including actual text pixels.

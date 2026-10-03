@@ -156,7 +156,8 @@ internal fun TextDialogScreen(
                                 if (state.remaining > 0)
                                     Text(
                                         (state.remaining / 1000).toString(),
-                                        Modifier.padding(vertical = 16.dp).testTag("text-countdown"),
+                                        Modifier.padding(vertical = 16.dp)
+                                            .testTag("text-countdown"),
                                     )
                                 Box {
                                     IconButton({ menu = true }, Modifier.testTag("text-menu")) {

@@ -52,9 +52,8 @@ class GlidePhotoImageLoader(context: Context) : PhotoImageLoader {
                     val cached =
                         synchronized(ImageProvider.bitmapLruCache) {
                             runCatching {
-                                    ImageProvider.get(request.src)
-                                        ?.copy(Bitmap.Config.ARGB_8888, false)
-                                }
+                                ImageProvider.get(request.src)?.copy(Bitmap.Config.ARGB_8888, false)
+                            }
                                 .getOrNull()
                         }
                     if (cached != null) {

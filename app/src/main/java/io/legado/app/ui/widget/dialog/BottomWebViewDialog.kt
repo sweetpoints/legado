@@ -1198,7 +1198,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
         // 底部弹窗状态相关配置
         var state: Int? =
             null, // 设置弹窗的初始状态： 3 STATE_EXPANDED(展开) 、 4 STATE_COLLAPSED(折叠) 、 5 STATE_HIDDEN(隐藏) 、
-                  // 6 STATE_HALF_EXPANDED(半展开)
+        // 6 STATE_HALF_EXPANDED(半展开)
         var peekHeight: Int? = null, // 设置折叠状态下的高度（像素）
         var isHideable: Boolean? = null, // 设置弹窗是否可以通过向下拖拽隐藏
         var skipCollapsed: Boolean? = null, // 设置是否跳过折叠状态，下滑对话框时直接关闭
@@ -1230,7 +1230,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
         var webViewInitialScale: Int? = null, // WebView初始缩放比例 默认100
         var webViewCacheMode: Int? =
             null, // WebView缓存模式： -1 LOAD_DEFAULT 、 1 LOAD_NO_CACHE 、 2 LOAD_CACHE_ONLY 、 3
-                  // LOAD_CACHE_ELSE_NETWORK
+        // LOAD_CACHE_ELSE_NETWORK
 
         // 生命周期配置
         var dismissOnTouchOutside: Boolean? = null, // 点击外部是否关闭弹窗
