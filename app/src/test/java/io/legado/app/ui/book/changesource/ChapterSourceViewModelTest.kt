@@ -177,6 +177,14 @@ class ChapterSourceViewModelTest {
             gate.complete(Unit); runCurrent(); assertEquals(cancelled, model.state.value); assertNull(model.state.value.error)
         } finally { gate.complete(Unit); owner.clear() }
     }
+    @Test fun failedOrdinaryContentClearsDirectoryButBatchFailureKeepsSelection() = runTest(dispatcher) {
+        val content = FakeContent().apply { contentFails = true }; val model = vm(content, seed = snapshot(false)); val owner = owned(model)
+        try { ready(model); model.openToc("target"); model.state.first { it.toc != null && !it.tocLoading }
+            model.chapter(0); model.state.first { it.error != null && !it.busy }
+            assertNull(model.state.value.toc); assertFalse(model.state.value.tocVisible); assertTrue(model.state.value.selected.isEmpty())
+            assertNull(model.state.value.pendingReceipt)
+        } finally { owner.clear() }
+    }
     private inner class FakeSearch : ChapterSourceSearchRepository {
         var rows = listOf(row("target")); var fail = false
         var stream: Flow<ChapterSourceSearchUpdate>? = null
@@ -209,11 +217,12 @@ class ChapterSourceViewModelTest {
     private inner class FakeContent : ChapterSourceContentRepository {
         var writeFails = false; var recoveryFails = false; var stored: ChapterSourceSession? = null; val receipts = linkedMapOf<String, ChapterSourceReceipt>(); val deleted = mutableListOf<String>()
         var target = ChapterSourceToc("target", GSON.toJson(Book(bookUrl = "target", origin = "target")), GSON.toJson(BookSource(bookSourceUrl = "target")), originals.filterNot { it.volume }, 0)
-        val cacheCalls = mutableListOf<List<Int>>(); var cacheFails = false; var commitGate: CompletableDeferred<Unit>? = null
+        val cacheCalls = mutableListOf<List<Int>>(); var contentFails = false; var cacheFails = false; var commitGate: CompletableDeferred<Unit>? = null
         val commitStarted = CompletableDeferred<Unit>(); var contentGate: CompletableDeferred<Unit>? = null
         override suspend fun original(bookJson: String) = originals
         override suspend fun toc(row: ChapterSourceSearchRow, index: Int, title: String) = target
         override suspend fun content(session: String, toc: ChapterSourceToc, position: Int): ChapterSourceReceipt {
+            if (contentFails) error("content failed")
             contentGate?.let { withContext(NonCancellable) { it.await() } }
             return ChapterSourceReceipt("content", ChapterSourceReceiptKind.Content, body = "Body", committed = true).also { receipts[it.key] = it }
         }

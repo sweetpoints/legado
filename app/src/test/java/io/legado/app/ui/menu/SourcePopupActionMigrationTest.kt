@@ -17,7 +17,7 @@ class SourcePopupActionMigrationTest {
         }
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
         assertContains(CHANGE_BOOK, readProjectFile(CHANGE_BOOK), "danger(\"deleteSource\")")
-        assertContains(CHANGE_CHAPTER, readProjectFile(CHANGE_CHAPTER), "danger(\"deleteSource\")")
+
         assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
         assertContains(RSS, readProjectFile(RSS), "danger(\"delete\")")
         legacyMenuFiles.forEach { path ->
@@ -62,7 +62,9 @@ class SourcePopupActionMigrationTest {
             "R.string.delete",
             "R.string.disable_explore else R.string.enable_explore"
         )
-        listOf(CHANGE_BOOK, CHANGE_CHAPTER).forEach { path ->
+        org.junit.Assert.assertEquals(listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
+            io.legado.app.ui.book.changesource.chapterSourceRowActions.map { it.name })
+        listOf(CHANGE_BOOK).forEach { path ->
             assertOrdered(
                 path,
                 "R.string.to_top",
@@ -116,16 +118,7 @@ class SourcePopupActionMigrationTest {
             "callBack.deleteSource(searchBook)",
             "updateItems(0, itemCount, listOf<Int>())"
         )
-        assertActions(
-            CHANGE_CHAPTER,
-            "\"topSource\" -> callBack.topSource(searchBook)",
-            "\"bottomSource\" -> callBack.bottomSource(searchBook)",
-            "\"editSource\" -> callBack.editSource(searchBook)",
-            "\"disableSource\" -> callBack.disableSource(searchBook)",
-            "\"deleteSource\" -> {",
-            "callBack.deleteSource(searchBook)",
-            "updateItems(0, itemCount, listOf<Int>())"
-        )
+        // Chapter callback ordering is covered independently by ChapterSourceViewModelTest/ChapterSourceComposeTest.
         assertActions(
             EXPLORE,
             "\"edit\" -> callBack.editSource(source.bookSourceUrl)",
@@ -173,10 +166,9 @@ class SourcePopupActionMigrationTest {
     private companion object {
         const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt"
-        const val CHANGE_CHAPTER = "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
         const val RSS = "src/main/java/io/legado/app/ui/main/rss/RssAdapter.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, CHANGE_CHAPTER, EXPLORE, RSS)
+        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, EXPLORE, RSS)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",

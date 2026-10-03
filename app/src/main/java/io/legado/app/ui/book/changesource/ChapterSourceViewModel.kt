@@ -273,6 +273,11 @@ internal class ChapterSourceViewModel(private val searches: ChapterSourceSearchR
             mutable.value = state.value.copy(contentLoading = true)
             try { val receipt = content.content(session, toc, position); currentCoroutineContext().ensureActive()
                 durable(requireNotNull(current).copy(pendingReceipt = receipt.key))
+            } catch (canceled: CancellationException) { throw canceled }
+            catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                current?.let { change(it.copy(toc = null, tocVisible = false, selected = emptySet())) }
+                throw error
             } finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(contentLoading = false) }
         }
     }

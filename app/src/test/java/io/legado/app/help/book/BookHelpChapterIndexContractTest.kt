@@ -60,13 +60,6 @@ class BookHelpChapterIndexContractTest {
         val bookHelpSource = projectFile("src/main/java/io/legado/app/help/book/BookHelp.kt")
             .readText()
             .replace("\r\n", "\n")
-        val dialogSource = projectFile(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt"
-        )
-            .readText()
-            .replace("\r\n", "\n")
-
-        assertTrue(dialogSource.contains("searchAllChapterNumbers = true"))
         val titleLookup = bookHelpSource.indexOf("findNearestChapterTitleIndex(")
         val chapterNumberLookup =
             bookHelpSource.indexOf("if (searchAllChapterNumbers && oldChapterNum > 0)")

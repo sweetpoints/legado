@@ -89,9 +89,6 @@ class ContentSaveFenceTest {
         val chapterDao = readProjectFile(
             "src/main/java/io/legado/app/data/dao/BookChapterDao.kt"
         )
-        val changeSource = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceViewModel.kt"
-        )
         val fencedWrite = bookHelp.substringAfter(
             "val saved = contentSaveFence.writeIfCurrent("
         ).substringBefore("if (saved)")
@@ -105,7 +102,7 @@ class ContentSaveFenceTest {
         assertTrue(replacementWrite.contains("if (saveChapterMetadata)"))
         assertTrue(replacementWrite.contains("updateContentMetadata"))
         assertTrue(webBook.contains("saveChapterMetadata = true"))
-        assertTrue(changeSource.contains("saveChapterMetadata = true"))
+        // Chapter cache metadata and CAS commits are covered by ChapterSourceCacheCommitTest/ChapterSourceContentRepositoryTest.
         assertTrue(chapterDao.contains("bookUrl = :bookUrl and `index` = :index"))
     }
 

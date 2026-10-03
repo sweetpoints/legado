@@ -13,6 +13,9 @@ class ChangeSourceResultOptionsWiringTest {
         assertTrue(menu.contains("@+id/menu_sort_respond_time"))
         assertTrue(menu.contains("@+id/menu_word_count_filter"))
 
+        assertTrue(chapterSourceMenuOrder.contains(ChapterSourceMenu.ResponseTime))
+        assertTrue(chapterSourceMenuOrder.contains(ChapterSourceMenu.WordCountFilter))
+        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
         DIALOGS.forEach { path ->
             val source = projectFile(path).readText()
             assertTrue(path, source.contains("R.id.menu_sort_respond_time"))
@@ -33,7 +36,6 @@ class ChangeSourceResultOptionsWiringTest {
     @Test
     fun `only chapter source results pin the current book`() {
         val bookViewModel = projectFile(VIEW_MODEL).readText()
-        val chapterViewModel = projectFile(CHAPTER_VIEW_MODEL).readText()
 
         assertTrue(bookViewModel.contains("protected open val pinCurrentSource = false"))
         assertTrue(
@@ -41,11 +43,12 @@ class ChangeSourceResultOptionsWiringTest {
                 "pinnedBookUrl = if (pinCurrentSource) oldBook?.bookUrl else null"
             )
         )
-        assertTrue(chapterViewModel.contains("protected override val pinCurrentSource = true"))
+        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
     }
 
     @Test
     fun `both adapters refresh measured result fields`() {
+        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
         ADAPTERS.forEach { path ->
             val source = projectFile(path).readText()
             assertTrue(path, source.contains("oldItem.chapterWordCountText == newItem.chapterWordCountText"))
@@ -80,16 +83,12 @@ class ChangeSourceResultOptionsWiringTest {
     companion object {
         private const val VIEW_MODEL =
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
-        private const val CHAPTER_VIEW_MODEL =
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceViewModel.kt"
         private const val APP_CONFIG = "src/main/java/io/legado/app/help/config/AppConfig.kt"
         private val DIALOGS = listOf(
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
         )
         private val ADAPTERS = listOf(
             "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt",
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceAdapter.kt",
         )
     }
 }

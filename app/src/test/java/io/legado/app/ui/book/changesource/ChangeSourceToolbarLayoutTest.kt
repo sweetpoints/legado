@@ -10,7 +10,6 @@ class ChangeSourceToolbarLayoutTest {
     fun `change source toolbars reserve end inset for expanded search actions`() {
         listOf(
             "dialog_book_change_source.xml",
-            "dialog_chapter_change_source.xml",
         ).forEach { name ->
             val source = projectFile("src/main/res/layout/$name").readText()
             assertTrue(
@@ -20,6 +19,7 @@ class ChangeSourceToolbarLayoutTest {
         }
     }
 
+    // Chapter toolbar/search/directory interactions: ChapterSourceComposeTest.
     private fun projectFile(pathInApp: String): File {
         return sequenceOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull(File::isFile)
