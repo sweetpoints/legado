@@ -1121,3 +1121,5 @@ RSS 源管理 A2：查询、完整选择集、编辑草稿和原生动作写入�
 设置框架 A1：新增纯 Compose 标题与搜索 Scaffold，查询、光标和持久化由宿主状态持有。搜索输入不触发操作，IME/按钮明确提交去空白查询，空查询不交付，搜索返回先关闭输入再导航；页面内容保持组合。新增 3 个实际 Compose 输入、返回及外部恢复状态 Android 用例；Android 用例仅编译验证，旧 ConfigActivity 接入留下一批。
 
 RSS 源管理 B：实际宿主、搜索/筛选、选择、排序手势、菜单及导入/导出/口令对话框全部 Compose，删除旧 Adapter/ViewModel、两个布局和两个菜单。原生回执携带独立 nonce，扫码按请求 Registry key 恢复，早到及忙时结果保留一次，反馈/口令完整载荷在私有会话。可访问排序动作和 48dp 快滚区域避免覆盖行菜单。VM 共 19 个 JVM 用例；新增 Screen、Route、实际宿主和分享边界 Android 回归，共享来源排序测试只迁移 RSS 分支，其余保留；Android 用例仅编译验证。
+
+RSS 主页 A1：不可变订阅卡片和 IO 仓库保留仅启用来源、精确分组及搜索排序。置顶、禁用和删除按稳定 ID 重读最新实体；导航复用原单 URL/首分类与 startHtml JavaScript 语法、空结果回退和十秒限制，完整脚本上下文在 IO。新增 6 个 JVM 导航/身份用例及 5 个实际 Room/Rhino/IO Android 用例；Android 用例仅编译验证。
