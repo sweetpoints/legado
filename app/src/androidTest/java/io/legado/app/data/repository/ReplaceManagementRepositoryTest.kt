@@ -7,6 +7,7 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonArray
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch

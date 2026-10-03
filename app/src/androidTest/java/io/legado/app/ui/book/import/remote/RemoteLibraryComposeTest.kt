@@ -13,6 +13,7 @@ import io.legado.app.model.remote.RemoteLibraryPrompt
 import io.legado.app.model.remote.RemoteLibrarySort
 import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
 
 class RemoteLibraryComposeTest {

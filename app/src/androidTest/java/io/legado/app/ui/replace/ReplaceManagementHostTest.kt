@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.help.config.AppConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 class ReplaceManagementHostTest {

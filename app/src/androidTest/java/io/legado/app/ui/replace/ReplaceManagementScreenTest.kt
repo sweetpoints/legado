@@ -12,6 +12,7 @@ import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 class ReplaceManagementScreenTest {
