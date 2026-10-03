@@ -39,6 +39,7 @@ internal class BookSearchViewModel(
     private val preferences: BookSearchPreferencesRepository,
     private val metadata: BookSearchMetadataRepository,
     private val savedState: SavedStateHandle,
+    cleanupFailure: (Throwable) -> Unit = {},
     engineFactory: ((CoroutineScope) -> BookSearchEngineRepository)? = null,
 ) : ViewModel() {
     val session: String =
@@ -66,6 +67,29 @@ internal class BookSearchViewModel(
     private var settingsJob: Job? = null
     private var pendingSettings: (suspend () -> Unit)? = null
     private var earlyScopeResult: Pair<String, String>? = null
+    private val inputs =
+        BookSearchInputController(
+            session = session,
+            saved = savedState,
+            drafts = drafts,
+            preferences = preferences,
+            owner = viewModelScope,
+            cleanupOwner = cleanupScope,
+            state = { state.value },
+            update = ::updateDraft,
+            checkpoint = ::checkpoint,
+            queryChanged = { query ->
+                invalidateSearch()
+                observeQuery(query)
+            },
+            search = { query -> startQuery(query, saveHistory = true) },
+            failure = { error ->
+                if (!stopped)
+                    mutableState.value =
+                        state.value.copy(commandError = error.message ?: error.toString())
+            },
+            cleanupFailure = cleanupFailure,
+        )
 
     init {
         jobs += viewModelScope.launch {
@@ -122,7 +146,12 @@ internal class BookSearchViewModel(
             state.value.copy(loading = true, initializationFailed = false, persistError = null)
         loadJob = viewModelScope.launch {
             try {
-                val restored = drafts.open(session)
+                val restored =
+                    if (savedState.get<Boolean>("searchPreparedSession") == true) {
+                        drafts.existing(session)
+                    } else {
+                        drafts.open(session)
+                    }
                 val settings = preferences.load()
                 currentCoroutineContext().ensureActive()
                 if (stopped) return@launch
@@ -146,6 +175,7 @@ internal class BookSearchViewModel(
                 observeQuery(draft.query)
                 if (draft.pendingScopeRequest != null) applyScopeResult(restored = true)
                 else acceptEarlyScopeResult()
+                inputs.ready()
             } catch (error: Exception) {
                 currentCoroutineContext().ensureActive()
                 if (!stopped)
@@ -210,7 +240,10 @@ internal class BookSearchViewModel(
     ) {
         if (!usable()) return
         val textChanged = query != state.value.draft.query
-        if (textChanged) invalidateSearch()
+        if (textChanged) {
+            inputs.cancelPending()
+            invalidateSearch()
+        }
         updateDraft { draft ->
             draft.copy(
                 query = query,
@@ -262,7 +295,16 @@ internal class BookSearchViewModel(
 
     fun submit() {
         if (!usable()) return
+        inputs.cancelPending()
         startQuery(state.value.draft.query.trim(), saveHistory = true)
+    }
+
+    fun receiveInput(ticket: String) {
+        if (!stopped) inputs.receive(ticket)
+    }
+
+    fun receiveLegacyInput(query: String?, scope: String?, newIntent: Boolean = false) {
+        if (!stopped) inputs.receiveLegacy(query, scope, newIntent)
     }
 
     private fun startQuery(query: String, saveHistory: Boolean) {
@@ -513,7 +555,10 @@ internal class BookSearchViewModel(
             } finally {
                 if (!stopped) {
                     mutableState.value = state.value.copy(settingsBusy = false)
-                    if (state.value.settingsError == null) acceptEarlyScopeResult()
+                    if (state.value.settingsError == null) {
+                        acceptEarlyScopeResult()
+                        inputs.ready()
+                    }
                 }
             }
         }
@@ -673,6 +718,7 @@ internal class BookSearchViewModel(
     }
 
     private fun rejectStaleOwner(error: BookSearchDraftConflictException) {
+        inputs.cancelPending()
         acceptsEngine = false
         commandGeneration++
         commandJob?.cancel()
@@ -702,6 +748,7 @@ internal class BookSearchViewModel(
                 observeQuery(state.value.draft.query)
             }
             writes.trySend(state.value.draft)
+            inputs.ready()
         }
     }
 
@@ -727,6 +774,7 @@ internal class BookSearchViewModel(
     fun stop() {
         if (stopped) return
         stopped = true
+        inputs.stop()
         acceptsEngine = false
         commandGeneration++
         commandJob?.cancel()
