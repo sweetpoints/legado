@@ -1551,3 +1551,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 发现结果页迁移前将 ExploreShowActivity/Adapter/ViewModel 三个独占 Kotlin 文件按固定 ktfmt 0.64（4 空格、100 列）实际格式化，行为与原分页/类别/加入书架引擎保持。本批 formatter/check 与 diffcheck 通过，功能与完整测试另批验证。
 
 发现结果页新增不可变私有会话与 prepared UUID 基础：完整 sourceUrl/title/exploreUrl、类别/分页/行元数据/滚动状态保存在 AtomicFile，跨页面预备入口只返回 UUID。严格 revision 与固定 stripe gate 保持输入身份，release 栅栏删除自有 body/bak/new 并拒绝迟到复活；IO 返回取消窗口清理未交付 session。新增三个真实磁盘 Android 回归（大脚本恢复、重复版本/身份拒绝、取消仅清本票据），实际 formatter/check 与 diffcheck 通过，完整 JVM/Android编译按队列验证，设备端未执行；Host 接入另批。
+
+发现结果页的数据仓库独立封装 source/categories/page/cache/membership 与批量加入书架，解析与 DAO 在 IO，发布完整 JSON 元数据的 detached 不可变行。保留 WebBook/source.exploreKinds 原引擎、URL 去重、名字作者/URL 书架提示和原 SearchBookShelfHelp 事务；接受加入后仍同步四类 active reader 与 SourceCallBack。新增三个 JVM projection 用例和两个实际 Room/IO 用例，统一 formatter/check 与 diffcheck 通过；随完整 Host 最终执行全量 JVM/Android编译，设备端未执行。
