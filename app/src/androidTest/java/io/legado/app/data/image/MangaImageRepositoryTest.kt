@@ -17,6 +17,26 @@ import org.junit.Test
 
 class MangaImageRepositoryTest {
     @Test
+    fun completedProgressCallbackCannotRemoveReentrantReplacementRequest() {
+        val url = "https://example.invalid/reentrant"
+        var replacementUpdates = 0
+        val replacement: OnProgressListener = { _, _, _, _ -> replacementUpdates++ }
+        val original: OnProgressListener = { complete, _, _, _ ->
+            if (complete) ProgressManager.addListener(url, replacement)
+        }
+        try {
+            ProgressManager.addListener(url, original)
+            ProgressManager.LISTENER.onProgress(url, 100, 100)
+            assertEquals(1, replacementUpdates)
+            ProgressManager.LISTENER.onProgress(url, 10, 100)
+            assertEquals(2, replacementUpdates)
+        } finally {
+            ProgressManager.removeListener(url, original)
+            ProgressManager.removeListener(url, replacement)
+        }
+    }
+
+    @Test
     fun lateProgressCleanupPreservesReplacementListenerWithUrlOptions() {
         val url = "https://example.invalid/image, {\"headers\":{}}"
         val oldListener: OnProgressListener = { _, _, _, _ -> }

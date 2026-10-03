@@ -1240,3 +1240,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 漫画 viewport 改为纯 Compose LazyColumn/LazyRow 页控件，章节边界与卷保持原高度，横向 RTL 仅反转物理摆放、逻辑章节顺序不变；保留整视口翻页、可关动画/吸附、逐帧自动滚动和定时翻页、viewport pinch/双击/惯性、原触摸区域、长按保存开关及触觉反馈。手势独立函数保留缩放后的普通列表滚动并取消过期动画，小 UUID/三浮点变换及 Lazy 小滚动状态进入 SavedState。新增 2 个实际 Compose RTL 命令与 tap 交互回归，实际格式化/check/diff check 已过；最终 tip 编译与 JVM 等 slot，宿主尚未接入。
 
 漫画启动参数、完整原生操作载荷与认领回执进入独立 private UUID Atomic session，SavedState 后续只保留小票据；revision（含同版本写入）拒绝迟到覆盖已接受回执，durable release tombstone 和 backup 阻止排队写入复活。清理仅删除自身 session body，不影响邻居或已交付文件。新增 3 个实际多兆载荷/Atomic备份/释放与回执回归，官方实际格式化/check 已通过，完整 tip 构建待 slot，VM/native Route 后续接入。
+
+漫画图像进度监听收尾也按 owner 原子移除：完成回调中重新安装同 URL 请求时，旧 complete 分支不删除后来监听器；保持旧公开 API 与下载百分比算法。新增实际重入 callback 回归，官方实际格式化/check 与 diff check 通过，最终 rebase 候选整体验证待 slot，其余功能冻结。

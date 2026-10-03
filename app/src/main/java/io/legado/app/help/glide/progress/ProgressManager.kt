@@ -19,7 +19,8 @@ object ProgressManager {
                     }
                     it.invoke(isComplete, percentage, bytesRead, totalBytes)
                     if (isComplete) {
-                        removeListener(url)
+                        // The callback can install a replacement request for the same URL.
+                        removeListener(url, it)
                     }
                 }
             }
