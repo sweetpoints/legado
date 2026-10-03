@@ -19,8 +19,4 @@ class SelectionIntervalGuardTest {
     private val sourceRoot: File by lazy {
         sequenceOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
     }
-
-    private companion object {
-        val sources = listOf()
-    }
 }

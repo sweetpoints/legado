@@ -28,7 +28,6 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
@@ -383,11 +382,6 @@ class SourceDragOrderUiTest {
             scenario = launch(kind)
             if (descending)
                 scenario.onActivity { activity ->
-                    val item =
-                        activity
-                            .findViewById<TitleBar>(R.id.title_bar)
-                            .menu
-                            .findItem(R.id.menu_sort_desc)
                     (activity as BookSourceActivity).managerModel.ascending()
                 }
             filter(scenario, "group:$group")
