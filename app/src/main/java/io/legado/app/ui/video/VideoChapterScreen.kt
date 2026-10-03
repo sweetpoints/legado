@@ -2,8 +2,10 @@ package io.legado.app.ui.video
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -125,16 +127,17 @@ private fun ChapterRail(
                 color = colorResource(R.color.card_bg_water),
                 border = BorderStroke(1.dp, colorResource(R.color.card_border_water)),
             ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.padding(4.dp),
-                    color =
-                        if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface,
-                    fontSize = fontSize,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
+                Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = title,
+                        color =
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
