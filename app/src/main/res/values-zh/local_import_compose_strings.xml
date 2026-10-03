@@ -1,0 +1,4 @@
+<resources>
+    <string name="local_import_recovery_title">导入操作已中断</string>
+    <string name="local_import_recovery_message">此前操作可能已被接受，不会自动再次执行。重试将检查已导入文件，或发起新的导航请求。</string>
+</resources>

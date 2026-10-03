@@ -178,6 +178,7 @@ internal class LocalImportViewModel(
                 selected = if (clearSelection) emptySet() else it.selected,
                 archive = null,
                 group = null,
+                pending = null,
             )
         }
         val directorySnapshot = directories.map { it.uri.toString() }
@@ -188,6 +189,7 @@ internal class LocalImportViewModel(
                         directories = directorySnapshot,
                         recursive = recursive,
                         selected = if (clearSelection) emptySet() else it.selected,
+                        pending = if (clearSelection) null else it.pending,
                     )
                 }
                 if (recursive)
