@@ -65,4 +65,32 @@ class TocHostSessionRepositoryTest {
         repo.write(session, value)
         assertEquals(value, repo.read(session))
     }
+
+    @Test
+    fun sameRevisionConflictsAreRejectedAndIdenticalWritesAreAcknowledged() = runBlocking {
+        val session = UUID.randomUUID().toString()
+        val repo = FileTocHostSessionRepository(directory)
+        val value = TocHostSession("book", "original", 5)
+        assertTrue(repo.write(session, value))
+        assertTrue(repo.write(session, value))
+        assertFalse(repo.write(session, value.copy(query = "conflicting")))
+        assertEquals(value, repo.read(session))
+    }
+
+    @Test
+    fun restoredOwnerSurvivesLateWriteAndCleanupFromAnotherRepositoryInstance() = runBlocking {
+        val session = UUID.randomUUID().toString()
+        val first = FileTocHostSessionRepository(directory)
+        val old = first.claim(session, "book", "old-owner")
+        assertTrue(first.write(session, old.copy(query = "saved", revision = old.revision + 1)))
+        val restored = FileTocHostSessionRepository(directory)
+        val accepted = restored.claim(session, "book", "restored-owner")
+        assertEquals("saved", accepted.query)
+        assertFalse(first.write(session, old.copy(query = "late", revision = 999)))
+        first.release(session, "old-owner")
+        assertEquals(accepted, restored.read(session))
+        restored.release(session, "restored-owner")
+        assertFalse(first.write(session, old.copy(revision = 1000)))
+        assertNull(restored.read(session))
+    }
 }

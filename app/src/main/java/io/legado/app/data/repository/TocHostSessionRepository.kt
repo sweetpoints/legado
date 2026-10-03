@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
@@ -12,14 +13,23 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
-data class TocHostSession(val bookUrl: String, val query: String, val revision: Long)
+@Keep
+data class TocHostSession(
+    val bookUrl: String,
+    val query: String,
+    val revision: Long,
+    val owner: String? = null,
+)
 
 interface TocHostSessionRepository {
     suspend fun read(session: String): TocHostSession?
 
-    suspend fun write(session: String, value: TocHostSession)
+    suspend fun claim(session: String, bookUrl: String?, owner: String): TocHostSession
 
-    suspend fun release(session: String)
+    /** False means the file belongs to a newer owner, revision, or released session. */
+    suspend fun write(session: String, value: TocHostSession): Boolean
+
+    suspend fun release(session: String, owner: String? = null)
 }
 
 class FileTocHostSessionRepository(
@@ -53,27 +63,58 @@ class FileTocHostSessionRepository(
     override suspend fun read(session: String) =
         withContext(Dispatchers.IO) { lock(session).withLock { readFile(session) } }
 
-    override suspend fun write(session: String, value: TocHostSession): Unit =
+    override suspend fun claim(session: String, bookUrl: String?, owner: String): TocHostSession =
         withContext(Dispatchers.IO + NonCancellable) {
             lock(session).withLock {
-                if (released(session)) return@withLock
-                if ((readFile(session)?.revision ?: -1) > value.revision) return@withLock
-                check(directory.isDirectory || directory.mkdirs())
-                val file = file(session)
-                val output = file.startWrite()
-                try {
-                    output.write(GSON.toJson(value).toByteArray())
-                    file.finishWrite(output)
-                } catch (error: Throwable) {
-                    file.failWrite(output)
-                    throw error
-                }
+                check(!released(session)) { "目录会话已关闭" }
+                val previous = readFile(session)
+                val target = bookUrl ?: previous?.bookUrl ?: error("目录会话不存在")
+                val value =
+                    TocHostSession(
+                        bookUrl = target,
+                        query = previous?.takeIf { it.bookUrl == target }?.query.orEmpty(),
+                        revision = (previous?.revision ?: -1L) + 1L,
+                        owner = owner,
+                    )
+                writeFile(session, value)
+                value
             }
         }
 
-    override suspend fun release(session: String): Unit =
+    override suspend fun write(session: String, value: TocHostSession): Boolean =
         withContext(Dispatchers.IO + NonCancellable) {
             lock(session).withLock {
+                if (released(session)) return@withLock false
+                val previous = readFile(session)
+                if (previous != null) {
+                    if (previous.owner != value.owner || previous.bookUrl != value.bookUrl) {
+                        return@withLock false
+                    }
+                    if (previous.revision > value.revision) return@withLock false
+                    if (previous.revision == value.revision) return@withLock previous == value
+                }
+                writeFile(session, value)
+                true
+            }
+        }
+
+    private fun writeFile(session: String, value: TocHostSession) {
+        check(directory.isDirectory || directory.mkdirs())
+        val file = file(session)
+        val output = file.startWrite()
+        try {
+            output.write(GSON.toJson(value).toByteArray())
+            file.finishWrite(output)
+        } catch (error: Throwable) {
+            file.failWrite(output)
+            throw error
+        }
+    }
+
+    override suspend fun release(session: String, owner: String?): Unit =
+        withContext(Dispatchers.IO + NonCancellable) {
+            lock(session).withLock {
+                if (readFile(session)?.owner != owner) return@withLock
                 check(directory.isDirectory || directory.mkdirs())
                 val fence = AtomicFile(File(directory, "$session.released"))
                 val output = fence.startWrite()

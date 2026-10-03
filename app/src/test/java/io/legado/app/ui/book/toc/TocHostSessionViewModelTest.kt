@@ -36,14 +36,38 @@ class TocHostSessionViewModelTest {
             return value
         }
 
-        override suspend fun write(session: String, value: TocHostSession) {
-            if (value.query == holdQuery) withContext(NonCancellable) { writeGate?.await() }
+        override suspend fun claim(
+            session: String,
+            bookUrl: String?,
+            owner: String,
+        ): TocHostSession {
             if (fail) error("Disk unavailable")
-            if ((disk[session]?.revision ?: -1) <= value.revision) disk[session] = value
+            val previous = disk[session]
+            val target = bookUrl ?: previous?.bookUrl ?: error("Missing session")
+            return TocHostSession(
+                    target,
+                    previous?.takeIf { it.bookUrl == target }?.query.orEmpty(),
+                    (previous?.revision ?: -1L) + 1L,
+                    owner,
+                )
+                .also { disk[session] = it }
         }
 
-        override suspend fun release(session: String) {
-            disk.remove(session)
+        override suspend fun write(session: String, value: TocHostSession): Boolean {
+            if (value.query == holdQuery) withContext(NonCancellable) { writeGate?.await() }
+            if (fail) error("Disk unavailable")
+            val previous = disk[session]
+            if (previous != null) {
+                if (previous.owner != value.owner || previous.bookUrl != value.bookUrl) return false
+                if (previous.revision > value.revision) return false
+                if (previous.revision == value.revision) return previous == value
+            }
+            disk[session] = value
+            return true
+        }
+
+        override suspend fun release(session: String, owner: String?) {
+            if (disk[session]?.owner == owner) disk.remove(session)
         }
     }
 
@@ -249,5 +273,30 @@ class TocHostSessionViewModelTest {
         runCurrent()
         assertFalse(model.state.value.ready)
         assertTrue(repo.disk.isEmpty())
+    }
+
+    @Test
+    fun newerRestoredOwnerRejectsOldHigherRevisionAndBlocksOldControls() = test {
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        val first = model(repo, saved)
+        first.bind("book")
+        runCurrent()
+        first.query("Saved")
+        runCurrent()
+        val restored = model(repo, copy(saved))
+        restored.bind("book")
+        runCurrent()
+        val accepted = repo.disk.values.single()
+        first.query("Old owner attempts a newer revision")
+        runCurrent()
+        assertEquals(accepted, repo.disk.values.single())
+        assertFalse(first.state.value.ready)
+        assertNotNull(first.state.value.error)
+        first.tab(2)
+        first.query("Must not write again")
+        runCurrent()
+        assertEquals(accepted, repo.disk.values.single())
+        assertEquals("Saved", restored.state.value.query)
     }
 }

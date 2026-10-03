@@ -6,9 +6,17 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.data.repository.TocHostSession
 import io.legado.app.data.repository.TocHostSessionRepository
 import java.util.UUID
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 data class TocHostSessionState(
     val ready: Boolean = false,
@@ -33,6 +41,7 @@ class TocHostSessionViewModel(
     private val session =
         saved.get<String>("tocHost.session")
             ?: UUID.randomUUID().toString().also { saved["tocHost.session"] = it }
+    private val owner = UUID.randomUUID().toString()
     private val mutable =
         MutableStateFlow(
             TocHostSessionState(
@@ -57,16 +66,16 @@ class TocHostSessionViewModel(
         mutable.value = state.value.copy(ready = false, error = null)
         reading = viewModelScope.launch {
             try {
-                val disk = repository.read(session)
+                val previous = repository.read(session)
                 currentCoroutineContext().ensureActive()
                 if (current != generation) return@launch
-                revision = maxOf(revision, disk?.revision ?: 0L) + 1
+                val accepted = repository.claim(session, bookUrl, owner)
+                currentCoroutineContext().ensureActive()
+                if (current != generation) return@launch
+                revision = accepted.revision
                 saved["tocHost.revision"] = revision
-                val query = disk?.takeIf { it.bookUrl == bookUrl }?.query.orEmpty()
-                repository.write(session, TocHostSession(bookUrl, query, revision))
-                currentCoroutineContext().ensureActive()
-                if (current != generation) return@launch
-                val changedOwner = disk != null && disk.bookUrl != bookUrl
+                val query = accepted.query
+                val changedOwner = previous != null && previous.bookUrl != bookUrl
                 if (changedOwner) {
                     saved["tocHost.tab"] = 0
                     saved["tocHost.searchOpen"] = false
@@ -144,14 +153,17 @@ class TocHostSessionViewModel(
     private fun persist() {
         val url = state.value.bookUrl ?: return
         val current = generation
-        val value = TocHostSession(url, state.value.query, ++revision)
+        val value = TocHostSession(url, state.value.query, ++revision, owner)
         saved["tocHost.revision"] = revision
         viewModelScope.launch {
             try {
-                repository.write(session, value)
+                val accepted = repository.write(session, value)
                 currentCoroutineContext().ensureActive()
-                if (current == generation && value.revision == revision)
-                    mutable.value = state.value.copy(error = null)
+                if (current == generation && value.revision == revision) {
+                    mutable.value =
+                        if (accepted) state.value.copy(error = null)
+                        else state.value.copy(ready = false, error = "目录会话已由其他页面接管，请重试")
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -173,7 +185,7 @@ class TocHostSessionViewModel(
     override fun onCleared() {
         stop()
         CoroutineScope(Dispatchers.IO + NonCancellable).launch {
-            runCatching { repository.release(session) }
+            runCatching { repository.release(session, owner) }
         }
         super.onCleared()
     }
