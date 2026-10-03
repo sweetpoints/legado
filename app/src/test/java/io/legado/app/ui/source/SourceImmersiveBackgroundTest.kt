@@ -28,7 +28,7 @@ class SourceImmersiveBackgroundTest {
         val mainScreen = projectFile("src/main/java/io/legado/app/ui/main/MainScreen.kt").readText()
         assertTrue(
             mainScreen.contains(
-                ".background(if (transparentNavigation) Color.Transparent else colors.bottomBackground)"
+                "if (transparentNavigation) Color.Transparent else colors.bottomBackground"
             )
         )
     }

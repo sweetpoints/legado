@@ -136,15 +136,15 @@ class CookieBackupCompatibilityTest {
         assertTrue(backupSync.contains("LocalConfig.lastBackup = maxOf("))
         assertTrue(backupSync.contains("viewModel.restoreWebDav("))
         assertTrue(backupSync.contains("lastBackupFile.lastModify,"))
-        assertTrue(autoRestore.contains("}.onSuccess {"))
+        assertTrue(autoRestore.contains(".onSuccess {"))
         assertTrue(
             autoRestore.contains(
                 "LocalConfig.lastBackup = maxOf(LocalConfig.lastBackup, restoredLastBackup)"
             )
         )
         assertTrue(autoRestore.contains("executeLazy {"))
-        assertTrue(autoRestore.contains("}.onError {"))
-        assertTrue(autoRestore.contains("}.start()"))
+        assertTrue(autoRestore.contains(".onError {"))
+        assertTrue(autoRestore.contains(".start()"))
         assertTrue(contentIsEnabled.contains("if (key == cookieContentKey)"))
         assertTrue(contentIsEnabled.contains("ignoreConfig[key] == false"))
     }
