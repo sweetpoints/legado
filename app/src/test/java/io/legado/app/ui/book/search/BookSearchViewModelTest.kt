@@ -348,6 +348,39 @@ class BookSearchViewModelTest {
             }
         }
 
+    @Test
+    fun oldScopeDialogResultCannotReplaceNewOwnedRequest() =
+        runTest(dispatcher) {
+            val preferences = Preferences()
+            val viewModel =
+                BookSearchViewModel(Drafts(), preferences, Metadata(), SavedStateHandle())
+            try {
+                runCurrent()
+                viewModel.openScope()
+                runCurrent()
+                val first = viewModel.state.value.draft.effects.single()
+                assertNotNull(viewModel.consumeReceipt(first.id))
+                viewModel.scopeDismissed(first.id)
+                runCurrent()
+                viewModel.openScope()
+                runCurrent()
+                val second = viewModel.state.value.draft.effects.single()
+                assertNotNull(viewModel.consumeReceipt(second.id))
+                viewModel.scopeSelected(first.id, "obsolete scope")
+                viewModel.scopeDismissed(first.id)
+                runCurrent()
+                assertEquals(second.id, viewModel.scopeRequest())
+                assertEquals("", preferences.values.value.scope)
+                viewModel.scopeSelected(second.id, "accepted scope")
+                runCurrent()
+                assertEquals("accepted scope", viewModel.state.value.draft.scope)
+                assertEquals("accepted scope", preferences.values.value.scope)
+                assertNull(viewModel.scopeRequest())
+            } finally {
+                viewModel.stop()
+            }
+        }
+
     private class Drafts(var current: BookSearchDraft = BookSearchDraft()) :
         BookSearchDraftRepository {
         var failOpen = false
