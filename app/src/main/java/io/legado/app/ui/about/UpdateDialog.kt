@@ -1,150 +1,138 @@
 package io.legado.app.ui.about
 
+import android.content.DialogInterface
 import android.os.Bundle
-import android.view.View
-import android.widget.LinearLayout
-import androidx.core.view.isVisible
+import androidx.compose.runtime.Composable
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogUpdateBinding
-import io.legado.app.help.config.LocalConfig
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.repository.*
 import io.legado.app.help.update.AppUpdate
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.Download
-import io.legado.app.utils.ConvertUtils
+import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.setLayout
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.noties.markwon.Markwon
-import io.noties.markwon.ext.tables.TablePlugin
-import io.noties.markwon.html.HtmlPlugin
-import io.noties.markwon.image.glide.GlideImagesPlugin
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import splitties.init.appCtx
 
-class UpdateDialog() : BaseDialogFragment(R.layout.dialog_update) {
-
+class UpdateDialog() : BaseComposeDialogFragment() {
     constructor(updateInfo: AppUpdate.UpdateInfo) : this() {
-        arguments = Bundle().apply {
-            putString("newVersion", updateInfo.tagName)
-            putString("updateBody", updateInfo.updateLog)
-            putString("url", updateInfo.downloadUrl)
-            putString("name", updateInfo.fileName)
-            putString("backupUrl", updateInfo.backupDownloadUrl)
-            putString("mirrorUrl", updateInfo.mirrorDownloadUrl)
-            putString("alternateMirrorUrl", updateInfo.alternateMirrorDownloadUrl)
-            putLong("size", updateInfo.size)
-            putLong("createdAt", updateInfo.createdAt)
-            putBoolean("isBeta", updateInfo.isBeta)
+        arguments =
+            Bundle().apply {
+                putString(
+                    "requestId",
+                    FileUpdateDialogRepository.stage(
+                        appCtx,
+                        UpdateDialogRequest(
+                            updateInfo.tagName,
+                            updateInfo.updateLog,
+                            updateInfo.downloadUrl,
+                            updateInfo.fileName,
+                            updateInfo.backupDownloadUrl,
+                            updateInfo.mirrorDownloadUrl,
+                            updateInfo.alternateMirrorDownloadUrl,
+                            updateInfo.size,
+                            updateInfo.createdAt,
+                            updateInfo.isBeta,
+                        ),
+                    ),
+                )
+            }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val legacy = arguments
+        if (legacy?.containsKey("requestId") != true) {
+            arguments =
+                Bundle().apply {
+                    putBoolean("noData", legacy?.getString("updateBody") == null)
+                    putString(
+                        "requestId",
+                        FileUpdateDialogRepository.stage(
+                            appCtx,
+                            UpdateDialogRequest(
+                                legacy?.getString("newVersion").orEmpty(),
+                                legacy?.getString("updateBody").orEmpty(),
+                                legacy?.getString("url").orEmpty(),
+                                legacy?.getString("name").orEmpty(),
+                                legacy?.getString("backupUrl"),
+                                legacy?.getString("mirrorUrl"),
+                                legacy?.getString("alternateMirrorUrl"),
+                                legacy?.getLong("size") ?: 0,
+                                legacy?.getLong("createdAt") ?: 0,
+                                legacy?.getBoolean("isBeta") == true,
+                            ),
+                        ),
+                    )
+                }
         }
     }
 
-    val binding by viewBinding(DialogUpdateBinding::bind)
-
-    private val isBetaUpdate: Boolean
-        get() = arguments?.getBoolean("isBeta") == true
+    internal val model by
+        viewModels<UpdateDialogViewModel> {
+            viewModelFactory {
+                initializer {
+                    UpdateDialogViewModel(
+                        FileUpdateDialogRepository(requireContext()),
+                        createSavedStateHandle(),
+                        requireArguments().getString("requestId")!!,
+                    )
+                }
+            }
+        }
+    private val images by lazy { GlideMarkdownImageRepository(requireContext()) }
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, 0.8f)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.title = arguments?.getString("newVersion")
-        binding.toolBar.subtitle = formatUpdateMetadata(
-            size = arguments?.getLong("size") ?: 0L,
-            createdAt = arguments?.getLong("createdAt") ?: 0L
-        ).takeIf(String::isNotBlank)
-        val updateBody = arguments?.getString("updateBody")
-        if (updateBody == null) {
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        if (arguments?.getBoolean("noData") == true) {
             toastOnUi("没有数据")
-            dismiss()
-            return
+            model.cancel()
         }
-        binding.textView.post {
-            Markwon.builder(requireContext())
-                .usePlugin(GlideImagesPlugin.create(requireContext()))
-                .usePlugin(HtmlPlugin.create())
-                .usePlugin(TablePlugin.create(requireContext()))
-                .build()
-                .setMarkdown(binding.textView, updateBody)
-        }
-        binding.betaActions.isVisible = true
-        (binding.textView.layoutParams as LinearLayout.LayoutParams).apply {
-            height = 0
-            weight = 1f
-        }
-        binding.btnBetaCancel.setOnClickListener { dismiss() }
-        binding.btnBetaUpdate.setText(R.string.beta_update_now)
-        binding.btnBetaUpdate.setOnClickListener {
-            startDownload(arguments?.getString("url"))
-        }
-        binding.toolBar.inflateMenu(R.menu.app_update)
-        if (!isBetaUpdate) {
-            binding.toolBar.menu.findItem(R.id.menu_download).isVisible = false
-            binding.toolBar.menu.findItem(R.id.menu_download_backup).isVisible =
-                !arguments?.getString("backupUrl").isNullOrBlank()
-            binding.toolBar.menu.findItem(R.id.menu_download_mirror).isVisible =
-                !arguments?.getString("mirrorUrl").isNullOrBlank()
-            binding.toolBar.menu.findItem(R.id.menu_download_alternate_mirror).isVisible =
-                !arguments?.getString("alternateMirrorUrl").isNullOrBlank()
-            binding.toolBar.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    R.id.menu_download -> startDownload(arguments?.getString("url"))
-                    R.id.menu_download_backup -> startDownload(arguments?.getString("backupUrl"))
-                    R.id.menu_download_mirror -> startDownload(arguments?.getString("mirrorUrl"))
-                    R.id.menu_download_alternate_mirror ->
-                        startDownload(arguments?.getString("alternateMirrorUrl"))
-                    R.id.menu_open_in_browser -> arguments?.getString("backupUrl").orEmpty()
-                        .ifBlank { arguments?.getString("url").orEmpty() }
-                        .takeIf(String::isNotBlank)
-                        ?.let { url -> requireContext().openUrl(url) }
-                    R.id.menu_ignore_version -> {
-                        LocalConfig.ignoreUpdateVersion = arguments?.getString("newVersion")
-                        toastOnUi(R.string.ignore_this_version)
-                        dismiss()
-                    }
-                }
-                return@setOnMenuItemClickListener true
+    }
+
+    @Composable
+    override fun Content() {
+        UpdateDialogRoute(
+            model,
+            images,
+            {
+                isAdded && !parentFragmentManager.isStateSaved && !childFragmentManager.isStateSaved
+            },
+            ::deliver,
+            { requireContext().openUrl(it) },
+            { showDialogFragment(PhotoDialog(it)) },
+            ::dismissAllowingStateLoss,
+            { isCancelable = it },
+        )
+    }
+
+    private fun deliver(effect: UpdateDialogEffect) {
+        when (effect.action) {
+            UpdateDialogAction.Download -> {
+                Download.start(
+                    requireContext(),
+                    requireNotNull(effect.url),
+                    requireNotNull(effect.fileName),
+                    isAppUpdate = true,
+                )
+                toastOnUi(R.string.download_start)
             }
-        } else {
-            binding.toolBar.menu.findItem(R.id.menu_download).isVisible = false
-            binding.toolBar.menu.findItem(R.id.menu_download_backup).isVisible = false
-            binding.toolBar.menu.findItem(R.id.menu_download_mirror).isVisible = false
-            binding.toolBar.menu.findItem(R.id.menu_download_alternate_mirror).isVisible = false
-            binding.toolBar.menu.findItem(R.id.menu_open_in_browser).isVisible = true
-            binding.toolBar.menu.findItem(R.id.menu_ignore_version).isVisible = false
-            binding.toolBar.setOnMenuItemClickListener {
-                if (it.itemId == R.id.menu_open_in_browser) {
-                    arguments?.getString("url").orEmpty()
-                        .takeIf(String::isNotBlank)
-                        ?.let { url -> requireContext().openUrl(url) }
-                }
-                true
-            }
+            UpdateDialogAction.Browser -> requireContext().openUrl(requireNotNull(effect.url))
+            UpdateDialogAction.IgnoredNotice -> toastOnUi(R.string.ignore_this_version)
         }
     }
 
-    private fun formatUpdateMetadata(size: Long, createdAt: Long): String {
-        val metadata = mutableListOf<String>()
-        if (size > 0) metadata += ConvertUtils.formatFileSize(size)
-        if (createdAt > 0) {
-            metadata += Instant.ofEpochMilli(createdAt)
-                .atZone(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ISO_LOCAL_DATE)
-        }
-        return metadata.joinToString(" · ")
+    override fun onCancel(dialog: DialogInterface) {
+        model.cancel()
+        super.onCancel(dialog)
     }
-
-    private fun startDownload(url: String?) {
-        val name = arguments?.getString("name")
-        if (url.isNullOrBlank() || name.isNullOrBlank()) return
-        Download.start(requireContext(), url, name, isAppUpdate = true)
-        toastOnUi(R.string.download_start)
-        dismiss()
-    }
-
 }

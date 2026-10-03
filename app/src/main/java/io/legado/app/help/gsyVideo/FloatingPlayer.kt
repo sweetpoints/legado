@@ -4,21 +4,36 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.Surface
 import android.view.SurfaceView
-import android.widget.ImageView
-import androidx.core.view.isInvisible
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.isNotEmpty
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
-
+import io.legado.app.ui.theme.LegadoComposeTheme
 
 class FloatingPlayer : StandardGSYVideoPlayer {
-    constructor(context: Context, fullFlag: Boolean) : super(context, fullFlag)
-    constructor(context: Context) : super(context)
-    constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
+    constructor(context: Context, fullFlag: Boolean) : super(context, fullFlag) {
+        initializeComposeControls()
+    }
 
-    lateinit var fullscreenB: ImageView
+    constructor(context: Context) : super(context) {
+        initializeComposeControls()
+    }
+
+    constructor(context: Context, attrs: AttributeSet) : super(context, attrs) {
+        initializeComposeControls()
+    }
+
+    var onCloseRequested: (() -> Unit)? = null
+    var onFullscreenRequested: (() -> Unit)? = null
+    private var controlsState by mutableStateOf(FloatingPlayerControlsState())
 
     override fun init(context: Context?) {
         if (activityContext != null) {
@@ -31,20 +46,73 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         if (isInEditMode) return
         mScreenWidth = activityContext!!.resources.displayMetrics.widthPixels
         mScreenHeight = activityContext!!.resources.displayMetrics.heightPixels
-        mStartButton = findViewById(R.id.start)
-        mStartButton.setOnClickListener { clickStartIcon() }
-        mTopContainer = findViewById(R.id.layout_top)
-        mBackButton = findViewById(R.id.back)
-        mBottomProgressBar = findViewById(R.id.bottom_progressbar)
-        fullscreenB = findViewById(R.id.fullscreenB)
     }
 
-    override fun getLayoutId(): Int {
-        return R.layout.video_layout_floating
+    // GSY calls this virtually from its constructor, before this subclass's fields are initialized.
+    override fun initInflate(context: Context?) {
+        val playerContext = requireNotNull(context)
+        val nativeContent =
+            FrameLayout(playerContext).apply {
+                setBackgroundResource(R.drawable.floating_rounded_background)
+                clipChildren = true
+                clipToOutline = true
+                clipToPadding = true
+                addView(
+                    FrameLayout(playerContext).apply { id = R.id.surface_container },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    ComposeView(playerContext).apply { id = R.id.floating_player_compose },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        addView(
+            nativeContent,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
+    private fun initializeComposeControls() {
+        val controls = findViewById<ComposeView>(R.id.floating_player_compose) ?: return
+        controls.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        controls.setContent {
+            LegadoComposeTheme {
+                FloatingPlayerControls(
+                    state = controlsState,
+                    onClose = { onCloseRequested?.invoke() },
+                    onFullscreen = { onFullscreenRequested?.invoke() },
+                    onPlayback = ::clickStartIcon,
+                )
+            }
+        }
+    }
 
-    override fun onAutoCompletion() { //自动播放完成
+    override fun resolveUIState(state: Int) {
+        super.resolveUIState(state)
+        controlsState =
+            controlsState.copy(
+                controlsVisible = true,
+                playing = state == CURRENT_STATE_PLAYING,
+            )
+    }
+
+    override fun hideAllWidget() {
+        super.hideAllWidget()
+        controlsState = controlsState.copy(controlsVisible = false)
+    }
+
+    override fun onAutoCompletion() { // 自动播放完成
         setStateAndUi(CURRENT_STATE_AUTO_COMPLETE)
         mSaveChangeViewTIme = 0
         if (mTextureViewContainer.isNotEmpty()) {
@@ -86,43 +154,59 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     }
 
     override fun setProgressAndTime(
-        progress: Long, secProgress: Long, currentTime: Long, totalTime: Long, forceChange: Boolean
+        progress: Long,
+        secProgress: Long,
+        currentTime: Long,
+        totalTime: Long,
+        forceChange: Boolean,
     ) {
+        super.setProgressAndTime(progress, secProgress, currentTime, totalTime, forceChange)
         if (mHadSeekTouch) {
             return
         }
-        if (mBottomProgressBar != null) {
-            if (progress != 0L || forceChange) mBottomProgressBar.progress = progress.toInt()
-        }
+        controlsState =
+            controlsState.copy(
+                progress =
+                    if (progress >= 0L || forceChange) (progress / 100f).coerceIn(0f, 1f)
+                    else controlsState.progress,
+                playing = mCurrentState == CURRENT_STATE_PLAYING,
+            )
     }
 
     fun showControlUi() {
-        if (mStartButton.isInvisible) {
-            resolveUIState(mCurrentState)
-        } else {
+        if (controlsState.controlsVisible) {
             hideAllWidget()
+        } else {
+            resolveUIState(mCurrentState)
         }
     }
 
     override fun getFullWindowPlayer(): GSYVideoPlayer? = null
+
     override fun getSmallWindowPlayer(): GSYVideoPlayer? = null
 
     override fun onError(what: Int, extra: Int) {
+        // The hidden GSY lock button is no longer part of the floating Compose host.
+        mLockCurScreen = false
+        VideoPlay.lockCurScreen = false
         super.onError(what, extra)
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
     }
+
     override fun getCurrentPlayer(): FloatingPlayer {
         return this
     }
 
-    /**********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现***********/
+    /** ********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现********** */
     override fun getGSYVideoManager(): ExoVideoManager {
         return VideoPlay.videoManager.apply { initContext(context.applicationContext) }
     }
+
     override fun releaseVideos() {
         VideoPlay.releaseAllVideos()
     }
+
     override fun getFullId(): Int {
         return ExoVideoManager.FULLSCREEN_ID
     }
@@ -130,6 +214,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     override fun getSmallId(): Int {
         return ExoVideoManager.SMALL_ID
     }
+
     override fun setDisplay(surface: Surface?) {
         if (surface != null && mTextureView.getShowView() is SurfaceView) {
             val surfaceView = (mTextureView.getShowView() as SurfaceView?)
@@ -140,9 +225,13 @@ class FloatingPlayer : StandardGSYVideoPlayer {
             gsyVideoManager.setDisplayNew(null)
         }
     }
-    fun nextUI() { resetProgressAndTime() }
 
-    //播放器转移
+    fun nextUI() {
+        resetProgressAndTime()
+        controlsState = controlsState.copy(progress = 0f)
+    }
+
+    // 播放器转移
     fun setSurfaceToPlay() {
         addTextureView()
         gsyVideoManager.setListener(this)

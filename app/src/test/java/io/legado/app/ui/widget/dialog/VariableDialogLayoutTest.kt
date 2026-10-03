@@ -1,67 +1,111 @@
 package io.legado.app.ui.widget.dialog
 
-import org.junit.Assert.assertEquals
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.ui.widget.dialog.variable.VariableResult
+import io.legado.app.ui.widget.dialog.variable.VariableViewModel
+import org.junit.Assert.*
 import org.junit.Test
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
+/** Replaces XML assertions with editable draft and delivery behavior. */
 class VariableDialogLayoutTest {
+    @Test
+    fun constructorParametersInitializeAnImmediateDraft() {
+        val model =
+            VariableViewModel(
+                SavedStateHandle(
+                    mapOf(
+                        "title" to "title",
+                        "key" to "key",
+                        "variable" to "before",
+                        "comment" to "help",
+                    )
+                )
+            )
+        assertEquals("title", model.state.value.title)
+        assertEquals("key", model.state.value.key)
+        assertEquals("before", model.state.value.input)
+        assertEquals("help", model.state.value.comment)
+    }
 
     @Test
-    fun variableInputUsesFloatingLabelAndCommentAreaKeepsCardInsets() {
-        val document = parseProjectXml("src/main/res/layout/dialog_variable.xml")
-        val variable = document.findElementById("@+id/tv_variable")
-        val inputLayout = variable.parentNode as Element
-        val scroll = document.getElementsByTagName("androidx.core.widget.NestedScrollView")
-            .item(0) as Element
-        val commentContent = scroll.firstElementChild()
-
-        assertEquals("io.legado.app.ui.widget.text.TextInputLayout", inputLayout.tagName)
-        assertEquals("variable", inputLayout.androidAttribute("hint"))
-        assertEquals("16dp", inputLayout.androidAttribute("layout_marginHorizontal"))
-
-        assertEquals("false", scroll.androidAttribute("clipToPadding"))
-        assertEquals("6dp", scroll.androidAttribute("paddingTop"))
-        assertEquals("12dp", scroll.androidAttribute("paddingBottom"))
-        assertEquals("16dp", commentContent.androidAttribute("paddingHorizontal"))
-        assertEquals(
-            "3dp",
-            document.findElementById("@+id/tool_bar").androidAttribute("layout_marginBottom")
-        )
+    fun nullInputDisplaysAndSavesEmptyTextLikeThePreviousEditText() {
+        val model = VariableViewModel(SavedStateHandle(mapOf("key" to "key", "variable" to null)))
+        assertEquals("", model.state.value.input)
+        model.requestSave()
+        assertEquals(VariableResult("key", ""), model.consumeSave())
     }
 
-    private fun parseProjectXml(pathInApp: String): Document {
-        val file = listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?: error("Missing project file: $pathInApp")
-        return DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder().parse(file)
+    @Test
+    fun multilineDraftSurvivesRecreationWithoutNormalizingWhitespace() {
+        val handle = SavedStateHandle(mapOf("variable" to "before", "key" to "source"))
+        val model = VariableViewModel(handle)
+        model.setInput("  first\nsecond\n ")
+        val restored = VariableViewModel(copy(handle))
+        assertEquals("  first\nsecond\n ", restored.state.value.input)
+        assertNull(restored.consumeSave())
+        restored.requestSave()
+        assertEquals(VariableResult("source", "  first\nsecond\n "), restored.consumeSave())
     }
 
-    private fun Document.findElementById(id: String): Element {
-        return getElementsByTagName("*").let { nodes ->
-            (0 until nodes.length)
-                .map { nodes.item(it) as Element }
-                .single { it.androidAttribute("id") == id }
-        }
+    @Test
+    fun clearingTheDraftDoesNotRestoreTheOriginalText() {
+        val handle = SavedStateHandle(mapOf("variable" to "before"))
+        VariableViewModel(handle).setInput("")
+        val restored = VariableViewModel(copy(handle))
+        assertEquals("", restored.state.value.input)
     }
 
-    private fun Element.firstElementChild(): Element {
-        return childNodes.let { nodes ->
-            (0 until nodes.length)
-                .map { nodes.item(it) }
-                .filterIsInstance<Element>()
-                .first()
-        }
+    @Test
+    fun onlySaveProducesAResultAndItCannotBeDeliveredTwice() {
+        val model = VariableViewModel(SavedStateHandle(mapOf("key" to "key")))
+        model.setInput("typed")
+        assertNull(model.consumeSave())
+        model.requestSave()
+        model.requestSave()
+        model.setInput("late edit")
+        assertEquals(VariableResult("key", "typed"), model.consumeSave())
+        assertNull(model.consumeSave())
+        model.requestSave()
+        assertNull(model.consumeSave())
     }
 
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(androidNamespace, name)
-
-    private companion object {
-        const val androidNamespace = "http://schemas.android.com/apk/res/android"
+    @Test
+    fun cancelledDraftNeverRequestsSaveIncludingAcrossRecreation() {
+        val handle = SavedStateHandle()
+        val model = VariableViewModel(handle)
+        model.setInput("unsaved")
+        model.cancel()
+        model.requestSave()
+        assertNull(model.consumeSave())
+        val restored = VariableViewModel(copy(handle))
+        assertTrue(restored.state.value.finished)
+        assertNull(restored.consumeSave())
     }
+
+    @Test
+    fun restoredConsumedSaveStaysFinishedWithoutAnotherResult() {
+        val handle = SavedStateHandle(mapOf("key" to "source", "variable" to "value"))
+        val original = VariableViewModel(handle)
+        original.requestSave()
+        original.consumeSave()
+        val restored = VariableViewModel(copy(handle))
+        assertTrue(restored.state.value.finished)
+        assertFalse(restored.state.value.saveRequested)
+        assertNull(restored.consumeSave())
+    }
+
+    @Test
+    fun pendingSaveIsRestoredAndCancellationCanDiscardIt() {
+        val handle = SavedStateHandle(mapOf("key" to "key", "variable" to "value"))
+        val model = VariableViewModel(handle)
+        model.requestSave()
+        val restored = VariableViewModel(copy(handle))
+        assertEquals(VariableResult("key", "value"), restored.consumeSave())
+        val cancelled = VariableViewModel(copy(handle))
+        cancelled.cancel()
+        assertNull(cancelled.consumeSave())
+    }
+
+    private fun copy(handle: SavedStateHandle) =
+        SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) })
 }

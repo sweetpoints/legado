@@ -7,7 +7,7 @@ on:
       - '.github/scripts/source-browser-test.init.gradle'
       - '.github/scripts/run-ui-regression.sh'
       - '.github/scripts/prepare-pdf-zoom-fixture.py'
-      - 'app/build.gradle'
+      - 'app/build.gradle.kts'
       - 'gradle.properties'
       - 'gradle/libs.versions.toml'
       - 'app/src/main/java/io/legado/app/ui/widget/dialog/BottomWebViewDialog.kt'

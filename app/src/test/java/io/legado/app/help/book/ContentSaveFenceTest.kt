@@ -81,22 +81,19 @@ class ContentSaveFenceTest {
 
     @Test
     fun `chapter metadata persists only inside accepted content write`() {
-        val bookContent = readProjectFile(
-            "src/main/java/io/legado/app/model/webBook/BookContent.kt"
-        )
+        val bookContent =
+            readProjectFile("src/main/java/io/legado/app/model/webBook/BookContent.kt")
         val bookHelp = readProjectFile("src/main/java/io/legado/app/help/book/BookHelp.kt")
         val webBook = readProjectFile("src/main/java/io/legado/app/model/webBook/WebBook.kt")
-        val chapterDao = readProjectFile(
-            "src/main/java/io/legado/app/data/dao/BookChapterDao.kt"
-        )
-        val changeSource = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceViewModel.kt"
-        )
-        val fencedWrite = bookHelp.substringAfter(
-            "val saved = contentSaveFence.writeIfCurrent("
-        ).substringBefore("if (saved)")
-        val replacementWrite = bookHelp.substringAfter("fun saveText(")
-            .substringBefore("internal fun contentSaveToken")
+        val chapterDao = readProjectFile("src/main/java/io/legado/app/data/dao/BookChapterDao.kt")
+        val fencedWrite =
+            bookHelp
+                .substringAfter("val saved = contentSaveFence.writeIfCurrent(")
+                .substringBefore("if (saved)")
+        val replacementWrite =
+            bookHelp
+                .substringAfter("fun saveText(")
+                .substringBefore("internal fun contentSaveToken")
 
         assertFalse(bookContent.contains("bookChapter.update()"))
         assertTrue(bookContent.contains("saveChapterMetadata = true"))
@@ -105,13 +102,13 @@ class ContentSaveFenceTest {
         assertTrue(replacementWrite.contains("if (saveChapterMetadata)"))
         assertTrue(replacementWrite.contains("updateContentMetadata"))
         assertTrue(webBook.contains("saveChapterMetadata = true"))
-        assertTrue(changeSource.contains("saveChapterMetadata = true"))
+        // Chapter cache metadata and CAS commits are covered by
+        // ChapterSourceCacheCommitTest/ChapterSourceContentRepositoryTest.
         assertTrue(chapterDao.contains("bookUrl = :bookUrl and `index` = :index"))
     }
 
     private fun readProjectFile(pathInApp: String): String {
-        val file = sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
+        val file = sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)
         requireNotNull(file) { "Project file not found: $pathInApp" }
         return file.readText()
     }

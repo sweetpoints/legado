@@ -2,11 +2,20 @@ package io.legado.app.ui.book.read
 
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
-import android.view.ViewGroup
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.longClick as composeLongClick
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -16,17 +25,10 @@ import androidx.test.espresso.action.GeneralSwipeAction
 import androidx.test.espresso.action.Press
 import androidx.test.espresso.action.Swipe
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.longClick
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import fi.iki.elonen.NanoHTTPD
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
@@ -43,34 +45,22 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ImageProvider
-import fi.iki.elonen.NanoHTTPD
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.ContentTextView
+import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.page.entities.column.ReviewColumn
 import io.legado.app.ui.book.read.page.entities.column.TextBaseColumn
 import io.legado.app.utils.defaultSharedPreferences
-import org.hamcrest.Matchers.allOf
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicIntegerArray
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -78,39 +68,76 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.After
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 /** Exercises the real reader with cached chapters, controlled HTTP responses and menu gestures. */
 @RunWith(AndroidJUnit4::class)
 class ContentReversalUiTest {
+    @get:Rule val contentCompose = createEmptyComposeRule()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
-    private val savedPreferences = listOf(PreferKey.readerMenuConfig, PreferKey.preDownloadNum,
-        PreferKey.clickActionMC, PreferKey.adaptSpecialStyle).associateWith { prefs.all[it] }
-    private val savedHelp = listOf("readHelpVersion", "readMenuHelpVersion")
-        .associateWith { LocalConfig.all[it] }
+    private val savedPreferences =
+        listOf(
+                PreferKey.readerMenuConfig,
+                PreferKey.preDownloadNum,
+                PreferKey.clickActionMC,
+                PreferKey.adaptSpecialStyle,
+            )
+            .associateWith { prefs.all[it] }
+    private val savedHelp =
+        listOf("readHelpVersion", "readMenuHelpVersion").associateWith { LocalConfig.all[it] }
     private val id = UUID.randomUUID().toString()
-    private val source = BookSource(bookSourceUrl = "https://example.invalid/reversal-source/$id",
-        bookSourceName = "Content reversal fixture")
-    private val book = Book(bookUrl = "https://example.invalid/reversal/$id",
-        tocUrl = "https://example.invalid/reversal/$id/toc", origin = source.bookSourceUrl,
-        name = "Content reversal $id", author = "Fixture", type = BookType.text,
-        totalChapterNum = 2, canUpdate = false).apply {
-        setPageAnim(PageAnim.noAnim)
-        setUseReplaceRule(false)
-        setReSegment(false)
-        setImageStyle(Book.imgStyleDefault)
-    }
-    private val chapters = (0..1).map { index ->
-        BookChapter(bookUrl = book.bookUrl, url = "${book.bookUrl}/$index", index = index,
-            title = "Chapter ${index + 1}", baseUrl = book.bookUrl)
-    }
+    private val source =
+        BookSource(
+            bookSourceUrl = "https://example.invalid/reversal-source/$id",
+            bookSourceName = "Content reversal fixture",
+        )
+    private val book =
+        Book(
+                bookUrl = "https://example.invalid/reversal/$id",
+                tocUrl = "https://example.invalid/reversal/$id/toc",
+                origin = source.bookSourceUrl,
+                name = "Content reversal $id",
+                author = "Fixture",
+                type = BookType.text,
+                totalChapterNum = 2,
+                canUpdate = false,
+            )
+            .apply {
+                setPageAnim(PageAnim.noAnim)
+                setUseReplaceRule(false)
+                setReSegment(false)
+                setImageStyle(Book.imgStyleDefault)
+            }
+    private val chapters =
+        (0..1).map { index ->
+            BookChapter(
+                bookUrl = book.bookUrl,
+                url = "${book.bookUrl}/$index",
+                index = index,
+                title = "Chapter ${index + 1}",
+                baseUrl = book.bookUrl,
+            )
+        }
     private val imageClick = "java.toast('ordinary image')"
     private val reviewClick = "java.toast('paragraph review 37')"
-    private val imageSrc = "https://example.invalid/$id/image.png," +
-        "{\"style\":\"text\",\"click\":\"$imageClick\"}"
-    private val reviewSrc = "https://example.invalid/$id/review.png," +
-        "{\"style\":\"TEXT\",\"reviewCount\":\"37\",\"click\":\"$reviewClick\"}"
+    private val imageSrc =
+        "https://example.invalid/$id/image.png," + "{\"style\":\"text\",\"click\":\"$imageClick\"}"
+    private val reviewSrc =
+        "https://example.invalid/$id/review.png," +
+            "{\"style\":\"TEXT\",\"reviewCount\":\"37\",\"click\":\"$reviewClick\"}"
     private val imageTag = "<img src=\"$imageSrc\">"
     private val reviewTag = "<img src=\"$reviewSrc\">"
     private val html = "<usehtml><b>HTML remains complete</b></usehtml>"
@@ -119,7 +146,8 @@ class ContentReversalUiTest {
     private val secondContent = "Second chapter keeps its own state. 😀\nAnother paragraph."
     private var scenario: ActivityScenario<ReadBookActivity>? = null
 
-    @Test fun refreshUsesThemeChangesAndTheExplicitPreloadRange() {
+    @Test
+    fun refreshUsesThemeChangesAndTheExplicitPreloadRange() {
         scenario?.close()
         scenario = null
         val originalCronet = prefs.all[PreferKey.cronet] as Boolean?
@@ -139,7 +167,9 @@ class ContentReversalUiTest {
         var base = ""
         fun body(index: Int, version: Int) =
             "<img src=\"$base/image/$index.png\">\n" +
-                (1..80).joinToString("\n") { "第${it}段。Stable text keeps the same reading position. 阅读位置保持不变。" } +
+                (1..80).joinToString("\n") {
+                    "第${it}段。Stable text keeps the same reading position. 阅读位置保持不变。"
+                } +
                 "\nVersion $version"
         fun png(color: Int): ByteArray {
             val bitmap = Bitmap.createBitmap(32, 16, Bitmap.Config.ARGB_8888)
@@ -149,43 +179,80 @@ class ContentReversalUiTest {
                     assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
                     it.toByteArray()
                 }
-            } finally { bitmap.recycle() }
-        }
-        val server = object : NanoHTTPD("127.0.0.1", 0) {
-            override fun serve(session: IHTTPSession): Response {
-                val index = session.uri.substringAfterLast('/').substringBefore('.').toIntOrNull()
-                    ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "missing")
-                return if (session.uri.startsWith("/image/")) {
-                    imageRequests.incrementAndGet(index)
-                    val bytes = if (index == failImage.get()) byteArrayOf(1, 2, 3) else png(imageColor.get())
-                    newFixedLengthResponse(Response.Status.OK, "image/png", bytes.inputStream(), bytes.size.toLong())
-                } else {
-                    val version = bodyVersion.get()
-                    bodyRequests.incrementAndGet(index)
-                    if (index == 3) refreshGate.getAndSet(null)?.let { (entered, release) ->
-                        entered.countDown()
-                        check(release.await(30, TimeUnit.SECONDS))
-                    }
-                    if (index == 3 && delayNextBody.compareAndSet(true, false)) {
-                        obsoleteEntered.countDown()
-                        check(releaseObsolete.await(15, TimeUnit.SECONDS))
-                    }
-                    if (index == failBody.get()) {
-                        newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "text/plain", "")
-                    } else newFixedLengthResponse(Response.Status.OK, "text/plain", body(index, version))
-                }.apply { addHeader("Cache-Control", "no-store") }
+            } finally {
+                bitmap.recycle()
             }
         }
+        val server =
+            object : NanoHTTPD("127.0.0.1", 0) {
+                override fun serve(session: IHTTPSession): Response {
+                    val index =
+                        session.uri.substringAfterLast('/').substringBefore('.').toIntOrNull()
+                            ?: return newFixedLengthResponse(
+                                Response.Status.NOT_FOUND,
+                                "text/plain",
+                                "missing",
+                            )
+                    return if (session.uri.startsWith("/image/")) {
+                            imageRequests.incrementAndGet(index)
+                            val bytes =
+                                if (index == failImage.get()) byteArrayOf(1, 2, 3)
+                                else png(imageColor.get())
+                            newFixedLengthResponse(
+                                Response.Status.OK,
+                                "image/png",
+                                bytes.inputStream(),
+                                bytes.size.toLong(),
+                            )
+                        } else {
+                            val version = bodyVersion.get()
+                            bodyRequests.incrementAndGet(index)
+                            if (index == 3)
+                                refreshGate.getAndSet(null)?.let { (entered, release) ->
+                                    entered.countDown()
+                                    check(release.await(30, TimeUnit.SECONDS))
+                                }
+                            if (index == 3 && delayNextBody.compareAndSet(true, false)) {
+                                obsoleteEntered.countDown()
+                                check(releaseObsolete.await(15, TimeUnit.SECONDS))
+                            }
+                            if (index == failBody.get()) {
+                                newFixedLengthResponse(
+                                    Response.Status.INTERNAL_ERROR,
+                                    "text/plain",
+                                    "",
+                                )
+                            } else
+                                newFixedLengthResponse(
+                                    Response.Status.OK,
+                                    "text/plain",
+                                    body(index, version),
+                                )
+                        }
+                        .apply { addHeader("Cache-Control", "no-store") }
+                }
+            }
         server.start()
         base = "http://127.0.0.1:${server.listeningPort}"
-        val refreshChapters = (0..6).map {
-            BookChapter(bookUrl = book.bookUrl, url = "$base/chapter/$it", index = it,
-                title = "Chapter ${it + 1}", baseUrl = base)
-        }
+        val refreshChapters =
+            (0..6).map {
+                BookChapter(
+                    bookUrl = book.bookUrl,
+                    url = "$base/chapter/$it",
+                    index = it,
+                    title = "Chapter ${it + 1}",
+                    baseUrl = base,
+                )
+            }
         try {
-            prefs.edit().putBoolean(PreferKey.cronet, false).putInt(PreferKey.preDownloadNum, 2).commit()
-            source.getContentRule().content = "@js:chapter.putVariable('refreshVersion', " +
-                "result.substring(result.lastIndexOf('Version '))); chapter.putImgUrl(''); result"
+            prefs
+                .edit()
+                .putBoolean(PreferKey.cronet, false)
+                .putInt(PreferKey.preDownloadNum, 2)
+                .commit()
+            source.getContentRule().content =
+                "@js:chapter.putVariable('refreshVersion', " +
+                    "result.substring(result.lastIndexOf('Version '))); chapter.putImgUrl(''); result"
             appDb.bookSourceDao.insert(source)
             book.durChapterIndex = 3
             book.durChapterPos = 0
@@ -198,29 +265,53 @@ class ContentReversalUiTest {
                 BookHelp.writeImage(book, "$base/image/${it.index}.png", png(Color.RED))
             }
             runBlocking { refreshBookResources(source, book, refreshChapters) }
-            repeat(7) { bodyRequests.set(it, 0); imageRequests.set(it, 0) }
-            scenario = ActivityScenario.launch(Intent(context, ReadBookActivity::class.java)
-                .putExtra("bookUrl", book.bookUrl).putExtra("inBookshelf", true))
-            fun ready(previous: TextChapter? = null) = await("refreshed real reader") {
-                val chapter = ReadBook.curTextChapter
-                val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
-                it.isInitFinish && ReadBook.durChapterIndex == 3 && chapter != null &&
-                    chapter !== previous && chapter.isCompleted && page.textChapter === chapter && !page.isMsgPage &&
-                    ViewModelProvider(it)[ReadBookViewModel::class.java].resourceRefreshing.value != true
+            repeat(7) {
+                bodyRequests.set(it, 0)
+                imageRequests.set(it, 0)
             }
+            scenario =
+                ActivityScenario.launch(
+                    Intent(context, ReadBookActivity::class.java)
+                        .putExtra("bookUrl", book.bookUrl)
+                        .putExtra("inBookshelf", true)
+                )
+            fun ready(previous: TextChapter? = null) =
+                await("refreshed real reader") {
+                    val chapter = ReadBook.curTextChapter
+                    val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
+                    it.isInitFinish &&
+                        ReadBook.durChapterIndex == 3 &&
+                        chapter != null &&
+                        chapter !== previous &&
+                        chapter.isCompleted &&
+                        page.textChapter === chapter &&
+                        !page.isMsgPage &&
+                        ViewModelProvider(it)[ReadBookViewModel::class.java]
+                            .resourceRefreshing
+                            .value != true
+                }
             fun refresh() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(click())
+                contentCompose
+                    .onNodeWithContentDescription(context.getString(R.string.refresh))
+                    .performClick()
             }
             fun pixel(index: Int): Int {
-                val bitmap = BitmapFactory.decodeFile(BookHelp.getImage(book, "$base/image/$index.png").path)
-                    ?: return 0
-                return try { bitmap.getPixel(0, 0) } finally { bitmap.recycle() }
+                val bitmap =
+                    BitmapFactory.decodeFile(BookHelp.getImage(book, "$base/image/$index.png").path)
+                        ?: return 0
+                return try {
+                    bitmap.getPixel(0, 0)
+                } finally {
+                    bitmap.recycle()
+                }
             }
             fun refreshAllResources() {
                 showReaderMenu()
-                onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(longClick())
-                onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).perform(click())
+                contentCompose
+                    .onNodeWithContentDescription(context.getString(R.string.refresh))
+                    .performTouchInput { composeLongClick() }
+                contentCompose.onNodeWithTag("reader-menu-item-resources").performClick()
             }
             fun showsLoading(activity: ReadBookActivity): Boolean {
                 val page = activity.findViewById<ReadView>(R.id.read_view).curPage.textPage
@@ -232,17 +323,23 @@ class ContentReversalUiTest {
                 val savedChapter = ReadBook.durChapterIndex
                 val savedPage = ReadBook.durPageIndex
                 var savedPosition = ReadBook.durChapterPos
-                if (scroll) scenario!!.onActivity {
-                    savedPosition = checkNotNull(it.findViewById<ReadView>(R.id.read_view)
-                        .getReadPosition()).second.chapterPosition
-                }
+                if (scroll)
+                    scenario!!.onActivity {
+                        savedPosition =
+                            checkNotNull(
+                                    it.findViewById<ReadView>(R.id.read_view).getReadPosition()
+                                )
+                                .second
+                                .chapterPosition
+                    }
                 val contents = refreshChapters.map { BookHelp.getContent(book, it) }
                 val metadata = refreshChapters.map {
                     appDb.bookChapterDao.getChapter(book.bookUrl, it.index)!!.let { saved ->
                         Triple(saved.title, saved.imgUrl, saved.variable)
                     }
                 }
-                val imageBytes = (0..6).map { BookHelp.getImage(book, "$base/image/$it.png").readBytes() }
+                val imageBytes =
+                    (0..6).map { BookHelp.getImage(book, "$base/image/$it.png").readBytes() }
                 val failures = AppLog.logs.count { it.second.startsWith("刷新资源失败\n") }
                 val entered = CountDownLatch(1)
                 val release = CountDownLatch(1)
@@ -250,42 +347,80 @@ class ContentReversalUiTest {
                 refreshGate.set(entered to release)
                 try {
                     action()
-                    assertTrue("The refresh must fetch in the background", entered.await(5, TimeUnit.SECONDS))
+                    assertTrue(
+                        "The refresh must fetch in the background",
+                        entered.await(5, TimeUnit.SECONDS),
+                    )
                     await("loading notice before the blocked request completes") {
-                        ViewModelProvider(it)[ReadBookViewModel::class.java].resourceRefreshing.value == true &&
-                            showsLoading(it)
+                        ViewModelProvider(it)[ReadBookViewModel::class.java]
+                            .resourceRefreshing
+                            .value == true && showsLoading(it)
                     }
-                    assertSame("Loading must retain the old chapter for failure recovery", layout, ReadBook.curTextChapter)
+                    assertSame(
+                        "Loading must retain the old chapter for failure recovery",
+                        layout,
+                        ReadBook.curTextChapter,
+                    )
                     assertEquals(savedPosition, ReadBook.durChapterPos)
                     val frame = CountDownLatch(1)
                     scenario!!.onActivity {
                         val reader = it.findViewById<ReadView>(R.id.read_view)
-                        assertTrue("Refresh uses the existing centered message page", reader.curPage.textPage.isMsgPage)
-                        assertTrue(listOf(reader.pageFactory.curPage, reader.pageFactory.prevPage,
-                            reader.pageFactory.nextPage, reader.pageFactory.nextPlusPage).all { page ->
-                            page.isMsgPage && page.text == context.getString(R.string.data_loading)
-                        })
-                        assertTrue("No second loading Snackbar is shown",
-                            it.findViewById<View>(com.google.android.material.R.id.snackbar_text)?.isShown != true)
+                        assertTrue(
+                            "Refresh uses the existing centered message page",
+                            reader.curPage.textPage.isMsgPage,
+                        )
+                        assertTrue(
+                            listOf(
+                                    reader.pageFactory.curPage,
+                                    reader.pageFactory.prevPage,
+                                    reader.pageFactory.nextPage,
+                                    reader.pageFactory.nextPlusPage,
+                                )
+                                .all { page ->
+                                    page.isMsgPage &&
+                                        page.text == context.getString(R.string.data_loading)
+                                }
+                        )
+                        assertTrue(
+                            "No second loading Snackbar is shown",
+                            it.findViewById<View>(com.google.android.material.R.id.snackbar_text)
+                                ?.isShown != true,
+                        )
                         reader.postOnAnimation { frame.countDown() }
                     }
-                    assertTrue("Reader frames must continue while HTTP is blocked", frame.await(2, TimeUnit.SECONDS))
+                    assertTrue(
+                        "Reader frames must continue while HTTP is blocked",
+                        frame.await(2, TimeUnit.SECONDS),
+                    )
                     closeReaderMenu()
-                    fun assertLoadingFixed() = scenario!!.onActivity {
-                        val reader = it.findViewById<ReadView>(R.id.read_view)
-                        assertTrue(showsLoading(it))
-                        assertFalse(reader.pageFactory.moveToNext(true))
-                        assertFalse(reader.pageFactory.moveToPrev(true))
-                        assertEquals(savedChapter, ReadBook.durChapterIndex)
-                        assertEquals(savedPage, ReadBook.durPageIndex)
-                        assertEquals(savedPosition, ReadBook.durChapterPos)
-                        val content = reader.curPage.findViewById<ContentTextView>(R.id.content_text_view)
-                        assertEquals("The loading message must not move when swiped", 0,
-                            ContentTextView::class.java.getDeclaredField("pageOffset")
-                                .apply { isAccessible = true }.getInt(content))
-                        assertTrue("Blocked paging must not show an end-of-book Snackbar",
-                            it.findViewById<View>(com.google.android.material.R.id.snackbar_text)?.isShown != true)
-                    }
+                    fun assertLoadingFixed() =
+                        scenario!!.onActivity {
+                            val reader = it.findViewById<ReadView>(R.id.read_view)
+                            assertTrue(showsLoading(it))
+                            assertFalse(reader.pageFactory.moveToNext(true))
+                            assertFalse(reader.pageFactory.moveToPrev(true))
+                            assertEquals(savedChapter, ReadBook.durChapterIndex)
+                            assertEquals(savedPage, ReadBook.durPageIndex)
+                            assertEquals(savedPosition, ReadBook.durChapterPos)
+                            val content =
+                                reader.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+                            assertEquals(
+                                "The loading message must not move when swiped",
+                                0,
+                                ContentTextView::class
+                                    .java
+                                    .getDeclaredField("pageOffset")
+                                    .apply { isAccessible = true }
+                                    .getInt(content),
+                            )
+                            assertTrue(
+                                "Blocked paging must not show an end-of-book Snackbar",
+                                it.findViewById<View>(
+                                        com.google.android.material.R.id.snackbar_text
+                                    )
+                                    ?.isShown != true,
+                            )
+                        }
                     if (scroll) {
                         dragReader(0.5f, 0.7f, 0.5f, 0.3f)
                         assertLoadingFixed()
@@ -296,7 +431,10 @@ class ContentReversalUiTest {
                         dragReader(0.2f, 0.5f, 0.8f, 0.5f)
                     }
                     assertLoadingFixed()
-                    screenshot(if (scroll) "resource-refresh-loading-scroll" else "resource-refresh-loading")
+                    screenshot(
+                        if (scroll) "resource-refresh-loading-scroll"
+                        else "resource-refresh-loading"
+                    )
                     if (failBody.get() == 3) {
                         scenario!!.recreate()
                         await("restored reader still shows the pending refresh") {
@@ -308,8 +446,11 @@ class ContentReversalUiTest {
                         scenario!!.onActivity {
                             val model = ViewModelProvider(it)[ReadBookViewModel::class.java]
                             // Observe actual cancellation completion, not a guessed delay.
-                            val field = ReadBookViewModel::class.java.getDeclaredField("resourceRefreshCoroutine")
-                                .apply { isAccessible = true }
+                            val field =
+                                ReadBookViewModel::class
+                                    .java
+                                    .getDeclaredField("resourceRefreshCoroutine")
+                                    .apply { isAccessible = true }
                             (field.get(model) as io.legado.app.help.coroutine.Coroutine<*>)
                                 .invokeOnCompletion { oldCompleted.countDown() }
                             ReadBook.callBack?.upContent()
@@ -318,12 +459,19 @@ class ContentReversalUiTest {
                         val repeatedEntered = CountDownLatch(1)
                         refreshGate.set(repeatedEntered to repeatedRelease)
                         action()
-                        assertTrue("The replacement refresh must start", repeatedEntered.await(5, TimeUnit.SECONDS))
+                        assertTrue(
+                            "The replacement refresh must start",
+                            repeatedEntered.await(5, TimeUnit.SECONDS),
+                        )
                         release.countDown()
-                        assertTrue("The old refresh must actually finish cancellation", oldCompleted.await(5, TimeUnit.SECONDS))
+                        assertTrue(
+                            "The old refresh must actually finish cancellation",
+                            oldCompleted.await(5, TimeUnit.SECONDS),
+                        )
                         await("the successor retains its loading notice after old completion") {
-                            ViewModelProvider(it)[ReadBookViewModel::class.java].resourceRefreshing.value == true &&
-                                showsLoading(it)
+                            ViewModelProvider(it)[ReadBookViewModel::class.java]
+                                .resourceRefreshing
+                                .value == true && showsLoading(it)
                         }
                         closeReaderMenu()
                         screenshot("resource-refresh-loading")
@@ -335,22 +483,45 @@ class ContentReversalUiTest {
                 }
                 await("resource failure reported without replacing cached resources") {
                     AppLog.logs.count { it.second.startsWith("刷新资源失败\n") } > failures &&
-                        ViewModelProvider(it)[ReadBookViewModel::class.java].resourceRefreshing.value == false &&
+                        ViewModelProvider(it)[ReadBookViewModel::class.java]
+                            .resourceRefreshing
+                            .value == false &&
                         !it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage
                 }
-                assertSame("A failed refresh must retain the rendered chapter", layout, ReadBook.curTextChapter)
+                assertSame(
+                    "A failed refresh must retain the rendered chapter",
+                    layout,
+                    ReadBook.curTextChapter,
+                )
                 assertEquals(savedPosition, ReadBook.durChapterPos)
-                if (scroll) scenario!!.onActivity {
-                    assertEquals("Failure restores the visible character from before loading", savedPosition,
-                        it.findViewById<ReadView>(R.id.read_view).getReadPosition()?.second?.chapterPosition)
-                }
+                if (scroll)
+                    scenario!!.onActivity {
+                        assertEquals(
+                            "Failure restores the visible character from before loading",
+                            savedPosition,
+                            it.findViewById<ReadView>(R.id.read_view)
+                                .getReadPosition()
+                                ?.second
+                                ?.chapterPosition,
+                        )
+                    }
                 refreshChapters.forEachIndexed { index, chapter ->
-                    assertEquals("Cached body $index", contents[index], BookHelp.getContent(book, chapter))
-                    assertArrayEquals("Cached image $index", imageBytes[index],
-                        BookHelp.getImage(book, "$base/image/$index.png").readBytes())
+                    assertEquals(
+                        "Cached body $index",
+                        contents[index],
+                        BookHelp.getContent(book, chapter),
+                    )
+                    assertArrayEquals(
+                        "Cached image $index",
+                        imageBytes[index],
+                        BookHelp.getImage(book, "$base/image/$index.png").readBytes(),
+                    )
                     val saved = appDb.bookChapterDao.getChapter(book.bookUrl, index)!!
-                    assertEquals("Cached chapter metadata $index", metadata[index],
-                        Triple(saved.title, saved.imgUrl, saved.variable))
+                    assertEquals(
+                        "Cached chapter metadata $index",
+                        metadata[index],
+                        Triple(saved.title, saved.imgUrl, saved.variable),
+                    )
                 }
             }
             ready()
@@ -370,8 +541,12 @@ class ContentReversalUiTest {
 
             scenario!!.onActivity { config.setCurTextColor(originalColor xor 0x00010101) }
             scenario!!.close()
-            scenario = ActivityScenario.launch(Intent(context, ReadBookActivity::class.java)
-                .putExtra("bookUrl", book.bookUrl).putExtra("inBookshelf", true))
+            scenario =
+                ActivityScenario.launch(
+                    Intent(context, ReadBookActivity::class.java)
+                        .putExtra("bookUrl", book.bookUrl)
+                        .putExtra("inBookshelf", true)
+                )
             ready()
             bodyVersion.set(3)
             failBody.set(3)
@@ -384,8 +559,15 @@ class ContentReversalUiTest {
             val beforeTheme = ReadBook.curTextChapter
             BookHelp.delContent(book, refreshChapters[3])
             delayNextBody.set(true)
-            obsoleteRead = CoroutineScope(Dispatchers.IO).async { ReadBook.loadContentAwait(3); Unit }
-            assertTrue("An obsolete real reader request must be pending", obsoleteEntered.await(5, TimeUnit.SECONDS))
+            obsoleteRead =
+                CoroutineScope(Dispatchers.IO).async {
+                    ReadBook.loadContentAwait(3)
+                    Unit
+                }
+            assertTrue(
+                "An obsolete real reader request must be pending",
+                obsoleteEntered.await(5, TimeUnit.SECONDS),
+            )
             bodyVersion.set(3)
             refresh()
             ready(beforeTheme)
@@ -397,8 +579,11 @@ class ContentReversalUiTest {
             releaseObsolete.countDown()
             runBlocking { withTimeout(5000) { obsoleteRead!!.await() } }
             awaitDraw()
-            assertSame("The completed old response must not replace or cancel the fresh layout",
-                refreshedLayout, ReadBook.curTextChapter)
+            assertSame(
+                "The completed old response must not replace or cancel the fresh layout",
+                refreshedLayout,
+                ReadBook.curTextChapter,
+            )
             assertTrue(BookHelp.getContent(book, refreshChapters[3])!!.contains("Version 3"))
             scenario!!.onActivity {
                 val viewModel = ViewModelProvider(it)[ReadBookViewModel::class.java]
@@ -406,11 +591,17 @@ class ContentReversalUiTest {
                 val style = ReadBookConfig.styleSelect
                 try {
                     ReadBookConfig.styleSelect = (style + 1) % ReadBookConfig.configList.size
-                    assertTrue("Switching reader styles must request resource refresh",
-                        viewModel.resourceThemeChanged(book))
-                } finally { ReadBookConfig.styleSelect = style }
-                assertTrue("Switching back remains pending until resources are accepted",
-                    viewModel.resourceThemeChanged(book))
+                    assertTrue(
+                        "Switching reader styles must request resource refresh",
+                        viewModel.resourceThemeChanged(book),
+                    )
+                } finally {
+                    ReadBookConfig.styleSelect = style
+                }
+                assertTrue(
+                    "Switching back remains pending until resources are accepted",
+                    viewModel.resourceThemeChanged(book),
+                )
             }
 
             scenario!!.onActivity {
@@ -425,12 +616,17 @@ class ContentReversalUiTest {
             dragReader(0.5f, 0.7f, 0.5f, 0.5f)
             var scrollPosition = 0
             scenario!!.onActivity {
-                scrollPosition = checkNotNull(it.findViewById<ReadView>(R.id.read_view)
-                    .getReadPosition()).second.chapterPosition
-                assertTrue("Start the refresh with unsaved scrolling within the page",
-                    scrollPosition > ReadBook.durChapterPos)
+                scrollPosition =
+                    checkNotNull(it.findViewById<ReadView>(R.id.read_view).getReadPosition())
+                        .second
+                        .chapterPosition
+                assertTrue(
+                    "Start the refresh with unsaved scrolling within the page",
+                    scrollPosition > ReadBook.durChapterPos,
+                )
             }
-            val outside = listOf(0, 6).associateWith { BookHelp.getContent(book, refreshChapters[it]) }
+            val outside =
+                listOf(0, 6).associateWith { BookHelp.getContent(book, refreshChapters[it]) }
             bodyVersion.set(4)
             imageColor.set(Color.BLUE)
             failBody.set(5)
@@ -440,31 +636,35 @@ class ContentReversalUiTest {
             expectResourceFailure { refreshAllResources() }
             failImage.set(-1)
             showReaderMenu()
-            onView(allOf(withContentDescription(R.string.refresh), isDisplayed())).perform(longClick())
+            contentCompose
+                .onNodeWithContentDescription(context.getString(R.string.refresh))
+                .performTouchInput { composeLongClick() }
             screenshot("resource-refresh-menu")
-            var resourceY = 0
-            onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).check { view, error ->
-                if (error != null) throw error
-                val location = IntArray(2)
-                view.getLocationOnScreen(location)
-                resourceY = location[1]
-            }
-            listOf(R.string.menu_refresh_dur, R.string.menu_refresh_after, R.string.menu_refresh_all).forEach {
-                onView(withText(it)).inRoot(isPlatformPopup()).check { view, error ->
-                    if (error != null) throw error
-                    val location = IntArray(2)
-                    view.getLocationOnScreen(location)
-                    assertTrue("Refresh all data must be below the existing actions", location[1] < resourceY)
-                }
+            val resourceY =
+                contentCompose
+                    .onNodeWithTag("reader-menu-item-resources")
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+                    .top
+            listOf("dur", "after", "all").forEach { action ->
+                val top =
+                    contentCompose
+                        .onNodeWithTag("reader-menu-item-$action")
+                        .fetchSemanticsNode()
+                        .boundsInRoot
+                        .top
+                assertTrue("Refresh all data must be below the existing actions", top < resourceY)
             }
             val beforeAll = ReadBook.curTextChapter
-            onView(withText(R.string.menu_refresh_resources)).inRoot(isPlatformPopup()).perform(click())
+            contentCompose.onNodeWithTag("reader-menu-item-resources").performClick()
             ready(beforeAll)
             await("all five target chapters and image responses") {
                 (1..5).all { index ->
-                    BookHelp.getContent(book, refreshChapters[index])?.contains("Version 4") == true &&
+                    BookHelp.getContent(book, refreshChapters[index])?.contains("Version 4") ==
+                        true &&
                         pixel(index) == Color.BLUE &&
-                        appDb.bookChapterDao.getChapter(book.bookUrl, index)
+                        appDb.bookChapterDao
+                            .getChapter(book.bookUrl, index)
                             ?.getVariable("refreshVersion") == "Version 4"
                 }
             }
@@ -485,11 +685,13 @@ class ContentReversalUiTest {
             closeReaderMenu()
             screenshot("resource-refresh-blue-image")
             File(checkNotNull(context.getExternalFilesDir("ui-regression")), "resource-refresh.txt")
-                .writeText("chapter=3 position=$position scrollPosition=$scrollPosition range=1..5 outside=0,6 preserved; " +
-                    "blockedSwipes=horizontal-both-directions,scroll-both-directions; " +
-                    "failurePaths=theme-body,theme-image,range-body,range-image; " +
-                    "bodyRequests=${(0..6).map { bodyRequests.get(it) }} " +
-                    "imageRequests=${(0..6).map { imageRequests.get(it) }}")
+                .writeText(
+                    "chapter=3 position=$position scrollPosition=$scrollPosition range=1..5 outside=0,6 preserved; " +
+                        "blockedSwipes=horizontal-both-directions,scroll-both-directions; " +
+                        "failurePaths=theme-body,theme-image,range-body,range-image; " +
+                        "bodyRequests=${(0..6).map { bodyRequests.get(it) }} " +
+                        "imageRequests=${(0..6).map { imageRequests.get(it) }}"
+                )
         } finally {
             releaseObsolete.countDown()
             obsoleteRead?.cancel()
@@ -497,22 +699,35 @@ class ContentReversalUiTest {
             scenario = null
             server.stop()
             config.setCurTextColor(originalColor)
-            prefs.edit().apply {
-                if (originalCronet == null) remove(PreferKey.cronet) else putBoolean(PreferKey.cronet, originalCronet)
-            }.commit()
+            prefs
+                .edit()
+                .apply {
+                    if (originalCronet == null) remove(PreferKey.cronet)
+                    else putBoolean(PreferKey.cronet, originalCronet)
+                }
+                .commit()
             BookHelp.clearCache(book)
         }
     }
 
-    @Before fun setUp() {
-        prefs.edit().putInt(PreferKey.preDownloadNum, 0).putInt(PreferKey.clickActionMC, 0)
-            .putBoolean(PreferKey.adaptSpecialStyle, true).commit()
+    @Before
+    fun setUp() {
+        prefs
+            .edit()
+            .putInt(PreferKey.preDownloadNum, 0)
+            .putInt(PreferKey.clickActionMC, 0)
+            .putBoolean(PreferKey.adaptSpecialStyle, true)
+            .commit()
         AppConfig.clickActionMC = 0
         AppConfig.adaptSpecialStyle = true
         LocalConfig.edit().putInt("readHelpVersion", 1).putInt("readMenuHelpVersion", 1).commit()
-        saveReaderMenuConfig(context, ReaderMenuConfig(
-            primary = listOf("reverseContent", "editContent"),
-            more = ReaderMenuConfig.ALL_KEYS - setOf("reverseContent", "editContent")))
+        saveReaderMenuConfig(
+            context,
+            ReaderMenuConfig(
+                primary = listOf("reverseContent", "editContent"),
+                more = ReaderMenuConfig.ALL_KEYS - setOf("reverseContent", "editContent"),
+            ),
+        )
         appDb.bookSourceDao.insert(source)
         appDb.bookDao.insert(book)
         appDb.bookChapterDao.insert(*chapters.toTypedArray())
@@ -521,19 +736,27 @@ class ContentReversalUiTest {
         val bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
         try {
             bitmap.eraseColor(Color.rgb(45, 135, 210))
-            val bytes = ByteArrayOutputStream().use {
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                it.toByteArray()
-            }
+            val bytes =
+                ByteArrayOutputStream().use {
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    it.toByteArray()
+                }
             BookHelp.writeImage(book, imageSrc, bytes)
             BookHelp.writeImage(book, reviewSrc, bytes)
-        } finally { bitmap.recycle() }
-        scenario = ActivityScenario.launch(Intent(context, ReadBookActivity::class.java)
-            .putExtra("bookUrl", book.bookUrl).putExtra("inBookshelf", true))
+        } finally {
+            bitmap.recycle()
+        }
+        scenario =
+            ActivityScenario.launch(
+                Intent(context, ReadBookActivity::class.java)
+                    .putExtra("bookUrl", book.bookUrl)
+                    .putExtra("inBookshelf", true)
+            )
         awaitReader(0)
     }
 
-    @After fun tearDown() {
+    @After
+    fun tearDown() {
         scenario?.close()
         chapters.forEach { BookHelp.delContent(book, it) }
         BookHelp.getImage(book, imageSrc).delete()
@@ -541,26 +764,32 @@ class ContentReversalUiTest {
         appDb.bookChapterDao.delByBook(book.bookUrl)
         appDb.bookDao.delete(book)
         appDb.bookSourceDao.delete(source)
-        prefs.edit().apply {
-            savedPreferences.forEach { (key, value) ->
-                when (value) {
-                    null -> remove(key)
-                    is String -> putString(key, value)
-                    is Int -> putInt(key, value)
-                    is Boolean -> putBoolean(key, value)
+        prefs
+            .edit()
+            .apply {
+                savedPreferences.forEach { (key, value) ->
+                    when (value) {
+                        null -> remove(key)
+                        is String -> putString(key, value)
+                        is Int -> putInt(key, value)
+                        is Boolean -> putBoolean(key, value)
+                    }
                 }
             }
-        }.commit()
+            .commit()
         AppConfig.clickActionMC = prefs.getInt(PreferKey.clickActionMC, 0)
         AppConfig.adaptSpecialStyle = prefs.getBoolean(PreferKey.adaptSpecialStyle, true)
-        LocalConfig.edit().apply {
-            savedHelp.forEach { (key, value) ->
-                if (value == null) remove(key) else putInt(key, value as Int)
+        LocalConfig.edit()
+            .apply {
+                savedHelp.forEach { (key, value) ->
+                    if (value == null) remove(key) else putInt(key, value as Int)
+                }
             }
-        }.commit()
+            .commit()
     }
 
-    @Test fun visibleReverseMenuPreservesImagesAndReviewAndRestoresExactRawCache() {
+    @Test
+    fun visibleReverseMenuPreservesImagesAndReviewAndRestoresExactRawCache() {
         assertRenderedImages()
         screenshot("content-reversal-original")
         reverseFromMenu(false, reversed)
@@ -572,8 +801,11 @@ class ContentReversalUiTest {
         screenshot("content-reversal-menu-checked")
         pressBack()
         reverseFromMenu(true, original)
-        assertEquals("A second real menu action restores every raw character", original,
-            BookHelp.getContent(book, chapters[0]))
+        assertEquals(
+            "A second real menu action restores every raw character",
+            original,
+            BookHelp.getContent(book, chapters[0]),
+        )
         assertRenderedImages()
         openOverflow()
         assertReverseCheck(false)
@@ -581,7 +813,8 @@ class ContentReversalUiTest {
         pressBack()
     }
 
-    @Test fun chapterCheckedStateRemainsIndependentWhenReturningAndRecreatingReader() {
+    @Test
+    fun chapterCheckedStateRemainsIndependentWhenReturningAndRecreatingReader() {
         reverseFromMenu(false, reversed)
         navigateTo(1)
         openOverflow()
@@ -594,8 +827,10 @@ class ContentReversalUiTest {
         assertReverseCheck(true)
         pressBack()
         reverseFromMenu(true, original)
-        assertTrue("Restoring chapter 1 must keep chapter 2 reversed",
-            BookHelp.isContentReversed(book, chapters[1]))
+        assertTrue(
+            "Restoring chapter 1 must keep chapter 2 reversed",
+            BookHelp.isContentReversed(book, chapters[1]),
+        )
         navigateTo(1)
         scenario!!.recreate()
         awaitReader(1)
@@ -606,19 +841,23 @@ class ContentReversalUiTest {
         assertFalse(BookHelp.isContentReversed(book, chapters[0]))
     }
 
-    @Test fun savingInContentEditorAndReplacingRefreshedCacheClearCheckedState() {
+    @Test
+    fun savingInContentEditorAndReplacingRefreshedCacheClearCheckedState() {
         reverseFromMenu(false, reversed)
         openOverflow()
-        onView(withText(R.string.edit_content)).inRoot(isPlatformPopup()).perform(click())
+        contentCompose
+            .onNodeWithTag("reader-menu-item-editContent")
+            .performScrollTo()
+            .performClick()
         await("content editor loaded") { activity ->
-            activity.supportFragmentManager.fragments.filterIsInstance<ContentEditDialog>()
-                .any { it.view != null && it.viewModel.hasDraft }
+            activity.supportFragmentManager.fragments.filterIsInstance<ContentEditDialog>().any {
+                it.view != null && it.viewModel.state.value.hasDraft
+            }
         }
         val edited = "Saved by the visible content editor. 😀"
         val beforeEdit = ReadBook.curTextChapter
-        onView(withId(R.id.content_view)).inRoot(isDialog())
-            .perform(replaceText(edited), closeSoftKeyboard())
-        onView(withId(R.id.menu_save)).inRoot(isDialog()).perform(click())
+        contentCompose.onNodeWithTag("content-body").performTextReplacement(edited)
+        contentCompose.onNodeWithTag("content-save").performClick()
         await("editor saved exact text") { BookHelp.getContent(book, chapters[0]) == edited }
         awaitReader(0, beforeEdit)
         openOverflow()
@@ -644,7 +883,10 @@ class ContentReversalUiTest {
         val previous = ReadBook.curTextChapter
         openOverflow()
         assertReverseCheck(wasChecked)
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).perform(click())
+        contentCompose
+            .onNodeWithTag("reader-menu-item-reverseContent")
+            .performScrollTo()
+            .performClick()
         await("chapter $index reverse state changed") {
             BookHelp.isContentReversed(book, chapters[index]) != wasChecked &&
                 (expectedRaw == null || BookHelp.getContent(book, chapters[index]) == expectedRaw)
@@ -655,7 +897,11 @@ class ContentReversalUiTest {
 
     private fun navigateTo(index: Int) {
         showReaderMenu()
-        onView(withId(if (index > ReadBook.durChapterIndex) R.id.tv_next else R.id.tv_pre)).perform(click())
+        contentCompose
+            .onNodeWithTag(
+                if (index > ReadBook.durChapterIndex) "reader-next" else "reader-previous"
+            )
+            .performClick()
         awaitReader(index)
         closeReaderMenu()
     }
@@ -663,68 +909,86 @@ class ContentReversalUiTest {
     private fun showReaderMenu() {
         awaitDraw()
         var visible = false
-        scenario!!.onActivity { visible = it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        scenario!!.onActivity { visible = it.readMenu.isVisible }
         if (!visible) onView(withId(R.id.read_view)).perform(click())
-        await("reader menu shown") { it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        await("reader menu shown") { it.readMenu.isVisible }
     }
 
     private fun closeReaderMenu() {
         var visible = false
-        scenario!!.onActivity { visible = it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
-        if (visible) onView(allOf(withId(R.id.vw_menu_bg), isDisplayed())).perform(click())
-        await("reader menu hidden") { !it.findViewById<ReadMenu>(R.id.read_menu).isVisible }
+        scenario!!.onActivity { visible = it.readMenu.isVisible }
+        if (visible) scenario!!.onActivity { it.readMenu.runMenuOut(false) }
+        await("reader menu hidden") { !it.readMenu.isVisible }
     }
 
     private fun openOverflow() {
         showReaderMenu()
-        val description = context.getString(androidx.appcompat.R.string.abc_action_menu_overflow_description)
-        onView(allOf(withContentDescription(description), isDisplayed())).perform(click())
+        contentCompose.onNodeWithTag("reader-overflow").performClick()
     }
 
     private fun assertReverseCheck(expected: Boolean) {
-        onView(withText(R.string.reverse_content)).inRoot(isPlatformPopup()).check { view, error ->
-            if (error != null) throw error
-            val row = view.parent as ViewGroup
-            val info = row.createAccessibilityNodeInfo()
-            assertTrue("The real popup row must expose a checkable action", info.isCheckable)
-            assertEquals("The popup accessibility state follows this chapter", expected, info.isChecked)
-            assertEquals("The visible check mark follows this chapter", expected,
-                row.findViewById<View>(R.id.iv_check_end).isVisible)
-        }
+        val action =
+            contentCompose.onNodeWithTag("reader-menu-item-reverseContent").performScrollTo()
+        if (expected) action.assertIsOn() else action.assertIsOff()
     }
 
     private fun assertRenderedImages() {
         scenario!!.onActivity {
             val chapter = checkNotNull(ReadBook.curTextChapter)
-            val images = chapter.pages.flatMap { page -> page.lines }
-                .flatMap { line -> line.columns }.filterIsInstance<ImageColumn>()
-            assertEquals("Both raw images must survive the actual layout", listOf(imageSrc, reviewSrc),
-                images.map { column -> column.src })
+            val images =
+                chapter.pages
+                    .flatMap { page -> page.lines }
+                    .flatMap { line -> line.columns }
+                    .filterIsInstance<ImageColumn>()
+            assertEquals(
+                "Both raw images must survive the actual layout",
+                listOf(imageSrc, reviewSrc),
+                images.map { column -> column.src },
+            )
             assertEquals(listOf(imageClick, reviewClick), images.map { column -> column.click })
             assertTrue(images.all { column -> column.end > column.start })
-            val review = ImageColumn::class.java.getDeclaredField("reviewColumn")
-                .apply { isAccessible = true }.get(images[1]) as? ReviewColumn
+            val review =
+                ImageColumn::class
+                    .java
+                    .getDeclaredField("reviewColumn")
+                    .apply { isAccessible = true }
+                    .get(images[1]) as? ReviewColumn
             assertNotNull("The legacy image must still create the native review bubble", review)
             assertEquals(37, review!!.count)
             assertFalse("The review bubble must stay inline", images[1].textLine.isImage)
             val columns = images[1].textLine.columns
             val preceding = columns[columns.indexOf(images[1]) - 1] as TextBaseColumn
-            assertEquals("Indentation must not move between text and its review bubble", "》", preceding.charData)
-            assertTrue("The bubble must remain adjacent to the final visible character",
-                images[1].start - preceding.end < preceding.end - preceding.start)
-            assertTrue("The HTML unit must still produce formatted text",
-                chapter.pages.any { page -> page.lines.any { line -> line.isHtml } })
+            assertEquals(
+                "Indentation must not move between text and its review bubble",
+                "》",
+                preceding.charData,
+            )
+            assertTrue(
+                "The bubble must remain adjacent to the final visible character",
+                images[1].start - preceding.end < preceding.end - preceding.start,
+            )
+            assertTrue(
+                "The HTML unit must still produce formatted text",
+                chapter.pages.any { page -> page.lines.any { line -> line.isHtml } },
+            )
         }
     }
 
-    private fun awaitReader(index: Int, previous: TextChapter? = null) = await("reader chapter $index completed") {
-        val chapter = ReadBook.curTextChapter
-        val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
-        ReadBook.book?.bookUrl == book.bookUrl && ReadBook.durChapterIndex == index &&
-            chapter != null && chapter.chapter.url == chapters[index].url && chapter !== previous && chapter.isCompleted &&
-            it.isInitFinish && it.window.decorView.hasWindowFocus() &&
-            page.textChapter === chapter && !page.isMsgPage
-    }
+    private fun awaitReader(index: Int, previous: TextChapter? = null) =
+        await("reader chapter $index completed") {
+            val chapter = ReadBook.curTextChapter
+            val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
+            ReadBook.book?.bookUrl == book.bookUrl &&
+                ReadBook.durChapterIndex == index &&
+                chapter != null &&
+                chapter.chapter.url == chapters[index].url &&
+                chapter !== previous &&
+                chapter.isCompleted &&
+                it.isInitFinish &&
+                it.window.decorView.hasWindowFocus() &&
+                page.textChapter === chapter &&
+                !page.isMsgPage
+        }
 
     private fun await(description: String, condition: (ReadBookActivity) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15000
@@ -737,12 +1001,15 @@ class ContentReversalUiTest {
         val chapter = ReadBook.curTextChapter
         var pageState = "unavailable"
         scenario!!.onActivity {
-            pageState = "messagePage=${it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage}, " +
-                "readerMenu=${it.findViewById<ReadMenu>(R.id.read_menu).isVisible}, bottomDialog=${it.bottomDialog}"
+            pageState =
+                "messagePage=${it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage}, " +
+                    "readerMenu=${it.readMenu.isVisible}, bottomDialog=${it.bottomDialog}"
         }
-        throw AssertionError("Timed out waiting for $description; chapter=${ReadBook.durChapterIndex}, " +
-            "book=${ReadBook.book?.bookUrl}, url=${chapter?.chapter?.url}, complete=${chapter?.isCompleted}, $pageState, " +
-            "cached=${BookHelp.getContent(book, chapters[ReadBook.durChapterIndex.coerceIn(0, 1)])}")
+        throw AssertionError(
+            "Timed out waiting for $description; chapter=${ReadBook.durChapterIndex}, " +
+                "book=${ReadBook.book?.bookUrl}, url=${chapter?.chapter?.url}, complete=${chapter?.isCompleted}, $pageState, " +
+                "cached=${BookHelp.getContent(book, chapters[ReadBook.durChapterIndex.coerceIn(0, 1)])}"
+        )
     }
 
     private fun dragReader(fromX: Float, fromY: Float, toX: Float, toY: Float) {
@@ -751,9 +1018,18 @@ class ContentReversalUiTest {
             view.getLocationOnScreen(location)
             floatArrayOf(location[0] + view.width * x, location[1] + view.height * y)
         }
-        onView(withId(R.id.read_view)).perform(GeneralSwipeAction(Swipe.SLOW,
-            coordinates(fromX, fromY), coordinates(toX, toY), Press.FINGER))
-        scenario!!.onActivity { it.findViewById<ReadView>(R.id.read_view).pageDelegate?.abortAnim() }
+        onView(withId(R.id.read_view))
+            .perform(
+                GeneralSwipeAction(
+                    Swipe.SLOW,
+                    coordinates(fromX, fromY),
+                    coordinates(toX, toY),
+                    Press.FINGER,
+                )
+            )
+        scenario!!.onActivity {
+            it.findViewById<ReadView>(R.id.read_view).pageDelegate?.abortAnim()
+        }
         awaitDraw()
     }
 
@@ -772,10 +1048,13 @@ class ContentReversalUiTest {
         awaitDraw()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            val directory = checkNotNull(context.getExternalFilesDir("ui-regression")).apply { mkdirs() }
+            val directory =
+                checkNotNull(context.getExternalFilesDir("ui-regression")).apply { mkdirs() }
             File(directory, "$name.png").outputStream().use {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-        } finally { bitmap.recycle() }
+        } finally {
+            bitmap.recycle()
+        }
     }
 }

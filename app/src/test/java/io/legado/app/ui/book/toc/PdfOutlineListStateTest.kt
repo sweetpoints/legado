@@ -1,18 +1,20 @@
 package io.legado.app.ui.book.toc
 
+import io.legado.app.model.book.toc.*
 import io.legado.app.model.localBook.PdfOutlineNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class PdfOutlineListStateTest {
-    private val nodes = listOf(
-        PdfOutlineNode(0, null, 0, "第一部分", null),
-        PdfOutlineNode(1, 0, 1, "章节", 3),
-        PdfOutlineNode(2, 1, 2, "同页小节", 3),
-        PdfOutlineNode(3, 0, 1, "另一章", 7),
-        PdfOutlineNode(4, null, 0, "前言", 0),
-    )
+    private val nodes =
+        listOf(
+            PdfOutlineNode(0, null, 0, "第一部分", null),
+            PdfOutlineNode(1, 0, 1, "章节", 3),
+            PdfOutlineNode(2, 1, 2, "同页小节", 3),
+            PdfOutlineNode(3, 0, 1, "另一章", 7),
+            PdfOutlineNode(4, null, 0, "前言", 0),
+        )
 
     @Test
     fun searchShowsAncestorsWithoutLosingCollapsedState() {

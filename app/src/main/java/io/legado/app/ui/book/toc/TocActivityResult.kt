@@ -8,8 +8,7 @@ import androidx.activity.result.contract.ActivityResultContract
 class TocActivityResult : ActivityResultContract<String, Array<Any>?>() {
 
     override fun createIntent(context: Context, input: String): Intent {
-        return Intent(context, TocActivity::class.java)
-            .putExtra("bookUrl", input)
+        return Intent(context, TocActivity::class.java).putExtra("bookUrl", input)
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Array<Any>? {
@@ -23,10 +22,10 @@ class TocActivityResult : ActivityResultContract<String, Array<Any>?>() {
                     it.getIntExtra("chapterInVolumeIndex", 0),
                     it.getIntExtra(
                         EXTRA_HIGHLIGHT_LAYOUT_TITLE_LENGTH,
-                        NO_HIGHLIGHT_LAYOUT_TITLE_LENGTH
+                        NO_HIGHLIGHT_LAYOUT_TITLE_LENGTH,
                     ),
                     it.getStringExtra(EXTRA_HIGHLIGHT_ANCHOR_TEXT).orEmpty(),
-                    it.getIntExtra(EXTRA_PDF_PAGE_INDEX, -1)
+                    it.getIntExtra(EXTRA_PDF_PAGE_INDEX, -1),
                 )
             }
         }

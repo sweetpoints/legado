@@ -1,115 +1,164 @@
 package io.legado.app.ui.book.read.config
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.TipSetting
+import io.legado.app.data.preferences.TipSettingsRepository
+import io.legado.app.data.preferences.TipSettingsSnapshot
+import io.legado.app.data.preferences.TipTemplateSlot
+import io.legado.app.data.preferences.tipSettingEvents
+import io.legado.app.data.preferences.tipTemplateEvents
+import io.legado.app.help.config.ReaderInfoTemplate
+import org.junit.Assert.*
 import org.junit.Test
-import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
+
+internal class FakeTipSettingsRepository : TipSettingsRepository {
+    var snapshot =
+        TipSettingsSnapshot(
+            TipSetting.entries.associateWith { if (it == TipSetting.TipSize) 12 else 0 },
+            templates = TipTemplateSlot.entries.associateWith { "prefix-${it.name}" },
+        )
+    val settingsWritten = mutableListOf<Pair<TipSetting, Int>>()
+    val templatesWritten = mutableListOf<Pair<TipTemplateSlot, String>>()
+    val fontsWritten = mutableListOf<String>()
+
+    override fun load() = snapshot
+
+    override fun set(setting: TipSetting, value: Int) {
+        settingsWritten += setting to value
+        snapshot = snapshot.copy(values = snapshot.values + (setting to value))
+    }
+
+    override fun setFont(path: String) {
+        fontsWritten += path
+        snapshot = snapshot.copy(titleFont = path)
+    }
+
+    override fun setTemplate(slot: TipTemplateSlot, value: String) {
+        templatesWritten += slot to value
+        snapshot = snapshot.copy(templates = snapshot.templates + (slot to value))
+    }
+}
 
 class TipConfigDialogTemplateWiringTest {
-
     @Test
-    fun `template editor layout is scrollable and exposes edit and placeholder controls`() {
-        val layout = readProjectFile("src/main/res/layout/dialog_reader_info_template.xml")
-
-        assertTrue(layout.contains("androidx.core.widget.NestedScrollView"))
-        assertTrue(layout.contains("io.legado.app.lib.theme.view.ThemeEditText"))
-        assertTrue(layout.contains("android:id=\"@+id/edit_template\""))
-        assertTrue(layout.contains("android:hint=\"@string/reader_info_template_hint\""))
-        assertTrue(layout.contains("android:maxLines=\"1\""))
-        assertTrue(layout.contains("android:singleLine=\"true\""))
-        assertTrue(layout.contains("com.google.android.material.chip.ChipGroup"))
-        assertTrue(layout.contains("android:id=\"@+id/chip_placeholders\""))
-    }
-
-    @Test
-    fun `all reader info rows edit and summarize their matching template fields`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt"
-        )
-        val pairs = mapOf(
-            "llHeaderLeft" to "tipHeaderLeftTemplate" to "tipHeaderLeft",
-            "llHeaderMiddle" to "tipHeaderMiddleTemplate" to "tipHeaderMiddle",
-            "llHeaderRight" to "tipHeaderRightTemplate" to "tipHeaderRight",
-            "llFooterLeft" to "tipFooterLeftTemplate" to "tipFooterLeft",
-            "llFooterMiddle" to "tipFooterMiddleTemplate" to "tipFooterMiddle",
-            "llFooterRight" to "tipFooterRightTemplate" to "tipFooterRight",
-        )
-
-        pairs.forEach { (row, fields) ->
-            val (template, legacy) = fields
-            val summary = row.replaceFirst("ll", "tv")
-            assertTrue(source.contains("$summary.text = effectiveTemplate($template, $legacy)"))
-            assertTrue(source.contains("$row.setOnClickListener"))
-            assertTrue(source.contains("current = effectiveTemplate($template, $legacy)"))
-            assertTrue(source.contains("$template = it"))
+    fun eachOfSixSlotsOpensExactCurrentTemplateAndConfirmsOnlyItsOwnField() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        TipTemplateSlot.entries.forEach { slot ->
+            model.openTemplate(slot)
+            assertEquals(repository.snapshot.templates[slot], model.state.value.template?.text)
+            model.editTemplate("edited-${slot.name}", 0, 0)
+            model.confirmTemplate()
+            model.confirmTemplate()
+            assertEquals(slot to "edited-${slot.name}", repository.templatesWritten.last())
+            assertEquals("edited-${slot.name}", model.state.value.settings.templates[slot])
         }
-        assertFalse(source.contains("tipTemplatePreview"))
-        assertFalse(source.contains("TIP_TEMPLATE_PREVIEW_LIMIT"))
+        assertEquals(6, repository.templatesWritten.size)
+        assertEquals(arrayListOf(2, 6), tipTemplateEvents())
     }
 
     @Test
-    fun `template summaries keep labels visible when values are long`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(readProjectFile("src/main/res/layout/dialog_tip_config.xml").byteInputStream())
-        val textViews = document.getElementsByTagName("TextView")
-        val elements = (0 until textViews.length)
-            .map { textViews.item(it) as Element }
-            .associateBy { it.getAttribute("android:id") }
-        val summaryIds = listOf(
-            "tv_header_left",
-            "tv_header_middle",
-            "tv_header_right",
-            "tv_footer_left",
-            "tv_footer_middle",
-            "tv_footer_right",
-        )
+    fun insertionReplacesReversedSelectionAndPlacesCursorAfterPlaceholder() {
+        val model = TipSettingsViewModel(FakeTipSettingsRepository(), SavedStateHandle())
+        model.openTemplate(TipTemplateSlot.HeaderLeft)
+        model.editTemplate("abcdef", 5, 2)
+        model.insertPlaceholder(ReaderInfoTemplate.TIME)
+        assertEquals("ab${ReaderInfoTemplate.TIME}f", model.state.value.template?.text)
+        val cursor = 2 + ReaderInfoTemplate.TIME.length
+        assertEquals(cursor, model.state.value.template?.selectionStart)
+        assertEquals(cursor, model.state.value.template?.selectionEnd)
+    }
 
-        summaryIds.forEach { id ->
-            val element = elements.getValue("@+id/$id")
-            assertEquals("0dp", element.getAttribute("android:layout_width"))
-            assertEquals("1", element.getAttribute("android:layout_weight"))
-            assertEquals("end", element.getAttribute("android:ellipsize"))
-            assertEquals("end", element.getAttribute("android:gravity"))
-            assertEquals("1", element.getAttribute("android:maxLines"))
+    @Test
+    fun outOfBoundsSelectionIsClampedAndEmptyTemplateCanBeSaved() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.openTemplate(TipTemplateSlot.FooterRight)
+        model.editTemplate("abc", -50, 100)
+        model.insertPlaceholder(ReaderInfoTemplate.PAGE)
+        assertEquals(ReaderInfoTemplate.PAGE, model.state.value.template?.text)
+        model.editTemplate("", 0, 0)
+        model.confirmTemplate()
+        assertEquals(TipTemplateSlot.FooterRight to "", repository.templatesWritten.single())
+    }
+
+    @Test
+    fun recreationRetainsUnsavedTextSelectionAndSlotWithoutWriting() {
+        val repository = FakeTipSettingsRepository()
+        val handle = SavedStateHandle()
+        val model = TipSettingsViewModel(repository, handle)
+        model.openTemplate(TipTemplateSlot.FooterMiddle)
+        model.editTemplate("unsaved draft", 7, 2)
+        val restored =
+            TipSettingsViewModel(
+                repository,
+                SavedStateHandle(handle.keys().associateWith { handle.get<Any>(it) }),
+            )
+        assertEquals(model.state.value.template, restored.state.value.template)
+        assertTrue(repository.templatesWritten.isEmpty())
+        restored.insertPlaceholder(ReaderInfoTemplate.BATTERY)
+        restored.confirmTemplate()
+        assertEquals(
+            TipTemplateSlot.FooterMiddle to "un${ReaderInfoTemplate.BATTERY} draft",
+            repository.templatesWritten.single(),
+        )
+    }
+
+    @Test
+    fun cancelDiscardsDraftAndReopeningLoadsStoredValue() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.openTemplate(TipTemplateSlot.HeaderRight)
+        model.editTemplate("cancelled", 4, 4)
+        model.dismissEditors()
+        model.confirmTemplate()
+        assertTrue(repository.templatesWritten.isEmpty())
+        model.openTemplate(TipTemplateSlot.HeaderRight)
+        assertEquals("prefix-HeaderRight", model.state.value.template?.text)
+    }
+
+    @Test
+    fun externalColorRefreshNeverOverwritesTemplateDraftOrSelection() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.openTemplate(TipTemplateSlot.HeaderMiddle)
+        model.editTemplate("draft", 1, 4)
+        val draft = model.state.value.template
+        repository.snapshot =
+            repository.snapshot.copy(
+                values = repository.snapshot.values + (TipSetting.TitleColor to 0xff112233.toInt())
+            )
+        model.refresh()
+        assertEquals(draft, model.state.value.template)
+        assertEquals(0xff112233.toInt(), model.state.value.settings[TipSetting.TitleColor])
+    }
+
+    @Test
+    fun eventPayloadsMatchTitleAndInfoBarContracts() {
+        listOf(TipSetting.TitleMode, TipSetting.SplitTitle, TipSetting.TitleNumberSpacing).forEach {
+            assertEquals(arrayListOf(5), tipSettingEvents(it))
         }
-    }
-
-    @Test
-    fun `editor normalizes selection and uses editable text for replace and save`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/TipConfigDialog.kt"
-        )
-        val compactSource = source.replace(Regex("\\s+"), " ").replace(" .", ".")
-
-        assertTrue(source.contains("ReaderInfoTemplate.placeholders.forEach"))
-        assertTrue(source.contains("val editable = edit.editableText"))
-        assertTrue(
-            compactSource.contains(
-                "minOf(edit.selectionStart, edit.selectionEnd).coerceIn(0, editable.length)"
+        listOf(
+                TipSetting.TitleSize,
+                TipSetting.TitleLineSpacing,
+                TipSetting.TitleBold,
+                TipSetting.TitleColor,
+                TipSetting.TitleNumberSize,
+                TipSetting.TitleNumberColor,
+                TipSetting.TitleTop,
+                TipSetting.TitleBottom,
             )
-        )
-        assertTrue(
-            compactSource.contains(
-                "maxOf(edit.selectionStart, edit.selectionEnd).coerceIn(0, editable.length)"
+            .forEach { assertEquals(arrayListOf(8, 5), tipSettingEvents(it)) }
+        listOf(
+                TipSetting.HeaderMode,
+                TipSetting.FooterMode,
+                TipSetting.TipSize,
+                TipSetting.TipColor,
+                TipSetting.DividerColor,
             )
-        )
-        assertTrue(source.contains("editable.replace(start, end, placeholder)"))
-        assertTrue(source.contains("save(dialogBinding.editTemplate.editableText.toString())"))
-        assertFalse(source.contains("edit.text?.replace"))
-        assertFalse(source.contains("editTemplate.text.toString()"))
-        assertTrue(source.contains("postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))"))
-        assertFalse(source.contains("clearRepeat"))
-    }
-
-    private infix fun Pair<String, String>.to(legacy: String) =
-        first to (second to legacy)
-
-    private fun readProjectFile(pathInApp: String): String {
-        val candidates = listOf(File(pathInApp), File("app/$pathInApp"))
-        return candidates.first { it.isFile }.readText()
+            .forEach { assertEquals(arrayListOf(2), tipSettingEvents(it)) }
+        val first = tipTemplateEvents()
+        first.clear()
+        assertEquals(arrayListOf(2, 6), tipTemplateEvents())
     }
 }

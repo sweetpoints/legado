@@ -3,10 +3,10 @@ package io.legado.app.model
 import io.legado.app.data.entities.Book
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ManualReplaceRuleContractTest {
 
@@ -40,15 +40,12 @@ class ManualReplaceRuleContractTest {
         assertTrue(viewModel.contains("ReadBook.clearTextChapter()"))
 
         val menu = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        assertTrue(menu.contains("R.id.menu_manual_replace_rule -> showDialogFragment<ManualReplaceRulesDialog>()"))
+        assertTrue(
+            menu.contains(
+                "R.id.menu_manual_replace_rule -> showDialogFragment<ManualReplaceRulesDialog>()"
+            )
+        )
         assertTrue(menu.contains("item.isVisible = !AppConfig.manualReplaceRule"))
-
-        val dialog = source("app/src/main/java/io/legado/app/ui/book/read/ManualReplaceRulesDialog.kt")
-        assertTrue(dialog.contains("selectedIds.retainAll"))
-        assertTrue(dialog.contains("Mode.ToggleAndReverse"))
-
-        val replaceActivity = source("app/src/main/java/io/legado/app/ui/replace/ReplaceRuleActivity.kt")
-        assertTrue(replaceActivity.contains("setResult(RESULT_OK)"))
     }
 
     @Test
@@ -61,8 +58,9 @@ class ManualReplaceRuleContractTest {
 
     private fun source(relativePath: String): String {
         val userDir = requireNotNull(System.getProperty("user.dir"))
-        val root = generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+        val root =
+            generateSequence(File(userDir)) { it.parentFile }
+                .first { File(it, "app/src/main").isDirectory }
         return File(root, relativePath).readText().replace("\r\n", "\n")
     }
 }

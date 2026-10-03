@@ -1,11 +1,11 @@
 package io.legado.app.api
 
 import io.legado.app.api.controller.BookSourceController
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class JsSourceWebApiContractTest {
 
@@ -19,11 +19,9 @@ class JsSourceWebApiContractTest {
 
     @Test
     fun `token storage commits before process exit`() {
-        val appConfig = readProjectFile(
-            "app/src/main/java/io/legado/app/help/config/AppConfig.kt"
-        )
-        val tokenStorage = appConfig.substringAfter("var jsSourceApiToken")
-            .substringBefore("var tocUiUseReplace")
+        val appConfig = readProjectFile("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
+        val tokenStorage =
+            appConfig.substringAfter("var jsSourceApiToken").substringBefore("var tocUiUseReplace")
 
         assertTrue(tokenStorage.contains(".commit()"))
         assertFalse(tokenStorage.contains(".apply()"))
@@ -31,39 +29,29 @@ class JsSourceWebApiContractTest {
 
     @Test
     fun `token protection defaults on and restarts active services`() {
-        val appConfig = readProjectFile(
-            "app/src/main/java/io/legado/app/help/config/AppConfig.kt"
-        )
-        val preferences = readProjectFile("app/src/main/res/xml/pref_config_other.xml")
-        val settings = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt"
-        )
-        val protectionPreference = preferences
-            .substringBefore("android:key=\"jsSourceApiToken\"")
-            .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference")
-        val protectionChange = settings
-            .substringAfter("PreferKey.jsSourceApiTokenRequired ->")
-            .substringBefore("PreferKey.defaultBookTreeUri ->")
-
+        val appConfig = readProjectFile("app/src/main/java/io/legado/app/help/config/AppConfig.kt")
+        assertTrue(appConfig.contains("getPrefBoolean(PreferKey.jsSourceApiTokenRequired, true)"))
+        val settings = io.legado.app.model.settings.OtherSettingsSnapshot()
         assertTrue(
-            appConfig.contains(
-                "getPrefBoolean(PreferKey.jsSourceApiTokenRequired, true)"
-            )
+            settings.switches.getValue(io.legado.app.model.settings.OtherSwitch.TokenRequired)
         )
-        assertTrue(protectionPreference.contains("android:defaultValue=\"true\""))
-        assertTrue(protectionPreference.contains("android:key=\"jsSourceApiTokenRequired\""))
-        assertTrue(protectionChange.contains("WebService.stop(requireContext())"))
-        assertTrue(protectionChange.contains("WebService.start(requireContext())"))
-        assertTrue(protectionChange.contains("McpService.restart(requireContext())"))
+        assertEquals(
+            io.legado.app.constant.PreferKey.jsSourceApiTokenRequired,
+            io.legado.app.model.settings.OtherSwitch.TokenRequired.key,
+        )
+        // Actual restart effect plans and consume-before-delivery are covered by
+        // OtherSettingsRepositoryTest, OtherSettingsViewModelTest and OtherSettingsRouteTest.
+
     }
 
     @Test
     fun `request boundary rejects unsafe bodies before parsing`() {
-        val validHeaders = mapOf(
-            "x-legado-token" to "secret",
-            "content-type" to "text/plain; charset=utf-8",
-            "content-length" to "128",
-        )
+        val validHeaders =
+            mapOf(
+                "x-legado-token" to "secret",
+                "content-type" to "text/plain; charset=utf-8",
+                "content-length" to "128",
+            )
 
         assertTrue(BookSourceController.validateJsSourceRequest(validHeaders, "secret") == null)
         assertTrue(BookSourceController.hasValidJsSourceApiToken(validHeaders, "secret"))
@@ -98,21 +86,24 @@ class JsSourceWebApiContractTest {
         )
         assertFalse(
             BookSourceController.validateJsSourceRequest(
-                validHeaders - "x-legado-token",
-                "secret",
-            )!!.isSuccess
+                    validHeaders - "x-legado-token",
+                    "secret",
+                )!!
+                .isSuccess
         )
         assertFalse(
             BookSourceController.validateJsSourceRequest(
-                validHeaders + ("x-legado-token" to "wrong"),
-                "secret",
-            )!!.isSuccess
+                    validHeaders + ("x-legado-token" to "wrong"),
+                    "secret",
+                )!!
+                .isSuccess
         )
         assertFalse(
             BookSourceController.validateJsSourceRequest(
-                validHeaders,
-                null,
-            )!!.isSuccess
+                    validHeaders,
+                    null,
+                )!!
+                .isSuccess
         )
         assertTrue(
             BookSourceController.validateJsSourceRequest(
@@ -151,15 +142,17 @@ class JsSourceWebApiContractTest {
         )
         assertFalse(
             BookSourceController.validateJsSourceRequest(
-                validHeaders + ("content-length" to "1048577"),
-                "secret",
-            )!!.isSuccess
+                    validHeaders + ("content-length" to "1048577"),
+                    "secret",
+                )!!
+                .isSuccess
         )
         assertFalse(
             BookSourceController.validateJsSourceRequest(
-                validHeaders + ("transfer-encoding" to "chunked"),
-                "secret",
-            )!!.isSuccess
+                    validHeaders + ("transfer-encoding" to "chunked"),
+                    "secret",
+                )!!
+                .isSuccess
         )
 
         val server = readProjectFile("app/src/main/java/io/legado/app/web/HttpServer.kt")
@@ -168,8 +161,8 @@ class JsSourceWebApiContractTest {
         assertTrue(validationIndex >= 0)
         assertTrue(parseBodyIndex >= 0)
         assertTrue(validationIndex < parseBodyIndex)
-        val rejectionBranch = server.substringAfter("if (requestError != null)")
-            .substringBefore("} else")
+        val rejectionBranch =
+            server.substringAfter("if (requestError != null)").substringBefore("} else")
         assertTrue(rejectionBranch.contains("shouldCloseConnection = true"))
         assertTrue(server.contains("response.closeConnection(true)"))
         assertTrue(server.contains("PROTECTED_SOURCE_WRITE_ROUTES"))
@@ -184,9 +177,10 @@ class JsSourceWebApiContractTest {
 
     @Test
     fun `controller limits payload timeout and preserves cancellation`() {
-        val controller = readProjectFile(
-            "app/src/main/java/io/legado/app/api/controller/BookSourceController.kt"
-        )
+        val controller =
+            readProjectFile(
+                "app/src/main/java/io/legado/app/api/controller/BookSourceController.kt"
+            )
         val timeoutCatch = controller.indexOf("catch (error: TimeoutCancellationException)")
         val cancellationCatch = controller.indexOf("catch (error: CancellationException)")
         val genericCatch = controller.indexOf("catch (error: Exception)")
@@ -208,24 +202,22 @@ class JsSourceWebApiContractTest {
         assertTrue(cancellationCatch >= 0)
         assertTrue(genericCatch > cancellationCatch)
         assertTrue(server.contains("x-legado-token"))
-        val webSocketServer = readProjectFile(
-            "app/src/main/java/io/legado/app/web/WebSocketServer.kt"
-        )
+        val webSocketServer =
+            readProjectFile("app/src/main/java/io/legado/app/web/WebSocketServer.kt")
         assertFalse(webSocketServer.contains("WebOriginPolicy"))
         assertFalse(webSocketServer.contains("tokenRequired"))
         assertTrue(webSocketServer.contains("hasValidJsSourceWebSocketProtocol"))
         assertTrue(webSocketServer.contains("override fun serve"))
         assertTrue(webSocketServer.contains("Response.Status.FORBIDDEN"))
         assertTrue(webSocketServer.contains("\"/searchBook\""))
-        val bookSearchWebSocket = readProjectFile(
-            "app/src/main/java/io/legado/app/web/socket/BookSearchWebSocket.kt"
-        )
-        val bookDebugWebSocket = readProjectFile(
-            "app/src/main/java/io/legado/app/web/socket/BookSourceDebugWebSocket.kt"
-        )
-        val rssDebugWebSocket = readProjectFile(
-            "app/src/main/java/io/legado/app/web/socket/RssSourceDebugWebSocket.kt"
-        )
+        val bookSearchWebSocket =
+            readProjectFile("app/src/main/java/io/legado/app/web/socket/BookSearchWebSocket.kt")
+        val bookDebugWebSocket =
+            readProjectFile(
+                "app/src/main/java/io/legado/app/web/socket/BookSourceDebugWebSocket.kt"
+            )
+        val rssDebugWebSocket =
+            readProjectFile("app/src/main/java/io/legado/app/web/socket/RssSourceDebugWebSocket.kt")
         assertFalse(bookSearchWebSocket.contains("matchesJsSourceApiToken"))
         assertFalse(bookSearchWebSocket.contains("searchMap[\"token\"]"))
         assertTrue(bookSearchWebSocket.contains("AUTH_TIMEOUT_MILLIS"))
@@ -239,42 +231,18 @@ class JsSourceWebApiContractTest {
         assertDebugSocketFailureReleasesOwner(bookDebugWebSocket)
         assertDebugSocketFailureReleasesOwner(rssDebugWebSocket)
 
-        val bookDebugModel = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugModel.kt"
-        )
-        val rssDebugModel = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/rss/source/debug/RssSourceDebugModel.kt"
-        )
-        assertTrue(bookDebugModel.contains("state == -1 || state == 1000"))
-        assertTrue(rssDebugModel.contains("state == -1 || state == 1000"))
-        assertTrue(bookDebugModel.contains("Debug.cancelDebug(this)"))
-        assertTrue(rssDebugModel.contains("Debug.cancelDebug(this)"))
-        assertTrue(bookDebugModel.contains("error: ((Throwable) -> Unit)?"))
-        assertTrue(rssDebugModel.contains("error: ((Throwable) -> Unit)?"))
-        assertTrue(bookDebugModel.contains("error?.invoke(it)"))
-        assertTrue(rssDebugModel.contains("error?.invoke(it)"))
-
-        val bookDebugActivity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/debug/BookSourceDebugActivity.kt"
-        )
-        val rssDebugActivity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/rss/source/debug/RssSourceDebugActivity.kt"
-        )
-        assertTrue(bookDebugActivity.contains("error.localizedMessage ?: \"调试失败\""))
-        assertTrue(rssDebugActivity.contains("error.localizedMessage ?: \"调试失败\""))
-
         val debugModel = readProjectFile("app/src/main/java/io/legado/app/model/Debug.kt")
         assertTrue(debugModel.contains("withActiveDebugSession"))
         assertTrue(debugModel.contains("trackDebugTask"))
         assertTrue(debugModel.contains("debugSessionId"))
         assertTrue(debugModel.contains("没有正文章节\", state = -1"))
         assertTrue(
-            debugModel.substringAfter("private fun trackDebugTask")
-                .contains("tasks.add(task)")
+            debugModel.substringAfter("private fun trackDebugTask").contains("tasks.add(task)")
         )
-        val sourceActivity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
-        )
+        val sourceActivity =
+            readProjectFile(
+                "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
+            )
         assertFalse(
             sourceActivity.contains(
                 "CheckSource.stop(this)\n                        Debug.finishChecking()"
@@ -292,15 +260,16 @@ class JsSourceWebApiContractTest {
         assertTrue(tokenCheck >= 0)
         assertTrue(logsRoute > tokenCheck)
         assertTrue(detailRoute > tokenCheck)
-        assertTrue(server.contains("BookSourceController.hasValidJsSourceApiToken(session.headers)"))
+        assertTrue(
+            server.contains("BookSourceController.hasValidJsSourceApiToken(session.headers)")
+        )
         assertTrue(server.contains("PROTECTED_HTTP_LOG_READ_ROUTES"))
-        val getBranch = server.substringAfter("Method.GET ->")
-            .substringBefore("else -> Unit")
-        val rejectionBranch = getBranch.substringAfter("if (requestError != null)")
-            .substringBefore("} else")
+        val getBranch = server.substringAfter("Method.GET ->").substringBefore("else -> Unit")
+        val rejectionBranch =
+            getBranch.substringAfter("if (requestError != null)").substringBefore("} else")
         assertTrue(rejectionBranch.contains("shouldCloseConnection = true"))
-        val optionsBranch = server.substringAfter("Method.OPTIONS ->")
-            .substringBefore("Method.POST ->")
+        val optionsBranch =
+            server.substringAfter("Method.OPTIONS ->").substringBefore("Method.POST ->")
         assertTrue(
             optionsBranch.contains(
                 "response.addHeader(\"Access-Control-Allow-Methods\", \"GET, POST\")"
@@ -313,11 +282,14 @@ class JsSourceWebApiContractTest {
 
     @Test
     fun `editor delegates persistence to shared upsert`() {
-        val activity = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
-        )
+        val activity =
+            readProjectFile(
+                "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditRepository.kt"
+            )
 
-        assertTrue(activity.contains("JsSourceUpsert.save(text, openedSourceUrl)"))
+        assertTrue(
+            activity.contains("JsSourceUpsert.save(text, sourceUrl, onAccepted = onAccepted)")
+        )
         assertFalse(activity.contains("private fun preserveUserState"))
         assertFalse(activity.contains("private fun stampSource"))
     }
@@ -326,14 +298,11 @@ class JsSourceWebApiContractTest {
     fun `documentation records endpoint limits and network boundary`() {
         val api = readProjectFile("api.md")
         val updateLog = readProjectFile("app/src/main/assets/updateLog.md")
-        val backupConfig = readProjectFile(
-            "app/src/main/java/io/legado/app/help/storage/BackupConfig.kt"
-        )
+        val backupConfig =
+            readProjectFile("app/src/main/java/io/legado/app/help/storage/BackupConfig.kt")
         val manifest = readProjectFile("app/src/main/AndroidManifest.xml")
         val backupRules = readProjectFile("app/src/main/res/xml/backup_rules.xml")
-        val extractionRules = readProjectFile(
-            "app/src/main/res/xml/data_extraction_rules.xml"
-        )
+        val extractionRules = readProjectFile("app/src/main/res/xml/data_extraction_rules.xml")
         val webAxios = readProjectFile("modules/web/src/api/axios.ts")
         val webApi = readProjectFile("modules/web/src/api/api.ts")
         val webShelf = readProjectFile("modules/web/src/views/BookShelf.vue")
@@ -409,9 +378,10 @@ class JsSourceWebApiContractTest {
         val form = readProjectFile("modules/web/src/components/SourceTabForm.vue")
         val config = readProjectFile("modules/web/src/config/bookSourceEditConfig.ts")
         val webApi = readProjectFile("modules/web/src/api/api.ts")
-        val controller = readProjectFile(
-            "app/src/main/java/io/legado/app/api/controller/BookSourceController.kt"
-        )
+        val controller =
+            readProjectFile(
+                "app/src/main/java/io/legado/app/api/controller/BookSourceController.kt"
+            )
 
         assertTrue(sourceEditor.contains("JSON 书源"))
         assertTrue(sourceEditor.contains("JavaScript 书源"))
@@ -424,29 +394,30 @@ class JsSourceWebApiContractTest {
         assertTrue(controller.contains("openedSourceUrl = openedSourceUrl"))
         assertTrue(form.contains("source[namespace] ||= {}"))
 
-        val reviewFields = listOf(
-            "enabled",
-            "reviewSummaryUrl",
-            "summaryListRule",
-            "summaryParagraphIndexRule",
-            "summaryCountRule",
-            "summaryParagraphDataRule",
-            "reviewDetailUrl",
-            "reviewDetailNextPageUrl",
-            "detailListRule",
-            "detailIdRule",
-            "detailAvatarRule",
-            "detailNameRule",
-            "detailBadgeRule",
-            "detailContentRule",
-            "reviewQuoteUrl",
-            "replyListRule",
-            "replyIdRule",
-            "replyAvatarRule",
-            "replyNameRule",
-            "replyBadgeRule",
-            "replyContentRule",
-        )
+        val reviewFields =
+            listOf(
+                "enabled",
+                "reviewSummaryUrl",
+                "summaryListRule",
+                "summaryParagraphIndexRule",
+                "summaryCountRule",
+                "summaryParagraphDataRule",
+                "reviewDetailUrl",
+                "reviewDetailNextPageUrl",
+                "detailListRule",
+                "detailIdRule",
+                "detailAvatarRule",
+                "detailNameRule",
+                "detailBadgeRule",
+                "detailContentRule",
+                "reviewQuoteUrl",
+                "replyListRule",
+                "replyIdRule",
+                "replyAvatarRule",
+                "replyNameRule",
+                "replyBadgeRule",
+                "replyContentRule",
+            )
         reviewFields.forEach { field ->
             assertTrue("Missing Web review field: $field", config.contains("id: '$field'"))
         }
@@ -482,8 +453,9 @@ class JsSourceWebApiContractTest {
 
     private fun readProjectFile(path: String): String {
         val userDirectory = File(requireNotNull(System.getProperty("user.dir"))).absoluteFile
-        val repositoryRoot = generateSequence(userDirectory) { it.parentFile }
-            .firstOrNull { File(it, "app/src/main").isDirectory }
+        val repositoryRoot =
+            generateSequence(userDirectory) { it.parentFile }
+                .firstOrNull { File(it, "app/src/main").isDirectory }
         requireNotNull(repositoryRoot) { "Repository root not found from $userDirectory" }
         val file = File(repositoryRoot, path)
         require(file.isFile) { "Project file not found: $file" }
@@ -491,10 +463,14 @@ class JsSourceWebApiContractTest {
     }
 
     private fun assertDebugSocketFailureReleasesOwner(source: String) {
-        val heartbeat = source.substringAfter("private fun startHeartbeat()")
-            .substringBefore("override fun onClose")
-        val printLog = source.substringAfter("override fun printLog")
-            .substringBefore("private fun cancelOwnedDebug")
+        val heartbeat =
+            source
+                .substringAfter("private fun startHeartbeat()")
+                .substringBefore("override fun onClose")
+        val printLog =
+            source
+                .substringAfter("override fun printLog")
+                .substringBefore("private fun cancelOwnedDebug")
 
         listOf(heartbeat, printLog).forEach { section ->
             val failure = section.substringAfter("}.onFailure {")

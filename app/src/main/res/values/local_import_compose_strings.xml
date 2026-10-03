@@ -1,0 +1,4 @@
+<resources>
+    <string name="local_import_recovery_title">Interrupted import action</string>
+    <string name="local_import_recovery_message">An earlier operation may have been accepted. It will not run again automatically. Retry reviews imported files or starts a new navigation request.</string>
+</resources>

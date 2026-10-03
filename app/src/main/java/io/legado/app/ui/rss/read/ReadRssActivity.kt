@@ -4,19 +4,15 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.graphics.Bitmap
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
@@ -25,223 +21,591 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.size
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.script.rhino.runScriptWithContext
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.constant.AppConst.imagePathKey
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityRssReadBinding
+import io.legado.app.data.repository.*
+import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.WebCacheManager
-import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieStore
+import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
-import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.ui.association.OnLineImportActivity
-import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.rss.favorites.RssFavoritesDialog
-import io.legado.app.utils.ACache
-import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
-import io.legado.app.utils.isTrue
-import io.legado.app.utils.keepScreenOn
-import io.legado.app.utils.longSnackbar
-import io.legado.app.utils.openUrl
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
-import io.legado.app.utils.setTintMutate
-import io.legado.app.utils.share
-import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.startActivity
-import io.legado.app.utils.textArray
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.toggleSystemBar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
-import org.apache.commons.text.StringEscapeUtils
-import org.jsoup.Jsoup
-import splitties.views.bottomPadding
-import java.io.ByteArrayInputStream
-import java.util.regex.PatternSyntaxException
-import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.rss.article.ReadRecordDialog
-import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
-import io.legado.app.utils.StartActivityContract
-import kotlinx.coroutines.runBlocking
-import androidx.core.net.toUri
-import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.WebJsExtensions
+import io.legado.app.help.webView.WebJsExtensions.Companion.JS_INJECTION
+import io.legado.app.help.webView.WebJsExtensions.Companion.JS_URL
 import io.legado.app.help.webView.WebJsExtensions.Companion.basicJs
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameBasic
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
-import io.legado.app.help.http.newCallResponse
-import io.legado.app.help.webView.PooledWebView
-import io.legado.app.help.webView.WebJsExtensions.Companion.JS_INJECTION
-import io.legado.app.help.webView.WebJsExtensions.Companion.JS_URL
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameUrl
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.webView.WebViewPool.BLANK_HTML
 import io.legado.app.help.webView.WebViewPool.DATA_HTML
-import io.legado.app.help.webView.toWebViewRequestConfig
 import io.legado.app.help.webView.shouldInjectPreloadJs
+import io.legado.app.help.webView.toWebViewRequestConfig
+import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.model.Download
+import io.legado.app.model.rss.rssReaderImageOwner
+import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.rss.article.ReadRecordDialog
+import io.legado.app.ui.rss.favorites.RssFavoritesDialog
+import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
+import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.StartActivityContract
+import io.legado.app.utils.isTrue
+import io.legado.app.utils.keepScreenOn
+import io.legado.app.utils.openUrl
+import io.legado.app.utils.share
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.splitNotBlank
+import io.legado.app.utils.startActivity
+import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.toggleSystemBar
+import java.io.ByteArrayInputStream
+import java.lang.ref.WeakReference
+import java.net.URLDecoder
+import java.util.UUID
+import java.util.regex.PatternSyntaxException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
-import java.lang.ref.WeakReference
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import splitties.systemservices.powerManager
-import java.net.URLDecoder
-import androidx.core.graphics.createBitmap
 
 internal fun shouldPreserveRssArticleOnRefresh(
     ruleDescription: String?,
     ruleContent: String?,
 ) = ruleContent.isNullOrBlank() || !ruleDescription.isNullOrBlank()
 
-/**
- * rss阅读界面
- */
-class ReadRssActivity :
-    VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>(showOpenMenuIcon = false),
-    RssFavoritesDialog.Callback {
+/** Compose chrome around the retained, pooled RSS browser engine. */
+class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavoritesDialog.Callback {
+    internal val readerModel by
+        viewModels<RssReaderViewModel> {
+            viewModelFactory {
+                initializer {
+                    RssReaderViewModel(
+                        AppRssReaderRepository(),
+                        FileRssReaderSessionRepository(),
+                        AppRssReaderSpeechRepository(),
+                        createSavedStateHandle().withoutReaderIntent(),
+                    )
+                }
+            }
+        }
+    private val imageModel by
+        viewModels<RssReaderImageViewModel> {
+            viewModelFactory {
+                initializer {
+                    RssReaderImageViewModel(
+                        AppRssReaderImageRepository(),
+                        FileRssReaderImageSessionRepository(),
+                        createSavedStateHandle().withoutReaderIntent(),
+                    )
+                }
+            }
+        }
 
-    override val binding by viewBinding(ActivityRssReadBinding::inflate)
-    override val viewModel by viewModels<ReadRssViewModel>()
+    private fun SavedStateHandle.withoutReaderIntent() = apply {
+        listOf("origin", "title", "link", "sort", "openUrl", "startHtml").forEach {
+            remove<String>(it)
+        }
+    }
 
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
-
-    private var starMenuItem: MenuItem? = null
-    private var ttsMenuItem: MenuItem? = null
-    private var isFullscreen = false
+    private lateinit var customWebView: FrameLayout
+    private val kernel = UUID.randomUUID().toString()
+    @Volatile private var readerSnapshot: RssReaderSnapshot? = null
+    private var isFullscreen by mutableStateOf(false)
     private var wasScreenOff = false
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var interfaceInjected: String? = null
     private var needClearHistory = true
     // shouldInterceptRequest runs off the main thread; never read WebView state there.
-    @Volatile
-    private var currentPageUrl: String? = null
-    private val selectImageDir = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            ACache.get().put(imagePathKey, uri.toString())
-            viewModel.saveImage(it.value, uri)
+    @Volatile private var currentPageUrl: String? = null
+    private var imageChoice by mutableStateOf<String?>(null)
+    private var dismissedImageError by mutableStateOf<String?>(null)
+    private val snackbar = SnackbarHostState()
+    private var pickerNonce: String? = null
+    private var imageOwnerHash by mutableStateOf<String?>(null)
+    private var imageBinding: Job? = null
+    private var imageGeneration = 0L
+    private val launchRequests by lazy { FileRssReaderLaunchRepository() }
+    private val selectImageDir =
+        registerForActivityResult(HandleFileContract()) {
+            imagePickerResult(it.value, it.uri?.toString())
         }
-    }
-    private val rssJsExtensions by lazy { RssJsExtensions(this, viewModel.rssSource) }
+    private val rssJsExtensions
+        get() = RssJsExtensions(this, readerSnapshot?.source)
 
-    private val refreshNameList: MutableList<String> by lazy { mutableListOf() }
-    private fun refresh() {
-        if (viewModel.rssSource?.singleUrl == true) {
-            currentWebView.reload()
-            return
+    private val refreshNameList = mutableListOf<String>()
+    private val editSourceResult =
+        registerForActivityResult(StartActivityContract(RssSourceEditActivity::class.java)) {
+            if (it.resultCode == RESULT_OK) refresh()
         }
-        currentWebView.title?.let {
-            refreshNameList.add(it)
-        }
-        viewModel.rssArticle?.let {
-            if (shouldPreserveRssArticleOnRefresh(
-                    viewModel.rssSource?.ruleDescription,
-                    viewModel.rssSource?.ruleContent,
-                )
-            ) {
-                start(this@ReadRssActivity, it.origin, it.title, it.link, it.sort)
-            } else {
-                start(this@ReadRssActivity, true, it.origin, it.title, it.link)
+
+    private fun request(intent: Intent) =
+        RssReaderRequest(
+            intent.getStringExtra("origin"),
+            intent.getStringExtra("title"),
+            intent.getStringExtra("link"),
+            intent.getStringExtra("sort"),
+            intent.getStringExtra("openUrl"),
+            intent.getStringExtra("startHtml"),
+        )
+
+    private fun ready() = !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
+
+    internal fun imagePickerResult(value: String?, directory: String?) {
+        val nonce = value ?: pickerNonce ?: return
+        imageModel.picked(nonce, directory)
+        if (nonce == pickerNonce) pickerNonce = null
+    }
+
+    private fun bindImages(request: RssReaderRequest) {
+        imageOwnerHash = null
+        imageModel.invalidateOwner()
+        imageBinding?.cancel()
+        val epoch = ++imageGeneration
+        imageBinding = lifecycleScope.launch {
+            val hash = withContext(IO) { rssReaderImageOwner(request) }
+            currentCoroutineContext().ensureActive()
+            if (epoch == imageGeneration) {
+                imageModel.bind(hash)
+                imageOwnerHash = hash
             }
-        } ?: run {
-            viewModel.initData(intent)
-        }
-    }
-    private val editSourceResult = registerForActivityResult(
-        StartActivityContract(RssSourceEditActivity::class.java)
-    ) {
-        if (it.resultCode == RESULT_OK) {
-            refresh()
         }
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
+    private fun bindPreparedReader(ticket: String) {
+        // Invalidate the old image owner before private request IO can suspend.
+        imageOwnerHash = null
+        imageModel.invalidateOwner()
+        imageBinding?.cancel()
+        val epoch = ++imageGeneration
+        readerModel.bindPrepared(ticket, launchRequests)
+        imageBinding = lifecycleScope.launch {
+            readerModel.state
+                .map { it.loaded }
+                .distinctUntilChanged()
+                .collectLatest { loaded ->
+                    if (!loaded) return@collectLatest
+                    val input = readerModel.snapshot()?.request ?: return@collectLatest
+                    val hash = withContext(IO) { rssReaderImageOwner(input) }
+                    currentCoroutineContext().ensureActive()
+                    if (epoch == imageGeneration) {
+                        imageModel.bind(hash)
+                        imageOwnerHash = hash
+                    }
+                }
+        }
+    }
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        pickerNonce = savedInstanceState?.getString("rssReader.pickerNonce")
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
-        binding.webViewContainer.addView(currentWebView)
-        viewModel.upStarMenuData.observe(this) { upStarMenu() }
-        viewModel.upTtsMenuData.observe(this) { upTtsMenu(it) }
-        viewModel.upTitleData.observe(this) { binding.titleBar.title = it }
-        initView()
+        customWebView = FrameLayout(this)
         initWebView()
-        initLiveData()
-        viewModel.initData(intent)
         currentWebView.clearHistory()
-        onBackPressedDispatcher.addCallback(this) {
-            if (binding.customWebView.size > 0) { //关闭全屏
-                customWebViewCallback?.onCustomViewHidden()
-                return@addCallback
-            }
-            if (currentWebView.canGoBack()) {
-                val list = currentWebView.copyBackForwardList() //获取历史列表
-                val size = list.size
-                if (size == 1) {
-                    finish()
-                    return@addCallback
-                }
-                val currentIndex = list.currentIndex
-                val currentItem = list.currentItem
-                val currentUrl = currentItem?.originalUrl ?: BLANK_HTML
-                val currentTitle = currentItem?.title
-                //从后往前找，找到第一个不同链接的页面，计算需要回退多少步 避免刷新后导致返回不灵
-                var steps = 1
-                for (i in currentIndex - 1 downTo 0) {
-                    val item = list.getItemAtIndex(i)
-                    val itemTitle = item.title
-                    val index = refreshNameList.indexOf(itemTitle)
-                    if (index != -1) {
-                        refreshNameList.removeAt(index)
-                        steps++
-                        continue
-                    }
-                    val itemUrl = item.originalUrl
-                    if (itemUrl == BLANK_HTML) {
-                        finish()
-                        return@addCallback
-                    }
-                    if (itemUrl != currentUrl || itemTitle != currentTitle) {
-                        break
-                    }
-                    if (currentUrl == DATA_HTML) {
-                        break
-                    }
-                    steps++
-                }
-                if (steps == size) {
-                    finish()
-                    return@addCallback
-                }
-                currentWebView.goBackOrForward(-steps)
-                return@addCallback
-            }
-            finish()
+        val ticket = intent.getStringExtra(PREPARED_REQUEST)
+        if (ticket != null) bindPreparedReader(ticket)
+        else {
+            readerModel.bind(if (savedInstanceState == null) request(intent) else null)
+            bindImages(request(intent))
         }
+        onBackPressedDispatcher.addCallback(this) { browserBack() }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        pickerNonce?.let { outState.putString("rssReader.pickerNonce", it) }
+        super.onSaveInstanceState(outState)
+    }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        val imageState by imageModel.state.collectAsStateWithLifecycle()
+        RssReaderRoute(
+            readerModel,
+            imageModel,
+            kernel,
+            imageOwnerHash,
+            isFullscreen,
+            ::ready,
+            ::browserBack,
+            ::loadDocument,
+            ::native,
+            ::imageEffect,
+            snackbar = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                    SnackbarHost(snackbar)
+                }
+            },
+            browser = {
+                AndroidView(factory = { currentWebView }, modifier = Modifier.fillMaxSize())
+            },
+            customVideo = {
+                AndroidView(factory = { customWebView }, modifier = Modifier.fillMaxSize())
+            },
+        )
+        imageChoice?.let { image ->
+            AlertDialog(
+                onDismissRequest = { imageChoice = null },
+                title = { Text(stringResource(R.string.action_save)) },
+                text = {
+                    Column {
+                        TextButton(
+                            {
+                                imageChoice = null
+                                dismissedImageError = null
+                                imageOwnerHash?.let { imageModel.save(image, it) }
+                            },
+                            enabled = imageOwnerHash != null,
+                        ) {
+                            Text(stringResource(R.string.action_save))
+                        }
+                        TextButton(
+                            {
+                                imageChoice = null
+                                imageOwnerHash?.let(imageModel::chooseDirectory)
+                            },
+                            enabled = imageOwnerHash != null,
+                        ) {
+                            Text(stringResource(R.string.select_folder))
+                        }
+                    }
+                },
+                confirmButton = {},
+            )
+        }
+        imageState.error
+            ?.takeUnless { it == dismissedImageError }
+            ?.let { error ->
+                AlertDialog(
+                    onDismissRequest = { dismissedImageError = error },
+                    title = { Text(stringResource(R.string.action_save)) },
+                    text = { Text(error) },
+                    confirmButton = {
+                        TextButton({
+                            dismissedImageError = null
+                            imageModel.retry()
+                        }) {
+                            Text(stringResource(R.string.retry))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton({ dismissedImageError = error }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
+                )
+            }
     }
 
     override fun onNewIntent(intent: Intent) {
+        val ticket = intent.getStringExtra(PREPARED_REQUEST)
+        val duplicate =
+            ticket != null &&
+                ticket == this.intent.getStringExtra(PREPARED_REQUEST) &&
+                readerModel.state.value.loaded
         super.onNewIntent(intent)
-        binding.progressBar.visible()
-        binding.progressBar.setDurProgress(30)
         setIntent(intent)
-        viewModel.initData(intent)
+        if (duplicate) return
+        imageChoice = null
+        dismissedImageError = null
+        currentWebView.stopLoading()
+        readerSnapshot = null
+        if (ticket != null) bindPreparedReader(ticket)
+        else {
+            readerModel.bind(request(intent))
+            bindImages(request(intent))
+        }
+    }
+
+    private fun refresh() {
+        if (readerSnapshot?.source?.singleUrl == true) {
+            currentWebView.reload()
+            return
+        }
+        currentWebView.title?.let(refreshNameList::add)
+        readerModel.snapshot()?.article?.let {
+            if (
+                shouldPreserveRssArticleOnRefresh(
+                    readerSnapshot?.source?.ruleDescription,
+                    readerSnapshot?.source?.ruleContent,
+                )
+            )
+                start(this, it.origin, it.title, it.link, it.sort)
+            else start(this, true, it.origin, it.title, it.link)
+        } ?: readerModel.bind(request(intent))
+    }
+
+    private fun native(effect: RssReaderEffect) {
+        when (effect.action) {
+            RssReaderAction.Refresh -> refresh()
+            RssReaderAction.Favorite ->
+                readerModel.snapshot()?.article?.let { showDialogFragment(RssFavoritesDialog(it)) }
+            RssReaderAction.Share ->
+                (currentWebView.url ?: readerModel.snapshot()?.article?.link)?.let { share(it) }
+                    ?: toastOnUi(R.string.null_url)
+            RssReaderAction.Speech -> {
+                currentWebView.settings.javaScriptEnabled = true
+                currentWebView.evaluateJavascript("document.documentElement.outerHTML") {
+                    readerModel.speakHtml(it, kernel, effect.nonce)
+                }
+            }
+            RssReaderAction.Login ->
+                startActivity<SourceLoginActivity> {
+                    putExtra("type", "rssSource")
+                    putExtra("key", readerSnapshot?.source?.sourceUrl)
+                }
+            RssReaderAction.Browser ->
+                currentWebView.url?.let { openUrl(it) } ?: toastOnUi(R.string.null_url)
+            RssReaderAction.ReadRecords ->
+                showDialogFragment(ReadRecordDialog(readerSnapshot?.source?.sourceUrl))
+            RssReaderAction.EditSource ->
+                readerSnapshot?.source?.sourceUrl?.let { source ->
+                    editSourceResult.launch { putExtra("sourceUrl", source) }
+                }
+            RssReaderAction.Log -> showDialogFragment<AppLogDialog>()
+        }
+    }
+
+    private fun imageEffect(effect: RssReaderImageEffect, previous: String?) {
+        when (effect.kind) {
+            RssReaderImageEffectKind.Saved -> toastOnUi(R.string.success)
+            RssReaderImageEffectKind.Picker -> {
+                pickerNonce = effect.nonce
+                try {
+                    selectImageDir.launch {
+                        value = effect.nonce
+                        otherActions =
+                            arrayListOf<SelectItem<Int>>().apply {
+                                previous
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?.let { add(SelectItem(it, -1)) }
+                            }
+                    }
+                } catch (error: Exception) {
+                    pickerNonce = null
+                    imageModel.picked(effect.nonce, null)
+                    toastOnUi(error.localizedMessage ?: error.javaClass.simpleName)
+                }
+            }
+        }
+    }
+
+    override fun updateFavorite(title: String?, group: String?) {
+        readerModel.updateFavorite(title, group)
+    }
+
+    override fun deleteFavorite() {
+        readerModel.deleteFavorite()
+    }
+
+    private fun snack(message: String, action: String, click: () -> Unit) {
+        lifecycleScope.launch {
+            if (
+                snackbar.showSnackbar(message, action, duration = SnackbarDuration.Long) ==
+                    SnackbarResult.ActionPerformed && ready()
+            )
+                click()
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun initWebView() {
+        currentWebView.webChromeClient = CustomWebChromeClient()
+        currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
+        currentWebView.webViewClient = CustomWebViewClient()
+        currentWebView.setOnLongClickListener {
+            val hit = currentWebView.hitTestResult
+            if (
+                hit.type == WebView.HitTestResult.IMAGE_TYPE ||
+                    hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+            ) {
+                hit.extra?.let {
+                    imageChoice = it
+                    return@setOnLongClickListener true
+                }
+            }
+            false
+        }
+        currentWebView.setDownloadListener { url, _, disposition, _, _ ->
+            val name = URLDecoder.decode(URLUtil.guessFileName(url, disposition, null), "UTF-8")
+            snack(name, getString(R.string.action_download)) { Download.start(this, url, name) }
+        }
+    }
+
+    private fun loadDocument(snapshot: RssReaderSnapshot) {
+        readerSnapshot = snapshot
+        bindImages(snapshot.request)
+        val document = snapshot.document ?: return
+        upWebviewSettings((document as? RssReaderDocument.Url)?.userAgent)
+        initJavascriptInterface()
+        when (document) {
+            is RssReaderDocument.Url -> {
+                CookieManager.applyToWebView(document.url)
+                currentPageUrl = document.url
+                currentWebView.loadUrl(document.url, document.headers)
+            }
+            is RssReaderDocument.Html -> {
+                currentPageUrl = document.historyUrl
+                currentWebView.loadDataWithBaseURL(
+                    document.baseUrl,
+                    document.html,
+                    "text/html",
+                    "utf-8",
+                    document.historyUrl,
+                )
+            }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun upWebviewSettings(userAgent: String? = null) {
+        readerSnapshot?.source?.let { source ->
+            currentWebView.settings.run {
+                userAgentString =
+                    userAgent
+                        ?: readerSnapshot!!
+                            .headers
+                            .toWebViewRequestConfig(AppConfig.userAgent)
+                            .userAgent
+                javaScriptEnabled = source.enableJs
+                cacheMode =
+                    if (source.cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK
+                    else WebSettings.LOAD_DEFAULT
+            }
+        }
+    }
+
+    private fun initJavascriptInterface() {
+        readerSnapshot?.source?.let { source ->
+            if (interfaceInjected != source.sourceUrl) {
+                interfaceInjected = source.sourceUrl
+                if (source.preloadJs.isNullOrBlank()) return
+                currentWebView.addJavascriptInterface(
+                    WebJsExtensions(source, this, currentWebView),
+                    nameJava,
+                )
+                currentWebView.addJavascriptInterface(source, nameSource)
+                currentWebView.addJavascriptInterface(WebCacheManager, nameCache)
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::currentWebView.isInitialized) {
+            if (powerManager.isInteractive) {
+                wasScreenOff = false
+                currentWebView.onPause()
+            } else wasScreenOff = true
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::currentWebView.isInitialized && !wasScreenOff) currentWebView.onResume()
+    }
+
+    override fun onDestroy() {
+        imageChoice = null
+        if (::customWebView.isInitialized) customWebView.removeAllViews()
+        customWebViewCallback = null
+        readerModel.detachKernel(kernel)
+        if (::pooledWebView.isInitialized) WebViewPool.release(pooledWebView)
+        super.onDestroy()
+    }
+
+    private fun browserBack() {
+        if (customWebView.size > 0) { // 关闭全屏
+            customWebViewCallback?.onCustomViewHidden()
+            if (isFullscreen) currentWebView.webChromeClient?.onHideCustomView()
+            return
+        }
+        if (currentWebView.canGoBack()) {
+            val list = currentWebView.copyBackForwardList() // 获取历史列表
+            val size = list.size
+            if (size == 1) {
+                finish()
+                return
+            }
+            val currentIndex = list.currentIndex
+            val currentItem = list.currentItem
+            val currentUrl = currentItem?.originalUrl ?: BLANK_HTML
+            val currentTitle = currentItem?.title
+            // 从后往前找，找到第一个不同链接的页面，计算需要回退多少步 避免刷新后导致返回不灵
+            var steps = 1
+            for (i in currentIndex - 1 downTo 0) {
+                val item = list.getItemAtIndex(i)
+                val itemTitle = item.title
+                val index = refreshNameList.indexOf(itemTitle)
+                if (index != -1) {
+                    refreshNameList.removeAt(index)
+                    steps++
+                    continue
+                }
+                val itemUrl = item.originalUrl
+                if (itemUrl == BLANK_HTML) {
+                    finish()
+                    return
+                }
+                if (itemUrl != currentUrl || itemTitle != currentTitle) {
+                    break
+                }
+                if (currentUrl == DATA_HTML) {
+                    break
+                }
+                steps++
+            }
+            if (steps == size) {
+                finish()
+                return
+            }
+            currentWebView.goBackOrForward(-steps)
+            return
+        }
+        finish()
     }
 
     @SuppressLint("SwitchIntDef")
@@ -261,290 +625,29 @@ class ReadRssActivity :
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_read, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        starMenuItem = menu.findItem(R.id.menu_rss_star)
-        ttsMenuItem = menu.findItem(R.id.menu_aloud)
-        upStarMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !viewModel.rssSource?.loginUrl.isNullOrBlank()
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_rss_refresh -> refresh()
-
-            R.id.menu_rss_star -> {
-                viewModel.addFavorite()
-                viewModel.rssArticle?.let {
-                    showDialogFragment(RssFavoritesDialog(it))
-                }
-            }
-
-            R.id.menu_share_it -> {
-                currentWebView.url?.let {
-                    share(it)
-                } ?: viewModel.rssArticle?.let {
-                    share(it.link)
-                } ?: toastOnUi(R.string.null_url)
-            }
-
-            R.id.menu_aloud -> readAloud()
-            R.id.menu_login -> startActivity<SourceLoginActivity> {
-                putExtra("type", "rssSource")
-                putExtra("key", viewModel.rssSource?.sourceUrl)
-            }
-
-            R.id.menu_browser_open -> currentWebView.url?.let {
-                openUrl(it)
-            } ?: toastOnUi("url null")
-            R.id.menu_edit_source -> viewModel.rssSource?.sourceUrl?.let {
-                editSourceResult.launch {
-                    putExtra("sourceUrl", it)
-                }
-            }
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_read_record -> showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun updateFavorite(title: String?, group: String?) {
-        viewModel.rssArticle?.let {
-            if (title != null) {
-                it.title = title
-            }
-            if (group != null) {
-                it.group = group
-            }
-        }
-        viewModel.updateFavorite()
-    }
-
-    override fun deleteFavorite() {
-        viewModel.delFavorite()
-    }
-
-    private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            val insets = windowInsets.getInsets(typeMask)
-            view.bottomPadding = insets.bottom
-            windowInsets
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun initWebView() {
-        binding.progressBar.fontColor = accentColor
-        currentWebView.webChromeClient = CustomWebChromeClient()
-        //添加屏幕方向控制，网页关闭，openUI
-        currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
-        currentWebView.webViewClient = CustomWebViewClient()
-        currentWebView.setOnLongClickListener {
-            val hitTestResult = currentWebView.hitTestResult
-            if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
-                hitTestResult.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
-                hitTestResult.extra?.let { webPic ->
-                    selector(
-                        arrayListOf(
-                            SelectItem(getString(R.string.action_save), "save"),
-                            SelectItem(getString(R.string.select_folder), "selectFolder")
-                        )
-                    ) { _, charSequence, _ ->
-                        when (charSequence.value) {
-                            "save" -> saveImage(webPic)
-                            "selectFolder" -> selectSaveFolder(null)
-                        }
-                    }
-                    return@setOnLongClickListener true
-                }
-            }
-            return@setOnLongClickListener false
-        }
-        currentWebView.setDownloadListener { url, _, contentDisposition, _, _ ->
-            var fileName = URLUtil.guessFileName(url, contentDisposition, null)
-            fileName = URLDecoder.decode(fileName, "UTF-8")
-            currentWebView.longSnackbar(fileName, getString(R.string.action_download)) {
-                Download.start(this, url, fileName)
-            }
-        }
-    }
-
-    private fun saveImage(webPic: String) {
-        val path = ACache.get().getAsString(imagePathKey)
-        if (path.isNullOrEmpty()) {
-            selectSaveFolder(webPic)
-        } else {
-            viewModel.saveImage(webPic, path.toUri())
-        }
-    }
-
-    private fun selectSaveFolder(webPic: String?) {
-        val default = arrayListOf<SelectItem<Int>>()
-        val path = ACache.get().getAsString(imagePathKey)
-        if (!path.isNullOrEmpty()) {
-            default.add(SelectItem(path, -1))
-        }
-        selectImageDir.launch {
-            otherActions = default
-            value = webPic
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun initLiveData() {
-        viewModel.contentLiveData.observe(this) { content ->
-            viewModel.rssArticle?.let {
-                upWebviewSettings()
-                initJavascriptInterface()
-                val rssSource = viewModel.rssSource
-                val html = viewModel.clHtml(content, rssSource?.style)
-                val url = NetworkUtils.getAbsoluteURL(it.origin, it.link).substringBefore("@js")
-                val baseUrl = if (rssSource?.loadWithBaseUrl == false) null else url
-                currentPageUrl = url
-                currentWebView.loadDataWithBaseURL(
-                    baseUrl, html, "text/html", "utf-8", url
-                )
-            }
-        }
-        viewModel.urlLiveData.observe(this) { urlState ->
-            val requestConfig = urlState.headerMap.toWebViewRequestConfig(urlState.getUserAgent())
-            upWebviewSettings(requestConfig.userAgent)
-            initJavascriptInterface()
-            CookieManager.applyToWebView(urlState.url)
-            currentPageUrl = urlState.url
-            currentWebView.loadUrl(urlState.url, requestConfig.additionalHeaders)
-        }
-        viewModel.htmlLiveData.observe(this) { html ->
-            viewModel.rssSource?.let {
-                upWebviewSettings()
-                initJavascriptInterface()
-                val baseUrl = if (it.loadWithBaseUrl) it.sourceUrl else null
-                currentPageUrl = it.sourceUrl
-                currentWebView.loadDataWithBaseURL(
-                    baseUrl, html, "text/html", "utf-8", it.sourceUrl
-                )
-            }
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun upWebviewSettings(userAgent: String? = null) {
-        viewModel.rssSource?.let { s ->
-            val sourceUserAgent = viewModel.headerMap
-                .toWebViewRequestConfig(AppConfig.userAgent)
-                .userAgent
-            currentWebView.settings.run {
-                userAgentString = userAgent ?: sourceUserAgent
-                javaScriptEnabled = s.enableJs
-                cacheMode = if (s.cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
-            }
-        }
-    }
-
-    private fun initJavascriptInterface() {
-        viewModel.rssSource?.let {
-            if (interfaceInjected != it.sourceUrl) {
-                interfaceInjected = it.sourceUrl
-                if (!viewModel.hasPreloadJs) return
-                val webJsExtensions = WebJsExtensions(it, this, currentWebView)
-                currentWebView.addJavascriptInterface(webJsExtensions, nameJava)
-                currentWebView.addJavascriptInterface(it, nameSource)
-                currentWebView.addJavascriptInterface(WebCacheManager, nameCache)
-            }
-        }
-    }
-
-    private fun upStarMenu() {
-        starMenuItem?.isVisible = viewModel.rssArticle != null
-        if (viewModel.rssStar != null) {
-            starMenuItem?.setIcon(R.drawable.ic_star)
-            starMenuItem?.setTitle(R.string.in_favorites)
-        } else {
-            starMenuItem?.setIcon(R.drawable.ic_star_border)
-            starMenuItem?.setTitle(R.string.out_favorites)
-        }
-        starMenuItem?.icon?.setTintMutate(primaryTextColor)
-    }
-
-    private fun upTtsMenu(isPlaying: Boolean) {
-        lifecycleScope.launch {
-            if (isPlaying) {
-                ttsMenuItem?.setIcon(R.drawable.ic_stop_black_24dp)
-                ttsMenuItem?.setTitle(R.string.aloud_stop)
-            } else {
-                ttsMenuItem?.setIcon(R.drawable.ic_volume_up)
-                ttsMenuItem?.setTitle(R.string.read_aloud)
-            }
-            ttsMenuItem?.icon?.setTintMutate(primaryTextColor)
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun readAloud() {
-        if (viewModel.tts?.isSpeaking == true) {
-            viewModel.tts?.stop()
-            upTtsMenu(false)
-        } else {
-            currentWebView.settings.javaScriptEnabled = true
-            currentWebView.evaluateJavascript("document.documentElement.outerHTML") {
-                val html = StringEscapeUtils.unescapeJson(it).replace("^\"|\"$".toRegex(), "")
-                viewModel.readAloud(
-                    Jsoup.parse(html).textArray().joinToString("\n")
-                )
-            }
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        if (powerManager.isInteractive) {
-            wasScreenOff = false
-            currentWebView.onPause()
-        } else {
-            wasScreenOff = true
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (!wasScreenOff) {
-            currentWebView.onResume()
-        }
-    }
-
-    override fun onDestroy() {
-        WebViewPool.release(pooledWebView)
-        super.onDestroy()
-    }
-
-
     @Suppress("unused")
     private class JSInterface(activity: ReadRssActivity) {
         private val activityRef: WeakReference<ReadRssActivity> = WeakReference(activity)
+
         @JavascriptInterface
         fun lockOrientation(orientation: String) {
             val ctx = activityRef.get()
             if (ctx != null && ctx.isFullscreen && !ctx.isFinishing && !ctx.isDestroyed) {
                 ctx.runOnUiThread {
-                    ctx.requestedOrientation = when (orientation) {
-                        "portrait", "portrait-primary" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        "portrait-secondary" -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
-                        "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE //横屏且受重力控制正反
-                        "landscape-primary" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE //正向横屏
-                        "landscape-secondary" -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE //反向横屏
-                        "any", "unspecified" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
-                        else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    }
+                    ctx.requestedOrientation =
+                        when (orientation) {
+                            "portrait",
+                            "portrait-primary" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            "portrait-secondary" -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+                            "landscape" ->
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE // 横屏且受重力控制正反
+                            "landscape-primary" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE // 正向横屏
+                            "landscape-secondary" ->
+                                ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE // 反向横屏
+                            "any",
+                            "unspecified" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }
                 }
             }
         }
@@ -567,26 +670,24 @@ class ReadRssActivity :
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
-            binding.progressBar.setDurProgress(newProgress)
-            binding.progressBar.gone(newProgress == 100)
+            readerModel.progress(newProgress)
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             isFullscreen = true
-            binding.llView.invisible()
-            binding.customWebView.addView(view)
+            customWebView.addView(view)
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
-            if (viewModel.rssSource?.enableJs == false) {
+            if (readerSnapshot?.source?.enableJs == false) {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
             }
         }
 
         override fun onHideCustomView() {
             isFullscreen = false
-            binding.customWebView.removeAllViews()
-            binding.llView.visible()
+            customWebView.removeAllViews()
+            customWebViewCallback = null
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
@@ -599,12 +700,16 @@ class ReadRssActivity :
 
         /* 监听网页日志 */
         override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-            viewModel.rssSource?.let { source ->
+            readerSnapshot?.source?.let { source ->
                 if (source.showWebLog) {
                     val messageLevel = consoleMessage.messageLevel().name
                     val message = consoleMessage.message()
-                    AppLog.put("${source.getTag()}${messageLevel}: $message",
-                        NoStackTraceException("\n${message}\n- Line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}"))
+                    AppLog.put(
+                        "${source.getTag()}${messageLevel}: $message",
+                        NoStackTraceException(
+                            "\n${message}\n- Line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}"
+                        ),
+                    )
                     return true
                 }
             }
@@ -615,7 +720,8 @@ class ReadRssActivity :
     inner class CustomWebViewClient : WebViewClient() {
 
         override fun shouldOverrideUrlLoading(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): Boolean {
             return shouldOverrideUrlLoading(request.url)
         }
@@ -629,31 +735,31 @@ class ReadRssActivity :
             currentPageUrl = url
             if (needClearHistory) {
                 needClearHistory = false
-                currentWebView.clearHistory() //清除历史
+                currentWebView.clearHistory() // 清除历史
             }
             super.onPageStarted(view, url, favicon)
             currentWebView.evaluateJavascript(basicJs, null)
         }
 
         private var jsInjected = false
-        /**
-         * 如果有黑名单,黑名单匹配返回空白,
-         * 没有黑名单再判断白名单,在白名单中的才通过,
-         * 都没有不做处理
-         */
+
+        /** 如果有黑名单,黑名单匹配返回空白, 没有黑名单再判断白名单,在白名单中的才通过, 都没有不做处理 */
         override fun shouldInterceptRequest(
-            view: WebView, request: WebResourceRequest
+            view: WebView,
+            request: WebResourceRequest,
         ): WebResourceResponse? {
             val url = request.url.toString()
-            val source = viewModel.rssSource ?: return super.shouldInterceptRequest(view, request)
+            val source =
+                readerSnapshot?.source ?: return super.shouldInterceptRequest(view, request)
             if (request.isForMainFrame) {
-                if (viewModel.hasPreloadJs) {
+                if ((!readerSnapshot?.source?.preloadJs.isNullOrBlank())) {
                     jsInjected = false
                     if (url.startsWith("data:text/html;") || request.method == "POST") {
                         return super.shouldInterceptRequest(view, request)
                     }
                     return runBlocking(IO) {
-                        getModifiedContentWithJs(url, request) ?: super.shouldInterceptRequest(view, request)
+                        getModifiedContentWithJs(url, request)
+                            ?: super.shouldInterceptRequest(view, request)
                     }
                 }
                 return super.shouldInterceptRequest(view, request)
@@ -663,7 +769,7 @@ class ReadRssActivity :
                 return WebResourceResponse(
                     "text/javascript",
                     "utf-8",
-                    ByteArrayInputStream("(() => {$JS_INJECTION\n$preloadJs\n})();".toByteArray())
+                    ByteArrayInputStream("(() => {$JS_INJECTION\n$preloadJs\n})();".toByteArray()),
                 )
             }
             val blacklist = source.contentBlacklist?.splitNotBlank(",")
@@ -694,13 +800,15 @@ class ReadRssActivity :
                     if (!matched) return createEmptyResource()
                 }
             }
-            if (AppConfig.isCronet && RssWebResourceProxy.shouldProxy(
-                    url = url,
-                    method = request.method,
-                    isForMainFrame = request.isForMainFrame,
-                    requestHeaders = request.requestHeaders,
-                    preloadUrl = nameUrl,
-                )
+            if (
+                AppConfig.isCronet &&
+                    RssWebResourceProxy.shouldProxy(
+                        url = url,
+                        method = request.method,
+                        isForMainFrame = request.isForMainFrame,
+                        requestHeaders = request.requestHeaders,
+                        preloadUrl = nameUrl,
+                    )
             ) {
                 return runBlocking(IO) { getProxiedResource(request) }
             }
@@ -710,34 +818,43 @@ class ReadRssActivity :
         private suspend fun getProxiedResource(request: WebResourceRequest): WebResourceResponse {
             val url = request.url.toString()
             val sameOrigin = isSameOrigin(url)
-            val sourceCookie = if (sameOrigin) {
-                viewModel.headerMap.entries.firstOrNull {
-                    it.key.equals("Cookie", ignoreCase = true)
-                }?.value
-            } else null
+            val sourceCookie =
+                if (sameOrigin) {
+                    (readerSnapshot?.headers ?: emptyMap())
+                        .entries
+                        .firstOrNull {
+                            it.key.equals("Cookie", ignoreCase = true)
+                        }
+                        ?.value
+                } else null
             val cookie = runCatching {
                 CookieManager.mergeCookies(
                     sourceCookie,
                     runCatching { CookieStore.getCookie(url) }.getOrNull(),
                     runCatching { webCookieManager.getCookie(url) }.getOrNull(),
                 )
-            }.getOrNull()
-            val response = try {
-                okHttpClient.newCallResponse {
-                    url(url)
-                    method(request.method, null)
-                    RssWebResourceProxy.requestHeaders(
-                        sourceHeaders = if (sameOrigin) viewModel.headerMap else emptyMap(),
-                        webViewHeaders = request.requestHeaders,
-                        cookie = cookie,
-                    ).forEach { (name, value) -> header(name, value) }
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                AppLog.put("RSS 子资源 Cronet 请求失败\n$url\n${error.localizedMessage}", error)
-                return createProxyErrorResource()
             }
+                .getOrNull()
+            val response =
+                try {
+                    okHttpClient.newCallResponse {
+                        url(url)
+                        method(request.method, null)
+                        RssWebResourceProxy.requestHeaders(
+                                sourceHeaders =
+                                    if (sameOrigin) (readerSnapshot?.headers ?: emptyMap())
+                                    else emptyMap(),
+                                webViewHeaders = request.requestHeaders,
+                                cookie = cookie,
+                            )
+                            .forEach { (name, value) -> header(name, value) }
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    AppLog.put("RSS 子资源 Cronet 请求失败\n$url\n${error.localizedMessage}", error)
+                    return createProxyErrorResource()
+                }
 
             response.headers("Set-Cookie").forEach { setCookie ->
                 webCookieManager.setCookie(url, setCookie)
@@ -751,46 +868,55 @@ class ReadRssActivity :
             val body = response.body
             val contentType = body.contentType()?.toString()
             return WebResourceResponse(
-                RssWebResourceProxy.mimeType(contentType) ?: "application/octet-stream",
-                RssWebResourceProxy.encoding(contentType) ?: "utf-8",
-                RssProxyResponseInputStream(response, body),
-            ).also { webResponse ->
-                webResponse.setStatusCodeAndReasonPhrase(
-                    response.code,
-                    RssWebResourceProxy.reasonPhrase(response.message),
+                    RssWebResourceProxy.mimeType(contentType) ?: "application/octet-stream",
+                    RssWebResourceProxy.encoding(contentType) ?: "utf-8",
+                    RssProxyResponseInputStream(response, body),
                 )
-                webResponse.responseHeaders = RssWebResourceProxy.responseHeaders(response.headers)
-            }
+                .also { webResponse ->
+                    webResponse.setStatusCodeAndReasonPhrase(
+                        response.code,
+                        RssWebResourceProxy.reasonPhrase(response.message),
+                    )
+                    webResponse.responseHeaders =
+                        RssWebResourceProxy.responseHeaders(response.headers)
+                }
         }
 
         private fun createProxyErrorResource(): WebResourceResponse {
             return WebResourceResponse(
-                "text/plain",
-                "utf-8",
-                ByteArrayInputStream("RSS resource unavailable".toByteArray()),
-            ).also {
-                it.setStatusCodeAndReasonPhrase(502, "Bad Gateway")
-            }
+                    "text/plain",
+                    "utf-8",
+                    ByteArrayInputStream("RSS resource unavailable".toByteArray()),
+                )
+                .also {
+                    it.setStatusCodeAndReasonPhrase(502, "Bad Gateway")
+                }
         }
 
         private fun isSameOrigin(url: String): Boolean {
             val target = url.toUri()
-            if (target.scheme !in setOf("http", "https") || target.host.isNullOrBlank()) return false
-            val page = sequenceOf(
-                currentPageUrl,
-                viewModel.rssArticle?.let { article ->
-                    NetworkUtils.getAbsoluteURL(article.origin, article.link)
-                },
-            ).filterNotNull()
-                .map(String::toUri)
-                .firstOrNull { it.scheme in setOf("http", "https") && !it.host.isNullOrBlank() }
-                ?: return false
-            return target.scheme.equals(page.scheme, ignoreCase = true)
-                && target.host.equals(page.host, ignoreCase = true)
-                && (target.port == page.port || target.port == -1 && page.port == -1)
+            if (target.scheme !in setOf("http", "https") || target.host.isNullOrBlank())
+                return false
+            val page =
+                sequenceOf(
+                        currentPageUrl,
+                        readerSnapshot?.article?.let { article ->
+                            NetworkUtils.getAbsoluteURL(article.origin, article.link)
+                        },
+                    )
+                    .filterNotNull()
+                    .map(String::toUri)
+                    .firstOrNull { it.scheme in setOf("http", "https") && !it.host.isNullOrBlank() }
+                    ?: return false
+            return target.scheme.equals(page.scheme, ignoreCase = true) &&
+                target.host.equals(page.host, ignoreCase = true) &&
+                (target.port == page.port || target.port == -1 && page.port == -1)
         }
 
-        private suspend fun getModifiedContentWithJs(url: String, request: WebResourceRequest): WebResourceResponse? {
+        private suspend fun getModifiedContentWithJs(
+            url: String,
+            request: WebResourceRequest,
+        ): WebResourceResponse? {
             try {
                 val cookie = webCookieManager.getCookie(url)
                 val res = okHttpClient.newCallResponse {
@@ -815,24 +941,25 @@ class ReadRssActivity :
                 val mimeType = contentType?.toString()?.substringBefore(";") ?: "text/html"
                 val charset = contentType?.charset() ?: Charsets.UTF_8
                 val charsetSre = charset.name()
-                val bodyText = body.text().let { originalText ->
-                    val headIndex = originalText.indexOf("<head", ignoreCase = true)
-                    if (headIndex >= 0) {
-                        val closingHeadIndex = originalText.indexOf('>', startIndex = headIndex)
-                        if (closingHeadIndex >= 0) {
-                            val insertPos = closingHeadIndex + 1
-                            StringBuilder(originalText).insert(insertPos, JS_URL).toString()
+                val bodyText =
+                    body.text().let { originalText ->
+                        val headIndex = originalText.indexOf("<head", ignoreCase = true)
+                        if (headIndex >= 0) {
+                            val closingHeadIndex = originalText.indexOf('>', startIndex = headIndex)
+                            if (closingHeadIndex >= 0) {
+                                val insertPos = closingHeadIndex + 1
+                                StringBuilder(originalText).insert(insertPos, JS_URL).toString()
+                            } else {
+                                originalText
+                            }
                         } else {
                             originalText
                         }
-                    } else {
-                        originalText
                     }
-                }
                 return WebResourceResponse(
                     mimeType,
                     charsetSre,
-                    ByteArrayInputStream(bodyText.toByteArray(charset))
+                    ByteArrayInputStream(bodyText.toByteArray(charset)),
                 )
             } catch (_: Exception) {
                 return null
@@ -842,22 +969,27 @@ class ReadRssActivity :
         override fun onPageFinished(view: WebView, url: String) {
             super.onPageFinished(view, url)
             if (URLUtil.isNetworkUrl(url)) {
-                webCookieManager.getCookie(url)?.takeIf { it.isNotBlank() }?.let { cookie ->
-                    CookieStore.setCookie(url, cookie)
-                }
+                webCookieManager
+                    .getCookie(url)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { cookie ->
+                        CookieStore.setCookie(url, cookie)
+                    }
             }
             view.title?.let { title ->
-                if (title != url
-                    && title != view.url
-                    && title.isNotBlank()
-                    && url != BLANK_HTML
-                    && !url.contains(title)) {
-                    binding.titleBar.title = title
+                if (
+                    title != url &&
+                        title != view.url &&
+                        title.isNotBlank() &&
+                        url != BLANK_HTML &&
+                        !url.contains(title)
+                ) {
+                    readerModel.page(url, title)
                 } else {
-                    binding.titleBar.title = viewModel.upTitleData.value
+                    readerModel.page(url, null)
                 }
             }
-            viewModel.rssSource?.injectJs?.let {
+            readerSnapshot?.source?.injectJs?.let {
                 if (it.isNotBlank()) {
                     view.evaluateJavascript(it, null)
                 }
@@ -866,24 +998,30 @@ class ReadRssActivity :
 
         private fun createEmptyResource(): WebResourceResponse {
             return WebResourceResponse(
-                "text/plain", "utf-8", ByteArrayInputStream("".toByteArray())
+                "text/plain",
+                "utf-8",
+                ByteArrayInputStream("".toByteArray()),
             )
         }
 
         private fun shouldOverrideUrlLoading(url: Uri): Boolean {
-            viewModel.rssSource?.let { source ->
+            readerSnapshot?.source?.let { source ->
                 source.shouldOverrideUrlLoading?.takeUnless(String::isNullOrBlank)?.let { js ->
                     val startTime = SystemClock.uptimeMillis()
                     val result = runCatching {
                         runScriptWithContext(lifecycleScope.coroutineContext) {
-                            source.evalJS(js) {
-                                put("java", rssJsExtensions)
-                                put("url", url.toString())
-                            }.toString()
+                            source
+                                .evalJS(js) {
+                                    put("java", rssJsExtensions)
+                                    put("url", url.toString())
+                                }
+                                .toString()
                         }
-                    }.onFailure {
-                        AppLog.put("${source.getTag()}: url跳转拦截js出错", it)
-                    }.getOrNull()
+                    }
+                        .onFailure {
+                            AppLog.put("${source.getTag()}: url跳转拦截js出错", it)
+                        }
+                        .getOrNull()
                     if (SystemClock.uptimeMillis() - startTime > 99) {
                         AppLog.put("${source.getTag()}: url跳转拦截js执行耗时过长")
                     }
@@ -895,14 +1033,16 @@ class ReadRssActivity :
 
         private fun handleCommonSchemes(url: Uri): Boolean {
             return when (url.scheme) {
-                "http", "https" -> false
-                "legado", "yuedu" -> {
+                "http",
+                "https" -> false
+                "legado",
+                "yuedu" -> {
                     startActivity<OnLineImportActivity> { data = url }
                     true
                 }
 
                 else -> {
-                    binding.root.longSnackbar(R.string.jump_to_another_app, R.string.confirm) {
+                    snack(getString(R.string.jump_to_another_app), getString(R.string.confirm)) {
                         openUrl(url)
                     }
                     true
@@ -912,15 +1052,36 @@ class ReadRssActivity :
 
         @SuppressLint("WebViewClientOnReceivedSslError")
         override fun onReceivedSslError(
-            view: WebView?, handler: SslErrorHandler?, error: SslError?
+            view: WebView?,
+            handler: SslErrorHandler?,
+            error: SslError?,
         ) {
             handler?.proceed()
         }
-
     }
 
     companion object {
-        fun start(context: Context, singleTop: Boolean, origin: String, title: String? = null, url: String? = null, startHtml: String? = null) {
+        const val PREPARED_REQUEST = "rssReader.launchTicket"
+
+        /**
+         * Complete input is staged on IO by the caller; only this canonical UUID reaches Binder.
+         */
+        fun startPrepared(context: Context, ticket: String, singleTop: Boolean = true) {
+            require(UUID.fromString(ticket).toString() == ticket)
+            context.startActivity<ReadRssActivity> {
+                putExtra(PREPARED_REQUEST, ticket)
+                if (singleTop) addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+        }
+
+        fun start(
+            context: Context,
+            singleTop: Boolean,
+            origin: String,
+            title: String? = null,
+            url: String? = null,
+            startHtml: String? = null,
+        ) {
             context.startActivity<ReadRssActivity> {
                 putExtra("origin", origin)
                 putExtra("title", title)
@@ -932,20 +1093,17 @@ class ReadRssActivity :
             }
         }
 
-        /**
-         * 知晓rssArticle的打开
-         */
+        /** 知晓rssArticle的打开 */
         fun start(context: Context, origin: String, title: String?, link: String, sort: String) {
             context.startActivity<ReadRssActivity> {
                 putExtra("origin", origin)
                 putExtra("title", title)
                 putExtra("link", link)
                 putExtra("sort", sort)
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) //栈顶复用
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) // 栈顶复用
             }
         }
 
         private val webCookieManager by lazy { android.webkit.CookieManager.getInstance() }
     }
-
 }

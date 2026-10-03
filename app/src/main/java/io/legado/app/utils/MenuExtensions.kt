@@ -6,8 +6,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
-import android.widget.ImageButton
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.appcompat.view.menu.SubMenuBuilder
@@ -24,32 +22,34 @@ import java.lang.reflect.Method
 fun Menu.applyTint(
     context: Context,
     theme: Theme = Theme.Auto,
-    transparentBar: Boolean = false
-): Menu = this.let { menu ->
-    if (menu is MenuBuilder) {
-        menu.setOptionalIconsVisible(true)
-    }
-    val defaultTextColor = context.getCompatColor(R.color.primaryText)
-    val tintColor = MenuExtensions.getMenuColor(
-        context,
-        theme,
-        transparentBar = transparentBar
-    )
-    menu.forEach { item ->
-        (item as MenuItemImpl).let { impl ->
-            //overflow：展开的item
-            impl.icon?.setTintMutate(
-                if (impl.requiresOverflow()) defaultTextColor else tintColor
-            )
-            (impl.actionView as? SearchView)?.applyTint(tintColor)
+    transparentBar: Boolean = false,
+): Menu =
+    this.let { menu ->
+        if (menu is MenuBuilder) {
+            menu.setOptionalIconsVisible(true)
         }
+        val defaultTextColor = context.getCompatColor(R.color.primaryText)
+        val tintColor =
+            MenuExtensions.getMenuColor(
+                context,
+                theme,
+                transparentBar = transparentBar,
+            )
+        menu.forEach { item ->
+            (item as MenuItemImpl).let { impl ->
+                // overflow：展开的item
+                impl.icon?.setTintMutate(
+                    if (impl.requiresOverflow()) defaultTextColor else tintColor
+                )
+                (impl.actionView as? SearchView)?.applyTint(tintColor)
+            }
+        }
+        return menu
     }
-    return menu
-}
 
 @SuppressLint("RestrictedApi")
 fun Menu.applyOpenTint(context: Context, showIcon: Boolean = true) {
-    //展开菜单显示图标
+    // 展开菜单显示图标
     if (this.javaClass.simpleName.equals("MenuBuilder", ignoreCase = true)) {
         val defaultTextColor = context.getCompatColor(R.color.primaryText)
         kotlin.runCatching {
@@ -77,23 +77,6 @@ fun Menu.applyOpenTint(context: Context, showIcon: Boolean = true) {
     }
 }
 
-fun Menu.iconItemOnLongClick(id: Int, function: (view: View) -> Unit) {
-    findItem(id)?.let { item ->
-        item.setActionView(R.layout.view_action_button)
-        item.actionView?.run {
-            contentDescription = item.title
-            findViewById<ImageButton>(R.id.item).setImageDrawable(item.icon)
-            setOnLongClickListener {
-                function.invoke(this)
-                true
-            }
-            setOnClickListener {
-                performIdentifierAction(id, 0)
-            }
-        }
-    }
-}
-
 @SuppressLint("RestrictedApi")
 inline fun Menu.transaction(block: (Menu) -> Unit) {
     val menuBuilder = this as? MenuBuilder
@@ -111,11 +94,10 @@ object MenuExtensions {
         context: Context,
         theme: Theme = Theme.Auto,
         requiresOverflow: Boolean = false,
-        transparentBar: Boolean = false
+        transparentBar: Boolean = false,
     ): Int {
         val defaultTextColor = context.getCompatColor(R.color.primaryText)
-        if (requiresOverflow)
-            return defaultTextColor
+        if (requiresOverflow) return defaultTextColor
         val primaryTextColor = context.primaryTextColor
         return when (theme) {
             Theme.Dark -> context.getCompatColor(R.color.md_white_1000)
@@ -123,5 +105,4 @@ object MenuExtensions {
             else -> if (transparentBar) context.getToolbarTextColor(true) else primaryTextColor
         }
     }
-
 }

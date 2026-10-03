@@ -31,8 +31,6 @@
     <string name="invalid_directory">Đường dẫn thư mục không hợp lệ</string>
     <string name="empty_directory_input">Đường dẫn thư mục không thể để trống</string>
 
-    <string name="dynamic_click_retry">Thử lại</string>
-    <string name="dynamic_loading">Đang tải</string>
     <string name="draw">Cảnh báo</string>
     <string name="edit">Chỉnh sửa</string>
     <string name="delete">Xóa</string>

@@ -4,15 +4,41 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ExploreScrollStateTest {
-    @Test fun openingKeepsTheClickedRowTop() {
-        assertEquals((12 to 240) to 240, exploreScrollState(null, 12, 240))
+    @Test
+    fun explicitWrapBeforeStartsAnotherControlRow() {
+        assertEquals(
+            listOf(listOf(0), listOf(1, 2)),
+            exploreControlRows(
+                listOf(20, 20, 20),
+                listOf(
+                    ExploreControlStyle(),
+                    ExploreControlStyle(wrapBefore = true),
+                    ExploreControlStyle(),
+                ),
+                100,
+                4,
+            ),
+        )
     }
 
-    @Test fun loadedExpansionReusesTheOriginalOffset() {
-        assertEquals(null to 240, exploreScrollState(12 to 240, 12, 0))
+    @Test
+    fun fullWidthSourceControlsRetainOneControlPerRow() {
+        assertEquals(
+            listOf(listOf(0), listOf(1), listOf(2)),
+            exploreControlRows(
+                listOf(100, 100, 100),
+                List(3) { ExploreControlStyle(basis = 1f) },
+                100,
+                4,
+            ),
+        )
     }
 
-    @Test fun aDifferentRowStartsASeparateAnchor() {
-        assertEquals((18 to 96) to 96, exploreScrollState(12 to 240, 18, 96))
+    @Test
+    fun rowWrappingIncludesActualSpaceBetweenControls() {
+        assertEquals(
+            listOf(listOf(0, 1), listOf(2)),
+            exploreControlRows(listOf(48, 48, 48), List(3) { ExploreControlStyle() }, 100, 4),
+        )
     }
 }

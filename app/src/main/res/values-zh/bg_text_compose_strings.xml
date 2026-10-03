@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bg_text_working">处理中…</string>
+    <string name="bg_text_restore_title">选择预设布局</string>
+    <string name="bg_text_import_address">输入地址</string>
+    <string name="bg_text_color_channel">%1$s 颜色通道</string>
+    <string name="bg_text_color_invalid">请输入有效的十六进制颜色</string>
+    <string name="bg_text_imported">导入成功</string>
+    <string name="bg_text_exported">导出成功，文件名为 %1$s</string>
+    <string name="bg_text_background_set">设定成功</string>
+    <string name="bg_text_minimum_presets">数量已是最少，不能删除</string>
+    <string name="bg_text_failed">操作失败：%1$s</string>
+</resources>

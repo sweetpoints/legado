@@ -1,116 +1,77 @@
 package io.legado.app.ui.book.read
 
-import org.junit.Assert.assertEquals
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.PaddingRegion
+import io.legado.app.data.preferences.PaddingSide
+import io.legado.app.ui.book.read.config.FakePaddingSettingsRepository
+import io.legado.app.ui.book.read.config.PaddingSettingsViewModel
+import org.junit.Assert.*
 import org.junit.Test
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class ReadPaddingLayoutTest {
-
     @Test
-    fun `padding panel uses four shared controls`() {
-        val document = readPaddingLayout()
-
-        assertEquals(
-            "androidx.core.widget.NestedScrollView",
-            document.documentElement.tagName,
-        )
-        assertEquals("true", document.documentElement.androidAttribute("fillViewport"))
-        assertEquals(
-            4,
-            document.getElementsByTagName("io.legado.app.ui.widget.DetailSeekBar").length,
-        )
-    }
-
-    @Test
-    fun `vertical padding supports the extended range`() {
-        val document = readPaddingLayout()
-        verticalPaddingIds.forEach { id ->
-            assertEquals("400", document.findElementById(id).appAttribute("max"))
+    fun allFourControlsUpdateTheirMatchingSides() {
+        val repository = FakePaddingSettingsRepository()
+        val model = PaddingSettingsViewModel(repository, SavedStateHandle())
+        model.setLock(false)
+        PaddingSide.entries.forEach { side ->
+            val before = model.state.value.current[side]
+            model.step(side, 1)
+            assertEquals(before + 1, repository.snapshot[PaddingRegion.BODY][side])
+            assertEquals(side, repository.edits.last().side)
         }
     }
 
     @Test
-    fun `horizontal padding keeps the compact range`() {
-        val document = readPaddingLayout()
-        horizontalPaddingIds.forEach { id ->
-            assertEquals("100", document.findElementById(id).appAttribute("max"))
+    fun verticalSidesSupport400AndHorizontalSidesStopAt100() {
+        val model = PaddingSettingsViewModel(FakePaddingSettingsRepository(), SavedStateHandle())
+        model.setLock(false)
+        PaddingSide.entries.forEach {
+            model.step(it, 1000)
+            assertEquals(
+                if (it in listOf(PaddingSide.TOP, PaddingSide.BOTTOM)) 400 else 100,
+                model.state.value.current[it],
+            )
+            model.step(it, -1000)
+            assertEquals(0, model.state.value.current[it])
         }
     }
 
     @Test
-    fun `region controls are equal and touch sized`() {
-        val document = readPaddingLayout()
-        regionButtonIds.forEach { id ->
-            val button = document.findElementById(id)
-            assertEquals("0dp", button.androidAttribute("layout_width"))
-            assertEquals("1", button.androidAttribute("layout_weight"))
-            assertEquals("48dp", button.androidAttribute("layout_height"))
-            assertEquals("true", button.androidAttribute("clickable"))
-            assertEquals("true", button.androidAttribute("focusable"))
-        }
-
-        val reset = document.findElementById("@+id/iv_reset")
-        assertEquals("48dp", reset.androidAttribute("layout_width"))
-        assertEquals("48dp", reset.androidAttribute("layout_height"))
-        assertEquals("@string/restore_default", reset.androidAttribute("contentDescription"))
+    fun regionSelectionKeepsEachAreasIndependentValuesAndRecomputesLock() {
+        val model = PaddingSettingsViewModel(FakePaddingSettingsRepository(), SavedStateHandle())
+        model.step(PaddingSide.TOP, 10)
+        model.selectRegion(PaddingRegion.HEADER)
+        assertEquals(0, model.state.value.current.top)
+        assertTrue(model.state.value.lockLR)
+        model.selectRegion(PaddingRegion.FOOTER)
+        assertFalse(model.state.value.lockLR)
+        model.selectRegion(PaddingRegion.BODY)
+        assertEquals(16, model.state.value.current.top)
     }
 
     @Test
-    fun `binary options use accessible switches`() {
-        val document = readPaddingLayout()
-        val lock = document.findElementById("@+id/sw_lock_lr")
-        assertEquals("@string/lock_left_right_padding", lock.androidAttribute("text"))
-        assertEquals("48dp", lock.androidAttribute("minHeight"))
-        val showLine = document.findElementById("@+id/sw_show_line")
-        assertEquals("@string/showLine", showLine.androidAttribute("text"))
-        assertEquals("48dp", showLine.androidAttribute("minHeight"))
+    fun lineSwitchDoesNotAlterUnselectedRegion() {
+        val repository = FakePaddingSettingsRepository()
+        val model = PaddingSettingsViewModel(repository, SavedStateHandle())
+        model.selectRegion(PaddingRegion.HEADER)
+        model.setShowLine(true)
+        assertTrue(repository.snapshot[PaddingRegion.HEADER].showLine)
+        assertFalse(repository.snapshot[PaddingRegion.FOOTER].showLine)
+        model.selectRegion(PaddingRegion.FOOTER)
+        model.setShowLine(true)
+        assertTrue(repository.snapshot[PaddingRegion.FOOTER].showLine)
     }
 
-    private fun readPaddingLayout(): Document {
-        val path = "src/main/res/layout/dialog_read_padding.xml"
-        val file = listOf(File(path), File("app/$path"))
-            .firstOrNull { it.isFile }
-            ?: error("Missing project file: $path")
-        return DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder().parse(file)
-    }
-
-    private fun Document.findElementById(id: String): Element {
-        return getElementsByTagName("*").let { nodes ->
-            (0 until nodes.length)
-                .map { nodes.item(it) as Element }
-                .single { it.androidAttribute("id") == id }
-        }
-    }
-
-    private fun Element.androidAttribute(name: String): String =
-        getAttributeNS(androidNamespace, name)
-
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(appNamespace, name)
-
-    private companion object {
-        const val androidNamespace = "http://schemas.android.com/apk/res/android"
-        const val appNamespace = "http://schemas.android.com/apk/res-auto"
-
-        val verticalPaddingIds = listOf(
-            "@+id/dsb_top",
-            "@+id/dsb_bottom",
-        )
-
-        val horizontalPaddingIds = listOf(
-            "@+id/dsb_left",
-            "@+id/dsb_right",
-        )
-
-        val regionButtonIds = listOf(
-            "@+id/btn_region_header",
-            "@+id/btn_region_body",
-            "@+id/btn_region_footer",
-        )
+    @Test
+    fun resetCancelKeepsTheSelectedRegionsSettings() {
+        val repository = FakePaddingSettingsRepository()
+        val model = PaddingSettingsViewModel(repository, SavedStateHandle())
+        val initial = model.state.value.snapshot
+        model.askReset()
+        model.cancelReset()
+        model.confirmReset()
+        assertEquals(initial, repository.snapshot)
+        assertTrue(repository.resets.isEmpty())
     }
 }

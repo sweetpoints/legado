@@ -1,11 +1,11 @@
 package io.legado.app.model
 
-import org.junit.Assert.assertFalse
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReadBookRefreshPositionTest {
 
@@ -18,7 +18,8 @@ class ReadBookRefreshPositionTest {
         val expected = cover.indexOf("第81段。") + paragraphs[80].indexOf("落下来。")
         assertEquals(expected, resolveLayoutBodyPosition(scroll, position, cover))
         assertEquals(position, resolveLayoutBodyPosition(cover, expected, scroll))
-        // Whole paragraphs may also repeat: their ordinal, rather than a unique text match, matters.
+        // Whole paragraphs may also repeat: their ordinal, rather than a unique text match,
+        // matters.
         val repeated = List(100) { "同一句。" }.joinToString("\n")
         val indented = List(100) { "　　同一句。" }.joinToString("\n")
         assertEquals(80 * 7 + 4, resolveLayoutBodyPosition(repeated, 80 * 5 + 2, indented))
@@ -29,42 +30,53 @@ class ReadBookRefreshPositionTest {
 
     @Test
     fun `reader refresh preserves position before discarding layout`() {
-        val refresh = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-            .substringAfter("private fun refreshDurChapter()")
-            .substringBefore("private fun refreshAfterChapters()")
+        val refresh =
+            source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
+                .substringAfter("private fun refreshDurChapter()")
+                .substringBefore("private fun refreshAfterChapters()")
 
         assertOrder(
             refresh,
             "ReadBook.preserveCurrentPositionForRefresh()",
             "ReadBook.curTextChapter = null",
-            "viewModel.refreshContentDur(it)"
+            "viewModel.refreshContentDur(it)",
         )
     }
 
     @Test
     fun `chapter list refresh carries the same anchor into the next layout`() {
         val readBook = source("app/src/main/java/io/legado/app/model/ReadBook.kt")
-        val chapterUpdate = readBook.substringAfter("fun onChapterListUpdated(")
-            .substringBefore("private fun clearExpiredChapterLoadingJob")
-        val resetData = readBook.substringAfter("fun resetData(book: Book)")
-            .substringBefore("fun loadHighlights")
-        val anchorCapture = readBook.substringAfter("private fun currentPositionAnchor()")
-            .substringBefore("private data class PendingHighlightJump")
+        val chapterUpdate =
+            readBook
+                .substringAfter("fun onChapterListUpdated(")
+                .substringBefore("private fun clearExpiredChapterLoadingJob")
+        val resetData =
+            readBook
+                .substringAfter("fun resetData(book: Book)")
+                .substringBefore("fun loadHighlights")
+        val anchorCapture =
+            readBook
+                .substringAfter("private fun currentPositionAnchor()")
+                .substringBefore("private data class PendingHighlightJump")
 
         assertOrder(
             chapterUpdate,
             "currentPositionAnchor()",
             "clearTextChapter()",
-            "pendingHighlightAnchor = positionAnchor"
+            "pendingHighlightAnchor = positionAnchor",
         )
         assertTrue(anchorCapture.contains("chapterText(textChapter).drop(titleLength)"))
-        assertTrue(anchorCapture.contains("bodyText.drop(bodyPosition).take(REFRESH_POSITION_ANCHOR_LENGTH)"))
+        assertTrue(
+            anchorCapture.contains(
+                "bodyText.drop(bodyPosition).take(REFRESH_POSITION_ANCHOR_LENGTH)"
+            )
+        )
         assertTrue(anchorCapture.contains("waitForLayout = true"))
         assertOrder(
             resetData,
             "val positionAnchor = pendingHighlightAnchor",
             "clearTextChapter()",
-            "pendingHighlightAnchor = positionAnchor?.takeIf"
+            "pendingHighlightAnchor = positionAnchor?.takeIf",
         )
         assertTrue(readBook.contains("return pendingHighlightAnchor?.waitForLayout != true"))
     }
@@ -72,53 +84,71 @@ class ReadBookRefreshPositionTest {
     @Test
     fun `completed layout resolves refresh anchor without waiting for callback flag`() {
         val readBook = source("app/src/main/java/io/legado/app/model/ReadBook.kt")
-        val loadCurrentChapter = readBook.substringAfter("suspend fun contentLoadFinishAwait(")
-            .substringBefore("fun pageAnim()")
-            .substringAfter("0 -> {")
-            .substringBefore("-1 -> {")
-        val anchorResolver = readBook.substringAfter("private fun resolvePendingHighlightAnchor(")
-            .substringBefore("private fun currentPositionAnchor()")
+        val loadCurrentChapter =
+            readBook
+                .substringAfter("suspend fun contentLoadFinishAwait(")
+                .substringBefore("fun pageAnim()")
+                .substringAfter("0 -> {")
+                .substringBefore("-1 -> {")
+        val anchorResolver =
+            readBook
+                .substringAfter("private fun resolvePendingHighlightAnchor(")
+                .substringBefore("private fun currentPositionAnchor()")
 
         assertOrder(
             loadCurrentChapter,
             "for (page in textChapter.layoutChannel)",
-            "resolvePendingHighlightAnchor(book, textChapter)"
+            "resolvePendingHighlightAnchor(book, textChapter)",
         )
         assertFalse(anchorResolver.contains("textChapter.isCompleted"))
-        assertTrue(loadCurrentChapter.contains("restoredAnchor || (!available && shouldResetPageOffset)"))
+        assertTrue(
+            loadCurrentChapter.contains("restoredAnchor || (!available && shouldResetPageOffset)")
+        )
     }
 
     @Test
     fun `toc refresh carries a scroll version while explicit jumps keep reset`() {
         val readBook = source("app/src/main/java/io/legado/app/model/ReadBook.kt")
-        val chapterUpdate = readBook.substringAfter("fun onChapterListUpdated(")
-            .substringBefore("private fun shouldApplyReadPositionReset")
+        val chapterUpdate =
+            readBook
+                .substringAfter("fun onChapterListUpdated(")
+                .substringBefore("private fun shouldApplyReadPositionReset")
         assertTrue(chapterUpdate.contains("readPositionVersion = callBack?.readPositionVersion()"))
         assertTrue(readBook.contains("readPositionVersion = readPositionVersion"))
         assertTrue(readBook.contains("resetPageOffset = resetPageOffset"))
 
-        val openChapter = readBook.substringAfter("fun openChapter(")
-            .substringBefore("private fun curPageChanged")
+        val openChapter =
+            readBook
+                .substringAfter("fun openChapter(")
+                .substringBefore("private fun curPageChanged")
         assertTrue(openChapter.contains("loadContent(resetPageOffset = true)"))
         assertFalse(openChapter.contains("readPositionVersion ="))
 
-        val setProgress = readBook.substringAfter("fun setProgress(")
-            .substringBefore("//暂时保存跳转前进度")
+        val setProgress =
+            readBook
+                .substringAfter("fun setProgress(")
+                .substringBefore("fun saveCurrentBookProgress(")
         assertTrue(setProgress.contains("loadContent(resetPageOffset = true)"))
         assertFalse(setProgress.contains("readPositionVersion ="))
 
         val activity = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        val upContent = activity.substringAfter("override fun upContent(")
-            .substringBefore("override fun readPositionVersion")
+        val upContent =
+            activity
+                .substringAfter("override fun upContent(")
+                .substringBefore("override fun readPositionVersion")
         assertTrue(upContent.contains("isReadPositionVersionCurrent(readPositionVersion)"))
     }
 
     @Test
     fun `initial chapter load carries the reader position version`() {
         val viewModel = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
-        val initBook = viewModel.substringAfter("private suspend fun initBook(")
-            .substringBefore("private fun checkLocalBookFileExist")
-        assertTrue(initBook.contains("readPositionVersion = ReadBook.callBack?.readPositionVersion()"))
+        val initBook =
+            viewModel
+                .substringAfter("private suspend fun initBook(")
+                .substringBefore("private fun checkLocalBookFileExist")
+        assertTrue(
+            initBook.contains("readPositionVersion = ReadBook.callBack?.readPositionVersion()")
+        )
     }
 
     private fun assertOrder(source: String, vararg expected: String) {
@@ -132,8 +162,9 @@ class ReadBookRefreshPositionTest {
 
     private fun source(path: String): String {
         val userDir = requireNotNull(System.getProperty("user.dir"))
-        val root = generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+        val root =
+            generateSequence(File(userDir)) { it.parentFile }
+                .first { File(it, "app/src/main").isDirectory }
         return File(root, path).readText().replace("\r\n", "\n")
     }
 }

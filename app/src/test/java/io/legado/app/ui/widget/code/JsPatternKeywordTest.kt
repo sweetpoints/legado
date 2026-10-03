@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.code
 
+import io.legado.app.model.analyzeRule.jsPattern
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test

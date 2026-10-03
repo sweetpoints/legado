@@ -1,0 +1,4 @@
+<resources>
+    <string name="qr_flashlight_on">打开手电筒</string>
+    <string name="qr_flashlight_off">关闭手电筒</string>
+</resources>

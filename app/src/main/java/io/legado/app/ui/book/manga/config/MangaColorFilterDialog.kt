@@ -1,79 +1,58 @@
 package io.legado.app.ui.book.manga.config
 
 import android.content.DialogInterface
-import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogMangaColorFilterBinding
-import io.legado.app.help.config.AppConfig
-import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.preferences.PreferenceMangaColorFilterRepository
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class MangaColorFilterDialog : BaseDialogFragment(R.layout.dialog_manga_color_filter) {
-    private val binding by viewBinding(DialogMangaColorFilterBinding::bind)
-    private val mConfig =
-        GSON.fromJsonObject<MangaColorFilterConfig>(AppConfig.mangaColorFilter).getOrNull()
-            ?: MangaColorFilterConfig()
-    private val callback get() = activity as? Callback
+class MangaColorFilterDialog : BaseComposeDialogFragment() {
+    private val viewModel by
+        viewModels<MangaColorFilterViewModel> {
+            viewModelFactory {
+                initializer {
+                    MangaColorFilterViewModel(
+                        PreferenceMangaColorFilterRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
         dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initData()
-        initView()
-    }
-
-    private fun initData() {
-        binding.run {
-            dsbBrightness.progress = mConfig.l
-            dsbR.progress = mConfig.r
-            dsbG.progress = mConfig.g
-            dsbB.progress = mConfig.b
-            dsbA.progress = mConfig.a
-        }
-    }
-
-    private fun initView() {
-        binding.run {
-            dsbBrightness.onChanged = {
-                mConfig.l = it
-                callback?.updateColorFilter(mConfig)
-            }
-            dsbR.onChanged = {
-                mConfig.r = it
-                callback?.updateColorFilter(mConfig)
-            }
-            dsbG.onChanged = {
-                mConfig.g = it
-                callback?.updateColorFilter(mConfig)
-            }
-            dsbB.onChanged = {
-                mConfig.b = it
-                callback?.updateColorFilter(mConfig)
-            }
-            dsbA.onChanged = {
-                mConfig.a = it
-                callback?.updateColorFilter(mConfig)
-            }
-        }
+    @Composable
+    override fun Content() {
+        MangaColorFilterRoute(
+            viewModel,
+            { (activity as? Callback)?.updateColorFilter(it) },
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 
     override fun onDismiss(dialog: DialogInterface) {
+        if (activity?.isChangingConfigurations != true) viewModel.finish()
         super.onDismiss(dialog)
-        AppConfig.mangaColorFilter = mConfig.toJson()
     }
 
     interface Callback {
         fun updateColorFilter(config: MangaColorFilterConfig)
     }
-
 }

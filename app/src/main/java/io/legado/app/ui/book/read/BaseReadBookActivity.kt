@@ -1,41 +1,35 @@
 package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
-import android.app.DatePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.constant.AppConst.charsets
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityBookReadBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogSimulatedReadingBinding
+import io.legado.app.data.repository.*
 import io.legado.app.help.book.cacheLocalUri
-import io.legado.app.help.book.savePreservingCustomCoverUrl
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.ui.book.download.showChapterDownloadDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.read.config.PaddingConfigDialog
@@ -43,53 +37,31 @@ import io.legado.app.ui.book.read.config.PageKeyDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileDoc
+import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.find
 import io.legado.app.utils.getPrefString
-import io.legado.app.utils.gone
 import io.legado.app.utils.isTv
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 
-@SuppressLint("InflateParams", "SetTextI18n")
 fun Context.showBookDownloadDialog(book: Book) {
-    alert(titleResource = R.string.offline_cache) {
-        val alertBinding = DialogDownloadChoiceBinding
-            .inflate(LayoutInflater.from(this@showBookDownloadDialog))
-            .apply {
-                editStart.setText((book.durChapterIndex + 1).toString())
-                editEnd.setText(book.totalChapterNum.toString())
-            }
-        customView { alertBinding.root }
-        okButton {
-            alertBinding.run {
-                val start = editStart.text!!.toString().let {
-                    if (it.isEmpty()) 0 else it.toInt()
-                }
-                val end = editEnd.text!!.toString().let {
-                    if (it.isEmpty()) book.totalChapterNum else it.toInt()
-                }
-                CacheBook.start(this@showBookDownloadDialog, book, start - 1, end - 1)
-            }
-        }
-        cancelButton()
-    }
+    showChapterDownloadDialog(book)
 }
 
-/**
- * 阅读界面
- */
-abstract class BaseReadBookActivity :
-    VMBaseActivity<ActivityBookReadBinding, ReadBookViewModel>(imageBg = false) {
+/** 阅读界面 */
+abstract class BaseReadBookActivity : BaseComposeActivity(imageBg = false) {
+    protected val viewModel by viewModels<ReadBookViewModel>()
+    abstract val readMenu: ReaderMenuController
+    abstract val searchMenu: ReaderSearchControls
+    protected var navigationBarVisible by mutableStateOf(false)
+        private set
 
-    override val binding by viewBinding(ActivityBookReadBinding::inflate)
-    override val viewModel by viewModels<ReadBookViewModel>()
     protected val menuLayoutIsVisible
-        get() = bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
+        get() = bottomDialog > 0 || readMenu.isVisible || searchMenu.bottomMenuVisible
 
     var bottomDialog = 0
         set(value) {
@@ -98,36 +70,38 @@ abstract class BaseReadBookActivity :
                 onBottomDialogChange()
             }
         }
-    private val selectBookFolderResult = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            ReadBook.book?.let { book ->
-                FileDoc.fromUri(uri, true).find(book.originName)?.let { doc ->
-                    AppConfig.importBookPath = uri.toString()
-                    LocalBook.withParserCacheInvalidated(book) {
-                        book.cacheLocalUri(doc.uri)
-                    }
-                    viewModel.loadChapterList(book)
-                } ?: ReadBook.upMsg("找不到文件")
-            }
-        } ?: ReadBook.upMsg("没有权限访问")
-    }
+
+    private val selectBookFolderResult =
+        registerForActivityResult(HandleFileContract()) {
+            it.uri?.let { uri ->
+                ReadBook.book?.let { book ->
+                    FileDoc.fromUri(uri, true).find(book.originName)?.let { doc ->
+                        AppConfig.importBookPath = uri.toString()
+                        LocalBook.withParserCacheInvalidated(book) {
+                            book.cacheLocalUri(doc.uri)
+                        }
+                        viewModel.loadChapterList(book)
+                    } ?: ReadBook.upMsg("找不到文件")
+                }
+            } ?: ReadBook.upMsg("没有权限访问")
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         ReadBook.msg = null
         setOrientation()
         upLayoutInDisplayCutoutMode()
         super.onCreate(savedInstanceState)
-        binding.navigationBar.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updateLayoutParams {
-                height = insets.bottom
-            }
-            windowInsets
+        supportFragmentManager.setFragmentResultListener(SimulatedReadingDialog.RESULT, this) {
+            _,
+            result ->
+            if (ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) == result.getString("owner"))
+                initializeReaderData(intent)
         }
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.navigationBar.setBackgroundColor(bottomBackground)
+    protected abstract fun initializeReaderData(requestIntent: Intent)
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
         viewModel.permissionDenialLiveData.observe(this) {
             selectBookFolderResult.launch {
                 mode = HandleFileContract.DIR_SYS
@@ -151,13 +125,9 @@ abstract class BaseReadBookActivity :
         }
     }
 
-    open fun onMenuShow() {
+    open fun onMenuShow() {}
 
-    }
-
-    open fun onMenuHide() {
-
-    }
+    open fun onMenuHide() {}
 
     fun showPaddingConfig() {
         showDialogFragment<PaddingConfigDialog>()
@@ -175,9 +145,7 @@ abstract class BaseReadBookActivity :
         PageKeyDialog(this).show()
     }
 
-    /**
-     * 屏幕方向
-     */
+    /** 屏幕方向 */
     @SuppressLint("SourceLockedOrientationActivity")
     fun setOrientation() {
         when (AppConfig.screenOrientation) {
@@ -190,13 +158,11 @@ abstract class BaseReadBookActivity :
         }
     }
 
-    /**
-     * 更新状态栏,导航栏
-     */
+    /** 更新状态栏,导航栏 */
     fun upSystemUiVisibility(
         isInMultiWindow: Boolean,
         toolBarHide: Boolean = true,
-        useBgMeanColor: Boolean = false
+        useBgMeanColor: Boolean = false,
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.insetsController?.run {
@@ -217,9 +183,9 @@ abstract class BaseReadBookActivity :
             setLightStatusBar(ReadBookConfig.durConfig.curStatusIconDark())
         } else {
             val statusBarColor =
-                if (AppConfig.readBarStyleFollowPage
-                    && ReadBookConfig.durConfig.curBgType() == 0
-                    || useBgMeanColor
+                if (
+                    AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0 ||
+                        useBgMeanColor
                 ) {
                     ReadBookConfig.bgMeanColor
                 } else {
@@ -232,11 +198,12 @@ abstract class BaseReadBookActivity :
     @Suppress("DEPRECATION")
     private fun upSystemUiVisibilityO(
         isInMultiWindow: Boolean,
-        toolBarHide: Boolean = true
+        toolBarHide: Boolean = true,
     ) {
-        var flag = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_IMMERSIVE
-                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+        var flag =
+            (View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_IMMERSIVE or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
         if (!isInMultiWindow) {
             flag = flag or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
         }
@@ -255,8 +222,8 @@ abstract class BaseReadBookActivity :
     override fun upNavigationBarColor() {
         upNavigationBar()
         when {
-            binding.readMenu.isVisible -> super.upNavigationBarColor()
-            binding.searchMenu.bottomMenuVisible -> super.upNavigationBarColor()
+            readMenu.isVisible -> super.upNavigationBarColor()
+            searchMenu.bottomMenuVisible -> super.upNavigationBarColor()
             bottomDialog > 0 -> super.upNavigationBarColor()
             !AppConfig.immNavigationBar -> super.upNavigationBarColor()
             else -> setNavigationBarColorAuto(ReadBookConfig.bgMeanColor)
@@ -265,12 +232,10 @@ abstract class BaseReadBookActivity :
 
     @SuppressLint("RtlHardcoded")
     private fun upNavigationBar() {
-        binding.navigationBar.gone(!menuLayoutIsVisible)
+        navigationBarVisible = menuLayoutIsVisible
     }
 
-    /**
-     * 保持亮屏
-     */
+    /** 保持亮屏 */
     fun keepScreenOn(on: Boolean) {
         val isScreenOn =
             (window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
@@ -282,18 +247,18 @@ abstract class BaseReadBookActivity :
         }
     }
 
-    /**
-     * 适配刘海
-     */
+    /** 适配刘海 */
     private fun upLayoutInDisplayCutoutMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (ReadBookConfig.readBodyToLh) {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                } else {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+            window.attributes =
+                window.attributes.apply {
+                    layoutInDisplayCutoutMode =
+                        if (ReadBookConfig.readBodyToLh) {
+                            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                        } else {
+                            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                        }
                 }
-            }
         }
     }
 
@@ -303,74 +268,48 @@ abstract class BaseReadBookActivity :
 
     fun showSimulatedReading() {
         val book = ReadBook.book ?: return
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val alertBinding = DialogSimulatedReadingBinding.inflate(layoutInflater).apply {
-            srEnabled.isChecked = book.getReadSimulating()
-            editStart.setText(book.getStartChapter().toString())
-            editNum.setText(book.getDailyChapters().toString())
-            startDate.setText(book.getStartDate()?.format(dateFormatter))
-            startDate.isFocusable = false // 设置为false，不允许获得焦点
-            startDate.isCursorVisible = false // 不显示光标
-            startDate.setOnClickListener {
-                // 获取当前日期
-                val localStartDate = runCatching {
-                    LocalDate.parse(startDate.text)
-                }.getOrDefault(LocalDate.now())
-                // 创建 DatePickerDialog
-                val datePickerDialog = DatePickerDialog(
-                    root.context,
-                    { _, yy, mm, dayOfMonth ->
-                        // 使用Java 8的日期和时间API来格式化日期
-                        val date = LocalDate.of(yy, mm + 1, dayOfMonth) // Java 8的LocalDate，月份从1开始
-                        val formattedDate = date.format(dateFormatter)
-                        startDate.setText(formattedDate)
-                    }, localStartDate.year,
-                    localStartDate.monthValue - 1,
-                    localStartDate.dayOfMonth
-                )
-                datePickerDialog.show()
-            }
-        }
-        alert(titleResource = R.string.simulated_reading) {
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.run {
-                    val start = editStart.text.toString().toIntOrNull()?.coerceAtLeast(0) ?: 0
-                    val num = editNum.text.toString().toIntOrNull()?.coerceAtLeast(1)
-                        ?: book.totalChapterNum.coerceAtLeast(1)
-                    val enabled = srEnabled.isChecked
-                    val date = startDate.text.toString().let {
-                        if (it.isEmpty()) LocalDate.now()
-                        else runCatching { LocalDate.parse(it, dateFormatter) }
-                            .getOrDefault(LocalDate.now())
-                    }
-                    book.setStartDate(date)
-                    book.setDailyChapters(num)
-                    book.setStartChapter(start)
-                    book.setReadSimulating(enabled)
-                    book.savePreservingCustomCoverUrl()
-                    ReadBook.clearTextChapter()
-                    viewModel.initData(intent)
+        val request =
+            SimulatedReadingRequest(
+                book.bookUrl,
+                SimulatedReadingSettings(
+                    book.getReadSimulating(),
+                    book.getStartDate()?.toString().orEmpty(),
+                    book.getStartChapter().toString(),
+                    book.getDailyChapters().toString(),
+                    book.totalChapterNum,
+                ),
+            )
+        val requests = FileSimulatedReadingRequestRepository(applicationContext)
+        lifecycleScope.launch {
+            var ticket: String? = null
+            var shown = false
+            try {
+                ticket = requests.create(request)
+                lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+                if (
+                    !isFinishing &&
+                        !supportFragmentManager.isStateSaved &&
+                        ReadBook.book?.bookUrl == request.bookUrl
+                ) {
+                    SimulatedReadingDialog.newInstance(ticket)
+                        .show(supportFragmentManager, "simulated-reading")
+                    shown = true
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                toastOnUi(error.localizedMessage ?: getString(R.string.error))
+            } finally {
+                if (!shown) ticket?.let { withContext(NonCancellable) { requests.release(it) } }
             }
-            cancelButton()
         }
     }
 
     fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset"
-                editView.setFilterValues(charsets)
-                editView.setText(ReadBook.book?.charset)
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    ReadBook.setCharset(it)
-                }
-            }
-            cancelButton()
+        if (
+            supportFragmentManager.findFragmentByTag(ReaderCharsetDialog::class.simpleName) == null
+        ) {
+            showDialogFragment(ReaderCharsetDialog.create())
         }
     }
 

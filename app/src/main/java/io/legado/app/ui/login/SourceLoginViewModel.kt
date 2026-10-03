@@ -2,24 +2,30 @@ package io.legado.app.ui.login
 
 import android.app.Application
 import android.content.Intent
-import com.script.rhino.runScriptWithContext
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.BookType
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.data.entities.getStoredLoginInfoMap
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.model.AudioPlay
-import io.legado.app.model.AutoTask
-import io.legado.app.model.ReadBook
-import io.legado.app.model.VideoPlay
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+sealed interface SourceLoginInitialization {
+    data object Idle : SourceLoginInitialization
+
+    data object Loading : SourceLoginInitialization
+
+    data object Ready : SourceLoginInitialization
+
+    data class Failed(val message: String) : SourceLoginInitialization
+}
 
 class SourceLoginViewModel(application: Application) : BaseViewModel(application) {
 
+    private val initializationState =
+        MutableStateFlow<SourceLoginInitialization>(SourceLoginInitialization.Idle)
+    val initialization = initializationState.asStateFlow()
     var source: BaseSource? = null
     var headerMap: Map<String, String> = emptyMap()
     var book: Book? = null
@@ -27,61 +33,52 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
     var chapter: BookChapter? = null
     var loginInfo: MutableMap<String, String> = mutableMapOf()
 
-    fun initData(intent: Intent, success: (bookSource: BaseSource) -> Unit, error: () -> Unit) {
-        execute {
-            bookType = intent.getIntExtra("bookType", 0)
-            when (bookType) {
-                BookType.text -> {
-                    source = ReadBook.bookSource
-                    book = ReadBook.book?.also {
-                        chapter = appDb.bookChapterDao.getChapter(it.bookUrl, ReadBook.durChapterIndex)
-                    }
-                }
+    private val repository = io.legado.app.data.repository.AppSourceLoginRepository()
+    private var loadedRequest: io.legado.app.data.repository.SourceLoginRequest? = null
 
-                BookType.audio -> {
-                    source = AudioPlay.bookSource
-                    book = AudioPlay.book
-                    chapter = AudioPlay.durChapter
-                }
-
-                BookType.video -> {
-                    source = VideoPlay.source
-                    book = VideoPlay.book
-                    chapter = VideoPlay.chapter
-                }
-
-                else -> {
-                    val sourceKey = intent.getStringExtra("key")
-                        ?: throw NoStackTraceException("没有参数")
-                    val type = intent.getStringExtra("type")
-                    source = when (type) {
-                        "bookSource" ->  appDb.bookSourceDao.getBookSource(sourceKey)
-                        "rssSource" -> appDb.rssSourceDao.getByKey(sourceKey)
-                        "httpTts" -> appDb.httpTTSDao.get(sourceKey.toLong())
-                        "autoTask" -> AutoTask.get(sourceKey)?.let(AutoTask::buildSource)
-                        else -> null
-                    }
-                    val bookUrl = intent.getStringExtra("bookUrl")
-                    book = bookUrl?.let {
-                        appDb.bookDao.getBook(it) ?: appDb.searchBookDao.getSearchBook(it)?.toBook()
-                    }
-                }
-            }
-            headerMap = runScriptWithContext {
-                source?.getHeaderMap(true) ?: emptyMap()
-            }
-            loginInfo = source?.getStoredLoginInfoMap() ?: mutableMapOf()
-            source
-        }.onSuccess {
-            if (it != null) {
-                success.invoke(it)
-            } else {
-                context.toastOnUi("未找到书源")
-            }
-        }.onError {
-            error.invoke()
-            AppLog.put("登录 UI 初始化失败\n$it", it, true)
-        }
+    internal fun applyInitialized(
+        request: io.legado.app.data.repository.SourceLoginRequest,
+        value: io.legado.app.data.repository.SourceLoginSnapshot,
+    ) {
+        loadedRequest = request
+        source = value.source
+        book = value.book
+        chapter = value.chapter
+        bookType = value.bookType
+        headerMap = value.headers.toMap()
+        loginInfo = value.loginInfo.toMutableMap()
+        initializationState.value =
+            if (value.source != null) SourceLoginInitialization.Ready
+            else SourceLoginInitialization.Failed("未找到书源")
     }
 
+    /** Existing form retry and public callers retain their one-shot completion API. */
+    fun initData(intent: Intent, success: (bookSource: BaseSource) -> Unit, error: () -> Unit) {
+        val request =
+            if (
+                intent.getStringExtra("key") == null &&
+                    intent.getIntExtra("bookType", 0) == 0 &&
+                    loadedRequest != null
+            )
+                loadedRequest!!
+            else
+                io.legado.app.data.repository.SourceLoginRequest(
+                    intent.getIntExtra("bookType", 0),
+                    intent.getStringExtra("type"),
+                    intent.getStringExtra("key"),
+                    intent.getStringExtra("bookUrl"),
+                )
+        initializationState.value = SourceLoginInitialization.Loading
+        execute { repository.load(request) }
+            .onSuccess { value ->
+                applyInitialized(request, value)
+                value.source?.let(success) ?: context.toastOnUi("未找到书源")
+            }
+            .onError {
+                initializationState.value =
+                    SourceLoginInitialization.Failed(it.localizedMessage ?: it.toString())
+                error.invoke()
+                AppLog.put("登录 UI 初始化失败\n$it", it, true)
+            }
+    }
 }

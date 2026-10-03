@@ -1,0 +1,12 @@
+<resources>
+    <item name="menu_custom_btn" type="id" />
+    <item name="menu_change_source" type="id" />
+    <item name="menu_login" type="id" />
+    <item name="menu_copy_audio_url" type="id" />
+    <item name="menu_audio_cache_folder" type="id" />
+    <item name="menu_audio_cache_range" type="id" />
+    <item name="menu_clear_current_audio_cache" type="id" />
+    <item name="menu_edit_source" type="id" />
+    <item name="menu_wake_lock" type="id" />
+    <item name="menu_skip_credits" type="id" />
+</resources>

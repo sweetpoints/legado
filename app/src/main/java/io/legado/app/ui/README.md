@@ -1,4 +1,11 @@
-# 放置与界面有关的类
+# UI 层
+
+Compose 页面按功能组织，采用 `Route / Screen / UiState / ViewModel` 分工；共享 UI 放在
+`components`，主题放在 `theme`，导航定义放在 `navigation`。静态页面无需强制创建 ViewModel。
+
+完整约定及尚未迁移的边界见 [Compose 迁移说明](../../../../../../../../docs/compose-migration.md)。
+
+现有功能目录：
 
 * about 关于界面
 * association 导入书源界面

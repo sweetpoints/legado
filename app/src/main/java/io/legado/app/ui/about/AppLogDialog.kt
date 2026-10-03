@@ -1,146 +1,95 @@
 package io.legado.app.ui.about
 
-import android.content.Context
-import android.os.Bundle
-import android.view.MenuItem
-import android.view.View
+import android.content.ClipData
+import android.content.Intent
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.constant.AppLog
-import io.legado.app.constant.EventBus
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemAppLogBinding
-import io.legado.app.help.http.HttpLogRecord
-import io.legado.app.help.http.HttpLogStore
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.constant.AppConst
+import io.legado.app.data.repository.AppLogDetail
+import io.legado.app.data.repository.AppLogExport
+import io.legado.app.data.repository.DefaultAppLogsRepository
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.utils.LogUtils
-import io.legado.app.utils.applyOpenTint
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.installMd3OverflowMenu
-import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.share
-import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.views.onClick
-import java.io.File
-import java.util.*
 
-class AppLogDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
-    Toolbar.OnMenuItemClickListener {
-
-    companion object {
-        private const val MAX_SHARE_TEXT = 64_000
-    }
-
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy {
-        LogAdapter(requireContext())
-    }
+class AppLogDialog : BaseComposeDialogFragment() {
+    private val viewModel by
+        viewModels<AppLogsViewModel> {
+            viewModelFactory {
+                initializer {
+                    AppLogsViewModel(
+                        DefaultAppLogsRepository(requireContext().cacheDir),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.run {
-            toolBar.setBackgroundColor(primaryColor)
-            toolBar.setTitle(R.string.log)
-            toolBar.inflateMenu(R.menu.app_log)
-            toolBar.menu.applyTint(requireContext())
-            toolBar.installMd3OverflowMenu(
-                showIcons = true,
-                onOpenCustomMenu = { it.applyOpenTint(requireContext()) }
-            )
-            toolBar.setOnMenuItemClickListener(this@AppLogDialog)
-            recyclerView.layoutManager = LinearLayoutManager(requireContext())
-            recyclerView.adapter = adapter
-        }
-        adapter.setItems(AppLog.logs)
-        observeEvent<Boolean>(EventBus.APP_LOG_UPDATED) {
-            adapter.setItems(AppLog.logs)
-        }
+    @Composable
+    override fun Content() {
+        AppLogsRoute(
+            viewModel = viewModel,
+            onShowLog = ::showLog,
+            onShare = ::shareLogs,
+            onClose = ::dismiss,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_clear -> alert(R.string.clear, R.string.clear_log_confirm) {
-                yesButton {
-                    AppLog.clear()
-                    HttpLogStore.clear()
-                    adapter.clearItems()
-                }
-                noButton()
+    private fun showLog(log: AppLogDetail): Boolean {
+        if (!isAdded || childFragmentManager.isStateSaved) return false
+        val tag = TextDialog::class.simpleName
+        return try {
+            if (childFragmentManager.findFragmentByTag(tag) == null) {
+                TextDialog(log.title, log.text).showNow(childFragmentManager, tag)
             }
-
-            R.id.menu_export -> exportLogs()
-        }
-        return true
-    }
-
-    private fun exportLogs() {
-        val text = AppLog.exportText(AppLog.logs)
-        if (text.isBlank()) {
-            toastOnUi(R.string.no_log)
-            return
-        }
-        if (text.length <= MAX_SHARE_TEXT) {
-            requireContext().share(text, getString(R.string.log))
-            return
-        }
-        runCatching {
-            val file = File(requireContext().cacheDir, "applog.txt")
-            file.writeText(text)
-            requireContext().share(file, "text/plain")
-        }.onFailure {
-            toastOnUi(R.string.can_not_share)
+            true
+        } catch (_: IllegalStateException) {
+            false
         }
     }
 
-    inner class LogAdapter(context: Context) :
-        RecyclerAdapter<Triple<Long, String, Throwable?>, ItemAppLogBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemAppLogBinding {
-            return ItemAppLogBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemAppLogBinding,
-            item: Triple<Long, String, Throwable?>,
-            payloads: MutableList<Any>
-        ) {
-            binding.textTime.text = LogUtils.logTimeFormat.format(Date(item.first))
-            binding.textMessage.text = item.second
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemAppLogBinding) {
-            binding.root.onClick {
-                getItem(holder.layoutPosition)?.let { item ->
-                    val httpId = HttpLogRecord.parseId(item.second)
-                    val httpRecord = httpId?.let(HttpLogStore::get)
-                    when {
-                        httpId != null -> {
-                            showDialogFragment(TextDialog("HTTP", httpRecord?.detail ?: item.second))
-                        }
-
-                        else -> item.third?.let { throwable ->
-                            showDialogFragment(TextDialog("Log", throwable.stackTraceToString()))
+    private fun shareLogs(export: AppLogExport): Boolean {
+        if (!isAdded || parentFragmentManager.isStateSaved) return false
+        try {
+            val context = requireContext()
+            val intent =
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, getString(R.string.log))
+                    when (export) {
+                        is AppLogExport.Text -> putExtra(Intent.EXTRA_TEXT, export.text)
+                        is AppLogExport.Document -> {
+                            val uri =
+                                FileProvider.getUriForFile(context, AppConst.authority, export.file)
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            clipData = ClipData.newRawUri(getString(R.string.log), uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                     }
                 }
-            }
+            startActivity(Intent.createChooser(intent, getString(R.string.log)))
+        } catch (_: Exception) {
+            viewModel.shareFailed(export)
         }
-
+        return true
     }
-
 }

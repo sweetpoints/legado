@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="menu_search" type="id" />
+    <item name="menu_update_toc" type="id" />
+    <item name="menu_add_local" type="id" />
+    <item name="menu_remote" type="id" />
+    <item name="menu_add_url" type="id" />
+    <item name="menu_bookshelf_manage" type="id" />
+    <item name="menu_download" type="id" />
+    <item name="menu_group_manage" type="id" />
+    <item name="menu_bookshelf_layout" type="id" />
+    <item name="menu_export_bookshelf" type="id" />
+    <item name="menu_import_bookshelf" type="id" />
+    <item name="menu_log" type="id" />
+</resources>

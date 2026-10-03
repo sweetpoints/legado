@@ -1,12 +1,12 @@
 package io.legado.app.model
 
-import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.ReadRecord
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class AudioReadTimeTrackerTest {
 
@@ -58,11 +58,23 @@ class AudioReadTimeTrackerTest {
     @Test
     fun `switching book data cannot change the previous authors chapter or cover`() {
         val tracker = AudioReadTimeTracker()
-        val original = ReadRecord(bookName = "book", author = "A", lastChapterTitle = "A chapter", coverUrl = "A cover")
+        val original =
+            ReadRecord(
+                bookName = "book",
+                author = "A",
+                lastChapterTitle = "A chapter",
+                coverUrl = "A cover",
+            )
         tracker.setRecord(original)
         tracker.start(100)
-        val other = Book(bookUrl = "B", name = "book", author = "B",
-            durChapterTitle = "B chapter", coverUrl = "B cover")
+        val other =
+            Book(
+                bookUrl = "B",
+                name = "book",
+                author = "B",
+                durChapterTitle = "B chapter",
+                coverUrl = "B cover",
+            )
         tracker.updateSnapshot(other, 9, 50)
         val saved = tracker.stop(200, 1000)!!.first
         assertEquals("A", saved.author)
@@ -72,12 +84,13 @@ class AudioReadTimeTrackerTest {
 
     @Test
     fun `service records only actual playing state`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/service/AudioPlayService.kt"
-        ).readText()
-        val callback = source.substringAfter("private fun handleIsPlayingChanged(")
-            .substringBefore("override fun onSharedPreferenceChanged")
-            .replace(Regex("\\s+"), " ")
+        val source =
+            projectFile("src/main/java/io/legado/app/service/AudioPlayService.kt").readText()
+        val callback =
+            source
+                .substringAfter("private fun handleIsPlayingChanged(")
+                .substringBefore("override fun onSharedPreferenceChanged")
+                .replace(Regex("\\s+"), " ")
 
         assertTrue(
             callback.contains(
@@ -85,41 +98,47 @@ class AudioReadTimeTrackerTest {
             )
         )
 
-        val preferenceCallback = source.substringAfter("override fun onSharedPreferenceChanged(")
-            .substringBefore("private fun upMediaMetadata")
-            .replace(Regex("\\s+"), " ")
+        val preferenceCallback =
+            source
+                .substringAfter("override fun onSharedPreferenceChanged(")
+                .substringBefore("private fun upMediaMetadata")
+                .replace(Regex("\\s+"), " ")
         assertTrue(preferenceCallback.contains("key != PreferKey.enableReadRecord"))
         assertTrue(
-            preferenceCallback.contains(
-                "if (AppConfig.enableReadRecord && exoPlayer.isPlaying)"
-            )
+            preferenceCallback.contains("if (AppConfig.enableReadRecord && exoPlayer.isPlaying)")
         )
 
-        val model = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt")
-            .readText()
-            .replace(Regex("\\s+"), " ")
+        val model =
+            projectFile("src/main/java/io/legado/app/model/AudioPlay.kt")
+                .readText()
+                .replace(Regex("\\s+"), " ")
         assertTrue(model.contains("@Synchronized fun upReadTime()"))
-        assertTrue(model.contains("executor.execute { record.saveWithCover(snapshotBook, elapsed) }"))
+        assertTrue(
+            model.contains("executor.execute { record.saveWithCover(snapshotBook, elapsed) }")
+        )
 
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
-        ).readText()
+        val viewModel =
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
+                .readText()
         assertTrue(viewModel.contains("AudioPlay.replaceBook(book)"))
     }
 
     @Test
     fun `generation invalidation settles old playback before stopping the player`() {
         val model = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt").readText()
-        val stopRequest = model.substringAfter("private fun stopPlayAndGetGeneration()")
-            .substringBefore("fun stopPlay()")
+        val stopRequest =
+            model
+                .substringAfter("private fun stopPlayAndGetGeneration()")
+                .substringBefore("fun stopPlay()")
         val stopAction = stopRequest.indexOf("IntentAction.stopPlay")
         assertTrue(stopRequest.indexOf("invalidatePlayback()") in 0..<stopAction)
 
-        val service = projectFile(
-            "src/main/java/io/legado/app/service/AudioPlayService.kt"
-        ).readText()
-        val stopBranch = service.substringAfter("IntentAction.stopPlay -> {")
-            .substringBefore("IntentAction.pause ->")
+        val service =
+            projectFile("src/main/java/io/legado/app/service/AudioPlayService.kt").readText()
+        val stopBranch =
+            service
+                .substringAfter("IntentAction.stopPlay -> {")
+                .substringBefore("IntentAction.pause ->")
         val clearPlaying = stopBranch.indexOf("isPlaying = false")
         val settleReadTime = stopBranch.indexOf("AudioPlay.upReadTime()")
         val playerStop = stopBranch.indexOf("exoPlayer.stop()")
@@ -128,8 +147,7 @@ class AudioReadTimeTrackerTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }

@@ -4,16 +4,19 @@ package io.legado.app.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.widget.Toast
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import io.legado.app.BuildConfig
-import io.legado.app.databinding.ViewToastBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
-import splitties.systemservices.layoutInflater
+import io.legado.app.ui.widget.toast.ToastComposePresentation
+import io.legado.app.ui.widget.toast.ToastSessionTimeouts
 
-private var toast: Toast? = null
+private var toastSession: CustomToastSession? = null
 
 private var toastLegacy: Toast? = null
 
@@ -21,22 +24,23 @@ fun Context.toastOnUi(message: Int, duration: Int = Toast.LENGTH_SHORT) {
     toastOnUi(getString(message), duration)
 }
 
-@SuppressLint("InflateParams")
-@Suppress("DEPRECATION")
+@SuppressLint("ShowToast")
 fun Context.toastOnUi(message: CharSequence?, duration: Int = Toast.LENGTH_SHORT) {
     runOnUI {
         kotlin.runCatching {
-            toast?.cancel()
-            toast = Toast(this)
-            val isLight = ColorUtils.isColorLight(bottomBackground)
-            ViewToastBinding.inflate(layoutInflater).run {
-                toast?.view = root
-                cvToast.setCardBackgroundColor(bottomBackground)
-                tvText.setTextColor(getPrimaryTextColor(isLight))
-                tvText.text = message
+            toastSession?.cancel()
+            toastSession = null
+            val session =
+                CustomToastSession(this, message, duration) { closed ->
+                    if (toastSession === closed) toastSession = null
+                }
+            toastSession = session
+            try {
+                session.show()
+            } catch (error: Throwable) {
+                session.cancel()
+                throw error
             }
-            toast?.duration = duration
-            toast?.show()
         }
     }
 }
@@ -84,3 +88,69 @@ fun Fragment.toastOnUi(message: CharSequence) = requireActivity().toastOnUi(mess
 fun Fragment.longToast(message: Int) = requireContext().longToastOnUi(message)
 
 fun Fragment.longToast(message: CharSequence) = requireContext().longToastOnUi(message)
+
+private class CustomToastSession(
+    context: Context,
+    message: CharSequence?,
+    private val duration: Int,
+    private val onClosed: (CustomToastSession) -> Unit,
+) {
+    private val toast = Toast(context)
+    private val backgroundColor = context.bottomBackground
+    private val textColor = context.getPrimaryTextColor(ColorUtils.isColorLight(backgroundColor))
+    private val metrics = context.resources.displayMetrics
+    private val composeDensity = Density(context)
+    private val toastMessage =
+        message.toToastMessage(
+            baseTextSizePx = with(composeDensity) { 16.sp.toPx() },
+            density = composeDensity,
+            color = textColor,
+        )
+    private val presentation =
+        ToastComposePresentation(
+            context = context,
+            message = toastMessage,
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+            onAttached = { timeouts.onAttached(duration) },
+        )
+    private var closed = false
+    private val timeouts = ToastSessionTimeouts(::cancel)
+    private var toastCallbackRegistration: AutoCloseable? = null
+
+    init {
+        @Suppress("DEPRECATION") run { toast.view = presentation.view }
+        toast.duration = duration
+        toastCallbackRegistration =
+            runToastCallbackOnApi30(Build.VERSION.SDK_INT) {
+                ToastCallbackApi30.registerHiddenCallback(toast, ::close)
+            }
+    }
+
+    fun show() {
+        toast.show()
+        timeouts.startPendingAttachmentTimeout()
+    }
+
+    fun cancel() {
+        try {
+            toast.cancel()
+        } finally {
+            close()
+        }
+    }
+
+    private fun close() {
+        if (closed) return
+        closed = true
+        timeouts.close()
+        runCatching { toast.cancel() }
+        runCatching { toastCallbackRegistration?.close() }
+        toastCallbackRegistration = null
+        presentation.close()
+        onClosed(this)
+    }
+}
+
+internal fun <T> runToastCallbackOnApi30(sdkInt: Int, register: () -> T): T? =
+    if (sdkInt >= 30) register() else null

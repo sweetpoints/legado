@@ -1,77 +1,22 @@
 package io.legado.app.ui.font
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import io.legado.app.data.file.installFontFile
+import io.legado.app.data.repository.FontEntry
+import io.legado.app.data.repository.mergeFontEntries
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class FontSelectionStyleTest {
-
-    @Test
-    fun `selected font uses an accent stroke`() {
-        val layout = readProjectFile("src/main/res/layout/item_font.xml")
-        val adapter = readProjectFile("src/main/java/io/legado/app/ui/font/FontAdapter.kt")
-
-        assertFalse(layout.contains("MaterialCardView"))
-        assertTrue(layout.contains("<LinearLayout"))
-        assertTrue(layout.contains("@+id/root_card"))
-        assertTrue(layout.contains("android:foreground=\"?android:attr/selectableItemBackground\""))
-        assertTrue(adapter.contains("rootCard.background = GradientDrawable().apply"))
-        assertTrue(adapter.contains("setColor(Color.TRANSPARENT)"))
-        assertTrue(adapter.contains("setStroke(2.dpToPx(), context.accentColor)"))
-        assertTrue(adapter.contains("val selected = doc.toString() == curFilePath"))
-        assertTrue(adapter.contains("R.string.font_item_private"))
-        assertTrue(adapter.contains("R.string.font_item_external"))
-    }
-
-    @Test
-    fun `font preview falls back when loading a recycled row fails`() {
-        val adapter = readProjectFile("src/main/java/io/legado/app/ui/font/FontAdapter.kt")
-            .substringAfter("override fun convert")
-
-        assertTrue(adapter.contains("tvFont.typeface = kotlin.runCatching"))
-        assertTrue(adapter.contains("}.getOrNull() ?: Typeface.DEFAULT"))
-    }
-
-    @Test
-    fun `private fonts load independently of the optional external folder`() {
-        val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
-        val setup = dialog.substringAfter("val fontPath = getPrefString(PreferKey.fontFolder)")
-            .substringBefore("override fun onMenuItemClick")
-        val localLoaderMarker =
-            "private fun loadLocalFonts(openFolderWhenEmpty: Boolean = false)"
-        assertTrue(dialog.contains(localLoaderMarker))
-        val localLoader = dialog.substringAfter(localLoaderMarker)
-            .substringBefore("private fun getLocalFonts()")
-
-        assertTrue(setup.contains("loadLocalFonts(openFolderWhenEmpty = true)"))
-        assertTrue(setup.contains("loadFontFiles(FileDoc.fromDocumentFile(doc))"))
-        val readableFolder = setup.substringAfter("if (doc?.canRead() == true)")
-            .substringBefore("} else {")
-        assertFalse(readableFolder.contains("loadLocalFonts"))
-        assertTrue(localLoader.contains("getLocalFonts()"))
-        assertTrue(localLoader.contains("if (it.isNotEmpty())"))
-        assertTrue(localLoader.contains("adapter.setItems(it)"))
-        assertTrue(localLoader.contains("else if (openFolderWhenEmpty)"))
-        assertTrue(localLoader.contains("openFolder()"))
-
-        val permissionLoader = dialog.substringAfter("private fun loadFontFilesByPermission")
-            .substringBefore("private fun loadFontFiles(fileDoc")
-        assertTrue(permissionLoader.contains(".onDenied"))
-        assertTrue(permissionLoader.contains("loadLocalFonts()"))
-
-        val externalLoader = dialog.substringAfter("private fun loadFontFiles(fileDoc")
-            .substringBefore("private fun mergeFontItems")
-        assertTrue(externalLoader.substringAfter(".onError").contains("loadLocalFonts()"))
-    }
 
     @Test
     fun `font import installs valid files without overwriting name conflicts`() {
@@ -79,22 +24,31 @@ class FontSelectionStyleTest {
         try {
             val fonts = root.resolve("font")
             val firstBytes = "font-one".encodeToByteArray()
-            val first = installFontFile(
-                ByteArrayInputStream(firstBytes),
-                "folder\\Demo.ttf",
-                fonts,
-            ) { it.readBytes().contentEquals(firstBytes) }
-            val duplicate = installFontFile(
-                ByteArrayInputStream(firstBytes),
-                "Demo.ttf",
-                fonts,
-            ) { true }
+            val first =
+                installFontFile(
+                    ByteArrayInputStream(firstBytes),
+                    "folder\\Demo.ttf",
+                    fonts,
+                ) {
+                    it.readBytes().contentEquals(firstBytes)
+                }
+            val duplicate =
+                installFontFile(
+                    ByteArrayInputStream(firstBytes),
+                    "Demo.ttf",
+                    fonts,
+                ) {
+                    true
+                }
             val secondBytes = "font-two".encodeToByteArray()
-            val second = installFontFile(
-                ByteArrayInputStream(secondBytes),
-                "Demo.ttf",
-                fonts,
-            ) { true }
+            val second =
+                installFontFile(
+                    ByteArrayInputStream(secondBytes),
+                    "Demo.ttf",
+                    fonts,
+                ) {
+                    true
+                }
 
             assertEquals("Demo.ttf", first.name)
             assertEquals(first, duplicate)
@@ -140,7 +94,9 @@ class FontSelectionStyleTest {
                         ByteArrayInputStream(content.encodeToByteArray()),
                         "Concurrent.ttf",
                         fonts,
-                    ) { true }
+                    ) {
+                        true
+                    }
                 }
             }
             start.countDown()
@@ -159,27 +115,34 @@ class FontSelectionStyleTest {
     }
 
     @Test
-    fun `font picker exposes a single file import and keeps same names by path`() {
-        val dialog = readProjectFile("src/main/java/io/legado/app/ui/font/FontSelectDialog.kt")
-        val menu = readProjectFile("src/main/res/menu/font_select.xml")
-        val importIo = dialog.substringAfter("private fun importFont(uri: Uri)")
-            .substringAfter("execute {")
-            .substringBefore("}.onSuccess")
-
-        assertTrue(menu.contains("@+id/menu_import"))
-        assertTrue(menu.contains("@drawable/ic_import"))
-        assertTrue(dialog.contains("mode = HandleFileContract.FILE"))
-        assertTrue(importIo.contains("FileDoc.fromUri(uri, false)"))
-        assertTrue(importIo.contains("source.openInputStream().getOrThrow()"))
-        assertTrue(importIo.contains("installFontFile(input, source.name, directory, ::isValidFont)"))
-        assertTrue(dialog.contains("if (paths.add(item.toString()))"))
-        assertFalse(dialog.contains("if (item2.name == item1.name)"))
+    fun mergingKeepsSameNamesAtDifferentPathsAndPrefersExternalForDuplicatePath() {
+        val external =
+            listOf(
+                FontEntry("/external/Demo.ttf", "file:///external/Demo.ttf", "Demo.ttf", false),
+                FontEntry("/shared/Same.ttf", "file:///shared/Same.ttf", "Same.ttf", false),
+            )
+        val local =
+            listOf(
+                FontEntry("/private/Demo.ttf", "file:///private/Demo.ttf", "Demo.ttf", true),
+                FontEntry("/shared/Same.ttf", "file:///shared/Same.ttf", "Same.ttf", true),
+            )
+        val merged = mergeFontEntries(external, local)
+        assertEquals(3, merged.size)
+        assertEquals(
+            listOf("/external/Demo.ttf", "/private/Demo.ttf", "/shared/Same.ttf"),
+            merged.map { it.path },
+        )
+        assertFalse(merged.last().privateFolder)
     }
 
-    private fun readProjectFile(pathInApp: String): String {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?.readText()
-            .orEmpty()
+    @Test
+    fun mergedFontsAreNameSortedAndPrivateFontsWorkWithoutAnExternalFolder() {
+        val local =
+            listOf(
+                FontEntry("/private/Z.ttf", "", "Z.ttf", true),
+                FontEntry("/private/A.otf", "", "A.otf", true),
+            )
+        assertEquals(listOf("A.otf", "Z.ttf"), mergeFontEntries(emptyList(), local).map { it.name })
+        assertTrue(mergeFontEntries(emptyList(), local).all { it.privateFolder })
     }
 }

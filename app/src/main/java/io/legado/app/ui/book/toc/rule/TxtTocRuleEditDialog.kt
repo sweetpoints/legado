@@ -1,181 +1,126 @@
 package io.legado.app.ui.book.toc.rule
 
-import android.app.Application
+import android.app.Activity.RESULT_OK
+import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
-import android.view.MenuItem
-import android.view.View
+import android.view.KeyEvent
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
+import android.view.WindowManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.BaseViewModel
-import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.DialogTocRegexEditBinding
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.code.addJsPattern
-import io.legado.app.ui.widget.code.addJsonPattern
+import io.legado.app.data.repository.RoomTxtTocRuleEditorRepository
+import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.utils.*
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.Dispatchers
-import java.util.regex.Pattern
-import java.util.regex.PatternSyntaxException
-import kotlin.toString
 
-class TxtTocRuleEditDialog() : BaseDialogFragment(R.layout.dialog_toc_regex_edit, true),
-    Toolbar.OnMenuItemClickListener {
-
+class TxtTocRuleEditDialog() : BaseComposeDialogFragment() {
     constructor(id: Long?) : this() {
-        id ?: return
-        arguments = Bundle().apply {
-            putLong("id", id)
-        }
+        if (id != null) arguments = Bundle().apply { putLong("id", id) }
     }
 
-    private val binding by viewBinding(DialogTocRegexEditBinding::bind)
-    private val viewModel by viewModels<ViewModel>()
-    private val callback get() = (parentFragment as? Callback) ?: activity as? Callback
+    private val model by
+        viewModels<TxtTocRuleEditorViewModel> {
+            viewModelFactory {
+                initializer {
+                    TxtTocRuleEditorViewModel(
+                        RoomTxtTocRuleEditorRepository(),
+                        createSavedStateHandle(),
+                        arguments?.takeIf { it.containsKey("id") }?.getLong("id"),
+                    )
+                }
+            }
+        }
+    private val callback
+        get() = txtTocRuleEditorCallback(parentFragment, activity)
+
+    private val codeLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                if (
+                    !model.codeResult(
+                        result.data?.getStringExtra("text"),
+                        result.data?.getIntExtra("cursorPosition", 0),
+                    )
+                )
+                    toastOnUi(R.string.focus_lost_on_textbox)
+            } else model.codeCancelled()
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        isCancelable = false
+    }
 
     override fun onStart() {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        initMenu()
-        viewModel.initData(arguments?.getLong("id")) {
-            upRuleView(it)
+        dialog?.window?.apply {
+            setBackgroundDrawableResource(R.color.transparent)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        dialog?.setOnKeyListener { _, key, event ->
+            if (key == KeyEvent.KEYCODE_BACK) {
+                if (event.action == KeyEvent.ACTION_UP) model.requestClose()
+                true
+            } else false
         }
     }
 
-    private fun initMenu() {
-        binding.toolBar.inflateMenu(R.menu.txt_toc_rule_edit)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        view?.setBackgroundColor(Color.TRANSPARENT)
     }
 
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_save -> {
-                val tocRule = getRuleFromView()
-                if (checkValid(tocRule)) {
-                    callback?.saveTxtTocRule(tocRule)
-                    dismissAllowingStateLoss()
-                }
-            }
-            R.id.menu_copy_rule -> context?.sendToClip(GSON.toJson(getRuleFromView()))
-            R.id.menu_paste_rule -> viewModel.pasteRule {
-                upRuleView(it)
-            }
-        }
-        return true
-    }
-
-    private fun checkValid(tocRule: TxtTocRule): Boolean {
-        if (tocRule.name.isEmpty()) {
-            toastOnUi("名称不能为空")
-            return false
-        }
-
-        try {
-            Pattern.compile(tocRule.rule, Pattern.MULTILINE)
-        } catch (ex: PatternSyntaxException) {
-            AppLog.put("正则语法错误或不支持(txt)：${ex.localizedMessage}", ex, true)
-            return false
-        }
-
-        return true
-    }
-
-    private fun upRuleView(tocRule: TxtTocRule?) {
-        binding.tvRuleName.setText(tocRule?.name)
-        binding.tvRuleRegex.setText(tocRule?.rule)
-        binding.tvRuleReplacement.apply{
-            addJsonPattern()
-            addJsPattern()
-            setText(tocRule?.replacement)
-        }
-        binding.tvRuleExample.setText(tocRule?.example)
-    }
-
-    private fun getRuleFromView(): TxtTocRule {
-        val tocRule = viewModel.tocRule ?: TxtTocRule().apply {
-            viewModel.tocRule = this
-        }
-        binding.run {
-            tocRule.name = tvRuleName.text.toString()
-            tocRule.rule = tvRuleRegex.text.toString()
-            tocRule.replacement = tvRuleReplacement.text.toString()
-            tocRule.example = tvRuleExample.text.toString()
-        }
-        return tocRule
-    }
-
-    private fun isSame(): Boolean{
-        val tocRule = viewModel.tocRule ?: return binding.tvRuleName.text.toString().isEmpty()
-        return binding.run {
-            tocRule.name == tvRuleName.text.toString() &&
-            tocRule.rule == tvRuleRegex.text.toString() &&
-            tocRule.replacement == tvRuleReplacement.text.toString() &&
-            tocRule.example == tvRuleExample.text.toString()
-        }
+    override fun onResume() {
+        super.onResume()
+        view?.setBackgroundColor(Color.TRANSPARENT)
     }
 
     override fun dismiss() {
-        if (!isSame()) {
-            alert(R.string.exit) {
-                setMessage(R.string.exit_no_save)
-                positiveButton(R.string.yes)
-                negativeButton(R.string.no) {
-                    super.dismiss()
-                }
-            }
-        } else {
-            super.dismiss()
-        }
+        model.requestClose()
     }
 
-    class ViewModel(application: Application) : BaseViewModel(application) {
-
-        var tocRule: TxtTocRule? = null
-
-        fun initData(id: Long?, finally: (tocRule: TxtTocRule?) -> Unit) {
-            if (tocRule != null) return
-            execute {
-                if (id == null) return@execute
-                tocRule = appDb.txtTocRuleDao.get(id)
-            }.onFinally {
-                finally.invoke(tocRule)
-            }
-        }
-
-        fun pasteRule(success: (TxtTocRule) -> Unit) {
-            execute(context = Dispatchers.Main) {
-                val text = context.getClipText()
-                if (text.isNullOrBlank()) {
-                    throw NoStackTraceException("剪贴板为空")
-                }
-                GSON.fromJsonObject<TxtTocRule>(text).getOrNull()
-                    ?: throw NoStackTraceException("格式不对")
-            }.onSuccess {
-                success.invoke(it)
-            }.onError {
-                context.toastOnUi(it.localizedMessage ?: "Error")
-                it.printOnDebug()
-            }
-        }
-
+    @Composable
+    override fun Content() {
+        TxtTocRuleEditorRoute(
+            model,
+            { request ->
+                val title =
+                    when (request.field) {
+                        TxtTocEditorField.Name -> R.string.name
+                        TxtTocEditorField.Regex -> R.string.regex
+                        TxtTocEditorField.Replacement -> R.string.replace_to_js
+                        TxtTocEditorField.Example -> R.string.example
+                    }
+                codeLauncher.launch(
+                    Intent(requireContext(), CodeEditActivity::class.java).apply {
+                        putExtra("text", request.text)
+                        putExtra("title", getString(title))
+                        putExtra("cursorPosition", request.cursor)
+                    }
+                )
+            },
+            { requireContext().sendToClip(it) },
+            { requireContext().getClipText() },
+            { toastOnUi(R.string.please_focus_cursor_on_textbox) },
+            { callback?.saveTxtTocRule(it.entity()) },
+            ::dismissAllowingStateLoss,
+        )
     }
 
     interface Callback {
-
         fun saveTxtTocRule(txtTocRule: TxtTocRule)
-
     }
-
 }
+
+internal fun txtTocRuleEditorCallback(
+    parent: Any?,
+    activity: Any?,
+): TxtTocRuleEditDialog.Callback? =
+    (parent as? TxtTocRuleEditDialog.Callback) ?: activity as? TxtTocRuleEditDialog.Callback

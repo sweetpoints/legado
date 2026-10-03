@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources><string name="file_picker_folder_name">文件夹名</string>
+    <string name="file_picker_file_required">请选择文件</string>
+    <string name="file_picker_folder_required">文件夹名不能为空</string>
+    <string name="file_picker_directory_missing">文件夹不存在</string>
+    <string name="file_picker_directory_unreadable">无法读取文件夹</string>
+    <string name="file_picker_outside_root">路径超出所选文件夹</string>
+    <string name="file_picker_invalid_name">非法文件夹名</string>
+    <string name="file_picker_create_failed">无法创建文件夹</string>
+    <string name="file_picker_selection_invalid">所选文件不存在或不允许选择</string>
+</resources>

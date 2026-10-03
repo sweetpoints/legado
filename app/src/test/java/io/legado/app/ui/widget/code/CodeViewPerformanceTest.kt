@@ -1,11 +1,11 @@
 package io.legado.app.ui.widget.code
 
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class CodeViewPerformanceTest {
 
@@ -19,11 +19,14 @@ class CodeViewPerformanceTest {
 
     @Test
     fun `navigation keys stay inside the code editor`() {
-        val codeView = File(
-            repositoryRoot(),
-            "app/src/main/java/io/legado/app/ui/widget/code/CodeView.kt"
-        ).readText().substringAfter("override fun dispatchKeyEvent")
-            .substringBefore("override fun showDropDown")
+        val codeView =
+            File(
+                    repositoryRoot(),
+                    "app/src/main/java/io/legado/app/ui/widget/code/CodeView.kt",
+                )
+                .readText()
+                .substringAfter("override fun dispatchKeyEvent")
+                .substringBefore("override fun showDropDown")
 
         assertTrue(codeView.contains("if (super.dispatchKeyEvent(event)) return true"))
         assertTrue(codeView.contains("KeyEvent.KEYCODE_PAGE_UP"))
@@ -42,26 +45,6 @@ class CodeViewPerformanceTest {
         assertEquals(8, selectionVisibilityOffset(-1, -1, 2, 8))
         assertEquals(7, selectionVisibilityOffset(7, 7, 7, 7))
         assertNull(selectionVisibilityOffset(2, 8, -1, -1))
-    }
-
-    @Test
-    fun `dead diff adapter APIs and orphan layout stay removed`() {
-        val root = repositoryRoot()
-        val codeView = File(
-            root,
-            "app/src/main/java/io/legado/app/ui/widget/code/CodeView.kt"
-        ).readText()
-        val adapter = File(
-            root,
-            "app/src/main/java/io/legado/app/base/adapter/DiffRecyclerAdapter.kt"
-        ).readText()
-
-        assertFalse(codeView.contains("val s = editable.toString()"))
-        assertFalse(File(root, "app/src/main/res/layout/view_refresh_recycler.xml").exists())
-        assertFalse(adapter.contains("fun setItem(position: Int, item: ITEM)"))
-        assertFalse(adapter.contains("fun updateItem(item: ITEM)"))
-        assertFalse(adapter.contains("fun updateItem(position: Int, payload: Any)"))
-        assertTrue(adapter.contains("fun updateItems("))
     }
 
     private fun repositoryRoot(): File {

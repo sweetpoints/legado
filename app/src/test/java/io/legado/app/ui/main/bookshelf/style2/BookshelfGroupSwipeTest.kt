@@ -7,15 +7,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BookshelfGroupSwipeTest {
 
-    private val groups = listOf(
-        BookGroup(groupId = 1, groupName = "First"),
-        BookGroup(groupId = 2, groupName = "Second"),
-        BookGroup(groupId = 4, groupName = "Third"),
-    )
+    private val groups =
+        listOf(
+            BookGroup(groupId = 1, groupName = "First"),
+            BookGroup(groupId = 2, groupName = "Second"),
+            BookGroup(groupId = 4, groupName = "Third"),
+        )
 
     @Test
     fun `swiping left selects the next visible group`() {
@@ -43,47 +43,31 @@ class BookshelfGroupSwipeTest {
     }
 
     @Test
-    fun `group swipe commits on up and cancel only resets state`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/widget/recycler/RecyclerViewAtPager2.kt",
-        ).readText().replace("\r\n", "\n")
-        val move = source.substringAfter("MotionEvent.ACTION_MOVE ->")
-            .substringBefore("MotionEvent.ACTION_UP ->")
-        val up = source.substringAfter("MotionEvent.ACTION_UP ->")
-            .substringBefore("MotionEvent.ACTION_CANCEL ->")
-        val cancel = source.substringAfter("MotionEvent.ACTION_CANCEL ->")
-
-        assertTrue(move.contains("canHandleHorizontalSwipe?.invoke(direction)"))
-        assertFalse(move.contains("onHorizontalSwipe?.invoke"))
-        assertTrue(up.contains("direction == capturedSwipeDirection"))
-        assertTrue(up.contains("onHorizontalSwipe?.invoke(capturedSwipeDirection)"))
-        assertTrue(cancel.contains("capturedSwipeDirection = 0"))
-        assertFalse(cancel.contains("onHorizontalSwipe?.invoke"))
-
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
-        ).readText().replace("\r\n", "\n")
-        assertTrue(fragment.contains("onHorizontalSwipe = ::switchBookGroup"))
-        assertTrue(fragment.contains("onHorizontalSwipe = null"))
+    fun gestureCommitsOnlyAfterReleaseAndCancellationOrReversalNeverChangesGroup() {
+        val gesture = BookshelfFolderGesture(50f, previous = true, next = true)
+        assertFalse(gesture.move(-20f, 0f))
+        assertTrue(gesture.move(-70f, 5f))
+        assertNull(gesture.finish(-70f, 5f, cancelled = true))
+        assertTrue(gesture.move(-70f, 5f))
+        assertNull(gesture.finish(80f, 5f, cancelled = false))
+        assertTrue(gesture.move(-70f, 5f))
+        assertEquals(1, gesture.finish(-100f, 5f, cancelled = false))
+        assertNull(gesture.finish(-100f, 5f, cancelled = false))
     }
 
     @Test
-    fun `folder group exposes toolbar back navigation`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt",
-        ).readText().replace("\r\n", "\n")
-
-        assertTrue(fragment.contains("setNavigationOnClickListener { back() }"))
-        assertTrue(fragment.contains("private fun initBooksData() {\n        upNavigationIcon()"))
-        assertTrue(fragment.contains("navigationIcon = if (groupId == BookGroup.IdRoot)"))
-        assertTrue(fragment.contains("abc_ic_ab_back_material"))
-        assertTrue(fragment.contains("navigationContentDescription = getString(R.string.back)"))
-        assertTrue(fragment.contains("transparentBar = binding.titleBar.usesTransparentForeground"))
-    }
-
-    private fun projectFile(pathInApp: String): File {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?: error("Project file not found: $pathInApp")
+    fun verticalMotionRootAndGroupEdgesStayUncaptured() {
+        val root = BookshelfFolderGesture(50f, false, false)
+        assertFalse(root.move(-100f, 0f))
+        assertNull(root.finish(-100f, 0f, false))
+        val first = BookshelfFolderGesture(50f, false, true)
+        assertFalse(first.move(100f, 0f))
+        assertFalse(first.move(-70f, 90f))
+        assertTrue(first.move(-100f, 0f))
+        assertEquals(1, first.finish(-100f, 0f, false))
+        val last = BookshelfFolderGesture(50f, true, false)
+        assertFalse(last.move(-100f, 0f))
+        assertTrue(last.move(100f, 0f))
+        assertEquals(-1, last.finish(100f, 0f, false))
     }
 }

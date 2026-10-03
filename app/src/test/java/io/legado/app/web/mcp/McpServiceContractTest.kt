@@ -3,6 +3,8 @@ package io.legado.app.web.mcp
 import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BookSource
 import io.legado.app.model.jsSource.JsSourceEngine
+import java.io.File
+import java.net.URI
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -15,8 +17,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
-import java.net.URI
 
 class McpServiceContractTest {
 
@@ -41,20 +41,21 @@ class McpServiceContractTest {
             service.indexOf("AppConfig.jsSourceApiTokenRequired && token.isNullOrBlank()") <
                 service.indexOf("embeddedServer(")
         )
-        assertTrue(service.contains("tokenRequiredProvider = { AppConfig.jsSourceApiTokenRequired }"))
+        assertTrue(
+            service.contains("tokenRequiredProvider = { AppConfig.jsSourceApiTokenRequired }")
+        )
 
         val manifest = projectFile("app/src/main/AndroidManifest.xml")
         assertTrue(manifest.contains("FOREGROUND_SERVICE_SPECIAL_USE"))
         assertTrue(manifest.contains("foregroundServiceType=\"specialUse\""))
         assertTrue(manifest.contains("PROPERTY_SPECIAL_USE_FGS_SUBTYPE"))
 
-        val settings = projectFile("app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt")
-        assertTrue(settings.contains("previousToken != token"))
-        assertTrue(settings.contains("McpService.restart(requireContext())"))
+        // Actual token change/clear plans and paused Main delivery are covered by
+        // OtherSettingsViewModelTest and OtherSettingsRouteTest, without mirroring the settings
+        // host.
 
-        val network = projectFile(
-            "app/src/main/java/io/legado/app/receiver/NetworkChangedListener.kt"
-        )
+        val network =
+            projectFile("app/src/main/java/io/legado/app/receiver/NetworkChangedListener.kt")
         assertTrue(network.contains("includeDetailedChanges: Boolean = false"))
         assertTrue(network.contains("onLinkPropertiesChanged"))
         assertTrue(network.contains("onLost"))
@@ -64,18 +65,19 @@ class McpServiceContractTest {
         assertTrue(service.contains("if (destroyed) return"))
         assertTrue(Regex("""@Synchronized\s+override fun onDestroy\(\)""").containsMatchIn(service))
 
-        val build = projectFile("app/build.gradle")
-        assertTrue(build.contains("module: 'kotlin-reflect'"))
+        val build = projectFile("app/build.gradle.kts")
+        assertTrue(build.contains("module = \"kotlin-reflect\""))
     }
 
     @Test
     fun `server exposes the expected thirteen tools on current safe APIs`() {
         val tools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
         val registrations = tools.substringAfter("private fun registerTools")
-        val names = Regex("name = \\\"([a-z_]+)\\\"")
-            .findAll(registrations)
-            .map { it.groupValues[1] }
-            .toList()
+        val names =
+            Regex("name = \\\"([a-z_]+)\\\"")
+                .findAll(registrations)
+                .map { it.groupValues[1] }
+                .toList()
 
         assertEquals(
             listOf(
@@ -95,24 +97,26 @@ class McpServiceContractTest {
             ),
             names,
         )
-        val getCookiesTool = tools.substringAfter("name = \"get_cookies\"")
-            .substringBefore("name = \"set_cookie\"")
+        val getCookiesTool =
+            tools.substringAfter("name = \"get_cookies\"").substringBefore("name = \"set_cookie\"")
         assertTrue(getCookiesTool.contains("CookieManager.getCookieNoSession"))
         assertTrue(getCookiesTool.contains("CookieManager.getSessionCookie"))
         assertTrue(getCookiesTool.contains("CookieManager.mergeCookies"))
         assertTrue(getCookiesTool.contains("McpFormat.truncate"))
         assertFalse(getCookiesTool.contains("CookieStore.getCookie("))
 
-        val setCookieTool = tools.substringAfter("name = \"set_cookie\"")
-            .substringBefore("name = \"clear_cookies\"")
+        val setCookieTool =
+            tools
+                .substringAfter("name = \"set_cookie\"")
+                .substringBefore("name = \"clear_cookies\"")
         assertTrue(setCookieTool.contains("CookieStore.cookieToMap(cookie)"))
         assertTrue(setCookieTool.contains("cookieMap.isEmpty()"))
         assertTrue(setCookieTool.contains("cookieMap.keys.any"))
         assertTrue(setCookieTool.contains("有效的 name=value"))
         assertTrue(setCookieTool.contains("CookieStore.replaceCookie"))
 
-        val clearCookiesTool = tools.substringAfter("name = \"clear_cookies\"")
-            .substringBefore("name = \"eval_js\"")
+        val clearCookiesTool =
+            tools.substringAfter("name = \"clear_cookies\"").substringBefore("name = \"eval_js\"")
         assertTrue(clearCookiesTool.contains("CookieStore.removeCookie"))
         assertTrue(tools.contains("HttpLogRecord"))
         assertTrue(tools.contains("JsSourceUpsert.withSaveLock"))
@@ -128,29 +132,34 @@ class McpServiceContractTest {
         assertFalse(tools.contains("HttpLogger"))
         assertTrue(tools.contains("logging = ServerCapabilities.Logging"))
 
-        val debugTool = tools.substringAfter("name = \"debug_source\"")
-            .substringBefore("name = \"list_sources\"")
+        val debugTool =
+            tools
+                .substringAfter("name = \"debug_source\"")
+                .substringBefore("name = \"list_sources\"")
         assertTrue(debugTool.contains("Channel<String>(Channel.CONFLATED)"))
         assertTrue(debugTool.contains("request.meta?.progressToken"))
         assertTrue(debugTool.contains("notificationJob.join()"))
         assertFalse(debugTool.contains("Channel.UNLIMITED"))
 
-        val notification = tools.substringAfter("private suspend fun sendBestEffort")
-            .substringBefore("private suspend fun ClientConnection.sendProgressLine")
+        val notification =
+            tools
+                .substringAfter("private suspend fun sendBestEffort")
+                .substringBefore("private suspend fun ClientConnection.sendProgressLine")
         assertTrue(notification.contains("catch (error: CancellationException)"))
         assertTrue(notification.contains("throw error"))
 
-        val checkProgress = tools
-            .substringAfter("private suspend fun ClientConnection.sendCheckProgress(")
-            .substringBefore("private fun registerTools")
+        val checkProgress =
+            tools
+                .substringAfter("private suspend fun ClientConnection.sendCheckProgress(")
+                .substringBefore("private fun registerTools")
         assertTrue(checkProgress.contains("total = total"))
 
         val api = projectFile("api.md")
         assertTrue(api.contains("notifications/message"))
         assertTrue(api.contains("progressToken"))
 
-        val evalTool = tools.substringAfter("name = \"eval_js\"")
-            .substringBefore("name = \"check_source\"")
+        val evalTool =
+            tools.substringAfter("name = \"eval_js\"").substringBefore("name = \"check_source\"")
         assertTrue(evalTool.contains("JsSourceUpsert.validatePayload(js)"))
         assertTrue(evalTool.contains("Debug.startSimpleDebug(collector, source.getKey())"))
         assertTrue(evalTool.contains("Debug.cancelDebug(collector)"))
@@ -174,9 +183,7 @@ class McpServiceContractTest {
         assertTrue(sourceStore.contains("JsSourceUpsert.withSaveLock"))
         assertTrue(sourceStore.contains("mainJs"))
         assertTrue(sourceStore.contains("MAX_SOURCE_BYTES"))
-        val upsert = projectFile(
-            "app/src/main/java/io/legado/app/model/jsSource/JsSourceUpsert.kt"
-        )
+        val upsert = projectFile("app/src/main/java/io/legado/app/model/jsSource/JsSourceUpsert.kt")
         assertTrue(upsert.contains("internal suspend fun <T> withSaveLock"))
     }
 
@@ -184,33 +191,50 @@ class McpServiceContractTest {
     fun `tools publish conservative behavior annotations`() {
         val tools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
         val registrations = tools.substringAfter("private fun registerTools")
-        val profiles = mapOf(
-            "localReadToolAnnotations" to listOf(
-                "list_sources", "get_source", "get_http_logs", "get_http_log", "get_cookies"
-            ),
-            "localWriteToolAnnotations" to listOf(
-                "delete_sources", "set_http_log_recording", "set_cookie", "clear_cookies"
-            ),
-            "openWorldWriteToolAnnotations" to listOf(
-                "save_source", "debug_source", "eval_js", "check_source"
-            ),
-        )
-        val registeredNames = Regex("name = \\\"([a-z_]+)\\\"")
-            .findAll(registrations)
-            .map { it.groupValues[1] }
-            .toSet()
+        val profiles =
+            mapOf(
+                "localReadToolAnnotations" to
+                    listOf(
+                        "list_sources",
+                        "get_source",
+                        "get_http_logs",
+                        "get_http_log",
+                        "get_cookies",
+                    ),
+                "localWriteToolAnnotations" to
+                    listOf(
+                        "delete_sources",
+                        "set_http_log_recording",
+                        "set_cookie",
+                        "clear_cookies",
+                    ),
+                "openWorldWriteToolAnnotations" to
+                    listOf(
+                        "save_source",
+                        "debug_source",
+                        "eval_js",
+                        "check_source",
+                    ),
+            )
+        val registeredNames =
+            Regex("name = \\\"([a-z_]+)\\\"")
+                .findAll(registrations)
+                .map { it.groupValues[1] }
+                .toSet()
         assertEquals(profiles.values.flatten().toSet(), registeredNames)
         profiles.forEach { (profile, names) ->
             names.forEach { name ->
-                val tool = registrations.substringAfter("name = \"$name\"")
-                    .substringBefore("\n        server.addTool(")
+                val tool =
+                    registrations
+                        .substringAfter("name = \"$name\"")
+                        .substringBefore("\n        server.addTool(")
                 assertTrue("$name must use $profile", tool.contains("toolAnnotations = $profile"))
             }
         }
 
         fun hints(profile: String): Set<String> {
-            val definition = tools.substringAfter("private val $profile = ToolAnnotations(")
-                .substringBefore(')')
+            val definition =
+                tools.substringAfter("private val $profile = ToolAnnotations(").substringBefore(')')
             return Regex("""[a-zA-Z]+Hint = (?:true|false)""")
                 .findAll(definition)
                 .map { it.value }
@@ -222,15 +246,19 @@ class McpServiceContractTest {
         )
         assertEquals(
             setOf(
-                "readOnlyHint = false", "destructiveHint = true",
-                "idempotentHint = true", "openWorldHint = false",
+                "readOnlyHint = false",
+                "destructiveHint = true",
+                "idempotentHint = true",
+                "openWorldHint = false",
             ),
             hints("localWriteToolAnnotations"),
         )
         assertEquals(
             setOf(
-                "readOnlyHint = false", "destructiveHint = true",
-                "idempotentHint = false", "openWorldHint = true",
+                "readOnlyHint = false",
+                "destructiveHint = true",
+                "idempotentHint = false",
+                "openWorldHint = true",
             ),
             hints("openWorldWriteToolAnnotations"),
         )
@@ -238,10 +266,11 @@ class McpServiceContractTest {
 
     @Test
     fun `request context evaluates and normalizes source javascript`() = runBlocking {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            mainJs = "var mainLoaded = true",
-        )
+        val source =
+            BookSource(
+                bookSourceUrl = "https://example.com",
+                mainJs = "var mainLoaded = true",
+            )
 
         val objectResult = evaluate(source, "({message: 'ok', items: [1, 2]})").orEmpty()
         assertTrue(objectResult.contains("\"message\":\"ok\""))
@@ -253,8 +282,8 @@ class McpServiceContractTest {
             evaluate(
                 source,
                 "baseUrl + '|' + source.bookSourceUrl + '|' + " +
-                    "sourceApi.bookSourceUrl + '|' + typeof mainLoaded"
-            )
+                    "sourceApi.bookSourceUrl + '|' + typeof mainLoaded",
+            ),
         )
     }
 
@@ -289,9 +318,10 @@ class McpServiceContractTest {
 
     @Test
     fun `bundled help resource uris are unique valid and readable`() {
-        val files = projectPath("app/src/main/assets/web/help/md")
-            .listFiles { file -> file.isFile && file.extension == "md" }
-            .orEmpty()
+        val files =
+            projectPath("app/src/main/assets/web/help/md")
+                .listFiles { file -> file.isFile && file.extension == "md" }
+                .orEmpty()
 
         assertTrue(files.isNotEmpty())
         val resources = files.associateWith { file ->

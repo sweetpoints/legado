@@ -1,98 +1,83 @@
 package io.legado.app.ui.autoTask
 
-import org.junit.Assert.assertTrue
+import io.legado.app.data.entities.AutoTaskRule
+import io.legado.app.data.repository.*
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
+/** Pure editor contracts; rendering and back/navigation are exercised by Compose/host tests. */
 class AutoTaskEditActivitySourceTest {
-
     @Test
-    fun `unsaved edits prompt only after a task has been bound`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt"
-        ).readText().replace("\r\n", "\n")
-        val bindBlock = source.substringAfter("private fun bind(")
-            .substringBefore("private fun save(")
-        val saveBlock = source.substringAfter("private fun save(")
-            .substringBefore("private fun buildRule(")
-        val finishBlock = source.substringAfter("override fun finish()")
-            .substringBefore("private fun textOrNull(")
-
-        assertTrue(bindBlock.contains("originTask = buildDraft()"))
+    fun cursorAndTrimEquivalentInputAreNotUnsavedContentChanges() {
+        val baseline =
+            AutoTaskEditorDraft.from(
+                AutoTaskRule(name = "name", script = "body", comment = "comment")
+            )
+        val cursor = baseline.with(AutoTaskEditorField.Script, AutoTaskEditorText("body", 3))
+        assertTrue(cursor.sameContent(baseline))
         assertTrue(
-            bindBlock.indexOf("originTask = buildDraft()") <
-                bindBlock.indexOf("applyPendingEditResult()")
+            cursor
+                .with(AutoTaskEditorField.Name, AutoTaskEditorText(" name "))
+                .sameContent(baseline)
         )
-        assertTrue(saveBlock.contains("originTask = saved"))
-        assertTrue(finishBlock.contains("originTask?.let { it != buildDraft() } == true"))
-        assertTrue(finishBlock.contains("setMessage(R.string.exit_no_save)"))
-        assertTrue(finishBlock.contains("super.finish()"))
+        assertFalse(
+            cursor
+                .with(AutoTaskEditorField.Script, AutoTaskEditorText("body "))
+                .sameContent(baseline)
+        )
     }
 
     @Test
-    fun `full editor routes supported code fields and keeps result state`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt"
-        ).readText().replace("\r\n", "\n")
-        val menu = projectFile("src/main/res/menu/auto_task_edit.xml")
-            .readText().replace("\r\n", "\n")
-
-        assertTrue(source.contains("StartActivityContract(CodeEditActivity::class.java)"))
-        assertTrue(source.contains("pendingEditViewId"))
-        assertTrue(source.contains("applyPendingEditResult()"))
-        assertTrue(source.contains("if (originTask == null)"))
-        assertTrue(source.contains("pendingEditText = view.text.toString()"))
-        assertTrue(source.contains("getStringExtra(\"text\")?.let { pendingEditText = it }"))
-        assertTrue(source.contains("putExtra(\"returnUnchangedText\", true)"))
-        assertTrue(source.contains("pendingEditCursor.coerceIn(0, text.length)"))
-        listOf("script", "header", "js_lib", "login_url", "login_ui", "login_check_js").forEach { id ->
-            assertTrue(source.contains("R.id.et_$id ->"))
-        }
-        assertTrue(menu.contains("android:id=\"@+id/menu_fullscreen_edit\""))
-        assertTrue(menu.contains("android:icon=\"@drawable/ic_code\""))
+    fun fullEditorSupportsAllSixOriginalCodeFieldsAndBoundsReturnedSelection() {
+        assertEquals(
+            setOf(
+                AutoTaskEditorField.Script,
+                AutoTaskEditorField.Header,
+                AutoTaskEditorField.JsLib,
+                AutoTaskEditorField.LoginUrl,
+                AutoTaskEditorField.LoginUi,
+                AutoTaskEditorField.LoginCheckJs,
+            ),
+            AutoTaskEditorField.entries.filter { it.code }.toSet(),
+        )
+        val draft =
+            AutoTaskEditorDraft()
+                .with(AutoTaskEditorField.LoginCheckJs, AutoTaskEditorText("text", -5, 100))
+        assertEquals(AutoTaskEditorText("text", 0, 4), draft[AutoTaskEditorField.LoginCheckJs])
     }
 
     @Test
-    fun `login url uses the same multiline code input as login ui`() {
-        val layout = projectFile("src/main/res/layout/activity_auto_task_edit.xml")
-            .readText().replace("\r\n", "\n")
-        val loginUrl = layout.substringAfter("android:id=\"@+id/et_login_url\"")
-            .substringBefore("</io.legado.app.lib.theme.view.ThemeEditText>")
-
-        assertTrue(loginUrl.contains("android:fontFamily=\"monospace\""))
-        assertTrue(loginUrl.contains("android:gravity=\"top|start\""))
-        assertTrue(loginUrl.contains("android:inputType=\"textMultiLine\""))
-        assertTrue(loginUrl.contains("android:minLines=\"3\""))
+    fun loginUrlRetainsMultipleLinesAndExactCursor() {
+        val text = "https://host/\n@js: value"
+        val draft =
+            AutoTaskEditorDraft().with(AutoTaskEditorField.LoginUrl, AutoTaskEditorText(text, 14))
+        assertEquals(text, draft.entity("id").loginUrl)
+        assertEquals(14, draft[AutoTaskEditorField.LoginUrl].start)
     }
 
     @Test
-    fun `copy and paste keep task identity and leave pasted values unsaved`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt"
-        ).readText().replace("\r\n", "\n")
-        val copyBlock = source.substringAfter("private fun copyRule()")
-            .substringBefore("private fun pasteRule()")
-        val pasteBlock = source.substringAfter("private fun pasteRule()")
-            .substringBefore("private fun save(")
-        val menu = projectFile("src/main/res/menu/auto_task_edit.xml").readText()
-
-        assertTrue(copyBlock.contains("val draft = buildDraft()"))
-        assertTrue(copyBlock.contains("withContext(Dispatchers.Default)"))
-        assertTrue(copyBlock.contains("AutoTask.exportJson(listOf(draft))"))
-        assertTrue(pasteBlock.contains("withContext(Dispatchers.Default)"))
-        assertTrue(pasteBlock.contains("fromJsonObject<AutoTaskRule>"))
-        assertTrue(pasteBlock.contains("fromJsonArray<AutoTaskRule>"))
-        assertTrue(pasteBlock.contains("singleOrNull()"))
-        assertTrue(pasteBlock.contains("applyRule(pasted)"))
-        assertTrue(!pasteBlock.contains("task = pasted"))
-        assertTrue(!pasteBlock.contains("originTask = buildDraft()"))
-        assertTrue(menu.contains("@+id/menu_copy_rule"))
-        assertTrue(menu.contains("@+id/menu_paste_rule"))
-    }
-
-    private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?: error("Missing project file: $pathInApp")
+    fun draftAppliesEveryEditableFieldWhileKeepingOriginalIdentityAndFreshRuntime() {
+        val imported =
+            AutoTaskRule(
+                "foreign",
+                "name",
+                false,
+                "0 * * * *",
+                "url",
+                "ui",
+                "check",
+                "comment",
+                "script",
+                "header",
+                "lib",
+                "2",
+                false,
+            )
+        val fresh = AutoTaskRule("original", customOrder = 20, lastRunAt = 90, lastLog = "latest")
+        val result = AutoTaskEditorDraft.from(imported).entity("original", fresh)
+        assertEquals(
+            imported.copy(id = "original", customOrder = 20, lastRunAt = 90, lastLog = "latest"),
+            result,
+        )
     }
 }

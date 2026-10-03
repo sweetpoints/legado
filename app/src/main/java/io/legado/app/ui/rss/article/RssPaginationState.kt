@@ -7,6 +7,7 @@ internal enum class RssRetryTarget {
 
 internal sealed interface RssRefreshAction {
     data object InProgress : RssRefreshAction
+
     data class Request(
         val page: Int,
         internal val requestId: Long,
@@ -15,7 +16,9 @@ internal sealed interface RssRefreshAction {
 
 internal sealed interface RssNextPageAction {
     data object InProgress : RssNextPageAction
+
     data class NoMore(internal val resultId: Long) : RssNextPageAction
+
     data class Request(
         val page: Int,
         val url: String,
@@ -47,6 +50,17 @@ internal class RssPaginationState {
     val hasNextPage: Boolean
         get() = !nextPageUrl.isNullOrBlank()
 
+    /** Restore an owned disk checkpoint only while idle, invalidating every prior result token. */
+    @Synchronized
+    fun restore(page: Int, nextPageUrl: String?, retryTarget: RssRetryTarget? = null) {
+        check(!isLoading && activeRequestId == null)
+        require(page >= 1)
+        requestSequence++
+        this.page = page
+        this.nextPageUrl = nextPageUrl.normalizedPageUrl()
+        this.retryTarget = retryTarget
+    }
+
     @Synchronized
     fun startRefresh(): RssRefreshAction {
         if (isLoading) return RssRefreshAction.InProgress
@@ -70,8 +84,8 @@ internal class RssPaginationState {
     @Synchronized
     fun startNextPage(): RssNextPageAction {
         if (isLoading) return RssNextPageAction.InProgress
-        val pageUrl = nextPageUrl.normalizedPageUrl()
-            ?: return RssNextPageAction.NoMore(requestSequence)
+        val pageUrl =
+            nextPageUrl.normalizedPageUrl() ?: return RssNextPageAction.NoMore(requestSequence)
         isLoading = true
         return RssNextPageAction.Request(page + 1, pageUrl, startRequest())
     }

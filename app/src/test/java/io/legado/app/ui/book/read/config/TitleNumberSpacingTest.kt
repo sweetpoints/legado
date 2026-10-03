@@ -1,10 +1,10 @@
 package io.legado.app.ui.book.read.config
 
+import androidx.lifecycle.SavedStateHandle
+import io.legado.app.data.preferences.TipSetting
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class TitleNumberSpacingTest {
 
@@ -31,22 +31,18 @@ class TitleNumberSpacingTest {
     }
 
     @Test
-    fun `spacing seek bar exposes the mapped range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_tip_config.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
-        )
-        val spacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_title_number_spacing" }
-
-        assertEquals("150", spacing.getAttribute("app:max"))
+    fun `number spacing remains signed while stored and clamped`() {
+        val repository = FakeTipSettingsRepository()
+        val model = TipSettingsViewModel(repository, SavedStateHandle())
+        model.set(TipSetting.TitleNumberSpacing, -51)
+        assertEquals(-50, model.state.value.settings[TipSetting.TitleNumberSpacing])
+        model.set(TipSetting.TitleNumberSpacing, 0)
+        assertEquals(0, model.state.value.settings[TipSetting.TitleNumberSpacing])
+        model.set(TipSetting.TitleNumberSpacing, 101)
+        assertEquals(100, model.state.value.settings[TipSetting.TitleNumberSpacing])
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .first { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
     }
 }

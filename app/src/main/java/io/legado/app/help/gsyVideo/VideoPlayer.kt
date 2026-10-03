@@ -2,6 +2,7 @@ package io.legado.app.help.gsyVideo
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -10,14 +11,22 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
-import android.widget.ImageView
-import android.widget.TextView
+import android.widget.FrameLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.shuyu.gsyvideoplayer.listener.LockClickListener
 import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.theme.LegadoComposeTheme
+import io.legado.app.ui.video.VideoPlayerActivity
+import java.io.File
+import java.io.FileInputStream
 import master.flame.danmaku.controller.DrawHandler
 import master.flame.danmaku.danmaku.loader.IllegalDataException
 import master.flame.danmaku.danmaku.loader.android.DanmakuLoaderFactory
@@ -28,33 +37,180 @@ import master.flame.danmaku.danmaku.model.android.DanmakuContext
 import master.flame.danmaku.danmaku.model.android.SpannedCacheStuffer
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser
 import master.flame.danmaku.ui.widget.DanmakuView
-import java.io.File
-import java.io.FileInputStream
 
-class VideoPlayer: StandardGSYVideoPlayer {
-    constructor(context: Context?, fullFlag: Boolean?) : super(context, fullFlag) //必须的,全屏时依靠这个构建知道获取全屏布局
-    constructor(context: Context?) : super(context)
-    constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs)
+class VideoPlayer : StandardGSYVideoPlayer {
+    constructor(
+        context: Context?,
+        fullFlag: Boolean?,
+    ) : super(context, fullFlag) {
+        initializeComposeControls()
+    } // 必须的,全屏时依靠这个构建知道获取全屏布局
 
-    private var episodeList: TextView? = null
-    private var playbackSpeed: TextView? = null
+    constructor(context: Context?) : super(context) {
+        initializeComposeControls()
+    }
+
+    constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs) {
+        initializeComposeControls()
+    }
+
+    private var gestureFeedbackDialog: VideoFeedbackDialog? = null
+    private var networkConfirmationDialog: VideoNetworkDialog? = null
+    private var activeChoiceDialog: VideoChoiceDialog? = null
+    private val playbackPromptFence = VideoPlaybackPromptFence()
+
+    private var actionControlsState by mutableStateOf(VideoPlayerActionControlsState())
+    private var overlayState by
+        mutableStateOf(VideoPlayerOverlayState(title = VideoPlay.videoTitle.orEmpty()))
     private var playSpeed: Float = 1.0f
-    private var btnNext: ImageView? = null
-    private var tipView: TextView? = null
     private var isChanging = false
     private var isLongPressSpeed = false
+    private var tipVersion = 0
 
-    private var mParser: BaseDanmakuParser? = null //解析器对象
-    private var mDanmakuView: DanmakuView? = null //弹幕view
+    private var mParser: BaseDanmakuParser? = null // 解析器对象
+    private var mDanmakuView: DanmakuView? = null // 弹幕view
     private var mDanmakuContext: DanmakuContext? = null
-    var mToggleDanmaku: TextView? = null //弹幕开关
     private var mDanmakuStartSeekPosition: Long = -1
 
+    override fun showWifiDialog() {
+        if (!com.shuyu.gsyvideoplayer.utils.NetworkUtils.isAvailable(context)) {
+            startPlayLogic()
+            return
+        }
+        networkConfirmationDialog?.dismiss()
+        val ticket = playbackPromptFence.capture(mOriginUrl)
+        val dialog =
+            VideoNetworkDialog(context) {
+                // A delayed confirmation must not start a replacement stream or a released player.
+                if (playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) {
+                    startPlayLogic()
+                }
+            }
+        networkConfirmationDialog = dialog
+        dialog.setOnDismissListener {
+            if (networkConfirmationDialog === dialog) {
+                networkConfirmationDialog = null
+            }
+        }
+        dialog.show()
+    }
 
-    override fun getLayoutId(): Int {
-        return if (mIfCurrentIsFullscreen)
-            R.layout.video_layout_controller_full
-        else R.layout.video_layout_controller
+    private fun dismissNetworkConfirmation() {
+        networkConfirmationDialog?.dismiss()
+        networkConfirmationDialog = null
+    }
+
+    private fun showOwnedChoiceDialog(dialog: VideoChoiceDialog) {
+        activeChoiceDialog?.dismiss()
+        activeChoiceDialog = dialog
+        dialog.setOnDismissListener {
+            if (activeChoiceDialog === dialog) {
+                activeChoiceDialog = null
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dismissPlayerDialogs() {
+        // Window callbacks belong to this player, never to a later stream or the transfer target.
+        activeChoiceDialog?.dismiss()
+        activeChoiceDialog = null
+        dismissNetworkConfirmation()
+        dismissGestureFeedback()
+    }
+
+    private fun showGestureFeedback(label: String, fraction: Float) {
+        val dialog =
+            gestureFeedbackDialog
+                ?: VideoFeedbackDialog(context).also {
+                    gestureFeedbackDialog = it
+                }
+        dialog.feedback = VideoFeedbackState(label, fraction)
+        dialog.showOver(this)
+    }
+
+    private fun dismissGestureFeedback() {
+        // Each native player owns its window, including the separate GSY fullscreen clone.
+        gestureFeedbackDialog?.dismiss()
+        gestureFeedbackDialog = null
+    }
+
+    override fun showProgressDialog(
+        deltaX: Float,
+        seekTime: String?,
+        seekTimePosition: Long,
+        totalTime: String?,
+        totalTimeDuration: Long,
+    ) {
+        val direction = if (deltaX >= 0f) "快进" else "快退"
+        val progress =
+            if (totalTimeDuration > 0) {
+                seekTimePosition.toFloat() / totalTimeDuration
+            } else {
+                0f
+            }
+        showGestureFeedback("$direction $seekTime / $totalTime", progress)
+    }
+
+    override fun dismissProgressDialog() {
+        dismissGestureFeedback()
+    }
+
+    override fun showVolumeDialog(deltaY: Float, volumePercent: Int) {
+        showGestureFeedback("音量 $volumePercent%", volumePercent / 100f)
+    }
+
+    override fun dismissVolumeDialog() {
+        dismissGestureFeedback()
+    }
+
+    override fun showBrightnessDialog(percent: Float) {
+        val brightnessPercent = (percent * 100).toInt().coerceIn(0, 100)
+        showGestureFeedback("亮度 $brightnessPercent%", percent)
+    }
+
+    override fun dismissBrightnessDialog() {
+        dismissGestureFeedback()
+    }
+
+    // GSY calls this virtually from its constructor, before this subclass's fields are initialized.
+    override fun initInflate(context: Context?) {
+        val playerContext = requireNotNull(context)
+        val nativeContent =
+            FrameLayout(playerContext).apply {
+                setBackgroundColor(Color.BLACK)
+                addView(
+                    FrameLayout(playerContext).apply { id = R.id.surface_container },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    DanmakuView(playerContext).apply {
+                        id = R.id.danmaku_view
+                        visibility = View.GONE
+                    },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    ComposeView(playerContext).apply { id = R.id.video_player_compose },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        addView(
+            nativeContent,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
     override fun getFullWindowPlayer(): VideoPlayer? {
@@ -67,6 +223,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
         return gsyVideoPlayer
     }
+
     override fun getSmallWindowPlayer(): VideoPlayer? = null
 
     override fun getCurrentPlayer(): VideoPlayer {
@@ -83,45 +240,100 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     fun getLockCurScreen() = mLockCurScreen
 
-    public override fun lockTouchLogic() = super.lockTouchLogic()
+    fun updateOverlayTitle(title: String) {
+        overlayState = overlayState.copy(title = title)
+    }
+
+    public override fun lockTouchLogic() {
+        if (mCurrentState == CURRENT_STATE_AUTO_COMPLETE || mCurrentState == CURRENT_STATE_ERROR)
+            return
+        mLockCurScreen = !mLockCurScreen
+        VideoPlay.lockCurScreen = mLockCurScreen
+        overlayState = overlayState.copy(locked = mLockCurScreen)
+        if (mLockCurScreen) cancelDismissControlViewTimer() else startDismissControlViewTimer()
+    }
+
+    override fun resolveUIState(state: Int) {
+        super.resolveUIState(state)
+        overlayState =
+            overlayState.copy(
+                title = VideoPlay.videoTitle.orEmpty(),
+                fullscreen = mIfCurrentIsFullscreen,
+                showProgressWhenHidden = !mIfCurrentIsFullscreen || VideoPlay.fullBottomProgressBar,
+                controlsVisible = true,
+                playing = state == CURRENT_STATE_PLAYING,
+                buffering =
+                    state == CURRENT_STATE_PREPAREING ||
+                        state == CURRENT_STATE_PLAYING_BUFFERING_START,
+                locked = mLockCurScreen,
+            )
+        if (state == CURRENT_STATE_AUTO_COMPLETE) {
+            overlayState = overlayState.copy(progress = 1f, currentPosition = overlayState.duration)
+        }
+    }
+
+    override fun hideAllWidget() {
+        super.hideAllWidget()
+        overlayState = overlayState.copy(controlsVisible = false)
+    }
+
+    override fun onClickUiToggle(e: MotionEvent?) {
+        if (mIfCurrentIsFullscreen && mLockCurScreen && mNeedLockFull) {
+            overlayState = overlayState.copy(controlsVisible = true)
+            return
+        }
+        overlayState = overlayState.copy(controlsVisible = !overlayState.controlsVisible)
+        if (overlayState.controlsVisible) startDismissControlViewTimer()
+        else cancelDismissControlViewTimer()
+    }
 
     override fun init(context: Context) {
         super.init(context)
-        initView()
         post {
-            gestureDetector = GestureDetector(
-                getContext().applicationContext,
-                object : GestureDetector.SimpleOnGestureListener() {
-                    override fun onDoubleTap(e: MotionEvent): Boolean {
-                        touchDoubleUp(e)
-                        return super.onDoubleTap(e)
-                    }
-
-                    override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                        if (!mChangePosition && !mChangeVolume && !mBrightness && mCurrentState != CURRENT_STATE_ERROR
-                        ) {
-                            onClickUiToggle(e)
+            gestureDetector =
+                GestureDetector(
+                    getContext().applicationContext,
+                    object : GestureDetector.SimpleOnGestureListener() {
+                        override fun onDoubleTap(e: MotionEvent): Boolean {
+                            touchDoubleUp(e)
+                            return super.onDoubleTap(e)
                         }
-                        return super.onSingleTapConfirmed(e)
-                    }
 
-                    override fun onLongPress(e: MotionEvent) {
-                        if (mCurrentState == CURRENT_STATE_PLAYING) {
-                            val speed = VideoPlay.longPressSpeed / 10.0f
-                            setVideoSpeed(speed)
-                            showOverlayTip("${speed}倍速播放中")
-                            isLongPressSpeed = true
+                        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                            if (
+                                !mChangePosition &&
+                                    !mChangeVolume &&
+                                    !mBrightness &&
+                                    mCurrentState != CURRENT_STATE_ERROR
+                            ) {
+                                onClickUiToggle(e)
+                            }
+                            return super.onSingleTapConfirmed(e)
                         }
-                        super.onLongPress(e)
-                    }
-                }
-            )
+
+                        override fun onLongPress(e: MotionEvent) {
+                            if (mCurrentState == CURRENT_STATE_PLAYING) {
+                                val speed = VideoPlay.longPressSpeed / 10.0f
+                                setVideoSpeed(speed)
+                                showOverlayTip("${speed}倍速播放中")
+                                isLongPressSpeed = true
+                            }
+                            super.onLongPress(e)
+                        }
+                    },
+                )
             mLockClickListener = LockClickListener { view, lock ->
                 VideoPlay.lockCurScreen = lock
             }
         }
     }
-    override fun touchSurfaceUp(){
+
+    private fun initializeComposeControls() {
+        // GSY calls this class's init() from its constructor before Kotlin fields are initialized.
+        initView()
+    }
+
+    override fun touchSurfaceUp() {
         if (isLongPressSpeed) {
             isLongPressSpeed = false
             setVideoSpeed(playSpeed)
@@ -134,7 +346,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     private fun setVideoSpeed(speed: Float) {
         setSpeed(speed, true)
-        if (mDanmakuView != null&& !mDanmakuView!!.isPaused) {
+        if (mDanmakuView != null && !mDanmakuView!!.isPaused) {
             mDanmakuContext!!.setScrollSpeedFactor(VideoPlay.danmakuSpeed - (speed - 1f) / 6f)
             mDanmakuView!!.invalidate()
         }
@@ -144,11 +356,12 @@ class VideoPlayer: StandardGSYVideoPlayer {
         super.onPrepared()
         onPrepareDanmaku(this)
     }
+
     private fun onPrepareDanmaku(gsyVideoPlayer: VideoPlayer) {
         val view = gsyVideoPlayer.mDanmakuView
         val par = gsyVideoPlayer.mParser
         val con = gsyVideoPlayer.mDanmakuContext
-        if ( view != null && !view.isPrepared && par != null) {
+        if (view != null && !view.isPrepared && par != null) {
             view.prepare(par, con)
         }
     }
@@ -157,6 +370,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
         super.onVideoPause()
         danmakuOnPause()
     }
+
     fun danmakuOnPause() {
         if (mDanmakuView != null && mDanmakuView!!.isPrepared) {
             mDanmakuView!!.pause()
@@ -167,6 +381,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
         super.onVideoResume(isResume)
         danmakuOnResume()
     }
+
     fun danmakuOnResume() {
         if (mDanmakuView != null && mDanmakuView!!.isPrepared && mDanmakuView!!.isPaused) {
             mDanmakuView!!.resume()
@@ -182,83 +397,181 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
     }
 
-    override fun onAutoCompletion() { //播放完成
+    override fun onAutoCompletion() { // 播放完成
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
+        // GSY's completion cleanup unlocks through its ImageView; Compose owns that control now.
+        mLockCurScreen = false
+        VideoPlay.lockCurScreen = false
         super.onAutoCompletion()
         VideoPlay.upDurIndex(1, this)
     }
 
     override fun onCompletion() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.onCompletion()
         releaseDanmaku(this)
     }
+
     fun releaseDanmaku(gsyVideoPlayer: VideoPlayer) {
         gsyVideoPlayer.mDanmakuView?.release()
     }
 
-
     override fun onSeekComplete() {
         super.onSeekComplete()
-        val time = mProgressBar.progress * getDuration() / 100
-        //如果已经初始化过的，直接seek到对于位置
+        val time = (overlayState.progress * getDuration()).toLong()
+        // 如果已经初始化过的，直接seek到对于位置
         if (mHadPlay && mDanmakuView != null && mDanmakuView!!.isPrepared) {
             resolveDanmakuSeek(time)
         } else if (mHadPlay && mDanmakuView != null && !mDanmakuView!!.isPrepared) {
-            //如果没有初始化过的，记录位置等待
+            // 如果没有初始化过的，记录位置等待
             mDanmakuStartSeekPosition = time
         }
     }
 
-
     fun showOverlayTip(message: String? = null, delay: Long = 0) {
-        tipView?.apply {
-            message?.also {
-                text = it
-                visibility = VISIBLE
-                alpha = 1f
-                if (delay > 0) {
-                    postDelayed({
-                        alpha = 0f
-                    }, delay)
-                }
-            } ?: run {
-                visibility = INVISIBLE
-                alpha = 0f
-            }
+        tipVersion += 1
+        val version = tipVersion
+        overlayState = overlayState.copy(tip = message)
+        if (message != null && delay > 0) {
+            postDelayed(
+                {
+                    if (tipVersion == version) {
+                        overlayState = overlayState.copy(tip = null)
+                    }
+                },
+                delay,
+            )
         }
     }
 
     private fun initView() {
-        isNeedLockFull = true //使用锁定按钮
-        playbackSpeed = findViewById(R.id.playback_speed)
-        playbackSpeed?.setOnClickListener {
-            if (mHadPlay && !isChanging) {
-                showSpeedDialog()
-            }
-        }
-        tipView = findViewById(R.id.tip_view)
-        if (mIfCurrentIsFullscreen && !VideoPlay.fullBottomProgressBar) {
-            mBottomProgressBar = null
-        }
-        //切换选集
-        episodeList = findViewById(R.id.episode_list)
-        btnNext = findViewById(R.id.next)
+        isNeedLockFull = true // 使用锁定按钮
+        setupPlayerOverlay()
+        overlayState =
+            overlayState.copy(
+                title = VideoPlay.videoTitle.orEmpty(),
+                fullscreen = mIfCurrentIsFullscreen,
+                showProgressWhenHidden = !mIfCurrentIsFullscreen || VideoPlay.fullBottomProgressBar,
+            )
+        // 切换选集
+        actionControlsState =
+            actionControlsState.copy(episodeControlsVisible = VideoPlay.episodes != null)
         if (VideoPlay.episodes == null) {
-            episodeList?.visibility = GONE
-            btnNext?.visibility = GONE
             return
-        }
-        episodeList?.setOnClickListener {
-            if (mHadPlay && !isChanging) {
-                showEpisodeDialog()
-            }
-        }
-        btnNext?.setOnClickListener {
-            VideoPlay.upDurIndex(1,this)
         }
     }
 
+    private fun setupPlayerOverlay() {
+        val controls = findViewById<ComposeView>(R.id.video_player_compose) ?: return
+        controls.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        controls.setContent {
+            LegadoComposeTheme {
+                VideoPlayerOverlay(
+                    state = overlayState,
+                    actions = actionControlsState,
+                    onBack = ::requestFullscreenToggle,
+                    onToggleFullscreen = ::requestFullscreenToggle,
+                    onToggleLock = ::lockTouchLogic,
+                    onTogglePlayback = ::clickStartIcon,
+                    onSeekStarted = ::onComposeSeekStarted,
+                    onSeekFinished = ::onComposeSeekFinished,
+                    onNext = { VideoPlay.upDurIndex(1, this) },
+                    onToggleDanmaku = ::toggleDanmaku,
+                    onOpenEpisodes = {
+                        if (mHadPlay && !isChanging) showEpisodeDialog()
+                    },
+                    onOpenSpeed = {
+                        if (mHadPlay && !isChanging) showSpeedDialog()
+                    },
+                )
+            }
+        }
+    }
 
-    override fun setUp(url: String?, cacheWithPlay: Boolean, cachePath: File?, title: String?): Boolean {
+    private fun requestFullscreenToggle() {
+        val activity = CommonUtil.scanForActivity(context) as? VideoPlayerActivity
+        if (activity != null) {
+            activity.toggleFullScreen()
+        } else if (mIfCurrentIsFullscreen) {
+            backFromFull(context)
+        }
+    }
+
+    private fun toggleDanmaku() {
+        VideoPlay.danmakuShow = !VideoPlay.danmakuShow
+        resolveDanmakuShow()
+    }
+
+    private fun onComposeSeekStarted() {
+        if (mHadSeekTouch) return
+        mHadSeekTouch = true
+        cancelDismissControlViewTimer()
+        cancelProgressTimer()
+    }
+
+    private fun onComposeSeekFinished(progress: Float) {
+        if (!mHadSeekTouch) return
+        if (mVideoAllCallBack != null && isCurrentMediaListener) {
+            if (mIfCurrentIsFullscreen) {
+                mVideoAllCallBack.onClickSeekbarFullscreen(mOriginUrl, mTitle, this)
+            } else {
+                mVideoAllCallBack.onClickSeekbar(mOriginUrl, mTitle, this)
+            }
+        }
+        if (mHadPlay) {
+            try {
+                val seekPosition = (progress * getDuration()).toLong()
+                mCurrentPosition = seekPosition
+                overlayState =
+                    overlayState.copy(
+                        currentPosition = seekPosition,
+                        progress = progress.coerceIn(0f, 1f),
+                    )
+                getGSYVideoManager().seekTo(seekPosition)
+                refreshSubtitleAfterSeek(seekPosition)
+            } catch (exception: Exception) {
+                exception.printStackTrace()
+            }
+        }
+        mHadSeekTouch = false
+        startProgressTimer()
+        startDismissControlViewTimer()
+    }
+
+    override fun setProgressAndTime(
+        progress: Long,
+        secProgress: Long,
+        currentTime: Long,
+        totalTime: Long,
+        forceChange: Boolean,
+    ) {
+        super.setProgressAndTime(progress, secProgress, currentTime, totalTime, forceChange)
+        if (mHadSeekTouch) return
+        overlayState =
+            overlayState.copy(
+                currentPosition = currentTime.coerceAtLeast(0L),
+                duration = totalTime.coerceAtLeast(0L),
+                progress =
+                    if (totalTime > 0L) (currentTime.toFloat() / totalTime).coerceIn(0f, 1f)
+                    else 0f,
+                bufferedProgress = (secProgress / 100f).coerceIn(0f, 1f),
+            )
+    }
+
+    override fun setUp(
+        url: String?,
+        cacheWithPlay: Boolean,
+        cachePath: File?,
+        title: String?,
+    ): Boolean {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
+        overlayState =
+            overlayState.copy(title = title.orEmpty(), currentPosition = 0L, progress = 0f)
         initDanmaku()
         return super.setUp(url, cacheWithPlay, cachePath, title)
     }
@@ -267,20 +580,18 @@ class VideoPlayer: StandardGSYVideoPlayer {
         val danmakuFile = VideoPlay.danmakuFile
         val danmakuStr = VideoPlay.danmakuStr
         if (danmakuFile == null && danmakuStr.isNullOrBlank()) {
-            mToggleDanmaku?.visibility = GONE
+            actionControlsState = actionControlsState.copy(danmakuVisible = false)
             return
         }
-        mDanmakuView = findViewById<DanmakuView>(R.id.danmaku_view)?.also {
-            it.visibility = VISIBLE
-        }
-        //弹幕开关
-        mToggleDanmaku = findViewById<TextView>(R.id.toggle_danmaku)?.also {
-            it.visibility = VISIBLE
-            it.setOnClickListener { //按钮事件
-                VideoPlay.danmakuShow = !VideoPlay.danmakuShow
-                resolveDanmakuShow()
+        mDanmakuView =
+            findViewById<DanmakuView>(R.id.danmaku_view)?.also {
+                it.visibility = VISIBLE
             }
-        }
+        actionControlsState =
+            actionControlsState.copy(
+                danmakuVisible = true,
+                danmakuEnabled = VideoPlay.danmakuShow,
+            )
         if (mDanmakuView != null) {
             // 设置最大显示行数
             val maxLinesPair = HashMap<Int?, Int?>()
@@ -290,37 +601,44 @@ class VideoPlayer: StandardGSYVideoPlayer {
             overlappingEnablePair[BaseDanmaku.TYPE_SCROLL_RL] = true
             overlappingEnablePair[BaseDanmaku.TYPE_FIX_TOP] = true
             val danmakuAdapter = DanmakuAdapter(mDanmakuView)
-            mDanmakuContext = DanmakuContext.create() //初始化上下文
-            mDanmakuContext!!.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3f) //设置弹幕类型
-                .setDuplicateMergingEnabled(false) //设置是否合并重复弹幕
-                .setScrollSpeedFactor(VideoPlay.danmakuSpeed) //设置弹幕滚动速度
-                .setScaleTextSize(1.0f) //设置弹幕字体大小
-                .setCacheStuffer(SpannedCacheStuffer(), danmakuAdapter) //设置缓存绘制填充器 图文混排使用SpannedCacheStuffer
-                .setMaximumLines(maxLinesPair) //设置最大行数
-                .preventOverlapping(overlappingEnablePair) //设置是否禁止重叠
-            mParser = createParser(danmakuFile, danmakuStr) //加载弹幕资源文件
-            mDanmakuView!!.setCallback(object : DrawHandler.Callback {
-                override fun updateTimer(timer: DanmakuTimer?) {}
-                override fun drawingFinished() {}
-                override fun danmakuShown(danmaku: BaseDanmaku?) {}
-                override fun prepared() {
-                    if (mDanmakuView != null) {
-                        mDanmakuView!!.start()
-                        if (mDanmakuStartSeekPosition != -1L) {
-                            resolveDanmakuSeek(mDanmakuStartSeekPosition)
-                            mDanmakuStartSeekPosition = -1L
+            mDanmakuContext = DanmakuContext.create() // 初始化上下文
+            mDanmakuContext!!
+                .setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3f) // 设置弹幕类型
+                .setDuplicateMergingEnabled(false) // 设置是否合并重复弹幕
+                .setScrollSpeedFactor(VideoPlay.danmakuSpeed) // 设置弹幕滚动速度
+                .setScaleTextSize(1.0f) // 设置弹幕字体大小
+                .setCacheStuffer(
+                    SpannedCacheStuffer(),
+                    danmakuAdapter,
+                ) // 设置缓存绘制填充器 图文混排使用SpannedCacheStuffer
+                .setMaximumLines(maxLinesPair) // 设置最大行数
+                .preventOverlapping(overlappingEnablePair) // 设置是否禁止重叠
+            mParser = createParser(danmakuFile, danmakuStr) // 加载弹幕资源文件
+            mDanmakuView!!.setCallback(
+                object : DrawHandler.Callback {
+                    override fun updateTimer(timer: DanmakuTimer?) {}
+
+                    override fun drawingFinished() {}
+
+                    override fun danmakuShown(danmaku: BaseDanmaku?) {}
+
+                    override fun prepared() {
+                        if (mDanmakuView != null) {
+                            mDanmakuView!!.start()
+                            if (mDanmakuStartSeekPosition != -1L) {
+                                resolveDanmakuSeek(mDanmakuStartSeekPosition)
+                                mDanmakuStartSeekPosition = -1L
+                            }
+                            resolveDanmakuShow()
                         }
-                        resolveDanmakuShow()
                     }
                 }
-            })
+            )
             mDanmakuView!!.enableDanmakuDrawingCache(true)
         }
     }
 
-    /**
-     * 弹幕偏移
-     */
+    /** 弹幕偏移 */
     private fun resolveDanmakuSeek(time: Long) {
         if (mHadPlay && mDanmakuView != null && mDanmakuView!!.isPrepared) {
             mDanmakuView!!.seekTo(time)
@@ -333,16 +651,14 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
     }
 
-
     private fun resolveDanmakuShow() {
         post {
             if (VideoPlay.danmakuShow) {
                 if (!mDanmakuView!!.isShown) mDanmakuView!!.show()
-                mToggleDanmaku?.text = "关弹幕"
             } else {
                 if (mDanmakuView!!.isShown) mDanmakuView!!.hide()
-                mToggleDanmaku?.text = "开弹幕"
             }
+            actionControlsState = actionControlsState.copy(danmakuEnabled = VideoPlay.danmakuShow)
         }
     }
 
@@ -358,7 +674,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
             if (danmakuFile != null) {
                 loader.load(FileInputStream(danmakuFile))
             } else if (danmakuStr != null) {
-                if (danmakuStr.startsWith("http",true)) {
+                if (danmakuStr.startsWith("http", true)) {
                     loader.load(danmakuStr)
                 } else {
                     loader.load(danmakuStr.byteInputStream())
@@ -374,109 +690,101 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     private fun showEpisodeDialog() {
-        if (!mHadPlay || VideoPlay.episodes.isNullOrEmpty()) {
-            return
-        }
+        val episodes = VideoPlay.episodes ?: return
+        if (!mHadPlay || episodes.isEmpty()) return
+        val ticket = playbackPromptFence.capture(mOriginUrl)
         isChanging = true
         val choiceEpisodeDialog = ChoiceEpisodeDialog(mContext)
-        choiceEpisodeDialog.initList(VideoPlay.episodes!!, object :
-            ChoiceEpisodeDialog.OnListItemClickListener {
-            override fun onItemClick(position: Int) {
-                VideoPlay.chapterInVolumeIndex = position
-                VideoPlay.saveRead(0)
-                VideoPlay.startPlay(this@VideoPlayer)
-            }
+        choiceEpisodeDialog.initList(
+            episodes,
+            object : ChoiceEpisodeDialog.OnListItemClickListener {
+                override fun onItemClick(position: Int) {
+                    if (!isCurrentMediaListener || !mHadPlay || VideoPlay.episodes !== episodes)
+                        return
+                    if (!playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) return
+                    VideoPlay.chapterInVolumeIndex = position
+                    VideoPlay.saveRead(0)
+                    VideoPlay.startPlay(this@VideoPlayer)
+                }
 
-            override fun finishDialog() {
-                isChanging = false
-            }
-        }, VideoPlay.chapterInVolumeIndex)
-        choiceEpisodeDialog.show()
+                override fun finishDialog() {
+                    isChanging = false
+                }
+            },
+            VideoPlay.chapterInVolumeIndex,
+        )
+        showOwnedChoiceDialog(choiceEpisodeDialog)
     }
 
     private fun showSpeedDialog() {
         if (!mHadPlay) {
             return
         }
+        val ticket = playbackPromptFence.capture(mOriginUrl)
         isChanging = true
         val choiceSpeedDialog = ChoiceSpeedDialog(mContext)
-        choiceSpeedDialog.initList(listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f).reversed(), object :
-            ChoiceSpeedDialog.OnListItemClickListener {
-            @SuppressLint("SetTextI18n")
-            override fun onItemClick(value: Float) {
-                playSpeed = value
-                setSpeed(playSpeed, true)
-                if (playSpeed != 1.0f) {
-                    playbackSpeed?.text = "${playSpeed}X"
-                    showOverlayTip("${playSpeed}倍播放中", 2000)
-                } else {
-                    playbackSpeed?.text = "倍速"
+        choiceSpeedDialog.initList(
+            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f).reversed(),
+            object : ChoiceSpeedDialog.OnListItemClickListener {
+                @SuppressLint("SetTextI18n")
+                override fun onItemClick(value: Float) {
+                    if (!isCurrentMediaListener || !mHadPlay) return
+                    if (!playbackPromptFence.accepts(ticket, mOriginUrl, isAttachedToWindow)) return
+                    playSpeed = value
+                    setSpeed(playSpeed, true)
+                    actionControlsState =
+                        actionControlsState.copy(selectedSpeed = value.takeUnless { it == 1.0f })
+                    if (playSpeed != 1.0f) {
+                        showOverlayTip("${playSpeed}倍播放中", 2000)
+                    }
                 }
-            }
 
-            override fun finishDialog() {
-                isChanging = false
-            }
-        })
-        choiceSpeedDialog.show()
+                override fun finishDialog() {
+                    isChanging = false
+                }
+            },
+        )
+        showOwnedChoiceDialog(choiceSpeedDialog)
     }
 
     override fun updateStartImage() {
-        if (mIfCurrentIsFullscreen) {
-            if (mStartButton is ImageView) {
-                val imageView = mStartButton as ImageView
-                when (mCurrentState) {
-                    CURRENT_STATE_PLAYING -> {
-                        imageView.setImageResource(R.drawable.ic_pause_24dp)
-                    }
-                    CURRENT_STATE_ERROR -> {
-                        imageView.setImageResource(R.drawable.ic_pause_outline_24dp)
-                    }
-                    else -> {
-                        imageView.setImageResource(R.drawable.ic_play_24dp)
-                    }
-                }
-            }
-        } else {
-            super.updateStartImage()
-        }
+        overlayState = overlayState.copy(playing = mCurrentState == CURRENT_STATE_PLAYING)
     }
 
     override fun onError(what: Int, extra: Int) {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
+        // GSY's error cleanup unlocks through its ImageView; Compose owns that control now.
+        mLockCurScreen = false
+        VideoPlay.lockCurScreen = false
         super.onError(what, extra)
+        overlayState = overlayState.copy(locked = false, buffering = false)
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
     }
 
-
-    /**
-     * 处理播放器在全屏切换时，弹幕显示的逻辑
-     * 需要格外注意的是，因为全屏和小屏，是切换了播放器，所以需要同步之间的弹幕状态
-     */
+    /** 处理播放器在全屏切换时，弹幕显示的逻辑 需要格外注意的是，因为全屏和小屏，是切换了播放器，所以需要同步之间的弹幕状态 */
     override fun startWindowFullscreen(
         context: Context?,
         actionBar: Boolean,
-        statusBar: Boolean
+        statusBar: Boolean,
     ): VideoPlayer? {
         val gsyBaseVideoPlayer = super.startWindowFullscreen(context, actionBar, statusBar)
         if (gsyBaseVideoPlayer != null) {
             val gsyVideoPlayer = gsyBaseVideoPlayer as VideoPlayer
-            //对弹幕设置偏移记录
-//            gsyVideoPlayer.mDanmakuView = this.mDanmakuView
+            // 对弹幕设置偏移记录
+            //            gsyVideoPlayer.mDanmakuView = this.mDanmakuView
             gsyVideoPlayer.mDanmakuStartSeekPosition = this.getCurrentPositionWhenPlaying()
             onPrepareDanmaku(gsyVideoPlayer)
         }
         return gsyBaseVideoPlayer
     }
 
-    /**
-     * 处理播放器在退出全屏时，弹幕显示的逻辑
-     * 需要格外注意的是，因为全屏和小屏，是切换了播放器，所以需要同步之间的弹幕状态
-     */
+    /** 处理播放器在退出全屏时，弹幕显示的逻辑 需要格外注意的是，因为全屏和小屏，是切换了播放器，所以需要同步之间的弹幕状态 */
     override fun resolveNormalVideoShow(
         oldF: View?,
         vp: ViewGroup?,
-        gsyVideoPlayer: GSYVideoPlayer?
+        gsyVideoPlayer: GSYVideoPlayer?,
     ) {
         super.resolveNormalVideoShow(oldF, vp, gsyVideoPlayer)
         if (gsyVideoPlayer != null) {
@@ -489,18 +797,29 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
     }
 
+    override fun onDetachedFromWindow() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
+        tipVersion += 1
+        super.onDetachedFromWindow()
+    }
+
     override fun release() {
+        playbackPromptFence.invalidate()
+        dismissPlayerDialogs()
         super.release()
         releaseDanmaku(this)
     }
 
-    /**********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现***********/
+    /** ********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现********** */
     override fun getGSYVideoManager(): ExoVideoManager {
         return VideoPlay.videoManager.apply { initContext(context.applicationContext) }
     }
+
     public override fun backFromFull(context: Context?): Boolean {
         return VideoPlay.backFromWindowFull(context)
     }
+
     override fun releaseVideos() {
         VideoPlay.releaseAllVideos()
     }
@@ -512,6 +831,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     override fun getSmallId(): Int {
         return ExoVideoManager.SMALL_ID
     }
+
     override fun setDisplay(surface: Surface?) {
         if (surface != null && mTextureView.getShowView() is SurfaceView) {
             val surfaceView = (mTextureView.getShowView() as SurfaceView?)
@@ -522,10 +842,12 @@ class VideoPlayer: StandardGSYVideoPlayer {
             gsyVideoManager.setDisplayNew(null)
         }
     }
-    fun nextUI() { resetProgressAndTime() }
 
+    fun nextUI() {
+        resetProgressAndTime()
+    }
 
-    //播放器转移
+    // 播放器转移
     fun setSurfaceToPlay() {
         addTextureView()
         gsyVideoManager.setListener(this)
@@ -533,6 +855,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     var needDestroy: Boolean = true
+
     override fun onSurfaceDestroyed(surface: Surface?): Boolean {
         if (needDestroy) {
             return super.onSurfaceDestroyed(surface)

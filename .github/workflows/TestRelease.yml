@@ -47,11 +47,11 @@ jobs:
           fi
           commit_epoch=$(git show -s --format=%ct "$COMMIT_SHA")
           version="3.$(TZ=Asia/Shanghai date -d "@$commit_epoch" +%y%m%d%H)"
-          base_commit=$(sed -n "s/^def versionCodeBaseCommit = '\([^']*\)'.*/\1/p" app/build.gradle)
-          base_code=$(awk '/^def versionCodeAtBase = / { print $4 }' app/build.gradle)
+          base_commit=$(sed -n 's/^val versionCodeBaseCommit = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          base_code=$(awk '/^val versionCodeAtBase = / { print $4 }' app/build.gradle.kts)
           if [[ ! "$base_commit" =~ ^[0-9a-f]{40}$ ]] || \
             [[ ! "$base_code" =~ ^[0-9]+$ ]]; then
-            echo "Unable to read version-code base from app/build.gradle"
+            echo "Unable to read version-code base from app/build.gradle.kts"
             exit 1
           fi
           commit_count=$(git rev-list "${base_commit}..HEAD" --count --no-merges)
@@ -148,15 +148,15 @@ jobs:
 
       - name: Build With Gradle
         run: |
-          sed -i "s/^def version = .*/def version = \"$VERSION\"/" \
-            "$GITHUB_WORKSPACE/app/build.gradle"
+          sed -i "s|^val appVersion = .*|val appVersion = \"$VERSION\"|" \
+            "$GITHUB_WORKSPACE/app/build.gradle.kts"
 
           if [ "$type" = "release" ]; then
             typeName="新包名"
           else
             typeName="新共存"
-            sed -i "s/'.release'/'.releaseA'/" \
-              "$GITHUB_WORKSPACE/app/build.gradle"
+            sed -i 's/".release"/".releaseA"/' \
+              "$GITHUB_WORKSPACE/app/build.gradle.kts"
             if [ -f "$GITHUB_WORKSPACE/app/google-services.json" ]; then
               sed -i 's/.release/.releaseA/' \
                 "$GITHUB_WORKSPACE/app/google-services.json"

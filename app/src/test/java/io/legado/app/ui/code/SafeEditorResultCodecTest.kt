@@ -4,13 +4,13 @@ import com.google.gson.Gson
 import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.github.rosemoe.sora.text.Content
+import java.io.File
+import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
-import java.security.MessageDigest
 
 class SafeEditorResultCodecTest {
 
@@ -19,13 +19,14 @@ class SafeEditorResultCodecTest {
     @Test
     fun `decodes text returned by evaluate javascript`() {
         val text = "中文\nquote=\" slash=\\ emoji=😀 mark=a${"\u0301".repeat(12)}"
-        val payload = gson.toJson(
-            mapOf(
-                "text" to text,
-                "cursorPosition" to 17,
-                "dirty" to true
+        val payload =
+            gson.toJson(
+                mapOf(
+                    "text" to text,
+                    "cursorPosition" to 17,
+                    "dirty" to true,
+                )
             )
-        )
 
         val result = SafeEditorResultCodec.decode(gson.toJson(payload))
 
@@ -36,14 +37,11 @@ class SafeEditorResultCodecTest {
 
     @Test
     fun `missing cursor defaults to zero and negative cursor is clamped`() {
-        val withoutCursor = gson.toJson(
-            gson.toJson(mapOf("text" to "value", "dirty" to true))
-        )
-        val negativeCursor = gson.toJson(
+        val withoutCursor = gson.toJson(gson.toJson(mapOf("text" to "value", "dirty" to true)))
+        val negativeCursor =
             gson.toJson(
-                mapOf("text" to "value", "cursorPosition" to -5, "dirty" to true)
+                gson.toJson(mapOf("text" to "value", "cursorPosition" to -5, "dirty" to true))
             )
-        )
 
         assertEquals(0, SafeEditorResultCodec.decode(withoutCursor)?.cursorPosition)
         assertEquals(0, SafeEditorResultCodec.decode(negativeCursor)?.cursorPosition)
@@ -53,15 +51,16 @@ class SafeEditorResultCodecTest {
     fun `unchanged content preserves original bom and mixed line endings`() {
         val original = "\uFEFFa\r\nb\rc\nd"
         val normalized = "\uFEFFa\nb\nc\nd"
-        val payload = gson.toJson(
+        val payload =
             gson.toJson(
-                mapOf(
-                    "text" to normalized,
-                    "cursorPosition" to 7,
-                    "dirty" to false
+                gson.toJson(
+                    mapOf(
+                        "text" to normalized,
+                        "cursorPosition" to 7,
+                        "dirty" to false,
+                    )
                 )
             )
-        )
 
         val resolved = SafeEditorResultCodec.decode(payload)?.resolveAgainst(original)
 
@@ -72,15 +71,16 @@ class SafeEditorResultCodecTest {
 
     @Test
     fun `changed content uses editor text and clamps cursor`() {
-        val payload = gson.toJson(
+        val payload =
             gson.toJson(
-                mapOf(
-                    "text" to "changed\n",
-                    "cursorPosition" to 99,
-                    "dirty" to true
+                gson.toJson(
+                    mapOf(
+                        "text" to "changed\n",
+                        "cursorPosition" to 99,
+                        "dirty" to true,
+                    )
                 )
             )
-        )
 
         val resolved = SafeEditorResultCodec.decode(payload)?.resolveAgainst("original\r\n")
 
@@ -96,70 +96,75 @@ class SafeEditorResultCodecTest {
         assertNull(SafeEditorResultCodec.decode("not-json"))
         assertNull(SafeEditorResultCodec.decode("null"))
         assertNull(
-            SafeEditorResultCodec.decode(
-                gson.toJson(gson.toJson(mapOf("cursorPosition" to 4)))
-            )
+            SafeEditorResultCodec.decode(gson.toJson(gson.toJson(mapOf("cursorPosition" to 4))))
         )
-        assertNull(
-            SafeEditorResultCodec.decode(
-                gson.toJson(gson.toJson(mapOf("text" to "value")))
-            )
-        )
+        assertNull(SafeEditorResultCodec.decode(gson.toJson(gson.toJson(mapOf("text" to "value")))))
     }
 
     @Test
     fun `normal code editor layout does not eagerly inflate a webview`() {
-        val layout = File(
-            repositoryRoot(),
-            "app/src/main/res/layout/activity_code_edit.xml"
-        ).readText()
-
-        assertFalse(layout.contains("<WebView"))
-        assertTrue(layout.contains("android:id=\"@+id/editorContainer\""))
+        val renderer =
+            File(
+                    repositoryRoot(),
+                    "app/src/main/java/io/legado/app/ui/code/CodeEditorRoute.kt",
+                )
+                .readText()
+        assertTrue(renderer.contains("if (safe) null else CodeEditorLanguageEngine"))
+        assertTrue(renderer.contains("if (safe)"))
+        assertTrue(renderer.contains("SafeCodeEditorEngine(viewContext"))
+        assertFalse(
+            File(repositoryRoot(), "app/src/main/res/layout/activity_code_edit.xml").exists()
+        )
     }
 
     @Test
     fun `optional source debug action reads the active safe editor`() {
-        val activity = activitySource()
-
-        assertTrue(activity.contains("menu.findItem(R.id.menu_debug_source)?.apply"))
-        assertTrue(activity.contains("readSafeEditorState { state ->"))
-        assertTrue(
-            activity.contains(
-                "returnText(action, resolvedState.text, resolvedState.cursorPosition)"
-            )
-        )
+        val route =
+            File(
+                    repositoryRoot(),
+                    "app/src/main/java/io/legado/app/ui/code/CodeEditorRoute.kt",
+                )
+                .readText()
+                .replace(Regex("\\s+"), " ")
+        assertTrue(route.contains("engine.snapshot { snapshot ->"))
+        assertTrue(route.contains("model.save(CodeEditActivity.RESULT_ACTION_DEBUG_SOURCE)"))
+        assertTrue(route.contains("model.updateEditor( capturedOwner"))
     }
 
     @Test
     fun `code formatter bundles its runtime for offline use`() {
         val root = repositoryRoot()
-        val viewModel = File(
-            root,
-            "app/src/main/java/io/legado/app/ui/code/CodeEditViewModel.kt"
-        ).readText()
+        val viewModel =
+            File(
+                    root,
+                    "app/src/main/java/io/legado/app/ui/code/CodeEditorLanguageEngine.kt",
+                )
+                .readText()
         val runtime = File(root, "app/src/main/assets/scripts/beautify.min.js")
         val license = File(root, "app/src/main/assets/scripts/beautify.LICENSE.txt")
 
         assertTrue(runtime.isFile)
         assertTrue(license.isFile)
 
-        val hash = MessageDigest.getInstance("SHA-256")
-            .digest(runtime.readBytes())
-            .joinToString("") { "%02x".format(it) }
+        val hash =
+            MessageDigest.getInstance("SHA-256").digest(runtime.readBytes()).joinToString("") {
+                "%02x".format(it)
+            }
 
         assertEquals(
             "40789fde39e23977976d6e5ca7f6d9ec294bbb0462f5e6563e64001b76b802eb",
-            hash
+            hash,
         )
-        val formatted = RhinoScriptEngine.eval(
-            """
+        val formatted =
+            RhinoScriptEngine.eval(
+                """
                 var window = {};
                 ${runtime.readText()}
                 window.js_beautify('function demo(){return 1;}', { indent_size: 4 });
-            """.trimIndent(),
-            ScriptBindings()
-        )
+            """
+                    .trimIndent(),
+                ScriptBindings(),
+            )
 
         assertEquals("function demo() {\n    return 1;\n}", formatted)
         assertTrue(license.readText().contains("The MIT License"))
@@ -184,10 +189,12 @@ class SafeEditorResultCodecTest {
         content.redo()
 
         assertEquals("function demo() { return 1; }", content.toString())
-        val viewModel = File(
-            repositoryRoot(),
-            "app/src/main/java/io/legado/app/ui/code/CodeEditViewModel.kt"
-        ).readText()
+        val viewModel =
+            File(
+                    repositoryRoot(),
+                    "app/src/main/java/io/legado/app/ui/code/CodeEditorLanguageEngine.kt",
+                )
+                .readText()
         assertTrue(viewModel.contains("val source = editor.text.toString()"))
         assertTrue(viewModel.contains("editor.text.toString() == source"))
         assertTrue(viewModel.contains("editor.text.replace(0, editor.text.length, formatted)"))
@@ -204,14 +211,15 @@ class SafeEditorResultCodecTest {
         assertTrue(activity.contains("dirty: editor.value !== initialValue"))
         assertTrue(lock >= 0)
         assertTrue(snapshot > lock)
-        assertTrue(activity.contains("!safeEditorReadPending"))
+        assertTrue(activity.contains("status.reading"))
     }
 
     private fun activitySource(): String {
         return File(
-            repositoryRoot(),
-            "app/src/main/java/io/legado/app/ui/code/CodeEditActivity.kt"
-        ).readText()
+                repositoryRoot(),
+                "app/src/main/java/io/legado/app/ui/code/SafeCodeEditorEngine.kt",
+            )
+            .readText()
     }
 
     private fun repositoryRoot(): File {

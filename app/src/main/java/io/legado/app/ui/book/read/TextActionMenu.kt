@@ -1,124 +1,85 @@
 package io.legado.app.ui.book.read
 
-import android.annotation.SuppressLint
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
 import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
-import androidx.annotation.RequiresApi
-import androidx.appcompat.view.SupportMenuInflater
-import androidx.appcompat.view.menu.MenuBuilder
-import androidx.appcompat.view.menu.MenuItemImpl
-import androidx.core.view.isVisible
-import io.legado.app.R
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.findViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ItemTextBinding
-import io.legado.app.databinding.PopupActionMenuBinding
-import io.legado.app.help.config.AppConfig
-import io.legado.app.utils.gone
+import io.legado.app.data.repository.*
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.visible
 
-@SuppressLint("RestrictedApi")
+/** Native reader positioning remains in PopupWindow; its entire content is Compose. */
 class TextActionMenu(private val context: Context, private val callBack: CallBack) :
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
-
-    private val binding = PopupActionMenuBinding.inflate(LayoutInflater.from(context))
-    private val adapter = Adapter(context).apply {
-        setHasStableIds(true)
+    private val store = ViewModelStore()
+    private val model =
+        TextActionMenuViewModel(DefaultTextActionRepository(AppTextActionStore(context))).also {
+            store.put("text-action", it)
+        }
+    private val composeView =
+        ComposeView(context).apply {
+            id = View.generateViewId()
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool
+            )
+            setContent {
+                LegadoComposeTheme { TextActionMenuRoute(model, { isShowing }, ::handle) }
+            }
+        }
+    private var owner: LifecycleOwner? = null
+    private val lifecycleObserver = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_DESTROY) releaseOwner()
     }
-    private val menuItems: List<MenuItemImpl>
-    private val visibleMenuItems = arrayListOf<MenuItemImpl>()
-    private val moreMenuItems = arrayListOf<MenuItemImpl>()
+
+    private fun releaseOwner() {
+        dismiss()
+        composeView.disposeComposition()
+        store.clear()
+        owner?.lifecycle?.removeObserver(lifecycleObserver)
+        owner = null
+    }
 
     init {
-        @SuppressLint("InflateParams")
-        contentView = binding.root
-
+        contentView = composeView
         isTouchable = true
         isOutsideTouchable = false
         isFocusable = false
-
-        val myMenu = MenuBuilder(context)
-        val otherMenu = MenuBuilder(context)
-        SupportMenuInflater(context).inflate(R.menu.content_select_action, myMenu)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            onInitializeMenu(otherMenu)
-        }
-        menuItems = myMenu.visibleItems + otherMenu.visibleItems
-        binding.recyclerView.adapter = adapter
-        binding.recyclerViewMore.adapter = adapter
         setOnDismissListener {
-            resetToPrimaryView()
+            composeView.disposeComposition()
+            model.reset()
         }
-        binding.ivMenuMore.setOnClickListener {
-            if (binding.recyclerView.isVisible) {
-                binding.ivMenuMore.setImageResource(R.drawable.ic_arrow_back)
-                adapter.setItems(moreMenuItems)
-                binding.recyclerView.gone()
-                binding.recyclerViewMore.visible()
-            } else {
-                resetToPrimaryView()
-            }
-        }
-        binding.ivMenuMore.setOnLongClickListener {
-            dismiss()
-            callBack.onEditTextActionMenu()
-            true
+        (context as? LifecycleOwner)?.let {
+            owner = it
+            it.lifecycle.addObserver(lifecycleObserver)
         }
         upMenu()
     }
 
-    private fun resetToPrimaryView() {
-        binding.ivMenuMore.setImageResource(R.drawable.ic_more_vert)
-        binding.recyclerViewMore.gone()
-        adapter.setItems(visibleMenuItems)
-        binding.recyclerView.visible()
-    }
-
     fun upMenu() {
-        buildPartition()
-        resetToPrimaryView()
-        if (moreMenuItems.isEmpty()) {
-            binding.ivMenuMore.gone()
-        } else {
-            binding.ivMenuMore.visible()
-        }
-    }
-
-    private fun buildPartition() {
-        val itemsById = menuItems
-            .filter { it.itemId != Menu.NONE }
-            .associateBy { it.itemId }
-        val builtInItems = TextSelectMenuItem.entries.mapNotNull { item ->
-            item.menuId?.let { id -> itemsById[id]?.let { item.key to it } }
-        }.toMap()
-        val processTextItems = menuItems.filter {
-            it.itemId == Menu.NONE && it.intent?.action == Intent.ACTION_PROCESS_TEXT
-        }
-        val partition = loadTextSelectMenuConfig(context).partitionItems(
-            builtInItems = builtInItems,
-            processTextItems = processTextItems,
-            allItems = menuItems
-        )
-        visibleMenuItems.clear()
-        visibleMenuItems.addAll(partition.bar)
-        moreMenuItems.clear()
-        moreMenuItems.addAll(partition.more)
+        model.refresh()
     }
 
     fun show(
@@ -128,145 +89,75 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
         startTopY: Int,
         startBottomY: Int,
         endX: Int,
-        endBottomY: Int
+        endBottomY: Int,
     ) {
+        val lifecycleOwner =
+            requireNotNull(view.findViewTreeLifecycleOwner() ?: context as? LifecycleOwner) {
+                "Reader lifecycle owner is required"
+            }
+        if (owner !== lifecycleOwner) {
+            owner?.lifecycle?.removeObserver(lifecycleObserver)
+            owner = lifecycleOwner
+            lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        }
+        composeView.setViewTreeLifecycleOwner(lifecycleOwner)
+        composeView.setViewTreeSavedStateRegistryOwner(
+            view.findViewTreeSavedStateRegistryOwner() ?: context as? SavedStateRegistryOwner
+        )
+        composeView.setViewTreeViewModelStoreOwner(
+            object : ViewModelStoreOwner {
+                override val viewModelStore = store
+            }
+        )
         upMenu()
-        when {
-            startTopY > 500 -> {
-                showAtLocation(
-                    view,
-                    Gravity.BOTTOM or Gravity.START,
-                    startX,
-                    windowHeight - startTopY
-                )
-            }
-
-            endBottomY - startBottomY > 500 -> {
-                showAtLocation(view, Gravity.TOP or Gravity.START, startX, startBottomY)
-            }
-
-            else -> {
-                showAtLocation(view, Gravity.TOP or Gravity.START, endX, endBottomY)
-            }
-        }
+        val position =
+            textActionPopupPosition(windowHeight, startX, startTopY, startBottomY, endX, endBottomY)
+        showAtLocation(
+            view,
+            (if (position.edge == TextPopupEdge.Bottom) Gravity.BOTTOM else Gravity.TOP) or
+                Gravity.START,
+            position.x,
+            position.y,
+        )
     }
 
-    inner class Adapter(context: Context) :
-        RecyclerAdapter<MenuItemImpl, ItemTextBinding>(context) {
-
-        override fun getItemId(position: Int): Long {
-            return position.toLong()
-        }
-
-        override fun getViewBinding(parent: ViewGroup): ItemTextBinding {
-            return ItemTextBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemTextBinding,
-            item: MenuItemImpl,
-            payloads: MutableList<Any>
-        ) {
-            with(binding) {
-                textView.text = item.title
+    private fun handle(event: TextActionEvent) {
+        when (event.kind) {
+            TextActionEventKind.Edit -> {
+                dismiss()
+                callBack.onEditTextActionMenu()
             }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemTextBinding) {
-            holder.itemView.setOnClickListener {
-                getItem(holder.layoutPosition)?.let {
-                    if (!callBack.onMenuItemSelected(it.itemId)) {
-                        onMenuItemSelected(it)
+            TextActionEventKind.Toast -> context.toastOnUi(event.message)
+            TextActionEventKind.Invoke ->
+                event.action?.let { action ->
+                    try {
+                        val id = TextSelectMenuItem.byKey[action.kind.configKey]?.menuId ?: 0
+                        if (!callBack.onMenuItemSelected(id)) perform(action)
+                    } finally {
+                        callBack.onMenuActionFinally()
                     }
                 }
-                callBack.onMenuActionFinally()
-            }
-            holder.itemView.setOnLongClickListener {
-                if (AppConfig.contentSelectSpeakMod == 0) {
-                    AppConfig.contentSelectSpeakMod = 1
-                    context.toastOnUi("切换为从选择的地方开始一直朗读")
-                } else {
-                    AppConfig.contentSelectSpeakMod = 0
-                    context.toastOnUi("切换为朗读选择内容")
-                }
-                true
-            }
         }
     }
 
-    private fun onMenuItemSelected(item: MenuItemImpl) {
-        when (item.itemId) {
-            R.id.menu_copy -> context.sendToClip(callBack.selectedText)
-            R.id.menu_share_str -> context.share(callBack.selectedText)
-            R.id.menu_browser -> {
-                kotlin.runCatching {
-                    val intent = if (callBack.selectedText.isAbsUrl()) {
-                        Intent(Intent.ACTION_VIEW).apply {
-                            data = Uri.parse(callBack.selectedText)
-                        }
-                    } else {
-                        Intent(Intent.ACTION_WEB_SEARCH).apply {
-                            putExtra(SearchManager.QUERY, callBack.selectedText)
-                        }
-                    }
-                    context.startActivity(intent)
-                }.onFailure {
-                    it.printOnDebug()
-                    context.toastOnUi(it.localizedMessage ?: "ERROR")
+    private fun perform(action: TextAction) {
+        when (action.kind) {
+            TextActionKind.Copy -> context.sendToClip(callBack.selectedText)
+            TextActionKind.Share -> context.share(callBack.selectedText)
+            TextActionKind.Browser -> runCatching {
+                    textActionIntent(action, callBack.selectedText)?.let(context::startActivity)
                 }
-            }
-
-            else -> item.intent?.let {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    kotlin.runCatching {
-                        it.putExtra(Intent.EXTRA_PROCESS_TEXT, callBack.selectedText)
-                        context.startActivity(it)
-                    }.onFailure { e ->
-                        AppLog.put("执行文本菜单操作出错\n$e", e, true)
+                    .onFailure {
+                        it.printOnDebug()
+                        context.toastOnUi(it.localizedMessage ?: "ERROR")
                     }
-                }
-            }
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun createProcessTextIntent(): Intent {
-        return Intent()
-            .setAction(Intent.ACTION_PROCESS_TEXT)
-            .setType("text/plain")
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun getSupportedActivities(): List<ResolveInfo> {
-        return context.packageManager
-            .queryIntentActivities(createProcessTextIntent(), 0)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun createProcessTextIntentForResolveInfo(info: ResolveInfo): Intent {
-        return createProcessTextIntent()
-            .putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false)
-            .setClassName(info.activityInfo.packageName, info.activityInfo.name)
-    }
-
-    /**
-     * Start with a menu Item order value that is high enough
-     * so that your "PROCESS_TEXT" menu items appear after the
-     * standard selection menu items like Cut, Copy, Paste.
-     */
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun onInitializeMenu(menu: Menu) {
-        kotlin.runCatching {
-            var menuItemOrder = 100
-            for (resolveInfo in getSupportedActivities()) {
-                menu.add(
-                    Menu.NONE, Menu.NONE,
-                    menuItemOrder++, resolveInfo.loadLabel(context.packageManager)
-                ).intent = createProcessTextIntentForResolveInfo(resolveInfo)
-            }
-        }.onFailure {
-            context.toastOnUi("获取文字操作菜单出错:${it.localizedMessage}")
+            TextActionKind.ProcessText ->
+                if (Build.VERSION.SDK_INT >= 23)
+                    runCatching {
+                        textActionIntent(action, callBack.selectedText)?.let(context::startActivity)
+                    }
+                        .onFailure { AppLog.put("执行文本菜单操作出错\n$it", it, true) }
+            else -> Unit
         }
     }
 
@@ -280,3 +171,19 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
         fun onEditTextActionMenu()
     }
 }
+
+internal fun textActionIntent(action: TextAction, selectedText: String): Intent? =
+    when (action.kind) {
+        TextActionKind.Browser ->
+            if (selectedText.isAbsUrl()) Intent(Intent.ACTION_VIEW, Uri.parse(selectedText))
+            else Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, selectedText)
+        TextActionKind.ProcessText ->
+            action.process?.let { target ->
+                Intent(Intent.ACTION_PROCESS_TEXT)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false)
+                    .putExtra(Intent.EXTRA_PROCESS_TEXT, selectedText)
+                    .setClassName(target.packageName, target.className)
+            }
+        else -> null
+    }

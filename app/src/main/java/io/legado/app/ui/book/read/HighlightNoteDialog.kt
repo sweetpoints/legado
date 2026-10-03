@@ -1,58 +1,48 @@
 package io.legado.app.ui.book.read
 
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import android.view.WindowManager
+import androidx.compose.runtime.Composable
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.entities.BookHighlight
-import io.legado.app.databinding.DialogHighlightNoteBinding
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.model.ReadBook
+import io.legado.app.data.repository.ReaderHighlightNoteRepository
+import io.legado.app.ui.book.read.highlightnote.HighlightNoteRoute
+import io.legado.app.ui.book.read.highlightnote.HighlightNoteViewModel
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class HighlightNoteDialog() : BaseDialogFragment(R.layout.dialog_highlight_note, true) {
-
+class HighlightNoteDialog() : BaseComposeDialogFragment() {
     constructor(highlight: BookHighlight) : this() {
-        arguments = Bundle().apply {
-            putParcelable(ARG_HIGHLIGHT, highlight)
-        }
+        arguments = Bundle().apply { putParcelable("highlight", highlight.copy()) }
     }
 
-    private val binding by viewBinding(DialogHighlightNoteBinding::bind)
+    private val viewModel by
+        viewModels<HighlightNoteViewModel> {
+            viewModelFactory {
+                initializer {
+                    HighlightNoteViewModel(
+                        ReaderHighlightNoteRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        @Suppress("DEPRECATION")
-        val highlight = arguments?.getParcelable<BookHighlight>(ARG_HIGHLIGHT) ?: run {
-            dismiss()
-            return
-        }
-        binding.run {
-            tvChapterName.text = highlight.chapterName
-            editBookText.setText(highlight.bookText)
-            editNote.setText(highlight.note)
-            btnCancel.setOnClickListener { dismiss() }
-            btnOk.setOnClickListener {
-                highlight.bookText = editBookText.text?.toString().orEmpty()
-                highlight.note = editNote.text?.toString().orEmpty()
-                ReadBook.updateHighlight(highlight)
-                dismiss()
-            }
-            btnDelete.setOnClickListener {
-                ReadBook.removeHighlight(highlight)
-                dismiss()
-            }
+        dialog?.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
     }
 
-    companion object {
-        private const val ARG_HIGHLIGHT = "highlight"
+    @Composable
+    override fun Content() {
+        HighlightNoteRoute(viewModel, ::dismissAllowingStateLoss)
     }
 }

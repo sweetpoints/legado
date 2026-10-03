@@ -1,23 +1,24 @@
 package io.legado.app.base
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class PredictiveBackTest {
 
     @Test
     fun `base activity leaves default back navigation to the system`() {
-        val baseActivity = File(
-            "src/main/java/io/legado/app/base/BaseActivity.kt"
-        ).readText()
-        val blanketFinishCallback = Regex(
-            """onBackPressedDispatcher\.addCallback\(this\)\s*\{\s*finish\(\)\s*}"""
-        )
+        val baseActivity = File("src/main/java/io/legado/app/base/BaseThemedActivity.kt").readText()
+        val blanketFinishCallback =
+            Regex("""onBackPressedDispatcher\.addCallback\(this\)\s*\{\s*finish\(\)\s*}""")
 
         assertFalse(blanketFinishCallback.containsMatchIn(baseActivity))
-        assertTrue(baseActivity.contains("OnBackInvokedCallback { onBackPressedDispatcher.onBackPressed() }"))
+        assertTrue(
+            baseActivity.contains(
+                "OnBackInvokedCallback { onBackPressedDispatcher.onBackPressed() }"
+            )
+        )
         assertFalse(baseActivity.contains("OnBackInvokedCallback { finish() }"))
 
         val manifest = File("src/main/AndroidManifest.xml").readText()
@@ -27,41 +28,48 @@ class PredictiveBackTest {
     @Test
     fun `regular activities do not consume finish without closing`() {
         listOf(
-            "src/main/java/io/legado/app/ui/book/search/SearchActivity.kt",
-            "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
-        ).forEach { path ->
-            assertFalse(File(path).readText().contains("override fun finish()"))
-        }
+                "src/main/java/io/legado/app/ui/book/search/SearchActivity.kt",
+                "src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
+            )
+            .forEach { path ->
+                assertFalse(File(path).readText().contains("override fun finish()"))
+            }
     }
 
     @Test
     fun `activities intercept back before finish may defer closing`() {
         // A callback may close a text-selection menu before invoking the guarded finish().
-        val guardedFinishCallback = Regex(
-            """onBackPressedDispatcher\.addCallback\(this\)\s*\{[^}]*\bfinish\(\)"""
-        )
+        val guardedFinishCallback =
+            Regex("""onBackPressedDispatcher\.addCallback\(this\)\s*\{[^}]*\bfinish\(\)""")
         listOf(
-            "src/main/java/io/legado/app/ui/rss/source/edit/RssSourceEditActivity.kt",
-            "src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditActivity.kt",
-            "src/main/java/io/legado/app/ui/code/CodeEditActivity.kt",
-            "src/main/java/io/legado/app/ui/autoTask/AutoTaskEditActivity.kt",
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt",
-            "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt",
-            "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt",
-        ).forEach { path ->
-            val source = File(path).readText()
-            assertTrue(guardedFinishCallback.containsMatchIn(source))
-            assertTrue(source.contains("override fun finish()"))
-        }
-    }
-
-    @Test
-    fun `replace editor handles cursor only result after discarded code edit`() {
-        val source = File(
-            "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt"
-        ).readText()
-
-        assertTrue(source.contains("it.hasExtra(\"cursorPosition\")"))
-        assertTrue(source.contains("else if (fieldId != null && cursorPosition != null)"))
+                "src/main/java/io/legado/app/ui/code/CodeEditActivity.kt",
+                "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt",
+                "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt",
+                "src/main/java/io/legado/app/ui/replace/edit/ReplaceEditActivity.kt",
+            )
+            .forEach { path ->
+                val source = File(path).readText()
+                if (path.endsWith("CodeEditActivity.kt")) {
+                    val route =
+                        File("src/main/java/io/legado/app/ui/code/CodeEditorRoute.kt").readText()
+                    assertTrue(route.contains("BackHandler(onBack = ::exit)"))
+                    val exit = route.substringAfter("fun exit()").substringBefore("SideEffect")
+                    val dismiss = exit.indexOf("engine?.dismissActions() == true")
+                    val requestExit = exit.indexOf("model.requestExit()")
+                    assertTrue(dismiss >= 0 && requestExit > dismiss)
+                    assertTrue(source.contains("controller.exit?.invoke() ?: super.finish()"))
+                    assertTrue(source.contains("private fun closeHost() = super.finish()"))
+                } else if (path.endsWith("ReadMangaActivity.kt")) {
+                    val guardedMangaCallback =
+                        Regex(
+                            """onBackPressedDispatcher\.addCallback\(this\)\s*\{\s*viewModel\.requestExit\(\)"""
+                        )
+                    assertTrue(guardedMangaCallback.containsMatchIn(source))
+                    assertTrue(source.contains("override fun finish() = viewModel.requestExit()"))
+                    assertTrue(source.contains("private fun finishPlatform("))
+                    assertTrue(source.contains("super.finish()"))
+                } else assertTrue(guardedFinishCallback.containsMatchIn(source))
+                assertTrue(source.contains("override fun finish()"))
+            }
     }
 }

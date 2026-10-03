@@ -125,14 +125,14 @@ jobs:
           set -o pipefail
           build_log="$RUNNER_TEMP/gradle-build.log"
           echo "当前版本号: $VERSION"
-          sed -i "s/^def version = .*/def version = \"$VERSION\"/" "$GITHUB_WORKSPACE/app/build.gradle"
+          sed -i "s|^val appVersion = .*|val appVersion = \"$VERSION\"|" "$GITHUB_WORKSPACE/app/build.gradle.kts"
 
           if [ "$type" == "release" ]; then
             typeName="新包名"
           else
             typeName="新共存"
             # 替换 releaseA 相关包名（防止冲突）
-            sed -i "s/'.release'/'.releaseA'/" "$GITHUB_WORKSPACE/app/build.gradle"
+            sed -i 's/".release"/".releaseA"/' "$GITHUB_WORKSPACE/app/build.gradle.kts"
             if [ -f "$GITHUB_WORKSPACE/app/google-services.json" ]; then
               sed -i 's/.release/.releaseA/' "$GITHUB_WORKSPACE/app/google-services.json"
             fi

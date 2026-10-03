@@ -1,27 +1,21 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.data.preferences.ReadStyleSlider
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class ReadStyleLineSpacingTest {
 
     @Test
-    fun `seek bar exposes the requested range`() {
-        val document = DocumentBuilderFactory.newInstance()
-            .newDocumentBuilder()
-            .parse(projectFile("src/main/res/layout/dialog_read_book_style.xml"))
-        val seekBars = document.getElementsByTagName(
-            "io.legado.app.ui.widget.DetailSeekBar"
+    fun `Compose slider exposes the requested range`() {
+        assertEquals(50, ReadStyleSlider.LineSpacing.maximum)
+        assertEquals("-2.0", ReadStyleSlider.LineSpacing.display(0))
+        assertEquals(
+            "3.0",
+            ReadStyleSlider.LineSpacing.display(ReadStyleSlider.LineSpacing.maximum),
         )
-        val lineSpacing = (0 until seekBars.length)
-            .map { seekBars.item(it) as Element }
-            .single { it.getAttribute("android:id") == "@+id/dsb_line_size" }
-
-        assertEquals("50", lineSpacing.getAttribute("app:max"))
     }
 
     @Test
@@ -51,12 +45,14 @@ class ReadStyleLineSpacingTest {
 
     @Test
     fun `pagination still consumes the stored multiplier`() {
-        val provider = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        ).readText()
-        val layout = projectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
-        ).readText()
+        val provider =
+            projectFile("src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt")
+                .readText()
+        val layout =
+            projectFile(
+                    "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
+                )
+                .readText()
 
         assertTrue(provider.contains("lineSpacingExtra = ReadBookConfig.lineSpacingExtra / 10f"))
         assertTrue(layout.contains("durY += lineHeight * lineSpacingExtra"))
@@ -65,7 +61,6 @@ class ReadStyleLineSpacingTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .first { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).first { it.isFile }
     }
 }

@@ -8,7 +8,9 @@ import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.model.SharedJsScope
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -26,8 +28,9 @@ object JsSourceUpsert {
 
     fun validatePayload(text: String?): PayloadIssue? {
         if (text.isNullOrBlank()) return PayloadIssue.EMPTY
-        if (text.length > MAX_SOURCE_BYTES ||
-            text.toByteArray(Charsets.UTF_8).size > MAX_SOURCE_BYTES
+        if (
+            text.length > MAX_SOURCE_BYTES ||
+                text.toByteArray(Charsets.UTF_8).size > MAX_SOURCE_BYTES
         ) {
             return PayloadIssue.TOO_LARGE
         }
@@ -38,16 +41,18 @@ object JsSourceUpsert {
         text: String,
         openedSourceUrl: String? = null,
         timeoutMillis: Long? = null,
+        onAccepted: (suspend (BookSource) -> Unit)? = null,
     ): BookSource {
         return withSaveLock(timeoutMillis) {
             withContext(IO) {
-                val source = if (timeoutMillis == null) {
-                    JsSourceConfig.extract(text, currentCoroutineContext())
-                } else {
-                    withTimeout(timeoutMillis) {
+                val source =
+                    if (timeoutMillis == null) {
                         JsSourceConfig.extract(text, currentCoroutineContext())
+                    } else {
+                        withTimeout(timeoutMillis) {
+                            JsSourceConfig.extract(text, currentCoroutineContext())
+                        }
                     }
-                }
                 val oldUrl = openedSourceUrl?.takeIf { it.isNotBlank() }
                 val openedSource = oldUrl?.let(appDb.bookSourceDao::getBookSource)
                 if (oldUrl != null && openedSource == null) {
@@ -60,29 +65,47 @@ object JsSourceUpsert {
                 val old = openedSource ?: targetSource
                 val changed = prepareForSave(source, old)
                 if (!changed && old != null) {
-                    return@withContext old
+                    return@withContext acceptedWrite(onAccepted) { old }
                 }
-                old?.let {
-                    if (it.bookSourceUrl != source.bookSourceUrl ||
-                        it.exploreUrl != source.exploreUrl
-                    ) {
-                        it.clearExploreKindsCache()
+                acceptedWrite(onAccepted) {
+                    old?.let {
+                        if (
+                            it.bookSourceUrl != source.bookSourceUrl ||
+                                it.exploreUrl != source.exploreUrl
+                        ) {
+                            it.clearExploreKindsCache()
+                        }
+                        if (it.jsLib != source.jsLib) {
+                            SharedJsScope.remove(it.jsLib)
+                        }
+                        if (it.bookSourceUrl != source.bookSourceUrl) {
+                            SourceHelp.deleteBookSource(it.bookSourceUrl)
+                            concurrentRecordMap.remove(it.bookSourceUrl)
+                        } else {
+                            appDb.bookSourceDao.delete(it)
+                            SourceConfig.removeSource(it.bookSourceUrl)
+                        }
                     }
-                    if (it.jsLib != source.jsLib) {
-                        SharedJsScope.remove(it.jsLib)
-                    }
-                    if (it.bookSourceUrl != source.bookSourceUrl) {
-                        SourceHelp.deleteBookSource(it.bookSourceUrl)
-                        concurrentRecordMap.remove(it.bookSourceUrl)
-                    } else {
-                        appDb.bookSourceDao.delete(it)
-                        SourceConfig.removeSource(it.bookSourceUrl)
-                    }
+                    appDb.bookSourceDao.insert(source)
+                    concurrentRecordMap.remove(source.bookSourceUrl)
+                    source
                 }
-                appDb.bookSourceDao.insert(source)
-                concurrentRecordMap.remove(source.bookSourceUrl)
-                source
             }
+        }
+    }
+
+    internal suspend fun acceptedWrite(
+        onAccepted: (suspend (BookSource) -> Unit)?,
+        write: suspend () -> BookSource,
+    ): BookSource {
+        if (onAccepted == null) return write()
+        currentCoroutineContext().ensureActive()
+        // Parsing and lock acquisition remain cancellable. Only accepted persistence and its
+        // private receipt survive caller cancellation, preventing a returned-to-Main gap.
+        return withContext(NonCancellable) {
+            val acceptedSource = write()
+            onAccepted(acceptedSource)
+            acceptedSource
         }
     }
 
@@ -122,12 +145,8 @@ object JsSourceUpsert {
     }
 
     internal fun equalIgnoringManagedUpdateTime(source: BookSource, old: BookSource): Boolean {
-        val normalizedSource = source.copy(
-            mainJs = normalizeManagedUpdateTime(source.mainJs),
-        )
-        val normalizedOld = old.copy(
-            mainJs = normalizeManagedUpdateTime(old.mainJs),
-        )
+        val normalizedSource = source.copy(mainJs = normalizeManagedUpdateTime(source.mainJs))
+        val normalizedOld = old.copy(mainJs = normalizeManagedUpdateTime(old.mainJs))
         return normalizedSource.equal(normalizedOld) &&
             normalizedSource.exploreScreen.orEmpty() == normalizedOld.exploreScreen.orEmpty() &&
             normalizedSource.ruleReview == normalizedOld.ruleReview &&

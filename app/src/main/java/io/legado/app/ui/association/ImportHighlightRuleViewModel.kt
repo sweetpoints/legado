@@ -1,190 +1,171 @@
 package io.legado.app.ui.association
 
-import android.app.Application
-import androidx.core.net.toUri
-import androidx.lifecycle.MutableLiveData
-import com.google.gson.JsonObject
-import com.google.gson.JsonElement
-import io.legado.app.R
-import io.legado.app.base.BaseViewModel
-import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HighlightRuleFile
-import io.legado.app.model.ReadBook
-import io.legado.app.utils.GSON
-import io.legado.app.utils.GSONStrict
-import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.readText
-import splitties.init.appCtx
+import io.legado.app.data.repository.*
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
-internal enum class HighlightRuleImportStatus {
-    NEW,
-    UPDATE,
-    EXISTING
-}
+// Existing parser/comparison consumers retain their pure APIs; the repository owns the
+// implementation.
+internal typealias HighlightRuleImportStatus = HighlightImportStatus
 
-internal data class HighlightRuleImportItem(
-    val rule: HighlightRule,
-    val status: HighlightRuleImportStatus
-)
+internal typealias HighlightRuleImportItem = HighlightImportComparison
 
-internal fun parseHighlightRuleFile(text: String): List<HighlightRule> {
-    val parsed = GSONStrict.fromJsonObject<JsonElement>(text).getOrThrow()
-    val root = if (parsed.isJsonArray) {
-        parsed.asJsonArray.forEach { element ->
-            require(element.isJsonObject)
-            val rule = element.asJsonObject
-            require(rule.has("pattern") && rule.has("style") && rule.has("uuid"))
-            require(!rule.has("replacement"))
-        }
-        JsonObject().apply {
-            addProperty("type", HighlightRuleFile.TYPE)
-            add("rules", parsed)
-        }
-    } else {
-        require(parsed.isJsonObject)
-        parsed.asJsonObject
-    }
-    val rules = root.get("rules")
-    require(rules != null && rules.isJsonArray)
-    rules.asJsonArray.forEach { element ->
-        require(element.isJsonObject)
-        val rule = element.asJsonObject
-        val uuid = rule.get("uuid")
-        require(
-            uuid != null && !uuid.isJsonNull &&
-                uuid.isJsonPrimitive && uuid.asJsonPrimitive.isString
-        )
-        listOf("name", "pattern", "style").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(value.isJsonPrimitive && value.asJsonPrimitive.isString)
-            }
-        }
-        rule.get("scope")?.let { value ->
-            require(
-                value.isJsonNull ||
-                    value.isJsonPrimitive && value.asJsonPrimitive.isString
-            )
-        }
-        listOf("isRegex", "isEnabled", "applyToTitle", "applyToBody").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(value.isJsonPrimitive && value.asJsonPrimitive.isBoolean)
-            }
-        }
-        listOf("id", "timeoutMillisecond").forEach { field ->
-            rule.get(field)?.let { value ->
-                require(
-                    value.isJsonPrimitive && value.asJsonPrimitive.isNumber &&
-                        runCatching { value.asBigDecimal.longValueExact() }.isSuccess
-                )
-            }
-        }
-        rule.get("order")?.let { value ->
-            require(
-                value.isJsonPrimitive && value.asJsonPrimitive.isNumber &&
-                    runCatching { value.asBigDecimal.intValueExact() }.isSuccess
-            )
-        }
-    }
-    return validateHighlightRuleFile(
-        GSONStrict.fromJson(root, HighlightRuleFile::class.java)
-    )
-}
+internal fun parseHighlightRuleFile(text: String) = parseHighlightImportFile(text)
 
-internal fun validateHighlightRuleFile(file: HighlightRuleFile): List<HighlightRule> {
-    require(file.type == HighlightRuleFile.TYPE)
-    val rules = file.rules ?: error("Missing rules")
-    val uuids = hashSetOf<String>()
-    return rules.map { nullableRule ->
-        val rule = nullableRule ?: error("Invalid rule")
-        @Suppress("USELESS_CAST")
-        val rawUuid = (rule.uuid as String?).orEmpty()
-        val uuid = UUID.fromString(rawUuid).toString()
-        require(uuid.equals(rawUuid, ignoreCase = true))
-        require(uuids.add(uuid))
-        rule.uuid = uuid
-        rule.scope = rule.scope?.ifBlank { null }
-        rule.normalizeForRestore()
-        require(rule.isValid())
-        rule
-    }
-}
+internal fun validateHighlightRuleFile(file: HighlightRuleFile) = validateHighlightImportFile(file)
 
 internal fun compareImportedHighlightRules(
     imported: List<HighlightRule>,
-    local: List<HighlightRule>
-): List<HighlightRuleImportItem> {
-    val localByUuid = local.associateBy { it.uuid.lowercase() }
-    return imported.map { rule ->
-        val existing = localByUuid[rule.uuid.lowercase()]
-        val status = when {
-            existing == null -> HighlightRuleImportStatus.NEW
-            GSON.toJsonTree(existing.copy(id = 0L, order = 0)) ==
-                GSON.toJsonTree(rule.copy(id = 0L, order = 0)) ->
-                HighlightRuleImportStatus.EXISTING
-            else -> HighlightRuleImportStatus.UPDATE
-        }
-        HighlightRuleImportItem(rule, status)
-    }
-}
+    local: List<HighlightRule>,
+) = compareHighlightImports(imported, local)
 
-class ImportHighlightRuleViewModel(app: Application) : BaseViewModel(app) {
-
-    val errorLiveData = MutableLiveData<String>()
-    val successLiveData = MutableLiveData<Int>()
-    val importingLiveData = MutableLiveData(false)
-    val importSuccessLiveData = MutableLiveData(false)
-    internal val items = arrayListOf<HighlightRuleImportItem>()
-    val selectStatus = arrayListOf<Boolean>()
-    private var loadStarted = false
-
+data class HighlightImportState(
+    val items: List<HighlightImportItem> = emptyList(),
+    val selected: Set<String> = emptySet(),
+    val loading: Boolean = true,
+    val busy: Boolean = false,
+    val error: String? = null,
+    val finished: Boolean = false,
+    val refreshPending: Boolean = false,
+) {
     val isSelectAll: Boolean
-        get() = selectStatus.isNotEmpty() && selectStatus.all { it }
+        get() = items.isNotEmpty() && items.all { it.key in selected }
 
     val selectCount: Int
-        get() = selectStatus.count { it }
+        get() = selected.size
 
-    fun load(source: String) {
-        if (loadStarted) return
-        loadStarted = true
-        execute {
-            val text = source.toUri().readText(appCtx)
-            val comparison = compareImportedHighlightRules(
-                parseHighlightRuleFile(text),
-                appDb.highlightRuleDao.all
+    val interactive: Boolean
+        get() = !loading && !busy && !finished
+}
+
+class ImportHighlightRuleViewModel(
+    private val repository: HighlightImportRepository,
+    private val saved: SavedStateHandle,
+    private val source: String,
+) : ViewModel() {
+    private val session =
+        saved.get<String>("session") ?: UUID.randomUUID().toString().also { saved["session"] = it }
+    private val mutable =
+        MutableStateFlow(
+            HighlightImportState(
+                finished = saved["finished"] ?: false,
+                refreshPending = saved["refreshPending"] ?: false,
             )
-            items.clear()
-            items.addAll(comparison)
-            selectStatus.clear()
-            selectStatus.addAll(comparison.map { it.status != HighlightRuleImportStatus.EXISTING })
-        }.onError {
-            val message = context.getString(R.string.wrong_format)
-            errorLiveData.postValue(message)
-            AppLog.put("ImportHighlightRuleError:${it.localizedMessage}", it)
-        }.onSuccess {
-            successLiveData.postValue(items.size)
+        )
+    val state = mutable.asStateFlow()
+    private var operation: Job? = null
+
+    init {
+        if (state.value.finished) mutable.value = state.value.copy(loading = false) else load()
+    }
+
+    private fun failure(error: Exception) {
+        if (!state.value.finished)
+            mutable.value =
+                state.value.copy(
+                    loading = false,
+                    busy = false,
+                    error = "ImportError:${error.localizedMessage}",
+                )
+    }
+
+    fun load() {
+        if (state.value.finished || operation?.isActive == true) return
+        mutable.value = state.value.copy(loading = true, error = null)
+        operation = viewModelScope.launch {
+            try {
+                if (source.isEmpty()) {
+                    cancel()
+                    return@launch
+                }
+                val staged =
+                    repository.restore(session)
+                        ?: HighlightImportSession(repository.read(source)).also {
+                            repository.stage(session, it.items)
+                        }
+                if (state.value.finished) return@launch
+                if (staged.committed) {
+                    imported()
+                    return@launch
+                }
+                val keys = staged.items.mapTo(mutableSetOf()) { it.key }
+                val selected =
+                    saved.get<ArrayList<String>>("selected")?.toSet()?.intersect(keys)
+                        ?: staged.items
+                            .filter { it.selectedByDefault }
+                            .mapTo(mutableSetOf()) { it.key }
+                saved["selected"] = ArrayList(selected)
+                mutable.value = HighlightImportState(staged.items, selected, loading = false)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                failure(error)
+            }
         }
     }
 
-    fun importSelected() {
-        if (importingLiveData.value == true) return
-        val selected = items.mapIndexedNotNull { index, item ->
-            item.rule.takeIf { selectStatus[index] }
-        }
-        if (selected.isEmpty()) return
-        importingLiveData.value = true
-        execute {
-            appDb.highlightRuleDao.importRules(selected)
-        }.onError {
-            errorLiveData.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
+    fun toggle(key: String) {
+        val value = state.value
+        if (!value.interactive || value.items.none { it.key == key }) return
+        select(if (key in value.selected) value.selected - key else value.selected + key)
+    }
+
+    private fun select(keys: Set<String>) {
+        saved["selected"] = ArrayList(keys)
+        mutable.value = state.value.copy(selected = keys)
+    }
+
+    fun toggleAll() {
+        val value = state.value
+        if (value.interactive)
+            select(
+                if (value.isSelectAll) emptySet() else value.items.mapTo(mutableSetOf()) { it.key }
             )
-            importingLiveData.postValue(false)
-        }.onSuccess {
-            ReadBook.upHighlightRules()
-            importSuccessLiveData.postValue(true)
+    }
+
+    fun confirm() {
+        val value = state.value
+        if (!value.interactive || value.selected.isEmpty()) return
+        mutable.value = value.copy(busy = true, error = null)
+        operation = viewModelScope.launch {
+            try {
+                repository.insert(session, value.items, value.selected)
+                imported()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                failure(error)
+            }
         }
+    }
+
+    private fun imported() {
+        saved["finished"] = true
+        saved["refreshPending"] = true
+        mutable.value =
+            state.value.copy(loading = false, busy = false, finished = true, refreshPending = true)
+    }
+
+    fun consumeRefresh() {
+        saved["refreshPending"] = false
+        mutable.value = state.value.copy(refreshPending = false)
+    }
+
+    fun cancel() {
+        if (state.value.busy || state.value.finished) return
+        saved["finished"] = true
+        saved["refreshPending"] = false
+        mutable.value =
+            state.value.copy(loading = false, busy = false, finished = true, refreshPending = false)
+        operation?.cancel()
     }
 }

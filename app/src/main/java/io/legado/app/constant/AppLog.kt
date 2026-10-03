@@ -6,17 +6,29 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
-import splitties.init.appCtx
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import splitties.init.appCtx
+
+data class AppLogEntry(
+    val id: Long,
+    val time: Long,
+    val message: String,
+    val throwable: Throwable?,
+)
 
 object AppLog {
 
-    private val mLogs = arrayListOf<Triple<Long, String, Throwable?>>()
+    private val mLogs = arrayListOf<AppLogEntry>()
+    private var nextEntryId = 0L
+    private val mutableEntries = MutableStateFlow<List<AppLogEntry>>(emptyList())
+    val entries = mutableEntries.asStateFlow()
 
     val logs
-        @Synchronized get() = mLogs.toList()
+        @Synchronized get() = mLogs.map { Triple(it.time, it.message, it.throwable) }
 
     @Synchronized
     fun put(message: String?, throwable: Throwable? = null, toast: Boolean = false) {
@@ -32,7 +44,8 @@ object AppLog {
         } else {
             LogUtils.d("AppLog", "$message\n${throwable.stackTraceToString()}")
         }
-        mLogs.add(0, Triple(System.currentTimeMillis(), message, throwable))
+        mLogs.add(0, AppLogEntry(++nextEntryId, System.currentTimeMillis(), message, throwable))
+        mutableEntries.value = mLogs.toList()
         runCatching { postEvent(EventBus.APP_LOG_UPDATED, true) }
         if (BuildConfig.DEBUG) {
             runCatching {
@@ -51,7 +64,8 @@ object AppLog {
         if (mLogs.size >= 100) {
             mLogs.removeLastOrNull()
         }
-        mLogs.add(0, Triple(System.currentTimeMillis(), message, throwable))
+        mLogs.add(0, AppLogEntry(++nextEntryId, System.currentTimeMillis(), message, throwable))
+        mutableEntries.value = mLogs.toList()
         runCatching { postEvent(EventBus.APP_LOG_UPDATED, true) }
         if (BuildConfig.DEBUG) {
             runCatching {
@@ -64,6 +78,8 @@ object AppLog {
     @Synchronized
     fun clear() {
         mLogs.clear()
+        mutableEntries.value = emptyList()
+        runCatching { postEvent(EventBus.APP_LOG_UPDATED, true) }
     }
 
     fun exportText(entries: List<Triple<Long, String, Throwable?>>): String {
@@ -85,5 +101,4 @@ object AppLog {
             put(message, throwable)
         }
     }
-
 }

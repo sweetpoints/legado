@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- BaseDialogFragment still probes this optional background ID after BookInfo XML removal. -->
+    <item name="vw_bg" type="id" />
+</resources>

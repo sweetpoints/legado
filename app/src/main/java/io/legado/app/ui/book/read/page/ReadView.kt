@@ -51,11 +51,16 @@ import java.util.Locale
 import kotlin.math.abs
 
 internal enum class PullBookmarkGestureState {
-    NONE, PULLING, READY
+    NONE,
+    PULLING,
+    READY,
 }
 
 private enum class ReplacePreviewGestureState {
-    IDLE, PENDING, ACTIVE, CONSUMED
+    IDLE,
+    PENDING,
+    ACTIVE,
+    CONSUMED,
 }
 
 internal fun movedBeyondTouchSlop(
@@ -113,26 +118,23 @@ internal fun selectableParagraphRange(
     hasColumns: (Int) -> Boolean,
 ): IntRange? {
     val first = paragraphRange.firstOrNull(hasColumns) ?: return null
-    val last = (paragraphRange.last downTo paragraphRange.first)
-        .firstOrNull(hasColumns) ?: return null
+    val last =
+        (paragraphRange.last downTo paragraphRange.first).firstOrNull(hasColumns) ?: return null
     return first..last
 }
 
 internal fun firstParagraphSelectionColumnIndex(
     columnCount: Int,
     textAt: (Int) -> String?,
-): Int = (0 until columnCount)
-    .firstOrNull { textAt(it)?.isBlank() != true }
-    ?: 0
+): Int = (0 until columnCount).firstOrNull { textAt(it)?.isBlank() != true } ?: 0
 
-/**
- * 阅读视图
- */
-class ReadView(context: Context, attrs: AttributeSet) :
-    FrameLayout(context, attrs),
-    DataSource, LayoutProgressListener {
+/** 阅读视图 */
+class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
+    FrameLayout(context, attrs), DataSource, LayoutProgressListener {
 
-    val callBack: CallBack get() = activity as CallBack
+    val callBack: CallBack
+        get() = activity as CallBack
+
     var pageFactory: TextPageFactory = TextPageFactory(this)
     var pageDelegate: PageDelegate? = null
         private set(value) {
@@ -141,32 +143,35 @@ class ReadView(context: Context, attrs: AttributeSet) :
             field = value
             upContent()
         }
+
     override var isScroll = false
     val prevPage by lazy { PageView(context) }
     val curPage by lazy { PageView(context) }
     val nextPage by lazy { PageView(context) }
     val defaultAnimationSpeed = 300
     private var pressDown = false
-    internal val isTouching: Boolean get() = pressDown
+    internal val isTouching: Boolean
+        get() = pressDown
+
     private var isMove = false
     private val readPositionVersion = ReadPositionVersion()
 
-    //起始点
+    // 起始点
     var startX: Float = 0f
     var startY: Float = 0f
 
-    //上一个触碰点
+    // 上一个触碰点
     var lastX: Float = 0f
     var lastY: Float = 0f
 
-    //触碰点
+    // 触碰点
     var touchX: Float = 0f
     var touchY: Float = 0f
 
-    //是否停止动画动作
+    // 是否停止动画动作
     var isAbortAnim = false
 
-    //长按
+    // 长按
     private var longPressed = false
     private val longPressTimeout = 600L
     private val longPressRunnable = Runnable {
@@ -194,6 +199,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
     private val slopSquare by lazy { ViewConfiguration.get(context).scaledTouchSlop }
     private val pullBookmarkDistance
         get() = resolvePullBookmarkDistance(AppConfig.pullBookmarkDistance, slopSquare)
+
     private var pullBookmarkCandidate = false
     private var pullBookmarkState = PullBookmarkGestureState.NONE
     private var pullBookmarkAnimator: ValueAnimator? = null
@@ -213,7 +219,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
     private val upProgressThrottle = throttle(200) { post { upProgress() } }
     val autoPager = AutoPager(this)
     internal val pdfZoom = PdfZoom(this)
-    val isAutoPage get() = autoPager.isRunning
+    val isAutoPage
+        get() = autoPager.isRunning
 
     init {
         if (!isInEditMode) {
@@ -240,7 +247,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
         mrRect.set(width * 0.66f, height * 0.33f, width.toFloat() - pageTouchClick, height * 0.66f)
         blRect.set(0f + pageTouchClick, height * 0.66f, width * 0.33f, height.toFloat())
         bcRect.set(width * 0.33f, height * 0.66f, width * 0.66f, height.toFloat())
-        brRect.set(width * 0.66f, height * 0.66f, width.toFloat() - pageTouchClick, height.toFloat())
+        brRect.set(
+            width * 0.66f,
+            height * 0.66f,
+            width.toFloat() - pageTouchClick,
+            height.toFloat(),
+        )
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -269,16 +281,17 @@ class ReadView(context: Context, attrs: AttributeSet) :
         return true
     }
 
-    /**
-     * 触摸事件
-     */
+    /** 触摸事件 */
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (pdfZoom.onTouch(event) { x, y ->
+        if (
+            pdfZoom.onTouch(event) { x, y ->
                 setStartPoint(x, y, false)
                 isAbortAnim = false
                 onSingleTapUp()
-            }) return true
+            }
+        )
+            return true
         if (replacePreviewGestureState != ReplacePreviewGestureState.IDLE) {
             if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
                 finishReplacePreviewGesture(ReplacePreviewGestureState.CONSUMED)
@@ -289,14 +302,16 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val insets = this.rootWindowInsets.getInsetsIgnoringVisibility(
-                WindowInsets.Type.mandatorySystemGestures()
-            )
+            val insets =
+                this.rootWindowInsets.getInsetsIgnoringVisibility(
+                    WindowInsets.Type.mandatorySystemGestures()
+                )
             val height = activity?.windowManager?.currentWindowMetrics?.bounds?.height()
             if (height != null) {
-                if (event.y > height.minus(insets.bottom)
-                    && event.action != MotionEvent.ACTION_UP
-                    && event.action != MotionEvent.ACTION_CANCEL
+                if (
+                    event.y > height.minus(insets.bottom) &&
+                        event.action != MotionEvent.ACTION_UP &&
+                        event.action != MotionEvent.ACTION_CANCEL
                 ) {
                     return true
                 }
@@ -308,9 +323,10 @@ class ReadView(context: Context, attrs: AttributeSet) :
             if (startReplacePreviewGesture(event)) return true
         }
 
-        //在多点触控时，事件不走ACTION_DOWN分支而产生的特殊事件处理
-        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN ||
-            event.actionMasked == MotionEvent.ACTION_POINTER_UP
+        // 在多点触控时，事件不走ACTION_DOWN分支而产生的特殊事件处理
+        if (
+            event.actionMasked == MotionEvent.ACTION_POINTER_DOWN ||
+                event.actionMasked == MotionEvent.ACTION_POINTER_UP
         ) {
             resetPullBookmarkGesture(animatePage = false)
             pageDelegate?.onTouch(event)
@@ -332,8 +348,10 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 postDelayed(longPressRunnable, longPressTimeout)
                 pressDown = true
                 isMove = false
-                pullBookmarkCandidate = AppConfig.pullToToggleBookmark &&
-                        !pressOnTextSelected && !isAutoPage &&
+                pullBookmarkCandidate =
+                    AppConfig.pullToToggleBookmark &&
+                        !pressOnTextSelected &&
+                        !isAutoPage &&
                         (!isScroll || curPage.isAtChapterTop())
                 pageDelegate?.onTouch(event)
                 pageDelegate?.onDown()
@@ -346,20 +364,23 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 val absY = abs(startY - event.y)
                 if (absX > slopSquare || absY > slopSquare) curPage.cancelHighlightTap()
                 if (pullBookmarkCandidate || pullBookmarkState != PullBookmarkGestureState.NONE) {
-                    val state = classifyPullBookmarkGesture(
-                        event.x - startX,
-                        event.y - startY,
-                        slopSquare,
-                        pullBookmarkDistance,
-                    )
-                    if (pullBookmarkState != PullBookmarkGestureState.NONE ||
-                        state != PullBookmarkGestureState.NONE
+                    val state =
+                        classifyPullBookmarkGesture(
+                            event.x - startX,
+                            event.y - startY,
+                            slopSquare,
+                            pullBookmarkDistance,
+                        )
+                    if (
+                        pullBookmarkState != PullBookmarkGestureState.NONE ||
+                            state != PullBookmarkGestureState.NONE
                     ) {
-                        pullBookmarkState = if (state == PullBookmarkGestureState.NONE) {
-                            PullBookmarkGestureState.PULLING
-                        } else {
-                            state
-                        }
+                        pullBookmarkState =
+                            if (state == PullBookmarkGestureState.NONE) {
+                                PullBookmarkGestureState.PULLING
+                            } else {
+                                state
+                            }
                         isMove = true
                         longPressed = false
                         removeCallbacks(longPressRunnable)
@@ -394,12 +415,13 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 if (!pressDown) return true
                 pressDown = false
                 if (pullBookmarkState != PullBookmarkGestureState.NONE) {
-                    val toggleBookmark = classifyPullBookmarkGesture(
-                        event.x - startX,
-                        event.y - startY,
-                        slopSquare,
-                        pullBookmarkDistance,
-                    ) == PullBookmarkGestureState.READY
+                    val toggleBookmark =
+                        classifyPullBookmarkGesture(
+                            event.x - startX,
+                            event.y - startY,
+                            slopSquare,
+                            pullBookmarkDistance,
+                        ) == PullBookmarkGestureState.READY
                     resetPullBookmarkGesture()
                     pressOnTextSelected = false
                     if (toggleBookmark) {
@@ -430,8 +452,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 removeCallbacks(longPressRunnable)
                 if (!pressDown) return true
                 pressDown = false
-                val wasPullingBookmark =
-                    pullBookmarkState != PullBookmarkGestureState.NONE
+                val wasPullingBookmark = pullBookmarkState != PullBookmarkGestureState.NONE
                 resetPullBookmarkGesture()
                 if (wasPullingBookmark) {
                     pressOnTextSelected = false
@@ -451,15 +472,16 @@ class ReadView(context: Context, attrs: AttributeSet) :
     }
 
     private fun startReplacePreviewGesture(event: MotionEvent): Boolean {
-        if (!AppConfig.twoFingerReplacePreview ||
-            event.pointerCount != 2 ||
-            !pressDown ||
-            longPressed ||
-            pressOnTextSelected ||
-            isTextSelected ||
-            isMove ||
-            pageDelegate?.isMoved == true ||
-            isAutoPage
+        if (
+            !AppConfig.twoFingerReplacePreview ||
+                event.pointerCount != 2 ||
+                !pressDown ||
+                longPressed ||
+                pressOnTextSelected ||
+                isTextSelected ||
+                isMove ||
+                pageDelegate?.isMoved == true ||
+                isAutoPage
         ) {
             return false
         }
@@ -480,8 +502,9 @@ class ReadView(context: Context, attrs: AttributeSet) :
     private fun handleReplacePreviewGesture(event: MotionEvent) {
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
-                if (replacePreviewGestureState == ReplacePreviewGestureState.PENDING &&
-                    replacePreviewPointersMoved(event)
+                if (
+                    replacePreviewGestureState == ReplacePreviewGestureState.PENDING &&
+                        replacePreviewPointersMoved(event)
                 ) {
                     finishReplacePreviewGesture(ReplacePreviewGestureState.CONSUMED)
                 }
@@ -505,13 +528,15 @@ class ReadView(context: Context, attrs: AttributeSet) :
         if (event.pointerCount != 2) return true
         for (pointer in 0..1) {
             val index = event.findPointerIndex(replacePreviewPointerIds[pointer])
-            if (index < 0 || movedBeyondTouchSlop(
-                    replacePreviewStartX[pointer],
-                    replacePreviewStartY[pointer],
-                    event.getX(index),
-                    event.getY(index),
-                    slopSquare,
-                )
+            if (
+                index < 0 ||
+                    movedBeyondTouchSlop(
+                        replacePreviewStartX[pointer],
+                        replacePreviewStartY[pointer],
+                        event.getX(index),
+                        event.getY(index),
+                        slopSquare,
+                    )
             ) {
                 return true
             }
@@ -537,8 +562,9 @@ class ReadView(context: Context, attrs: AttributeSet) :
     }
 
     fun showReplacePreview(preview: ReadBook.ReplacePreview): Boolean {
-        if (replacePreviewGestureState != ReplacePreviewGestureState.ACTIVE ||
-            !ReadBook.isCurrentReplacePreview(preview)
+        if (
+            replacePreviewGestureState != ReplacePreviewGestureState.ACTIVE ||
+                !ReadBook.isCurrentReplacePreview(preview)
         ) {
             return false
         }
@@ -573,13 +599,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
             setPullBookmarkPageOffset(0f)
             return
         }
-        pullBookmarkAnimator = ValueAnimator.ofFloat(startOffset, 0f).apply {
-            duration = defaultAnimationSpeed.toLong()
-            addUpdateListener {
-                setPullBookmarkPageOffset(it.animatedValue as Float)
+        pullBookmarkAnimator =
+            ValueAnimator.ofFloat(startOffset, 0f).apply {
+                duration = defaultAnimationSpeed.toLong()
+                addUpdateListener {
+                    setPullBookmarkPageOffset(it.animatedValue as Float)
+                }
+                start()
             }
-            start()
-        }
     }
 
     private fun setPullBookmarkPageOffset(offset: Float) {
@@ -594,18 +621,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 更新状态栏
-     */
+    /** 更新状态栏 */
     fun upStatusBar() {
         curPage.upStatusBar()
         prevPage.upStatusBar()
         nextPage.upStatusBar()
     }
 
-    /**
-     * 保存开始位置
-     */
+    /** 保存开始位置 */
     fun setStartPoint(x: Float, y: Float, invalidate: Boolean = true) {
         startX = x
         startY = y
@@ -619,9 +642,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 保存当前位置
-     */
+    /** 保存当前位置 */
     fun setTouchPoint(x: Float, y: Float, invalidate: Boolean = true) {
         lastX = touchX
         lastY = touchY
@@ -641,9 +662,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         readPositionVersion.markChanged()
     }
 
-    /**
-     * 长按选择
-     */
+    /** 长按选择 */
     private fun onLongPress() {
         kotlin.runCatching {
             curPage.longPress(startX, startY) { textPos: TextPos ->
@@ -655,18 +674,23 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 val endPos = textPos.copy()
                 val page = curPage.relativePage(textPos.relativePagePos)
                 if (AppConfig.longPressSelectParagraph) {
-                    val range = visibleParagraphRange(
-                        textPos.lineIndex,
-                        page.lineSize,
-                    ) { page.getLine(it).isParagraphEnd }
-                    val selectableRange = selectableParagraphRange(range) {
-                        page.getLine(it).columns.isNotEmpty()
-                    } ?: return@longPress
+                    val range =
+                        visibleParagraphRange(
+                            textPos.lineIndex,
+                            page.lineSize,
+                        ) {
+                            page.getLine(it).isParagraphEnd
+                        }
+                    val selectableRange =
+                        selectableParagraphRange(range) {
+                            page.getLine(it).columns.isNotEmpty()
+                        } ?: return@longPress
                     val startLine = page.getLine(selectableRange.first)
                     startPos.lineIndex = selectableRange.first
-                    startPos.columnIndex = firstParagraphSelectionColumnIndex(
-                        startLine.columns.size,
-                    ) { (startLine.columns[it] as? TextBaseColumn)?.charData }
+                    startPos.columnIndex =
+                        firstParagraphSelectionColumnIndex(startLine.columns.size) {
+                            (startLine.columns[it] as? TextBaseColumn)?.charData
+                        }
                     endPos.lineIndex = selectableRange.last
                     endPos.columnIndex = page.getLine(selectableRange.last).columns.lastIndex
                     curPage.selectStartMoveIndex(startPos)
@@ -731,15 +755,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 单击
-     */
+    /** 单击 */
     private fun onSingleTapUp() {
         when {
             isTextSelected -> Unit
-            mcRect.contains(startX, startY) -> if (!isAbortAnim) {
-                click(AppConfig.clickActionMC)
-            }
+            mcRect.contains(startX, startY) ->
+                if (!isAbortAnim) {
+                    click(AppConfig.clickActionMC)
+                }
 
             bcRect.contains(startX, startY) -> {
                 click(AppConfig.clickActionBC)
@@ -775,9 +798,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 点击
-     */
+    /** 点击 */
     private fun click(action: Int) {
         when (action) {
             0 -> {
@@ -792,16 +813,23 @@ class ReadView(context: Context, attrs: AttributeSet) :
             5 -> ReadAloud.prevParagraph(context)
             6 -> ReadAloud.nextParagraph(context)
             7 -> callBack.addBookmark()
-            8 -> ContentEditDialog.newInstance()?.let {
-                activity?.showDialogFragment(it)
-            }
+            8 ->
+                ContentEditDialog.newInstance()?.let {
+                    activity?.showDialogFragment(it)
+                }
             9 -> callBack.changeReplaceRuleState()
             10 -> callBack.openChapterList()
             11 -> callBack.openSearchActivity(null)
-            12 -> ReadBook.syncProgress(
-                { progress -> callBack.sureNewProgress(progress) },
-                { context.longToastOnUi(context.getString(R.string.upload_book_success)) },
-                { context.longToastOnUi(context.getString(R.string.sync_book_progress_success)) })
+            12 ->
+                ReadBook.syncProgress(
+                    { progress -> callBack.sureNewProgress(progress) },
+                    { context.longToastOnUi(context.getString(R.string.upload_book_success)) },
+                    {
+                        context.longToastOnUi(
+                            context.getString(R.string.sync_book_progress_success)
+                        )
+                    },
+                )
 
             13 -> {
                 if (BaseReadAloudService.isPlay()) {
@@ -813,9 +841,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 选择文本
-     */
+    /** 选择文本 */
     private fun selectText(x: Float, y: Float) {
         curPage.selectText(x, y) { textPos ->
             val compare = initialTextPos.compare(textPos)
@@ -825,7 +851,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
                     curPage.selectEndMoveIndex(
                         initialTextPos.relativePagePos,
                         initialTextPos.lineIndex,
-                        initialTextPos.columnIndex - 1
+                        initialTextPos.columnIndex - 1,
                     )
                 }
 
@@ -839,8 +865,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     private fun showTextMagnifier(x: Float, y: Float) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
-        val magnifier = textMagnifier
-            ?: SelectionMagnifierApi28(this).also { textMagnifier = it }
+        val magnifier = textMagnifier ?: SelectionMagnifierApi28(this).also { textMagnifier = it }
         magnifier.show(x, y)
     }
 
@@ -870,9 +895,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 销毁事件
-     */
+    /** 销毁事件 */
     fun onDestroy() {
         curPage.closePdfRenderer()
         cancelTouchGestures()
@@ -893,6 +916,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     /**
      * 翻页动画完成后事件
+     *
      * @param direction 翻页方向
      */
     fun fillPage(direction: PageDirection): Boolean {
@@ -910,9 +934,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 更新翻页动画
-     */
+    /** 更新翻页动画 */
     fun upPageAnim(upRecorder: Boolean = false) {
         val scroll = ReadBook.pageAnim() == PageAnim.scrollPageAnim
         if (pageDelegate != null) updateScrollReadPosition(preserveText = isScroll != scroll)
@@ -921,25 +943,30 @@ class ReadView(context: Context, attrs: AttributeSet) :
         if (pageDelegate != null) curPage.setIsScroll(isScroll)
         ChapterProvider.upLayout()
         when (ReadBook.pageAnim()) {
-            PageAnim.coverPageAnim -> if (pageDelegate !is CoverPageDelegate) {
-                pageDelegate = CoverPageDelegate(this)
-            }
+            PageAnim.coverPageAnim ->
+                if (pageDelegate !is CoverPageDelegate) {
+                    pageDelegate = CoverPageDelegate(this)
+                }
 
-            PageAnim.slidePageAnim -> if (pageDelegate !is SlidePageDelegate) {
-                pageDelegate = SlidePageDelegate(this)
-            }
+            PageAnim.slidePageAnim ->
+                if (pageDelegate !is SlidePageDelegate) {
+                    pageDelegate = SlidePageDelegate(this)
+                }
 
-            PageAnim.simulationPageAnim -> if (pageDelegate !is SimulationPageDelegate) {
-                pageDelegate = SimulationPageDelegate(this)
-            }
+            PageAnim.simulationPageAnim ->
+                if (pageDelegate !is SimulationPageDelegate) {
+                    pageDelegate = SimulationPageDelegate(this)
+                }
 
-            PageAnim.scrollPageAnim -> if (pageDelegate !is ScrollPageDelegate) {
-                pageDelegate = ScrollPageDelegate(this)
-            }
+            PageAnim.scrollPageAnim ->
+                if (pageDelegate !is ScrollPageDelegate) {
+                    pageDelegate = ScrollPageDelegate(this)
+                }
 
-            else -> if (pageDelegate !is NoAnimPageDelegate) {
-                pageDelegate = NoAnimPageDelegate(this)
-            }
+            else ->
+                if (pageDelegate !is NoAnimPageDelegate) {
+                    pageDelegate = NoAnimPageDelegate(this)
+                }
         }
         (pageDelegate as? ScrollPageDelegate)?.noAnim = AppConfig.noAnimScrollPage
         if (upRecorder) {
@@ -957,13 +984,17 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     /**
      * 更新阅读内容
+     *
      * @param relativePosition 相对位置 -1 上一页 0 当前页 1 下一页
      * @param resetPageOffset 滚动阅读是是否重置位置
      */
     override fun upContent(relativePosition: Int, resetPageOffset: Boolean) {
-        if (BuildConfig.DEBUG && relativePosition == 0) Log.d("ReadPosition",
-            "bind scroll=$isScroll reset=$resetPageOffset position=${ReadBook.durChapterPos} " +
-                "chapter=${System.identityHashCode(ReadBook.curTextChapter)}")
+        if (BuildConfig.DEBUG && relativePosition == 0)
+            Log.d(
+                "ReadPosition",
+                "bind scroll=$isScroll reset=$resetPageOffset position=${ReadBook.durChapterPos} " +
+                    "chapter=${System.identityHashCode(ReadBook.curTextChapter)}",
+            )
         post {
             curPage.setContentDescription(pageFactory.curPage.text)
         }
@@ -998,26 +1029,20 @@ class ReadView(context: Context, attrs: AttributeSet) :
         curPage.setProgress(pageFactory.curPage)
     }
 
-    /**
-     * 更新滑动距离
-     */
+    /** 更新滑动距离 */
     fun upPageSlopSquare() {
         val pageTouchSlop = AppConfig.pageTouchSlop
         this.pageSlopSquare = if (pageTouchSlop == 0) slopSquare else pageTouchSlop
         pageSlopSquare2 = this.pageSlopSquare * this.pageSlopSquare
     }
 
-    /**
-     * 更新边缘点击阈值
-     */
+    /** 更新边缘点击阈值 */
     fun upPageTouchClick() {
         this.pageTouchClick = AppConfig.pageTouchClick
         setRect9x()
     }
 
-    /**
-     * 更新样式
-     */
+    /** 更新样式 */
     fun upStyle() {
         ChapterProvider.upStyle()
         curPage.upStyle()
@@ -1028,9 +1053,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
-    /**
-     * 更新背景
-     */
+    /** 更新背景 */
     fun upBg() {
         ReadBookConfig.upBg(width, height)
         setBackgroundColor(ReadBookConfig.bgMeanColor)
@@ -1039,36 +1062,28 @@ class ReadView(context: Context, attrs: AttributeSet) :
         nextPage.upBg()
     }
 
-    /**
-     * 更新背景透明度
-     */
+    /** 更新背景透明度 */
     fun upBgAlpha() {
         curPage.upBgAlpha()
         prevPage.upBgAlpha()
         nextPage.upBgAlpha()
     }
 
-    /**
-     * 更新时间信息
-     */
+    /** 更新时间信息 */
     fun upTime() {
         curPage.upTime()
         prevPage.upTime()
         nextPage.upTime()
     }
 
-    /**
-     * 更新电量信息
-     */
+    /** 更新电量信息 */
     fun upBattery(battery: Int) {
         curPage.upBattery(battery)
         prevPage.upBattery(battery)
         nextPage.upBattery(battery)
     }
 
-    /**
-     * 从选择位置开始朗读
-     */
+    /** 从选择位置开始朗读 */
     suspend fun aloudStartSelect() {
         val selectStartPos = curPage.selectStartPos
         var pagePos = selectStartPos.relativePagePos
@@ -1084,9 +1099,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         ReadBook.readAloud(startPos = startPos)
     }
 
-    /**
-     * @return 选择的文本
-     */
+    /** @return 选择的文本 */
     fun getSelectText(): String {
         return curPage.selectedText
     }
@@ -1105,10 +1118,13 @@ class ReadView(context: Context, attrs: AttributeSet) :
         if (ReadBook.msg != null || !ReadBook.isLayoutAvailable) return
         // A replacement chapter can finish before its final UI bind runs.
         if (curPage.textPage.textChapter !== ReadBook.curTextChapter) return
-        if (BuildConfig.DEBUG) Log.d("ReadPosition",
-            "capture scroll=$isScroll preserve=$preserveText position=${ReadBook.durChapterPos} " +
-                "visible=${getReadPosition()?.second?.chapterPosition} " +
-                "chapter=${System.identityHashCode(ReadBook.curTextChapter)}")
+        if (BuildConfig.DEBUG)
+            Log.d(
+                "ReadPosition",
+                "capture scroll=$isScroll preserve=$preserveText position=${ReadBook.durChapterPos} " +
+                    "visible=${getReadPosition()?.second?.chapterPosition} " +
+                    "chapter=${System.identityHashCode(ReadBook.curTextChapter)}",
+            )
         if (isScroll || (preserveText && ReadBook.isScroll)) {
             val (chapterIndex, line) = getReadPosition() ?: return
             if (chapterIndex != ReadBook.durChapterIndex) return
@@ -1169,9 +1185,10 @@ class ReadView(context: Context, attrs: AttributeSet) :
     }
 
     override val pageIndex: Int
-        get() = replacePreview?.let {
-            it.previewChapter.getPageIndexByCharIndex(it.chapterPosition)
-        } ?: ReadBook.durPageIndex
+        get() =
+            replacePreview?.let {
+                it.previewChapter.getPageIndexByCharIndex(it.chapterPosition)
+            } ?: ReadBook.durPageIndex
 
     override val allowPageMove: Boolean
         get() = replacePreview == null
@@ -1206,17 +1223,29 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     interface CallBack {
         val isInitFinish: Boolean
+
         fun showActionMenu()
+
         fun screenOffTimerStart()
+
         fun showTextActionMenu()
+
         fun autoPageStop()
+
         fun openChapterList()
+
         fun addBookmark()
+
         fun toggleBookmark()
+
         fun changeReplaceRuleState()
+
         fun setReplacePreview(enabled: Boolean)
+
         fun openSearchActivity(searchWord: String?)
+
         fun upSystemUiVisibility()
+
         fun sureNewProgress(progress: BookProgress)
     }
 }

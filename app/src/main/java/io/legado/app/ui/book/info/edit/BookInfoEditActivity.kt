@@ -1,188 +1,105 @@
 package io.legado.app.ui.book.info.edit
 
-import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
-import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
-import io.legado.app.constant.BookType
-import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityBookInfoEditBinding
-import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.addType
-import io.legado.app.help.book.hasEditedNetworkCover
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
-import io.legado.app.help.book.isLocal
-import io.legado.app.help.book.isVideo
-import io.legado.app.help.book.removeType
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeActivity
+import io.legado.app.data.repository.*
+import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.externalFiles
-import io.legado.app.utils.inputStream
-import io.legado.app.utils.readUri
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.init.appCtx
-import splitties.views.bottomPadding
-import java.io.FileOutputStream
 
-class BookInfoEditActivity :
-    VMBaseActivity<ActivityBookInfoEditBinding, BookInfoEditViewModel>(),
-    ChangeCoverDialog.CallBack {
-
-    private val selectCover = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            coverChangeTo(uri)
-        }
-    }
-
-    override val binding by viewBinding(ActivityBookInfoEditBinding::inflate)
-    override val viewModel by viewModels<BookInfoEditViewModel>()
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        viewModel.bookData.observe(this) { upView(it) }
-        if (viewModel.bookData.value == null) {
-            intent.getStringExtra("bookUrl")?.let {
-                viewModel.loadBook(it)
+class BookInfoEditActivity : BaseComposeActivity(), ChangeCoverDialog.CallBack {
+    val viewModel by
+        viewModels<BookMetadataEditorViewModel> {
+            viewModelFactory {
+                initializer {
+                    val books = RoomBookMetadataEditorRepository()
+                    val saved = createSavedStateHandle().apply { remove<String>("bookUrl") }
+                    BookMetadataEditorViewModel(
+                        saved,
+                        books,
+                        FileBookMetadataEditorSessionRepository(applicationContext, books),
+                        FileBookMetadataCoverImportRepository(applicationContext),
+                        intent.getStringExtra("bookUrl"),
+                    )
+                }
             }
         }
-        initView()
-        initEvent()
+    private var pickerToken: String? = null
+    private val selectCover =
+        registerForActivityResult(HandleFileContract()) { result ->
+            val token = result.value ?: pickerToken
+            if (token != null) viewModel.coverResult(token, result.uri?.toString())
+            if (token == pickerToken) pickerToken = null
+        }
+
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        pickerToken = savedInstanceState?.getString("book.metadata.picker")
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_info_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("book.metadata.picker", pickerToken)
+        super.onSaveInstanceState(outState)
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_save -> saveData()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            val insets = windowInsets.getInsets(typeMask)
-            view.bottomPadding = insets.bottom
-            windowInsets
-        }
-    }
-
-    private fun initEvent() = binding.run {
-        tvChangeCover.setOnClickListener {
-            viewModel.bookData.value?.let {
-                showDialogFragment(
-                    ChangeCoverDialog(it.name, it.author)
-                )
-            }
-        }
-        tvSelectCover.setOnClickListener {
-            selectCover.launch {
-                mode = HandleFileContract.IMAGE
-            }
-        }
-        tvRefreshCover.setOnClickListener {
-            viewModel.book?.customCoverUrl = tieCoverUrl.text?.toString()
-            viewModel.book?.persistedCoverUrl = null
-            upCover()
-        }
-    }
-
-    private fun upView(book: Book) = binding.run {
-        tieBookName.setText(book.name)
-        tieBookAuthor.setText(book.author)
-        spType.setSelection(
-            when {
-                book.isVideo -> 4
-                book.isImage -> 2
-                book.isAudio -> 1
-                else -> 0
-            }
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        BookMetadataEditorRoute(
+            viewModel,
+            { ok ->
+                if (ok) setResult(RESULT_OK)
+                viewModel.close()
+                super.finish()
+            },
+            { book, highlights ->
+                ReadBook.book
+                    ?.takeIf { it.bookUrl == book.bookUrl }
+                    ?.let { current ->
+                        // Keep live reader progress/configuration, applying only the committed
+                        // metadata.
+                        val updated =
+                            current.copy(
+                                name = book.name,
+                                author = book.author,
+                                type = book.type,
+                                customCoverUrl = book.customCoverUrl,
+                                persistedCoverUrl = book.persistedCoverUrl,
+                                customIntro = book.customIntro,
+                            )
+                        ReadBook.book = updated
+                        ReadBook.applyPreparedHighlights(updated.bookUrl, highlights)
+                    }
+            },
+            { navigation, book ->
+                when (navigation.action) {
+                    BookMetadataAction.ChangeCover ->
+                        showDialogFragment(ChangeCoverDialog(book.name, book.author))
+                    BookMetadataAction.PickCover -> {
+                        pickerToken = navigation.token
+                        selectCover.launch {
+                            mode = HandleFileContract.IMAGE
+                            value = navigation.token
+                        }
+                    }
+                }
+            },
+            { toastOnUi(it) },
+            { !supportFragmentManager.isStateSaved },
         )
-        tieCoverUrl.setText(book.customCoverUrl?.takeIf { it.isNotEmpty() } ?: book.coverUrl)
-        tieBookIntro.setText(book.getDisplayIntro())
-        upCover()
-    }
-
-    private fun upCover() {
-        viewModel.book?.let {
-            binding.ivCover.load(it, false)
-        }
-    }
-
-    private fun saveData() = binding.run {
-        val book = viewModel.book ?: return@run
-        val oldBook = book.copy()
-        book.name = tieBookName.text?.toString() ?: ""
-        book.author = tieBookAuthor.text?.toString() ?: ""
-        val local = if (book.isLocal) BookType.local else 0
-        val bookType = when (spType.selectedItemPosition) {
-            4 -> BookType.video or local
-            2 -> BookType.image or local
-            1 -> BookType.audio or local
-            else -> BookType.text or local
-        }
-        book.removeType(BookType.video, BookType.local, BookType.image, BookType.audio, BookType.text)
-        book.addType(bookType)
-        val customCoverUrl = tieCoverUrl.text?.toString()?.takeIf { it.isNotEmpty() }
-        if (hasEditedNetworkCover(customCoverUrl, book.customCoverUrl, book.coverUrl)) {
-            book.persistedCoverUrl = null
-        }
-        book.customCoverUrl = if (customCoverUrl == book.coverUrl) null else customCoverUrl
-        val customIntro = tieBookIntro.text?.toString()
-        book.customIntro = if (customIntro == book.intro) null else customIntro
-        BookHelp.updateCacheFolder(oldBook, book)
-        viewModel.saveBook(book) {
-            setResult(RESULT_OK)
-            finish()
-        }
     }
 
     override fun coverChangeTo(coverUrl: String) {
-        viewModel.book?.customCoverUrl = coverUrl
-        viewModel.book?.persistedCoverUrl = null
-        binding.tieCoverUrl.setText(coverUrl)
-        upCover()
+        viewModel.receiveCover(coverUrl)
     }
 
-    private fun coverChangeTo(uri: Uri) {
-        if (uri.scheme?.lowercase() in listOf("http", "https")) {
-            coverChangeTo(uri.toString())
-            return
-        }
-        readUri(uri) { fileDoc, inputStream ->
-            runCatching {
-                inputStream.use {
-                    var file = this.externalFiles
-                    val suffix = if (fileDoc.name.contains(".9.png", true)) {
-                        ".9.png"
-                    } else {
-                        "." + fileDoc.name.substringAfterLast(".")
-                    }
-                    val fileName = uri.inputStream(this).getOrThrow().use {
-                        MD5Utils.md5Encode(it) + suffix
-                    }
-                    file = FileUtils.createFileIfNotExist(file, "covers", fileName)
-                    FileOutputStream(file).use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                    coverChangeTo(file.absolutePath)
-                }
-            }.onFailure {
-                appCtx.toastOnUi(it.localizedMessage)
-            }
-        }
+    override fun finish() {
+        viewModel.close()
+        super.finish()
     }
-
 }

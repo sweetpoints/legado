@@ -1,0 +1,4 @@
+<resources>
+    <string name="book_cache_settings_not_saved">导出设置保存失败，请重试以同步修改。</string>
+    <string name="book_cache_export_interrupted">导出已中断，请重试导出所选书籍。</string>
+</resources>

@@ -14,10 +14,10 @@ import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.HighlightRule
-import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.ReadRecord
-import io.legado.app.data.entities.updateSnapshot
+import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.saveWithCover
+import io.legado.app.data.entities.updateSnapshot
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.HighlightAnchor
 import io.legado.app.help.HighlightMatcher
@@ -25,13 +25,11 @@ import io.legado.app.help.HighlightRuleMatcher
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightTextBuilder
 import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.ContentSaveToken
 import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.ContentSaveToken
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isPdf
-import io.legado.app.model.localBook.PdfFile
-import io.legado.app.ui.book.read.page.findPdfPagePosition
 import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.readSimulating
 import io.legado.app.help.book.simulatedTotalChapterNum
@@ -40,13 +38,15 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.globalExecutor
+import io.legado.app.model.localBook.PdfFile
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.service.CacheBookService
 import io.legado.app.ui.book.read.page.entities.TextChapter
-import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.page.entities.TextPage
+import io.legado.app.ui.book.read.page.entities.column.ImageColumn
+import io.legado.app.ui.book.read.page.findPdfPagePosition
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.HighlightSpacing
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
@@ -55,6 +55,9 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -65,8 +68,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
@@ -77,14 +80,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.max
-import kotlin.math.min
 
 internal fun resolveHighlightChapterPosition(
     rawPosition: Int,
     sourceTitleLength: Int,
-    currentTitleLength: Int
+    currentTitleLength: Int,
 ): Int {
     val currentLength = currentTitleLength.coerceAtLeast(0)
     val sourceLength = sourceTitleLength.takeIf { it >= 0 } ?: currentLength
@@ -100,9 +100,13 @@ internal fun resolveLayoutBodyPosition(source: String, position: Int, target: St
     val targetParagraphs = target.split('\n')
     // Indentation contributes to chapterPosition. Match the entire body before using
     // paragraph order, so repeated sentences stay in their original paragraph.
-    if (sourceParagraphs.size != targetParagraphs.size || sourceParagraphs.indices.any {
-            sourceParagraphs[it].trimStart() != targetParagraphs[it].trimStart()
-        }) return null
+    if (
+        sourceParagraphs.size != targetParagraphs.size ||
+            sourceParagraphs.indices.any {
+                sourceParagraphs[it].trimStart() != targetParagraphs[it].trimStart()
+            }
+    )
+        return null
     var sourceStart = 0
     var targetStart = 0
     for (index in sourceParagraphs.indices) {
@@ -133,14 +137,15 @@ internal fun resolveReplacePreviewPosition(
     val previewBody = previewText.drop(previewTitle)
     val sourceBodyPosition = (sourcePosition - sourceTitle).coerceIn(0, sourceBody.length)
     val anchor = sourceBody.drop(sourceBodyPosition).take(REFRESH_POSITION_ANCHOR_LENGTH)
-    val previewBodyPosition = (if (anchor.isEmpty()) {
-        sourceBodyPosition.coerceAtMost(previewBody.length)
-    } else {
-        HighlightAnchor.jumpPos(previewBody, sourceBodyPosition, anchor)
-    }).coerceIn(0, previewBody.length)
+    val previewBodyPosition =
+        (if (anchor.isEmpty()) {
+                sourceBodyPosition.coerceAtMost(previewBody.length)
+            } else {
+                HighlightAnchor.jumpPos(previewBody, sourceBodyPosition, anchor)
+            })
+            .coerceIn(0, previewBody.length)
     return previewTitle + previewBodyPosition
 }
-
 
 @Suppress("MemberVisibilityCanBePrivate")
 object ReadBook : CoroutineScope by MainScope() {
@@ -159,17 +164,19 @@ object ReadBook : CoroutineScope by MainScope() {
         val title: List<ReplaceRule>,
         val content: List<ReplaceRule>,
     ) {
-        val enabled get() = title.isNotEmpty() || content.isNotEmpty()
+        val enabled
+            get() = title.isNotEmpty() || content.isNotEmpty()
     }
 
     var book: Book? = null
     var callBack: CallBack? = null
     var highlights: List<BookHighlight> = emptyList()
         private set
-    @Volatile
-    private var highlightsVersion = 0L
+
+    @Volatile private var highlightsVersion = 0L
     var highlightRules: List<HighlightRule> = emptyList()
         private set
+
     private var highlightRulesVersion = 0L
     private var highlightRulesBookUrl: String? = null
     var inBookshelf = false
@@ -193,7 +200,13 @@ object ReadBook : CoroutineScope by MainScope() {
     private val nextChapterLoadingLock = Mutex()
     private var pendingHighlightJump: PendingHighlightJump? = null
     private var pendingHighlightAnchor: PendingHighlightAnchor? = null
-    private data class PendingPdfJump(val bookUrl: String, val chapterIndex: Int, val pageIndex: Int)
+
+    private data class PendingPdfJump(
+        val bookUrl: String,
+        val chapterIndex: Int,
+        val pageIndex: Int,
+    )
+
     private var pendingPdfJump: PendingPdfJump? = null
     var readStartTime: Long = System.currentTimeMillis()
 
@@ -221,11 +234,12 @@ object ReadBook : CoroutineScope by MainScope() {
         loadHighlights(book)
         loadHighlightRules(book)
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
-        simulatedChapterSize = if (book.readSimulating()) {
-            book.simulatedTotalChapterNum()
-        } else {
-            chapterSize
-        }
+        simulatedChapterSize =
+            if (book.readSimulating()) {
+                book.simulatedTotalChapterNum()
+            } else {
+                chapterSize
+            }
         contentProcessor = ContentProcessor.get(book)
         durChapterIndex = book.durChapterIndex
         durChapterPos = book.durChapterPos
@@ -254,11 +268,12 @@ object ReadBook : CoroutineScope by MainScope() {
     private fun manualReplaceRules(book: Book): ManualReplaceRules? {
         if (!AppConfig.manualReplaceRule) return null
         val ids = book.config.manualReplaceRuleIds
-        val rules = if (ids.isEmpty()) {
-            emptyList()
-        } else {
-            appDb.replaceRuleDao.findByIds(*ids.toLongArray())
-        }
+        val rules =
+            if (ids.isEmpty()) {
+                emptyList()
+            } else {
+                appDb.replaceRuleDao.findByIds(*ids.toLongArray())
+            }
         return ManualReplaceRules(
             title = rules.filter { it.scopeTitle },
             content = rules.filter { it.scopeContent },
@@ -268,23 +283,37 @@ object ReadBook : CoroutineScope by MainScope() {
     internal fun processChapterContent(book: Book, chapter: BookChapter, content: String) =
         ContentProcessor.get(book).let { processor ->
             val manualRules = manualReplaceRules(book)
-            val title = chapter.getDisplayTitle(
-                manualRules?.title ?: processor.getTitleReplaceRules(),
-                manualRules?.enabled ?: book.getUseReplaceRule(),
-                replaceBook = book.toReplaceBook(),
-            )
-            title to processor.getContent(
-                book, chapter, content, includeTitle = false,
-                replaceEnabledOverride = manualRules?.enabled,
-                titleReplaceRulesOverride = manualRules?.title,
-                contentReplaceRulesOverride = manualRules?.content,
-            )
+            val title =
+                chapter.getDisplayTitle(
+                    manualRules?.title ?: processor.getTitleReplaceRules(),
+                    manualRules?.enabled ?: book.getUseReplaceRule(),
+                    replaceBook = book.toReplaceBook(),
+                )
+            title to
+                processor.getContent(
+                    book,
+                    chapter,
+                    content,
+                    includeTitle = false,
+                    replaceEnabledOverride = manualRules?.enabled,
+                    titleReplaceRulesOverride = manualRules?.title,
+                    contentReplaceRulesOverride = manualRules?.content,
+                )
         }
 
     fun loadHighlights(book: Book) {
         invalidateHighlightSpacing()
         highlights = appDb.bookHighlightDao.getByBook(book.bookUrl)
         highlightsVersion++
+    }
+
+    /** Publish an IO-prepared result only while its reader still owns the active book. */
+    fun applyPreparedHighlights(bookUrl: String, prepared: List<BookHighlight>): Boolean {
+        if (book?.bookUrl != bookUrl) return false
+        invalidateHighlightSpacing()
+        highlights = prepared.toList()
+        highlightsVersion++
+        return true
     }
 
     fun loadHighlightRules(book: Book) {
@@ -307,8 +336,9 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         val version = highlightRulesVersion
         val bookUrl = currentBook.bookUrl
-        if (textChapter.highlightRuleMatchesVersion == version &&
-            textChapter.highlightRuleMatchesBookUrl == bookUrl
+        if (
+            textChapter.highlightRuleMatchesVersion == version &&
+                textChapter.highlightRuleMatchesBookUrl == bookUrl
         ) {
             return textChapter.highlightRuleMatches ?: emptyList()
         }
@@ -321,39 +351,44 @@ object ReadBook : CoroutineScope by MainScope() {
                 it.styleObj(),
                 it.timeoutMillisecond,
                 applyToTitle = it.applyToTitle,
-                applyToBody = it.applyToBody
+                applyToBody = it.applyToBody,
             )
         }
         val chapterBookUrl = textChapter.chapter.bookUrl
         val chapterIndex = textChapter.chapter.index
         lateinit var job: Job
-        job = launch(Default, start = CoroutineStart.LAZY) {
-            val matchResult = HighlightRuleMatcher.matchDetailed(
-                chapterText(textChapter),
-                rules,
-                shouldContinue = { job.isActive },
-                titleLength = textChapter.layoutTitleLength
-            )
-            withContext(Main) {
-                if (highlightRulesVersion != version ||
-                    highlightRulesBookUrl != bookUrl ||
-                    book?.bookUrl != bookUrl ||
-                    textChapter.chapter.bookUrl != chapterBookUrl ||
-                    textChapter.chapter.index != chapterIndex ||
-                    !textChapter.isCompleted ||
-                    !isActiveTextChapter(textChapter) ||
-                    textChapter.highlightRuleMatchesJob !== job
-                ) return@withContext
-                textChapter.highlightRuleMatches = if (matchResult.completed) {
-                    matchResult.matches
-                } else {
-                    emptyList()
+        job =
+            launch(Default, start = CoroutineStart.LAZY) {
+                val matchResult =
+                    HighlightRuleMatcher.matchDetailed(
+                        chapterText(textChapter),
+                        rules,
+                        shouldContinue = { job.isActive },
+                        titleLength = textChapter.layoutTitleLength,
+                    )
+                withContext(Main) {
+                    if (
+                        highlightRulesVersion != version ||
+                            highlightRulesBookUrl != bookUrl ||
+                            book?.bookUrl != bookUrl ||
+                            textChapter.chapter.bookUrl != chapterBookUrl ||
+                            textChapter.chapter.index != chapterIndex ||
+                            !textChapter.isCompleted ||
+                            !isActiveTextChapter(textChapter) ||
+                            textChapter.highlightRuleMatchesJob !== job
+                    )
+                        return@withContext
+                    textChapter.highlightRuleMatches =
+                        if (matchResult.completed) {
+                            matchResult.matches
+                        } else {
+                            emptyList()
+                        }
+                    textChapter.highlightRuleMatchesVersion = version
+                    textChapter.highlightRuleMatchesBookUrl = bookUrl
+                    callBack?.upContent(resetPageOffset = false)
                 }
-                textChapter.highlightRuleMatchesVersion = version
-                textChapter.highlightRuleMatchesBookUrl = bookUrl
-                callBack?.upContent(resetPageOffset = false)
             }
-        }
         textChapter.highlightRuleMatchesJob = job
         job.invokeOnCompletion {
             if (textChapter.highlightRuleMatchesJob === job) {
@@ -365,15 +400,18 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     private fun chapterText(textChapter: TextChapter): String {
-        textChapter.highlightText?.let { return it }
+        textChapter.highlightText?.let {
+            return it
+        }
         val cacheResult = textChapter.isCompleted
-        val text = HighlightTextBuilder.build(
-            textChapter.pages.flatMap { page ->
-                page.lines.map { line ->
-                    HighlightTextBuilder.LineInput(line.text, line.isParagraphEnd)
+        val text =
+            HighlightTextBuilder.build(
+                textChapter.pages.flatMap { page ->
+                    page.lines.map { line ->
+                        HighlightTextBuilder.LineInput(line.text, line.isParagraphEnd)
+                    }
                 }
-            }
-        )
+            )
         if (cacheResult) textChapter.highlightText = text
         return text
     }
@@ -385,11 +423,13 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     private fun observeHighlightRuleLayout(textChapter: TextChapter) {
-        textChapter.setProgressListener(object : LayoutProgressListener {
-            override fun onLayoutCompleted() {
-                launch { ruleMatchesOfChapter(textChapter) }
+        textChapter.setProgressListener(
+            object : LayoutProgressListener {
+                override fun onLayoutCompleted() {
+                    launch { ruleMatchesOfChapter(textChapter) }
+                }
             }
-        })
+        )
         if (textChapter.isCompleted) ruleMatchesOfChapter(textChapter)
     }
 
@@ -409,52 +449,94 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     fun highlightRangesOfChapter(chapter: TextChapter): List<HighlightMatcher.Range> {
-        val rules = ruleMatchesOfChapter(chapter).map {
-            HighlightMatcher.Range(it.start, it.end, it.style, it.applyToTitle, it.applyToBody)
-        }
-        val titleLength = chapter.layoutTitleLength
-        val manual = if (titleLength >= 0) {
-            anchoredHighlightsOfChapter(chapter, titleLength).map { (highlight, anchor) ->
-                HighlightMatcher.Range(anchor.start + titleLength, anchor.end + titleLength,
-                    highlight.styleObj())
+        val rules =
+            ruleMatchesOfChapter(chapter).map {
+                HighlightMatcher.Range(it.start, it.end, it.style, it.applyToTitle, it.applyToBody)
             }
-        } else emptyList()
+        val titleLength = chapter.layoutTitleLength
+        val manual =
+            if (titleLength >= 0) {
+                anchoredHighlightsOfChapter(chapter, titleLength).map { (highlight, anchor) ->
+                    HighlightMatcher.Range(
+                        anchor.start + titleLength,
+                        anchor.end + titleLength,
+                        highlight.styleObj(),
+                    )
+                }
+            } else emptyList()
         return rules + manual
     }
 
-    private fun highlightLayoutState() = listOf(
-        ReadBookConfig.config.copy(), ReadBookConfig.useZhLayout,
-        ReadBookConfig.textFullJustify, ReadBookConfig.hangingPunctuation,
-        ReadBookConfig.punctuationCompress, AppConfig.adaptSpecialStyle,
-        book?.getPageAnim(), book?.getImageStyle(),
-        listOf(ChapterProvider.titlePaint, ChapterProvider.titleNumberPaint,
-            ChapterProvider.contentPaint).map {
-            listOf(it, it.textSize, it.textScaleX, it.textSkewX, it.letterSpacing,
-                it.typeface, it.color, it.flags, it.fontFeatureSettings)
-        },
-        ChapterProvider.viewWidth, ChapterProvider.viewHeight, ChapterProvider.doublePage,
-        ChapterProvider.visibleWidth, ChapterProvider.visibleHeight,
-        ChapterProvider.paddingLeft, ChapterProvider.paddingTop, ChapterProvider.paddingRight,
-        ChapterProvider.paddingBottom,
-        ChapterProvider.lineSpacingExtra, ChapterProvider.titleLineSpacingExtra,
-        ChapterProvider.paragraphSpacing, ChapterProvider.titleTopSpacing,
-        ChapterProvider.titleBottomSpacing, ChapterProvider.indentCharWidth,
-    )
+    private fun highlightLayoutState() =
+        listOf(
+            ReadBookConfig.config.copy(),
+            ReadBookConfig.useZhLayout,
+            ReadBookConfig.textFullJustify,
+            ReadBookConfig.hangingPunctuation,
+            ReadBookConfig.punctuationCompress,
+            AppConfig.adaptSpecialStyle,
+            book?.getPageAnim(),
+            book?.getImageStyle(),
+            listOf(
+                    ChapterProvider.titlePaint,
+                    ChapterProvider.titleNumberPaint,
+                    ChapterProvider.contentPaint,
+                )
+                .map {
+                    listOf(
+                        it,
+                        it.textSize,
+                        it.textScaleX,
+                        it.textSkewX,
+                        it.letterSpacing,
+                        it.typeface,
+                        it.color,
+                        it.flags,
+                        it.fontFeatureSettings,
+                    )
+                },
+            ChapterProvider.viewWidth,
+            ChapterProvider.viewHeight,
+            ChapterProvider.doublePage,
+            ChapterProvider.visibleWidth,
+            ChapterProvider.visibleHeight,
+            ChapterProvider.paddingLeft,
+            ChapterProvider.paddingTop,
+            ChapterProvider.paddingRight,
+            ChapterProvider.paddingBottom,
+            ChapterProvider.lineSpacingExtra,
+            ChapterProvider.titleLineSpacingExtra,
+            ChapterProvider.paragraphSpacing,
+            ChapterProvider.titleTopSpacing,
+            ChapterProvider.titleBottomSpacing,
+            ChapterProvider.indentCharWidth,
+        )
 
     /** Whether styles can be applied to the currently visible, coherent layout. */
     fun upHighlightSpacing(chapter: TextChapter, ranges: List<HighlightMatcher.Range>): Boolean {
         val currentBook = book ?: return true
-        if (!chapter.isCompleted || chapter.isTransient || !chapter.isForBook(currentBook) ||
-            !isActiveTextChapter(chapter)
-        ) return true
-        if (chapter.highlightSpacingJob?.isActive == true ||
-            (chapter.highlightRuleMatchesJob?.isActive == true &&
-                chapter.highlightRuleMatchesVersion != highlightRulesVersion)
-        ) return false
-        if (chapter.highlightSpacing.isEmpty && ranges.none {
-                it.style.changesTextMetrics ||
-                    it.style.fill != 0 && it.style.resolvedFillShape == HighlightStyle.FillShape.PILL
-            }) return true
+        if (
+            !chapter.isCompleted ||
+                chapter.isTransient ||
+                !chapter.isForBook(currentBook) ||
+                !isActiveTextChapter(chapter)
+        )
+            return true
+        if (
+            chapter.highlightSpacingJob?.isActive == true ||
+                (chapter.highlightRuleMatchesJob?.isActive == true &&
+                    chapter.highlightRuleMatchesVersion != highlightRulesVersion)
+        )
+            return false
+        if (
+            chapter.highlightSpacing.isEmpty &&
+                ranges.none {
+                    it.style.changesTextMetrics ||
+                        it.style.fill != 0 &&
+                            it.style.resolvedFillShape == HighlightStyle.FillShape.PILL
+                }
+        )
+            return true
         // Always measure from the original advances; measuring the replacement compounds padding.
         val base = chapter.highlightSpacingBase ?: chapter
         // Completed lines receive review columns on Main. Snapshot their advances here.
@@ -468,64 +550,81 @@ object ReadBook : CoroutineScope by MainScope() {
         val contentToken = BookHelp.contentSaveToken(currentBook, chapter.chapter)
         val layoutState = highlightLayoutState()
         lateinit var job: Job
-        fun isCurrent() = book === currentBook && book?.bookUrl == bookUrl &&
-            chapter.chapter.url == chapterUrl && chapter.chapter.index == chapterIndex &&
-            isActiveTextChapter(chapter) && chapter.highlightSpacingJob === job &&
-            highlightsVersion == manualVersion && highlightRulesVersion == ruleVersion &&
-            BookHelp.isContentSaveCurrent(contentToken)
-        job = launch(start = CoroutineStart.LAZY) {
-            var retry = false
-            try {
-                if (!isCurrent() || layoutState != highlightLayoutState()) return@launch
-                chapter.highlightSpacingRequest = spacing
-                val replacement = if (spacing.isEmpty) base else coroutineScope {
-                    val result = base.layoutWithHighlightSpacing(this, spacing)
-                        ?: return@coroutineScope null
-                    for (page in result.layoutChannel) {
-                        ensureActive()
-                        if (!isCurrent()) throw CancellationException("Highlight layout was superseded")
+        fun isCurrent() =
+            book === currentBook &&
+                book?.bookUrl == bookUrl &&
+                chapter.chapter.url == chapterUrl &&
+                chapter.chapter.index == chapterIndex &&
+                isActiveTextChapter(chapter) &&
+                chapter.highlightSpacingJob === job &&
+                highlightsVersion == manualVersion &&
+                highlightRulesVersion == ruleVersion &&
+                BookHelp.isContentSaveCurrent(contentToken)
+        job =
+            launch(start = CoroutineStart.LAZY) {
+                var retry = false
+                try {
+                    if (!isCurrent() || layoutState != highlightLayoutState()) return@launch
+                    chapter.highlightSpacingRequest = spacing
+                    val replacement =
+                        if (spacing.isEmpty) base
+                        else
+                            coroutineScope {
+                                val result =
+                                    base.layoutWithHighlightSpacing(this, spacing)
+                                        ?: return@coroutineScope null
+                                for (page in result.layoutChannel) {
+                                    ensureActive()
+                                    if (!isCurrent())
+                                        throw CancellationException(
+                                            "Highlight layout was superseded"
+                                        )
+                                }
+                                result
+                            } ?: return@launch
+                    val sameText =
+                        withContext(Default) { chapterText(base) == chapterText(replacement) }
+                    if (!isCurrent()) return@launch
+                    if (layoutState != highlightLayoutState()) {
+                        retry = true
+                        return@launch
                     }
-                    result
-                } ?: return@launch
-                val sameText = withContext(Default) { chapterText(base) == chapterText(replacement) }
-                if (!isCurrent()) return@launch
-                if (layoutState != highlightLayoutState()) {
-                    retry = true
-                    return@launch
-                }
-                check(sameText && base.layoutTitleLength == replacement.layoutTitleLength) {
-                    "Highlight spacing changed canonical chapter text"
-                }
-                if (!replacement.isCompleted) return@launch
-                // Review counts can arrive while layout runs without changing highlight versions.
-                if (HighlightSpacing.resolve(base, ranges) != spacing) {
-                    retry = true
-                    return@launch
-                }
-                replacement.highlightRuleMatches = chapter.highlightRuleMatches
-                replacement.highlightRuleMatchesVersion = chapter.highlightRuleMatchesVersion
-                replacement.highlightRuleMatchesBookUrl = chapter.highlightRuleMatchesBookUrl
-                replacement.manualHighlightAnchors = chapter.manualHighlightAnchors
-                replacement.manualHighlightAnchorsVersion = chapter.manualHighlightAnchorsVersion
-                replacement.manualHighlightAnchorsTitleLength = chapter.manualHighlightAnchorsTitleLength
-                // Publish a complete chapter on Main. Keep the latest durChapterPos, including
-                // any user navigation that happened while the replacement was being laid out.
-                if (prevTextChapter === chapter) prevTextChapter = replacement
-                if (curTextChapter === chapter) curTextChapter = replacement
-                if (nextTextChapter === chapter) nextTextChapter = replacement
-                callBack?.upContent(chapterIndex - durChapterIndex, resetPageOffset = false)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                AppLog.put("Highlight spacing layout failed", error)
-            } finally {
-                if (chapter.highlightSpacingJob === job) {
-                    chapter.highlightSpacingJob = null
-                    chapter.highlightSpacingRequest = null
-                    if (retry) upHighlightSpacing(chapter, highlightRangesOfChapter(chapter))
+                    check(sameText && base.layoutTitleLength == replacement.layoutTitleLength) {
+                        "Highlight spacing changed canonical chapter text"
+                    }
+                    if (!replacement.isCompleted) return@launch
+                    // Review counts can arrive while layout runs without changing highlight
+                    // versions.
+                    if (HighlightSpacing.resolve(base, ranges) != spacing) {
+                        retry = true
+                        return@launch
+                    }
+                    replacement.highlightRuleMatches = chapter.highlightRuleMatches
+                    replacement.highlightRuleMatchesVersion = chapter.highlightRuleMatchesVersion
+                    replacement.highlightRuleMatchesBookUrl = chapter.highlightRuleMatchesBookUrl
+                    replacement.manualHighlightAnchors = chapter.manualHighlightAnchors
+                    replacement.manualHighlightAnchorsVersion =
+                        chapter.manualHighlightAnchorsVersion
+                    replacement.manualHighlightAnchorsTitleLength =
+                        chapter.manualHighlightAnchorsTitleLength
+                    // Publish a complete chapter on Main. Keep the latest durChapterPos, including
+                    // any user navigation that happened while the replacement was being laid out.
+                    if (prevTextChapter === chapter) prevTextChapter = replacement
+                    if (curTextChapter === chapter) curTextChapter = replacement
+                    if (nextTextChapter === chapter) nextTextChapter = replacement
+                    callBack?.upContent(chapterIndex - durChapterIndex, resetPageOffset = false)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    AppLog.put("Highlight spacing layout failed", error)
+                } finally {
+                    if (chapter.highlightSpacingJob === job) {
+                        chapter.highlightSpacingJob = null
+                        chapter.highlightSpacingRequest = null
+                        if (retry) upHighlightSpacing(chapter, highlightRangesOfChapter(chapter))
+                    }
                 }
             }
-        }
         chapter.highlightSpacingJob = job
         job.start()
         return false
@@ -533,7 +632,7 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun highlightsOfChapter(
         chapter: TextChapter,
-        layoutTitleLength: Int? = null
+        layoutTitleLength: Int? = null,
     ): List<BookHighlight> {
         val currentBook = book ?: return emptyList()
         val bookChapter = chapter.chapter
@@ -546,9 +645,10 @@ object ReadBook : CoroutineScope by MainScope() {
                 appDb.bookHighlightDao.bindChapterUrl(legacyTimes, bookChapter.url)
             }
         }
-        val chapterHighlights = highlights
-            .filter { it.isForChapter(currentBook, bookChapter) }
-            .sortedWith(compareBy(BookHighlight::chapterPos, BookHighlight::time))
+        val chapterHighlights =
+            highlights
+                .filter { it.isForChapter(currentBook, bookChapter) }
+                .sortedWith(compareBy(BookHighlight::chapterPos, BookHighlight::time))
         val titleLength = layoutTitleLength ?: return chapterHighlights
         val pinned = chapterHighlights.filter { it.pinLayoutTitleLength(titleLength) }
         if (pinned.isNotEmpty()) {
@@ -556,7 +656,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 appDb.bookHighlightDao.pinLayoutTitleLength(
                     currentBook.bookUrl,
                     bookChapter.url,
-                    titleLength
+                    titleLength,
                 )
             }
         }
@@ -565,37 +665,41 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun anchoredHighlightsOfChapter(
         chapter: TextChapter,
-        layoutTitleLength: Int
+        layoutTitleLength: Int,
     ): List<Pair<BookHighlight, HighlightAnchor.Anchor>> {
         val version = highlightsVersion
-        if (chapter.isCompleted &&
-            chapter.manualHighlightAnchorsVersion == version &&
-            chapter.manualHighlightAnchorsTitleLength == layoutTitleLength
+        if (
+            chapter.isCompleted &&
+                chapter.manualHighlightAnchorsVersion == version &&
+                chapter.manualHighlightAnchorsTitleLength == layoutTitleLength
         ) {
             return chapter.manualHighlightAnchors.orEmpty()
         }
         val chapterHighlights = highlightsOfChapter(chapter, layoutTitleLength)
         if (!chapter.isCompleted) {
             return chapterHighlights.map { highlight ->
-                highlight to HighlightAnchor.Anchor(
-                    highlight.bodyStart(layoutTitleLength),
-                    highlight.bodyEnd(layoutTitleLength)
-                )
+                highlight to
+                    HighlightAnchor.Anchor(
+                        highlight.bodyStart(layoutTitleLength),
+                        highlight.bodyEnd(layoutTitleLength),
+                    )
             }
         }
-        val anchors = if (chapterHighlights.isEmpty()) {
-            emptyList()
-        } else {
-            val bodyText = chapterText(chapter).drop(layoutTitleLength)
-            chapterHighlights.mapNotNull { highlight ->
-                HighlightAnchor.reanchor(
-                    bodyText,
-                    highlight.bodyStart(layoutTitleLength),
-                    highlight.bodyEnd(layoutTitleLength),
-                    highlight.bookText
-                )?.let { highlight to it }
+        val anchors =
+            if (chapterHighlights.isEmpty()) {
+                emptyList()
+            } else {
+                val bodyText = chapterText(chapter).drop(layoutTitleLength)
+                chapterHighlights.mapNotNull { highlight ->
+                    HighlightAnchor.reanchor(
+                            bodyText,
+                            highlight.bodyStart(layoutTitleLength),
+                            highlight.bodyEnd(layoutTitleLength),
+                            highlight.bookText,
+                        )
+                        ?.let { highlight to it }
+                }
             }
-        }
         if (highlightsVersion == version) {
             chapter.manualHighlightAnchors = anchors
             chapter.manualHighlightAnchorsTitleLength = layoutTitleLength
@@ -607,9 +711,13 @@ object ReadBook : CoroutineScope by MainScope() {
     fun addHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.insert(highlight)
         if (!highlight.isForBook(book)) return
-        highlights = (highlights.filterNot { it.time == highlight.time } + highlight)
-            .sortedWith(
-                compareBy(BookHighlight::chapterIndex, BookHighlight::chapterPos, BookHighlight::time)
+        highlights =
+            (highlights.filterNot { it.time == highlight.time } + highlight).sortedWith(
+                compareBy(
+                    BookHighlight::chapterIndex,
+                    BookHighlight::chapterPos,
+                    BookHighlight::time,
+                )
             )
         highlightsVersion++
         invalidateHighlightSpacing()
@@ -618,6 +726,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun updateHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.update(highlight)
+        applyUpdatedHighlight(highlight)
+    }
+
+    /** Refresh the UI after the annotation has been persisted. Call on the main thread. */
+    internal fun applyUpdatedHighlight(highlight: BookHighlight) {
         if (!highlight.isForBook(book)) return
         highlights = highlights.map { if (it.time == highlight.time) highlight else it }
         highlightsVersion++
@@ -627,6 +740,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun removeHighlight(highlight: BookHighlight) {
         appDb.bookHighlightDao.delete(highlight)
+        applyRemovedHighlight(highlight)
+    }
+
+    /** Refresh the UI after the annotation has been deleted. Call on the main thread. */
+    internal fun applyRemovedHighlight(highlight: BookHighlight) {
         if (!highlight.isForBook(book)) return
         highlights = highlights.filter { it.time != highlight.time }
         highlightsVersion++
@@ -650,11 +768,12 @@ object ReadBook : CoroutineScope by MainScope() {
         loadHighlights(book)
         loadHighlightRules(book)
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
-        simulatedChapterSize = if (book.readSimulating()) {
-            book.simulatedTotalChapterNum()
-        } else {
-            chapterSize
-        }
+        simulatedChapterSize =
+            if (book.readSimulating()) {
+                book.simulatedTotalChapterNum()
+            } else {
+                chapterSize
+            }
         if (durChapterIndex != book.durChapterIndex) {
             durChapterIndex = book.durChapterIndex
             durChapterPos = book.durChapterPos
@@ -697,9 +816,10 @@ object ReadBook : CoroutineScope by MainScope() {
                         book.setPageAnim(0)
                     }
                 }
-            } ?: let {
-                bookSource = null
             }
+                ?: let {
+                    bookSource = null
+                }
         }
     }
 
@@ -718,9 +838,10 @@ object ReadBook : CoroutineScope by MainScope() {
         if (BaseReadAloudService.isRun) {
             ReadAloud.detachReadAloudFollow()
         }
-        if (progress.durChapterIndex < chapterSize &&
-            (durChapterIndex != progress.durChapterIndex
-                    || durChapterPos != progress.durChapterPos)
+        if (
+            progress.durChapterIndex < chapterSize &&
+                (durChapterIndex != progress.durChapterIndex ||
+                    durChapterPos != progress.durChapterPos)
         ) {
             durChapterIndex = progress.durChapterIndex
             durChapterPos = progress.durChapterPos
@@ -731,13 +852,13 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    //暂时保存跳转前进度
+    // 暂时保存跳转前进度
     fun saveCurrentBookProgress() {
-        if (lastBookProgress != null) return //避免进度条连续跳转不能覆盖最初的进度记录
+        if (lastBookProgress != null) return // 避免进度条连续跳转不能覆盖最初的进度记录
         lastBookProgress = book?.let { BookProgress(it) }
     }
 
-    //恢复跳转前进度
+    // 恢复跳转前进度
     fun restoreLastBookProgress() {
         lastBookProgress?.let {
             setProgress(it)
@@ -758,23 +879,30 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun preserveCurrentPositionForRefresh() {
         pendingHighlightAnchor = currentPositionAnchor()
-        if (BuildConfig.DEBUG) Log.d("ReadPosition",
-            "anchor position=$durChapterPos pending=${pendingHighlightAnchor?.rawPosition} " +
-                "chapter=${System.identityHashCode(curTextChapter)}")
+        if (BuildConfig.DEBUG)
+            Log.d(
+                "ReadPosition",
+                "anchor position=$durChapterPos pending=${pendingHighlightAnchor?.rawPosition} " +
+                    "chapter=${System.identityHashCode(curTextChapter)}",
+            )
     }
 
     fun resourceImageSources(indexes: IntRange): Set<String> =
         listOfNotNull(prevTextChapter, curTextChapter, nextTextChapter)
             .filter { it.chapter.index in indexes }
             .flatMap { chapter -> chapter.pages.flatMap { it.lines }.flatMap { it.columns } }
-            .filterIsInstance<ImageColumn>().map { it.src }.toSet()
+            .filterIsInstance<ImageColumn>()
+            .map { it.src }
+            .toSet()
 
     @Synchronized
     fun clearResourceChapters(indexes: IntRange) {
-        if (durChapterIndex in indexes && curTextChapter != null) preserveCurrentPositionForRefresh()
+        if (durChapterIndex in indexes && curTextChapter != null)
+            preserveCurrentPositionForRefresh()
         preDownloadTask?.cancel()
         listOfNotNull(prevTextChapter, curTextChapter, nextTextChapter)
-            .filter { it.chapter.index in indexes }.forEach {
+            .filter { it.chapter.index in indexes }
+            .forEach {
                 it.cancelLayout()
                 it.invalidateHighlightRuleMatches()
             }
@@ -807,65 +935,76 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    /**
-     * 同步阅读进度
-     * 如果当前进度快于服务器进度或者没有进度进行上传，如果慢与服务器进度则执行传入动作
-     */
+    /** 同步阅读进度 如果当前进度快于服务器进度或者没有进度进行上传，如果慢与服务器进度则执行传入动作 */
     fun syncProgress(
         newProgressAction: ((progress: BookProgress) -> Unit)? = null,
         uploadSuccessAction: (() -> Unit)? = null,
-        syncSuccessAction: (() -> Unit)? = null
+        syncSuccessAction: (() -> Unit)? = null,
     ) {
         if (!AppConfig.syncBookProgress) return
         val book = book ?: return
         Coroutine.async {
-            AppWebDav.getBookProgress(book)
-        }.onError {
-            AppLog.put("拉取阅读进度失败", it)
-        }.onSuccess { progress ->
-            if (progress == null || progress.durChapterIndex < book.durChapterIndex ||
-                (progress.durChapterIndex == book.durChapterIndex
-                        && progress.durChapterPos < book.durChapterPos)
-            ) {
-                // 服务器没有进度或者进度比服务器快，上传现有进度
-                Coroutine.async {
-                    AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
-                    book.update()
-                }
-            } else if (progress.durChapterIndex > book.durChapterIndex ||
-                progress.durChapterPos > book.durChapterPos
-            ) {
-                // 进度比服务器慢，执行传入动作
-                newProgressAction?.invoke(progress)
-            } else {
-                syncSuccessAction?.invoke()
+                AppWebDav.getBookProgress(book)
             }
-        }
+            .onError {
+                AppLog.put("拉取阅读进度失败", it)
+            }
+            .onSuccess { progress ->
+                if (
+                    progress == null ||
+                        progress.durChapterIndex < book.durChapterIndex ||
+                        (progress.durChapterIndex == book.durChapterIndex &&
+                            progress.durChapterPos < book.durChapterPos)
+                ) {
+                    // 服务器没有进度或者进度比服务器快，上传现有进度
+                    Coroutine.async {
+                        AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        book.update()
+                    }
+                } else if (
+                    progress.durChapterIndex > book.durChapterIndex ||
+                        progress.durChapterPos > book.durChapterPos
+                ) {
+                    // 进度比服务器慢，执行传入动作
+                    newProgressAction?.invoke(progress)
+                } else {
+                    syncSuccessAction?.invoke()
+                }
+            }
     }
 
     private fun resetReadRecord(book: Book) {
-        readRecord = appDb.readRecordDao.getRecord(AppConst.androidId, book.name, book.author)
-            ?: ReadRecord(deviceId = AppConst.androidId, bookName = book.name, author = book.author)
+        readRecord =
+            appDb.readRecordDao.getRecord(AppConst.androidId, book.name, book.author)
+                ?: ReadRecord(
+                    deviceId = AppConst.androidId,
+                    bookName = book.name,
+                    author = book.author,
+                )
     }
 
     fun upReadTime() {
         if (!AppConfig.enableReadRecord) {
             return
         }
-        val (record, currentBook, elapsed) = synchronized(readRecordLock) {
-            val currentBook = book?.copy() ?: return
-            // Book details may fill in an author on the existing Book instance.
-            if (readRecord.bookName != currentBook.name || readRecord.author != currentBook.author) {
-                resetReadRecord(currentBook)
+        val (record, currentBook, elapsed) =
+            synchronized(readRecordLock) {
+                val currentBook = book?.copy() ?: return
+                // Book details may fill in an author on the existing Book instance.
+                if (
+                    readRecord.bookName != currentBook.name ||
+                        readRecord.author != currentBook.author
+                ) {
+                    resetReadRecord(currentBook)
+                }
+                val now = System.currentTimeMillis()
+                val elapsed = (now - readStartTime).coerceAtLeast(0)
+                readRecord.readTime += elapsed
+                readStartTime = now
+                readRecord.lastRead = now
+                readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)
+                Triple(readRecord.copy(), currentBook, elapsed)
             }
-            val now = System.currentTimeMillis()
-            val elapsed = (now - readStartTime).coerceAtLeast(0)
-            readRecord.readTime += elapsed
-            readStartTime = now
-            readRecord.lastRead = now
-            readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)
-            Triple(readRecord.copy(), currentBook, elapsed)
-        }
         executor.execute {
             record.saveWithCover(currentBook, elapsed)
         }
@@ -879,12 +1018,13 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     private fun prepareReadAloudPageNavigation(syncReadAloudFollow: Boolean): Boolean {
-        val restartReadAloud = ReadAloudManualPagePolicy.shouldRestartFromVisiblePage(
-            isReadAloudRunning = BaseReadAloudService.isRun,
-            speechDrivenNavigation = syncReadAloudFollow,
-            followManualPageTurns = AppConfig.readAloudFollowManualPage,
-            followingReadAloudPosition = ReadAloud.followReadAloudPosition
-        )
+        val restartReadAloud =
+            ReadAloudManualPagePolicy.shouldRestartFromVisiblePage(
+                isReadAloudRunning = BaseReadAloudService.isRun,
+                speechDrivenNavigation = syncReadAloudFollow,
+                followManualPageTurns = AppConfig.readAloudFollowManualPage,
+                followingReadAloudPosition = ReadAloud.followReadAloudPosition,
+            )
         if (BaseReadAloudService.isRun && !syncReadAloudFollow && !restartReadAloud) {
             ReadAloud.detachReadAloudFollow()
         }
@@ -936,7 +1076,7 @@ object ReadBook : CoroutineScope by MainScope() {
     fun moveToNextChapter(
         upContent: Boolean,
         upContentInPlace: Boolean = true,
-        syncReadAloudFollow: Boolean = false
+        syncReadAloudFollow: Boolean = false,
     ): Boolean {
         if (syncReadAloudFollow && !BaseReadAloudService.shouldSyncSpeechNavigation()) {
             return false
@@ -964,7 +1104,7 @@ object ReadBook : CoroutineScope by MainScope() {
             AppLog.putDebug("moveToNextChapter-curPageChanged()")
             curPageChanged(
                 syncReadAloudFollow = syncReadAloudFollow,
-                restartReadAloudFromVisiblePage = restartReadAloud
+                restartReadAloudFromVisiblePage = restartReadAloud,
             )
             return true
         } else {
@@ -976,7 +1116,7 @@ object ReadBook : CoroutineScope by MainScope() {
     suspend fun moveToNextChapterAwait(
         upContent: Boolean,
         upContentInPlace: Boolean = true,
-        syncReadAloudFollow: Boolean = false
+        syncReadAloudFollow: Boolean = false,
     ): Boolean {
         if (BaseReadAloudService.isRun && !syncReadAloudFollow) {
             ReadAloud.detachReadAloudFollow()
@@ -1016,7 +1156,7 @@ object ReadBook : CoroutineScope by MainScope() {
         upContent: Boolean,
         toLast: Boolean = true,
         upContentInPlace: Boolean = true,
-        syncReadAloudFollow: Boolean = false
+        syncReadAloudFollow: Boolean = false,
     ): Boolean {
         if (syncReadAloudFollow && !BaseReadAloudService.shouldSyncSpeechNavigation()) {
             return false
@@ -1041,7 +1181,7 @@ object ReadBook : CoroutineScope by MainScope() {
             callBack?.upMenuView()
             curPageChanged(
                 syncReadAloudFollow = syncReadAloudFollow,
-                restartReadAloudFromVisiblePage = restartReadAloud
+                restartReadAloudFromVisiblePage = restartReadAloud,
             )
             return true
         } else {
@@ -1072,7 +1212,7 @@ object ReadBook : CoroutineScope by MainScope() {
         curPageChanged(
             pageChanged = true,
             syncReadAloudFollow = syncReadAloudFollow,
-            restartReadAloudFromVisiblePage = restartReadAloud
+            restartReadAloudFromVisiblePage = restartReadAloud,
         )
     }
 
@@ -1098,7 +1238,7 @@ object ReadBook : CoroutineScope by MainScope() {
         highlightLayoutTitleLength: Int? = null,
         highlightAnchorText: String? = null,
         pdfPageIndex: Int? = null,
-        success: (() -> Unit)? = null
+        success: (() -> Unit)? = null,
     ) {
         if (BaseReadAloudService.isRun) {
             ReadAloud.detachReadAloudFollow()
@@ -1114,24 +1254,28 @@ object ReadBook : CoroutineScope by MainScope() {
                         it.bookUrl,
                         index,
                         durChapterPos,
-                        sourceTitleLength
+                        sourceTitleLength,
                     )
                 }
             }
-            pendingHighlightAnchor = highlightAnchorText?.takeIf(String::isNotEmpty)?.let {
-                book?.let { currentBook ->
-                    PendingHighlightAnchor(
-                        currentBook.bookUrl,
-                        index,
-                        durChapterPos,
-                        highlightLayoutTitleLength ?: -1,
-                        it
-                    )
+            pendingHighlightAnchor =
+                highlightAnchorText?.takeIf(String::isNotEmpty)?.let {
+                    book?.let { currentBook ->
+                        PendingHighlightAnchor(
+                            currentBook.bookUrl,
+                            index,
+                            durChapterPos,
+                            highlightLayoutTitleLength ?: -1,
+                            it,
+                        )
+                    }
                 }
-            }
-            pendingPdfJump = pdfPageIndex?.takeIf { it >= 0 && it / PdfFile.PAGE_SIZE == index }?.let { page ->
-                book?.takeIf { it.isPdf }?.let { PendingPdfJump(it.bookUrl, index, page) }
-            }
+            pendingPdfJump =
+                pdfPageIndex
+                    ?.takeIf { it >= 0 && it / PdfFile.PAGE_SIZE == index }
+                    ?.let { page ->
+                        book?.takeIf { it.isPdf }?.let { PendingPdfJump(it.bookUrl, index, page) }
+                    }
             if (pendingHighlightJump == null) {
                 saveRead()
             }
@@ -1141,14 +1285,12 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    /**
-     * 当前页面变化
-     */
+    /** 当前页面变化 */
     private fun curPageChanged(
         pageChanged: Boolean = false,
         syncReadAloudFollow: Boolean = false,
         restartReadAloudFromVisiblePage: Boolean = false,
-        updateReadAloud: Boolean = true
+        updateReadAloud: Boolean = true,
     ) {
         callBack?.pageChanged()
         curTextChapter?.let {
@@ -1175,13 +1317,11 @@ object ReadBook : CoroutineScope by MainScope() {
         preDownload()
     }
 
-    /**
-     * 朗读
-     */
+    /** 朗读 */
     fun readAloud(
         play: Boolean = true,
         startPos: Int = 0,
-        rewindToSentenceStart: Boolean = false
+        rewindToSentenceStart: Boolean = false,
     ) {
         book ?: return
         val textChapter = curTextChapter ?: return
@@ -1190,31 +1330,28 @@ object ReadBook : CoroutineScope by MainScope() {
                 appCtx,
                 play,
                 startPos = startPos,
-                rewindToSentenceStart = rewindToSentenceStart
+                rewindToSentenceStart = rewindToSentenceStart,
             )
         }
     }
 
-    /**
-     * 当前页数
-     */
+    /** 当前页数 */
     val durPageIndex: Int
         get() {
             return curTextChapter?.getPageIndexByCharIndex(durChapterPos) ?: durChapterPos
         }
 
-    /**
-     * 是否排版到了当前阅读位置
-     */
-    val isLayoutAvailable inline get() = durPageIndex >= 0
+    /** 是否排版到了当前阅读位置 */
+    val isLayoutAvailable
+        inline get() = durPageIndex >= 0
 
-    val isScroll inline get() = pageAnim() == scrollPageAnim
+    val isScroll
+        inline get() = pageAnim() == scrollPageAnim
 
-    val contentLoadFinish get() = curTextChapter != null || msg != null
+    val contentLoadFinish
+        get() = curTextChapter != null || msg != null
 
-    /**
-     * chapterOnDur: 0为当前页,1为下一页,-1为上一页
-     */
+    /** chapterOnDur: 0为当前页,1为下一页,-1为上一页 */
     fun textChapter(chapterOnDur: Int = 0): TextChapter? {
         return when (chapterOnDur) {
             0 -> curTextChapter
@@ -1226,6 +1363,7 @@ object ReadBook : CoroutineScope by MainScope() {
 
     /**
      * 加载当前章节和前后一章内容
+     *
      * @param resetPageOffset 滚动阅读是否重置滚动位置
      * @param success 当前章节加载完成回调
      */
@@ -1270,49 +1408,53 @@ object ReadBook : CoroutineScope by MainScope() {
 
     suspend fun buildReplacePreview(sourcePosition: Int): ReplacePreview? {
         val currentBook = book ?: return null
-        val sourceChapter = curTextChapter?.takeIf {
-            it.isCompleted &&
-                it.chapter.index == durChapterIndex &&
-                it.chapter.bookUrl == currentBook.bookUrl
-        } ?: return null
+        val sourceChapter =
+            curTextChapter?.takeIf {
+                it.isCompleted &&
+                    it.chapter.index == durChapterIndex &&
+                    it.chapter.bookUrl == currentBook.bookUrl
+            } ?: return null
         val sourceProgressPosition = durChapterPos
         val chapterIndex = durChapterIndex
         return withContext(IO) {
             val chapter = sourceChapter.chapter
-            val rawContent = BookHelp.getContent(currentBook, chapter)
-                ?: return@withContext null
+            val rawContent = BookHelp.getContent(currentBook, chapter) ?: return@withContext null
             val processor = ContentProcessor.get(currentBook)
             val manualRules = manualReplaceRules(currentBook)
-            val replaceEnabled = if (manualRules != null) {
-                false
-            } else {
-                !currentBook.getUseReplaceRule()
-            }
-            val titleRules = manualRules?.let { emptyList<ReplaceRule>() }
-                ?: processor.getTitleReplaceRules()
-            val displayTitle = chapter.getDisplayTitle(
-                titleRules,
-                useReplace = replaceEnabled,
-                replaceBook = currentBook.toReplaceBook(),
-            )
-            val contents = processor.getContent(
-                currentBook,
-                chapter,
-                rawContent,
-                includeTitle = false,
-                replaceEnabledOverride = replaceEnabled,
-                titleReplaceRulesOverride = manualRules?.let { emptyList<ReplaceRule>() },
-                contentReplaceRulesOverride = manualRules?.let { emptyList<ReplaceRule>() },
-            )
-            val previewChapter = ChapterProvider.getTextChapterAsync(
-                this,
-                currentBook,
-                chapter,
-                displayTitle,
-                contents,
-                simulatedChapterSize,
-                saveChapterData = false,
-            )
+            val replaceEnabled =
+                if (manualRules != null) {
+                    false
+                } else {
+                    !currentBook.getUseReplaceRule()
+                }
+            val titleRules =
+                manualRules?.let { emptyList<ReplaceRule>() } ?: processor.getTitleReplaceRules()
+            val displayTitle =
+                chapter.getDisplayTitle(
+                    titleRules,
+                    useReplace = replaceEnabled,
+                    replaceBook = currentBook.toReplaceBook(),
+                )
+            val contents =
+                processor.getContent(
+                    currentBook,
+                    chapter,
+                    rawContent,
+                    includeTitle = false,
+                    replaceEnabledOverride = replaceEnabled,
+                    titleReplaceRulesOverride = manualRules?.let { emptyList<ReplaceRule>() },
+                    contentReplaceRulesOverride = manualRules?.let { emptyList<ReplaceRule>() },
+                )
+            val previewChapter =
+                ChapterProvider.getTextChapterAsync(
+                    this,
+                    currentBook,
+                    chapter,
+                    displayTitle,
+                    contents,
+                    simulatedChapterSize,
+                    saveChapterData = false,
+                )
             try {
                 previewChapter.layoutChannel.receiveAsFlow().collect()
                 ensureActive()
@@ -1323,13 +1465,14 @@ object ReadBook : CoroutineScope by MainScope() {
                     previewChapter = previewChapter,
                     sourcePosition = sourcePosition,
                     sourceProgressPosition = sourceProgressPosition,
-                    chapterPosition = resolveReplacePreviewPosition(
-                        sourceText = sourceText,
-                        sourceTitleLength = sourceChapter.layoutTitleLength,
-                        sourcePosition = sourcePosition,
-                        previewText = previewText,
-                        previewTitleLength = previewChapter.layoutTitleLength,
-                    ),
+                    chapterPosition =
+                        resolveReplacePreviewPosition(
+                            sourceText = sourceText,
+                            sourceTitleLength = sourceChapter.layoutTitleLength,
+                            sourcePosition = sourcePosition,
+                            previewText = previewText,
+                            previewTitleLength = previewChapter.layoutTitleLength,
+                        ),
                     bookUrl = currentBook.bookUrl,
                     chapterIndex = chapterIndex,
                 )
@@ -1349,6 +1492,7 @@ object ReadBook : CoroutineScope by MainScope() {
 
     /**
      * 加载章节内容
+     *
      * @param index 章节序号
      * @param upContent 是否更新视图
      * @param resetPageOffset 滚动阅读是否重置滚动位置
@@ -1363,32 +1507,34 @@ object ReadBook : CoroutineScope by MainScope() {
     ) {
         val requestBook = book ?: return
         Coroutine.async {
-            val book = requestBook
-            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@async
-            val contentToken = BookHelp.contentSaveToken(book, chapter)
-            if (addLoading(index)) {
-                BookHelp.getContent(book, chapter)?.let {
-                    contentLoadFinish(
-                        book,
-                        chapter,
-                        it,
-                        upContent,
-                        resetPageOffset,
-                        readPositionVersion = readPositionVersion,
-                        contentToken = contentToken,
-                        success = success
-                    )
-                } ?: download(
-                    downloadScope,
-                    chapter,
-                    resetPageOffset,
-                    readPositionVersion = readPositionVersion,
-                    success = success,
-                )
+                val book = requestBook
+                val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@async
+                val contentToken = BookHelp.contentSaveToken(book, chapter)
+                if (addLoading(index)) {
+                    BookHelp.getContent(book, chapter)?.let {
+                        contentLoadFinish(
+                            book,
+                            chapter,
+                            it,
+                            upContent,
+                            resetPageOffset,
+                            readPositionVersion = readPositionVersion,
+                            contentToken = contentToken,
+                            success = success,
+                        )
+                    }
+                        ?: download(
+                            downloadScope,
+                            chapter,
+                            resetPageOffset,
+                            readPositionVersion = readPositionVersion,
+                            success = success,
+                        )
+                }
             }
-        }.onError {
-            AppLog.put("加载正文出错\n${it.localizedMessage}")
-        }
+            .onError {
+                AppLog.put("加载正文出错\n${it.localizedMessage}")
+            }
     }
 
     suspend fun loadContentAwait(
@@ -1397,38 +1543,40 @@ object ReadBook : CoroutineScope by MainScope() {
         resetPageOffset: Boolean = false,
         readPositionVersion: Long? = null,
         success: (() -> Unit)? = null,
-    ) = withContext(IO) {
-        val book = book ?: return@withContext
-        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@withContext
-        val contentToken = BookHelp.contentSaveToken(book, chapter)
-        if (addLoading(index)) {
-            try {
-                val content = BookHelp.getContent(book, chapter) ?: downloadAwait(chapter)
-                contentLoadFinishAwait(
-                    book,
-                    chapter,
-                    content,
-                    upContent,
-                    resetPageOffset,
-                    readPositionVersion,
-                    contentToken,
-                )
-                if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
-            } catch (e: Exception) {
-                AppLog.put("加载正文出错\n${e.localizedMessage}")
-            } finally {
-                synchronized(this@ReadBook) {
-                    if (ReadBook.book?.bookUrl == book.bookUrl && BookHelp.isContentSaveCurrent(contentToken)) {
-                        removeLoading(index)
+    ) =
+        withContext(IO) {
+            val book = book ?: return@withContext
+            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@withContext
+            val contentToken = BookHelp.contentSaveToken(book, chapter)
+            if (addLoading(index)) {
+                try {
+                    val content = BookHelp.getContent(book, chapter) ?: downloadAwait(chapter)
+                    contentLoadFinishAwait(
+                        book,
+                        chapter,
+                        content,
+                        upContent,
+                        resetPageOffset,
+                        readPositionVersion,
+                        contentToken,
+                    )
+                    if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
+                } catch (e: Exception) {
+                    AppLog.put("加载正文出错\n${e.localizedMessage}")
+                } finally {
+                    synchronized(this@ReadBook) {
+                        if (
+                            ReadBook.book?.bookUrl == book.bookUrl &&
+                                BookHelp.isContentSaveCurrent(contentToken)
+                        ) {
+                            removeLoading(index)
+                        }
                     }
                 }
             }
         }
-    }
 
-    /**
-     * 下载正文
-     */
+    /** 下载正文 */
     private suspend fun downloadIndex(index: Int) {
         if (index < 0) return
         if (index > chapterSize - 1) {
@@ -1447,9 +1595,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    /**
-     * 下载正文
-     */
+    /** 下载正文 */
     private fun download(
         scope: CoroutineScope,
         chapter: BookChapter,
@@ -1461,14 +1607,15 @@ object ReadBook : CoroutineScope by MainScope() {
         val book = book ?: return removeLoading(chapter.index)
         val bookSource = bookSource
         if (bookSource != null) {
-            CacheBook.getOrCreate(bookSource, book).download(
-                scope,
-                chapter,
-                semaphore,
-                resetPageOffset = resetPageOffset,
-                readPositionVersion = readPositionVersion,
-                success = success,
-            )
+            CacheBook.getOrCreate(bookSource, book)
+                .download(
+                    scope,
+                    chapter,
+                    semaphore,
+                    resetPageOffset = resetPageOffset,
+                    readPositionVersion = readPositionVersion,
+                    success = success,
+                )
         } else {
             val msg = if (book.isLocal) "无内容" else "没有书源"
             contentLoadFinish(
@@ -1477,7 +1624,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 "加载正文失败\n$msg",
                 resetPageOffset = resetPageOffset,
                 readPositionVersion = readPositionVersion,
-                success = success
+                success = success,
             )
         }
     }
@@ -1505,9 +1652,7 @@ object ReadBook : CoroutineScope by MainScope() {
         loadingChapters.remove(index)
     }
 
-    /**
-     * 内容加载完成
-     */
+    /** 内容加载完成 */
     @Synchronized
     fun contentLoadFinish(
         book: Book,
@@ -1520,127 +1665,150 @@ object ReadBook : CoroutineScope by MainScope() {
         contentToken: ContentSaveToken = BookHelp.contentSaveToken(book, chapter),
         success: (() -> Unit)? = null,
     ) {
-        if (this.book?.bookUrl != book.bookUrl || !BookHelp.isContentSaveCurrent(contentToken)) return
+        if (this.book?.bookUrl != book.bookUrl || !BookHelp.isContentSaveCurrent(contentToken))
+            return
         removeLoading(chapter.index)
         if (canceled || chapter.index !in durChapterIndex - 1..durChapterIndex + 1) {
             return
         }
         // Restoring visual follow during layout must not create a new speech session.
         val updateReadAloud = BaseReadAloudService.shouldSyncSpeechNavigation()
-        val shouldResetPageOffset = resetPageOffset &&
-            shouldApplyReadPositionReset(readPositionVersion)
+        val shouldResetPageOffset =
+            resetPageOffset && shouldApplyReadPositionReset(readPositionVersion)
         chapterLoadingJobs[chapter.index]?.cancel()
-        val job = Coroutine.async(this, start = CoroutineStart.LAZY) {
-            ensureContentCurrent(book, contentToken)
-            val (displayTitle, contents) = processChapterContent(book, chapter, content)
-            ensureActive()
-            val textChapter = ChapterProvider.getTextChapterAsync(
-                this, book, chapter, displayTitle, contents, simulatedChapterSize,
-                hasBodyContent = contents.textList.isNotEmpty() &&
-                        !content.isContentLoadFailurePlaceholder(),
-            )
-            when (val offset = chapter.index - durChapterIndex) {
-                0 -> curChapterLoadingLock.withLock {
-                    withContext(Main) {
-                        ensureContentCurrent(book, contentToken)
-                        ensureActive()
-                        curTextChapter?.invalidateHighlightRuleMatches()
-                        curTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
-                    }
-                    callBack?.upMenuView()
-                    var available = false
-                    for (page in textChapter.layoutChannel) {
-                        ensureContentCurrent(book, contentToken)
-                        val index = page.index
-                        val positionReady = resolvePendingPdfJump(book, textChapter, page) &&
-                            resolvePendingHighlightJump(book, textChapter)
-                        if (positionReady && !available && page.containPos(durChapterPos)) {
-                            if (upContent) {
-                                callBack?.upContent(
-                                    offset,
-                                    shouldResetPageOffset,
-                                    readPositionVersion = readPositionVersion,
-                                )
-                            }
-                            available = true
-                        }
-                        if (positionReady && upContent && isScroll) {
-                            if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
-                            }
-                        }
-                        callBack?.onLayoutPageCompleted(index, page)
-                    }
+        val job =
+            Coroutine.async(this, start = CoroutineStart.LAZY) {
                     ensureContentCurrent(book, contentToken)
-                    finishPendingPdfJump(book, textChapter)
-                    val restoredAnchor = resolvePendingHighlightAnchor(book, textChapter)
-                    if (upContent) {
-                        callBack?.upContent(
-                            offset,
-                            restoredAnchor || (!available && shouldResetPageOffset),
-                            readPositionVersion = readPositionVersion,
+                    val (displayTitle, contents) = processChapterContent(book, chapter, content)
+                    ensureActive()
+                    val textChapter =
+                        ChapterProvider.getTextChapterAsync(
+                            this,
+                            book,
+                            chapter,
+                            displayTitle,
+                            contents,
+                            simulatedChapterSize,
+                            hasBodyContent =
+                                contents.textList.isNotEmpty() &&
+                                    !content.isContentLoadFailurePlaceholder(),
                         )
-                    }
-                    curPageChanged(
-                        syncReadAloudFollow = BaseReadAloudService.shouldSyncSpeechNavigation(),
-                        updateReadAloud = updateReadAloud
-                    )
-                    callBack?.contentLoadFinish()
-                }
+                    when (val offset = chapter.index - durChapterIndex) {
+                        0 ->
+                            curChapterLoadingLock.withLock {
+                                withContext(Main) {
+                                    ensureContentCurrent(book, contentToken)
+                                    ensureActive()
+                                    curTextChapter?.invalidateHighlightRuleMatches()
+                                    curTextChapter = textChapter
+                                    observeHighlightRuleLayout(textChapter)
+                                }
+                                callBack?.upMenuView()
+                                var available = false
+                                for (page in textChapter.layoutChannel) {
+                                    ensureContentCurrent(book, contentToken)
+                                    val index = page.index
+                                    val positionReady =
+                                        resolvePendingPdfJump(book, textChapter, page) &&
+                                            resolvePendingHighlightJump(book, textChapter)
+                                    if (
+                                        positionReady &&
+                                            !available &&
+                                            page.containPos(durChapterPos)
+                                    ) {
+                                        if (upContent) {
+                                            callBack?.upContent(
+                                                offset,
+                                                shouldResetPageOffset,
+                                                readPositionVersion = readPositionVersion,
+                                            )
+                                        }
+                                        available = true
+                                    }
+                                    if (positionReady && upContent && isScroll) {
+                                        if (max(index - 3, 0) < durPageIndex) {
+                                            callBack?.upContent(offset, false)
+                                        }
+                                    }
+                                    callBack?.onLayoutPageCompleted(index, page)
+                                }
+                                ensureContentCurrent(book, contentToken)
+                                finishPendingPdfJump(book, textChapter)
+                                val restoredAnchor =
+                                    resolvePendingHighlightAnchor(book, textChapter)
+                                if (upContent) {
+                                    callBack?.upContent(
+                                        offset,
+                                        restoredAnchor || (!available && shouldResetPageOffset),
+                                        readPositionVersion = readPositionVersion,
+                                    )
+                                }
+                                curPageChanged(
+                                    syncReadAloudFollow =
+                                        BaseReadAloudService.shouldSyncSpeechNavigation(),
+                                    updateReadAloud = updateReadAloud,
+                                )
+                                callBack?.contentLoadFinish()
+                            }
 
-                -1 -> prevChapterLoadingLock.withLock {
-                    withContext(Main) {
-                        ensureContentCurrent(book, contentToken)
-                        ensureActive()
-                        prevTextChapter?.invalidateHighlightRuleMatches()
-                        prevTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
-                    }
-                    textChapter.layoutChannel.receiveAsFlow().collect { ensureContentCurrent(book, contentToken) }
-                    if (upContent) {
-                        callBack?.upContent(
-                            offset,
-                            shouldResetPageOffset,
-                            readPositionVersion = readPositionVersion,
-                        )
-                    }
-                }
+                        -1 ->
+                            prevChapterLoadingLock.withLock {
+                                withContext(Main) {
+                                    ensureContentCurrent(book, contentToken)
+                                    ensureActive()
+                                    prevTextChapter?.invalidateHighlightRuleMatches()
+                                    prevTextChapter = textChapter
+                                    observeHighlightRuleLayout(textChapter)
+                                }
+                                textChapter.layoutChannel.receiveAsFlow().collect {
+                                    ensureContentCurrent(book, contentToken)
+                                }
+                                if (upContent) {
+                                    callBack?.upContent(
+                                        offset,
+                                        shouldResetPageOffset,
+                                        readPositionVersion = readPositionVersion,
+                                    )
+                                }
+                            }
 
-                1 -> nextChapterLoadingLock.withLock {
-                    withContext(Main) {
-                        ensureContentCurrent(book, contentToken)
-                        ensureActive()
-                        nextTextChapter?.invalidateHighlightRuleMatches()
-                        nextTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
+                        1 ->
+                            nextChapterLoadingLock.withLock {
+                                withContext(Main) {
+                                    ensureContentCurrent(book, contentToken)
+                                    ensureActive()
+                                    nextTextChapter?.invalidateHighlightRuleMatches()
+                                    nextTextChapter = textChapter
+                                    observeHighlightRuleLayout(textChapter)
+                                }
+                                for (page in textChapter.layoutChannel) {
+                                    ensureContentCurrent(book, contentToken)
+                                    if (page.index > 1) {
+                                        continue
+                                    }
+                                    if (upContent) {
+                                        callBack?.upContent(
+                                            offset,
+                                            shouldResetPageOffset,
+                                            readPositionVersion = readPositionVersion,
+                                        )
+                                    }
+                                }
+                            }
                     }
-                    for (page in textChapter.layoutChannel) {
-                        ensureContentCurrent(book, contentToken)
-                        if (page.index > 1) {
-                            continue
-                        }
-                        if (upContent) {
-                            callBack?.upContent(
-                                offset,
-                                shouldResetPageOffset,
-                                readPositionVersion = readPositionVersion,
-                            )
-                        }
-                    }
-                }
-            }
 
-            return@async
-        }.onError {
-            if (it is CancellationException) {
-                return@onError
-            }
-            AppLog.put("ChapterProvider ERROR", it)
-            appCtx.toastOnUi("ChapterProvider ERROR:\n${it.stackTraceStr}")
-        }.onSuccess {
-            if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
-        }
+                    return@async
+                }
+                .onError {
+                    if (it is CancellationException) {
+                        return@onError
+                    }
+                    AppLog.put("ChapterProvider ERROR", it)
+                    appCtx.toastOnUi("ChapterProvider ERROR:\n${it.stackTraceStr}")
+                }
+                .onSuccess {
+                    if (BookHelp.isContentSaveCurrent(contentToken)) success?.invoke()
+                }
         chapterLoadingJobs[chapter.index] = job
         job.start()
     }
@@ -1655,98 +1823,89 @@ object ReadBook : CoroutineScope by MainScope() {
         contentToken: ContentSaveToken = BookHelp.contentSaveToken(book, chapter),
     ) {
         synchronized(this) {
-            if (this.book?.bookUrl != book.bookUrl || !BookHelp.isContentSaveCurrent(contentToken)) return
+            if (this.book?.bookUrl != book.bookUrl || !BookHelp.isContentSaveCurrent(contentToken))
+                return
             removeLoading(chapter.index)
             if (chapter.index !in durChapterIndex - 1..durChapterIndex + 1) return
         }
         // Restoring visual follow during layout must not create a new speech session.
         val updateReadAloud = BaseReadAloudService.shouldSyncSpeechNavigation()
-        val shouldResetPageOffset = resetPageOffset &&
-            shouldApplyReadPositionReset(readPositionVersion)
-        kotlin.runCatching {
-            val (displayTitle, contents) = processChapterContent(book, chapter, content)
-            val textChapter = ChapterProvider.getTextChapterAsync(
-                this@ReadBook, book, chapter, displayTitle, contents, simulatedChapterSize,
-                hasBodyContent = contents.textList.isNotEmpty() &&
-                        !content.isContentLoadFailurePlaceholder(),
-            )
-            when (val offset = chapter.index - durChapterIndex) {
-                0 -> {
-                    withContext(Main) {
-                        ensureContentCurrent(book, contentToken)
-                        curTextChapter?.cancelLayout()
-                        curTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
-                    }
-                    callBack?.upMenuView()
-                    var available = false
-                    for (page in textChapter.layoutChannel) {
-                        ensureContentCurrent(book, contentToken)
-                        val index = page.index
-                        val positionReady = resolvePendingPdfJump(book, textChapter, page) &&
-                            resolvePendingHighlightJump(book, textChapter)
-                        if (positionReady && !available && page.containPos(durChapterPos)) {
-                            if (upContent) {
-                                callBack?.upContent(
-                                    offset,
-                                    shouldResetPageOffset,
-                                    readPositionVersion = readPositionVersion,
-                                )
-                            }
-                            available = true
-                        }
-                        if (positionReady && upContent && isScroll) {
-                            if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
-                            }
-                        }
-                        callBack?.onLayoutPageCompleted(index, page)
-                    }
-                    ensureContentCurrent(book, contentToken)
-                    finishPendingPdfJump(book, textChapter)
-                    val restoredAnchor = resolvePendingHighlightAnchor(book, textChapter)
-                    if (upContent) {
-                        callBack?.upContent(
-                            offset,
-                            restoredAnchor || (!available && shouldResetPageOffset),
-                            readPositionVersion = readPositionVersion,
-                        )
-                    }
-                    curPageChanged(
-                        syncReadAloudFollow = BaseReadAloudService.shouldSyncSpeechNavigation(),
-                        updateReadAloud = updateReadAloud
+        val shouldResetPageOffset =
+            resetPageOffset && shouldApplyReadPositionReset(readPositionVersion)
+        kotlin
+            .runCatching {
+                val (displayTitle, contents) = processChapterContent(book, chapter, content)
+                val textChapter =
+                    ChapterProvider.getTextChapterAsync(
+                        this@ReadBook,
+                        book,
+                        chapter,
+                        displayTitle,
+                        contents,
+                        simulatedChapterSize,
+                        hasBodyContent =
+                            contents.textList.isNotEmpty() &&
+                                !content.isContentLoadFailurePlaceholder(),
                     )
-                    callBack?.contentLoadFinish()
-                }
-
-                -1 -> {
-                    withContext(Main) {
+                when (val offset = chapter.index - durChapterIndex) {
+                    0 -> {
+                        withContext(Main) {
+                            ensureContentCurrent(book, contentToken)
+                            curTextChapter?.cancelLayout()
+                            curTextChapter = textChapter
+                            observeHighlightRuleLayout(textChapter)
+                        }
+                        callBack?.upMenuView()
+                        var available = false
+                        for (page in textChapter.layoutChannel) {
+                            ensureContentCurrent(book, contentToken)
+                            val index = page.index
+                            val positionReady =
+                                resolvePendingPdfJump(book, textChapter, page) &&
+                                    resolvePendingHighlightJump(book, textChapter)
+                            if (positionReady && !available && page.containPos(durChapterPos)) {
+                                if (upContent) {
+                                    callBack?.upContent(
+                                        offset,
+                                        shouldResetPageOffset,
+                                        readPositionVersion = readPositionVersion,
+                                    )
+                                }
+                                available = true
+                            }
+                            if (positionReady && upContent && isScroll) {
+                                if (max(index - 3, 0) < durPageIndex) {
+                                    callBack?.upContent(offset, false)
+                                }
+                            }
+                            callBack?.onLayoutPageCompleted(index, page)
+                        }
                         ensureContentCurrent(book, contentToken)
-                        prevTextChapter?.cancelLayout()
-                        prevTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
-                    }
-                    textChapter.layoutChannel.receiveAsFlow().collect { ensureContentCurrent(book, contentToken) }
-                    if (upContent) {
-                        callBack?.upContent(
-                            offset,
-                            shouldResetPageOffset,
-                            readPositionVersion = readPositionVersion,
+                        finishPendingPdfJump(book, textChapter)
+                        val restoredAnchor = resolvePendingHighlightAnchor(book, textChapter)
+                        if (upContent) {
+                            callBack?.upContent(
+                                offset,
+                                restoredAnchor || (!available && shouldResetPageOffset),
+                                readPositionVersion = readPositionVersion,
+                            )
+                        }
+                        curPageChanged(
+                            syncReadAloudFollow = BaseReadAloudService.shouldSyncSpeechNavigation(),
+                            updateReadAloud = updateReadAloud,
                         )
+                        callBack?.contentLoadFinish()
                     }
-                }
 
-                1 -> {
-                    withContext(Main) {
-                        ensureContentCurrent(book, contentToken)
-                        nextTextChapter?.cancelLayout()
-                        nextTextChapter = textChapter
-                        observeHighlightRuleLayout(textChapter)
-                    }
-                    for (page in textChapter.layoutChannel) {
-                        ensureContentCurrent(book, contentToken)
-                        if (page.index > 1) {
-                            continue
+                    -1 -> {
+                        withContext(Main) {
+                            ensureContentCurrent(book, contentToken)
+                            prevTextChapter?.cancelLayout()
+                            prevTextChapter = textChapter
+                            observeHighlightRuleLayout(textChapter)
+                        }
+                        textChapter.layoutChannel.receiveAsFlow().collect {
+                            ensureContentCurrent(book, contentToken)
                         }
                         if (upContent) {
                             callBack?.upContent(
@@ -1756,15 +1915,37 @@ object ReadBook : CoroutineScope by MainScope() {
                             )
                         }
                     }
+
+                    1 -> {
+                        withContext(Main) {
+                            ensureContentCurrent(book, contentToken)
+                            nextTextChapter?.cancelLayout()
+                            nextTextChapter = textChapter
+                            observeHighlightRuleLayout(textChapter)
+                        }
+                        for (page in textChapter.layoutChannel) {
+                            ensureContentCurrent(book, contentToken)
+                            if (page.index > 1) {
+                                continue
+                            }
+                            if (upContent) {
+                                callBack?.upContent(
+                                    offset,
+                                    shouldResetPageOffset,
+                                    readPositionVersion = readPositionVersion,
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }.onFailure {
-            if (it is CancellationException) {
-                return@onFailure
+            .onFailure {
+                if (it is CancellationException) {
+                    return@onFailure
+                }
+                AppLog.put("ChapterProvider ERROR", it)
+                appCtx.toastOnUi("ChapterProvider ERROR:\n${it.stackTraceStr}")
             }
-            AppLog.put("ChapterProvider ERROR", it)
-            appCtx.toastOnUi("ChapterProvider ERROR:\n${it.stackTraceStr}")
-        }
     }
 
     private fun ensureContentCurrent(book: Book, token: ContentSaveToken) {
@@ -1773,9 +1954,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    /**
-     * 预下载时，章节已完，更新目录
-     */
+    /** 预下载时，章节已完，更新目录 */
     @Synchronized
     fun upToc() {
         val bookSource = bookSource ?: return
@@ -1815,7 +1994,12 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     fun saveRead(pageChanged: Boolean = false) {
-        if (pendingPdfJump?.let { it.bookUrl == book?.bookUrl && it.chapterIndex == durChapterIndex } == true) return
+        if (
+            pendingPdfJump?.let {
+                it.bookUrl == book?.bookUrl && it.chapterIndex == durChapterIndex
+            } == true
+        )
+            return
         if (hasPendingHighlightJump()) return
         val book = book ?: return
         // The shared writer may still be queued when the reader switches books or pages.
@@ -1824,32 +2008,40 @@ object ReadBook : CoroutineScope by MainScope() {
         val bookSource = bookSource
         val durTime = System.currentTimeMillis()
         executor.execute {
-            kotlin.runCatching {
-                book.lastCheckCount = 0
-                book.durChapterTime = durTime
-                val chapterChanged = book.durChapterIndex != durChapterIndex
-                book.durChapterIndex = durChapterIndex
-                book.durChapterPos = durChapterPos
-                if (!pageChanged || chapterChanged) {
-                    appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
-                        book.durChapterTitle = it.getDisplayTitle(
-                            ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
-                            book.getUseReplaceRule(),
-                            replaceBook = book.toReplaceBook()
-                        )
-                        SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, bookSource, book, it, durTime.toString())
+            kotlin
+                .runCatching {
+                    book.lastCheckCount = 0
+                    book.durChapterTime = durTime
+                    val chapterChanged = book.durChapterIndex != durChapterIndex
+                    book.durChapterIndex = durChapterIndex
+                    book.durChapterPos = durChapterPos
+                    if (!pageChanged || chapterChanged) {
+                        appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
+                            book.durChapterTitle =
+                                it.getDisplayTitle(
+                                    ContentProcessor.get(book.name, book.origin)
+                                        .getTitleReplaceRules(),
+                                    book.getUseReplaceRule(),
+                                    replaceBook = book.toReplaceBook(),
+                                )
+                            SourceCallBack.callBackBook(
+                                SourceCallBack.SAVE_READ,
+                                bookSource,
+                                book,
+                                it,
+                                durTime.toString(),
+                            )
+                        }
                     }
+                    book.update()
                 }
-                book.update()
-            }.onFailure {
-                AppLog.put("保存书籍阅读进度信息出错\n$it", it)
-            }
+                .onFailure {
+                    AppLog.put("保存书籍阅读进度信息出错\n$it", it)
+                }
         }
     }
 
-    /**
-     * 预下载
-     */
+    /** 预下载 */
     private fun preDownload() {
         if (book?.isLocal == true) return
         executor.execute {
@@ -1858,51 +2050,52 @@ object ReadBook : CoroutineScope by MainScope() {
                 return@execute
             }
             preDownloadTask?.cancel()
-            preDownloadTask = launch(IO) {
-                //书源支持批量正文时先整批预取,没取到的章节走下面的单章流程兜底
-                bookSource?.takeIf { it.supportContentBatch() }?.let { source ->
-                    preDownloadBatch(source)
-                }
-                //预下载
-                launch {
-                    val maxChapterIndex =
-                        min(durChapterIndex + AppConfig.preDownloadNum, chapterSize)
-                    for (i in durChapterIndex.plus(2)..maxChapterIndex) {
-                        if (downloadedChapters.contains(i)) continue
-                        if ((downloadFailChapters[i] ?: 0) >= 3) continue
-                        downloadIndex(i)
+            preDownloadTask =
+                launch(IO) {
+                    // 书源支持批量正文时先整批预取,没取到的章节走下面的单章流程兜底
+                    bookSource
+                        ?.takeIf { it.supportContentBatch() }
+                        ?.let { source ->
+                            preDownloadBatch(source)
+                        }
+                    // 预下载
+                    launch {
+                        val maxChapterIndex =
+                            min(durChapterIndex + AppConfig.preDownloadNum, chapterSize)
+                        for (i in durChapterIndex.plus(2)..maxChapterIndex) {
+                            if (downloadedChapters.contains(i)) continue
+                            if ((downloadFailChapters[i] ?: 0) >= 3) continue
+                            downloadIndex(i)
+                        }
+                    }
+                    launch {
+                        val minChapterIndex = durChapterIndex - min(5, AppConfig.preDownloadNum)
+                        for (i in durChapterIndex.minus(2) downTo minChapterIndex) {
+                            if (downloadedChapters.contains(i)) continue
+                            if ((downloadFailChapters[i] ?: 0) >= 3) continue
+                            downloadIndex(i)
+                        }
                     }
                 }
-                launch {
-                    val minChapterIndex = durChapterIndex - min(5, AppConfig.preDownloadNum)
-                    for (i in durChapterIndex.minus(2) downTo minChapterIndex) {
-                        if (downloadedChapters.contains(i)) continue
-                        if ((downloadFailChapters[i] ?: 0) >= 3) continue
-                        downloadIndex(i)
-                    }
-                }
-            }
         }
     }
 
-    /**
-     * 批量预下载。
-     * 按书源声明的最大批量数量分批,书源没回存的章节留给单章流程兜底。
-     */
+    /** 批量预下载。 按书源声明的最大批量数量分批,书源没回存的章节留给单章流程兜底。 */
     private suspend fun preDownloadBatch(bookSource: BookSource) {
         val book = book ?: return
         val batchSize = bookSource.contentBatchSize()
         if (batchSize <= 1) return
         val maxChapterIndex = min(durChapterIndex + AppConfig.preDownloadNum, chapterSize)
         val minChapterIndex = durChapterIndex - min(5, AppConfig.preDownloadNum)
-        val indexes = (durChapterIndex.plus(2)..maxChapterIndex) +
-            (durChapterIndex.minus(2) downTo minChapterIndex)
+        val indexes =
+            (durChapterIndex.plus(2)..maxChapterIndex) +
+                (durChapterIndex.minus(2) downTo minChapterIndex)
         val pending = indexes.mapNotNull { index ->
             if (index < 0 || index > chapterSize - 1) return@mapNotNull null
             if (downloadedChapters.contains(index)) return@mapNotNull null
             if ((downloadFailChapters[index] ?: 0) >= 3) return@mapNotNull null
-            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index)
-                ?: return@mapNotNull null
+            val chapter =
+                appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@mapNotNull null
             if (chapter.isVolume || BookHelp.hasContent(book, chapter)) {
                 downloadedChapters.add(index)
                 return@mapNotNull null
@@ -1965,11 +2158,18 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    private fun resolvePendingPdfJump(layoutBook: Book, textChapter: TextChapter, page: TextPage): Boolean {
+    private fun resolvePendingPdfJump(
+        layoutBook: Book,
+        textChapter: TextChapter,
+        page: TextPage,
+    ): Boolean {
         val pending = pendingPdfJump ?: return true
         if (curTextChapter !== textChapter) return false
-        if (pending.bookUrl != layoutBook.bookUrl || pending.chapterIndex != textChapter.chapter.index ||
-            pending.chapterIndex != durChapterIndex) {
+        if (
+            pending.bookUrl != layoutBook.bookUrl ||
+                pending.chapterIndex != textChapter.chapter.index ||
+                pending.chapterIndex != durChapterIndex
+        ) {
             pendingPdfJump = null
             return true
         }
@@ -1982,8 +2182,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     private fun finishPendingPdfJump(layoutBook: Book, textChapter: TextChapter) {
         val pending = pendingPdfJump ?: return
-        if (curTextChapter === textChapter && pending.bookUrl == layoutBook.bookUrl &&
-            pending.chapterIndex == textChapter.chapter.index) {
+        if (
+            curTextChapter === textChapter &&
+                pending.bookUrl == layoutBook.bookUrl &&
+                pending.chapterIndex == textChapter.chapter.index
+        ) {
             pendingPdfJump = null
             AppLog.put("PDF 目录目标页未能完成排版：${pending.pageIndex + 1}")
         }
@@ -1991,26 +2194,27 @@ object ReadBook : CoroutineScope by MainScope() {
 
     private fun resolvePendingHighlightJump(
         layoutBook: Book,
-        textChapter: TextChapter
+        textChapter: TextChapter,
     ): Boolean {
         if (curTextChapter !== textChapter) return false
-        val pending = pendingHighlightJump
-            ?: return pendingHighlightAnchor?.waitForLayout != true
-        if (pending.bookUrl != layoutBook.bookUrl ||
-            pending.chapterIndex != durChapterIndex ||
-            pending.chapterIndex != textChapter.chapter.index ||
-            pending.rawPosition != durChapterPos
+        val pending = pendingHighlightJump ?: return pendingHighlightAnchor?.waitForLayout != true
+        if (
+            pending.bookUrl != layoutBook.bookUrl ||
+                pending.chapterIndex != durChapterIndex ||
+                pending.chapterIndex != textChapter.chapter.index ||
+                pending.rawPosition != durChapterPos
         ) {
             pendingHighlightJump = null
             return true
         }
         val currentTitleLength = textChapter.layoutTitleLength
         if (currentTitleLength < 0) return false
-        durChapterPos = resolveHighlightChapterPosition(
-            pending.rawPosition,
-            pending.sourceTitleLength,
-            currentTitleLength
-        )
+        durChapterPos =
+            resolveHighlightChapterPosition(
+                pending.rawPosition,
+                pending.sourceTitleLength,
+                currentTitleLength,
+            )
         pendingHighlightJump = null
         saveRead()
         return pendingHighlightAnchor?.waitForLayout != true
@@ -2018,9 +2222,10 @@ object ReadBook : CoroutineScope by MainScope() {
 
     private fun hasPendingHighlightJump(): Boolean {
         val pending = pendingHighlightJump ?: return false
-        if (pending.bookUrl == book?.bookUrl &&
-            pending.chapterIndex == durChapterIndex &&
-            pending.rawPosition == durChapterPos
+        if (
+            pending.bookUrl == book?.bookUrl &&
+                pending.chapterIndex == durChapterIndex &&
+                pending.rawPosition == durChapterPos
         ) {
             return true
         }
@@ -2030,59 +2235,69 @@ object ReadBook : CoroutineScope by MainScope() {
 
     private fun resolvePendingHighlightAnchor(
         layoutBook: Book,
-        textChapter: TextChapter
+        textChapter: TextChapter,
     ): Boolean {
         val pending = pendingHighlightAnchor ?: return false
         if (curTextChapter !== textChapter) return false
-        if (pending.bookUrl != layoutBook.bookUrl ||
-            pending.chapterIndex != durChapterIndex ||
-            pending.chapterIndex != textChapter.chapter.index
+        if (
+            pending.bookUrl != layoutBook.bookUrl ||
+                pending.chapterIndex != durChapterIndex ||
+                pending.chapterIndex != textChapter.chapter.index
         ) {
             pendingHighlightAnchor = null
             return false
         }
         val currentTitleLength = textChapter.layoutTitleLength.takeIf { it >= 0 } ?: return false
-        val expectedPosition = resolveHighlightChapterPosition(
-            pending.rawPosition,
-            pending.sourceTitleLength,
-            currentTitleLength
-        )
+        val expectedPosition =
+            resolveHighlightChapterPosition(
+                pending.rawPosition,
+                pending.sourceTitleLength,
+                currentTitleLength,
+            )
         pendingHighlightAnchor = null
         val bodyText = chapterText(textChapter).drop(currentTitleLength)
         if (durChapterPos == pending.rawPosition) {
-            val layoutPosition = pending.layoutBodyText?.let {
-                resolveLayoutBodyPosition(
-                    it, pending.rawPosition - pending.sourceTitleLength, bodyText
-                )
-            }
-            if (layoutPosition != null) {
-                durChapterPos = if (pending.rawPosition < pending.sourceTitleLength) {
-                    pending.rawPosition.coerceIn(0, currentTitleLength)
-                } else {
-                    currentTitleLength + layoutPosition
+            val layoutPosition =
+                pending.layoutBodyText?.let {
+                    resolveLayoutBodyPosition(
+                        it,
+                        pending.rawPosition - pending.sourceTitleLength,
+                        bodyText,
+                    )
                 }
-                if (BuildConfig.DEBUG) Log.d("ReadPosition",
-                    "restore raw=${pending.rawPosition} position=$durChapterPos " +
-                        "chapter=${System.identityHashCode(textChapter)}")
+            if (layoutPosition != null) {
+                durChapterPos =
+                    if (pending.rawPosition < pending.sourceTitleLength) {
+                        pending.rawPosition.coerceIn(0, currentTitleLength)
+                    } else {
+                        currentTitleLength + layoutPosition
+                    }
+                if (BuildConfig.DEBUG)
+                    Log.d(
+                        "ReadPosition",
+                        "restore raw=${pending.rawPosition} position=$durChapterPos " +
+                            "chapter=${System.identityHashCode(textChapter)}",
+                    )
                 saveRead()
                 return true
             }
         }
         if (durChapterPos != expectedPosition) return false
         val bodyPosition = (expectedPosition - currentTitleLength).coerceAtLeast(0)
-        durChapterPos = currentTitleLength +
-            HighlightAnchor.jumpPos(bodyText, bodyPosition, pending.bookText)
+        durChapterPos =
+            currentTitleLength + HighlightAnchor.jumpPos(bodyText, bodyPosition, pending.bookText)
         saveRead()
         return true
     }
 
     private fun currentPositionAnchor(): PendingHighlightAnchor? {
         val currentBook = book ?: return null
-        val textChapter = curTextChapter?.takeIf {
-            it.isCompleted &&
-                it.chapter.index == durChapterIndex &&
-                it.chapter.bookUrl == currentBook.bookUrl
-        } ?: return null
+        val textChapter =
+            curTextChapter?.takeIf {
+                it.isCompleted &&
+                    it.chapter.index == durChapterIndex &&
+                    it.chapter.bookUrl == currentBook.bookUrl
+            } ?: return null
         val titleLength = textChapter.layoutTitleLength.takeIf { it >= 0 } ?: return null
         val bodyText = chapterText(textChapter).drop(titleLength)
         val bodyPosition = (durChapterPos - titleLength).coerceAtLeast(0)
@@ -2103,7 +2318,7 @@ object ReadBook : CoroutineScope by MainScope() {
         val bookUrl: String,
         val chapterIndex: Int,
         val rawPosition: Int,
-        val sourceTitleLength: Int
+        val sourceTitleLength: Int,
     )
 
     private data class PendingHighlightAnchor(
@@ -2116,17 +2331,13 @@ object ReadBook : CoroutineScope by MainScope() {
         val layoutBodyText: String? = null,
     )
 
-    /**
-     * 注册回调
-     */
+    /** 注册回调 */
     fun register(cb: CallBack) {
         callBack?.notifyBookChanged()
         callBack = cb
     }
 
-    /**
-     * 取消注册回调
-     */
+    /** 取消注册回调 */
     fun unregister(cb: CallBack) {
         if (callBack === cb) {
             callBack = null
@@ -2156,7 +2367,7 @@ object ReadBook : CoroutineScope by MainScope() {
             relativePosition: Int = 0,
             resetPageOffset: Boolean = true,
             readPositionVersion: Long? = null,
-            success: (() -> Unit)? = null
+            success: (() -> Unit)? = null,
         )
 
         fun readPositionVersion(): Long? = null
@@ -2167,7 +2378,7 @@ object ReadBook : CoroutineScope by MainScope() {
             relativePosition: Int = 0,
             resetPageOffset: Boolean = true,
             readPositionVersion: Long? = null,
-            success: (() -> Unit)? = null
+            success: (() -> Unit)? = null,
         )
 
         fun pageChanged()
@@ -2182,7 +2393,6 @@ object ReadBook : CoroutineScope by MainScope() {
 
         fun cancelSelect()
     }
-
 }
 
 internal fun String.isContentLoadFailurePlaceholder(): Boolean =
@@ -2199,7 +2409,7 @@ internal fun BookHighlight.isForChapter(book: Book?, chapter: BookChapter): Bool
 internal fun BookHighlight.bindLegacyChapter(
     book: Book?,
     chapter: BookChapter,
-    displayTitle: String = chapter.title
+    displayTitle: String = chapter.title,
 ): Boolean {
     if (!isForBook(book) || chapterUrl.isNotBlank()) return false
     if (book?.bookUrl != chapter.bookUrl) return false

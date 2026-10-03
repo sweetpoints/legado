@@ -1,0 +1,7 @@
+<resources>
+    <string name="rule_subscription_move_up">Move subscription up</string>
+    <string name="rule_subscription_move_down">Move subscription down</string>
+    <string name="rule_subscription_missing">This subscription was deleted. Cancel and reopen the editor.</string>
+    <string name="rule_subscription_conflict">This subscription changed elsewhere. Cancel and reopen the editor.</string>
+    <string name="rule_subscription_save_pending">Saving is awaiting confirmation. Retry to complete it.</string>
+</resources>

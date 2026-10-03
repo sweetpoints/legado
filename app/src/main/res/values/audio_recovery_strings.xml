@@ -1,0 +1,4 @@
+<resources>
+    <string name="audio_restore_action_title">Interrupted audio action</string>
+    <string name="audio_restore_action_message">An earlier action may have been accepted. It will not run automatically. Retry only if you want to start a new attempt.</string>
+</resources>

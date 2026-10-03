@@ -1,23 +1,25 @@
 package io.legado.app.ui.code
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class CodeEditorSelectionContractTest {
 
     @Test
     fun `overflow select all uses the editor document instead of ime extracted text`() {
-        val activity = projectFile(
-            "app/src/main/java/io/legado/app/ui/code/CodeEditActivity.kt"
-        ).readText()
-        val menu = projectFile("app/src/main/res/menu/code_edit_activity.xml").readText()
-
-        assertTrue(menu.contains("@+id/menu_select_all"))
-        assertTrue(menu.contains("@string/select_all"))
-        assertTrue(activity.contains("menu_select_all)?.isVisible = showSoraActions"))
-        assertTrue(activity.contains("R.id.menu_select_all -> if (!useSafeEditor) editor.selectAll()"))
-        assertTrue(activity.contains("props.maxIPCTextLength = 64 * 1024"))
+        val screen =
+            projectFile("app/src/main/java/io/legado/app/ui/code/CodeEditorScreen.kt").readText()
+        val route =
+            projectFile("app/src/main/java/io/legado/app/ui/code/CodeEditorRoute.kt").readText()
+        val engine =
+            projectFile("app/src/main/java/io/legado/app/ui/code/SoraCodeEditorEngine.kt")
+                .readText()
+        assertTrue(screen.contains("R.string.select_all"))
+        assertTrue(screen.contains("CodeEditorAction.SELECT_ALL"))
+        assertTrue(route.contains("CodeEditorAction.SELECT_ALL -> sora?.selectAll()"))
+        assertTrue(engine.contains("view.selectAll()"))
+        assertTrue(engine.contains("props.maxIPCTextLength = 64 * 1024"))
     }
 
     private fun projectFile(path: String): File {

@@ -1,0 +1,4 @@
+<resources>
+    <string name="book_group_selection_move_up">上移</string>
+    <string name="book_group_selection_move_down">下移</string>
+</resources>

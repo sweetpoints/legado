@@ -1,12 +1,12 @@
 package io.legado.app.ui.book.audio
 
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class AudioPlayBookResolverTest {
 
@@ -23,12 +23,13 @@ class AudioPlayBookResolverTest {
         val cachedBook = TestBook("book-b")
         val databaseBook = TestBook("book-a")
 
-        val result = resolveAudioPlayBook(
-            requestedBookUrl = "book-a",
-            cachedBook = cachedBook,
-            bookUrlOf = TestBook::bookUrl,
-            findBook = { databaseBook },
-        )
+        val result =
+            resolveAudioPlayBook(
+                requestedBookUrl = "book-a",
+                cachedBook = cachedBook,
+                bookUrlOf = TestBook::bookUrl,
+                findBook = { databaseBook },
+            )
 
         assertSame(databaseBook, result)
     }
@@ -38,15 +39,16 @@ class AudioPlayBookResolverTest {
         val cachedBook = TestBook("book-a")
         var databaseLookupCount = 0
 
-        val result = resolveAudioPlayBook(
-            requestedBookUrl = "book-a",
-            cachedBook = cachedBook,
-            bookUrlOf = TestBook::bookUrl,
-            findBook = {
-                databaseLookupCount++
-                TestBook("book-a")
-            },
-        )
+        val result =
+            resolveAudioPlayBook(
+                requestedBookUrl = "book-a",
+                cachedBook = cachedBook,
+                bookUrlOf = TestBook::bookUrl,
+                findBook = {
+                    databaseLookupCount++
+                    TestBook("book-a")
+                },
+            )
 
         assertSame(cachedBook, result)
         assertEquals(0, databaseLookupCount)
@@ -56,133 +58,147 @@ class AudioPlayBookResolverTest {
     fun `notification restore without extras uses current cached book`() {
         val cachedBook = TestBook("book-a")
 
-        val result = resolveAudioPlayBook(
-            requestedBookUrl = null,
-            cachedBook = cachedBook,
-            bookUrlOf = TestBook::bookUrl,
-            findBook = { error("database lookup should not run") },
-        )
+        val result =
+            resolveAudioPlayBook(
+                requestedBookUrl = null,
+                cachedBook = cachedBook,
+                bookUrlOf = TestBook::bookUrl,
+                findBook = { error("database lookup should not run") },
+            )
 
         assertSame(cachedBook, result)
     }
 
     @Test
     fun `missing requested book never falls back to another cached book`() {
-        val result = resolveAudioPlayBook(
-            requestedBookUrl = "book-a",
-            cachedBook = TestBook("book-b"),
-            bookUrlOf = TestBook::bookUrl,
-            findBook = { null },
-        )
+        val result =
+            resolveAudioPlayBook(
+                requestedBookUrl = "book-a",
+                cachedBook = TestBook("book-b"),
+                bookUrlOf = TestBook::bookUrl,
+                findBook = { null },
+            )
 
         assertNull(result)
     }
 
     @Test
     fun `audio notifications carry book identity`() {
-        val playService = projectFile(
-            "src/main/java/io/legado/app/service/AudioPlayService.kt"
-        ).readText()
-        val cacheService = projectFile(
-            "src/main/java/io/legado/app/service/AudioCacheService.kt"
-        ).readText()
+        val playService =
+            projectFile("src/main/java/io/legado/app/service/AudioPlayService.kt").readText()
+        val cacheService =
+            projectFile("src/main/java/io/legado/app/service/AudioCacheService.kt").readText()
 
-        assertTrue(playService.contains("putExtra(\"bookUrl\", it.bookUrl)"))
-        assertFalse(playService.contains("putExtra(\"inBookshelf\""))
-        assertTrue(cacheService.contains("putExtra(\"bookUrl\", bookUrl)"))
-        assertTrue(cacheService.contains("notificationBuilder.setContentIntent(contentIntent)"))
-        assertTrue(cacheService.contains("currentBookUrl.takeIf { it.isNotBlank() }"))
+        assertTrue(playService.containsCode("putExtra(\"bookUrl\", it.bookUrl)"))
+        assertFalse(playService.containsCode("putExtra(\"inBookshelf\""))
+        assertTrue(cacheService.containsCode("putExtra(\"bookUrl\", bookUrl)"))
+        assertTrue(cacheService.containsCode("notificationBuilder.setContentIntent(contentIntent)"))
+        assertTrue(cacheService.containsCode("currentBookUrl.takeIf { it.isNotBlank() }"))
     }
 
     @Test
     fun `audio activity consumes notification updates`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt"
-        ).readText()
-        val onNewIntent = activity.substringAfter("override fun onNewIntent(intent: Intent)")
-            .substringBefore("override fun onCompatCreateOptionsMenu")
-        val beforeInit = onNewIntent.substringBefore("viewModel.initData(")
+        val activity =
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayActivity.kt").readText()
+        val onNewIntent =
+            activity
+                .substringAfter("override fun onNewIntent(intent: Intent)")
+                .substringBefore("private fun menuAction")
+        val beforeInit = onNewIntent.substringBefore("viewModel.initialize(")
 
-        assertTrue(onNewIntent.contains("setIntent(intent)"))
-        assertTrue(beforeInit.contains("shouldReuseCurrentAudioPlay("))
-        assertTrue(onNewIntent.contains("viewModel.initData("))
-        assertTrue(onNewIntent.contains("intent = intent"))
+        assertTrue(onNewIntent.containsCode("setIntent(intent)"))
+        assertTrue(beforeInit.containsCode("shouldReuseCurrentAudioPlay("))
+        assertTrue(onNewIntent.containsCode("viewModel.initialize("))
+        assertTrue(
+            onNewIntent.containsCode("viewModel.initialize(requestedBookUrl, freshRequest = true)")
+        )
     }
 
     @Test
     fun `audio initialization is serialized and refreshes shelf state`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
-        ).readText()
+        val viewModel =
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
+                .readText()
 
-        assertTrue(viewModel.contains("private val initSemaphore = Semaphore(1)"))
-        assertTrue(viewModel.contains("initTask?.cancel()"))
-        assertTrue(viewModel.contains("execute(semaphore = initSemaphore)"))
-        assertTrue(viewModel.contains("cachedBook = cachedBook"))
-        assertFalse(viewModel.contains("cachedBook.takeUnless"))
-        assertFalse(viewModel.contains("getBooleanExtra(\"inBookshelf\""))
-        assertTrue(viewModel.contains("val resolvedBook = resolveAudioPlayBook("))
-        assertFalse(viewModel.contains("cachedChapterIndex"))
-        assertFalse(viewModel.contains("cachedChapterPos"))
-        assertTrue(viewModel.contains("val temporaryBook = targetBook.copy().apply"))
-        assertTrue(viewModel.contains("appDb.bookDao.insertIgnore(temporaryBook)"))
-        assertTrue(viewModel.contains("val concurrentBook = appDb.bookDao.getBook(requestedBookUrl)"))
-        assertTrue(viewModel.contains("databaseBook = concurrentBook"))
-        assertTrue(viewModel.contains("else -> !(databaseBook ?: targetBook).isNotShelf"))
+        assertTrue(viewModel.containsCode("private val engineWrites = Mutex()"))
+        assertTrue(
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt")
+                .readText()
+                .containsCode("initTask?.cancel()")
+        )
+        assertTrue(viewModel.containsCode("engineWrites.withLock"))
+        assertTrue(viewModel.containsCode("val cachedBook = AudioPlay.book"))
+        assertFalse(viewModel.containsCode("cachedBook.takeUnless"))
+        assertFalse(viewModel.containsCode("getBooleanExtra(\"inBookshelf\""))
+        assertTrue(viewModel.containsCode("val resolvedBook = resolveAudioPlayBook("))
+        assertFalse(viewModel.containsCode("cachedChapterIndex"))
+        assertFalse(viewModel.containsCode("cachedChapterPos"))
+        assertTrue(viewModel.containsCode("val temporaryBook = targetBook.copy().apply"))
+        assertTrue(viewModel.containsCode("appDb.bookDao.insertIgnore(temporaryBook)"))
+        assertTrue(viewModel.containsCode("databaseBook = appDb.bookDao.getBook(requestedBookUrl)"))
+        assertTrue(viewModel.containsCode("targetBook = checkNotNull(databaseBook)"))
+        assertTrue(viewModel.containsCode("else !(databaseBook ?: targetBook).isNotShelf"))
 
-        val audioPlay = projectFile(
-            "src/main/java/io/legado/app/model/AudioPlay.kt"
-        ).readText()
-        val upData = audioPlay.substringAfter("fun upData(book: Book, preserveProgress: Boolean)")
-            .substringBefore("fun resetData(book: Book)")
-        assertTrue(upData.contains("val playbackChanged = synchronized(this)"))
-        assertTrue(upData.contains("if (preserveProgress &&"))
-        assertTrue(upData.contains("book.durChapterIndex = durChapterIndex"))
-        assertTrue(upData.contains("book.durChapterPos = durChapterPos"))
-        assertTrue(upData.contains("AudioPlay.book = book"))
-        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = true)"))
-        assertTrue(viewModel.contains("AudioPlay.upData(book, preserveProgress = false)"))
+        val audioPlay = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt").readText()
+        val upData =
+            audioPlay
+                .substringAfter("fun upData(book: Book, preserveProgress: Boolean)")
+                .substringBefore("fun resetData(book: Book)")
+        assertTrue(upData.containsCode("val playbackChanged = synchronized(this)"))
+        assertTrue(upData.containsCode("if (preserveProgress &&"))
+        assertTrue(upData.containsCode("book.durChapterIndex = durChapterIndex"))
+        assertTrue(upData.containsCode("book.durChapterPos = durChapterPos"))
+        assertTrue(upData.containsCode("AudioPlay.book = book"))
+        assertTrue(viewModel.containsCode("AudioPlay.upData(book, preserveProgress = true)"))
+        assertTrue(viewModel.containsCode("AudioPlay.upData(book, preserveProgress = false)"))
     }
 
     @Test
     fun `source change refreshes the running notification`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
-        ).readText()
-        val service = projectFile(
-            "src/main/java/io/legado/app/service/AudioPlayService.kt"
-        ).readText()
-        val updateAction = service.substringAfter("ACTION_UPDATE_NOTIFICATION ->")
-            .substringBefore("IntentAction.stop ->")
+        val viewModel =
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
+                .readText()
+        val service =
+            projectFile("src/main/java/io/legado/app/service/AudioPlayService.kt").readText()
+        val updateAction =
+            service
+                .substringAfter("ACTION_UPDATE_NOTIFICATION ->")
+                .substringBefore("IntentAction.stop ->")
 
-        assertTrue(viewModel.contains("AudioPlayService.updateNotification(context)"))
-        assertTrue(updateAction.contains("upMediaMetadata()"))
-        assertTrue(updateAction.contains("upAudioPlayNotification()"))
-        assertTrue(viewModel.contains("appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true"))
-        assertTrue(viewModel.contains("if (wasNotShelf) book.addType(BookType.notShelf)"))
-        assertTrue(viewModel.contains("AudioPlay.inBookshelf = !wasNotShelf"))
+        assertTrue(viewModel.containsCode("AudioPlayService.updateNotification(context)"))
+        assertTrue(updateAction.containsCode("upMediaMetadata()"))
+        assertTrue(updateAction.containsCode("upAudioPlayNotification()"))
+        assertTrue(viewModel.containsCode("appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true"))
+        assertTrue(viewModel.containsCode("if (wasNotShelf) book.addType(BookType.notShelf)"))
+        assertTrue(viewModel.containsCode("AudioPlay.inBookshelf = !wasNotShelf"))
     }
 
     @Test
     fun `book loading failure is propagated`() {
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt"
-        ).readText()
+        val viewModel =
+            projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
+                .readText()
 
-        assertTrue(viewModel.contains("private suspend fun initBook(book: Book): Boolean"))
         assertTrue(
-            viewModel.contains(
-                "if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book))"
+            viewModel.containsCode("private suspend fun initBook(book: Book, owner: Long): Boolean")
+        )
+        assertTrue(
+            viewModel.containsCode(
+                "if (AudioPlay.chapterSize == 0 && workingBook.tocUrl.isEmpty())"
             )
         )
-        assertTrue(viewModel.contains("if (AudioPlay.chapterSize == 0 && !loadChapterList(book))"))
-        assertTrue(viewModel.contains("if (cList.isEmpty()) return false"))
-        assertTrue(viewModel.contains("return false"))
+        assertTrue(
+            viewModel.containsCode("loadChapterList(workingBook, source, owner, engineIdentity)")
+        )
+        assertTrue(viewModel.containsCode("if (chapters.isEmpty()) return false"))
+        assertTrue(viewModel.containsCode("return false"))
     }
 
+    private fun String.containsCode(expected: String): Boolean =
+        filterNot(Char::isWhitespace).contains(expected.filterNot(Char::isWhitespace))
+
     private fun projectFile(pathInApp: String): File {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
+        return sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)
             ?: error("Project file not found: $pathInApp")
     }
 

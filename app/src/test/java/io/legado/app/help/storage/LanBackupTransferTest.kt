@@ -2,33 +2,34 @@ package io.legado.app.help.storage
 
 import com.google.gson.JsonParser
 import io.legado.app.utils.GSON
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
-import org.junit.Test
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class LanBackupTransferTest {
 
     @Test
     fun `descriptor uses stable protocol field names`() {
-        val descriptor = LanBackupDescriptor(
-            hosts = listOf("192.168.1.2"),
-            port = 12345,
-            token = "01".repeat(16),
-            key = "02".repeat(32),
-            iv = "03".repeat(12),
-            size = 17,
-            sha256 = "04".repeat(32),
-            deviceName = "test",
-            expiresAt = 10_000,
-        )
+        val descriptor =
+            LanBackupDescriptor(
+                hosts = listOf("192.168.1.2"),
+                port = 12345,
+                token = "01".repeat(16),
+                key = "02".repeat(32),
+                iv = "03".repeat(12),
+                size = 17,
+                sha256 = "04".repeat(32),
+                deviceName = "test",
+                expiresAt = 10_000,
+            )
 
         val json = GSON.toJson(descriptor)
 
@@ -41,9 +42,10 @@ class LanBackupTransferTest {
         )
         assertTrue(
             LanBackupTransfer.validateDescriptor(
-                descriptor.copy(size = LAN_BACKUP_MAX_ENCRYPTED_BYTES + 1),
-                now = 1_000,
-            ).isFailure
+                    descriptor.copy(size = LAN_BACKUP_MAX_ENCRYPTED_BYTES + 1),
+                    now = 1_000,
+                )
+                .isFailure
         )
     }
 
@@ -101,9 +103,9 @@ class LanBackupTransferTest {
         server.start(5_000, false)
         try {
             repeat(2) {
-                val connection = URL(
-                    "http://127.0.0.1:${server.listeningPort}/backup/$token"
-                ).openConnection() as HttpURLConnection
+                val connection =
+                    URL("http://127.0.0.1:${server.listeningPort}/backup/$token").openConnection()
+                        as HttpURLConnection
                 try {
                     assertEquals(HttpURLConnection.HTTP_OK, connection.responseCode)
                     assertArrayEquals(payload, connection.inputStream.use { it.readBytes() })
@@ -118,42 +120,33 @@ class LanBackupTransferTest {
 
     @Test
     fun `settings flow validates then backs up before restore`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/config/BackupConfigFragment.kt"
-        ).readText()
-        val flow = fragment.substringAfter("private fun receiveLanBackup")
-            .substringBefore("private fun backupIgnore")
-        val receiveIndex = flow.indexOf("LanBackupTransfer.receive")
-        val backupIndex = flow.indexOf("Backup.backupBeforeLanRestoreLocked")
-        val spaceIndex = flow.indexOf("LanBackupTransfer.requireRestoreSpace")
-        val restoreIndex = flow.indexOf("Restore.restoreOrThrow")
-        assertTrue(receiveIndex >= 0)
-        assertTrue(backupIndex >= 0)
-        assertTrue(spaceIndex >= 0)
-        assertTrue(restoreIndex >= 0)
-        assertTrue(receiveIndex < backupIndex)
-        assertTrue(backupIndex < spaceIndex)
-        assertTrue(spaceIndex < restoreIndex)
-        assertTrue(flow.contains("receivedFile?.parentFile?.deleteRecursively()"))
-        assertTrue(flow.contains("withContext(IO)"))
-        assertTrue(fragment.contains("lanBackupSession?.close()"))
-        assertTrue(fragment.contains("override fun onStop()"))
-
-        val backup = projectFile(
-            "src/main/java/io/legado/app/help/storage/Backup.kt"
-        ).readText()
+        // The page operation order, cancellation and owned sessions are exercised by
+        // BackupLanRepositoryTest and BackupOperationsControllerTest through actual repositories.
+        val backup = projectFile("src/main/java/io/legado/app/help/storage/Backup.kt").readText()
         assertTrue(backup.contains("variable = book.variable.takeUnless { lanTransfer }"))
         assertTrue(backup.contains("paths.removeAll(listOf(\"servers.json\""))
         assertTrue(backup.contains("DirectLinkUpload.getConfig()?.takeUnless { lanTransfer }"))
         assertTrue(backup.contains("enabledContentKeys.remove(BackupConfig.cookieContentKey)"))
         assertTrue(backup.contains("it == BackupConfig.cookieContentKey"))
         assertTrue(backup.contains("check(\n                    backup("))
-        assertTrue(backup.contains("if (!ZipUtils.zipFiles(paths, workingZipFile.absolutePath)) return false"))
-        val completedBackup = backup.substringAfter("if (!ZipUtils.zipFiles(paths, workingZipFile.absolutePath)) return false")
-            .substringBefore("private suspend fun writeListToJson")
+        assertTrue(
+            backup.contains(
+                "if (!ZipUtils.zipFiles(paths, workingZipFile.absolutePath)) return false"
+            )
+        )
+        val completedBackup =
+            backup
+                .substringAfter(
+                    "if (!ZipUtils.zipFiles(paths, workingZipFile.absolutePath)) return false"
+                )
+                .substringBefore("private suspend fun writeListToJson")
         assertTrue(completedBackup.contains("return true"))
         assertTrue(completedBackup.indexOf("copyBackup(") < completedBackup.indexOf("return true"))
-        assertTrue(completedBackup.contains("if (!lanTransfer) LocalConfig.lastBackup = System.currentTimeMillis()"))
+        assertTrue(
+            completedBackup.contains(
+                "if (!lanTransfer) LocalConfig.lastBackup = System.currentTimeMillis()"
+            )
+        )
         assertTrue(backup.contains("lan_backup/send/${'$'}{UUID.randomUUID()}"))
         assertTrue(backup.contains("val workingZipFile = File(directory, \"tmp_backup.zip\")"))
         assertTrue(backup.contains("workingZipFile = workingZipFile"))
@@ -162,17 +155,14 @@ class LanBackupTransferTest {
         assertTrue(backup.contains("writePreferenceSnapshot(appCtx, backupPath, \"config\")"))
         assertTrue(backup.contains("writePreferenceSnapshot(appCtx, backupPath, \"videoConfig\")"))
 
-        val transfer = projectFile(
-            "src/main/java/io/legado/app/help/storage/LanBackupTransfer.kt"
-        ).readText()
+        val transfer =
+            projectFile("src/main/java/io/legado/app/help/storage/LanBackupTransfer.kt").readText()
         assertTrue(transfer.contains("lan_backup/receive/${'$'}{UUID.randomUUID()}"))
         assertTrue(transfer.contains("connection.instanceFollowRedirects = false"))
         assertTrue(transfer.contains("cipher.doFinal()"))
         assertTrue(!transfer.contains("CipherInputStream"))
 
-        val restore = projectFile(
-            "src/main/java/io/legado/app/help/storage/Restore.kt"
-        ).readText()
+        val restore = projectFile("src/main/java/io/legado/app/help/storage/Restore.kt").readText()
         assertTrue(restore.contains("suspend fun restoreOrThrow"))
         assertTrue(restore.contains("if (lanTransfer) book.variable = null"))
         assertTrue(restore.contains("appDb.bookDao.upsertPreservingVariable(book)"))
@@ -186,17 +176,13 @@ class LanBackupTransferTest {
         assertTrue(restore.contains("readPreferenceSnapshot(appCtx, path, \"videoConfig\")"))
         assertTrue(restore.contains("!lanTransfer && !BackupConfig.ignoreCookies"))
         assertTrue(restore.contains("key !in lanTransferIgnoredPrefKeys"))
-        assertTrue(flow.contains("lanTransfer = true"))
 
-        val bookDao = projectFile(
-            "src/main/java/io/legado/app/data/dao/BookDao.kt"
-        ).readText()
+        val bookDao = projectFile("src/main/java/io/legado/app/data/dao/BookDao.kt").readText()
         assertTrue(bookDao.contains("fun upsertPreservingVariable(book: Book)"))
         assertTrue(bookDao.contains("book.variable = existing.variable"))
 
-        val snapshot = projectFile(
-            "src/main/java/io/legado/app/help/storage/PreferenceSnapshot.kt"
-        ).readText()
+        val snapshot =
+            projectFile("src/main/java/io/legado/app/help/storage/PreferenceSnapshot.kt").readText()
         assertTrue(snapshot.contains("UUID.randomUUID()"))
         assertTrue(snapshot.contains("preferences.edit().clear()"))
         assertTrue(snapshot.contains("check(editor.commit())"))
@@ -204,12 +190,13 @@ class LanBackupTransferTest {
         assertTrue(snapshot.contains("return HashMap(preferences.all)"))
         assertTrue(snapshot.contains("File(\"\${file.absolutePath}.bak\").delete()"))
 
-        val preferences = projectFile(
-            "src/main/java/io/legado/app/utils/PreferencesExtensions.kt"
-        ).readText()
+        val preferences =
+            projectFile("src/main/java/io/legado/app/utils/PreferencesExtensions.kt").readText()
         assertTrue(preferences.contains("synchronized(objMBase.javaClass)"))
         assertTrue(preferences.contains("val originalPreferencesDir"))
-        assertTrue(preferences.contains("fieldMPreferencesDir.set(objMBase, originalPreferencesDir)"))
+        assertTrue(
+            preferences.contains("fieldMPreferencesDir.set(objMBase, originalPreferencesDir)")
+        )
     }
 
     private fun writeZip(file: File, vararg entries: Pair<String, String>) {
@@ -232,6 +219,5 @@ class LanBackupTransferTest {
     }
 
     private fun projectFile(pathInApp: String): File =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .first(File::isFile)
+        sequenceOf(File(pathInApp), File("app/$pathInApp")).first(File::isFile)
 }

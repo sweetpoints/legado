@@ -1,31 +1,24 @@
 package io.legado.app.ui.main.bookshelf
 
-import org.junit.Assert.assertTrue
+import io.legado.app.ui.main.bookshelf.components.BookshelfBookCardModel
+import io.legado.app.ui.main.bookshelf.components.BookshelfGroupCardModel
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
 class BookshelfItemAnimatorTest {
-
     @Test
-    fun `bookshelf variants disable animations for frequent item updates`() {
-        val bookshelfSources = listOf(
-            "src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BooksFragment.kt",
-            "src/main/java/io/legado/app/ui/main/bookshelf/style2/BookshelfFragment2.kt"
-        )
-
-        bookshelfSources.forEach { path ->
-            val source = readProjectFile(path)
-            assertTrue(
-                "$path should disable the RecyclerView item animator",
-                source.contains(Regex("rvBookshelf\\.itemAnimator\\s*=\\s*null"))
-            )
-        }
+    fun composeBookSnapshotChangesMetadataWithoutChangingItsStableScrollKey() {
+        val before = BookshelfBookCardModel("url", "Name", "Author", "Old", "Latest")
+        val after = before.copy(currentChapter = "New", updating = true, unreadCount = 3)
+        assertEquals(before.key, after.key)
+        assertNotEquals(before, after)
     }
 
-    private fun readProjectFile(pathInApp: String): String {
-        val file = sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-        requireNotNull(file) { "Project file not found: $pathInApp" }
-        return file.readText()
+    @Test
+    fun groupRenameKeepsIdentityAndEqualBookMetadataDoesNotMergeDifferentUrls() {
+        val group = BookshelfGroupCardModel(8, "Group")
+        assertEquals(group.key, group.copy(name = "Renamed").key)
+        val first = BookshelfBookCardModel("first", "Name", "Author", "Read", "Latest")
+        assertNotEquals(first.key, first.copy(key = "second").key)
     }
 }

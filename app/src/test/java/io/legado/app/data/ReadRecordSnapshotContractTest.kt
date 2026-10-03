@@ -1,8 +1,8 @@
 package io.legado.app.data
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReadRecordSnapshotContractTest {
 
@@ -32,25 +32,37 @@ class ReadRecordSnapshotContractTest {
                 .contains("readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)")
         )
         val audio = projectFile("src/main/java/io/legado/app/model/AudioPlay.kt")
-        assertTrue(audio.contains("fun updateSnapshot(book: Book, chapterIndex: Int, chapterPos: Int)"))
-        assertTrue(audio.contains("readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos)"))
-        assertTrue(audio.contains("book?.let { readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos) }"))
+        assertTrue(
+            audio.contains("fun updateSnapshot(book: Book, chapterIndex: Int, chapterPos: Int)")
+        )
+        assertTrue(
+            audio.contains("readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos)")
+        )
+        assertTrue(
+            audio.contains(
+                "book?.let { readTimeTracker.updateSnapshot(it, durChapterIndex, durChapterPos) }"
+            )
+        )
     }
 
     @Test
     fun `deletion snapshots bookshelf data and restore prefers latest record`() {
         val record = projectFile("src/main/java/io/legado/app/data/entities/ReadRecord.kt")
         assertTrue(record.contains("fun Book.saveReadRecordSnapshot()"))
-        assertTrue(record.contains("appDb.readRecordDao.getRecord(AppConst.androidId, name, author)"))
+        assertTrue(
+            record.contains("appDb.readRecordDao.getRecord(AppConst.androidId, name, author)")
+        )
 
         val book = projectFile("src/main/java/io/legado/app/data/entities/Book.kt")
         assertTrue(book.contains("saveReadRecordSnapshot()"))
-        val bookshelf = projectFile(
-            "src/main/java/io/legado/app/ui/book/manage/BookshelfManageViewModel.kt"
-        )
-        assertTrue(bookshelf.contains("books.forEach { it.saveReadRecordSnapshot() }"))
+        // BookshelfMaintenanceRepositoryTest checks fresh-row snapshots precede actual deletion;
+        // this class retains the shared reader/history/restore contracts.
         val main = projectFile("src/main/java/io/legado/app/ui/main/MainViewModel.kt")
-        assertTrue(main.contains("appDb.bookDao.getNotShelfBooks().forEach { it.saveReadRecordSnapshot() }"))
+        assertTrue(
+            main.contains(
+                "appDb.bookDao.getNotShelfBooks().forEach { it.saveReadRecordSnapshot() }"
+            )
+        )
         assertTrue(main.contains("appDb.bookDao.deleteNotShelfBook()"))
         val dao = projectFile("src/main/java/io/legado/app/data/dao/BookDao.kt")
         assertTrue(dao.contains("fun getNotShelfBooks(): List<Book>"))

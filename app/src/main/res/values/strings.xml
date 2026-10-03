@@ -32,8 +32,6 @@
     <string name="invalid_directory">Invalid directory path</string>
     <string name="empty_directory_input">Directory path cannot be empty</string>
 
-    <string name="dynamic_click_retry">Retry</string>
-    <string name="dynamic_loading">Loading</string>
     <string name="draw">Warning</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
@@ -1638,6 +1636,12 @@
     <string name="whitespace_selection">选中</string>
     <string name="press_speed">长按倍速</string>
     <string name="press_speed_summary">长按倍速 %.1f</string>
+    <string name="video_playback_speed">倍速</string>
+    <string name="video_speed_multiple">%1$sX</string>
+    <string name="video_danmaku_enable">开弹幕</string>
+    <string name="video_danmaku_disable">关弹幕</string>
+    <string name="video_toggle_fullscreen">切换全屏</string>
+    <string name="video_toggle_lock">锁定播放器控制</string>
     <string name="full_bottom_progress">全屏时显示底部进度条</string>
     <string name="json_format">json格式</string>
     <string name="open_other_video_player">其它播放器打开</string>
@@ -1840,4 +1844,7 @@
     <string name="reimport_book_source">Reimport this book’s source</string>
     <string name="customize_my">Customize My page</string>
     <string name="my_more_items">Move selected items to More</string>
+    <string name="welcome_title">阅\n读</string>
+    <string name="welcome_subtitle">享\n受\n美\n好\n时\n光</string>
+    <string name="welcome_tagline">品读万千故事</string>
 </resources>

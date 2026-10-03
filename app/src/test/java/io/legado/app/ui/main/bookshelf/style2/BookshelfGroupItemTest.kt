@@ -12,13 +12,15 @@ class BookshelfGroupItemTest {
 
     @Test
     fun selectsAtMostFourBooksUsingEachGroupSort() {
-        val books = (1..5).reversed().map { index ->
-            book("book-$index", group = 3, order = index)
-        }
-        val groups = listOf(
-            BookGroup(groupId = 1, bookSort = 3),
-            BookGroup(groupId = 2, cover = "custom-cover", bookSort = 3),
-        )
+        val books =
+            (1..5).reversed().map { index ->
+                book("book-$index", group = 3, order = index)
+            }
+        val groups =
+            listOf(
+                BookGroup(groupId = 1, bookSort = 3),
+                BookGroup(groupId = 2, cover = "custom-cover", bookSort = 3),
+            )
 
         val items = buildBookshelfGroupItems(groups, books)
 
@@ -28,27 +30,29 @@ class BookshelfGroupItemTest {
 
     @Test
     fun matchesSystemAndUserGroups() {
-        val books = listOf(
-            book("local-grouped", type = BookType.text or BookType.local, group = 1),
-            book("local-none", type = BookType.text or BookType.local),
-            book("net-none"),
-            book("user-net", group = 1),
-            book("hidden-group", group = 2, hasUserGroup = true),
-            book("audio", type = BookType.audio),
-            book("video", type = BookType.video),
-            book("error", type = BookType.text or BookType.updateError),
-            book("legacy", type = 0, origin = BookType.localTag),
-        )
-        val groups = listOf(
-            BookGroup(BookGroup.IdAll, bookSort = 3),
-            BookGroup(BookGroup.IdLocal, bookSort = 3),
-            BookGroup(BookGroup.IdAudio, bookSort = 3),
-            BookGroup(BookGroup.IdNetNone, bookSort = 3),
-            BookGroup(BookGroup.IdLocalNone, bookSort = 3),
-            BookGroup(BookGroup.IdVideo, bookSort = 3),
-            BookGroup(BookGroup.IdError, bookSort = 3),
-            BookGroup(1, bookSort = 3),
-        )
+        val books =
+            listOf(
+                book("local-grouped", type = BookType.text or BookType.local, group = 1),
+                book("local-none", type = BookType.text or BookType.local),
+                book("net-none"),
+                book("user-net", group = 1),
+                book("hidden-group", group = 2, hasUserGroup = true),
+                book("audio", type = BookType.audio),
+                book("video", type = BookType.video),
+                book("error", type = BookType.text or BookType.updateError),
+                book("legacy", type = 0, origin = BookType.localTag),
+            )
+        val groups =
+            listOf(
+                BookGroup(BookGroup.IdAll, bookSort = 3),
+                BookGroup(BookGroup.IdLocal, bookSort = 3),
+                BookGroup(BookGroup.IdAudio, bookSort = 3),
+                BookGroup(BookGroup.IdNetNone, bookSort = 3),
+                BookGroup(BookGroup.IdLocalNone, bookSort = 3),
+                BookGroup(BookGroup.IdVideo, bookSort = 3),
+                BookGroup(BookGroup.IdError, bookSort = 3),
+                BookGroup(1, bookSort = 3),
+            )
         val items = buildBookshelfGroupItems(groups, books).associateBy { it.group.groupId }
 
         assertEquals(
@@ -60,7 +64,10 @@ class BookshelfGroupItemTest {
             urls(items.getValue(BookGroup.IdLocal)).toSet(),
         )
         assertEquals(listOf("audio"), urls(items.getValue(BookGroup.IdAudio)))
-        assertEquals(setOf("net-none", "error", "legacy"), urls(items.getValue(BookGroup.IdNetNone)).toSet())
+        assertEquals(
+            setOf("net-none", "error", "legacy"),
+            urls(items.getValue(BookGroup.IdNetNone)).toSet(),
+        )
         assertEquals(listOf("local-none"), urls(items.getValue(BookGroup.IdLocalNone)))
         assertEquals(listOf("video"), urls(items.getValue(BookGroup.IdVideo)))
         assertEquals(listOf("error"), urls(items.getValue(BookGroup.IdError)))
@@ -69,11 +76,12 @@ class BookshelfGroupItemTest {
 
     @Test
     fun supportsEveryBookshelfSortMode() {
-        val books = listOf(
-            book("b", name = "B", order = 2, latest = 20, read = 40),
-            book("a", name = "A", order = 3, latest = 30, read = 10),
-            book("c", name = "C", order = 1, latest = 10, read = 20),
-        )
+        val books =
+            listOf(
+                book("b", name = "B", order = 2, latest = 20, read = 40),
+                book("a", name = "A", order = 3, latest = 30, read = 10),
+                book("c", name = "C", order = 1, latest = 10, read = 20),
+            )
 
         assertEquals(listOf("a", "b", "c"), sortBookshelfBooks(books, 1).map { it.bookUrl })
         assertEquals(listOf("a", "b", "c"), sortBookshelfBooks(books, 2).map { it.bookUrl })
@@ -84,14 +92,16 @@ class BookshelfGroupItemTest {
 
     @Test
     fun customCoverOnlyUsesCredentialsOnTheSameOrigin() {
-        val sameOrigin = book(
-            "same",
-            customCover = "https://books.example.com/custom.jpg",
-        )
-        val otherOrigin = book(
-            "other",
-            customCover = "https://images.example.com/custom.jpg",
-        )
+        val sameOrigin =
+            book(
+                "same",
+                customCover = "https://books.example.com/custom.jpg",
+            )
+        val otherOrigin =
+            book(
+                "other",
+                customCover = "https://images.example.com/custom.jpg",
+            )
 
         assertEquals(sameOrigin.customCoverUrl, sameOrigin.displayCover)
         assertEquals(sameOrigin.origin, sameOrigin.coverSourceOrigin)
@@ -100,6 +110,16 @@ class BookshelfGroupItemTest {
         val persisted = sameOrigin.copy(persistedCoverUrl = "/covers/local.cover")
         assertEquals(persisted.persistedCoverUrl, persisted.displayCover)
         assertNull(persisted.coverSourceOrigin)
+    }
+
+    @Test
+    fun authorSortUsesAuthorsEvenWhenTitleOrderDiffers() {
+        val books =
+            listOf(
+                book("first", name = "A").copy(author = "Zulu"),
+                book("second", name = "Z").copy(author = "Alpha"),
+            )
+        assertEquals(listOf("second", "first"), sortBookshelfBooks(books, 5).map { it.bookUrl })
     }
 
     private fun urls(item: BookshelfGroupItem) = item.previewBooks.map { it.bookUrl }
@@ -116,19 +136,20 @@ class BookshelfGroupItemTest {
         persistedCover: String? = null,
         hasUserGroup: Boolean = group > 0,
         origin: String = "https://books.example.com",
-    ) = BookshelfBook(
-        bookUrl = id,
-        origin = origin,
-        name = name,
-        author = "author",
-        coverUrl = "https://books.example.com/$id.jpg",
-        customCoverUrl = customCover,
-        type = type,
-        group = group,
-        hasUserGroup = hasUserGroup,
-        latestChapterTime = latest,
-        durChapterTime = read,
-        persistedCoverUrl = persistedCover,
-        order = order,
-    )
+    ) =
+        BookshelfBook(
+            bookUrl = id,
+            origin = origin,
+            name = name,
+            author = "author",
+            coverUrl = "https://books.example.com/$id.jpg",
+            customCoverUrl = customCover,
+            type = type,
+            group = group,
+            hasUserGroup = hasUserGroup,
+            latestChapterTime = latest,
+            durChapterTime = read,
+            persistedCoverUrl = persistedCover,
+            order = order,
+        )
 }

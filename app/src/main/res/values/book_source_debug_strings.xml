@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="book_debug_busy">Debug channel is busy. Try again later.</string>
+    <string name="book_debug_interrupted">The previous debug run was interrupted. Submit the query to run again.</string>
+    <string name="book_debug_search_help">Debug search: enter a keyword, for example:</string>
+    <string name="book_debug_category_help">Debug explore: enter an explore URL, for example:</string>
+    <string name="book_debug_info_help">Debug book information: enter the details URL, for example:</string>
+    <string name="book_debug_toc_help">Debug table of contents: enter a URL prefixed with ++:</string>
+    <string name="book_debug_content_help">Debug chapter content: enter a URL prefixed with --:</string>
+    <string name="book_debug_choose_category">Choose an explore category</string>
+</resources>

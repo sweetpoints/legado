@@ -1,5 +1,8 @@
 package io.legado.app.ui.book.source.edit
 
+import androidx.annotation.Keep
+
+@Keep
 internal enum class JsSourceEditStage {
     READY,
     EDITOR_OPEN,

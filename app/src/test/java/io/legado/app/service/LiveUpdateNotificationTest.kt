@@ -6,12 +6,12 @@ import io.legado.app.utils.isPromotableNotificationChannel
 import io.legado.app.utils.progressPercent
 import io.legado.app.utils.shouldPromoteProgressNotification
 import io.legado.app.utils.supportsPromotedNotifications
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class LiveUpdateNotificationTest {
 
@@ -57,15 +57,14 @@ class LiveUpdateNotificationTest {
         val service = source("app/src/main/java/io/legado/app/service/DownloadService.kt")
         val helper = source("app/src/main/java/io/legado/app/utils/NotificationExtensions.kt")
         val manifest = source("app/src/main/AndroidManifest.xml")
-        val settings = source(
-            "app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt"
-        )
         val download = source("app/src/main/java/io/legado/app/model/Download.kt")
         val updateDialog = source("app/src/main/java/io/legado/app/ui/about/UpdateDialog.kt")
 
         assertTrue(manifest.contains("android.permission.POST_PROMOTED_NOTIFICATIONS"))
         assertTrue(service.contains("private var nextNotificationId = NotificationId.Download"))
-        assertTrue(service.contains("allocateNotificationId(url, fileName, preferredNotificationId)"))
+        assertTrue(
+            service.contains("allocateNotificationId(url, fileName, preferredNotificationId)")
+        )
         assertTrue(service.contains("notificationManager.activeNotifications"))
         assertTrue(service.contains("putExtra(\"notificationId\", downloadInfo.notificationId)"))
         assertTrue(service.contains("TERMINAL_NOTIFICATION_DURATION = 4_500L"))
@@ -76,7 +75,7 @@ class LiveUpdateNotificationTest {
         assertTrue(service.contains("stopSelfResult(startId)"))
         assertEquals(
             1,
-            Regex("""notificationManager\.notify\(""").findAll(service).count()
+            Regex("""notificationManager\.notify\(""").findAll(service).count(),
         )
         assertTrue(service.contains("eligible = !result"))
         assertTrue(service.contains("criticalText = criticalText"))
@@ -85,17 +84,23 @@ class LiveUpdateNotificationTest {
         assertTrue(service.contains("if (!result) setGroup(groupKey)"))
         assertTrue(service.contains("download_live_update_completed"))
         assertTrue(service.contains("download_live_canceled"))
-        assertTrue(service.contains("private fun updateResultNotification(downloadInfo: DownloadInfo)"))
+        assertTrue(
+            service.contains("private fun updateResultNotification(downloadInfo: DownloadInfo)")
+        )
         assertTrue(service.contains("result = true"))
         assertTrue(service.contains("EXTRA_RESULT_NOTIFICATION"))
         assertTrue(service.contains("EXTRA_DOWNLOAD_ID"))
-        assertTrue(service.contains("if (!intent.getBooleanExtra(EXTRA_RESULT_NOTIFICATION, false))"))
+        assertTrue(
+            service.contains("if (!intent.getBooleanExtra(EXTRA_RESULT_NOTIFICATION, false))")
+        )
         assertTrue(service.contains("downloads.values.forEach { downloadInfo ->"))
         assertTrue(service.contains("updateResultNotification(downloadInfo)"))
         assertTrue(service.contains("IntentAction.start"))
         assertTrue(service.contains("putExtra(\"isAppUpdate\", downloadInfo.isAppUpdate)"))
         assertTrue(service.contains("notificationManager.cancel(downloadInfo.notificationId)"))
-        assertTrue(service.contains("delay(TERMINAL_NOTIFICATION_DURATION + RESULT_NOTIFICATION_DELAY)"))
+        assertTrue(
+            service.contains("delay(TERMINAL_NOTIFICATION_DURATION + RESULT_NOTIFICATION_DELAY)")
+        )
         assertTrue(service.contains("TERMINAL_NOTIFICATION_DURATION + RESULT_NOTIFICATION_DELAY"))
         assertTrue(service.contains("preferredNotificationId"))
         assertTrue(service.contains("putExtra(\"notificationId\", downloadInfo.notificationId)"))
@@ -114,11 +119,15 @@ class LiveUpdateNotificationTest {
         assertTrue(secondProbe > colorizedFallback)
         assertFalse(helper.contains("SDK_INT_FULL"))
         assertTrue(download.contains("isAppUpdate: Boolean = false"))
-        assertTrue(settings.contains("canConfigurePromotedNotifications()"))
-        assertTrue(settings.contains("canPostPromotedNotifications() ||"))
-        assertTrue(settings.contains("promotedNotificationSettingsIntent().resolveActivity"))
-        assertTrue(settings.contains("intent.resolveActivity(requireContext().packageManager)"))
-        assertTrue(settings.contains("putPrefBoolean(PreferKey.liveUpdateNotifications, false)"))
+        val setting = io.legado.app.model.settings.OtherSwitch.LiveNotifications
+        assertFalse(io.legado.app.model.settings.OtherSettingsSnapshot().visible(setting))
+        assertTrue(
+            io.legado.app.model.settings
+                .OtherSettingsSnapshot(promotedNotificationsVisible = true)
+                .visible(setting)
+        )
+        // Android capability checks and the Compose row are covered by
+        // AppOtherSettingsStoreTest/OtherSettingsComposeTest.
         assertTrue(updateDialog.contains("isAppUpdate = true"))
     }
 
@@ -160,7 +169,9 @@ class LiveUpdateNotificationTest {
 
         assertTrue(service.contains("DownloadState.COMPLETED ||"))
         assertTrue(service.contains("DownloadState.FAILED"))
-        assertTrue(service.contains("DownloadState.COMPLETED -> getString(R.string.download_success)"))
+        assertTrue(
+            service.contains("DownloadState.COMPLETED -> getString(R.string.download_success)")
+        )
         assertTrue(service.contains("DownloadState.FAILED -> getString(R.string.download_error)"))
         assertTrue(service.contains("setAutoCancel(true)"))
         assertTrue(strings.contains("<string name=\"download_live_downloading\">%1\$d%%</string>"))

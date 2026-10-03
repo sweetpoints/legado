@@ -1,24 +1,25 @@
 package io.legado.app.ui.welcome
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class WelcomeActivityLifecycleContractTest {
 
     private val source by lazy {
-        projectFile(
-            "src/main/java/io/legado/app/ui/welcome/WelcomeActivity.kt"
-        ).readText().replace("\r\n", "\n")
+        projectFile("src/main/java/io/legado/app/ui/welcome/WelcomeActivity.kt")
+            .readText()
+            .replace("\r\n", "\n")
     }
 
     @Test
     fun `delayed main launch belongs to activity lifecycle`() {
-        val onActivityCreated = section(
-            "override fun onActivityCreated",
-            "override fun setupSystemBar",
-        )
+        val onActivityCreated =
+            section(
+                "override fun onComposeCreated",
+                "override fun setupSystemBar",
+            )
 
         assertTrue(source.contains("private var startMainJob: Job? = null"))
         assertTrue(onActivityCreated.contains("startMainJob = lifecycleScope.launch"))
@@ -38,17 +39,27 @@ class WelcomeActivityLifecycleContractTest {
 
     @Test
     fun `welcome content visibility does not depend on custom background`() {
-        val background = section("override fun upBackgroundImage()", "private fun startMainActivity")
-        val customBackground = background.indexOf("if (getPrefBoolean(PreferKey.customWelcome))")
-
-        assertTrue(customBackground > 0)
-        listOf(
-            "binding.tvLegado.visible(showText)",
-            "binding.ivBook.visible(showIcon)",
-            "binding.tvGzh.visible(showText)",
-        ).forEach { visibilityCall ->
-            assertTrue(background.indexOf(visibilityCall) in 0 until customBackground)
-        }
+        val state = section("private val welcomeUiState", "private var startMainJob")
+        assertTrue(
+            state.contains(
+                "showText = if (dark) AppConfig.welcomeShowTextDark else AppConfig.welcomeShowText"
+            )
+        )
+        assertTrue(
+            state.contains(
+                "showIcon = if (dark) AppConfig.welcomeShowIconDark else AppConfig.welcomeShowIcon"
+            )
+        )
+        assertTrue(state.contains("WelcomeScreen(welcomeUiState)"))
+        assertFalse(state.contains("PreferKey.customWelcome"))
+        val screen =
+            projectFile("src/main/java/io/legado/app/ui/welcome/WelcomeScreen.kt").readText()
+        assertTrue(screen.contains("if (state.showText)"))
+        assertTrue(screen.contains("if (state.showIcon)"))
+        val background =
+            section("override fun upBackgroundImage()", "private fun startMainActivity")
+        assertFalse(background.contains("welcomeUiState"))
+        assertTrue(background.contains("withContext(Dispatchers.IO)"))
     }
 
     private fun section(startMarker: String, endMarker: String): String {
@@ -59,8 +70,7 @@ class WelcomeActivityLifecycleContractTest {
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }

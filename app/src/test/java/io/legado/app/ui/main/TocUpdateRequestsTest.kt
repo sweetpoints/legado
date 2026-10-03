@@ -3,38 +3,40 @@ package io.legado.app.ui.main
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.updateTo
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class TocUpdateRequestsTest {
 
     @Test
     fun `book state merge preserves video and sync progress`() {
-        val current = Book(
-            type = BookType.audio or BookType.notShelf or BookType.updateError,
-            kind = "old kind",
-            coverUrl = "old cover",
-            intro = "old intro",
-            latestChapterTitle = "old latest",
-            totalChapterNum = 8,
-            durChapterIndex = 7,
-            durVolumeIndex = 2,
-            chapterInVolumeIndex = 3,
-            syncTime = 123L,
-        )
-        val refreshed = Book(
-            type = BookType.text,
-            kind = "new kind",
-            coverUrl = "new cover",
-            intro = "new intro",
-            latestChapterTitle = "new latest",
-            totalChapterNum = 12,
-        )
+        val current =
+            Book(
+                type = BookType.audio or BookType.notShelf or BookType.updateError,
+                kind = "old kind",
+                coverUrl = "old cover",
+                intro = "old intro",
+                latestChapterTitle = "old latest",
+                totalChapterNum = 8,
+                durChapterIndex = 7,
+                durVolumeIndex = 2,
+                chapterInVolumeIndex = 3,
+                syncTime = 123L,
+            )
+        val refreshed =
+            Book(
+                type = BookType.text,
+                kind = "new kind",
+                coverUrl = "new cover",
+                intro = "new intro",
+                latestChapterTitle = "new latest",
+                totalChapterNum = 12,
+            )
 
         current.updateTo(refreshed)
 
@@ -55,21 +57,24 @@ class TocUpdateRequestsTest {
 
     @Test
     fun `selected update filters local and update-disabled books`() {
-        val remote = Book(
-            bookUrl = "remote",
-            origin = "https://example.com",
-            type = BookType.text,
-        )
-        val local = Book(
-            bookUrl = "local",
-            type = BookType.text or BookType.local,
-        )
-        val disabled = Book(
-            bookUrl = "disabled",
-            origin = "https://example.org",
-            type = BookType.text,
-            canUpdate = false,
-        )
+        val remote =
+            Book(
+                bookUrl = "remote",
+                origin = "https://example.com",
+                type = BookType.text,
+            )
+        val local =
+            Book(
+                bookUrl = "local",
+                type = BookType.text or BookType.local,
+            )
+        val disabled =
+            Book(
+                bookUrl = "disabled",
+                origin = "https://example.org",
+                type = BookType.text,
+                canUpdate = false,
+            )
 
         assertEquals(listOf(remote), filterBooksForTocUpdate(listOf(remote, local, disabled)))
     }
@@ -186,19 +191,15 @@ class TocUpdateRequestsTest {
 
     @Test
     fun `management action is wired to the skip pre-download policy`() {
-        val manageActivity = source(
-            "app/src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt"
-        )
+        val manageActivity =
+            source("app/src/main/java/io/legado/app/ui/book/manage/BookshelfManageActivity.kt")
         val mainActivity = source("app/src/main/java/io/legado/app/ui/main/MainActivity.kt")
-        val menu = source("app/src/main/res/menu/bookshelf_menage_sel.xml")
 
-        assertTrue(menu.contains("android:id=\"@+id/menu_update_toc\""))
-        assertTrue(manageActivity.contains("R.id.menu_update_toc -> updateBooksToc()"))
-        assertTrue(manageActivity.contains("postEvent(EventBus.UP_BOOKS_TOC, books)"))
+        assertTrue(manageActivity.contains("postEvent(EventBus.UP_BOOKS_TOC, prepared.books)"))
         assertTrue(mainActivity.contains("onlyUpdateRead = false"))
         assertTrue(mainActivity.contains("policy = TocUpdatePolicy.SKIP_PRE_DOWNLOAD"))
         assertTrue(mainActivity.contains("refreshBookInfo = true"))
-        assertTrue(menu.contains("android:title=\"@string/update_book_info_toc\""))
+        // BookshelfManagementComposeTest exercises the actual typed TOC menu item.
         assertTrue(manageActivity.contains("R.string.update_book_info_toc_submitted"))
     }
 
@@ -208,11 +209,7 @@ class TocUpdateRequestsTest {
         val bookExtensions = source("app/src/main/java/io/legado/app/help/book/BookExtensions.kt")
 
         assertTrue(viewModel.contains("tocUpdateRequests.takeRefreshBookInfo(request)"))
-        assertTrue(
-            viewModel.contains(
-                "WebBook.getBookInfoAwait(source, book, canReName = false)"
-            )
-        )
+        assertTrue(viewModel.contains("WebBook.getBookInfoAwait(source, book, canReName = false)"))
         assertTrue(viewModel.contains("runPerJs = refreshBookInfo"))
         assertTrue(viewModel.contains("isFromBookInfo = refreshBookInfo"))
         assertTrue(viewModel.contains("appDb.runInTransaction"))

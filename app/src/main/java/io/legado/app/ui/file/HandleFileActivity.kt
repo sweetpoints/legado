@@ -3,33 +3,33 @@ package io.legado.app.ui.file
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.webkit.MimeTypeMap
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.core.net.toUri
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityTranslucenceBinding
-import io.legado.app.databinding.DialogEditTextBinding
+import io.legado.app.data.repository.AppHandleFileChoicesRepository
+import io.legado.app.data.repository.FileHandleFileChoicesSessionRepository
+import io.legado.app.data.repository.HandleFileInput
+import io.legado.app.data.repository.HandleFileIssue
+import io.legado.app.data.repository.HandleFileSeed
 import io.legado.app.help.IntentData
-import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.utils.SelectImageContract
-import io.legado.app.utils.checkWrite
-import io.legado.app.utils.externalFiles
-import io.legado.app.utils.getJsonArray
 import io.legado.app.utils.isContentScheme
-import io.legado.app.utils.isSameOrDescendantOf
-import io.legado.app.utils.launch
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.init.appCtx
 import java.io.File
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 internal fun takePersistableUriPermissions(
     requestedFlags: Int,
@@ -37,363 +37,251 @@ internal fun takePersistableUriPermissions(
 ): Int {
     var persistedFlags = 0
     listOf(
-        Intent.FLAG_GRANT_READ_URI_PERMISSION,
-        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-    ).forEach { flag ->
-        if (requestedFlags and flag != 0) {
-            try {
-                takePermission(flag)
-                persistedFlags = persistedFlags or flag
-            } catch (_: SecurityException) {
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+        )
+        .forEach { flag ->
+            if (requestedFlags and flag != 0) {
+                try {
+                    takePermission(flag)
+                    persistedFlags = persistedFlags or flag
+                } catch (_: SecurityException) {}
             }
         }
-    }
     return persistedFlags
 }
 
-class HandleFileActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, HandleFileViewModel>(),
-    FilePickerDialog.CallBack {
+class HandleFileActivity : BaseComposeActivity(transparent = true), FilePickerDialog.CallBack {
+    private val repository by lazy { AppHandleFileChoicesRepository(applicationContext) }
+    internal val choicesModel by
+        viewModels<HandleFileChoicesViewModel> {
+            viewModelFactory {
+                initializer {
+                    val saved =
+                        createSavedStateHandle().apply {
+                            // Intent defaults contain unrestricted labels/URLs. Only private UUID
+                            // ownership
+                            // and a small revision may enter the framework's saved-state Bundle.
+                            keys()
+                                .filterNot { it.startsWith("handleFile.") }
+                                .forEach { remove<Any?>(it) }
+                        }
+                    HandleFileChoicesViewModel(
+                        saved,
+                        repository,
+                        FileHandleFileChoicesSessionRepository(),
+                    )
+                }
+            }
+        }
+    private val directoryLaunchers = mutableMapOf<String, ActivityResultLauncher<Uri?>>()
+    private val documentLaunchers = mutableMapOf<String, ActivityResultLauncher<Array<String>>>()
+    private val imageLaunchers = mutableMapOf<String, ActivityResultLauncher<Int?>>()
+    private val permissionRequests = mutableSetOf<String>()
+    private var completing = false
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
-    override val viewModel by viewModels<HandleFileViewModel>()
-    private var mode = 0
-
-    private val selectDocTree =
-        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            uri?.let {
-                takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) {
+            val input =
+                HandleFileInput(
+                    mode = intent.getIntExtra("mode", 0),
+                    title = intent.getStringExtra("title"),
+                    extensions = intent.getStringArrayExtra("allowExtensions")?.toList().orEmpty(),
+                    fileName = intent.getStringExtra("fileName"),
+                    contentType = intent.getStringExtra("contentType"),
+                    value = intent.getStringExtra("value"),
                 )
-                onResult(Intent().setData(uri))
-            } ?: finish()
-        }
-
-    private val selectDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
-        it?.let {
-            takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            onResult(Intent().setData(it))
-        } ?: finish()
-    }
-
-    private val selectImage = registerForActivityResult(SelectImageContract()) {
-        it.uri?.let { uri ->
-            onResult(Intent().setData(uri))
-        } ?: finish()
-    }
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        mode = intent.getIntExtra("mode", 0)
-        viewModel.errorLiveData.observe(this) {
-            toastOnUi(it)
-            finish()
-        }
-        val allowExtensions = intent.getStringArrayExtra("allowExtensions")
-        val selectList: ArrayList<SelectItem<Int>> = when (mode) {
-            HandleFileContract.DIR_SYS -> getDirActions(true)
-            HandleFileContract.DIR -> getDirActions()
-            HandleFileContract.FILE -> getFileActions()
-            HandleFileContract.EXPORT -> arrayListOf(
-                SelectItem(getString(R.string.upload_url), 111)
-            ).apply {
-                addAll(getDirActions())
-            }
-
-            HandleFileContract.IMAGE -> getImageActions()
-            else -> arrayListOf()
-        }
-        intent.getJsonArray<SelectItem<Int>>("otherActions")?.let {
-            selectList.addAll(it)
-        }
-        val title = intent.getStringExtra("title") ?: let {
-            when (mode) {
-                HandleFileContract.EXPORT -> return@let getString(R.string.export)
-                HandleFileContract.DIR -> return@let getString(R.string.select_folder)
-                HandleFileContract.IMAGE -> return@let getString(R.string.select_image)
-                else -> return@let getString(R.string.select_file)
-            }
-        }
-        alert(title) {
-            items(selectList) { _, item, _ ->
-                when (item.value) {
-                    HandleFileContract.DIR -> kotlin.runCatching {
-                        selectDocTree.launch()
-                    }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
-                        checkPermissions {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.DIR
-                            )
-                        }
-                    }
-
-                    HandleFileContract.FILE -> kotlin.runCatching {
-                        selectDoc.launch(typesOfExtensions(allowExtensions))
-                    }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
-                        checkPermissions {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.FILE,
-                                allowExtensions = allowExtensions
-                            )
-                        }
-                    }
-
-                    HandleFileContract.IMAGE -> {
-                        selectImage.launch()
-                    }
-
-                    10 -> checkPermissions {
-                        @Suppress("DEPRECATION")
-                        lifecycleScope.launchWhenResumed {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.DIR
-                            )
-                        }
-                    }
-
-                    11 -> checkPermissions {
-                        @Suppress("DEPRECATION")
-                        lifecycleScope.launchWhenResumed {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.FILE,
-                                allowExtensions = allowExtensions
-                            )
-                        }
-                    }
-
-                    111 -> getFileData()?.let {
-                        viewModel.upload(it.first, it.second, it.third) { url ->
-                            val uri = url.toUri()
-                            setResult(RESULT_OK, Intent().setData(uri))
-                            finish()
-                        }
-                    }
-
-                    112 -> checkPermissions { // 手动输入目录路径
-                        showInputDirectoryDialog()
-                    }
-
-                    113 -> checkPermissions { // 手动输入图片链接
-                        showInputImgSrcDialog()
-                    }
-
-                    else -> {
-                        val path = item.title
-                        val uri = if (path.isContentScheme()) {
-                            path.toUri()
-                        } else {
-                            Uri.fromFile(File(path))
-                        }
-                        onResult(Intent().setData(uri))
-                    }
-                }
-            }
-            onCancelled {
-                finish()
-            }
-        }
-    }
-
-    private fun showInputDirectoryDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_directory_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
-                if (inputPath.isBlank()) {
-                    toastOnUi(getString(R.string.empty_directory_input))
-                    return@okButton
-                }
-                val file = File(inputPath)
-                if (file.exists() &&
-                    file.isDirectory &&
-                    isExternalStorage(file) &&
-                    file.checkWrite()
-                ) {
-                    onResult(Intent().setData(Uri.fromFile(file)))
-                } else {
-                    toastOnUi(getString(R.string.invalid_directory))
-                }
-            }
-            onDismiss {
-                finish()
-            }
-            cancelButton()
-        }
-    }
-
-    private fun showInputImgSrcDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_img_src_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
-                if (inputPath.isBlank()) {
-                    toastOnUi(getString(R.string.empty_img_src_input))
-                    return@okButton
-                }
-                if (inputPath.startsWith("http", true)) {
-                    onResult(Intent().setData(inputPath.toUri()))
-                    return@okButton
-                }
-                val file = File(inputPath)
-                if (file.exists() &&
-                    file.isFile &&
-                    isExternalStorage(file) &&
-                    file.canRead()
-                ) {
-                    onResult(Intent().setData(Uri.fromFile(file)))
-                } else {
-                    toastOnUi(getString(R.string.invalid_file_path))
-                }
-            }
-            onDismiss {
-                finish()
-            }
-            cancelButton()
-        }
-    }
-
-    private fun isExternalStorage(path: File): Boolean {
-        if (path.isSameOrDescendantOf(appCtx.externalFiles.parentFile!!)) {
-            return false
-        }
-        try {
-            if (Environment.isExternalStorageEmulated(path)) {
-                return true
-            }
-        } catch (_: IllegalArgumentException) {
-        }
-        try {
-            if (Environment.isExternalStorageRemovable(path)) {
-                return true
-            }
-        } catch (_: IllegalArgumentException) {
-        }
-        return false
-    }
-
-    private fun takePersistableUriPermission(uri: Uri, requestedFlags: Int) {
-        if (!uri.isContentScheme()) return
-        takePersistableUriPermissions(requestedFlags) { flag ->
-            contentResolver.takePersistableUriPermission(uri, flag)
-        }
-    }
-
-    private fun getFileData(): Triple<String, Any, String>? {
-        val fileName = intent.getStringExtra("fileName")
-        val file = intent.getStringExtra("fileKey")?.let {
-            IntentData.get<Any>(it)
-        }
-        val contentType = intent.getStringExtra("contentType")
-        if (fileName != null && file != null && contentType != null) {
-            return Triple(fileName, file, contentType)
-        }
-        return null
-    }
-
-    private fun getDirActions(onlySys: Boolean = false): ArrayList<SelectItem<Int>> {
-        return if (onlySys) {
-            arrayListOf(
-                SelectItem(getString(R.string.sys_folder_picker), HandleFileContract.DIR),
-                SelectItem(getString(R.string.manual_input), 112) // 添加手动输入选项
-            )
+            val payload = intent.getStringExtra("fileKey")?.let { IntentData.get<Any>(it) }
+            choicesModel.load(HandleFileSeed(input, payload, intent.getStringExtra("otherActions")))
         } else {
-            arrayListOf(
-                SelectItem(getString(R.string.sys_folder_picker), HandleFileContract.DIR),
-                SelectItem(getString(R.string.app_folder_picker), 10),
-                SelectItem(getString(R.string.manual_input), 112) // 添加手动输入选项
-            )
+            choicesModel.load()
+        }
+        lifecycleScope.launch {
+            choicesModel.state.collect { state ->
+                val pending = state.pending ?: return@collect
+                // Register even delivered launches: ActivityResultRegistry retains early results
+                // until asynchronous private checkpoint loading establishes their exact nonce.
+                if (state.loaded && state.phase == "Native")
+                    registerPicker(pending.nonce, pending.action)
+            }
         }
     }
 
-    private fun getFileActions(): ArrayList<SelectItem<Int>> {
-        return arrayListOf(
-            SelectItem(getString(R.string.sys_file_picker), HandleFileContract.FILE),
-            SelectItem(getString(R.string.app_file_picker), 11)
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        HandleFileChoicesRoute(
+            model = choicesModel,
+            canDeliver = ::canDeliver,
+            native = ::launchNative,
+            result = ::completeResult,
+            close = ::completeCancellation,
         )
     }
 
-    private fun getImageActions(): ArrayList<SelectItem<Int>> {
-        return arrayListOf(
-            SelectItem(getString(R.string.sys_image_picker), HandleFileContract.IMAGE)
-        ).apply {
-            addAll(getFileActions())
-            add(SelectItem(getString(R.string.manual_input_img_src), 113)) //手动输入图片链接
+    private fun canDeliver(): Boolean =
+        !isFinishing &&
+            !isDestroyed &&
+            lifecycle.currentState == Lifecycle.State.RESUMED &&
+            !supportFragmentManager.isStateSaved
+
+    private fun registerPicker(nonce: String, action: Int) {
+        when (action) {
+            0 ->
+                directoryLaunchers.getOrPut(nonce) {
+                    activityResultRegistry.register(
+                        "handle-directory-$nonce",
+                        ActivityResultContracts.OpenDocumentTree(),
+                    ) { uri ->
+                        takePermissions(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                        choicesModel.returned(nonce, uri?.toString())
+                    }
+                }
+            1 ->
+                documentLaunchers.getOrPut(nonce) {
+                    activityResultRegistry.register(
+                        "handle-document-$nonce",
+                        ActivityResultContracts.OpenDocument(),
+                    ) { uri ->
+                        takePermissions(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        choicesModel.returned(nonce, uri?.toString())
+                    }
+                }
+            4 ->
+                imageLaunchers.getOrPut(nonce) {
+                    activityResultRegistry.register("handle-image-$nonce", SelectImageContract()) {
+                        result ->
+                        choicesModel.returned(nonce, result.uri?.toString())
+                    }
+                }
         }
     }
 
-    private fun checkPermissions(success: (() -> Unit)? = null) {
+    private fun launchNative(request: HandleFileNativeRequest): Boolean {
+        val nonce = request.nonce
+        val action = request.action
+        registerPicker(nonce, action)
+        val current = choicesModel.state.value
+        if (!canDeliver() || current.phase != "Native" || current.pending?.nonce != nonce)
+            return false
+        when (action) {
+            0 -> launchSystemPicker(nonce) { directoryLaunchers.getValue(nonce).launch(null) }
+            1 ->
+                launchSystemPicker(nonce) {
+                    documentLaunchers.getValue(nonce).launch(request.mimeTypes.toTypedArray())
+                }
+            4 -> imageLaunchers.getValue(nonce).launch(null)
+            10,
+            11,
+            112,
+            113 -> requestPermissions(nonce, action)
+            else -> {
+                val path = request.customPath
+                val uri = if (path.isContentScheme()) Uri.parse(path) else Uri.fromFile(File(path))
+                choicesModel.returned(nonce, uri.toString())
+            }
+        }
+        return true
+    }
+
+    private fun launchSystemPicker(nonce: String, launch: () -> Unit) {
+        runCatching(launch).onFailure {
+            AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
+            choicesModel.fallback(nonce)
+        }
+    }
+
+    private fun requestPermissions(nonce: String, action: Int) {
+        if (!permissionRequests.add(nonce)) return
         PermissionsCompat.Builder()
             .addPermissions(*Permissions.Group.STORAGE)
             .rationale(R.string.tip_perm_request_storage)
             .onGranted {
-                success?.invoke()
+                lifecycleScope.launch {
+                    lifecycle.currentStateFlow.first { it == Lifecycle.State.RESUMED }
+                    val state = choicesModel.state.value
+                    if (!canDeliver() || state.phase != "Native" || state.pending?.nonce != nonce)
+                        return@launch
+                    choicesModel.state.first { !it.busy }
+                    if (action == 112 || action == 113) choicesModel.manualReady(nonce)
+                    else showAppPicker(nonce, action)
+                }
             }
-            .onDenied {
-                finish()
-            }
-            .onError {
-                finish()
-            }
+            .onDenied { choicesModel.returned(nonce, null) }
+            .onError { choicesModel.returned(nonce, null) }
             .request()
     }
 
-    private fun typesOfExtensions(allowExtensions: Array<String>?): Array<String> {
-        val types = hashSetOf<String>()
-        if (allowExtensions.isNullOrEmpty()) {
-            types.add("*/*")
-        } else {
-            allowExtensions.forEach {
-                when (it) {
-                    "*" -> types.add("*/*")
-                    "txt", "xml" -> types.add("text/*")
-                    "js" -> {
-                        types.add("application/javascript")
-                        types.add("text/javascript")
+    private fun showAppPicker(nonce: String, action: Int) {
+        if (supportFragmentManager.findFragmentByTag(FilePickerDialog.tag) != null) return
+        val state = choicesModel.state.value
+        if (!canDeliver() || state.phase != "Native" || state.pending?.nonce != nonce) return
+        FilePickerDialog()
+            .apply {
+                arguments =
+                    Bundle().apply {
+                        putInt(
+                            "mode",
+                            if (action == 10) HandleFileContract.DIR else HandleFileContract.FILE,
+                        )
+                        putStringArray("allowExtensions", state.input?.extensions?.toTypedArray())
+                        putString("handleFileNonce", nonce)
                     }
-                    else -> {
-                        val mime = MimeTypeMap.getSingleton()
-                            .getMimeTypeFromExtension(it)
-                            ?: "application/octet-stream"
-                        types.add(mime)
-                    }
-                }
             }
-        }
-        return types.toTypedArray()
+            .show(supportFragmentManager, FilePickerDialog.tag)
     }
 
     override fun onResult(data: Intent) {
-        val uri = data.data
-        uri ?: let {
-            finish()
-            return
+        val picker = supportFragmentManager.findFragmentByTag(FilePickerDialog.tag)
+        val nonce = picker?.arguments?.getString("handleFileNonce") ?: return
+        choicesModel.returned(nonce, data.data?.toString())
+    }
+
+    private fun takePermissions(uri: Uri?, flags: Int) {
+        if (uri == null || !uri.isContentScheme()) return
+        takePersistableUriPermissions(flags) {
+            contentResolver.takePersistableUriPermission(uri, it)
         }
-        if (mode == HandleFileContract.EXPORT) {
-            getFileData()?.let { fileData ->
-                viewModel.saveToLocal(uri, fileData.first, fileData.second) { savedUri ->
-                    setResult(RESULT_OK, Intent().setData(savedUri))
-                    finish()
+    }
+
+    private fun completeResult(uri: String, value: String?) {
+        completing = true
+        val result = Intent().setData(Uri.parse(uri))
+        if (choicesModel.state.value.input?.mode != HandleFileContract.EXPORT)
+            result.putExtra("value", value)
+        setResult(RESULT_OK, result)
+        super.finish()
+    }
+
+    private fun completeCancellation(issue: HandleFileIssue?) {
+        issue?.let {
+            val resource =
+                when (it) {
+                    HandleFileIssue.EmptyDirectory -> R.string.empty_directory_input
+                    HandleFileIssue.InvalidDirectory -> R.string.invalid_directory
+                    HandleFileIssue.EmptyImage -> R.string.empty_img_src_input
+                    HandleFileIssue.InvalidImage -> R.string.invalid_file_path
+                    HandleFileIssue.PayloadMissing -> R.string.error
                 }
-            }
-        } else {
-            data.putExtra("value", intent.getStringExtra("value"))
-            setResult(RESULT_OK, data)
-            finish()
+            toastOnUi(getString(resource))
         }
+        completing = true
+        super.finish()
+    }
+
+    override fun finish() {
+        // FilePickerDialog closes its Activity on dismissal. An accepted asynchronous export must
+        // finish only after its private result receipt; close() ignores that busy interval.
+        if (completing || isChangingConfigurations) super.finish() else choicesModel.close()
+    }
+
+    override fun onDestroy() {
+        directoryLaunchers.values.forEach { it.unregister() }
+        documentLaunchers.values.forEach { it.unregister() }
+        imageLaunchers.values.forEach { it.unregister() }
+        super.onDestroy()
     }
 }

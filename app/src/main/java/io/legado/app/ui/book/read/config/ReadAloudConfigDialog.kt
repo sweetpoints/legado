@@ -1,138 +1,63 @@
 package io.legado.app.ui.book.read.config
 
-import android.content.SharedPreferences
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import androidx.preference.ListPreference
-import androidx.preference.Preference
-import io.legado.app.R
-import io.legado.app.base.BasePrefDialogFragment
-import io.legado.app.constant.EventBus
-import io.legado.app.constant.PreferKey
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.data.preferences.PreferenceReadAloudSettingsRepository
 import io.legado.app.help.IntentHelp
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.prefs.SwitchPreference
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.model.ReadAloud
-import io.legado.app.service.BaseReadAloudService
-import io.legado.app.utils.postEvent
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 
-class ReadAloudConfigDialog : BasePrefDialogFragment() {
-    private val readAloudPreferTag = "readAloudPreferTag"
+class ReadAloudConfigDialog : BaseComposeDialogFragment(), SpeakEngineDialog.CallBack {
+    private val viewModel by
+        viewModels<ReadAloudSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    ReadAloudSettingsViewModel(
+                        PreferenceReadAloudSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.run {
-            setBackgroundDrawableResource(R.color.transparent)
-            setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
+        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        val view = LinearLayout(requireContext())
-        view.setBackgroundColor(requireContext().backgroundColor)
-        view.id = R.id.tag1
-        container?.addView(view)
-        return view
+    @Composable
+    override fun Content() {
+        ReadAloudSettingsRoute(
+            viewModel,
+            Color(requireContext().backgroundColor),
+            ::navigate,
+            Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp),
+        )
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        var preferenceFragment = childFragmentManager.findFragmentByTag(readAloudPreferTag)
-        if (preferenceFragment == null) preferenceFragment = ReadAloudPreferenceFragment()
-        childFragmentManager.beginTransaction()
-            .replace(view.id, preferenceFragment, readAloudPreferTag)
-            .commit()
+    private fun navigate(destination: ReadAloudSettingsDestination): Boolean {
+        if (!isAdded || childFragmentManager.isStateSaved) return false
+        when (destination) {
+            ReadAloudSettingsDestination.Controls -> showDialogFragment(ReadAloudControlsDialog())
+            ReadAloudSettingsDestination.Engine -> showDialogFragment(SpeakEngineDialog())
+            ReadAloudSettingsDestination.SystemTts -> IntentHelp.openTTSSetting()
+        }
+        return true
     }
 
-    class ReadAloudPreferenceFragment : PreferenceFragment(),
-        SpeakEngineDialog.CallBack,
-        SharedPreferences.OnSharedPreferenceChangeListener {
-
-        private val speakEngineSummary: String
-            get() = ReadAloud.getEngineName(requireContext())
-
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            addPreferencesFromResource(R.xml.pref_config_aloud)
-            upSpeakEngineSummary()
-            findPreference<SwitchPreference>(PreferKey.pauseReadAloudWhilePhoneCalls)?.let {
-                it.isEnabled = AppConfig.ignoreAudioFocus
-            }
-        }
-
-        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-            super.onViewCreated(view, savedInstanceState)
-            listView.setEdgeEffectColor(primaryColor)
-        }
-
-        override fun onResume() {
-            super.onResume()
-            preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        }
-
-        override fun onPause() {
-            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
-            super.onPause()
-        }
-
-        override fun onPreferenceTreeClick(preference: Preference): Boolean {
-            when (preference.key) {
-                PreferKey.ttsEngine -> showDialogFragment(SpeakEngineDialog())
-                "sysTtsConfig" -> IntentHelp.openTTSSetting()
-                "readAloudControls" -> showDialogFragment(ReadAloudControlsDialog())
-            }
-            return super.onPreferenceTreeClick(preference)
-        }
-
-        override fun onSharedPreferenceChanged(
-            sharedPreferences: SharedPreferences?,
-            key: String?
-        ) {
-            when (key) {
-                PreferKey.readAloudByPage, PreferKey.streamReadAloudAudio -> {
-                    if (BaseReadAloudService.isRun) {
-                        postEvent(EventBus.MEDIA_BUTTON, false)
-                    }
-                }
-
-                PreferKey.ignoreAudioFocus -> {
-                    findPreference<SwitchPreference>(PreferKey.pauseReadAloudWhilePhoneCalls)?.let {
-                        it.isEnabled = AppConfig.ignoreAudioFocus
-                    }
-                }
-            }
-        }
-
-        private fun upPreferenceSummary(preference: Preference?, value: String) {
-            when (preference) {
-                is ListPreference -> {
-                    val index = preference.findIndexOfValue(value)
-                    preference.summary = if (index >= 0) preference.entries[index] else null
-                }
-
-                else -> {
-                    preference?.summary = value
-                }
-            }
-        }
-
-        override fun upSpeakEngineSummary() {
-            upPreferenceSummary(
-                findPreference(PreferKey.ttsEngine),
-                speakEngineSummary
-            )
-        }
+    override fun upSpeakEngineSummary() {
+        viewModel.refreshEngine()
     }
 }

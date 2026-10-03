@@ -1,55 +1,61 @@
 package io.legado.app.ui.menu
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class SelectActionBarPopupActionMigrationTest {
 
     @Test
-    fun `select action bar uses the themed popup and preserves listener behavior`() {
-        val source = readProjectFile(SELECT_ACTION_BAR)
-
-        listOf(
-            "private var selMenu: Menu? = null",
-            "private var menuItemClickListener: PopupMenu.OnMenuItemClickListener? = null",
-            "MenuBuilder(context)",
-            "SupportMenuInflater(context).inflate(resId, this)",
-            "private fun showMoreMenu()",
-            "setVertical(true)",
-            "setDangerValues(",
-            "setDisabledValues(",
-            "if (item.isVisible)",
-            "it.isEnabled && it.itemId.toString() == action",
-            "menuItemClickListener?.onMenuItemClick(menuItem)",
-            "R.id.menu_del_selection",
-            "R.id.menu_del"
-        ).forEach { expected ->
-            assertTrue("SelectActionBar should contain $expected", source.contains(expected))
+    fun `retired select action bar has no layout or production consumer`() {
+        assertFalse(resolveFile(SELECT_ACTION_BAR).exists())
+        assertFalse(resolveFile("src/main/res/layout/view_select_action_bar.xml").exists())
+        val productionSources =
+            File("src/main/java").takeIf(File::isDirectory) ?: File("app/src/main/java")
+        productionSources.walkTopDown().filter(File::isFile).forEach { file ->
+            assertFalse(
+                "${file.path} still references SelectActionBar",
+                file.readText().contains("SelectActionBar"),
+            )
         }
 
-        assertFalse(source.contains("selMenu?.show()"))
-        assertFalse(source.contains("PopupMenu(context"))
-        assertFalse(source.contains("selMenu?.setOnMenuItemClickListener"))
-        assertFalse(source.contains("import android.view.MenuInflater"))
+        val composePopup = readProjectFile(POPUP_ACTION)
+        assertTrue(composePopup.contains("PopupActionContent"))
+        val popupComposeTest =
+            sequenceOf(
+                    File("src/androidTest/java/io/legado/app/ui/widget/PopupActionComposeTest.kt"),
+                    File(
+                        "app/src/androidTest/java/io/legado/app/ui/widget/PopupActionComposeTest.kt"
+                    ),
+                )
+                .first(File::isFile)
+                .readText()
+        assertTrue(
+            popupComposeTest.contains(
+                "verticalRowsExposeCheckStateAndRejectBothKindsOfDisabledAction"
+            )
+        )
     }
 
     @Test
     fun `themed popup preserves disabled menu items`() {
-        val source = readProjectFile(POPUP_ACTION)
+        val source =
+            readProjectFile(POPUP_ACTION) +
+                readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionContent.kt")
 
         listOf(
-            "private var disabledValues: Set<String> = emptySet()",
-            "fun setDisabledValues(values: Set<String>)",
-            "item.enabled && item.value !in disabledValues",
-            "context.secondaryDisabledTextColor"
-        ).forEach { expected ->
-            assertTrue("PopupAction should contain $expected", source.contains(expected))
-        }
+                "val disabledValues: Set<String> = emptySet()",
+                "fun setDisabledValues(values: Set<String>)",
+                "item.enabled && item.value !in disabledValues",
+                "context.secondaryDisabledTextColor",
+            )
+            .forEach { expected ->
+                assertTrue("PopupAction should contain $expected", source.contains(expected))
+            }
     }
 
     @Test
@@ -57,6 +63,27 @@ class SelectActionBarPopupActionMigrationTest {
         expectedMenuIds.forEach { (path, expected) ->
             assertEquals(path, expected, readMenuItemIds(path))
         }
+    }
+
+    @Test
+    fun `Compose book source selection menu preserves its previous item order`() {
+        assertEquals(
+            listOf(
+                "ENABLE",
+                "DISABLE",
+                "ADD_GROUP",
+                "REMOVE_GROUP",
+                "ENABLE_EXPLORE",
+                "DISABLE_EXPLORE",
+                "TOP",
+                "BOTTOM",
+            ),
+            io.legado.app.ui.book.source.manage.sourceManagerBulkMutations.map { it.name },
+        )
+        assertEquals(
+            listOf("export", "share", "check", "interval"),
+            io.legado.app.ui.book.source.manage.sourceManagerBulkActions,
+        )
     }
 
     @Test
@@ -76,15 +103,17 @@ class SelectActionBarPopupActionMigrationTest {
     }
 
     private fun readMenuItemIds(path: String): List<String> {
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }
-        val document = factory
-            .newDocumentBuilder()
-            .parse(resolveFile("src/main/res/menu/$path"))
+        val factory =
+            DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }
+        val document = factory.newDocumentBuilder().parse(resolveFile("src/main/res/menu/$path"))
         val items = document.getElementsByTagName("item")
         return (0 until items.length).map { index ->
-            (items.item(index) as Element).getAttributeNS(ANDROID_NS, "id")
+            val item = items.item(index) as Element
+            item.getAttributeNS(ANDROID_NS, "id").ifBlank {
+                if (item.getAttribute("type") == "id") "@+id/" + item.getAttribute("name") else ""
+            }
         }
     }
 
@@ -95,9 +124,7 @@ class SelectActionBarPopupActionMigrationTest {
         resolveFile("src/main/assets/$path").takeIf(File::isFile)?.readText().orEmpty()
 
     private fun resolveFile(path: String): File =
-        sequenceOf(File(path), File("app/$path"))
-            .firstOrNull(File::isFile)
-            ?: File("app/$path")
+        sequenceOf(File(path), File("app/$path")).firstOrNull(File::isFile) ?: File("app/$path")
 
     private companion object {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
@@ -105,70 +132,15 @@ class SelectActionBarPopupActionMigrationTest {
         const val POPUP_ACTION = "src/main/java/io/legado/app/ui/widget/PopupAction.kt"
         const val VIEW_EXTENSIONS = "src/main/java/io/legado/app/utils/ViewExtensions.kt"
 
-        val expectedMenuIds = mapOf(
-            "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
-            "bookshelf_menage_sel.xml" to listOf(
-                "@+id/menu_del_selection",
-                "@+id/menu_update_enable",
-                "@+id/menu_update_disable",
-                "@+id/menu_add_to_group",
-                "@+id/menu_remove_to_group",
-                "@+id/menu_change_source",
-                "@+id/menu_clear_cache",
-                "@+id/menu_persist_covers",
-                "@+id/menu_restore_network_covers",
-                "@+id/menu_restore_source_covers",
-                "@+id/menu_check_selected_interval",
-                "@+id/menu_update_toc",
-                "@+id/menu_create_book_update_tasks"
-            ),
-            "book_source_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_enable_explore",
-                "@+id/menu_disable_explore",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source",
-                "@+id/menu_check_source",
-                "@+id/menu_check_selected_interval"
-            ),
-            "txt_toc_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            ),
-            "dict_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            ),
-            "replace_rule_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source"
-            ),
-            "rss_source_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source",
-                "@+id/menu_check_selected_interval"
+        val expectedMenuIds =
+            mapOf(
+                "../values/local_import_compat_ids.xml" to
+                    listOf("@+id/titleBar", "@+id/menu_del_selection")
+                // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
+                // Compose book source order is checked by the immutable action lists below.
+
+                // Replace selection order is exercised in ReplaceManagementScreenTest.
+
             )
-        )
     }
 }

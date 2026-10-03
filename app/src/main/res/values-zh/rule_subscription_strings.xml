@@ -1,0 +1,7 @@
+<resources>
+    <string name="rule_subscription_move_up">上移规则订阅</string>
+    <string name="rule_subscription_move_down">下移规则订阅</string>
+    <string name="rule_subscription_missing">该规则订阅已删除，请取消后重新打开编辑。</string>
+    <string name="rule_subscription_conflict">该规则订阅已被其他页面修改，请取消后重新打开编辑。</string>
+    <string name="rule_subscription_save_pending">正在确认保存结果，请重试完成保存。</string>
+</resources>

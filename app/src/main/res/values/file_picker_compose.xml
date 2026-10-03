@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources><string name="file_picker_folder_name">Folder name</string>
+    <string name="file_picker_file_required">Please select a file</string>
+    <string name="file_picker_folder_required">Folder name cannot be empty</string>
+    <string name="file_picker_directory_missing">Directory does not exist</string>
+    <string name="file_picker_directory_unreadable">Directory cannot be read</string>
+    <string name="file_picker_outside_root">Path is outside the selected folder</string>
+    <string name="file_picker_invalid_name">Invalid folder name</string>
+    <string name="file_picker_create_failed">Folder could not be created</string>
+    <string name="file_picker_selection_invalid">Selected file no longer exists or is not allowed</string>
+</resources>

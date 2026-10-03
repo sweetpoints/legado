@@ -1,8 +1,8 @@
 package io.legado.app.data
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReadRecordDeviceScopeTest {
 
@@ -14,17 +14,25 @@ class ReadRecordDeviceScopeTest {
                 "select readTime from readRecord where deviceId = :deviceId and bookName = :bookName"
             )
         )
-        assertTrue(dao.contains("fun getReadTime(deviceId: String, bookName: String, author: String)"))
+        assertTrue(
+            dao.contains("fun getReadTime(deviceId: String, bookName: String, author: String)")
+        )
         listOf(
-            "src/main/java/io/legado/app/model/ReadBook.kt" to
-                "getRecord(AppConst.androidId, book.name, book.author)",
-            "src/main/java/io/legado/app/model/ReadManga.kt" to
-                "getRecord(AppConst.androidId, book.name, book.author)",
-            "src/main/java/io/legado/app/model/AudioPlay.kt" to
-                "ReadRecord(\n            deviceId = AppConst.androidId,",
-        ).forEach { (path, call) ->
-            assertTrue(path, projectFile(path).contains(call))
-        }
+                "src/main/java/io/legado/app/model/ReadBook.kt" to
+                    "getRecord(AppConst.androidId, book.name, book.author)",
+                "src/main/java/io/legado/app/model/ReadManga.kt" to
+                    "getRecord(AppConst.androidId, book.name, book.author)",
+                "src/main/java/io/legado/app/model/AudioPlay.kt" to
+                    "ReadRecord(\n            deviceId = AppConst.androidId,",
+            )
+            .forEach { (path, call) ->
+                assertTrue(
+                    path,
+                    projectFile(path)
+                        .filterNot(Char::isWhitespace)
+                        .contains(call.filterNot(Char::isWhitespace)),
+                )
+            }
     }
 
     @Test
@@ -34,20 +42,24 @@ class ReadRecordDeviceScopeTest {
         assertTrue(restore.contains("readRecord.copy(deviceId = androidId)"))
         assertTrue(restore.contains("restoredRecord.deviceId == androidId"))
         assertTrue(
-            restore.contains(
-                "getRecord(restoredRecord.deviceId, restoredRecord.bookName, restoredRecord.author)"
-            )
+            Regex(
+                    "getRecord\\s*\\(\\s*restoredRecord\\.deviceId\\s*,\\s*" +
+                        "restoredRecord\\.bookName\\s*,\\s*restoredRecord\\.author\\s*,?\\s*\\)"
+                )
+                .containsMatchIn(restore)
         )
     }
 
     @Test
     fun `manga resume excludes time spent in background`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt"
-        )
-        assertTrue(methodBody(activity, "onPause").contains("ReadManga.upReadTime()"))
+        val activity = projectFile("src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt")
+        assertTrue(methodBody(activity, "onPause").contains("viewModel.paused()"))
+        assertTrue(methodBody(activity, "onResume").contains("viewModel.resumed()"))
+        val model =
+            projectFile("src/main/java/io/legado/app/ui/book/manga/MangaReaderComposeViewModel.kt")
+        assertTrue(methodBody(model, "paused").contains("ReadManga.upReadTime()"))
         assertTrue(
-            methodBody(activity, "onResume")
+            methodBody(model, "resumed")
                 .contains("ReadManga.readStartTime = System.currentTimeMillis()")
         )
 
@@ -58,10 +70,13 @@ class ReadRecordDeviceScopeTest {
         assertTrue(upReadTime.contains("readStartTime = now"))
         assertTrue(upReadTime.contains("readRecord.copy()"))
         assertTrue(upReadTime.contains("record.saveWithCover(snapshotBook, elapsed)"))
-        assertTrue(upReadTime.indexOf("val elapsed = (now - readStartTime).coerceAtLeast(0)") <
-            upReadTime.indexOf("executor.execute"))
-        assertTrue(upReadTime.indexOf("readStartTime = now") <
-            upReadTime.indexOf("executor.execute"))
+        assertTrue(
+            upReadTime.indexOf("val elapsed = (now - readStartTime).coerceAtLeast(0)") <
+                upReadTime.indexOf("executor.execute")
+        )
+        assertTrue(
+            upReadTime.indexOf("readStartTime = now") < upReadTime.indexOf("executor.execute")
+        )
     }
 
     private fun methodBody(source: String, name: String): String {

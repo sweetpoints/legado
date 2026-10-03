@@ -4,11 +4,11 @@ import io.legado.app.ui.code.scriptSourceIndex
 import io.legado.app.ui.code.shouldShowDebugSourceAction
 import io.legado.app.ui.code.shouldShowJavaScriptSyntaxAction
 import io.legado.app.ui.code.shouldShowLoginSourceAction
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class JsSourceDirectDebugTest {
 
@@ -30,9 +30,7 @@ class JsSourceDirectDebugTest {
 
     @Test
     fun `syntax action requires the explicit JavaScript editor mode`() {
-        assertFalse(
-            shouldShowJavaScriptSyntaxAction(useSafeEditor = false, requested = false)
-        )
+        assertFalse(shouldShowJavaScriptSyntaxAction(useSafeEditor = false, requested = false))
         assertFalse(shouldShowJavaScriptSyntaxAction(useSafeEditor = true, requested = true))
         assertTrue(shouldShowJavaScriptSyntaxAction(useSafeEditor = false, requested = true))
         assertEquals(7, scriptSourceIndex("ok\r\nbad(", lineNumber = 2, columnNumber = 4))
@@ -121,52 +119,45 @@ class JsSourceDirectDebugTest {
 
     @Test
     fun `source editor wires hidden optional action and persisted flow state`() {
-        val codeEditorMenu = projectFile("app/src/main/res/menu/code_edit_activity.xml").readText()
-        val sourceEditor = projectFile(
-            "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
-        ).readText()
+        val codeEditorMenu =
+            projectFile("app/src/main/java/io/legado/app/ui/code/CodeEditorScreen.kt").readText()
+        val sourceEditor =
+            projectFile(
+                    "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
+                )
+                .readText()
         val debugLauncher = sourceEditor.indexOf("private val debugResult")
         val editorLauncher = sourceEditor.indexOf("private val editorResult")
         val loginLauncher = sourceEditor.indexOf("private val loginResult")
-        val debugMenuItem = codeEditorMenu
-            .substringAfter("android:id=\"@+id/menu_debug_source\"")
-            .substringBefore("/>")
-        val loginMenuItem = codeEditorMenu
-            .substringAfter("android:id=\"@+id/menu_login\"")
-            .substringBefore("/>")
-        val syntaxMenuItem = codeEditorMenu
-            .substringAfter("android:id=\"@+id/menu_check_javascript_syntax\"")
-            .substringBefore("/>")
-
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_debug_source\""))
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_login\""))
-        assertTrue(codeEditorMenu.contains("android:id=\"@+id/menu_check_javascript_syntax\""))
-        assertTrue(debugMenuItem.contains("android:visible=\"false\""))
-        assertTrue(loginMenuItem.contains("android:visible=\"false\""))
-        assertTrue(syntaxMenuItem.contains("android:visible=\"false\""))
+        assertTrue(codeEditorMenu.contains("session.showDebugSource"))
+        assertTrue(codeEditorMenu.contains("session.showLoginSource"))
+        assertTrue(codeEditorMenu.contains("session?.checkJavaScriptSyntax == true"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.DEBUG"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.LOGIN"))
+        assertTrue(codeEditorMenu.contains("CodeEditorAction.SYNTAX"))
         assertTrue(debugLauncher >= 0 && debugLauncher < editorLauncher)
         assertTrue(editorLauncher < loginLauncher)
-        assertTrue(sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_SHOW_DEBUG_SOURCE, true)"))
         assertTrue(
-            sourceEditor.contains(
-                "putExtra(CodeEditActivity.EXTRA_CHECK_JAVASCRIPT_SYNTAX, true)"
-            )
+            sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_SHOW_DEBUG_SOURCE, true)")
         )
-        assertTrue(sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_SHOW_LOGIN_SOURCE, true)"))
+        assertTrue(
+            sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_CHECK_JAVASCRIPT_SYNTAX, true)")
+        )
+        assertTrue(
+            sourceEditor.contains("putExtra(CodeEditActivity.EXTRA_SHOW_LOGIN_SOURCE, true)")
+        )
         assertTrue(sourceEditor.contains("StartActivityContract(SourceLoginActivity::class.java)"))
-        assertTrue(sourceEditor.contains("if (source.hasLogin())"))
-        assertTrue(sourceEditor.contains("toastOnUi(R.string.source_no_login)"))
         assertTrue(sourceEditor.contains("putExtra(\"type\", \"bookSource\")"))
-        assertTrue(sourceEditor.contains("putExtra(\"key\", sourceUrl)"))
-        assertTrue(sourceEditor.contains("outState.putString(STATE_STAGE, stage.name)"))
-        assertTrue(sourceEditor.contains("catch (error: CancellationException)"))
-        assertTrue(sourceEditor.contains("withStateAtLeast(Lifecycle.State.RESUMED)"))
+        assertTrue(sourceEditor.contains("putExtra(\"key\", state.sourceUrl)"))
+        assertFalse(sourceEditor.contains("outState.putString"))
+        assertFalse(sourceEditor.contains("STATE_PENDING_TEXT"))
     }
 
     private fun projectFile(path: String): File {
         val userDirectory = File(requireNotNull(System.getProperty("user.dir"))).absoluteFile
-        val repositoryRoot = generateSequence(userDirectory) { it.parentFile }
-            .firstOrNull { File(it, "app/src/main").isDirectory }
+        val repositoryRoot =
+            generateSequence(userDirectory) { it.parentFile }
+                .firstOrNull { File(it, "app/src/main").isDirectory }
         requireNotNull(repositoryRoot) { "Repository root not found from $userDirectory" }
         return File(repositoryRoot, path).also {
             require(it.isFile) { "Project file not found: $it" }

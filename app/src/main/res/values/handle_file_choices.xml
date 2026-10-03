@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="handle_file_interrupted_action">The previous operation was interrupted. Retry when ready.</string>
+</resources>

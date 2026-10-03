@@ -3,106 +3,86 @@ package io.legado.app.ui.book.toc
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.base.VMBaseFragment
-import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.FragmentBookmarkBinding
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.data.repository.RoomTocBookmarksRepository
+import io.legado.app.data.repository.TocBookmarksParameters
 import io.legado.app.ui.book.bookmark.BookmarkDialog
-import io.legado.app.ui.widget.recycler.UpLinearLayoutManager
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
+import io.legado.app.ui.theme.LegadoComposeTheme
 
-
-class BookmarkFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_bookmark),
-    BookmarkAdapter.Callback,
-    TocViewModel.BookmarkCallBack {
+/**
+ * Search and book ownership stay in the existing TOC host; only this tab owns its Room collector.
+ */
+class BookmarkFragment : VMBaseFragment<TocViewModel>(0), TocViewModel.BookmarkCallBack {
     override val viewModel by activityViewModels<TocViewModel>()
-    private val binding by viewBinding(FragmentBookmarkBinding::bind)
-    private var layoutManager: UpLinearLayoutManager? = null
-    private var adapter: BookmarkAdapter? = null
-    private var bookmarkJob: Job? = null
-    private var durChapterIndex = 0
+    internal val model by
+        viewModels<TocBookmarksViewModel> {
+            viewModelFactory {
+                initializer {
+                    TocBookmarksViewModel(RoomTocBookmarksRepository(), createSavedStateHandle())
+                }
+            }
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    TocBookmarksRoute(
+                        model,
+                        { isAdded && !parentFragmentManager.isStateSaved },
+                        { row, edit, position ->
+                            if (edit) onLongClick(row, position) else onClick(row)
+                        },
+                    )
+                }
+            }
+        }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         viewModel.bookMarkCallBack = this
-        initRecyclerView()
-        viewModel.bookData.observe(viewLifecycleOwner) {
-            durChapterIndex = it.durChapterIndex
-            upBookmark(viewModel.searchKey)
-        }
-    }
-
-    override fun onDestroyView() {
-        bookmarkJob?.cancel()
-        bookmarkJob = null
-        binding.recyclerView.adapter = null
-        adapter = null
-        layoutManager = null
-        viewModel.bookMarkCallBack = clearCallbackIfOwned(
-            viewModel.bookMarkCallBack,
-            this
-        )
-        super.onDestroyView()
-    }
-
-    private fun initRecyclerView() {
-        val layoutManager = UpLinearLayoutManager(requireContext())
-        val adapter = BookmarkAdapter(requireContext(), this)
-        this.layoutManager = layoutManager
-        this.adapter = adapter
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.layoutManager = layoutManager
-        binding.recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
+        viewModel.bookData.observe(viewLifecycleOwner) { upBookmark(viewModel.searchKey) }
     }
 
     override fun upBookmark(searchKey: String?) {
-        bookmarkJob?.cancel()
         val book = viewModel.bookData.value ?: return
-        bookmarkJob = viewLifecycleOwner.lifecycleScope.launch {
-            when {
-                searchKey.isNullOrBlank() -> appDb.bookmarkDao.flowByBook(book.name, book.author)
-                else -> appDb.bookmarkDao.flowSearch(book.name, book.author, searchKey)
-            }.catch {
-                AppLog.put("目录界面获取书签数据失败\n${it.localizedMessage}", it)
-            }.flowOn(IO).collect { bookmarks ->
-                adapter?.setItems(bookmarks)
-                val scrollPosition = bookmarks
-                    .indexOfLast { it.chapterIndex < durChapterIndex }
-                    .coerceAtLeast(0)
-                layoutManager?.scrollToPositionWithOffset(scrollPosition, 0)
-            }
-        }
+        model.bind(TocBookmarksParameters(book.name, book.author, searchKey, book.durChapterIndex))
     }
 
+    override fun onDestroyView() {
+        model.unbind()
+        viewModel.bookMarkCallBack = clearCallbackIfOwned(viewModel.bookMarkCallBack, this)
+        super.onDestroyView()
+    }
 
-    override fun onClick(bookmark: Bookmark) {
+    fun onClick(bookmark: Bookmark) {
         activity?.run {
-            setResult(Activity.RESULT_OK, Intent().apply {
-                putExtra("index", bookmark.chapterIndex)
-                putExtra("chapterPos", bookmark.chapterPos)
-            })
+            setResult(
+                Activity.RESULT_OK,
+                Intent()
+                    .putExtra("index", bookmark.chapterIndex)
+                    .putExtra("chapterPos", bookmark.chapterPos),
+            )
             finish()
         }
     }
 
-    override fun onLongClick(bookmark: Bookmark, pos: Int) {
-        showDialogFragment(BookmarkDialog(bookmark, pos))
+    fun onLongClick(bookmark: Bookmark, pos: Int) {
+        BookmarkDialog(bookmark, pos).show(parentFragmentManager, "toc-bookmark-editor")
     }
-
 }

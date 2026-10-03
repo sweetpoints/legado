@@ -1,28 +1,16 @@
 package io.legado.app.ui.config
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import io.legado.app.model.theme.ThemeSettingsSnapshot
+import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 class ThemeFontScalePickerTest {
-
     @Test
-    fun `font scale picker keeps the effective configured or system value`() {
-        val source = readProjectFile("src/main/java/io/legado/app/ui/config/ThemeConfigFragment.kt")
-            .substringAfter("PreferKey.fontScale -> NumberPickerDialog")
-            .substringBefore("PreferKey.bgImage ->")
-
-        assertTrue(source.contains("AppContextWrapper.getFontScale(requireContext()) * 10"))
-        assertTrue(source.contains(".roundToInt()"))
-        assertTrue(source.contains(".coerceIn(8, 16)"))
-        assertFalse(source.contains(".setValue(10)"))
-    }
-
-    private fun readProjectFile(pathInApp: String): String {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?.readText()
-            .orEmpty()
+    fun fontScalePickerKeepsConfiguredOrEffectiveSystemValueBeforeClamping() {
+        assertEquals(13, ThemeSettingsSnapshot(fontScale = 13, systemFontScale = 1.1f).fontPicker)
+        assertEquals(12, ThemeSettingsSnapshot(fontScale = 0, systemFontScale = 1.16f).fontPicker)
+        assertEquals(9, ThemeSettingsSnapshot(fontScale = 99, systemFontScale = .91f).fontPicker)
+        assertEquals(8, ThemeSettingsSnapshot(fontScale = -1, systemFontScale = .7f).fontPicker)
+        assertEquals(16, ThemeSettingsSnapshot(fontScale = 0, systemFontScale = 2f).fontPicker)
     }
 }

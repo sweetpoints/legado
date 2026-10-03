@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="book_search_scope_empty">No search results</string>
+    <string name="book_search_disable_precision">No results in %1$s. Turn off precise search?</string>
+    <string name="book_search_use_all_sources">No results in %1$s. Search all groups?</string>
+</resources>

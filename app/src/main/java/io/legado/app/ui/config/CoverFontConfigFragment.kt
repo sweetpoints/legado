@@ -1,113 +1,96 @@
 package io.legado.app.ui.config
 
-import android.content.SharedPreferences
 import android.os.Bundle
-import android.graphics.Typeface
+import android.view.LayoutInflater
 import android.view.View
-import androidx.lifecycle.lifecycleScope
-import androidx.preference.Preference
+import android.view.ViewGroup
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.constant.EventBus
-import io.legado.app.constant.PreferKey
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.model.BookCover
+import io.legado.app.constant.AppLog
+import io.legado.app.data.preferences.*
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.ui.font.FontSelectDialog
-import io.legado.app.ui.font.installFontFile
-import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.getPrefInt
-import io.legado.app.utils.getPrefString
-import io.legado.app.utils.putPrefString
-import io.legado.app.utils.FileDoc
-import io.legado.app.utils.externalFiles
-import io.legado.app.utils.openInputStream
-import io.legado.app.utils.showDialogFragment
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.postEvent
-import io.legado.app.utils.putPrefInt
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 
-class CoverFontConfigFragment : PreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener,
-    FontSelectDialog.CallBack {
-    private val sizes = listOf(PreferKey.coverTitleLargeSize, PreferKey.coverTitleSmallSize,
-        PreferKey.coverAuthorLargeSize, PreferKey.coverAuthorSmallSize)
-    private val styleKeys = sizes + listOf(PreferKey.coverHorizontal, PreferKey.coverTitleAdaptive,
-        PreferKey.coverKeepPunctuation, PreferKey.coverFont, PreferKey.coverCustomFontSize)
-    private var fontJob: Job? = null
+class CoverFontConfigFragment : Fragment(), ConfigSearchPage, FontSelectDialog.CallBack {
+    private val model by
+        viewModels<CoverFontSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    val application = requireContext().applicationContext
+                    CoverFontSettingsViewModel(
+                        DefaultCoverFontSettingsRepository(AppCoverFontSettingsStore(application)),
+                        FileCoverFontDraftRepository(application),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    private var query by mutableStateOf<String?>(null)
+    private var selected: (() -> Unit)? = null
+    override val curFontPath: String
+        get() = model.state.value.settings?.fontPath.orEmpty()
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        addPreferencesFromResource(R.xml.pref_config_cover_font)
-        sizes.forEach(::updateSummary)
-        updateSummary(PreferKey.coverFont)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-    }
+    override val selectSystemTypefaceOnDefault = false
+
+    override fun selectFont(path: String) = model.selectFont(path)
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    CoverFontSettingsRoute(
+                        model,
+                        { isAdded && !parentFragmentManager.isStateSaved },
+                        { FontSelectDialog().show(childFragmentManager, "coverFont") },
+                        query,
+                        {
+                            query = null
+                            selected?.invoke()
+                            selected = null
+                        },
+                        {
+                            query = null
+                            selected = null
+                            toastOnUi(R.string.config_search_empty)
+                        },
+                    )
+                }
+            }
+        }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.cover_font_config)
     }
 
+    override fun searchSettings(query: String, onSelected: () -> Unit) {
+        this.query = query
+        selected = onSelected
+    }
+
     override fun onDestroy() {
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
+        if (isRemoving || activity?.isFinishing == true) {
+            val captured = model
+            captured.stop()
+            Coroutine.async(context = Dispatchers.Main.immediate) { captured.release() }
+                .onError { AppLog.put("清理封面字体草稿失败", it) }
+        }
+        selected = null
         super.onDestroy()
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (!isAdded) return
-        if (key !in styleKeys) return
-        key?.let(::updateSummary)
-        BookCover.upDefaultCover()
-        findPreference<CoverPreviewPreference>("coverPreview")?.refresh()
-        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-    }
-
-    private fun updateSummary(key: String) {
-        if (key in sizes) findPreference<Preference>(key)?.summary = "${getPrefInt(key, 100).coerceIn(50, 200)}%"
-        if (key == PreferKey.coverFont) findPreference<Preference>(key)?.summary =
-            curFontPath.takeIf { it.isNotBlank() }?.let { File(it).name } ?: getString(R.string.default_font)
-    }
-
-    override val curFontPath: String get() = getPrefString(PreferKey.coverFont).orEmpty()
-    override val selectSystemTypefaceOnDefault = false
-
-    override fun selectFont(path: String) {
-        fontJob?.cancel()
-        if (path.isEmpty()) {
-            putPrefString(PreferKey.coverFont, "")
-            return
-        }
-        val directory = File(requireContext().externalFiles, "font")
-        fontJob = lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val source = FileDoc.fromFile(path)
-                    source.openInputStream().getOrThrow().use { input ->
-                        installFontFile(input, source.name, directory) {
-                            runCatching { Typeface.createFromFile(it) }.isSuccess
-                        }.absolutePath
-                    }
-                }
-            }
-            result.onSuccess { putPrefString(PreferKey.coverFont, it) }
-                .onFailure { requireContext().toastOnUi(it.localizedMessage) }
-        }
-    }
-
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        if (preference.key == PreferKey.coverFont) {
-            showDialogFragment(FontSelectDialog())
-            return true
-        }
-        if (preference.key !in sizes) return super.onPreferenceTreeClick(preference)
-        NumberPickerDialog(requireContext())
-            .setTitle(preference.title.toString())
-            .setMinValue(50).setMaxValue(200)
-            .setValue(getPrefInt(preference.key, 100).coerceIn(50, 200))
-            .setCustomButton(R.string.btn_default_s) { putPrefInt(preference.key, 100) }
-            .show { putPrefInt(preference.key, it) }
-        return true
     }
 }

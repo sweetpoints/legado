@@ -8,9 +8,11 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallelSafe
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
@@ -30,9 +32,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import splitties.init.appCtx
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.min
 
 class SearchModel(private val scope: CoroutineScope, private val callBack: CallBack) {
     val threadCount = AppConfig.threadCount
@@ -46,11 +45,11 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var workingState = MutableStateFlow(true)
     private val activeProgress = AtomicReference<SearchProgressReporter?>()
 
-
     private fun initSearchPool() {
         searchPool?.close()
-        searchPool = Executors
-            .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+        searchPool =
+            Executors.newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD))
+                .asCoroutineDispatcher()
     }
 
     fun search(searchId: Long, key: String) {
@@ -88,64 +87,77 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         val page = searchPage
         val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
         activeProgress.getAndSet(progress)?.cancel()
-        val job = scope.launch(searchPool!!, start = CoroutineStart.LAZY) {
-            flow {
-                for (bs in sourceParts) {
-                    val source = bs.getBookSource()
-                    if (source == null) {
-                        if (currentCoroutineContext().isActive) {
-                            progress.completeOne()
+        val job =
+            scope.launch(searchPool!!, start = CoroutineStart.LAZY) {
+                flow {
+                        for (bs in sourceParts) {
+                            val source = bs.getBookSource()
+                            if (source == null) {
+                                if (currentCoroutineContext().isActive) {
+                                    progress.completeOne()
+                                }
+                            } else {
+                                emit(source)
+                            }
+                            workingState.first { it }
                         }
-                    } else {
-                        emit(source)
                     }
-                    workingState.first { it }
-                }
-            }.onStart {
-                progress.start(callBack::onSearchStart)
-            }.mapParallelSafe(threadCount) {
-                try {
-                    withTimeout(30000L) {
-                        WebBook.searchBookAwait(
-                            it, key, page,
-                            filter = { name, author, kind ->
-                                !precision || name.contains(key) ||
-                                        author.contains(key) ||
-                                        kind?.contains(key) == true
-                            })
+                    .onStart {
+                        progress.start(callBack::onSearchStart)
                     }
-                } finally {
-                    if (currentCoroutineContext().isActive) {
-                        progress.completeOne()
-                    }
-                }
-            }.onEach { items ->
-                for (book in items) {
-                    book.releaseHtmlData()
-                }
-                hasMore = hasMore || items.isNotEmpty()
-                appDb.searchBookDao.insert(*items.toTypedArray())
-                mergeItems(items, precision, key)
-                currentCoroutineContext().ensureActive()
-                callBack.onSearchSuccess(searchBooks)
-            }.onCompletion { error ->
-                val context = currentCoroutineContext()
-                pageOwner.complete(context[Job]) {
-                    when {
-                        error == null -> progress.finish {
-                            callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                    .mapParallelSafe(threadCount) {
+                        try {
+                            withTimeout(30000L) {
+                                WebBook.searchBookAwait(
+                                    it,
+                                    key,
+                                    page,
+                                    filter = { name, author, kind ->
+                                        !precision ||
+                                            name.contains(key) ||
+                                            author.contains(key) ||
+                                            kind?.contains(key) == true
+                                    },
+                                )
+                            }
+                        } finally {
+                            if (currentCoroutineContext().isActive) {
+                                progress.completeOne()
+                            }
                         }
-                        context.isActive -> progress.finish {
-                            callBack.onSearchCancel()
-                        }
-                        else -> progress.cancel()
                     }
-                    activeProgress.compareAndSet(progress, null)
-                }
-            }.catch {
-                AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
-            }.collect()
-        }
+                    .onEach { items ->
+                        for (book in items) {
+                            book.releaseHtmlData()
+                        }
+                        hasMore = hasMore || items.isNotEmpty()
+                        appDb.searchBookDao.insert(*items.toTypedArray())
+                        mergeItems(items, precision, key)
+                        currentCoroutineContext().ensureActive()
+                        callBack.onSearchSuccess(searchBooks)
+                    }
+                    .onCompletion { error ->
+                        val context = currentCoroutineContext()
+                        pageOwner.complete(context[Job]) {
+                            when {
+                                error == null ->
+                                    progress.finish {
+                                        callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                                    }
+                                context.isActive ->
+                                    progress.finish {
+                                        callBack.onSearchCancel()
+                                    }
+                                else -> progress.cancel()
+                            }
+                            activeProgress.compareAndSet(progress, null)
+                        }
+                    }
+                    .catch {
+                        AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
+                    }
+                    .collect()
+            }
         check(pageOwner.register(job))
         job.start()
     }
@@ -258,20 +270,23 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
     interface CallBack {
         fun getSearchScope(): SearchScope
+
         fun onSearchStart()
+
         fun onSearchProgress(searched: Int, total: Int)
+
         fun onSearchSuccess(searchBooks: List<SearchBook>)
+
         fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean)
+
         fun onSearchCancel(exception: Throwable? = null)
     }
-
 }
 
 internal class SearchPageOwner {
     private var owner: Job? = null
 
-    @Synchronized
-    fun isRunning(): Boolean = owner != null
+    @Synchronized fun isRunning(): Boolean = owner != null
 
     @Synchronized
     fun register(job: Job): Boolean {

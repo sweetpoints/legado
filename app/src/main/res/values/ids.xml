@@ -11,14 +11,24 @@
 
     <item name="menu_1" type="id" />
 
-    <item name="fast_scroller" type="id" />
 
     <item name="bettermovementmethod_highlight_background_span" type="id" />
     <item name="small_id" type="id" />
     <item name="full_id" type="id" />
     <item name="text_watcher" type="id" />
+    <item name="tv_text" type="id" />
     <item name="toolbar_overflow_menu_state" type="id" />
     <item name="menu_show_explore_categories" type="id" />
     <item name="code_share_selection" type="id" />
+    <item name="editText" type="id" />
 
+    <item name="compose_dialog_content" type="id" />
+    <item name="custom_web_view" type="id" />
+
+    <!-- Stable IDs required by the GSY native playback and Compose overlay bridge. -->
+    <item name="surface_container" type="id" />
+    <item name="danmaku_view" type="id" />
+    <item name="video_player_compose" type="id" />
+    <item name="floating_player_compose" type="id" />
+    <item name="floatingPlayerView" type="id" />
 </resources>

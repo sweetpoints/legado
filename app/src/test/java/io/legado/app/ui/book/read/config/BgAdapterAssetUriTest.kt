@@ -1,39 +1,30 @@
 package io.legado.app.ui.book.read.config
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import io.legado.app.data.preferences.BgTextSetting
+import io.legado.app.data.preferences.bgTextUpdate
+import io.legado.app.help.config.parseReadConfigObject
+import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 
 class BgAdapterAssetUriTest {
-
     @Test
-    fun `background previews use glide asset uri without reading bytes on main thread`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgAdapter.kt"
-        )
-
-        assertTrue(source.contains("\"file:///android_asset/bg/\$item\".toUri()"))
-        assertFalse(source.contains("assets.open("))
-        assertFalse(source.contains(".readBytes()"))
-        assertFalse(source.contains("java.io.File"))
+    fun `Compose preview descriptor keeps the same asset in all theme modes`() {
+        val config =
+            parseReadConfigObject(backgroundAssetConfiguration("paper.nine.png")).getOrThrow()
+        assertEquals("paper.nine.png", config.bgStr)
+        assertEquals("paper.nine.png", config.bgStrNight)
+        assertEquals("paper.nine.png", config.bgStrEInk)
+        assertEquals(1, config.bgType)
+        assertEquals(1, config.bgTypeNight)
+        assertEquals(1, config.bgTypeEInk)
     }
 
     @Test
-    fun `background names and selection behavior remain unchanged`() {
-        val source = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/config/BgAdapter.kt"
-        )
-
-        assertTrue(source.contains("tvName.text = item.substringBeforeLast(\".\")"))
-        assertTrue(source.contains("ReadBookConfig.durConfig.setCurBg(1, it)"))
-        assertTrue(source.contains("postEvent(EventBus.UP_CONFIG, arrayListOf(1))"))
-    }
-
-    private fun readProjectFile(pathInApp: String): String {
-        val file = sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-        requireNotNull(file) { "Project file not found: $pathInApp" }
-        return file.readText()
+    fun `asset selection keeps the background-only refresh payload`() {
+        val update = bgTextUpdate(BgTextSetting.AssetBackground)
+        assertEquals(listOf(1), update.codes)
+        assertFalse(update.actionBar)
+        assertFalse(update.reviewCache)
+        assertFalse(update.systemUi)
     }
 }

@@ -135,6 +135,15 @@ cn.hutool.core.util.**{*;}
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
+# 本仓库刻意排除了 kotlin-reflect（见 app/build.gradle 中对本模块及若干依赖的 exclude），
+# 但 Ktor server 的开发模式自动重载与模块反射加载会引用这些类。
+# AGP 9 起新版 R8 把「缺失类」从警告升级为构建错误（AGP 8.13.2 下仅警告即可通过），
+# 故需显式声明。这些代码路径在 release 运行时不会执行。
+# 规则取自 AGP 生成的 app/build/outputs/mapping/appRelease/missing_rules.txt。
+-dontwarn kotlin.reflect.full.KCallables
+-dontwarn kotlin.reflect.full.KClasses
+-dontwarn kotlin.reflect.jvm.ReflectJvmMapping
+
 # PDFBox reads outline metadata only; Android PdfRenderer renders images.
 # Its optional JPEG 2000 decoder is guarded by Class.forName in JPXFilter.
 -dontwarn com.gemalto.jp2.JP2Decoder
