@@ -1,5 +1,8 @@
 package io.legado.app.model.remote
 
+import androidx.annotation.Keep
+
+@Keep
 internal enum class RemoteLibraryPrompt {
     StorageHelp,
     Reimport,
@@ -8,6 +11,7 @@ internal enum class RemoteLibraryPrompt {
     ChooseArchive,
 }
 
+@Keep
 internal data class RemoteLibraryConfirmation(
     val kind: RemoteLibraryPrompt,
     val entryId: String? = null,
@@ -17,11 +21,13 @@ internal data class RemoteLibraryConfirmation(
     val help: String = "",
 )
 
+@Keep
 internal enum class RemoteLibraryTaskKind {
     ImportBooks,
     ImportArchive,
 }
 
+@Keep
 internal data class RemoteLibraryTask(
     val id: String,
     val kind: RemoteLibraryTaskKind,
@@ -32,6 +38,7 @@ internal data class RemoteLibraryTask(
     val completed: List<String> = emptyList(),
 )
 
+@Keep
 internal enum class RemoteLibraryEffect {
     PickStorage,
     OpenBook,
@@ -42,6 +49,7 @@ internal enum class RemoteLibraryEffect {
     Close,
 }
 
+@Keep
 internal data class RemoteLibraryReceipt(
     val id: String,
     val effect: RemoteLibraryEffect,
@@ -53,6 +61,7 @@ internal data class RemoteLibraryReceipt(
 /**
  * Full paths and accepted task receipts belong to disk; SavedState retains only opaque ownership.
  */
+@Keep
 internal data class RemoteLibraryDraft(
     val revision: Long = 0,
     val query: String = "",

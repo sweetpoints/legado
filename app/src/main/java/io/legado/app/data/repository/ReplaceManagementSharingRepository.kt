@@ -1,10 +1,12 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.SourceSharePassphrase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@Keep
 data class ReplaceManagementShareFeedback(
     val url: String,
     val summary: String = "",

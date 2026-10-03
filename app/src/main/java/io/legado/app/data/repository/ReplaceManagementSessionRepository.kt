@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
@@ -10,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import splitties.init.appCtx
 
 /** Unlimited queries, selected IDs and modal drafts belong to the owned private checkpoint. */
+@Keep
 data class ReplaceManagementCheckpoint(
     val revision: Long = 0,
     val query: String = "",
@@ -28,6 +30,7 @@ data class ReplaceManagementCheckpoint(
     val ownedExports: List<String> = emptyList(),
 )
 
+@Keep
 data class ReplaceManagementPrepared(
     val action: String,
     val nonce: String,

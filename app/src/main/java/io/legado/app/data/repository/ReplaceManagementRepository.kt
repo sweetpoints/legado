@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import androidx.room.withTransaction
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
@@ -60,6 +61,7 @@ data class ReplaceManagementRow(
     val order: Int,
 )
 
+@Keep
 data class ReplaceManagementExport(val path: String, val name: String = "exportReplaceRule.json")
 
 interface ReplaceManagementRepository {

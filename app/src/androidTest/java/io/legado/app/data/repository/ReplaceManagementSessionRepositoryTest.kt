@@ -40,6 +40,23 @@ class ReplaceManagementSessionRepositoryTest {
                 2,
                 4,
                 listOf(2, 5, 7),
+                pending =
+                    ReplaceManagementPrepared(
+                        action = "Export",
+                        nonce = "pending-nonce",
+                        export = ReplaceManagementExport("/cache/export.json", "rules.json"),
+                        returningNonce = "returned-nonce",
+                    ),
+                exportFile = ReplaceManagementExport("/cache/export.json", "rules.json"),
+                feedback =
+                    ReplaceManagementShareFeedback(
+                        url = "https://example.invalid/share",
+                        summary = "replacement rules",
+                        canEncode = true,
+                        passphrase = "passphrase",
+                    ),
+                returnedNonce = "returned-nonce",
+                ownedExports = listOf("/cache/export.json"),
             )
         repository.write(id, value)
         assertEquals(value, FileReplaceManagementSessionRepository(directory).read(id))
