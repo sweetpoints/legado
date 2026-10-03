@@ -395,6 +395,48 @@ class CodeEditorComposeViewModelTest {
             assertFalse(model.state.value.editorReady)
         }
 
+    @Test
+    fun readOnlyProgrammaticFormattingCanPersistWhileUserEditingRemainsBlocked() =
+        runTest(dispatcher) {
+            val model =
+                CodeEditorComposeViewModel(
+                    FakeRepository(),
+                    SavedStateHandle(),
+                    CodeEditorLaunch(text = "raw", readOnly = true),
+                )
+            runCurrent()
+            val owner = model.state.value.engineOwner!!
+            model.updateEditor(owner, "user mutation", 0, 0)
+            assertEquals("raw", model.state.value.session!!.text)
+            model.updateEditor(owner, "formatted preview", 2, 2, programmatic = true)
+            runCurrent()
+            assertEquals("formatted preview", model.state.value.session!!.text)
+            model.requestExit()
+            runCurrent()
+            assertTrue(model.state.value.session!!.finished)
+            assertEquals(null, model.state.value.session!!.returnReceipt)
+        }
+
+    @Test
+    fun explicitEngineRestartRetiresOldCallbacksWithoutReloadingLaunchPayload() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val model =
+                CodeEditorComposeViewModel(
+                    repository,
+                    SavedStateHandle(),
+                    CodeEditorLaunch(text = "raw"),
+                )
+            runCurrent()
+            val oldOwner = model.state.value.engineOwner!!
+            model.restartEngine(oldOwner)
+            runCurrent()
+            assertFalse(oldOwner == model.state.value.engineOwner)
+            model.updateEditor(oldOwner, "stale callback", 0, 0)
+            assertEquals("raw", model.state.value.session!!.text)
+            assertEquals(1, repository.loads)
+        }
+
     private class FakeRepository : CodeEditorSessionRepository {
         val sessions = mutableMapOf<String, CodeEditorSession>()
         val released = mutableListOf<String?>()

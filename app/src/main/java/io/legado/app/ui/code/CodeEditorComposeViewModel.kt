@@ -154,16 +154,35 @@ internal class CodeEditorComposeViewModel(
         }
     }
 
+    fun restartEngine(owner: String) {
+        if (owner != state.value.engineOwner || state.value.busy) return
+        operation {
+            val current = session ?: return@operation
+            if (current.finished || current.returnReceipt != null) return@operation
+            mutableState.value =
+                mutableState.value.copy(
+                    engineOwner = UUID.randomUUID().toString(),
+                    editorReady = false,
+                )
+        }
+    }
+
     fun editorReady(owner: String, ready: Boolean) {
         if (owner != state.value.engineOwner) return
         mutableState.value = mutableState.value.copy(editorReady = ready)
     }
 
-    fun updateEditor(owner: String, text: String, start: Int, end: Int) {
+    fun updateEditor(
+        owner: String,
+        text: String,
+        start: Int,
+        end: Int,
+        programmatic: Boolean = false,
+    ) {
         if (owner != state.value.engineOwner) return
         val current = session ?: return
         if (state.value.busy || current.finished || current.returnReceipt != null) return
-        if (!current.writable && text != current.text) return
+        if (!current.writable && text != current.text && !programmatic) return
         val next = current.edited(text, CodeEditorSelection(start, end))
         if (next != current) edit(next)
     }
