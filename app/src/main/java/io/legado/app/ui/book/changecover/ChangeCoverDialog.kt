@@ -17,21 +17,60 @@ import io.legado.app.utils.setLayout
 
 class ChangeCoverDialog() : BaseComposeDialogFragment() {
     constructor(name: String, author: String) : this() {
-        arguments = Bundle().apply { putString("name", name); putString("author", author) }
+        arguments =
+            Bundle().apply {
+                putString("name", name)
+                putString("author", author)
+            }
     }
-    private val callBack: CallBack? get() = activity as? CallBack
-    private val model by viewModels<ChangeCoverComposeViewModel> {
-        viewModelFactory { initializer { ChangeCoverComposeViewModel(DefaultChangeCoverRepository(AppChangeCoverStore(requireContext())),
-            createSavedStateHandle(), arguments?.getString("name").orEmpty(), arguments?.getString("author").orEmpty()) } }
+
+    private val callBack: CallBack?
+        get() = activity as? CallBack
+
+    private val model by
+        viewModels<ChangeCoverComposeViewModel> {
+            viewModelFactory {
+                initializer {
+                    ChangeCoverComposeViewModel(
+                        DefaultChangeCoverRepository(AppChangeCoverStore(requireContext())),
+                        createSavedStateHandle(),
+                        arguments?.getString("name").orEmpty(),
+                        arguments?.getString("author").orEmpty(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
     }
-    override fun onStart() { super.onStart(); setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT) }
-    override fun onCancel(dialog: DialogInterface) { model.stop(); super.onCancel(dialog) }
-    @Composable override fun Content() {
-        ChangeCoverRoute(model, { isAdded && !parentFragmentManager.isStateSaved }, ::changeTo,
-            { dismissAllowingStateLoss() }, Modifier.fillMaxSize())
+
+    override fun onCancel(dialog: DialogInterface) {
+        model.stop()
+        super.onCancel(dialog)
     }
+
+    @Composable
+    override fun Content() {
+        ChangeCoverRoute(
+            model,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            ::changeTo,
+            { dismissAllowingStateLoss() },
+            Modifier.fillMaxSize(),
+        )
+    }
+
     fun changeTo(coverUrl: String) {
-        try { callBack?.coverChangeTo(coverUrl) } finally { dismissAllowingStateLoss() }
+        try {
+            callBack?.coverChangeTo(coverUrl)
+        } finally {
+            dismissAllowingStateLoss()
+        }
     }
-    interface CallBack { fun coverChangeTo(coverUrl: String) }
+
+    interface CallBack {
+        fun coverChangeTo(coverUrl: String)
+    }
 }
