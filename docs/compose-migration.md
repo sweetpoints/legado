@@ -1021,3 +1021,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 RSS 分类数据与状态层迁入 Repository/ViewModel，沿用 sort 脚本缓存、顺序 JSON 地址、无查询与空查询的区别、singleTop 分类继承、五样式切换及来源变量。大请求与搜索草稿保存在私有原子文件，SavedState 只保留票据、选择和导航标记；释放检查完整侧文件清理并拒绝恢复关闭备份。12 个 JVM 状态回归执行、7 个真实 Room 和 4 个实际文件 Android 回归仅编译。
 
 RSS 文章页数据与状态层复用既有 await 解析器和分页状态机，保留刷新/追加/去重/停止加载/失败重试及完整文章元数据。大查询、下一页 URL 和分页进度留私有文件，SavedState 保留稳定行键与滚动票据；审查修复重复恢复时 hasMore 检查点提前写成 false，增加真实连续恢复回归。14 个文章状态和 4 个分页恢复 JVM 测试执行，6 个 Room 与 4 个实际文件 Android 测试仅编译。
+
+主题设置整页改为 Compose 设置列表、颜色/数字/图标/名称弹窗和搜索定位，删除 Preference XML 及菜单 XML；共用 ConfigActivity 通过小搜索接口接入，其他旧设置页面保持原搜索路径。图片选择保存日/夜小票据，重建丢失 contract requestCode 时仍准确交付，早到结果等待初始化，取消/重复结果不保存图片。新增颜色 JVM、2 个早到/恢复 JVM（状态共 10 个）、10 个 Compose 与 2 个实际宿主回归；Android 测试仅编译。

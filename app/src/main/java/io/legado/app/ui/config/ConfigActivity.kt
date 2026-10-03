@@ -86,8 +86,16 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
     private fun showPreferenceSearchResults(query: String, searchView: SearchView) {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isEmpty()) return
-        val fragment = supportFragmentManager.findFragmentById(R.id.configFrameLayout)
-            as? PreferenceFragmentCompat ?: return
+        val currentPage = supportFragmentManager.findFragmentById(R.id.configFrameLayout)
+        if (currentPage is ConfigSearchPage) {
+            currentPage.searchSettings(normalizedQuery) {
+                searchView.setQuery("", false)
+                searchView.clearFocus()
+                searchView.isIconified = true
+            }
+            return
+        }
+        val fragment = currentPage as? PreferenceFragmentCompat ?: return
         val results = findPreferenceSearchResults(fragment.preferenceScreen, normalizedQuery)
         if (results.isEmpty()) {
             toastOnUi(R.string.config_search_empty)

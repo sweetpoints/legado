@@ -80,6 +80,27 @@ class ThemeSettingsViewModelTest {
             assertTrue(vm.state.value.downloaded); vm.clearMessage(); assertFalse(vm.state.value.downloaded); assertNull(vm.state.value.error)
         } finally { owner.clear() }
     }
+    @Test fun restoredNightPickerWithLostContractCodeWaitsForInitializationAndDoesNotPublishUriToSavedState() = runTest(dispatcher) {
+        val saved=SavedStateHandle();val repo=Repo();val names=Names()
+        val first=ThemeSettingsViewModel(repo,names,saved);val firstOwner=own(first)
+        try {
+            ready(first);first.imagePicker(true);val restoredSaved=savedCopy(saved)
+            val blocked=Names().apply {failOpen=true};val restored=ThemeSettingsViewModel(repo,blocked,restoredSaved);val owner=own(restored)
+            try {
+                restored.pickedImage(0,"content://night");runCurrent();assertTrue(repo.actions.isEmpty());assertTrue(restored.state.value.failed)
+                assertTrue(restoredSaved.keys().none { restoredSaved.get<Any?>(it)=="content://night" })
+                blocked.failOpen=false;restored.retry();runCurrent();assertEquals(listOf("image:true:content://night"),repo.actions)
+                restored.pickedImage(0,"content://duplicate");runCurrent();assertEquals(1,repo.actions.size)
+            } finally {owner.clear()}
+        } finally {firstOwner.clear()}
+    }
+    @Test fun cancelledPickerAndStoppedQueuedImageNeverApplyBackground() = runTest(dispatcher) {
+        val repo=Repo();val names=Names().apply {failOpen=true};val vm=ThemeSettingsViewModel(repo,names,SavedStateHandle());val owner=own(vm)
+        try {
+            vm.imagePicker(false);vm.pickedImage(0,null);vm.pickedImage(0,"content://late");runCurrent();assertTrue(repo.actions.isEmpty())
+            vm.imagePicker(true);vm.pickedImage(0,"content://queued");runCurrent();vm.stop();names.failOpen=false;vm.retry();runCurrent();assertTrue(repo.actions.isEmpty())
+        } finally {owner.clear()}
+    }
     private class Names : ThemeNameDraftRepository {
         var value = ThemeNameDraft(); var failOpen = false; var released = false
         override suspend fun open(session: String): ThemeNameDraft { if (failOpen) error("read failed"); check(!released); return value }

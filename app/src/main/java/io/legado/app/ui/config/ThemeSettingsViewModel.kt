@@ -32,6 +32,7 @@ internal class ThemeSettingsViewModel(private val repository: ThemeSettingsRepos
     private var generation = 0
     private var observer: Job? = null
     private var operation: Job? = null
+    private var imageWaiting: Job? = null
     private val nameGate = Mutex()
     private val drafts = MutableStateFlow<ThemeNameDraft?>(null)
     private val writer = viewModelScope.launch {
@@ -108,8 +109,21 @@ internal class ThemeSettingsViewModel(private val repository: ThemeSettingsRepos
         saved.remove<String>("event"); saved.remove<String>("destination"); mutable.value = state.value.copy(event = null); return true
     }
     fun removeBackground(night: Boolean) = run(close = true) { repository.image(night, null) }
-    fun background(night: Boolean, uri: String) = run { repository.image(night, uri); currentCoroutineContext().ensureActive()
-        if (!stopped) mutable.value = state.value.copy(downloaded = uri.startsWith("http:", true) || uri.startsWith("https:", true)) }
+    fun imagePicker(night: Boolean) { saved["imagePickerNight"] = night }
+    fun pickedImage(requestCode: Int, uri: String?) {
+        val pending = saved.remove<Boolean>("imagePickerNight") ?: return
+        if (requestCode != 0 && requestCode != if (pending) 122 else 121) return
+        uri?.let { background(pending, it) }
+    }
+    fun background(night: Boolean, uri: String) {
+        if (stopped) return
+        imageWaiting?.cancel()
+        imageWaiting = viewModelScope.launch {
+            state.first { usable() }; currentCoroutineContext().ensureActive()
+            this@ThemeSettingsViewModel.run { repository.image(night, uri); currentCoroutineContext().ensureActive()
+                if (!stopped) mutable.value = state.value.copy(downloaded = uri.startsWith("http:", true) || uri.startsWith("https:", true)) }
+        }
+    }
     fun blurFinished(night: Boolean) = run { repository.refreshTheme(night) }
     fun clearMessage() { mutable.value = state.value.copy(error = null, problem = null, downloaded = false) }
     private fun run(close: Boolean = false, action: suspend () -> Unit) {
@@ -127,7 +141,7 @@ internal class ThemeSettingsViewModel(private val repository: ThemeSettingsRepos
     }
     private fun failure(error: Exception) { mutable.value = state.value.copy(error = error.localizedMessage.orEmpty(), problem = (error as? ThemeSettingsException)?.problem) }
     suspend fun flush() { if (initializedName && !stopped) nameGate.withLock { names.write(session, nameDraft) } }
-    fun stop() { if (!stopped) { stopped = true; generation++; observer?.cancel(); operation?.cancel(); writer.cancel() } }
+    fun stop() { if (!stopped) { stopped = true; generation++; observer?.cancel(); operation?.cancel(); imageWaiting?.cancel(); writer.cancel() } }
     suspend fun release() { stop(); names.release(session) }
     override fun onCleared() { stop() }
 }
