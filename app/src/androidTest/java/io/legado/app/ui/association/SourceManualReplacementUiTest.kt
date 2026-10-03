@@ -442,7 +442,9 @@ class SourceManualReplacementUiTest {
                     if (rss)
                         host.feed.state.value.items.map { it.key in host.feed.state.value.selected }
                     else
-                        host.book.state.value.items.map { it.key in host.book.state.value.selected },
+                        host.book.state.value.items.map {
+                            it.key in host.book.state.value.selected
+                        },
                 )
                 assertEquals(
                     "Seed0",
