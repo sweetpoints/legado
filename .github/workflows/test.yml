@@ -1,21 +1,21 @@
 name: Test Build
 
 on:
-  #push:
-  #  branches:
-  #    - master
- #   paths:
- #     - '**'
- #     - '!**/ISSUE_TEMPLATE/**'
- #     - '!**/modules/web/**'
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'modules/web/**'
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     paths-ignore:
-      - '**/modules/web/**'
-  workflow_run:
-    workflows: [Build Web]
-    branches: [master]
-    types: [completed]
+      - 'modules/web/**'
+      - 'docs/**'
+      - 'README.md'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,12 +25,9 @@ jobs:
 
   prepare:
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.head_commit.message, 'Merge pull request') }}
     outputs:
       version: ${{ steps.set-ver.outputs.version }}
       versionL: ${{ steps.set-ver.outputs.versionL }}
-      lanzou: ${{ steps.check.outputs.lanzou }}
-      telegram: ${{ steps.check.outputs.telegram }}
     steps:
       - id: set-ver
         run: |
@@ -38,14 +35,25 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "versionL=$version" >> $GITHUB_OUTPUT
 
-      - id: check
-        run: |
-          if [ -n "${{ secrets.LANZOU_ID }}" ]; then
-            echo "lanzou=yes" >> $GITHUB_OUTPUT
-          fi
-          if [ -n "${{ secrets.BOT_TOKEN }}" ]; then
-            echo "telegram=yes" >> $GITHUB_OUTPUT
-          fi
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-android
+      - name: Run unit tests
+        run: ./gradlew :app:testAppReleaseUnitTest --build-cache --no-daemon --max-workers=2 --stacktrace
+      - name: Upload unit-test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          if-no-files-found: warn
 
   build:
     needs: prepare
@@ -53,9 +61,12 @@ jobs:
       matrix:
         product: [app]
         type: [release, releaseA]
+        package: [arm, universal]
       fail-fast: false
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
+      package: ${{ matrix.package }}
       product: ${{ matrix.product }}
       type: ${{ matrix.type }}
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -67,35 +78,29 @@ jobs:
           fetch-depth: 0
 
       - name: Verify Beta Release Notes
-        if: ${{ matrix.type == 'release' }}
+        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
         run: bash .github/scripts/test-extract-latest-update.sh
 
       - name: Verify Help Highlight Bundle
-        if: ${{ matrix.type == 'release' }}
+        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
         run: node .github/scripts/test-help-highlight.js
 
-      - name: Setup JDK 21
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: 21
+      - name: Setup Android build
+        uses: ./.github/actions/setup-android
 
       - name: Verify Cronet Bundle
-        if: ${{ matrix.type == 'release' }}
+        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
         run: |
           chmod +x .github/scripts/verify-cronet.sh
           .github/scripts/verify-cronet.sh
 
       - name: Verify APK Collector
-        if: ${{ matrix.type == 'release' }}
+        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
         run: bash .github/scripts/test-collect-apks.sh
 
       - name: Verify Web Asset Push
-        if: ${{ matrix.type == 'release' }}
+        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
         run: bash .github/scripts/test-push-web-assets.sh
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.3.0
 
       - name: Prepare Assets
         run: |
@@ -111,14 +116,6 @@ jobs:
           sed '$a\RELEASE_KEY_ALIAS=legado'                 $GITHUB_WORKSPACE/gradle.properties -i
           sed '$a\RELEASE_STORE_PASSWORD=gedoor_legado'     $GITHUB_WORKSPACE/gradle.properties -i
           sed '$a\RELEASE_KEY_PASSWORD=gedoor_legado'       $GITHUB_WORKSPACE/gradle.properties -i
-
-      - name: Run Unit Tests
-        if: ${{ matrix.type == 'release' }}
-        run: |
-          set -o pipefail
-          chmod +x gradlew
-          ./gradlew :app:testAppReleaseUnitTest --build-cache --parallel --daemon --warning-mode all \
-            2>&1 | tee "$RUNNER_TEMP/gradle-unit-test.log"
 
       - name: Build With Gradle
         run: |
@@ -139,28 +136,16 @@ jobs:
           fi
 
           chmod +x gradlew
-          echo "开始构建 ARM APK: $product - $typeName"
-          ./gradlew :$product:assembleRelease -ParmOnly=true --build-cache --parallel --daemon --warning-mode all \
+          gradle_args=()
+          if [[ "$package" == "arm" ]]; then
+            gradle_args+=(-ParmOnly=true)
+          fi
+          ./gradlew :app:assembleAppRelease "${gradle_args[@]}" \
+            --build-cache --no-daemon --max-workers=2 --warning-mode all --stacktrace \
             2>&1 | tee "$build_log"
-          mkdir -p ${{ github.workspace }}/apk/
-          bash $GITHUB_WORKSPACE/.github/scripts/collect-apks.sh \
-            $GITHUB_WORKSPACE/app/build/outputs/apk \
-            $GITHUB_WORKSPACE/apk \
-            ${{ env.product }} \
-            ${{ env.VERSIONL }} \
-            "$typeName" \
-            arm
-
-          echo "开始构建通用 APK: $product - $typeName"
-          ./gradlew :$product:assembleRelease --build-cache --parallel --daemon --warning-mode all \
-            2>&1 | tee -a "$build_log"
-          bash $GITHUB_WORKSPACE/.github/scripts/collect-apks.sh \
-            $GITHUB_WORKSPACE/app/build/outputs/apk \
-            $GITHUB_WORKSPACE/apk \
-            ${{ env.product }} \
-            ${{ env.VERSIONL }} \
-            "$typeName" \
-            universal
+          bash .github/scripts/collect-apks.sh \
+            app/build/outputs/apk "$GITHUB_WORKSPACE/apk" \
+            "$product" "$VERSIONL" "$typeName" "$package"
 
           echo "移动mapping文件"
           mkdir -p ${{ github.workspace }}/mapping/
@@ -185,13 +170,13 @@ jobs:
       - name: Upload Missing Rules File
         uses: actions/upload-artifact@v7
         with:
-          name: legado.${{ env.product }}.${{ env.type }}.mapping.missing_rules
+          name: legado.${{ env.product }}.${{ env.type }}.${{ matrix.package }}.mapping.missing_rules
           if-no-files-found: ignore
           path: ${{ github.workspace }}/mapping/missing_rules.txt
 
       - name: Check Build Result
         run: |
-          expected_packages=(arm universal)
+          expected_packages=("$package")
           mapfile -d '' apks < <(find ${{ github.workspace }}/apk -maxdepth 1 \
             -type f -name 'legado_*.apk' -print0)
           if [[ ${#apks[@]} -ne ${#expected_packages[@]} ]]; then
@@ -248,13 +233,23 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: legado.${{ env.product }}.${{ env.type }}
-          if-no-files-found: ignore
+          name: legado.${{ env.product }}.${{ env.type }}.${{ matrix.package }}
+          if-no-files-found: error
           path: ${{ github.workspace }}/apk/*.apk
 
       - name: Upload Mapping Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: legado.${{ env.product }}.${{ env.type }}.mapping
+          name: legado.${{ env.product }}.${{ env.type }}.${{ matrix.package }}.mapping
           if-no-files-found: ignore
           path: ${{ github.workspace }}/mapping/mapping.txt
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-logs-${{ matrix.type }}-${{ matrix.package }}
+          path: |
+            ${{ runner.temp }}/gradle-*.log
+            app/build/reports/lint-results-*.html
+          if-no-files-found: warn

@@ -3,6 +3,12 @@ name: Cronet Runtime Regression
 on:
   pull_request:
     paths:
+      - ".github/actions/setup-android/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle/wrapper/**"
+      - "modules/rhino/**"
+      - "third_party/maven/**"
       - '.github/workflows/cronet-runtime-test.yml'
       - '.github/scripts/cronet-runtime-test.init.gradle'
       - '.github/scripts/run-cronet-runtime.sh'
@@ -37,16 +43,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [23, 29, 31, 36]
+        api: [26, 29, 31, 36]
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Setup Android build
+        uses: ./.github/actions/setup-android
       - name: Verify untouched official Cronet artifacts
         run: bash .github/scripts/verify-cronet.sh
       - name: Build minified release with platform instrumentation

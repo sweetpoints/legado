@@ -3,12 +3,19 @@ name: PDF Runtime Regression
 on:
   pull_request:
     paths:
+      - ".github/actions/setup-android/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle/wrapper/**"
+      - "modules/rhino/**"
+      - "third_party/maven/**"
       - '.github/workflows/pdf-runtime-test.yml'
       - '.github/scripts/pdf-runtime-test.init.gradle'
       - '.github/scripts/run-pdf-runtime.sh'
       - 'app/build.gradle.kts'
       - 'app/*proguard*'
       - 'gradle/libs.versions.toml'
+      - 'gradle.properties'
       - 'app/src/main/java/io/legado/app/model/localBook/Pdf*'
       - 'app/src/pdfRuntime/**'
       - 'app/src/androidTest/assets/pdf*'
@@ -22,18 +29,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  minified-api-23:
+  minified-api-26:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Setup Android build
+        uses: ./.github/actions/setup-android
       - name: Build minified release with platform instrumentation
         run: |
           chmod +x gradlew
@@ -46,10 +50,10 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify PDF outlines and rendering on Android 6
+      - name: Verify PDF outlines and rendering on Android 8
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
-          api-level: 23
+          api-level: 26
           target: google_apis
           arch: x86_64
           disable-animations: true
@@ -58,7 +62,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: pdf-runtime-api-23
+          name: pdf-runtime-api-26
           path: |
             app/build/pdf-runtime/
             app/build/outputs/mapping/appRelease/

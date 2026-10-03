@@ -6,10 +6,13 @@ on:
     - cron: "0 1 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'LegadoTeam/legado' }}
+    if: ${{ vars.ENABLE_CRONET_UPDATES == 'true' }}
     steps:
       - uses: actions/checkout@v7
 

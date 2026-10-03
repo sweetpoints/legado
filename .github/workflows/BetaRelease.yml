@@ -7,16 +7,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
 
   prepare:
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.head_commit.message, 'Merge pull request') }}
     outputs:
       version: ${{ steps.set-ver.outputs.version }}
       versionL: ${{ steps.set-ver.outputs.versionL }}
-      lanzou: ${{ steps.check.outputs.lanzou }}
       telegram: ${{ steps.check.outputs.telegram }}
+      cdn: ${{ steps.check.outputs.cdn }}
     steps:
       - id: set-ver
         run: |
@@ -25,12 +27,31 @@ jobs:
           echo "versionL=$version" >> $GITHUB_OUTPUT
 
       - id: check
+        env:
+          RELEASE_KEY_STORE: ${{ secrets.RELEASE_KEY_STORE }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USERNAME: ${{ secrets.SERVER_USERNAME }}
+          CDN_PATH: ${{ vars.CDN_PATH }}
         run: |
-          if [ -n "${{ secrets.LANZOU_ID }}" ]; then
-            echo "lanzou=yes" >> $GITHUB_OUTPUT
+          for name in RELEASE_KEY_STORE RELEASE_KEY_PASSWORD RELEASE_STORE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required secret: $name"
+              exit 1
+            fi
+          done
+          if [[ -n "$BOT_TOKEN" && -n "$CHANNEL_ID" && -n "$API_ID" && -n "$API_HASH" ]]; then
+            echo "telegram=yes" >> "$GITHUB_OUTPUT"
           fi
-          if [ -n "${{ secrets.BOT_TOKEN }}" ]; then
-            echo "telegram=yes" >> $GITHUB_OUTPUT
+          if [[ -n "$SSH_PRIVATE_KEY" && -n "$SERVER_HOST" && -n "$SERVER_PORT" && -n "$SERVER_USERNAME" && -n "$CDN_PATH" ]]; then
+            echo "cdn=yes" >> "$GITHUB_OUTPUT"
           fi
 
   build:
@@ -41,6 +62,7 @@ jobs:
         type: [release, releaseA]
       fail-fast: false
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       product: ${{ matrix.product }}
       type: ${{ matrix.type }}
@@ -53,14 +75,8 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Setup JDK 21
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Setup Android build
+        uses: ./.github/actions/setup-android
 
       - name: Prepare Assets
         run: |
@@ -68,12 +84,16 @@ jobs:
           echo "" > $GITHUB_WORKSPACE/app/src/main/assets/18PlusList.txt
 
       - name: Release APK Sign
+        env:
+          RELEASE_KEY_STORE: ${{ secrets.RELEASE_KEY_STORE }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
         run: |
           echo "设置签名文件"
-          echo "${{ secrets.RELEASE_KEY_STORE }}" | base64 --decode > $GITHUB_WORKSPACE/app/legado.jks
+          printf '%s' "$RELEASE_KEY_STORE" | base64 --decode > $GITHUB_WORKSPACE/app/legado.jks
           {
-            echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}"
-            echo "RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD }}"
+            echo "RELEASE_KEY_PASSWORD=${RELEASE_KEY_PASSWORD}"
+            echo "RELEASE_STORE_PASSWORD=${RELEASE_STORE_PASSWORD}"
             echo "RELEASE_STORE_FILE=./legado.jks"
             echo "RELEASE_KEY_ALIAS=legado"
           } >> $GITHUB_WORKSPACE/gradle.properties
@@ -96,7 +116,7 @@ jobs:
 
           chmod +x gradlew
           echo "开始构建 ARM APK: $product - $typeName"
-          ./gradlew :$product:assembleRelease -ParmOnly=true --build-cache --parallel --daemon --warning-mode all
+          ./gradlew :$product:assembleRelease -ParmOnly=true --build-cache --no-daemon --max-workers=2 --warning-mode all
           mkdir -p ${{ github.workspace }}/apk/
           bash $GITHUB_WORKSPACE/.github/scripts/collect-apks.sh \
             $GITHUB_WORKSPACE/app/build/outputs/apk \
@@ -107,7 +127,7 @@ jobs:
             arm
 
           echo "开始构建通用 APK: $product - $typeName"
-          ./gradlew :$product:assembleRelease --build-cache --parallel --daemon --warning-mode all
+          ./gradlew :$product:assembleRelease --build-cache --no-daemon --max-workers=2 --warning-mode all
           bash $GITHUB_WORKSPACE/.github/scripts/collect-apks.sh \
             $GITHUB_WORKSPACE/app/build/outputs/apk \
             $GITHUB_WORKSPACE/apk \
@@ -184,7 +204,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: legado.${{ env.product }}.${{ env.type }}
-          if-no-files-found: ignore
+          if-no-files-found: error
           path: ${{ github.workspace }}/apk/*.apk
 
       - name: Upload Mapping Artifact
@@ -195,8 +215,7 @@ jobs:
           path: ${{ github.workspace }}/mapping/mapping.txt
 
   release:
-    needs: [prepare, build, CDN]
-    if: github.event_name != 'pull_request' && github.repository == 'LegadoTeam/legado'
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -248,6 +267,7 @@ jobs:
 
   CDN:
     needs: [prepare, build]
+    if: needs.prepare.outputs.cdn == 'yes'
     runs-on: ubuntu-latest
     env:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -276,60 +296,8 @@ jobs:
           REMOTE_HOST: ${{ secrets.SERVER_HOST }}
           REMOTE_PORT: ${{ secrets.SERVER_PORT }}
           REMOTE_USER: ${{ secrets.SERVER_USERNAME }}
-          TARGET: "/www/wwwroot/cdn.mgz.la/app"
+          TARGET: ${{ vars.CDN_PATH }}
 
-  lanzou:
-    needs: [prepare, build]
-    if: ${{ github.event_name != 'pull_request' && needs.prepare.outputs.lanzou == 'yes' }}
-    runs-on: ubuntu-latest
-    env:
-      ylogin: ${{ secrets.LANZOU_ID }}
-      phpdisk_info: ${{ secrets.LANZOU_PSD }}
-      LANZOU_FOLDER_ID: ${{ secrets.LANZOU_FOLDER_ID }}
-      LANZOU_URL: ${{ secrets.LANZOU_URL }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          path: apk/
-      - working-directory: apk/
-        run: |
-          mv */*.apk . || true
-          rm -rf */
-          bash "$GITHUB_WORKSPACE/.github/scripts/remove-universal-apks.sh" \
-            "$GITHUB_WORKSPACE/apk"
-      - name: Upload To Lanzou
-        continue-on-error: true
-        run: |
-          path="$GITHUB_WORKSPACE/apk/"
-          python3 $GITHUB_WORKSPACE/.github/scripts/lzy_web.py "$path" "$LANZOU_FOLDER_ID"
-          echo "[$(TZ=Asia/Shanghai date '+%Y.%m.%d %H:%M:%S')] 分享链接: $LANZOU_URL"
-  test_Branch:
-    needs: [ prepare, build ]
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' && github.actor == 'LegadoTeam' }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          path: apk/
-      - working-directory: apk/
-        run: |
-          mv */*.apk .
-          rm -rf */
-          bash "$GITHUB_WORKSPACE/.github/scripts/remove-universal-apks.sh" \
-            "$GITHUB_WORKSPACE/apk"
-      - name: Push To "test" Branch
-        run: |
-          cd $GITHUB_WORKSPACE/apk/
-          git init
-          git checkout -b test
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/LegadoTeam/release"
-          git add *.apk
-          git commit -m "${{ needs.prepare.outputs.versionL }}"
-          git push -f -u origin test
   telegram:
     needs: [prepare, build]
     if: ${{ github.event_name != 'pull_request' && needs.prepare.outputs.telegram == 'yes' }}

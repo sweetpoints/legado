@@ -5,12 +5,12 @@ on:
     branches:
       - master
     paths:
-      - '**/modules/web/**'
+      - 'modules/web/**'
       - '.github/workflows/web.yml'
       - '.github/scripts/push-web-assets.sh'
   pull_request:
     paths:
-      - '**/modules/web/**'
+      - 'modules/web/**'
       - '.github/workflows/web.yml'
       - '.github/scripts/push-web-assets.sh'
   workflow_dispatch:
@@ -18,9 +18,6 @@ on:
 concurrency:
   group: build-web-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  UPSTREAM_REPOSITORY: LegadoTeam/legado
 
 permissions:
   actions: write
@@ -36,18 +33,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
       - uses: pnpm/action-setup@v6.0.10
         name: Install pnpm
         with:
           version: 9.15.9
           run_install: false
-          cache: true
-          cache_dependency_path: modules/web/pnpm-lock.yaml
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: modules/web/pnpm-lock.yaml
 
       - name: Build and move files
         working-directory: modules/web
@@ -57,9 +54,18 @@ jobs:
           version="v$(date -d "8 hour" -u +3.%y.%m%d%H)"
           echo "APP_VER=$version" >> $GITHUB_ENV
 
+      - name: Upload web assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-assets
+          path: |
+            app/src/main/assets/web/vue/
+            modules/web/src/components.d.ts
+          if-no-files-found: error
+
       - name: Commit web assets
         id: web-commit
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == env.UPSTREAM_REPOSITORY }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.ENABLE_WEB_ASSET_PUSH == 'true' }}
         uses: stefanzweifel/git-auto-commit-action@v7.2.0
         with:
           commit_message: Bump web ${{ env.APP_VER}}
@@ -72,7 +78,7 @@ jobs:
         run: bash .github/scripts/push-web-assets.sh
 
       - name: Dispatch Test Release
-        if: ${{ steps.web-commit.outputs.changes_detected == 'true' }}
+        if: ${{ steps.web-commit.outputs.changes_detected == 'true' && vars.ENABLE_TEST_RELEASE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
