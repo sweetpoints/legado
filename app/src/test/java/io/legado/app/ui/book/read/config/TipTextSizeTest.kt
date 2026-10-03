@@ -2,14 +2,13 @@ package io.legado.app.ui.book.read.config
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.preferences.TipSetting
-
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class TipTextSizeTest {
 
@@ -23,9 +22,7 @@ class TipTextSizeTest {
     @Test
     fun `text size survives json and map export`() {
         val config = ReadBookConfig.Config(tipTextSize = 24)
-        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(
-            GSON.toJson(config)
-        ).getOrThrow()
+        val restored = GSON.fromJsonObject<ReadBookConfig.Config>(GSON.toJson(config)).getOrThrow()
 
         assertEquals(24, restored.tipTextSize)
         assertEquals(24, config.toMap()["tipTextSize"])
