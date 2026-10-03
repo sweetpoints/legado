@@ -1061,3 +1061,5 @@ RSS 阅读 A1：新增 IO 页面加载与收藏仓库、独立 HTML/预加载脚
 封面字体设置 B：实际目的地使用纯 Compose 控件与两份正式 ComposeCover 预览，保留字体选择公共 callback、默认字体隔离、百分比编辑/默认值/取消及设置搜索。删除旧 CoverPreviewPreference、独占 Preference XML 与预览布局，共享像素和安装测试改为实际 Compose 控件与渲染捕获。新增 4 个 Compose 与 2 个 ConfigActivity Android 用例；Android 用例仅编译验证。
 
 备份设置 A1a：新增不可变基础配置与 IO 仓库，保留 WebDAV 连接字段、设备名、进度增强依赖、默认路径及自动备份三字段原子更新。已接受的连接保存与 WebDAV 重配置处于同一非取消区，避免配置已写但授权仍旧；不触发用户备份或恢复。新增 6 个真实 JVM 配置/跨 IO 取消用例及 1 个隔离配置 Android 用例；Android 用例仅编译验证。
+
+备份设置 A1b：新增不可变备份内容与忽略项目选项，IO 仓库串行读取、切换与保存原有配置，保留内容选中和忽略值的反向映射及默认值。新增 3 个 JVM 仓库用例与 1 个实际配置映射 Android 用例；Android 用例仅编译验证。
