@@ -18,7 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.repository.DictionaryImageData
 import io.legado.app.ui.dict.DictionaryResultAction
 
@@ -26,7 +26,7 @@ import io.legado.app.ui.dict.DictionaryResultAction
 fun BookDetailIntro(
     document: BookDetailIntroDocument,
     bookUrl: String,
-    source: BookSource?,
+    source: BaseSource?,
     expanded: Boolean,
     onExpanded: (Boolean) -> Unit,
     image: suspend (String) -> DictionaryImageData,

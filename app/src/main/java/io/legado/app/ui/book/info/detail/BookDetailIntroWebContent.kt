@@ -28,7 +28,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.repository.DictionaryImageData
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.config.AppConfig
@@ -55,7 +55,7 @@ import kotlinx.coroutines.withContext
 internal fun BookDetailIntroWebContent(
     document: BookDetailIntroDocument,
     bookUrl: String,
-    source: BookSource?,
+    source: BaseSource?,
     expanded: Boolean,
     image: suspend (String) -> DictionaryImageData,
     onAction: (DictionaryResultAction) -> Unit,
@@ -81,7 +81,7 @@ internal fun BookDetailIntroWebContent(
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    key(document.mode, source?.bookSourceUrl, document.signature) {
+    key(document.mode, source?.getKey(), document.signature) {
         AndroidView(
             factory = { context ->
                 BookDetailIntroNativeView(
@@ -141,7 +141,7 @@ internal class BookDetailIntroNativeView(
     private var loadedBase: String? = null
     @Volatile private var document: BookDetailIntroDocument? = null
     private var key: List<Any?>? = null
-    private var source: BookSource? = null
+    private var source: BaseSource? = null
     private var bookUrl = ""
     private var expanded = true
     private var fullMeasured = false
@@ -272,7 +272,7 @@ internal class BookDetailIntroNativeView(
     fun display(
         next: BookDetailIntroDocument,
         url: String,
-        nextSource: BookSource?,
+        nextSource: BaseSource?,
         showExpanded: Boolean,
         background: Int,
         text: Int,
@@ -284,7 +284,7 @@ internal class BookDetailIntroNativeView(
             listOf(
                 next.signature,
                 url,
-                nextSource?.bookSourceUrl,
+                nextSource?.getKey(),
                 showExpanded,
                 background,
                 text,

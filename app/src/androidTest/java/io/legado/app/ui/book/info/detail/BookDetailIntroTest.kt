@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.DictionaryImageData
 import org.junit.*
 import org.junit.Assert.*
@@ -90,5 +91,44 @@ class BookDetailIntroTest {
         compose.waitUntil(timeoutMillis=15_000){compose.onNodeWithTag("book-detail-intro-web").fetchSemanticsNode().boundsInRoot.height>collapsed+10}
         assertTrue(expanded);assertTrue(document.rich!!.text.contains("Text line 20"))
     }
+
+    @Test
+    fun webRendererKeepsRssSourceJavascriptBridge() {
+        val source = RssSource(sourceUrl = "https://rss.invalid/source", sourceName = "RSS")
+        val document = bookDetailIntroDocument("<useweb><p>source.getKey()</p></useweb>")
+        var context: Context? = null
+        var sourceKey: String? = null
+        compose.setContent {
+            context = LocalContext.current
+            MaterialTheme {
+                BookDetailIntro(
+                    document,
+                    "https://rss.invalid/book",
+                    source,
+                    true,
+                    {},
+                    { image(it) },
+                    {},
+                    {},
+                    {},
+                )
+            }
+        }
+
+        compose.waitUntil(timeoutMillis = 15_000) {
+            compose.runOnIdle {
+                context?.let(::native)?.let { it.isPageReady && it.progress == 100 } == true
+            }
+        }
+        compose.runOnIdle {
+            native(context!!)!!.evaluateJavascript("source.getKey()") { result ->
+                sourceKey = result?.trim('"')
+            }
+        }
+        compose.waitUntil(timeoutMillis = 5_000) { sourceKey != null }
+
+        assertEquals(source.sourceUrl, sourceKey)
+    }
+
     private class Owner:LifecycleOwner {val registry=LifecycleRegistry(this);override val lifecycle:Lifecycle get()=registry}
 }
