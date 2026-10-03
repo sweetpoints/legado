@@ -149,15 +149,69 @@ class HandleFileChoicesViewModelTest {
         assertEquals("content://first", disk.value!!.result)
     }
 
+    @Test
+    fun canceledMimePreparationLeavesNativeReceiptUnclaimed() = test {
+        val repository = Files().apply { mimeGate = CompletableDeferred() }
+        val disk = Disk()
+        val model = model(repo = repository, disk = disk)
+        model.load(HandleFileSeed(HandleFileInput(mode = 1)))
+        runCurrent()
+        model.choose(1)
+        runCurrent()
+        val nonce = model.state.value.pending!!.nonce
+        var prepared: HandleFileNativeRequest? = null
+        val preparing = launch { prepared = model.prepareNative(nonce) }
+        runCurrent()
+        preparing.cancel()
+        repository.mimeGate!!.complete(Unit)
+        preparing.join()
+        assertNull(prepared)
+        assertFalse(disk.value!!.pending!!.delivered)
+        assertNotNull(model.prepareNative(nonce))
+    }
+
+    @Test
+    fun canceledDurableClaimRollsBackLatestDiskRevisionAndCanResume() = test {
+        val disk = Disk()
+        val model = model(disk = disk)
+        model.load(HandleFileSeed(HandleFileInput(mode = 1)))
+        runCurrent()
+        model.choose(1)
+        runCurrent()
+        val nonce = model.state.value.pending!!.nonce
+        disk.writeGate = CompletableDeferred()
+        disk.protectWrites = true
+        val claiming = launch {
+            try {
+                model.nativeDelivered(nonce)
+            } finally {
+                model.nativeDeferred(nonce)
+            }
+        }
+        runCurrent()
+        claiming.cancel()
+        disk.writeGate!!.complete(Unit)
+        claiming.join()
+        runCurrent()
+        assertFalse(disk.value!!.pending!!.delivered)
+        assertFalse(model.state.value.pending!!.delivered)
+        assertFalse(model.state.value.busy)
+        assertTrue(model.nativeDelivered(nonce))
+    }
+
     private class Files : HandleFileChoicesRepository {
 
         var uploads = 0
         var saves = 0
+        var mimeGate: CompletableDeferred<Unit>? = null
         var manualIssue: HandleFileIssue? = null
         var acceptedGate: CompletableDeferred<Unit>? = null
         val uploadedFileNames = mutableListOf<String>()
 
-        override suspend fun mimeTypes(extensions: List<String>) = listOf("*/*")
+        override suspend fun mimeTypes(extensions: List<String>): List<String> {
+            mimeGate?.let { withContext(NonCancellable) { it.await() } }
+            return listOf("*/*")
+        }
 
         override suspend fun manual(text: String, image: Boolean): String {
 
@@ -210,6 +264,7 @@ class HandleFileChoicesViewModelTest {
         var failStage = false
         var failResult = false
         var writeGate: CompletableDeferred<Unit>? = null
+        var protectWrites = false
         var readGate: CompletableDeferred<Unit>? = null
 
         override suspend fun stage(id: String, seed: HandleFileSeed): HandleFileInput {
@@ -234,7 +289,8 @@ class HandleFileChoicesViewModelTest {
         override suspend fun read(id: String) = value
 
         override suspend fun write(id: String, value: HandleFileCheckpoint) {
-            writeGate?.await()
+            if (protectWrites) withContext(NonCancellable) { writeGate?.await() }
+            else writeGate?.await()
 
             if (failResult && value.phase == "Result") error("Receipt failed")
             if ((this.value?.revision ?: -1) <= value.revision) this.value = value

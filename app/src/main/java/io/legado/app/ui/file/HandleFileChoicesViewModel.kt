@@ -16,12 +16,14 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Immutable UI projection; all unrestricted strings are owned by the private session. */
 data class HandleFileChoicesState(
@@ -37,6 +39,13 @@ data class HandleFileChoicesState(
     val issue: HandleFileIssue? = null,
     val error: String? = null,
     val finished: Boolean = false,
+)
+
+data class HandleFileNativeRequest(
+    val nonce: String,
+    val action: Int,
+    val customPath: String,
+    val mimeTypes: List<String>,
 )
 
 class HandleFileChoicesViewModel(
@@ -125,6 +134,47 @@ class HandleFileChoicesViewModel(
             }
         }
     }
+
+    suspend fun prepareNative(nonce: String): HandleFileNativeRequest? {
+        val current = state.value
+        val pending = current.pending ?: return null
+        if (!ready() || current.phase != "Native" || pending.nonce != nonce) return null
+        val types =
+            if (pending.action == 1) repository.mimeTypes(current.input!!.extensions)
+            else emptyList()
+        currentCoroutineContext().ensureActive()
+        if (!ready() || state.value.phase != "Native" || state.value.pending?.nonce != nonce)
+            return null
+        return HandleFileNativeRequest(nonce, pending.action, current.draft, types)
+    }
+
+    suspend fun nativeDeferred(nonce: String) =
+        withContext(NonCancellable) {
+            if (stopped) return@withContext
+            val durable = sessionRepository.read(sessionId) ?: return@withContext
+            val pending = durable.pending ?: return@withContext
+            if (
+                durable.finished ||
+                    durable.phase != "Native" ||
+                    pending.nonce != nonce ||
+                    !pending.delivered
+            )
+                return@withContext
+            // A canceled claim may have reached AtomicFile without publishing its revision to Main.
+            // Read that accepted version before writing a strictly newer rollback for this owner
+            // only.
+            val rollback =
+                durable.copy(
+                    revision = maxOf(checkpoint.revision, durable.revision) + 1,
+                    pending = pending.copy(delivered = false),
+                )
+            sessionRepository.write(sessionId, rollback)
+            if (!stopped && state.value.phase == "Native" && state.value.pending?.nonce == nonce) {
+                publish(rollback)
+                mutableState.value = state.value.copy(busy = false)
+                drainResult()
+            }
+        }
 
     /**
      * The launch receipt is durable before a platform picker, permission request or manual editor.

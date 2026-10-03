@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.first
 fun HandleFileChoicesRoute(
     model: HandleFileChoicesViewModel,
     canDeliver: () -> Boolean,
-    native: suspend (String, Int, String) -> Unit,
+    native: (HandleFileNativeRequest) -> Boolean,
     result: (String, String?) -> Unit,
     close: (HandleFileIssue?) -> Unit,
 ) {
@@ -39,19 +39,27 @@ fun HandleFileChoicesRoute(
         val current = model.state.first { !it.busy }
         if (!current.loaded || current.finished || !ready()) return@LaunchedEffect
         val pending = current.pending ?: return@LaunchedEffect
+        val resumePermission = pending.action in listOf(10, 11, 112, 113)
+        if (pending.delivered && !resumePermission) return@LaunchedEffect
+        var claiming = false
+        var handedOff = false
         try {
-            if (!pending.delivered && !model.nativeDelivered(pending.nonce)) return@LaunchedEffect
+            // IO preparation precedes the durable claim. The host's final handoff is synchronous.
+            val prepared = model.prepareNative(pending.nonce) ?: return@LaunchedEffect
+            currentCoroutineContext().ensureActive()
+            if (!ready()) return@LaunchedEffect
+            if (!pending.delivered) {
+                claiming = true
+                if (!model.nativeDelivered(pending.nonce)) return@LaunchedEffect
+            }
             currentCoroutineContext().ensureActive()
             if (!ready() || model.state.value.phase != "Native") return@LaunchedEffect
-            // Restored system launches wait for their registered result. Permission handshakes and
-            // app dialogs can instead resume safely in the recreated host without another
-            // transport.
-            if (!pending.delivered || pending.action in listOf(10, 11, 112, 113)) {
-                launchNative(pending.nonce, pending.action, current.draft)
-            }
+            handedOff = launchNative(prepared)
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             model.nativeFailed(pending.nonce, error)
+        } finally {
+            if (claiming && !handedOff) model.nativeDeferred(pending.nonce)
         }
     }
     LaunchedEffect(lifecycle, state.result, state.error) {

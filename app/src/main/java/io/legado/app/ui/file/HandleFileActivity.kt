@@ -160,29 +160,31 @@ class HandleFileActivity : BaseComposeActivity(transparent = true), FilePickerDi
         }
     }
 
-    private suspend fun launchNative(nonce: String, action: Int, customPath: String) {
+    private fun launchNative(request: HandleFileNativeRequest): Boolean {
+        val nonce = request.nonce
+        val action = request.action
         registerPicker(nonce, action)
-        if (!canDeliver()) return
+        val current = choicesModel.state.value
+        if (!canDeliver() || current.phase != "Native" || current.pending?.nonce != nonce)
+            return false
         when (action) {
             0 -> launchSystemPicker(nonce) { directoryLaunchers.getValue(nonce).launch(null) }
-            1 -> {
-                val extensions = choicesModel.state.value.input?.extensions.orEmpty()
-                val types = repository.mimeTypes(extensions).toTypedArray()
-                if (canDeliver())
-                    launchSystemPicker(nonce) { documentLaunchers.getValue(nonce).launch(types) }
-            }
+            1 ->
+                launchSystemPicker(nonce) {
+                    documentLaunchers.getValue(nonce).launch(request.mimeTypes.toTypedArray())
+                }
             4 -> imageLaunchers.getValue(nonce).launch(null)
             10,
             11,
             112,
             113 -> requestPermissions(nonce, action)
             else -> {
-                val uri =
-                    if (customPath.isContentScheme()) Uri.parse(customPath)
-                    else Uri.fromFile(File(customPath))
+                val path = request.customPath
+                val uri = if (path.isContentScheme()) Uri.parse(path) else Uri.fromFile(File(path))
                 choicesModel.returned(nonce, uri.toString())
             }
         }
+        return true
     }
 
     private fun launchSystemPicker(nonce: String, launch: () -> Unit) {
