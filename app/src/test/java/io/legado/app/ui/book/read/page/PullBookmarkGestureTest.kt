@@ -23,7 +23,14 @@ class PullBookmarkGestureTest {
             )
         assertTrue(readView.contains("AppConfig.pullBookmarkDistance"))
         assertTrue(settings.contains("PreferKey.pullBookmarkDistance ->"))
-        assertTrue(settings.contains("AppConfig.pullBookmarkDistance = value"))
+        assertTrue(settings.contains("showNumberPicker("))
+        assertTrue(
+            source(
+                    "app/src/main/java/io/legado/app/ui/book/read/config/MoreReaderSettingsViewModel.kt"
+                )
+                .contains("repository.saveNumber(setting, value)")
+        )
+        assertTrue(readerSettings.contains("putInt(setting.key"))
         assertTrue(readerSettings.contains("PreferKey.pullBookmarkDistance"))
     }
 
