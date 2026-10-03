@@ -203,6 +203,135 @@ class BookSearchCommandsTest {
             }
         }
 
+    @Test
+    fun historyWriteFailureDoesNotSuppressAcceptedSearchOrOverwriteQuery() =
+        runTest(dispatcher) {
+            val engine = Engine()
+            val metadata = Metadata().apply { failHistoryWrite = true }
+            val viewModel =
+                BookSearchViewModel(Drafts(), Preferences(), metadata, SavedStateHandle()) {
+                    engine
+                }
+            try {
+                runCurrent()
+                viewModel.editQuery("retained")
+                runCurrent()
+                viewModel.submit()
+                runCurrent()
+                assertEquals(listOf("retained" to ""), engine.searches)
+                assertEquals("retained", viewModel.state.value.draft.query)
+                assertTrue(viewModel.state.value.metadataError != null)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun precisionToggleResubmitsTrimmedQueryWhileReadRecordToggleOnlyUpdatesMarkers() =
+        runTest(dispatcher) {
+            val engine = Engine()
+            val metadata = Metadata()
+            val preferences = Preferences()
+            val viewModel =
+                BookSearchViewModel(Drafts(), preferences, metadata, SavedStateHandle()) { engine }
+            try {
+                runCurrent()
+                viewModel.editQuery("  title  ")
+                runCurrent()
+                viewModel.togglePrecision()
+                runCurrent()
+                assertTrue(viewModel.state.value.preferences.precision)
+                assertEquals("title", viewModel.state.value.draft.query)
+                assertEquals(listOf("title" to ""), engine.searches)
+                viewModel.toggleReadRecords()
+                runCurrent()
+                assertFalse(viewModel.state.value.preferences.showReadRecord)
+                assertEquals(1, engine.searches.size)
+                assertEquals(listOf("title"), metadata.saved)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun selectedGroupRemovalKeepsGlobalScopeAndMissingMenuChoicesExplicitlyResetIt() =
+        runTest(dispatcher) {
+            val preferences = Preferences()
+            val viewModel =
+                BookSearchViewModel(Drafts(), preferences, Metadata(), SavedStateHandle())
+            try {
+                runCurrent()
+                viewModel.selectScope("One,Two")
+                runCurrent()
+                viewModel.selectGroup("One")
+                runCurrent()
+                assertEquals("Two", viewModel.state.value.draft.scope)
+                assertEquals("One,Two", preferences.values.value.scope)
+                assertEquals(listOf("One,Two"), preferences.scopeWrites)
+                viewModel.validateScopeMenu()
+                runCurrent()
+                assertEquals("", viewModel.state.value.draft.scope)
+                assertEquals(listOf("One,Two", ""), preferences.scopeWrites)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun filterFailureRetryKeepsNewerEditingTextAndOnlyCommitsOriginalConfirmedValue() =
+        runTest(dispatcher) {
+            val preferences = Preferences().apply { failFilter = true }
+            val viewModel =
+                BookSearchViewModel(Drafts(), preferences, Metadata(), SavedStateHandle())
+            try {
+                runCurrent()
+                viewModel.openFilter()
+                viewModel.editFilter("  confirmed  ")
+                viewModel.confirmFilter()
+                runCurrent()
+                assertTrue(viewModel.state.value.settingsError != null)
+                assertEquals("  confirmed  ", viewModel.state.value.draft.filterDraft)
+                viewModel.editFilter("new unsaved draft")
+                preferences.failFilter = false
+                viewModel.retry()
+                runCurrent()
+                assertEquals("confirmed", viewModel.state.value.preferences.resultFilter)
+                assertEquals("new unsaved draft", viewModel.state.value.draft.filterDraft)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
+    @Test
+    fun emptyPrecisionConfirmationUsesOriginalRawQueryWithoutAnotherHistoryIncrement() =
+        runTest(dispatcher) {
+            val engine = Engine()
+            val metadata = Metadata()
+            val preferences =
+                Preferences().apply { values.value = BookSearchPreferences(precision = true) }
+            val drafts = Drafts(BookSearchDraft(revision = 10, scope = "group"))
+            val viewModel =
+                BookSearchViewModel(drafts, preferences, metadata, SavedStateHandle()) { engine }
+            try {
+                runCurrent()
+                viewModel.editQuery("  title  ")
+                runCurrent()
+                viewModel.submit()
+                runCurrent()
+                engine.state.value =
+                    engine.state.value.copy(searching = false, finishedEmpty = true)
+                runCurrent()
+                assertTrue(viewModel.state.value.draft.emptyScopeConfirmation)
+                viewModel.confirmEmptyScope()
+                runCurrent()
+                assertFalse(viewModel.state.value.preferences.precision)
+                assertEquals(listOf("title" to "group", "  title  " to "group"), engine.searches)
+                assertEquals(listOf("title"), metadata.saved)
+            } finally {
+                viewModel.stop()
+            }
+        }
+
     private class Engine : BookSearchEngineRepository {
         override val state = MutableStateFlow(BookSearchSession())
         val searches = mutableListOf<Pair<String, String>>()
@@ -250,25 +379,35 @@ class BookSearchCommandsTest {
     }
 
     private class Preferences : BookSearchPreferencesRepository {
-        private val values = MutableStateFlow(BookSearchPreferences())
+        val values = MutableStateFlow(BookSearchPreferences())
+        val scopeWrites = mutableListOf<String>()
+        var failFilter = false
 
         override fun observe() = values
 
         override suspend fun load() = values.value
 
-        override suspend fun precision(value: Boolean) = values.value.copy(precision = value)
+        override suspend fun precision(value: Boolean) =
+            values.value.copy(precision = value).also { values.value = it }
 
         override suspend fun showReadRecord(value: Boolean) =
-            values.value.copy(showReadRecord = value)
+            values.value.copy(showReadRecord = value).also { values.value = it }
 
-        override suspend fun resultFilter(value: String) = values.value.copy(resultFilter = value)
+        override suspend fun resultFilter(value: String): BookSearchPreferences {
+            check(!failFilter) { "synthetic filter failure" }
+            return values.value.copy(resultFilter = value).also { values.value = it }
+        }
 
-        override suspend fun scope(value: String) = values.value.copy(scope = value)
+        override suspend fun scope(value: String): BookSearchPreferences {
+            scopeWrites += value
+            return values.value.copy(scope = value).also { values.value = it }
+        }
     }
 
     private class Metadata : BookSearchMetadataRepository {
         val saved = mutableListOf<String>()
         val queries = mutableListOf<String>()
+        var failHistoryWrite = false
         var namedBook = false
         var namedGate: CompletableDeferred<Unit>? = null
 
@@ -290,6 +429,7 @@ class BookSearchCommandsTest {
         }
 
         override suspend fun saveHistory(word: String) {
+            check(!failHistoryWrite) { "synthetic history failure" }
             saved += word
         }
 

@@ -23,6 +23,8 @@ internal data class BookSearchUiState(
     val persistError: String? = null,
     val metadataError: String? = null,
     val commandError: String? = null,
+    val settingsBusy: Boolean = false,
+    val settingsError: String? = null,
 ) {
     val visibleResults: List<BookSearchResult>
         get() = filterBookSearchSnapshots(draft.results, preferences.resultFilter)
