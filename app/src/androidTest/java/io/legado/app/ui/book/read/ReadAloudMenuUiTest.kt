@@ -10,9 +10,10 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.MotionEvent
-import android.view.View
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -20,7 +21,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
-import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
@@ -289,7 +289,7 @@ class ReadAloudMenuUiTest {
         await("pause control and requested playback state") {
             BaseReadAloudService.isRun &&
                 BaseReadAloudService.pause == paused &&
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
         }
         return checkNotNull(service)
     }
@@ -307,7 +307,7 @@ class ReadAloudMenuUiTest {
         if (movable) {
             var beforeY = 0f
             scenario!!.onActivity {
-                beforeY = it.findViewById<View>(R.id.read_aloud_float_bar_container).y
+                beforeY = it.readAloudControlsBounds.y
             }
             // A slow drag lasts beyond the long-press timeout and must not stop or toggle playback.
             compose.onNodeWithTag("reader-aloud-pause").performTouchInput {
@@ -316,8 +316,7 @@ class ReadAloudMenuUiTest {
             scenario!!.onActivity {
                 assertTrue(
                     "Drag moves the control",
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).y <
-                        beforeY - 48.dpToPx(),
+                    it.readAloudControlsBounds.y < beforeY - 48.dpToPx(),
                 )
                 assertTrue("Dragging must keep the service alive", BaseReadAloudService.isRun)
                 assertEquals(
@@ -343,7 +342,7 @@ class ReadAloudMenuUiTest {
                 assertTrue("Stopped service remains paused", BaseReadAloudService.pause)
                 assertFalse(
                     "Stopped controls disappear",
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible,
+                    it.readAloudControlsVisible,
                 )
             }
         } finally {
@@ -384,27 +383,27 @@ class ReadAloudMenuUiTest {
                 activity.showReadAloudControls()
             }
             await("pause control visible") {
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
             }
             scenario!!.onActivity { it.showReadAloudDialog() }
             await("aloud dialog visible") { it.bottomDialog == 1 }
             scenario!!.onActivity {
-                assertFalse(it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible)
+                assertFalse(it.readAloudControlsVisible)
             }
             compose.onNodeWithTag("read-aloud-main-menu").performClick()
             await("returned to main menu") {
-                it.bottomDialog == 0 && it.findViewById<ReadMenu>(R.id.read_menu).isVisible
+                it.bottomDialog == 0 && it.readMenu.isVisible
             }
             screenshot("aloud-main-menu-paused-$paused")
             scenario!!.onActivity {
                 assertFalse(
                     "Playback controls must remain hidden over the main menu",
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible,
+                    it.readAloudControlsVisible,
                 )
-                it.findViewById<ReadMenu>(R.id.read_menu).runMenuOut(anim = false)
+                it.readMenu.runMenuOut(anim = false)
             }
             await("controls return after menu closes") {
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
             }
         }
     }
@@ -465,11 +464,11 @@ class ReadAloudMenuUiTest {
             it.showReadAloudControls()
         }
         await("pause switch hides the attached control") {
-            !it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible
+            !it.readAloudControlsVisible
         }
         scenario!!.onActivity { BaseReadAloudService.detachReadAloudFollow() }
         await("position control is independent of pause switch") {
-            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            it.readAloudControlsVisible
         }
         prefs
             .edit()
@@ -477,11 +476,11 @@ class ReadAloudMenuUiTest {
             .putBoolean(PreferKey.readAloudControlsPause, true)
             .commit()
         await("position switch hides the detached control") {
-            !it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible
+            !it.readAloudControlsVisible
         }
         scenario!!.onActivity { BaseReadAloudService.restoreReadAloudFollow() }
         await("pause control is independent of position switch") {
-            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            it.readAloudControlsVisible
         }
     }
 
@@ -507,7 +506,7 @@ class ReadAloudMenuUiTest {
             await("manual departure stays detached after navigation (paused=$paused)") {
                 ReadBook.durPageIndex == 1 &&
                     !ReadAloud.followReadAloudPosition &&
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                    it.readAloudControlsVisible
             }
             prefs.edit().putBoolean(PreferKey.readAloudControlsPause, false).commit()
             swipePage(next = false)
@@ -515,7 +514,7 @@ class ReadAloudMenuUiTest {
                 ReadBook.durPageIndex == 0 &&
                     ReadAloud.followReadAloudPosition &&
                     ReadBook.curTextChapter!!.getPage(0)!!.hasReadAloudSpan &&
-                    !it.findViewById<View>(R.id.read_aloud_float_bar_container).isVisible
+                    !it.readAloudControlsVisible
             }
             assertEquals(
                 "Restoring follow must not change playback state",
@@ -524,7 +523,7 @@ class ReadAloudMenuUiTest {
             )
             prefs.edit().putBoolean(PreferKey.readAloudControlsPause, true).commit()
             await("pause control reappears on its own switch") {
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
             }
             screenshot("aloud-realtime-return-paused-$paused")
         }
@@ -537,7 +536,7 @@ class ReadAloudMenuUiTest {
         await("realtime off keeps manual return at the speech page") {
             ReadBook.durPageIndex == 0 &&
                 !ReadAloud.followReadAloudPosition &&
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
         }
         screenshot("aloud-realtime-off-manual-return")
         compose.onNodeWithTag("reader-aloud-back").performClick()
@@ -1022,7 +1021,7 @@ class ReadAloudMenuUiTest {
                 ReadBook.durChapterIndex == (if (paused) 0 else 2) &&
                     ReadBook.curTextChapter?.isCompleted == true &&
                     !ReadAloud.followReadAloudPosition &&
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                    it.readAloudControlsVisible
             }
             assertEquals(session, speechSession(service))
             if (download) BookHelp.delContent(fixture, chapters[1])
@@ -1180,7 +1179,7 @@ class ReadAloudMenuUiTest {
         await("scrolled page remains detached") {
             ReadBook.durPageIndex == 1 &&
                 !ReadAloud.followReadAloudPosition &&
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
         }
         var returnedLineTop = 0f
         scenario!!.onActivity {
@@ -1192,7 +1191,7 @@ class ReadAloudMenuUiTest {
             ReadAloud.followReadAloudPosition &&
                 ReadBook.durPageIndex == 0 &&
                 ReadBook.curTextChapter!!.getPage(0)!!.hasReadAloudSpan &&
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
         }
         scenario!!.onActivity {
             assertEquals(
@@ -1250,13 +1249,13 @@ class ReadAloudMenuUiTest {
         var state = ""
         scenario!!.onActivity {
             val view = it.findViewById<ReadView>(R.id.read_view)
-            val controls = it.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val controls = it.readAloudControlsBounds
             state =
                 "page=${ReadBook.durPageIndex}, chapter=${ReadBook.durChapterIndex}, " +
                     "speechChapter=${ReadAloud.readAloudChapterIndex}, speechPosition=${ReadAloud.readAloudChapterStart}, " +
                     "following=${ReadAloud.followReadAloudPosition}, running=${BaseReadAloudService.isRun}, " +
                     "paused=${BaseReadAloudService.pause}, highlighted=${view.curPage.textPage.hasReadAloudSpan}, " +
-                    "selected=${view.isTextSelected}, controls=${controls.isShown}, " +
+                    "selected=${view.isTextSelected}, controls=${it.readAloudControlsVisible}, " +
                     "controlPosition=${controls.x},${controls.y}, dialog=${it.bottomDialog}"
         }
         val label = "aloud-timeout-${SystemClock.uptimeMillis()}"
@@ -1281,6 +1280,21 @@ class ReadAloudMenuUiTest {
             }
         } finally {
             bitmap.recycle()
+        }
+        var controlsVisible = false
+        scenario!!.onActivity { controlsVisible = it.readAloudControlsVisible }
+        if (controlsVisible) {
+            val controls =
+                compose.onNodeWithTag("reader-aloud-controls").captureToImage().asAndroidBitmap()
+            try {
+                File(context.getExternalFilesDir("ui-regression"), "$name-controls.png")
+                    .outputStream()
+                    .use {
+                        assertTrue(controls.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+            } finally {
+                controls.recycle()
+            }
         }
     }
 }

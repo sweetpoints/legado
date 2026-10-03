@@ -2,19 +2,17 @@ package io.legado.app.ui.book.read
 
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Matrix
-import android.graphics.Rect
-import android.graphics.RectF
 import android.os.SystemClock
 import android.view.MotionEvent
-import android.view.View
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
@@ -188,52 +186,60 @@ class ReadAloudScaleUiTest {
                 it.showReadAloudControls()
             }
             await("position bar visible") {
-                it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                it.readAloudControlsVisible
             }
             screenshot("aloud-scale-position-$widthDp")
             var expectedHeight = 0
-            val bounds = Rect()
+            var density = 1f
+            var actualBounds = ReadAloudControlsBounds(0f, 0f, 0, 0)
             scenario!!.onActivity { activity ->
-                val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-                val density = activity.resources.displayMetrics.density
-                val parent = bar.parent as View
-                val expectedWidth =
-                    minOf(
-                        (widthDp * density).roundToInt(),
-                        parent.width - (32 * density).roundToInt(),
-                    )
-                expectedHeight = (expectedWidth / 6f).roundToInt()
-                evidence.appendLine(
-                    "requested=$widthDp actual=${bar.width}x${bar.height} expected=${expectedWidth}x$expectedHeight"
-                )
-                File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt")
-                    .writeText(evidence.toString())
-                assertEquals(
-                    "Long control must use the selected total width",
-                    expectedWidth,
-                    bar.width,
-                )
-                assertEquals(
-                    "Long control height must scale with its width",
-                    expectedHeight,
-                    bar.height,
-                )
-                assertEquals(1f, bar.scaleX, 0f)
-                assertEquals(1f, bar.scaleY, 0f)
-                assertTrue(bar.getGlobalVisibleRect(bounds))
-                // An odd width can be centered on a half pixel; visible integer bounds round
-                // outward.
-                val globalTransform = Matrix()
-                bar.transformMatrixToGlobal(globalTransform)
-                val transformedBounds = RectF(0f, 0f, bar.width.toFloat(), bar.height.toFloat())
-                globalTransform.mapRect(transformedBounds)
-                val expectedBounds = Rect().also { transformedBounds.roundOut(it) }
-                assertEquals(
-                    "The complete transformed control must remain visible",
-                    expectedBounds,
-                    bounds,
-                )
+                actualBounds = activity.readAloudControlsBounds
+                density = activity.resources.displayMetrics.density
             }
+            val bar = actualBounds
+            val hostBounds = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            val expectedWidth =
+                minOf(
+                    (widthDp * density).roundToInt(),
+                    hostBounds.width.roundToInt() - (32 * density).roundToInt(),
+                )
+            expectedHeight = (expectedWidth / 6f).roundToInt()
+            evidence.appendLine(
+                "requested=$widthDp actual=${bar.width}x${bar.height} expected=${expectedWidth}x$expectedHeight"
+            )
+            File(context.getExternalFilesDir("ui-regression"), "aloud-scale-bounds.txt")
+                .writeText(evidence.toString())
+            assertEquals(
+                "Long control must use the selected total width",
+                expectedWidth,
+                bar.width,
+            )
+            assertEquals(
+                "Long control height must scale with its width",
+                expectedHeight,
+                bar.height,
+            )
+            val semanticsBounds =
+                compose.onNodeWithTag("reader-aloud-controls").fetchSemanticsNode().boundsInRoot
+            assertEquals(
+                "Compose exposes the measured control width",
+                bar.width,
+                semanticsBounds.width.roundToInt(),
+            )
+            assertEquals(
+                "Compose exposes the measured control height",
+                bar.height,
+                semanticsBounds.height.roundToInt(),
+            )
+            assertEquals("Compose exposes the control X", bar.x, semanticsBounds.left, 1f)
+            assertEquals("Compose exposes the control Y", bar.y, semanticsBounds.top, 1f)
+            assertTrue(
+                "The complete Compose control stays within the host viewport",
+                semanticsBounds.left >= 0 &&
+                    semanticsBounds.top >= 0 &&
+                    semanticsBounds.right <= hostBounds.right &&
+                    semanticsBounds.bottom <= hostBounds.bottom,
+            )
             compose.onNodeWithTag("reader-aloud-back").assertIsDisplayed()
             compose.onNodeWithTag("reader-aloud-here").assertIsDisplayed()
             for (paused in listOf(false, true)) {
@@ -243,14 +249,16 @@ class ReadAloudScaleUiTest {
                     it.showReadAloudControls()
                 }
                 await("pause control visible") {
-                    it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+                    it.readAloudControlsVisible
                 }
                 screenshot("aloud-scale-circle-$widthDp-$paused")
-                scenario!!.onActivity { activity ->
-                    val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-                    assertEquals("Circle follows the same scale", expectedHeight, bar.width)
-                    assertEquals(expectedHeight, bar.height)
-                }
+                var circleBounds = ReadAloudControlsBounds(0f, 0f, 0, 0)
+                scenario!!.onActivity { circleBounds = it.readAloudControlsBounds }
+                assertEquals("Circle follows the same scale", expectedHeight, circleBounds.width)
+                assertEquals(expectedHeight, circleBounds.height)
+                val image = compose.onNodeWithTag("reader-aloud-controls").captureToImage()
+                assertEquals(expectedHeight, image.width)
+                assertEquals(expectedHeight, image.height)
                 compose.onNodeWithTag("reader-aloud-pause").assertIsDisplayed()
             }
         }
@@ -315,12 +323,12 @@ class ReadAloudScaleUiTest {
             it.showReadAloudControls()
         }
         await("restored position control") {
-            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            it.readAloudControlsVisible
         }
         screenshot("aloud-scale-restored-85")
         scenario!!.onActivity { activity ->
             assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             assertEquals((85 * activity.resources.displayMetrics.density).roundToInt(), bar.width)
         }
     }
@@ -331,7 +339,6 @@ class ReadAloudScaleUiTest {
     }
 
     private fun verifyLockedPosition(pauseControl: Boolean) {
-        val controlId = R.id.read_aloud_float_bar_container
         prefs
             .edit()
             .remove(PreferKey.readAloudControlsX)
@@ -346,31 +353,25 @@ class ReadAloudScaleUiTest {
             else BaseReadAloudService.detachReadAloudFollow()
             it.showReadAloudControls(resetPosition = true)
         }
-        await("movable control visible") { it.findViewById<View>(controlId).isShown }
+        await("movable control visible") { it.readAloudControlsVisible }
         screenshot("aloud-lock-default-$pauseControl")
 
         var defaultX = 0f
         var defaultY = 0f
-        var startGlobalX = 0f
-        var startGlobalY = 0f
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             defaultX = bar.x
             defaultY = bar.y
-            val location = IntArray(2)
-            bar.getLocationOnScreen(location)
-            startGlobalX = location[0] + bar.width / 2f
-            startGlobalY = location[1] + bar.height / 2f
         }
-        // Move inside the real control bounds; the production listener stores normalized
+        // Gesture the actual Compose control; its production pointer handler stores normalized
         // coordinates on ACTION_UP.
-        drag(startGlobalX, startGlobalY, startGlobalX - 48.dpToPx(), startGlobalY - 72.dpToPx())
+        drag(-48.dpToPx(), -72.dpToPx())
         var movedX = 0f
         var movedY = 0f
         var storedX = 0f
         var storedY = 0f
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             movedX = bar.x
             movedY = bar.y
             storedX = prefs.getFloat(PreferKey.readAloudControlsX, Float.NaN)
@@ -386,28 +387,19 @@ class ReadAloudScaleUiTest {
         prefs.edit().putBoolean(PreferKey.readAloudControlsDrag, false).commit()
         scenario!!.onActivity { it.showReadAloudControls() }
         await("control remains visible after disabling drag") {
-            it.findViewById<View>(controlId).isShown
+            it.readAloudControlsVisible
         }
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             assertEquals("Disabling drag must retain X", movedX, bar.x, 1f)
             assertEquals("Disabling drag must retain Y", movedY, bar.y, 1f)
         }
 
         // With dragging disabled the same real gesture must leave both the view and stored
         // coordinates unchanged.
-        var movedGlobalX = 0f
-        var movedGlobalY = 0f
+        drag(48.dpToPx(), 48.dpToPx())
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-            val location = IntArray(2)
-            bar.getLocationOnScreen(location)
-            movedGlobalX = location[0] + bar.width / 2f
-            movedGlobalY = location[1] + bar.height / 2f
-        }
-        drag(movedGlobalX, movedGlobalY, movedGlobalX + 48.dpToPx(), movedGlobalY + 48.dpToPx())
-        scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             assertEquals("Disabled drag must ignore movement on X", movedX, bar.x, 1f)
             assertEquals("Disabled drag must ignore movement on Y", movedY, bar.y, 1f)
             assertEquals(storedX, prefs.getFloat(PreferKey.readAloudControlsX, Float.NaN), 0f)
@@ -417,12 +409,12 @@ class ReadAloudScaleUiTest {
 
         scenario!!.onActivity { it.showReadAloudControls(resetPosition = true) }
         await("control remains visible after reset") {
-            it.findViewById<View>(controlId).isShown &&
+            it.readAloudControlsVisible &&
                 !prefs.contains(PreferKey.readAloudControlsX) &&
                 !prefs.contains(PreferKey.readAloudControlsY)
         }
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
+            val bar = activity.readAloudControlsBounds
             assertFalse("Reset must remove stored X", prefs.contains(PreferKey.readAloudControlsX))
             assertFalse("Reset must remove stored Y", prefs.contains(PreferKey.readAloudControlsY))
             assertEquals("Reset must restore default X", defaultX, bar.x, 1f)
@@ -449,19 +441,19 @@ class ReadAloudScaleUiTest {
             it.showReadAloudControls()
         }
         await("clamped control") {
-            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            it.readAloudControlsVisible
         }
         screenshot("aloud-scale-old40-clamped85-opacity90")
+        var restoredWidth = 0
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
-            assertEquals((85 * activity.resources.displayMetrics.density).roundToInt(), bar.width)
+            restoredWidth = activity.readAloudControlsBounds.width
             assertEquals(
-                "Unset opacity uses 90 percent",
-                229,
-                backgroundAlpha(bar),
+                (85 * activity.resources.displayMetrics.density).roundToInt(),
+                restoredWidth,
             )
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "new-defaults")
         }
+        assertEquals("Unset opacity uses 90 percent", 229, backgroundAlpha())
         compose.onNodeWithTag("aloud-controls-value-Width").performScrollTo().assertTextEquals("85")
         assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
         compose
@@ -484,19 +476,18 @@ class ReadAloudScaleUiTest {
             it.showReadAloudControls()
         }
         await("explicit opacity restored") {
-            it.findViewById<View>(R.id.read_aloud_float_bar_container).isShown
+            it.readAloudControlsVisible
         }
         screenshot("aloud-scale-explicit-opacity30")
         scenario!!.onActivity { activity ->
-            val bar = activity.findViewById<View>(R.id.read_aloud_float_bar_container)
             assertEquals(
                 "Explicit opacity remains unchanged",
                 30,
                 prefs.getInt(PreferKey.readAloudControlsOpacity, -1),
             )
-            assertEquals(76, backgroundAlpha(bar))
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "saved-opacity")
         }
+        assertEquals(76, backgroundAlpha())
         compose
             .onNodeWithTag("aloud-controls-value-Opacity")
             .performScrollTo()
@@ -508,38 +499,20 @@ class ReadAloudScaleUiTest {
         }
     }
 
-    private fun backgroundAlpha(bar: View): Int {
-        val bitmap = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
+    private fun backgroundAlpha(): Int {
+        val bitmap =
+            compose.onNodeWithTag("reader-aloud-controls").captureToImage().asAndroidBitmap()
         return try {
-            bar.draw(Canvas(bitmap))
-            Color.alpha(bitmap.getPixel(bar.width / 2, bar.height / 10))
+            android.graphics.Color.alpha(bitmap.getPixel(bitmap.width / 2, bitmap.height / 10))
         } finally {
             bitmap.recycle()
         }
     }
 
-    private fun drag(fromX: Float, fromY: Float, toX: Float, toY: Float) {
-        val downTime = SystemClock.uptimeMillis()
-        fun send(action: Int, x: Float, y: Float, eventTime: Long) {
-            MotionEvent.obtain(downTime, eventTime, action, x, y, 0).let {
-                try {
-                    instrumentation.sendPointerSync(it)
-                } finally {
-                    it.recycle()
-                }
-            }
+    private fun drag(dx: Float, dy: Float) {
+        compose.onNodeWithTag("reader-aloud-controls").performTouchInput {
+            swipe(center, center + Offset(dx, dy), durationMillis = 200)
         }
-        send(MotionEvent.ACTION_DOWN, fromX, fromY, downTime)
-        repeat(4) { index ->
-            val fraction = (index + 1) / 4f
-            send(
-                MotionEvent.ACTION_MOVE,
-                fromX + (toX - fromX) * fraction,
-                fromY + (toY - fromY) * fraction,
-                downTime + (index + 1) * 40L,
-            )
-        }
-        send(MotionEvent.ACTION_UP, toX, toY, downTime + 200L)
         instrumentation.waitForIdleSync()
     }
 
@@ -591,6 +564,25 @@ class ReadAloudScaleUiTest {
             }
         } finally {
             bitmap.recycle()
+        }
+        if (
+            scenario?.let { current ->
+                var visible = false
+                current.onActivity { visible = it.readAloudControlsVisible }
+                visible
+            } == true
+        ) {
+            val controls =
+                compose.onNodeWithTag("reader-aloud-controls").captureToImage().asAndroidBitmap()
+            try {
+                File(context.getExternalFilesDir("ui-regression"), "$name-controls.png")
+                    .outputStream()
+                    .use {
+                        assertTrue(controls.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+            } finally {
+                controls.recycle()
+            }
         }
     }
 }
