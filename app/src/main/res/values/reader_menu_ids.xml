@@ -2,4 +2,7 @@
 <resources>
     <!-- Kept while the independently migrated manga menu still uses this constraint anchor. -->
     <item name="ll_brightness" type="id" />
+    <!-- The public onTouch ABI still accepts native cursor IDs during the host transition. -->
+    <item name="cursor_left" type="id" />
+    <item name="cursor_right" type="id" />
 </resources>

@@ -15,21 +15,10 @@
         android:layout_height="0dp"
         android:visibility="invisible" />
 
-    <ImageView
-        android:id="@+id/cursor_left"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="@string/select_start"
-        android:src="@drawable/ic_cursor_left"
-        android:visibility="invisible" />
-
-    <ImageView
-        android:id="@+id/cursor_right"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="@string/select_end"
-        android:src="@drawable/ic_cursor_right"
-        android:visibility="invisible" />
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/selection_cursors"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <io.legado.app.ui.book.read.ReadMenu
         android:id="@+id/read_menu"

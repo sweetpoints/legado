@@ -19,6 +19,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.net.toUri
 import androidx.core.view.doOnLayout
 import androidx.core.view.get
@@ -130,6 +136,7 @@ import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.popupActionMenu
@@ -160,7 +167,6 @@ import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.sysScreenOffTime
 import io.legado.app.utils.throttle
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.visible
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -264,6 +270,10 @@ class ReadBookActivity :
                 viewModel.saveImage(it.value, uri)
             }
         }
+    private var selectionState by mutableStateOf(ReaderSelectionState())
+    private val selectionCursorSize
+        get() = 24.dpToPx().toFloat()
+
     private var menu: Menu? = null
     @get:SuppressLint("RestrictedApi")
     private val composeReaderMenu by lazy {
@@ -388,10 +398,20 @@ class ReadBookActivity :
         }
         binding.readView.pdfZoom.restore(savedInstanceState?.getBundle("pdfZoom"))
         aloudControls.restore(savedInstanceState?.getBundle("aloudControls"))
-        binding.cursorLeft.setColorFilter(accentColor)
-        binding.cursorRight.setColorFilter(accentColor)
-        binding.cursorLeft.setOnTouchListener(this)
-        binding.cursorRight.setOnTouchListener(this)
+        binding.selectionCursors.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.selectionCursors.setContent {
+            LegadoComposeTheme {
+                ReaderSelectionCursorsScreen(
+                    state = selectionState,
+                    color = Color(accentColor),
+                    begin = { textActionMenu.dismiss() },
+                    move = ::moveSelectionCursor,
+                    end = ::finishSelectionCursor,
+                )
+            }
+        }
         window.setBackgroundDrawable(null)
         upScreenTimeOut()
         ReadBook.register(this)
@@ -1144,74 +1164,67 @@ class ReadBookActivity :
         return super.onKeyUp(keyCode, event)
     }
 
-    /** view触摸,文字选择 */
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouch(v: View, event: MotionEvent): Boolean = binding.run {
-        if (!binding.readView.isTextSelected) {
-            return false
-        }
+    /**
+     * Kept for callers using the original reader touch contract; Compose cursors call the same
+     * bridge.
+     */
+    override fun onTouch(v: View, event: MotionEvent): Boolean {
+        if (!binding.readView.isTextSelected) return false
         when (event.action) {
             MotionEvent.ACTION_DOWN -> textActionMenu.dismiss()
-            MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_MOVE ->
                 when (v.id) {
                     R.id.cursor_left ->
-                        if (!readView.curPage.getReverseStartCursor()) {
-                            readView.selectStartMoveAtRaw(
-                                event.rawX + cursorLeft.width,
-                                event.rawY - cursorLeft.height,
-                            )
-                        } else {
-                            readView.selectEndMoveAtRaw(
-                                event.rawX - cursorRight.width,
-                                event.rawY - cursorRight.height,
-                            )
-                        }
-
+                        moveSelectionCursor(SelectionHandle.Start, Offset(event.rawX, event.rawY))
                     R.id.cursor_right ->
-                        if (readView.curPage.getReverseEndCursor()) {
-                            readView.selectStartMoveAtRaw(
-                                event.rawX + cursorLeft.width,
-                                event.rawY - cursorLeft.height,
-                            )
-                        } else {
-                            readView.selectEndMoveAtRaw(
-                                event.rawX - cursorRight.width,
-                                event.rawY - cursorRight.height,
-                            )
-                        }
+                        moveSelectionCursor(SelectionHandle.End, Offset(event.rawX, event.rawY))
                 }
-            }
-
             MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL -> {
-                readView.dismissTextMagnifier()
-                readView.curPage.resetReverseCursor()
-                showTextActionMenu()
-            }
+            MotionEvent.ACTION_CANCEL -> finishSelectionCursor()
         }
         return true
     }
 
-    /** 更新文字选择开始位置 */
-    override fun upSelectedStart(x: Float, y: Float, top: Float) = binding.run {
-        cursorLeft.x = x - cursorLeft.width
-        cursorLeft.y = y
-        cursorLeft.visible(true)
-        textMenuPosition.x = x
-        textMenuPosition.y = top
+    private fun moveSelectionCursor(handle: SelectionHandle, rawPosition: Offset) {
+        val readView = binding.readView
+        if (!readView.isTextSelected) return
+        val command =
+            selectionDragCommand(
+                handle = handle,
+                reverseStart = readView.curPage.getReverseStartCursor(),
+                reverseEnd = readView.curPage.getReverseEndCursor(),
+                rawX = rawPosition.x,
+                rawY = rawPosition.y,
+                cursorWidth = selectionCursorSize,
+                cursorHeight = selectionCursorSize,
+            )
+        when (command.endpoint) {
+            SelectionEndpoint.Start ->
+                readView.selectStartMoveAtRaw(command.screenX, command.screenY)
+            SelectionEndpoint.End -> readView.selectEndMoveAtRaw(command.screenX, command.screenY)
+        }
     }
 
-    /** 更新文字选择结束位置 */
-    override fun upSelectedEnd(x: Float, y: Float) = binding.run {
-        cursorRight.x = x
-        cursorRight.y = y
-        cursorRight.visible(true)
+    private fun finishSelectionCursor() {
+        if (!binding.readView.isTextSelected) return
+        binding.readView.dismissTextMagnifier()
+        binding.readView.curPage.resetReverseCursor()
+        showTextActionMenu()
     }
 
-    /** 取消文字选择 */
-    override fun onCancelSelect() = binding.run {
-        cursorLeft.invisible()
-        cursorRight.invisible()
+    override fun upSelectedStart(x: Float, y: Float, top: Float) {
+        selectionState =
+            selectionState.copy(startX = x, startY = y, startTop = top, showStart = true)
+        binding.textMenuPosition.x = x
+        binding.textMenuPosition.y = top
+    }
+
+    override fun upSelectedEnd(x: Float, y: Float) {
+        selectionState = selectionState.copy(endX = x, endY = y, showEnd = true)
+    }
+
+    override fun onCancelSelect() {
+        selectionState = selectionState.copy(showStart = false, showEnd = false)
         textActionMenu.dismiss()
     }
 
@@ -1226,9 +1239,9 @@ class ReadBookActivity :
             binding.root.rootView.height,
             binding.textMenuPosition.x.toInt(),
             binding.textMenuPosition.y.toInt(),
-            binding.cursorLeft.y.toInt() + binding.cursorLeft.height,
-            binding.cursorRight.x.toInt(),
-            binding.cursorRight.y.toInt() + binding.cursorRight.height,
+            (selectionState.startY + selectionCursorSize).toInt(),
+            selectionState.endX.toInt(),
+            (selectionState.endY + selectionCursorSize).toInt(),
         )
     }
 
