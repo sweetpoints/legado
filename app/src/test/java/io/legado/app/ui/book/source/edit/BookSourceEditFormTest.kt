@@ -116,4 +116,40 @@ class BookSourceEditFormTest {
         val enabled = original.copy(options = original.options.copy(enabledReview = true))
         assertTrue(materializeBookSourceEditForm(source, enabled).ruleReview!!.enabled)
     }
+
+    @Test
+    fun keyboardInsertionUsesRawUtf16OffsetsAndReversedSelection() {
+        val original = projectBookSourceEditForm(BookSource(header = "A\r\n中😀Z"))
+        val selected = original.updateField(0, "header", "A\r\n中😀Z", 6, 3)
+        val inserted = selected.insert(0, "header", "x")
+        assertEquals("A\r\nxZ", inserted.field(0, "header")!!.value)
+        assertEquals(4, inserted.field(0, "header")!!.selectionStart)
+        assertEquals(4, inserted.field(0, "header")!!.selectionEnd)
+        assertEquals("A\r\n中😀Z", original.field(0, "header")!!.value)
+        assertEquals(6, selected.field(0, "header")!!.selectionStart)
+        assertEquals(3, selected.field(0, "header")!!.selectionEnd)
+    }
+
+    @Test
+    fun changingFieldClampsSelectionAndDoesNotMoveAnotherTabCursor() {
+        val original =
+            projectBookSourceEditForm(BookSource())
+                .updateField(1, "name", "search title", 4, 8)
+                .updateField(3, "name", "detail title", 5, 7)
+        val updated = original.updateField(1, "name", "x")
+        assertEquals(1, updated.field(1, "name")!!.selectionStart)
+        assertEquals(1, updated.field(1, "name")!!.selectionEnd)
+        assertEquals(5, updated.field(3, "name")!!.selectionStart)
+        assertEquals(7, updated.field(3, "name")!!.selectionEnd)
+    }
+
+    @Test
+    fun invalidSelectionIsBoundedBeforeKeyboardInsertion() {
+        val form = projectBookSourceEditForm(BookSource()).updateField(0, "jsLib", "abc", -5, 100)
+        assertEquals(0, form.field(0, "jsLib")!!.selectionStart)
+        assertEquals(3, form.field(0, "jsLib")!!.selectionEnd)
+        assertEquals("replace", form.insert(0, "jsLib", "replace").field(0, "jsLib")!!.value)
+        assertEquals(form, form.insert(0, "jsLib", ""))
+        assertEquals(form, form.insert(9, "missing", "text"))
+    }
 }

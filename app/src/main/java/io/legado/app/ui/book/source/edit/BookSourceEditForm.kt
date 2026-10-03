@@ -15,7 +15,15 @@ internal data class BookSourceEditField(
     val value: String,
     val labelResource: Int = 0,
     val label: String? = null,
-)
+    val selectionStart: Int = 0,
+    val selectionEnd: Int = selectionStart,
+) {
+    fun boundedSelection(): BookSourceEditField =
+        copy(
+            selectionStart = selectionStart.coerceIn(0, value.length),
+            selectionEnd = selectionEnd.coerceIn(0, value.length),
+        )
+}
 
 internal data class BookSourceEditOptions(
     val enabled: Boolean,
@@ -34,17 +42,41 @@ internal data class BookSourceEditForm(
     fun field(tab: Int, key: String): BookSourceEditField? =
         tabs.getOrNull(tab)?.find { it.key == key }
 
-    fun updateField(tab: Int, key: String, text: String): BookSourceEditForm {
+    fun updateField(
+        tab: Int,
+        key: String,
+        text: String,
+        selectionStart: Int? = null,
+        selectionEnd: Int? = null,
+    ): BookSourceEditForm {
         return copy(
             tabs =
                 tabs.mapIndexed { index, fields ->
                     if (index != tab) fields
                     else
                         fields.map { field ->
-                            if (field.key != key) field else field.copy(value = text)
+                            if (field.key != key) field
+                            else
+                                field
+                                    .copy(
+                                        value = text,
+                                        selectionStart = selectionStart ?: field.selectionStart,
+                                        selectionEnd = selectionEnd ?: field.selectionEnd,
+                                    )
+                                    .boundedSelection()
                         }
                 }
         )
+    }
+
+    fun insert(tab: Int, key: String, insertion: String): BookSourceEditForm {
+        if (insertion.isEmpty()) return this
+        val target = field(tab, key)?.boundedSelection() ?: return this
+        val start = minOf(target.selectionStart, target.selectionEnd)
+        val end = maxOf(target.selectionStart, target.selectionEnd)
+        val updatedText = target.value.replaceRange(start, end, insertion)
+        val updatedCursor = start + insertion.length
+        return updateField(tab, key, updatedText, updatedCursor, updatedCursor)
     }
 }
 
