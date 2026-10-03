@@ -16,7 +16,6 @@ class SourcePopupActionMigrationTest {
             assertContains(path, source, "popupActionMenu(context)")
         }
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
-        assertContains(CHANGE_BOOK, readProjectFile(CHANGE_BOOK), "danger(\"deleteSource\")")
 
         assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
         assertContains(RSS, readProjectFile(RSS), "danger(\"delete\")")
@@ -64,16 +63,8 @@ class SourcePopupActionMigrationTest {
         )
         org.junit.Assert.assertEquals(listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
             io.legado.app.ui.book.changesource.chapterSourceRowActions.map { it.name })
-        listOf(CHANGE_BOOK).forEach { path ->
-            assertOrdered(
-                path,
-                "R.string.to_top",
-                "R.string.to_bottom",
-                "R.string.edit_source",
-                "R.string.disable_source",
-                "R.string.delete_source"
-            )
-        }
+        org.junit.Assert.assertEquals(listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
+            io.legado.app.ui.book.changesource.bookSourceRowActions.map { it.name })
         assertOrdered(
             EXPLORE,
             "R.string.edit",
@@ -107,17 +98,7 @@ class SourcePopupActionMigrationTest {
             "selected.remove(source)",
             "\"toggleExplore\" -> callBack.enableExplore(!source.enabledExplore, source)"
         )
-        assertActions(
-            CHANGE_BOOK,
-            "\"topSource\" -> callBack.topSource(searchBook)",
-            "\"bottomSource\" -> callBack.bottomSource(searchBook)",
-            "\"editSource\" -> callBack.editSource(searchBook)",
-            "\"disableSource\" -> callBack.disableSource(searchBook)",
-            "\"deleteSource\" -> {",
-            "deleteSourceDialog = context.alert(R.string.draw)",
-            "callBack.deleteSource(searchBook)",
-            "updateItems(0, itemCount, listOf<Int>())"
-        )
+        // Book callbacks and delete confirmation: BookSourceViewModelTest/BookSourceComposeTest.
         // Chapter callback ordering is covered independently by ChapterSourceViewModelTest/ChapterSourceComposeTest.
         assertActions(
             EXPLORE,
@@ -165,10 +146,9 @@ class SourcePopupActionMigrationTest {
 
     private companion object {
         const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
-        const val CHANGE_BOOK = "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
         const val RSS = "src/main/java/io/legado/app/ui/main/rss/RssAdapter.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, CHANGE_BOOK, EXPLORE, RSS)
+        val sourceMenuFiles = listOf(BOOK_SOURCE, EXPLORE, RSS)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",

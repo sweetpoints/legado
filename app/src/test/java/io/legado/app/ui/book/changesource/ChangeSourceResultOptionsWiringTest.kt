@@ -1,94 +1,21 @@
 package io.legado.app.ui.book.changesource
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class ChangeSourceResultOptionsWiringTest {
-
-    @Test
-    fun `both change source dialogs share result option controls`() {
-        val menu = projectFile("src/main/res/menu/change_source.xml").readText()
-        assertTrue(menu.contains("@+id/menu_sort_respond_time"))
-        assertTrue(menu.contains("@+id/menu_word_count_filter"))
-
-        assertTrue(chapterSourceMenuOrder.contains(ChapterSourceMenu.ResponseTime))
-        assertTrue(chapterSourceMenuOrder.contains(ChapterSourceMenu.WordCountFilter))
-        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
-        DIALOGS.forEach { path ->
-            val source = projectFile(path).readText()
-            assertTrue(path, source.contains("R.id.menu_sort_respond_time"))
-            assertTrue(path, source.contains("R.id.menu_word_count_filter"))
-            assertTrue(path, source.contains("syncChangeSourceResultOptions()"))
-            assertTrue(path, source.contains("showChangeSourceWordCountFilter"))
-        }
+    @Test fun bothComposeMenusKeepTheSharedResultControlsInTheirOriginalOrder() {
+        assertEquals(listOf("Manage", "Refresh", "Author", "WordCount", "ResponseTime", "WordCountFilter", "Info", "Toc", "Group", "Close"), bookSourceMenuOrder.map { it.name })
+        assertEquals(listOf("Manage", "Automation", "Refresh", "Author", "WordCount", "ResponseTime", "WordCountFilter", "Info", "Toc", "Group", "Close"), chapterSourceMenuOrder.map { it.name })
     }
-
-    @Test
-    fun `display and automatic source selection use the same result policy`() {
-        val source = projectFile(VIEW_MODEL).readText()
-
-        assertTrue(source.contains("ChangeSourceResultOptions.apply("))
-        assertTrue(source.contains("currentResults().forEach"))
+    @Test fun resultOptionsDoNotImplicitlyChangeTheBaseWordCountPreference() {
+        val path = "src/main/java/io/legado/app/help/config/AppConfig.kt"
+        val config = sequenceOf(File(path), File("app/$path")).first(File::isFile).readText()
+        assertFalse(config.contains("if (value) changeSourceLoadWordCount = true"))
+        assertFalse(config.contains("if (mode != 0) changeSourceLoadWordCount = true"))
     }
-
-    @Test
-    fun `only chapter source results pin the current book`() {
-        val bookViewModel = projectFile(VIEW_MODEL).readText()
-
-        assertTrue(bookViewModel.contains("protected open val pinCurrentSource = false"))
-        assertTrue(
-            bookViewModel.contains(
-                "pinnedBookUrl = if (pinCurrentSource) oldBook?.bookUrl else null"
-            )
-        )
-        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
-    }
-
-    @Test
-    fun `both adapters refresh measured result fields`() {
-        // Chapter policies and measurements are covered by ChapterSourceSearchRepositoryTest.
-        ADAPTERS.forEach { path ->
-            val source = projectFile(path).readText()
-            assertTrue(path, source.contains("oldItem.chapterWordCountText == newItem.chapterWordCountText"))
-            assertTrue(path, source.contains("oldItem.respondTime == newItem.respondTime"))
-        }
-    }
-
-    @Test
-    fun `result options reuse cached searches without changing the base preference`() {
-        val viewModel = projectFile(VIEW_MODEL).readText()
-        val appConfig = projectFile(APP_CONFIG).readText()
-
-        assertTrue(viewModel.contains("AppConfig.changeSourceLoadWordCount -> startRefreshList(true)"))
-        assertTrue(viewModel.contains("operationState.reserveMeasurementRefresh("))
-        assertTrue(viewModel.contains("operationPreparation.withLock"))
-        assertTrue(viewModel.contains("operationState.startTaskIfCurrent(operation)"))
-        assertTrue(viewModel.contains("finishPreparingOperation(operation)"))
-        assertTrue(viewModel.contains("refreshPendingMeasurements(operation)"))
-        assertTrue(viewModel.contains("refreshList(books, operation)"))
-        assertFalse(viewModel.contains("private var searchBookList"))
-        assertFalse(viewModel.contains("searchBooks.isEmpty() || AppConfig.changeSourceLoadWordCount"))
-        assertFalse(appConfig.contains("if (value) changeSourceLoadWordCount = true"))
-        assertFalse(appConfig.contains("if (mode != 0) changeSourceLoadWordCount = true"))
-    }
-
-    private fun projectFile(pathInApp: String): File {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?: error("Project file not found: $pathInApp")
-    }
-
-    companion object {
-        private const val VIEW_MODEL =
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
-        private const val APP_CONFIG = "src/main/java/io/legado/app/help/config/AppConfig.kt"
-        private val DIALOGS = listOf(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
-        )
-        private val ADAPTERS = listOf(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceAdapter.kt",
-        )
-    }
+    // Real sorting/reference policies: BookSourceSearchRepositoryTest, ChapterSourceSearchRepositoryTest.
+    // Cached and deferred measurement actions: BookSourceViewModelTest, ChapterSourceViewModelTest.
 }

@@ -19,13 +19,8 @@ class TitleBarAccessibilityTest {
             )
         )
 
-        val changeSourceNavigation = projectFile(
-            "src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt"
-        ).readText()
-            .substringAfter("private fun initNavigationView()")
-            .substringBefore("\n    private fun")
-        assertTrue(changeSourceNavigation.contains("R.string.back"))
-        assertFalse(changeSourceNavigation.contains("abc_action_bar_up_description"))
+        // Compose book navigation semantics are exercised by BookSourceComposeTest.
+
     }
 
     private fun projectFile(path: String): File {

@@ -155,6 +155,46 @@ class BookSourceViewModelTest {
             assertEquals("Book", change.sessions.getValue(session).request.query)
         } finally { owner.clear() }
     }
+    @Test fun manualRefreshWithWordCountOffReplacesRunningSearchAndRefreshesAllExistingResults() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>(); val target = row("target")
+        val search = FakeSearch(listOf(target)).apply { searchUpdates = flow { emit(ChapterSourceSearchUpdate(listOf(target), true)); gate.await() } }
+        val model = vm(search = search); val owner = own(model)
+        try { ready(model); model.startSearch(); model.state.first { it.searching }; assertFalse(model.state.value.request!!.loadWordCount)
+            model.refreshMeasurements(); runCurrent()
+            assertEquals(1, search.measurements); assertEquals(listOf(false), search.missingOnly)
+            assertFalse(model.state.value.searching); assertEquals(listOf(target), model.state.value.rows)
+        } finally { gate.complete(Unit); owner.clear() }
+    }
+    @Test fun cachedSourceTitleQuerySurvivesOptionProjectionWhileNewSearchResultsUseBookTitleAndLateOldQueryCannotReplaceNewQuery() = runTest(dispatcher) {
+        val cached = row("cached").copy(originName = "SourceOnly"); val next = row("new").copy(name = "new")
+        val search = FakeSearch(listOf(cached)); val model = vm(search = search); val owner = own(model)
+        val gate = CompletableDeferred<Unit>()
+        try { ready(model); model.query("SourceOnly"); runCurrent()
+            assertEquals(listOf(cached), model.state.value.rows)
+            model.optionsChanged(false); runCurrent(); assertEquals(listOf(cached), model.state.value.rows)
+            search.cachedHandler = { request ->
+                if (request.query == "old") withContext(NonCancellable) { gate.await(); ChapterSourceSearchUpdate(listOf(cached), false) }
+                else ChapterSourceSearchUpdate(listOf(next), false)
+            }
+            model.query("old"); runCurrent(); model.query("new"); runCurrent(); gate.complete(Unit); runCurrent()
+            assertEquals("new", model.state.value.request!!.query); assertEquals(listOf(next), model.state.value.rows)
+            search.searchUpdates = flowOf(ChapterSourceSearchUpdate(listOf(cached, next), false))
+            model.startSearch(); runCurrent(); assertEquals(listOf(next), model.state.value.rows)
+        } finally { gate.complete(Unit); owner.clear() }
+    }
+    @Test fun relativeReferenceWarningIsOncePerOperationAndConsumedWarningDoesNotReplayOnProcessRestore() = runTest(dispatcher) {
+        val changes = FakeChange(); val saved = SavedStateHandle(); val search = FakeSearch(listOf(row("target")))
+        val prefs = FakePrefs().apply { value = value.copy(wordCount = true, filterMode = 2, minimum = 40, maximum = 60) }
+        val model = vm(changes, search, prefs, saved); val owner = own(model)
+        try { ready(model); model.state.first { it.relativeWarning }; model.consumeWarning(); runCurrent()
+            assertFalse(model.state.value.relativeWarning)
+            val restored = vm(changes, search, prefs, copy(saved)); val other = own(restored)
+            try { ready(restored); runCurrent(); assertFalse(restored.state.value.relativeWarning)
+                restored.refreshMeasurements(); restored.state.first { it.relativeWarning }
+                restored.consumeWarning(); runCurrent(); assertFalse(restored.state.value.relativeWarning)
+            } finally { other.clear() }
+        } finally { owner.clear() }
+    }
     private class FakePrefs : ChapterSourceSettingsRepository {
         var value = ChapterSourceSettings("", true, false, false, false, false, 0, 0, 0)
         override suspend fun load() = value
@@ -170,15 +210,16 @@ class BookSourceViewModelTest {
     private class FakeSearch(private val cachedRows: List<ChapterSourceSearchRow> = emptyList()) : BookSourceSearchRepository {
         var searchUpdates: Flow<ChapterSourceSearchUpdate> = flow { emit(ChapterSourceSearchUpdate(cachedRows, false)) }
         val searched = mutableListOf<Pair<ChapterSourceSearchRequest, String?>>(); val previous = mutableListOf<List<ChapterSourceSearchRow>>()
-        var measurements = 0
-        override suspend fun cached(request: ChapterSourceSearchRequest) = ChapterSourceSearchUpdate(cachedRows, false, effectiveGroup = request.group)
+        var cachedHandler: suspend (ChapterSourceSearchRequest) -> ChapterSourceSearchUpdate = { request -> ChapterSourceSearchUpdate(cachedRows, false, effectiveGroup = request.group) }
+        var measurements = 0; val missingOnly = mutableListOf<Boolean>()
+        override suspend fun cached(request: ChapterSourceSearchRequest) = cachedHandler(request)
         override suspend fun project(request: ChapterSourceSearchRequest, rows: List<ChapterSourceSearchRow>) = rows
         override fun search(request: ChapterSourceSearchRequest, previous: List<ChapterSourceSearchRow>) = search(request, previous, null)
         override fun search(request: ChapterSourceSearchRequest, previous: List<ChapterSourceSearchRow>, origin: String?): Flow<ChapterSourceSearchUpdate> {
             searched += request to origin; this.previous += previous; return searchUpdates
         }
         override fun measure(request: ChapterSourceSearchRequest, previous: List<ChapterSourceSearchRow>, missingOnly: Boolean): Flow<ChapterSourceSearchUpdate> {
-            measurements++; return flowOf(ChapterSourceSearchUpdate(previous, false, effectiveGroup = request.group))
+            measurements++; this.missingOnly += missingOnly; return flowOf(ChapterSourceSearchUpdate(previous, false, effectiveGroup = request.group))
         }
     }
     private class FakeChange : BookSourceChangeRepository {

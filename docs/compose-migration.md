@@ -941,3 +941,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 全部书签页面迁移至 Compose Activity/Route/Screen，按书名与作者分组显示粘性标题，保留单击阅读/缺书编辑、长按编辑和 JSON/Markdown 导出。导航读取后再次检查 RESUMED 与 FragmentManager 状态，消费回执后才调用阅读器或正式书签编辑器，旋转不重复打开。滚动恢复等待数据到达；保留 TOC 使用的共享 item_bookmark 布局。删除本页旧 ViewModel、已无消费者的 Adapter/Decoration、独占布局与菜单。新增 6 个 Compose 和 2 个真实宿主 Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
 
 直链上传配置的数据层与 ViewModel 独立迁移：不可变草稿保留上传地址、下载规则、注释、压缩和原有效期校验顺序；默认规则及测试上传在 IO 委托现有实现，仅明确保存才修改配置。私有 AtomicFile 保存完整脚本与测试结果，SavedState 只保存 UUID；修订号和跨实例锁拒绝旧写入，取消后不发布迟到测试结果，释放的草稿不会被迟到写入重建。新增 8 个 JVM 与 3 个真实 AtomicFile Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
+
+整本换源页面迁移至 Compose Dialog/Route/Screen，保留来源分组、筛选、排序与测量选项、评分、五项行操作、类型确认、当前源定位和成功后删除旧源的回调 ABI。手动刷新在关闭自动字数测量时仍执行，并替代当前搜索；缓存筛选沿用原 SQL 匹配，后续搜索结果按书名筛选，参考字数先按完整结果计算。缺少相对字数基准的提示仅在 RESUMED 消费一次，成功确认任务在宿主关闭后仍可完成。删除两旧类、两个独占布局和菜单，保留真实结果/成功回调契约测试。新增 3 个 JVM 与 11 个 Compose/宿主/真实 WebFile 解析 Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。

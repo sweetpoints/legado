@@ -14,7 +14,7 @@ import java.util.UUID
 
 internal data class BookSourceState(val loading: Boolean = true, val searching: Boolean = false,
     val busy: Boolean = false, val changing: Boolean = false, val changeCancelable: Boolean = true,
-    val error: String? = null, val persistError: Boolean = false, val request: ChapterSourceSearchRequest? = null,
+    val relativeWarning: Boolean = false, val error: String? = null, val persistError: Boolean = false, val request: ChapterSourceSearchRequest? = null,
     val rows: List<ChapterSourceSearchRow> = emptyList(), val originName: String = "", val mismatchId: String? = null,
     val pendingReceipt: String? = null, val finished: Boolean = false, val emptyGroup: Boolean = false,
     val completed: Int = 0, val total: Int = 0, val sourceName: String = "", val searchOpen: Boolean = false)
@@ -23,12 +23,13 @@ internal class BookSourceViewModel(private val searches: BookSourceSearchReposit
     private val changes: BookSourceChangeRepository, private val settings: ChapterSourceSettingsRepository,
     private val saved: SavedStateHandle, private val seed: suspend () -> BookSourceChangeSession) : ViewModel() {
     val session = saved.get<String>("session") ?: UUID.randomUUID().toString().also { saved["session"] = it }
-    private val mutable = MutableStateFlow(BookSourceState(searchOpen = saved.get<Boolean>("searchOpen") == true))
+    private val mutable = MutableStateFlow(BookSourceState(searchOpen = saved.get<Boolean>("searchOpen") == true, relativeWarning = saved.get<Boolean>("relativeWarning") == true))
     val state = mutable.asStateFlow()
     private var current: BookSourceChangeSession? = null
     private var oldType = 0; private var originName = ""; private var revision = 0L
     private var stopped = false; private var searchGeneration = 0L; private var readGeneration = 0L
     private var changeGeneration = 0L; private var pendingMeasurement = false
+    private var relativeWarned = saved.get<Boolean>("relativeWarned") == true
     private var load: Job? = null; private var search: Job? = null; private var read: Job? = null
     private var operation: Job? = null; private var changeTask: Job? = null
     private val writes = MutableStateFlow<BookSourceChangeSession?>(null)
@@ -88,14 +89,14 @@ internal class BookSourceViewModel(private val searches: BookSourceSearchReposit
         }
     }
     private suspend fun project(request: ChapterSourceSearchRequest, rows: List<ChapterSourceSearchRow>) =
-        searches.project(request, rows).filter { request.query.isEmpty() || it.name.contains(request.query) }
-    private suspend fun projectLatest(rows: List<ChapterSourceSearchRow>, token: Long? = null): List<ChapterSourceSearchRow>? {
+        searches.project(request, rows)
+    private suspend fun projectLatest(rows: List<ChapterSourceSearchRow>, token: Long? = null, filterTitles: Boolean = false): List<ChapterSourceSearchRow>? {
         while (!stopped) {
             if (token != null && token != searchGeneration) return null
             val request = current?.request ?: return null; val result = project(request, rows)
             currentCoroutineContext().ensureActive()
             if (stopped || token != null && token != searchGeneration) return null
-            if (current?.request == request) return result
+            if (current?.request == request) return if (filterTitles) result.filter { request.query.isEmpty() || it.name.contains(request.query) } else result
         }
         return null
     }
@@ -107,8 +108,7 @@ internal class BookSourceViewModel(private val searches: BookSourceSearchReposit
     fun filterOpen() { val open = !state.value.searchOpen; saved["searchOpen"] = open; mutable.value = state.value.copy(searchOpen = open) }
     fun query(value: String) {
         val snapshot = current ?: return; change(snapshot.copy(request = snapshot.request.copy(query = value.trim())))
-        launchRead { if (state.value.searching) projectLatest(requireNotNull(current).rows)?.let { mutable.value = state.value.copy(rows = it) }
-            else refreshCached(false) }
+        launchRead { refreshCached(false) }
     }
     fun startOrStop() { if (state.value.searching) stopSearch() else startSearch() }
     fun stopSearch() { searchGeneration++; search?.cancel(); search = null; pendingMeasurement = false
@@ -116,7 +116,7 @@ internal class BookSourceViewModel(private val searches: BookSourceSearchReposit
     fun startSearch(origin: String? = null) {
         val snapshot = current ?: return
         if (stopped || state.value.persistError || state.value.changing || snapshot.pendingReceipt != null) return
-        stopSearch(); val token = ++searchGeneration
+        stopSearch(); resetWarning(); val token = ++searchGeneration
         search = viewModelScope.launch {
             mutable.value = state.value.copy(searching = true, emptyGroup = false, error = null)
             try { searches.search(snapshot.request, snapshot.rows, origin).collect { update -> acceptSearch(update, token) } }
@@ -136,17 +136,26 @@ internal class BookSourceViewModel(private val searches: BookSourceSearchReposit
             if (stopped || token != searchGeneration) return
             change(requireNotNull(current).copy(request = prefs.apply(requireNotNull(current).request)))
         }
-        val visible = projectLatest(update.allRows, token) ?: return
+        val visible = projectLatest(update.allRows, token, filterTitles = true) ?: return
         change(requireNotNull(current).copy(rows = update.allRows))
         mutable.value = state.value.copy(rows = visible, searching = update.running, completed = update.completed,
             total = update.total, sourceName = update.sourceName,
             emptyGroup = !update.running && visible.isEmpty() && requireNotNull(current).request.group.isNotEmpty())
+        val request = requireNotNull(current).request
+        if (!update.running && request.loadWordCount && request.filterMode == 2 && update.referenceWordCount == null && !relativeWarned) {
+            relativeWarned = true; saved["relativeWarned"] = true; saved["relativeWarning"] = true
+            mutable.value = state.value.copy(relativeWarning = true)
+        }
     }
+    private fun resetWarning() {
+        relativeWarned = false; saved["relativeWarned"] = false; consumeWarning()
+    }
+    fun consumeWarning() { saved["relativeWarning"] = false; mutable.value = state.value.copy(relativeWarning = false) }
     private fun measure(missingOnly: Boolean) {
         val snapshot = current ?: return
-        if (stopped || !snapshot.request.loadWordCount) return
-        if (state.value.searching) { pendingMeasurement = true; return }
-        stopSearch(); val token = ++searchGeneration
+        if (stopped || missingOnly && !snapshot.request.loadWordCount) return
+        if (missingOnly && state.value.searching) { pendingMeasurement = true; return }
+        stopSearch(); if (!missingOnly) resetWarning(); val token = ++searchGeneration
         search = viewModelScope.launch {
             try { searches.measure(snapshot.request, snapshot.rows, missingOnly).collect { acceptSearch(it, token) } }
             catch (canceled: CancellationException) { throw canceled }
