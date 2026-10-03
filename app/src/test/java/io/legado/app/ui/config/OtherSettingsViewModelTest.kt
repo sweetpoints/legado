@@ -16,12 +16,14 @@ class OtherSettingsViewModelTest {
     @After fun clear() { Dispatchers.resetMain() }
     private class Store : OtherSettingsStore {
         val state = MutableStateFlow(OtherSettingsSnapshot()); var token = ""; val writes = mutableListOf<String>()
-        var gate: CompletableDeferred<Unit>? = null; var lateFailure = false
+        var gate: CompletableDeferred<Unit>? = null; var lateFailure = false; var deferBoolean = false; var loadedOverride: OtherSettingsSnapshot? = null
         override fun changes(): Flow<Unit> = state.map { Unit }
         override suspend fun initializeProcessText() {}
-        override suspend fun load() = state.value
+        // Only the accepted boolean observation is delayed; unrelated preference reads remain current.
+        override suspend fun load() = loadedOverride?.let { state.value.copy(switches = it.switches) } ?: state.value
         override suspend fun readText(key: OtherText) = if (key == OtherText.Token) token else state.value.texts.getValue(key)
-        override suspend fun boolean(key: OtherSwitch, value: Boolean) { writes += "boolean:${key.name}:$value"; state.value = state.value.copy(switches = state.value.switches + (key to value))
+        override suspend fun boolean(key: OtherSwitch, value: Boolean) { writes += "boolean:${key.name}:$value"; val updated = (loadedOverride ?: state.value).copy(switches = (loadedOverride ?: state.value).switches + (key to value))
+            if (deferBoolean) loadedOverride = updated else state.value = updated
             gate?.let { withContext(NonCancellable) { it.await(); if (lateFailure) error("late failure") } } }
         override suspend fun number(key: OtherNumber, value: Int) { writes += "number:${key.name}:$value"; state.value = state.value.copy(numbers = state.value.numbers + (key to value)) }
         override suspend fun text(key: OtherText, value: String?) { writes += "text:${key.name}"; if (key == OtherText.Token) { token = value.orEmpty(); state.value = state.value.copy(tokenConfigured = token.isNotEmpty()) }
@@ -29,10 +31,11 @@ class OtherSettingsViewModelTest {
         override suspend fun choice(key: OtherChoice, value: String) { writes += "choice:${key.name}:$value"; state.value = state.value.copy(choices = state.value.choices + (key to value)) }
     }
     private class Drafts : OtherSettingsDraftRepository {
-        var value = OtherSettingsDraft(); var failOpen = false; var failCompleted = false; var failAll = false
+        var value = OtherSettingsDraft(); var failOpen = false; var failCompleted = false; var failAll = false; var receiptGate: CompletableDeferred<Unit>? = null
         override suspend fun open(session: String): OtherSettingsDraft { if (failOpen) error("open failed"); return value }
         override suspend fun write(session: String, draft: OtherSettingsDraft) {
             if (failAll || failCompleted && draft.mutation == null && draft.effects.isNotEmpty()) error("private write failed")
+            if (draft.effects.isNotEmpty()) receiptGate?.await()
             if (draft.revision >= value.revision) value = draft
         }
         override suspend fun release(session: String) {}
@@ -121,4 +124,63 @@ class OtherSettingsViewModelTest {
             f.model.stop(); gate.complete(Unit); runCurrent(); assertEquals(before, f.model.state.value); assertTrue(f.model.state.value.draft!!.effects.isEmpty())
         } finally { gate.complete(Unit); f.close() }
     }
+    @Test fun externalMultiKeyChangesQueueDurableOrderedEffectsWithoutOverwritingAnActiveForm() = runTest(dispatcher) {
+        val f = Fixture()
+        try { runCurrent(); f.model.edit(OtherEditor.Hosts); runCurrent(); f.model.text("private unfinished JSON", 2, 6); runCurrent()
+            f.store.state.value = f.store.state.value.copy(switches = f.store.state.value.switches + (OtherSwitch.TokenRequired to false) + (OtherSwitch.ProcessText to false),
+                numbers = f.store.state.value.numbers + (OtherNumber.Threads to 64) + (OtherNumber.BitmapCache to 90))
+            runCurrent(); assertEquals("private unfinished JSON", f.model.state.value.draft!!.text); assertEquals(2, f.model.state.value.draft!!.selectionStart)
+            assertEquals(listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp, OtherEffect.ProcessTextConfiguration, OtherEffect.ThreadsChanged), f.drafts.value.effects.map { it.effect })
+            assertFalse(f.drafts.value.effects.any { it.effect == OtherEffect.ResizeBitmapCache }); assertTrue(f.store.writes.isEmpty())
+            assertEquals(f.drafts.value.effects, f.model.state.value.draft!!.effects)
+        } finally { f.close() }
+    }
+    @Test fun coalescedOwnObserverSettlesItsBaselineAndCannotSuppressTheNextExternalChange() = runTest(dispatcher) {
+        val store = Store().apply { deferBoolean = true }; val f = Fixture(store)
+        try { runCurrent(); f.model.boolean(OtherSwitch.Log, true); runCurrent()
+            assertEquals(listOf(OtherEffect.LogConfiguration), f.model.state.value.draft!!.effects.map { it.effect })
+            f.model.consumeEffect(f.model.state.value.draft!!.effects.single().id); runCurrent()
+            store.loadedOverride = null; store.state.value = store.state.value.copy(switches = store.state.value.switches + (OtherSwitch.Log to false))
+            // Emit a fresh snapshot with another field so StateFlow can represent the coalesced change back to false.
+            store.state.value = store.state.value.copy(numbers = store.state.value.numbers + (OtherNumber.PreDownload to 3)); runCurrent()
+            assertEquals(listOf(OtherEffect.LogConfiguration), f.model.state.value.draft!!.effects.map { it.effect })
+            f.model.consumeEffect(f.model.state.value.draft!!.effects.single().id); runCurrent()
+            store.state.value = store.state.value.copy(switches = store.state.value.switches + (OtherSwitch.Log to true)); runCurrent()
+            assertEquals(listOf(OtherEffect.LogConfiguration), f.model.state.value.draft!!.effects.map { it.effect }); assertEquals(1, store.writes.size)
+        } finally { f.close() }
+    }
+    @Test fun unpublishedExternalReceiptCannotReachHostWhileItsPrivateWriteIsPendingEvenDuringTyping() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>(); val drafts = Drafts().apply { receiptGate = gate }; val f = Fixture(drafts = drafts)
+        try { runCurrent(); f.model.edit(OtherEditor.Hosts); runCurrent()
+            f.store.state.value = f.store.state.value.copy(numbers = f.store.state.value.numbers + (OtherNumber.WebPort to 6000)); runCurrent()
+            assertTrue(f.model.state.value.effectsWriting); f.model.text("edit while receipt is writing"); runCurrent()
+            val receipt = f.model.state.value.draft!!.effects.single(); assertFalse(f.model.consumeEffect(receipt.id)); assertTrue(drafts.value.effects.isEmpty())
+            gate.complete(Unit); runCurrent(); assertFalse(f.model.state.value.effectsWriting); assertEquals("edit while receipt is writing", f.model.state.value.draft!!.text)
+            assertTrue(f.model.consumeEffect(receipt.id)); runCurrent()
+        } finally { gate.complete(Unit); f.close() }
+    }
+
+    @Test fun firstRestoredPreferenceSnapshotNeverProducesExternalEffectsAndFailedPromotionPreservesAnOpenEditor() = runTest(dispatcher) {
+        val store = Store().apply { state.value = state.value.copy(switches = state.value.switches + (OtherSwitch.Log to true) + (OtherSwitch.LiveNotifications to true),
+            numbers = state.value.numbers + (OtherNumber.WebPort to 5000)) }; val f = Fixture(store)
+        try { runCurrent(); assertTrue(f.model.state.value.draft!!.effects.isEmpty()); f.model.edit(OtherEditor.Hosts); runCurrent(); f.model.text("keep this private unfinished JSON", 3, 7); runCurrent()
+            f.model.promotedNotificationUnavailable(); runCurrent(); assertFalse(store.state.value.switches.getValue(OtherSwitch.LiveNotifications))
+            assertEquals(OtherEditor.Hosts, f.model.state.value.draft!!.editor); assertEquals("keep this private unfinished JSON", f.model.state.value.draft!!.text)
+            assertEquals(3, f.model.state.value.draft!!.selectionStart); assertTrue(f.model.state.value.draft!!.effects.isEmpty())
+            assertEquals(listOf("boolean:LiveNotifications:false"), store.writes)
+        } finally { f.close() }
+    }
+
+    @Test fun completionRetrySettlesCoalescedOwnObservationAndPreservesConcurrentExternalReceipts() = runTest(dispatcher) {
+        val store = Store().apply { deferBoolean = true }; val f = Fixture(store, Drafts().apply { failCompleted = true })
+        try { runCurrent(); f.model.boolean(OtherSwitch.Log, true); runCurrent(); assertTrue(f.model.state.value.pendingCommit)
+            store.state.value = store.state.value.copy(numbers = store.state.value.numbers + (OtherNumber.Threads to 64)); runCurrent()
+            f.drafts.failCompleted = false; f.model.retry(); runCurrent()
+            assertEquals(setOf(OtherEffect.LogConfiguration, OtherEffect.ThreadsChanged), f.drafts.value.effects.map { it.effect }.toSet())
+            while (f.model.state.value.draft!!.effects.isNotEmpty()) { assertTrue(f.model.consumeEffect(f.model.state.value.draft!!.effects.first().id)); runCurrent() }
+            store.loadedOverride = null; store.state.value = store.state.value.copy(numbers = store.state.value.numbers + (OtherNumber.PreDownload to 3)); runCurrent()
+            assertEquals(listOf(OtherEffect.LogConfiguration), f.drafts.value.effects.map { it.effect }); assertEquals(1, store.writes.size)
+        } finally { f.close() }
+    }
+
 }

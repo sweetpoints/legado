@@ -65,4 +65,12 @@ class OtherSettingsRepositoryTest {
         val count = store.writes.size; repo.number(OtherNumber.BitmapCache, 50); assertEquals(count, store.writes.size)
         assertEquals(listOf(OtherEffect.ResizeBitmapCache), repo.number(OtherNumber.BitmapCache, 51))
     }
+    @Test fun processReconciliationReadsLatestPreferenceInsideAcceptedGateAndInvalidPromotionCanRollBackHiddenFlag() = test { store, repo ->
+        repo.boolean(OtherSwitch.ProcessText, false)
+        store.snapshot = store.snapshot.copy(switches = store.snapshot.switches + (OtherSwitch.ProcessText to true) + (OtherSwitch.LiveNotifications to true))
+        repo.reconcileProcessText(); assertEquals("boolean:ProcessText:true", store.writes.last())
+        assertTrue(repo.boolean(OtherSwitch.LiveNotifications, false).isEmpty()); assertFalse(store.snapshot.switches.getValue(OtherSwitch.LiveNotifications))
+        assertFalse(store.snapshot.promotedNotificationsVisible)
+    }
+
 }

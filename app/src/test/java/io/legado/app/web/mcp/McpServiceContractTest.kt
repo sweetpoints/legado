@@ -48,9 +48,8 @@ class McpServiceContractTest {
         assertTrue(manifest.contains("foregroundServiceType=\"specialUse\""))
         assertTrue(manifest.contains("PROPERTY_SPECIAL_USE_FGS_SUBTYPE"))
 
-        val settings = projectFile("app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt")
-        assertTrue(settings.contains("previousToken != token"))
-        assertTrue(settings.contains("McpService.restart(requireContext())"))
+        // Actual token change/clear plans and paused Main delivery are covered by
+        // OtherSettingsViewModelTest and OtherSettingsRouteTest, without mirroring the settings host.
 
         val network = projectFile(
             "app/src/main/java/io/legado/app/receiver/NetworkChangedListener.kt"

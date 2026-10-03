@@ -20,7 +20,7 @@ internal enum class OtherNumber(val key: String, val default: Int, val minimum: 
 }
 internal enum class OtherText(val key: String) { UserAgent(PreferKey.userAgent), Hosts(PreferKey.customHosts), Token(PreferKey.jsSourceApiToken), BookTree(PreferKey.defaultBookTreeUri) }
 internal enum class OtherChoice(val key: String, val default: String) { Language(PreferKey.language, "auto"), Home(PreferKey.defaultHomePage, "bookshelf") }
-internal enum class OtherEffect { ThreadsChanged, RestartWeb, RestartMcp, StopMcp, LogConfiguration, DownloadCronet, NotifyMain, RestartApplication, ResizeBitmapCache, PromotedNotificationSettings }
+internal enum class OtherEffect { ThreadsChanged, RestartWeb, RestartMcp, StopMcp, LogConfiguration, DownloadCronet, NotifyMain, RestartApplication, ResizeBitmapCache, PromotedNotificationSettings, ProcessTextConfiguration }
 internal data class OtherSettingsSnapshot(val switches: Map<OtherSwitch, Boolean> = OtherSwitch.entries.associateWith { it.default },
     val numbers: Map<OtherNumber, Int> = OtherNumber.entries.associateWith { it.default },
     val texts: Map<OtherText, String> = OtherText.entries.filter { it != OtherText.Token }.associateWith { "" },

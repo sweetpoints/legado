@@ -22,6 +22,7 @@ internal interface OtherSettingsRepository {
     fun observe(): Flow<OtherSettingsSnapshot>
     suspend fun load(): OtherSettingsSnapshot
     suspend fun readText(key: OtherText): String
+    suspend fun reconcileProcessText() {}
     suspend fun boolean(key: OtherSwitch, value: Boolean): List<OtherEffect>
     suspend fun number(key: OtherNumber, value: Int): List<OtherEffect>
     suspend fun text(key: OtherText, value: String): List<OtherEffect>
@@ -35,9 +36,10 @@ internal class DefaultOtherSettingsRepository(private val store: OtherSettingsSt
     }.flowOn(io)
     override suspend fun load() = withContext(io) { store.load() }
     override suspend fun readText(key: OtherText) = withContext(io) { store.readText(key) }
+    override suspend fun reconcileProcessText() { accepted { store.boolean(OtherSwitch.ProcessText, store.load().switches.getValue(OtherSwitch.ProcessText)); emptyList() } }
     override suspend fun boolean(key: OtherSwitch, value: Boolean): List<OtherEffect> = accepted {
         val old = store.load()
-        if (!old.visible(key) || old.switches.getValue(key) == value) return@accepted emptyList()
+        if (!old.visible(key) && !(key == OtherSwitch.LiveNotifications && !value) || old.switches.getValue(key) == value) return@accepted emptyList()
         store.boolean(key, value)
         when (key) {
             OtherSwitch.TokenRequired -> listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp)

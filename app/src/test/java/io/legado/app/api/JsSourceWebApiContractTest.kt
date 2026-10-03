@@ -34,27 +34,17 @@ class JsSourceWebApiContractTest {
         val appConfig = readProjectFile(
             "app/src/main/java/io/legado/app/help/config/AppConfig.kt"
         )
-        val preferences = readProjectFile("app/src/main/res/xml/pref_config_other.xml")
-        val settings = readProjectFile(
-            "app/src/main/java/io/legado/app/ui/config/OtherConfigFragment.kt"
-        )
-        val protectionPreference = preferences
-            .substringBefore("android:key=\"jsSourceApiToken\"")
-            .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference")
-        val protectionChange = settings
-            .substringAfter("PreferKey.jsSourceApiTokenRequired ->")
-            .substringBefore("PreferKey.defaultBookTreeUri ->")
-
         assertTrue(
             appConfig.contains(
                 "getPrefBoolean(PreferKey.jsSourceApiTokenRequired, true)"
             )
         )
-        assertTrue(protectionPreference.contains("android:defaultValue=\"true\""))
-        assertTrue(protectionPreference.contains("android:key=\"jsSourceApiTokenRequired\""))
-        assertTrue(protectionChange.contains("WebService.stop(requireContext())"))
-        assertTrue(protectionChange.contains("WebService.start(requireContext())"))
-        assertTrue(protectionChange.contains("McpService.restart(requireContext())"))
+        val settings = io.legado.app.model.settings.OtherSettingsSnapshot()
+        assertTrue(settings.switches.getValue(io.legado.app.model.settings.OtherSwitch.TokenRequired))
+        assertEquals(io.legado.app.constant.PreferKey.jsSourceApiTokenRequired, io.legado.app.model.settings.OtherSwitch.TokenRequired.key)
+        // Actual restart effect plans and consume-before-delivery are covered by
+        // OtherSettingsRepositoryTest, OtherSettingsViewModelTest and OtherSettingsRouteTest.
+
     }
 
     @Test

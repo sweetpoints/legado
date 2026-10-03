@@ -58,13 +58,11 @@ class HomeFastScrollerContractTest {
             ),
         )
 
-        val preferences = parseProjectXml("src/main/res/xml/pref_config_other.xml")
-        val discoverySwitch = preferences.findElementByAndroidKey("showDiscoveryFastScroller")
-        assertEquals("false", discoverySwitch.androidAttribute("defaultValue"))
-        assertEquals(
-            "@string/show_discovery_fast_scroller",
-            discoverySwitch.androidAttribute("title"),
-        )
+        val setting = io.legado.app.model.settings.OtherSwitch.DiscoveryScroller
+        assertEquals("showDiscoveryFastScroller", setting.key)
+        assertEquals(false, io.legado.app.model.settings.OtherSettingsSnapshot().switches.getValue(setting))
+        // OtherSettingsComposeTest verifies the actual row title, default toggle and search visibility.
+
     }
 
     private fun assertFastScrollerLayout(
