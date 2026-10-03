@@ -17,6 +17,44 @@ import org.junit.Test
 
 class BookSearchDraftFileTest {
     @Test
+    fun sameRevisionIsIdempotentAcrossRepositoryInstances() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val session = UUID.randomUUID().toString()
+        val repository = FileBookSearchDraftRepository(context)
+        val restoredRepository = FileBookSearchDraftRepository(context)
+        val directory = File(context.filesDir, "book-search-drafts")
+        try {
+            repository.open(session)
+            val acceptedDraft =
+                BookSearchDraft(revision = 10, query = "accepted", filterDraft = "kept")
+            repository.write(session, acceptedDraft)
+            restoredRepository.write(
+                session,
+                acceptedDraft.copy(query = "late", filterDraft = "lost"),
+            )
+            assertEquals(acceptedDraft, repository.open(session))
+
+            restoredRepository.write(session, acceptedDraft)
+            assertEquals(acceptedDraft, restoredRepository.open(session))
+
+            val nextDraft = acceptedDraft.copy(revision = 11, query = "newer")
+            restoredRepository.write(session, nextDraft)
+            assertEquals(nextDraft, repository.open(session))
+        } finally {
+            repository.release(session)
+            listOf(
+                    ".json",
+                    ".json.bak",
+                    ".json.new",
+                    ".json.closed",
+                    ".json.closed.bak",
+                    ".json.closed.new",
+                )
+                .forEach { suffix -> File(directory, session + suffix).delete() }
+        }
+    }
+
+    @Test
     fun largeResultsAndEditableQueryRestoreWithoutBundleAndCloseRejectsLateWriters() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val repository = FileBookSearchDraftRepository(context)

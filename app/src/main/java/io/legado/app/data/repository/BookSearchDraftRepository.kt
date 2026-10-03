@@ -76,8 +76,8 @@ internal class FileBookSearchDraftRepository(context: Context) : BookSearchDraft
             lock(sessionFile).withLock {
                 val exists = sessionFile.exists() || File(sessionFile.path + ".bak").exists()
                 check(!closed(sessionFile) && exists) { "Book search draft closed" }
-                // A writer from the previous Activity cannot replace a newer durable draft.
-                if (draft.revision >= read(sessionFile).revision) {
+                // A revision identifies one accepted payload; retries cannot replace it.
+                if (draft.revision > read(sessionFile).revision) {
                     save(sessionFile, draft)
                 }
             }
