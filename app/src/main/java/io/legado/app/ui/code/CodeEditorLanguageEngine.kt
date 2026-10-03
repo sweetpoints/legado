@@ -12,7 +12,6 @@ import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolve
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.legado.app.R
 import io.legado.app.constant.AppLog
-import io.legado.app.help.CacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.http.BackstageWebView
@@ -222,14 +221,14 @@ internal class CodeEditorLanguageEngine(context: Context) {
         language = null
     }
 
-    private suspend fun webFormatCode(jsCode: String): String? {
-        CacheManager.putMemory("web_format_code", jsCode)
-        return BackstageWebView(
-                url = null,
-                html =
-                    """<html><body><script>
+    private suspend fun webFormatCode(jsCode: String): String? =
+        withCodeEditorFormatterInput(jsCode) { cacheKey ->
+            BackstageWebView(
+                    url = null,
+                    html =
+                        """<html><body><script>
                 $beautifyJs
-                window.re = js_beautify($nameCache.getFromMemory('web_format_code'), {
+                window.re = js_beautify($nameCache.getFromMemory('$cacheKey'), {
                 indent_size: 4,
                 indent_char: ' ',
                 preserve_newlines: true,
@@ -243,14 +242,14 @@ internal class CodeEditorLanguageEngine(context: Context) {
                 comma_first: false
                 });
                 </script></body></html>"""
-                        .trimIndent(),
-                javaScript = "window.re",
-                timeout = 5000,
-                isRule = true,
-            )
-            .getStrResponse()
-            .body
-    }
+                            .trimIndent(),
+                    javaScript = "window.re",
+                    timeout = 5000,
+                    isRule = true,
+                )
+                .getStrResponse()
+                .body
+        }
 
     private fun formatCodeHtml(html: String): String? {
         val doc = Jsoup.parse(html)
