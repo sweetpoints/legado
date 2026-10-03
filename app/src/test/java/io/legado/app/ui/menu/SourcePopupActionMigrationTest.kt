@@ -19,10 +19,10 @@ class SourcePopupActionMigrationTest {
                 "$path should not import AppCompat PopupMenu",
                 source.contains("import androidx.appcompat.widget.PopupMenu"),
             )
-            assertContains(path, source, "popupActionMenu(context)")
+            assertContains(path, source, "DropdownMenu(menu")
         }
 
-        assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
+        assertContains(EXPLORE, readProjectFile(EXPLORE), "MaterialTheme.colorScheme.error")
         legacyMenuFiles.forEach { path ->
             assertFalse(
                 "$path should be removed",
@@ -33,10 +33,13 @@ class SourcePopupActionMigrationTest {
 
     @Test
     fun `dynamic source menu entries keep their visibility and labels`() {
-        assertContains(
-            EXPLORE,
-            readProjectFile(EXPLORE),
-            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
+        org.junit.Assert.assertEquals(
+            listOf("edit", "top", "search", "refresh", "delete"),
+            io.legado.app.ui.main.explore.visibleExploreHomeRowActions(false),
+        )
+        org.junit.Assert.assertEquals(
+            listOf("edit", "top", "login", "search", "refresh", "delete"),
+            io.legado.app.ui.main.explore.visibleExploreHomeRowActions(true),
         )
     }
 
@@ -68,13 +71,16 @@ class SourcePopupActionMigrationTest {
         // Chapter callback ordering is covered independently by
         // ChapterSourceViewModelTest/ChapterSourceComposeTest.
         assertActions(
-            EXPLORE,
-            "\"edit\" -> callBack.editSource(source.bookSourceUrl)",
-            "\"top\" -> callBack.toTop(source)",
-            "\"search\" -> callBack.searchBook(source)",
-            "\"login\" -> context.startActivity<SourceLoginActivity>",
-            "\"refresh\" -> refreshExplore(source, position, binding)",
-            "\"delete\" -> callBack.deleteSource(source)",
+            "src/main/java/io/legado/app/ui/main/explore/ExploreHomeRoute.kt",
+            "model.top(url)",
+            "model.requestDelete(url)",
+            "model.refresh(url)",
+        )
+        assertActions(
+            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt",
+            "startActivity<BookSourceEditActivity>",
+            "startActivity<SourceLoginActivity>",
+            "SearchActivity.start",
         )
     }
 
@@ -104,7 +110,7 @@ class SourcePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
+        const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreHomeScreen.kt"
         val sourceMenuFiles = listOf(EXPLORE)
         val legacyMenuFiles =
             listOf(

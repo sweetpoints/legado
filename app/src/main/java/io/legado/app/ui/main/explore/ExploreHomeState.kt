@@ -70,3 +70,10 @@ internal fun acceptsExplorePanel(
     expectedUrl: String,
     expandedUrl: String?,
 ): Boolean = expectedGeneration == generation && expectedUrl == expandedUrl
+
+internal val exploreHomeRowActions = listOf("edit", "top", "login", "search", "refresh", "delete")
+
+internal fun visibleExploreHomeRowActions(hasLogin: Boolean): List<String> =
+    exploreHomeRowActions.filter {
+        it != "login" || hasLogin
+    }

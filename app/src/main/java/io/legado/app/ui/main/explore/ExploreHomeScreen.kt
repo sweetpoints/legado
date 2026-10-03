@@ -255,10 +255,17 @@ private fun ExploreHomeCard(
                             "refresh" to R.string.refresh,
                             "delete" to R.string.delete,
                         )
-                        .filter { it.first != "login" || source.hasLogin }
+                        .filter { it.first in visibleExploreHomeRowActions(source.hasLogin) }
                         .forEach { (action, label) ->
                             DropdownMenuItem(
-                                text = { Text(stringResource(label)) },
+                                text = {
+                                    Text(
+                                        stringResource(label),
+                                        color =
+                                            if (action == "delete") MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                },
                                 onClick = {
                                     menu = false
                                     actions.action(action, source.url)
