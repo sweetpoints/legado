@@ -1362,3 +1362,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 BookInfo 最终编译准备增量：补齐纯格式整理后漏掉的显式 import，最后专属 XML 删除后以独立 values ID 保留共享 BaseDialogFragment 对可选背景的查询，不改变共享基类行为。首轮生产编译暴露的问题精确单独修复；完整 JVM/Android Kotlin 编译继续同一协调 slot 重跑，未执行设备用例。
 
 BookInfo 回归收尾：prepared 入口用例等待真实 IO bootstrap 的 Main 返回后断言首次请求，并在重置 Main 前 clear/join 整个 VM，防真实 dispatcher 迟到退出串扰下一个用例；移除 Compose member assertDoesNotExist 的错误 extension import。完整首轮 JVM 3805 项暴露 1 个该等待竞态及 1 个派生串扰，本独立测试修复后按同 slot 重跑全量；生产行为不改。
+
+BookInfo 全页最终验证：clean 源码候选 b191736b6 在 ae5cfc089 整合基线上执行标准 :app:compileAppDebugAndroidTestKotlin + :app:testAppDebugUnitTest（offline、max-workers=2），27 秒 EXIT0；XML 汇总 3805 项 JVM、零 failure/error/skipped，Android 用例完成 Kotlin 编译、未在设备执行。所有本 lane 触达 Kotlin 的统一 formatter check 与 git diff --check 通过。prepared UUID API 与完整宿主现已具备，消费者切换仍由 Root 正式 FF 后统一通知；本记录提交只改文档，不改变已经验证的代码树。
