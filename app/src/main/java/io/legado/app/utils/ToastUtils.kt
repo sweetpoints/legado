@@ -99,7 +99,7 @@ private class CustomToastSession(
     private val backgroundColor = context.bottomBackground
     private val textColor = context.getPrimaryTextColor(ColorUtils.isColorLight(backgroundColor))
     private val metrics = context.resources.displayMetrics
-    private val composeDensity = Density(metrics.density, context.resources.configuration.fontScale)
+    private val composeDensity = Density(context)
     private val toastMessage =
         message.toToastMessage(
             baseTextSizePx = with(composeDensity) { 16.sp.toPx() },

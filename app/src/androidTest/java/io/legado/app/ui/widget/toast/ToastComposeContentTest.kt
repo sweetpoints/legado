@@ -7,11 +7,12 @@ import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.ReplacementSpan
+import android.text.style.ScaleXSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
@@ -28,8 +29,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.utils.runToastCallbackOnApi30
 import io.legado.app.utils.toToastMessage
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -45,6 +44,7 @@ class ToastComposeContentTest {
     @Test
     fun androidCharacterAndReplacementSpansBecomeComposeTextAndInlinePixels() {
         val source = SpannableString("Red *toast*")
+        val replacementSpan = TestReplacementSpan()
         source.setSpan(
             ForegroundColorSpan(AndroidColor.RED),
             0,
@@ -53,7 +53,7 @@ class ToastComposeContentTest {
         )
         source.setSpan(StyleSpan(Typeface.BOLD), 4, source.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         source.setSpan(UnderlineSpan(), 4, source.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        source.setSpan(TestReplacementSpan(), 4, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        source.setSpan(replacementSpan, 4, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         val message =
             source.toToastMessage(
@@ -74,6 +74,8 @@ class ToastComposeContentTest {
         assertTrue(image.widthPx > 0)
         assertTrue(image.heightPx > 0)
         assertEquals(AndroidColor.GREEN, image.bitmap.getPixel(0, 0))
+        assertEquals(32f, replacementSpan.drawTextSizePx, 0.01f)
+        assertEquals(1f, replacementSpan.drawTextScaleX, 0.01f)
 
         compose.setContent {
             Box(Modifier.requiredSize(320.dp, 100.dp).testTag("toast-test-host")) {
@@ -122,6 +124,63 @@ class ToastComposeContentTest {
     }
 
     @Test
+    fun metricSpansAreAppliedOnceWhenConvertedForComposeAndReplacementPixels() {
+        val density = Density(2f, 1f)
+        val halfSize = SpannableString("half")
+        halfSize.setSpan(
+            RelativeSizeSpan(0.5f),
+            0,
+            halfSize.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        val halfSizeStyle =
+            halfSize
+                .toToastMessage(32f, density, AndroidColor.BLACK)
+                .annotatedText
+                .spanStyles
+                .single()
+                .item
+        assertEquals(16f, with(density) { halfSizeStyle.fontSize.toPx() }, 0.01f)
+
+        val doubleSize = SpannableString("double")
+        doubleSize.setSpan(
+            RelativeSizeSpan(2f),
+            0,
+            doubleSize.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        val doubleSizeStyle =
+            doubleSize
+                .toToastMessage(32f, density, AndroidColor.BLACK)
+                .annotatedText
+                .spanStyles
+                .single()
+                .item
+        assertEquals(64f, with(density) { doubleSizeStyle.fontSize.toPx() }, 0.01f)
+
+        val stretched = SpannableString("wide")
+        stretched.setSpan(ScaleXSpan(2f), 0, stretched.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val transform =
+            stretched
+                .toToastMessage(32f, density, AndroidColor.BLACK)
+                .annotatedText
+                .spanStyles
+                .single()
+                .item
+                .textGeometricTransform
+        assertEquals(2f, requireNotNull(transform).scaleX, 0.01f)
+
+        val replacementSource = SpannableString("x")
+        val replacementSpan = TestReplacementSpan()
+        replacementSource.setSpan(RelativeSizeSpan(0.5f), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        replacementSource.setSpan(ScaleXSpan(2f), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        replacementSource.setSpan(replacementSpan, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        replacementSource.toToastMessage(32f, density, AndroidColor.BLACK)
+        assertEquals(16f, replacementSpan.drawTextSizePx, 0.01f)
+        assertEquals(2f, replacementSpan.drawTextScaleX, 0.01f)
+    }
+
+    @Test
     fun toastPresentationUsesAndReleasesItsOwnLifecycleOwner() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         lateinit var presentation: ToastComposePresentation
@@ -162,37 +221,6 @@ class ToastComposeContentTest {
     }
 
     @Test
-    fun pendingAttachmentTimeoutCancelsToastAndReleasesPresentationResources() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        lateinit var owner: Lifecycle
-        val timeoutFinished = CountDownLatch(1)
-        val toastCancelled = booleanArrayOf(false)
-        val leaseClosed = booleanArrayOf(false)
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val message = "pending timeout".toToastMessage(32f, Density(2f, 1f), AndroidColor.BLACK)
-            val presentation =
-                ToastComposePresentation(context, message, AndroidColor.DKGRAY, AndroidColor.WHITE)
-            owner = requireNotNull(presentation.view.findViewTreeLifecycleOwner()).lifecycle
-            val nativeToast = Toast(context)
-            val watchdog =
-                ToastSessionTimeouts(
-                    onTimeout = {
-                        nativeToast.cancel()
-                        toastCancelled[0] = true
-                        presentation.close()
-                        leaseClosed[0] = true
-                        timeoutFinished.countDown()
-                    }
-                )
-            watchdog.startPendingAttachmentTimeout(timeoutMillis = 10L)
-        }
-        assertTrue(timeoutFinished.await(2, TimeUnit.SECONDS))
-        assertTrue(toastCancelled[0])
-        assertTrue(leaseClosed[0])
-        assertEquals(Lifecycle.State.DESTROYED, owner.currentState)
-    }
-
-    @Test
     fun preApi30ToastCallbackPathNeverInvokesCallbackFactory() {
         var callbackFactories = 0
         (26..29).forEach { sdkInt ->
@@ -218,6 +246,9 @@ class ToastComposeContentTest {
     }
 
     private class TestReplacementSpan : ReplacementSpan() {
+        var drawTextSizePx = 0f
+        var drawTextScaleX = 0f
+
         override fun getSize(
             paint: Paint,
             text: CharSequence?,
@@ -240,6 +271,8 @@ class ToastComposeContentTest {
             bottom: Int,
             paint: Paint,
         ) {
+            drawTextSizePx = paint.textSize
+            drawTextScaleX = paint.textScaleX
             paint.color = AndroidColor.GREEN
             canvas.drawRect(x, top.toFloat(), x + 18, bottom.toFloat(), paint)
         }

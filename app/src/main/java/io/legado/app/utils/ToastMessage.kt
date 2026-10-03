@@ -8,7 +8,6 @@ import android.text.Spanned
 import android.text.TextPaint
 import android.text.style.BackgroundColorSpan
 import android.text.style.CharacterStyle
-import android.text.style.MetricAffectingSpan
 import android.text.style.ReplacementSpan
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.graphics.Color
@@ -109,8 +108,6 @@ private data class ReplacementRange(val span: ReplacementSpan, val start: Int, v
     fun rasterize(text: Spanned, basePaint: TextPaint): ToastInlineImage {
         val paint = TextPaint(basePaint)
         text.getSpans(start, end, CharacterStyle::class.java).forEach { span ->
-            if (span !is ReplacementSpan && span is MetricAffectingSpan)
-                span.updateMeasureState(paint)
             if (span !is ReplacementSpan) span.updateDrawState(paint)
         }
         val metrics = Paint.FontMetricsInt()
@@ -128,7 +125,6 @@ private fun CharacterStyle.toComposeSpanStyle(
     density: Density,
 ): SpanStyle? {
     val paint = TextPaint(basePaint)
-    if (this is MetricAffectingSpan) updateMeasureState(paint)
     updateDrawState(paint)
 
     val changedColor = paint.color.takeIf { it != basePaint.color }?.let(::Color)
