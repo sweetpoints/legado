@@ -64,31 +64,14 @@ class SharedImportAssociationTest {
     }
 
     @Test
-    fun `share target keeps search separate and routes stream or text to confirmation imports`() {
+    fun `share target keeps search and import declarations separate`() {
         val manifest = projectFile("src/main/AndroidManifest.xml")
-        val activity =
-            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt")
-        val viewModel =
-            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationViewModel.kt")
         val shareFilter =
             manifest
                 .substringAfter(
                     "<intent-filter android:label=\"@string/receiving_shared_import_label\">"
                 )
                 .substringBefore("</intent-filter>")
-        val sharedUri =
-            viewModel
-                .substringAfter("fun dispatchSharedUri(uri: Uri)")
-                .substringBefore("fun dispatchSharedText(text: String)")
-        val sharedText =
-            viewModel
-                .substringAfter("fun dispatchSharedText(text: String)")
-                .substringBefore("fun reportInvalidSharedContent()")
-        val newIntent =
-            activity
-                .substringAfter("override fun onNewIntent(intent: Intent)")
-                .substringBefore("private fun dispatchIntent(intent: Intent)")
-
         assertTrue(manifest.contains("android:name=\".receiver.SharedReceiverActivity\""))
         assertTrue(manifest.contains("android:label=\"@string/receiving_shared_label\""))
         assertTrue(manifest.contains("android:label=\"@string/receiving_shared_import_label\""))
@@ -98,44 +81,11 @@ class SharedImportAssociationTest {
         assertTrue(manifest.contains("android.intent.action.SEND_MULTIPLE"))
         assertFalse(shareFilter.contains("javascript"))
         assertTrue(shareFilter.contains("application/octet-stream"))
-        assertTrue(activity.contains("IntentCompat.getParcelableExtra("))
-        assertTrue(activity.contains("Intent.EXTRA_STREAM"))
-        assertFalse(activity.contains("intent.clipData"))
-        assertTrue(activity.contains("Intent.EXTRA_TEXT"))
-        assertTrue(activity.contains("Intent.ACTION_SEND"))
-        assertTrue(activity.contains("Intent.ACTION_VIEW"))
-        assertTrue(activity.contains("viewModel.dispatchSharedUri(uri)"))
-        assertTrue(activity.contains("viewModel.dispatchSharedText(text)"))
-        assertTrue(newIntent.contains("toastOnUi(R.string.importing)"))
-        assertFalse(newIntent.contains("dispatchIntent(intent)"))
-        assertTrue(activity.contains("if (viewModel.shouldDispatchInitialIntent())"))
-        assertTrue(viewModel.contains("private var initialIntentDispatched = false"))
-        assertTrue(viewModel.contains("if (initialIntentDispatched) return false"))
-        assertTrue(activity.contains("supportFragmentManager.fragments.any"))
-        assertTrue(activity.contains("fragment is DialogFragment"))
-        assertTrue(sharedUri.contains("require(uri.isContentScheme())"))
-        assertTrue(sharedUri.contains("dispatchFile(FileDoc.fromUri(uri, false), shared = true)"))
-        assertFalse(sharedUri.contains("dispatchIntent(uri)"))
-        assertTrue(sharedText.contains("File.createTempFile("))
-        assertTrue(sharedText.contains("context.cacheDir"))
-        assertTrue(sharedText.contains("file.writeText(text)"))
-        assertTrue(sharedText.contains("importJson(Uri.fromFile(file))"))
-        assertTrue(sharedText.contains("extractSharedImportUrl(text)"))
-        assertTrue(sharedText.contains(".appendPath(\"auto\")"))
-        assertTrue(sharedText.contains(".appendQueryParameter(\"src\", url)"))
-        assertTrue(
-            sharedText.indexOf("extractSharedImportUrl(text)") <
-                sharedText.indexOf("File.createTempFile(")
-        )
-        assertTrue(viewModel.contains("override fun onCleared()"))
-        assertTrue(viewModel.contains("sharedImportFile?.delete()"))
     }
 
     @Test
-    fun `view association advertises and routes JavaScript source files`() {
+    fun `view association advertises JavaScript source files`() {
         val manifest = projectFile("src/main/AndroidManifest.xml")
-        val viewModel =
-            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationViewModel.kt")
         val knownMimeFilter =
             manifest
                 .substringAfter("<!-- VIEW (Open with) action -->")
@@ -147,12 +97,6 @@ class SharedImportAssociationTest {
         assertTrue(jsFileRegex.matches("source.js"))
         assertTrue(jsFileRegex.matches("SOURCE.JS"))
         assertFalse(jsFileRegex.matches("source.js.bak"))
-        assertTrue(viewModel.contains("AppPattern.jsFileRegex"))
-        assertTrue(
-            viewModel.indexOf("fileDoc.name.matches(jsFileRegex)") <
-                viewModel.indexOf("fileDoc.name.matches(bookFileRegex)")
-        )
-        assertTrue(viewModel.contains("\"bookSource\" to fileDoc.uri.toString()"))
     }
 
     private fun projectFile(pathInApp: String): String =

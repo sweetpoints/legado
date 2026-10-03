@@ -1,58 +1,149 @@
 package io.legado.app.ui.association
 
+import io.legado.app.data.association.AssociationBookPreview
+import io.legado.app.data.association.AssociationFileInspection
+import io.legado.app.data.association.AssociationHostKind
+import io.legado.app.data.association.AssociationInput
+import io.legado.app.data.association.AssociationInputKind
+import io.legado.app.data.association.AssociationNativeKind
+import io.legado.app.data.association.AssociationOperationResult
+import io.legado.app.data.association.AssociationPhase
+import io.legado.app.data.association.AssociationSession
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FileAssociationLoadingStateTest {
-
-    private val source = readProjectFile(
-        "src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt"
-    )
+    private val input =
+        AssociationInput(AssociationHostKind.File, AssociationInputKind.SharedText, text = "source")
+    private val preview =
+        AssociationBookPreview("book", "file:///private/book.txt", "book.txt", "private metadata")
 
     @Test
-    fun `loading is hidden before import dialogs and permission failure`() {
-        val onlineImportObserver = source.substringAfter("viewModel.onLineImportLive.observe(this)")
-            .substringBefore("viewModel.successLive.observe(this)")
-        val successObserver = source.substringAfter("viewModel.successLive.observe(this)")
-            .substringBefore("viewModel.errorLive.observe(this)")
-        val permissionDenied = source.substringAfter("}.onDenied {")
-            .substringBefore("}.request()")
-
-        assertTrue(onlineImportObserver.contains("binding.rotateLoading.gone()"))
-        assertTrue(successObserver.contains("binding.rotateLoading.gone()"))
-        assertTrue(permissionDenied.contains("binding.rotateLoading.gone()"))
+    fun completedInspectionHidesLoadingBeforeImportDialogDelivery() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val gate = CompletableDeferred<Unit>()
+        val fixture =
+            AssociationStateFixture(
+                AssociationSession(input),
+                inspect = {
+                    gate.await()
+                    AssociationFileInspection(
+                        importType = "bookSource",
+                        source = "file:///private/source.json",
+                    )
+                },
+            )
+        try {
+            runCurrent()
+            assertTrue(fixture.model.state.value.busy)
+            gate.complete(Unit)
+            runCurrent()
+            assertFalse(fixture.model.state.value.busy)
+            assertEquals(
+                AssociationNativeKind.ImportDialog,
+                fixture.model.state.value.session!!.effects.single().kind,
+            )
+        } finally {
+            gate.complete(Unit)
+            fixture.close()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
-    fun `folder selection does not leave loading visible`() {
-        val folderSelection = source.substringAfter("private fun chooseBookDirectory()")
-
-        assertFalse(folderSelection.contains("binding.rotateLoading.visible()"))
-        assertTrue(folderSelection.contains("binding.rotateLoading.gone()"))
-        assertTrue(
-            folderSelection.indexOf("binding.rotateLoading.gone()") <
-                    folderSelection.indexOf("localBookTreeSelect.launch")
-        )
+    fun permissionDenialAndFolderPickerLeaveLoadingHidden() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val permission =
+            AssociationStateFixture(
+                AssociationSession(
+                    input.copy(kind = AssociationInputKind.View, uris = listOf("file:///book.txt"))
+                )
+            )
+        val directory =
+            AssociationStateFixture(
+                AssociationSession(
+                    input,
+                    phase = AssociationPhase.Preview,
+                    previews = listOf(preview),
+                    selectedIds = listOf("book"),
+                )
+            )
+        try {
+            runCurrent()
+            assertFalse(permission.model.state.value.busy)
+            val request = permission.model.state.value.session!!.effects.single()
+            permission.model.claimNative(request)
+            permission.model.permissionResult(request, false)
+            runCurrent()
+            assertFalse(permission.model.state.value.busy)
+            assertEquals(
+                "permissionDenied",
+                permission.model.state.value.session!!.effects.single().type,
+            )
+            directory.model.requestDirectory()
+            runCurrent()
+            directory.model.chooseSystemDirectory()
+            runCurrent()
+            assertFalse(directory.model.state.value.busy)
+            assertTrue(directory.model.state.value.session!!.choosingDirectory)
+            assertEquals(
+                AssociationNativeKind.SelectDirectory,
+                directory.model.state.value.session!!.effects.single().kind,
+            )
+        } finally {
+            permission.close()
+            directory.close()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
-    fun `copy attempt owns loading lifecycle`() {
-        val observer = source.substringAfter("viewModel.importingLocalBooks.observe(this)")
-            .substringBefore("viewModel.importedLocalBooks.observe(this)")
-        val copy = readProjectFile("src/main/java/io/legado/app/ui/association/FileAssociationViewModel.kt")
-            .substringAfter("fun importLocalBooks(directory: Uri)")
-            .substringBefore("private fun reportSharedImportError")
-        assertTrue(observer.contains("if (importing) binding.rotateLoading.visible() else binding.rotateLoading.gone()"))
-        assertTrue(copy.contains("importingLocalBooks.value = true"))
-        assertTrue(copy.contains(".onFinally { importingLocalBooks.value = false }"))
-    }
-
-    private fun readProjectFile(pathInApp: String): String {
-        val file = sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-        requireNotNull(file) { "Project file not found: $pathInApp" }
-        return file.readText()
+    fun acceptedCopyOwnsLoadingUntilItsResultIsDurable() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val gate = CompletableDeferred<Unit>()
+        val fixture =
+            AssociationStateFixture(
+                AssociationSession(
+                    input,
+                    phase = AssociationPhase.Preview,
+                    previews = listOf(preview),
+                    selectedIds = listOf("book"),
+                ),
+                mutate = {
+                    assertEquals("local-import", it.kind)
+                    gate.await()
+                    AssociationOperationResult(importedCount = 1, selectedCount = 1)
+                },
+            )
+        try {
+            runCurrent()
+            fixture.model.confirmOperation("local-import", "file:///private/books")
+            runCurrent()
+            assertTrue(fixture.model.state.value.busy)
+            assertTrue(fixture.sessions.current.operation!!.accepted)
+            gate.complete(Unit)
+            runCurrent()
+            assertFalse(fixture.model.state.value.busy)
+            assertEquals(AssociationPhase.Finished, fixture.sessions.current.phase)
+            assertEquals(1, fixture.acceptedMutations)
+        } finally {
+            gate.complete(Unit)
+            fixture.close()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
     }
 }

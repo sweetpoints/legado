@@ -1,5 +1,6 @@
 package io.legado.app.ui.autoTask
 
+import io.legado.app.data.association.associationOnlineRoute
 import io.legado.app.ui.association.jsonImportType
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -10,21 +11,13 @@ class AutoTaskImportContractTest {
 
     @Test
     fun `automatic task import is routed from files and links`() {
-        val base =
-            projectFile("src/main/java/io/legado/app/ui/association/BaseAssociationViewModel.kt")
-        val online =
-            projectFile("src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt")
-        val file =
-            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt")
-
         assertEquals("autoTask", jsonImportType(mapOf("cron" to "0 * * * *", "script" to "test")))
         assertEquals(null, jsonImportType(mapOf("cron" to "0 * * * *")))
         assertEquals(null, jsonImportType(mapOf("script" to "test")))
-        assertTrue(base.contains("successLive.postValue(type to uri.toString())"))
-        assertTrue(online.contains("\"/autoTask\" -> showDialogFragment("))
-        assertTrue(online.contains("\"/auto\" -> viewModel.determineType("))
-        assertTrue(online.contains("\"autoTask\" -> showDialogFragment("))
-        assertTrue(file.contains("\"autoTask\" -> showDialogFragment("))
+        assertEquals("autoTask", associationOnlineRoute("/autoTask", "import").importType)
+        assertEquals(null, associationOnlineRoute("/auto", "import").importType)
+        // Untyped auto links must determine the actual downloaded JSON format.
+        assertEquals("autoTask", jsonImportType(mapOf("cron" to "daily", "script" to "run")))
     }
 
     @Test

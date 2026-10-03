@@ -1,55 +1,80 @@
 package io.legado.app.ui.association
 
+import io.legado.app.data.association.AssociationHostKind
+import io.legado.app.data.association.AssociationInput
+import io.legado.app.data.association.AssociationInputKind
+import io.legado.app.data.association.AssociationOperationResult
+import io.legado.app.data.association.AssociationPhase
+import io.legado.app.data.association.AssociationSession
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ReadConfigImportConfirmationContractTest {
+    private val config =
+        AssociationSession(
+            AssociationInput(
+                AssociationHostKind.Online,
+                AssociationInputKind.View,
+                uris = listOf("legado://import/readConfig?src=https://fixture/config"),
+            ),
+            phase = AssociationPhase.ReadConfig,
+            readConfigFile = "private-read-config.json",
+        )
 
     @Test
-    fun `online read config waits for confirmation before importing`() {
-        val activity = projectFile(
-            "src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt"
-        )
-        val viewModel = projectFile(
-            "src/main/java/io/legado/app/ui/association/OnLineImportViewModel.kt"
-        )
-        val confirmation = activity.substringAfter("private fun confirmReadConfigImport()")
-            .substringBefore("private fun finallyDialog")
-        val directLoad = viewModel.substringAfter("fun getReadConfig(url: String)")
-            .substringBefore("fun importReadConfig()")
-        val confirmedImport = viewModel.substringAfter("fun importReadConfig()")
-            .substringBefore("fun cancelReadConfigImport()")
-        val binaryImport = viewModel.substringAfter("\"application/zip\".toMediaType(),")
-            .substringBefore("else ->")
-
-        assertTrue(activity.contains("\"/readConfig\" -> viewModel.getReadConfig(url)"))
-        assertTrue(activity.contains("viewModel.readConfigLive.observe(this)"))
-        assertEquals(3, Regex("viewModel\\.determineType\\(url\\)").findAll(activity).count())
-        assertTrue(
-            activity.indexOf("if (viewModel.intentHandled) return") <
-                    activity.indexOf("intent.data?.let")
-        )
-        assertTrue(confirmation.contains("yesButton"))
-        assertTrue(confirmation.contains("viewModel.importReadConfig()"))
-        assertTrue(confirmation.contains("viewModel.cancelReadConfigImport()"))
-        assertFalse(directLoad.contains("ReadBookConfig.import"))
-        assertTrue(confirmedImport.contains("val bytes = readConfigLive.value ?: return"))
-        assertTrue(
-            confirmedImport.indexOf("readConfigLive.value = null") <
-                    confirmedImport.indexOf("ReadBookConfig.import(bytes)")
-        )
-        assertTrue(binaryImport.contains("rs.bytes()"))
-        assertFalse(binaryImport.contains("importReadConfig"))
-        assertFalse(activity.contains("viewModel.importReadConfig(bytes"))
+    fun restoredReadConfigRequiresConfirmationAndConsumesSuccessfulImportOnlyOnce() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val fixture =
+            AssociationStateFixture(
+                config,
+                mutate = {
+                    assertEquals("read-config", it.kind)
+                    AssociationOperationResult(message = "Imported configuration")
+                },
+            )
+        try {
+            runCurrent()
+            assertEquals(0, fixture.acceptedMutations)
+            assertEquals(AssociationPhase.ReadConfig, fixture.model.state.value.session!!.phase)
+            assertFalse(fixture.model.state.value.busy)
+            fixture.model.confirmOperation("read-config")
+            runCurrent()
+            fixture.model.confirmOperation("read-config")
+            runCurrent()
+            assertEquals(1, fixture.acceptedMutations)
+            assertEquals("Imported configuration", fixture.sessions.current.completionMessage)
+            assertEquals(AssociationPhase.Finished, fixture.sessions.current.phase)
+        } finally {
+            fixture.close()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
     }
 
-    private fun projectFile(pathInApp: String): String {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
-            ?.readText()
-            ?: error("Missing project file: $pathInApp")
+    @Test
+    fun closingReadConfigWithoutConfirmationNeverCallsConfigurationEngine() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val fixture = AssociationStateFixture(config)
+        try {
+            runCurrent()
+            fixture.model.closeOwnedSession()
+            fixture.model.confirmOperation("read-config")
+            runCurrent()
+            assertEquals(0, fixture.acceptedMutations)
+            assertEquals(AssociationPhase.ReadConfig, fixture.sessions.current.phase)
+        } finally {
+            fixture.close()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
     }
 }

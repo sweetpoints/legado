@@ -75,6 +75,16 @@ class AssociationFileRepositoryTest {
             val classified = repository.inspect(ticket, jsonInput)
             assertEquals("replaceRule", classified.importType)
             assertEquals(null, classified.staging)
+            val javaScript =
+                File(incoming, "source.JS").apply { writeText("var source = {name: 'Fixture'};") }
+            val javaScriptResult =
+                repository.inspect(
+                    ticket,
+                    jsonInput.copy(uris = listOf(Uri.fromFile(javaScript).toString())),
+                )
+            assertEquals("bookSource", javaScriptResult.importType)
+            assertEquals(Uri.fromFile(javaScript).toString(), javaScriptResult.source)
+            assertEquals(null, javaScriptResult.staging)
             val unsupported = File(incoming, "unrecognized.bin").apply { writeText("unsupported") }
             val result =
                 repository.inspect(

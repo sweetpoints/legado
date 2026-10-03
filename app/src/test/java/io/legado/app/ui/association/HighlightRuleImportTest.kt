@@ -7,7 +7,6 @@ import io.legado.app.data.entities.HighlightRuleFile
 import io.legado.app.help.HighlightStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -193,12 +192,7 @@ class HighlightRuleImportTest {
     }
 
     @Test
-    fun `file and online association both route typed highlight rules`() {
-        val file =
-            projectFile("src/main/java/io/legado/app/ui/association/FileAssociationActivity.kt")
-        val online =
-            projectFile("src/main/java/io/legado/app/ui/association/OnLineImportActivity.kt")
-
+    fun `automatic association classification retains typed highlight priority`() {
         assertEquals(
             "highlightRule",
             jsonImportType(
@@ -213,17 +207,7 @@ class HighlightRuleImportTest {
             "replaceRule",
             jsonImportType(mapOf("pattern" to "target", "replacement" to "other")),
         )
-        assertTrue(
-            file.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)")
-        )
-        assertTrue(
-            online.contains("\"highlightRule\" -> showImportHighlightRuleDialog(it.second, true)")
-        )
     }
-
-    private fun projectFile(pathInApp: String): String =
-        sequenceOf(File(pathInApp), File("app/$pathInApp")).firstOrNull(File::isFile)?.readText()
-            ?: error("Missing project file: $pathInApp")
 
     private companion object {
         const val UUID_A = "11111111-1111-4111-8111-111111111111"
