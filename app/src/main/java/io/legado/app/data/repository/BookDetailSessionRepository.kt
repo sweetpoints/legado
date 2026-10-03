@@ -42,6 +42,7 @@ enum class BookDetailNativeKind {
     Deleted,
     Toast,
     CacheCleared,
+    ClearCacheRequest,
     IntroAction,
     IntroLink,
 }
