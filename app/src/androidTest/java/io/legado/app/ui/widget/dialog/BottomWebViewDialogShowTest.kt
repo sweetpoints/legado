@@ -137,9 +137,10 @@ class BottomWebViewDialogShowTest {
             assertTrue("The reopened dynamic page must finish rendering", awaitCondition {
                 val dialog = manager.fragments.filterIsInstance<BottomWebViewDialog>()
                     .single { it.dialog?.isShowing == true }
-                val web = (dialog.requireView().findViewById<View>(io.legado.app.R.id.web_view_container)
-                    as android.view.ViewGroup).getChildAt(0) as WebView
-                web.title == "Request 2" && web.progress == 100
+                val container = dialog.view?.findViewById<View>(io.legado.app.R.id.web_view_container)
+                    as? android.view.ViewGroup
+                val web = container?.getChildAt(0) as? WebView
+                web?.title == "Request 2" && web.progress == 100
             })
             // A collapsed sheet extends below its parent; check its visible resting state.
             awaitGeometry {
@@ -555,9 +556,16 @@ class BottomWebViewDialogShowTest {
                         config = """{"heightPercentage":0.6,
                             "dismissOnTouchOutside":$outside,"isHideable":true}""")
                     browser.show(activity.supportFragmentManager, "back")
-                    web = (browser.requireView().findViewById<View>(io.legado.app.R.id.web_view_container)
-                        as android.view.ViewGroup).getChildAt(0) as WebView
                 }
+                assertTrue("Compose must attach the browser surface", awaitCondition {
+                    val container = browser.view?.findViewById<View>(io.legado.app.R.id.web_view_container)
+                        as? android.view.ViewGroup
+                    val attachedWeb = container?.getChildAt(0) as? WebView
+                    if (attachedWeb?.isAttachedToWindow != true) false else {
+                        web = attachedWeb
+                        true
+                    }
+                })
                 assertTrue("Browser initial page must be ready", awaitCondition {
                     web.url == firstUrl && web.title == "First" &&
                         web.progress == 100 && web.copyBackForwardList().size == 1 &&
