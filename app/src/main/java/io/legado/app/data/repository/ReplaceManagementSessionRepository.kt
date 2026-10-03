@@ -14,7 +14,12 @@ import java.util.UUID
 data class ReplaceManagementCheckpoint(val revision: Long = 0, val query: String = "",
     val queryStart: Int = 0, val queryEnd: Int = 0, val selected: List<Long> = emptyList(),
     val dialog: String? = null, val draft: String = "", val draftStart: Int = 0, val draftEnd: Int = 0,
-    val targets: List<Long> = emptyList())
+    val targets: List<Long> = emptyList(), val pending: ReplaceManagementPrepared? = null,
+    val exportFile: ReplaceManagementExport? = null, val feedback: ReplaceManagementShareFeedback? = null,
+    val returnedNonce: String? = null, val ownedExports: List<String> = emptyList())
+data class ReplaceManagementPrepared(val action: String, val nonce: String,
+    val ruleId: Long? = null, val input: String? = null, val export: ReplaceManagementExport? = null,
+    val returningNonce: String? = null)
 interface ReplaceManagementSessionRepository {
     suspend fun read(session: String): ReplaceManagementCheckpoint?
     suspend fun write(session: String, value: ReplaceManagementCheckpoint)

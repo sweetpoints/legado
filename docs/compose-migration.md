@@ -1202,3 +1202,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 搜索范围纯模型移至 model/webBook，保留旧 UI typealias、LiveData 与公开 ScopeDialog 调用；搜索引擎不再依赖 UI 包。纯结果过滤移入 model 并保留原公开薄委托，大小写、trim、空白列表身份和字段过滤规则保持；新增 2 个 JVM 回归，完整 JVM 与 Android 测试编译通过。
 
 搜索页历史、书架提示、阅读记录与启用书源分组抽离为独立 IO 元数据仓库，发布 detached 不可变值并保留原 SQL wildcard/排序及书架身份规则；历史使用次数在 Room 事务内重读递增。新增 3 个 JVM 回归与实际 Room 并发计数/查询/快照测试编译覆盖，完整 JVM 与 Android 测试编译通过，设备端未执行；旧搜索引擎及宿主暂保持兼容。
+
+替换规则管理的原生操作改为持久 UUID 回执，完整导入输入、导出反馈和口令保存在私有 checkpoint；重复、迟到与恢复早到结果不会覆盖新请求。保留可见顺序、空导出、原 URL 复制及 REPLACE_RULE 口令类型，导出写失败可按同票据重试。每个会话登记全部自有导出文件，终止仅清理本会话文件，覆盖连续两次已交付导出、第三次落盘失败恢复与邻居文件保留。新增 9 个 JVM 与 3 个实际 IO/Atomic Android 编译用例，AndroidTest Kotlin 编译及全部 JVM 回归通过；设备端未执行，宿主接入另批提交。
