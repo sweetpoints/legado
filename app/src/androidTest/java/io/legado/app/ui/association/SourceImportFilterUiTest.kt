@@ -5,8 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
-import android.view.View
-import androidx.appcompat.widget.Toolbar
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -24,12 +22,10 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -55,6 +51,12 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SourceImportFilterUiTest {
+    private enum class ImportControl(val tag: String) {
+        Confirm("confirm"),
+        Cancel("cancel"),
+        SelectVisible("select-visible"),
+    }
+
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -198,7 +200,7 @@ class SourceImportFilterUiTest {
                     }
                     host.awaitReady()
                     screenshot("source-filter-auto-restored-$rss")
-                    host.click(R.id.tv_cancel)
+                    host.click(ImportControl.Cancel)
                     host.awaitFinished()
                 }
                 worker.join(1_000)
@@ -224,7 +226,7 @@ class SourceImportFilterUiTest {
             host.selection(true, true, true)
             host.query("TWIN", 1, 2)
             host.footer(2, 2, 3, all = true)
-            host.click(R.id.tv_footer_left)
+            host.click(ImportControl.SelectVisible)
             host.selection(true, false, false)
             host.footer(0, 2, 1, all = false)
             screenshot("source-filter-count-$rss")
@@ -232,15 +234,15 @@ class SourceImportFilterUiTest {
                 host.query("Hidden", 0)
                 host.rowClick(0, false)
                 host.query("TWIN", 1, 2)
-                host.menu(R.id.menu_select_new_source)
+                host.menu(BookImportMenu.SelectNew)
                 host.selection(false, true, false)
-                host.menu(R.id.menu_select_update_source)
+                host.menu(BookImportMenu.SelectUpdate)
                 host.selection(false, true, true)
                 host.query("Hidden", 0)
                 host.rowClick(0, false)
                 host.query("TWIN", 1, 2)
             } else {
-                host.click(R.id.tv_footer_left)
+                host.click(ImportControl.SelectVisible)
             }
             host.selection(true, true, true)
             host.rowClick(0, false)
@@ -270,7 +272,7 @@ class SourceImportFilterUiTest {
             host.assertQuery("OnlyNeedle")
             host.selection(true, false, true)
             host.query("Edited-$id", 1)
-            host.menu(R.id.menu_replace_source)
+            host.menu(BookImportMenu.Automatic)
             host.awaitReady()
             host.assertQuery("Edited-$id")
             host.query("Derived-$id", 1)
@@ -282,19 +284,19 @@ class SourceImportFilterUiTest {
             }
             host.awaitReady()
             host.selection(true, false, true)
-            host.menu(R.id.menu_replace_source)
+            host.menu(BookImportMenu.Automatic)
             host.awaitReady()
             host.assertQuery("Derived-$id")
             host.query("", 0, 1, 2)
             // Clear every selection through the actual footer, then import only original index 1.
-            host.click(R.id.tv_footer_left)
-            host.click(R.id.tv_footer_left)
+            host.click(ImportControl.SelectVisible)
+            host.click(ImportControl.SelectVisible)
             host.selection(false, false, false)
             host.query("Edited-$id", 1)
             host.rowClick(0, false)
             host.selection(false, true, false)
             host.setGroup("Imported group", false)
-            host.click(R.id.tv_ok)
+            host.click(ImportControl.Confirm)
             await("Edited $rss source was not imported") {
                 storedGroup(rss, editedUrl) == "Imported group"
             }
@@ -312,6 +314,12 @@ class SourceImportFilterUiTest {
             if (rss) appDb.rssSourceDao.getByKey(editedUrl)?.sourceName
             else appDb.bookSourceDao.getBookSource(editedUrl)?.bookSourceName
         assertEquals("Edited-$id", savedName)
+        assertStoredMetadata(rss, candidateUrls[2], existing)
+        assertStoredMetadata(
+            rss,
+            editedUrl,
+            source(rss, editedUrl, "Edited-$id", "Imported group", "edited comment"),
+        )
     }
 
     @Test
@@ -341,7 +349,7 @@ class SourceImportFilterUiTest {
                     context.getString(R.string.need_login),
                     *if (rss) intArrayOf(1) else intArrayOf(0, 1),
                 )
-                host.click(R.id.tv_cancel)
+                host.click(ImportControl.Cancel)
                 host.awaitFinished()
             }
         }
@@ -355,7 +363,7 @@ class SourceImportFilterUiTest {
             host.group(null, false)
             host.setGroup("Once", false)
             assertNull(AppConfig.importLastGroup)
-            host.click(R.id.tv_ok)
+            host.click(ImportControl.Confirm)
             await("One-time replacement group was not imported") {
                 storedGroup(false, first) == "Once"
             }
@@ -363,12 +371,12 @@ class SourceImportFilterUiTest {
         val second = url("group/remember-add")
         withImport(true, listOf(source(true, second))) { host ->
             host.group(null, false)
-            host.menu(R.id.menu_remember_source_group)
+            host.menu(BookImportMenu.RememberGroup)
             assertTrue(AppConfig.importRememberGroup)
             host.setGroup("Remember add", true)
             assertEquals("Remember add", AppConfig.importLastGroup)
             assertTrue(AppConfig.importLastGroupAdd)
-            host.click(R.id.tv_ok)
+            host.click(ImportControl.Confirm)
             await("Remembered add group was not applied") {
                 storedGroup(true, second) == "Original,Remember add"
             }
@@ -380,7 +388,9 @@ class SourceImportFilterUiTest {
             screenshot("source-remembered-group-book")
             host.cancelGroup()
             host.setGroup("Remember replace", false)
-            host.click(R.id.tv_ok)
+            host.recreate()
+            host.group("Remember replace", false)
+            host.click(ImportControl.Confirm)
             await("Remembered replacement group was not applied") {
                 storedGroup(false, third) == "Remember replace"
             }
@@ -391,22 +401,22 @@ class SourceImportFilterUiTest {
             host.inspectGroupDialog("Remember replace", false)
             screenshot("source-remembered-group-rss")
             host.cancelGroup()
-            host.menu(R.id.menu_remember_source_group)
+            host.menu(BookImportMenu.RememberGroup)
             host.group(null, false)
             assertFalse(AppConfig.importRememberGroup)
             assertNull(AppConfig.importLastGroup)
             assertFalse(AppConfig.importLastGroupAdd)
-            host.click(R.id.tv_ok)
+            host.click(ImportControl.Confirm)
             await("Disabling memory must preserve the source's own group") {
                 storedGroup(true, fourth) == "Original"
             }
         }
         withImport(false, listOf(source(false, url("group/after-disable")))) { host ->
             host.group(null, false)
-            host.menu(R.id.menu_remember_source_group)
+            host.menu(BookImportMenu.RememberGroup)
             host.group(null, false)
             assertNull(AppConfig.importLastGroup)
-            host.click(R.id.tv_cancel)
+            host.click(ImportControl.Cancel)
         }
     }
 
@@ -443,6 +453,21 @@ class SourceImportFilterUiTest {
         if (rss) appDb.rssSourceDao.getByKey(url)?.sourceGroup
         else appDb.bookSourceDao.getBookSource(url)?.bookSourceGroup
 
+    private fun assertStoredMetadata(rss: Boolean, url: String, expected: Any) {
+        val actual =
+            if (rss) checkNotNull(appDb.rssSourceDao.getByKey(url))
+            else checkNotNull(appDb.bookSourceDao.getBookSource(url))
+        // Book's existing SourceHelp renumbers customOrder asynchronously. Compare every other
+        // persisted field structurally, including nested rules, rather than URL-only entity equals.
+        fun document(value: Any) =
+            GSON.toJsonTree(if (value is BookSource) value.copy(customOrder = 0) else value)
+        assertEquals(
+            "Full persisted metadata: rss=$rss url=$url",
+            document(expected),
+            document(actual),
+        )
+    }
+
     private fun withImport(rss: Boolean, sources: List<Any>, action: (ImportHost) -> Unit) {
         val file = File(context.cacheDir, "source-filter-$id-${files.size}.json")
         files.add(file)
@@ -460,11 +485,7 @@ class SourceImportFilterUiTest {
             val host = ImportHost(scenario, rss)
             host.findParent()
             host.awaitReady()
-            try {
-                action(host)
-            } finally {
-                host.closeMenus()
-            }
+            action(host)
         }
     }
 
@@ -489,12 +510,21 @@ class SourceImportFilterUiTest {
                 context.getString(R.string.disabled_explore),
             )
 
-        fun <T : View> view(id: Int): T = parent.requireView().findViewById(id)
+        private val prefix: String
+            get() = if (rss) "rss-import" else "book-import"
 
-        private fun toolbar() = view<Toolbar>(R.id.tool_bar)
+        private fun rssLabels() =
+            RssImportSearchLabels(
+                context.getString(R.string.enabled),
+                context.getString(R.string.disabled),
+                context.getString(R.string.need_login),
+                context.getString(R.string.no_group),
+            )
 
-        private fun indices() =
-            (view<RecyclerView>(R.id.recycler_view).adapter as RecyclerAdapter<*, *>).getItems()
+        private fun visibleKeys(): List<String> = main {
+            if (rss) visibleRssImportItems(feed.state.value, rssLabels()).map { it.key }
+            else visibleBookImportItems(book.state.value, bookLabels()).map { it.key }
+        }
 
         fun findParent() =
             await("Import dialog missing: rss=$rss") {
@@ -551,15 +581,24 @@ class SourceImportFilterUiTest {
             main {
                 assertEquals(query, if (rss) feed.state.value.query else book.state.value.query)
             }
+            expected.forEach { index ->
+                compose.onNodeWithTag("$prefix-row-$index").performScrollTo().assertIsDisplayed()
+            }
         }
 
-        fun selection(vararg expected: Boolean) = main {
-            assertEquals(
-                "Selection must use original indices: rss=$rss",
-                expected.toList(),
-                if (rss) feed.state.value.items.map { it.key in feed.state.value.selected }
-                else book.state.value.items.map { it.key in book.state.value.selected },
-            )
+        fun selection(vararg expected: Boolean) {
+            main {
+                assertEquals(
+                    "Selection must use original indices: rss=$rss",
+                    expected.toList(),
+                    if (rss) feed.state.value.items.map { it.key in feed.state.value.selected }
+                    else book.state.value.items.map { it.key in book.state.value.selected },
+                )
+            }
+            visibleKeys().forEach { key ->
+                val checkbox = compose.onNodeWithTag("$prefix-check-$key").performScrollTo()
+                if (expected[key.toInt()]) checkbox.assertIsOn() else checkbox.assertIsOff()
+            }
         }
 
         fun footer(selected: Int, visible: Int, total: Int, all: Boolean) {
@@ -588,27 +627,8 @@ class SourceImportFilterUiTest {
             }
         }
 
-        fun click(id: Int) {
-            if (rss)
-                compose
-                    .onNodeWithTag(
-                        when (id) {
-                            R.id.tv_ok -> "rss-import-confirm"
-                            R.id.tv_cancel -> "rss-import-cancel"
-                            else -> "rss-import-select-visible"
-                        }
-                    )
-                    .performClick()
-            else
-                compose
-                    .onNodeWithTag(
-                        when (id) {
-                            R.id.tv_ok -> "book-import-confirm"
-                            R.id.tv_cancel -> "book-import-cancel"
-                            else -> "book-import-select-visible"
-                        }
-                    )
-                    .performClick()
+        fun click(control: ImportControl) {
+            compose.onNodeWithTag("$prefix-${control.tag}").performClick()
         }
 
         fun rowClick(position: Int, openCode: Boolean) {
@@ -653,40 +673,12 @@ class SourceImportFilterUiTest {
             assertQuery(query, originalIndex)
         }
 
-        fun menu(id: Int) {
-            if (rss) {
-                compose.onNodeWithTag("rss-import-menu").performClick()
-                val menu =
-                    when (id) {
-                        R.id.menu_replace_source -> RssImportMenu.Automatic
-                        R.id.menu_remember_source_group -> RssImportMenu.RememberGroup
-                        R.id.menu_show_comment -> RssImportMenu.ShowComment
-                        else -> error("Unsupported RSS menu $id")
-                    }
-                compose.onNodeWithTag("rss-import-menu-${menu.name}").performClick()
-                awaitReady()
-                return
-            }
-            compose.onNodeWithTag("book-import-menu").performClick()
-            val menu =
-                when (id) {
-                    R.id.menu_replace_source -> BookImportMenu.Automatic
-                    R.id.menu_remember_source_group -> BookImportMenu.RememberGroup
-                    R.id.menu_show_comment -> BookImportMenu.ShowComment
-                    R.id.menu_select_new_source -> BookImportMenu.SelectNew
-                    R.id.menu_select_update_source -> BookImportMenu.SelectUpdate
-                    R.id.menu_keep_original_name -> BookImportMenu.KeepName
-                    R.id.menu_keep_group -> BookImportMenu.KeepGroup
-                    R.id.menu_keep_enable -> BookImportMenu.KeepEnable
-                    else -> error("Unsupported book menu $id")
-                }
-            compose.onNodeWithTag("book-import-menu-${menu.name}").performClick()
+        fun menu(option: BookImportMenu) {
+            // Both actual menu enums share these options; RSS deliberately omits Book-only actions.
+            val menuName = if (rss) RssImportMenu.valueOf(option.name).name else option.name
+            compose.onNodeWithTag("$prefix-menu").performClick()
+            compose.onNodeWithTag("$prefix-menu-$menuName").performClick()
             awaitReady()
-        }
-
-        fun closeMenus() = main {
-            if (::parent.isInitialized)
-                parent.view?.findViewById<Toolbar>(R.id.tool_bar)?.dismissPopupMenus()
         }
 
         fun open(position: Int, originalIndex: Int): CodeDialog {
@@ -740,6 +732,7 @@ class SourceImportFilterUiTest {
                     RssImportMenu.ShowComment.ordinal + 1,
                     RssImportMenu.RememberGroup.ordinal,
                 )
+                assertRememberMenuOrder()
             } else {
                 compose.onNodeWithTag("book-import-group").assertTextContains(title)
                 main {
@@ -748,20 +741,21 @@ class SourceImportFilterUiTest {
                         book.state.value.preferences.rememberGroup,
                     )
                 }
-                compose.onNodeWithTag("book-import-menu").performClick()
-                val comment =
-                    compose
-                        .onNodeWithTag("book-import-menu-ShowComment")
-                        .fetchSemanticsNode()
-                        .boundsInRoot
-                val remember =
-                    compose
-                        .onNodeWithTag("book-import-menu-RememberGroup")
-                        .fetchSemanticsNode()
-                        .boundsInRoot
-                assertTrue(comment.bottom <= remember.top)
-                androidx.test.espresso.Espresso.pressBack()
+                assertRememberMenuOrder()
             }
+        }
+
+        private fun assertRememberMenuOrder() {
+            compose.onNodeWithTag("$prefix-menu").performClick()
+            val comment =
+                compose.onNodeWithTag("$prefix-menu-ShowComment").fetchSemanticsNode().boundsInRoot
+            val remember =
+                compose
+                    .onNodeWithTag("$prefix-menu-RememberGroup")
+                    .fetchSemanticsNode()
+                    .boundsInRoot
+            assertTrue(comment.bottom <= remember.top)
+            androidx.test.espresso.Espresso.pressBack()
         }
 
         fun inspectGroupDialog(expected: String?, add: Boolean) {
