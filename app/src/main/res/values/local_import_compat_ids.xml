@@ -1,0 +1,5 @@
+<resources>
+    <!-- Shared hosts/widgets retain these identities after the exclusive import XML is removed. -->
+    <item name="titleBar" type="id" />
+    <item name="menu_del_selection" type="id" />
+</resources>

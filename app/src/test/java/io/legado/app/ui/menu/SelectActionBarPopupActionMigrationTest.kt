@@ -106,7 +106,10 @@ class SelectActionBarPopupActionMigrationTest {
         val document = factory.newDocumentBuilder().parse(resolveFile("src/main/res/menu/$path"))
         val items = document.getElementsByTagName("item")
         return (0 until items.length).map { index ->
-            (items.item(index) as Element).getAttributeNS(ANDROID_NS, "id")
+            val item = items.item(index) as Element
+            item.getAttributeNS(ANDROID_NS, "id").ifBlank {
+                if (item.getAttribute("type") == "id") "@+id/" + item.getAttribute("name") else ""
+            }
         }
     }
 
@@ -127,7 +130,8 @@ class SelectActionBarPopupActionMigrationTest {
 
         val expectedMenuIds =
             mapOf(
-                "import_book_sel.xml" to listOf("@+id/menu_del_selection")
+                "../values/local_import_compat_ids.xml" to
+                    listOf("@+id/titleBar", "@+id/menu_del_selection")
                 // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
                 // Compose book source order is checked by the immutable action lists below.
 
