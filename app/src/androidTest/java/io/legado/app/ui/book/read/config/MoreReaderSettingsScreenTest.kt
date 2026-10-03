@@ -75,6 +75,31 @@ class MoreReaderSettingsScreenTest {
     }
 
     @Test
+    fun errorStateOffersRetryAction() {
+        val retryCount = AtomicInteger()
+        compose.setContent {
+            LegadoComposeTheme {
+                MoreReaderSettingsScreen(
+                    state = MoreReaderSettingsUiState(isLoading = false, error = "Read failed"),
+                    visibleSettings = MoreReaderSettings.all,
+                    background = Color.White,
+                    slopSummary = "system default 8 px",
+                    bookmarkSummary = "default 48 px",
+                    onToggle = { _, _ -> },
+                    onChoice = { _, _ -> },
+                    onSeekBar = { _, _ -> },
+                    onAction = {},
+                    onRetry = { retryCount.incrementAndGet() },
+                    modifier = Modifier.height(480.dp),
+                )
+            }
+        }
+
+        compose.onNodeWithTag("more-reader-settings-retry").performClick()
+        assertEquals(1, retryCount.get())
+    }
+
+    @Test
     fun controlsPersistTypedPreferencesAndRefreshAfterExternalChanges() {
         val repository = MoreReaderSettingsRepository(context)
         val viewModel = MoreReaderSettingsViewModel(repository)

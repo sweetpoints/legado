@@ -100,6 +100,7 @@ class MoreReaderSettingsViewModel(private val repository: MoreReaderSettingsRepo
             ioOperations.withLock {
                 try {
                     repository.saveNumber(setting, value)
+                    onSaved()
                     val values = repository.load()
                     if (request == generation.get()) {
                         mutableState.value =
@@ -107,7 +108,6 @@ class MoreReaderSettingsViewModel(private val repository: MoreReaderSettingsRepo
                                 values = values,
                                 isLoading = false,
                             )
-                        onSaved()
                     }
                 } catch (error: CancellationException) {
                     throw error

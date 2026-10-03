@@ -31,6 +31,7 @@ fun MoreReaderSettingsRoute(
         onChoice = onChoice,
         onSeekBar = onSeekBar,
         onAction = onAction,
+        onRetry = viewModel::refresh,
         modifier = modifier,
     )
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +47,7 @@ fun MoreReaderSettingsScreen(
     onChoice: (MoreReaderSetting.Choice, String) -> Unit,
     onSeekBar: (MoreReaderSetting.SeekBar, Int) -> Unit,
     onAction: (MoreReaderSetting.Action) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier.fillMaxSize(), color = background) {
@@ -62,7 +64,16 @@ fun MoreReaderSettingsScreen(
                     Modifier.fillMaxSize().padding(16.dp).testTag("more-reader-settings-error"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(state.error, color = MaterialTheme.colorScheme.error)
+                        Button(
+                            onClick = onRetry,
+                            modifier =
+                                Modifier.padding(top = 12.dp).testTag("more-reader-settings-retry"),
+                        ) {
+                            Text(stringResource(io.legado.app.R.string.retry))
+                        }
+                    }
                 }
             else ->
                 LazyColumn(Modifier.fillMaxSize().testTag("more-reader-settings-list")) {
