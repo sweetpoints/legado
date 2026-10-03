@@ -1466,3 +1466,8 @@ Reader initialization, chapter list replacement, book-info loading, automatic so
 ### Manga immutable session controller
 
 The session controller serializes immutable checkpoints and native request receipts. SavedState consumers will retain only its private-file UUID. Native claims require a resumed owner and are written before synchronous platform dispatch; cancellation during accepted IO cannot strand the receipt before dispatch. Duplicate concurrent claims dispatch once, completion records a terminal phase, platform-launch failure records cancellation, and owner release prevents further controller writes. JVM tests exercise concurrent claims with a full large URL, cancellation held inside accepted IO, and release against late checkpoints. Formatting/checks pass; final complete candidate Gradle validation is pending.
+
+
+### Manga callback cleanup ownership
+
+Callback registration and teardown share the engine lock. An obsolete callback cannot clear or cancel a replacement owner. Current-owner teardown captures the exact existing child jobs and invalidates content receipts under that lock, then cancels only those captured jobs outside it; a new owner can create children without its work being included in late cleanup. An Android regression creates real engine and download jobs, replaces the callback, and verifies old-owner teardown leaves both jobs active while current-owner teardown cancels them. This test awaits device execution; it is included in the final candidate AndroidTest compile. Formatting and diff checks pass.

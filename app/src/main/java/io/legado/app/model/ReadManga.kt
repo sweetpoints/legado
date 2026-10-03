@@ -673,19 +673,28 @@ object ReadManga : CoroutineScope by MainScope() {
     }
 
     /** 注册回调 */
+    @Synchronized
     fun register(cb: Callback) {
         mCallback = cb
     }
 
     /** 取消注册回调 */
     fun unregister(cb: Callback) {
-        if (mCallback === cb) {
-            mCallback = null
-        }
-        preDownloadTask?.cancel()
-        preDownloadTask = null
-        downloadScope.coroutineContext.cancelChildren()
-        coroutineContext.cancelChildren()
+        val ownedJobs =
+            synchronized(this) {
+                if (mCallback !== cb) return
+                mCallback = null
+                invalidateContentLoads()
+                val jobs = buildList {
+                    preDownloadTask?.let { add(it) }
+                    downloadScope.coroutineContext[Job]?.children?.let { addAll(it.toList()) }
+                    coroutineContext[Job]?.children?.let { addAll(it.toList()) }
+                }
+                preDownloadTask = null
+                jobs
+            }
+        // Cancel only captured jobs outside the lock: a replacement may already own new children.
+        ownedJobs.forEach { it.cancel() }
     }
 
     private suspend fun getManageChapter(chapter: BookChapter, content: String): MangaChapter {
