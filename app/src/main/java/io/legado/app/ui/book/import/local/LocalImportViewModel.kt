@@ -48,6 +48,7 @@ internal data class LocalImportUiState(
     val group: LocalImportGroupPrompt? = null,
     val archive: LocalImportArchivePrompt? = null,
     val pending: LocalImportNative? = null,
+    val registryNative: LocalImportNative? = null,
     val recovery: Boolean = false,
     val error: String? = null,
     val message: String? = null,
@@ -88,10 +89,13 @@ internal class LocalImportViewModel(
     fun initialize() {
         if (initialized) return
         initialized = true
+        owner = ownership.begin()
+        val request = owner
         viewModelScope.launch {
             try {
                 val settings = repository.settings()
                 val restored = session.load()
+                if (!ownership.current(request)) return@launch
                 val path = restored.root ?: settings.root ?: settings.storage
                 mutableState.update {
                     it.copy(
@@ -103,10 +107,17 @@ internal class LocalImportViewModel(
                         script = settings.fileNameScript,
                         storagePrompt = settings.storage.isNullOrBlank(),
                         recovery = restored.pending != null || restored.importNonce != null,
+                        registryNative =
+                            restored.pending?.takeIf { pending ->
+                                pending.claimed &&
+                                    (pending.kind == LocalImportNativeKind.Folder ||
+                                        pending.kind == LocalImportNativeKind.Storage)
+                            },
                     )
                 }
                 if (path != null) {
-                    session.update { it.copy(root = path) }
+                    session.update { if (ownership.current(request)) it.copy(root = path) else it }
+                    if (!ownership.current(request)) return@launch
                     if (path.startsWith("content:"))
                         restoreDirectory(path, restored.directories, restored.recursive)
                     else if (restored.pending == null)
@@ -114,14 +125,19 @@ internal class LocalImportViewModel(
                 } else if (!state.value.storagePrompt) requestFolder()
                 else mutableState.update { it.copy(loading = false) }
             } catch (error: Exception) {
-                failure(error)
+                if (ownership.current(request)) failure(error)
             }
         }
     }
 
     private suspend fun restoreDirectory(path: String, children: List<String>, recursive: Boolean) {
-        root = repository.root(path)
-        directories = children.map { repository.root(it) }
+        val request = owner
+        val resolvedRoot = repository.root(path)
+        val resolvedChildren = children.map { repository.root(it) }
+        // Provider metadata may finish after another picked directory has become current.
+        if (!ownership.current(request)) return
+        root = resolvedRoot
+        directories = resolvedChildren
         loadDirectory(recursive, clearSelection = false)
     }
 
@@ -347,7 +363,19 @@ internal class LocalImportViewModel(
                 it.copy(pending = pending.copy(claimed = true))
             }
         }
-        if (claimed != null) mutableState.update { it.copy(pending = null) }
+        if (claimed != null)
+            mutableState.update {
+                it.copy(
+                    pending = null,
+                    registryNative =
+                        claimed
+                            ?.takeIf { pending ->
+                                pending.kind == LocalImportNativeKind.Folder ||
+                                    pending.kind == LocalImportNativeKind.Storage
+                            }
+                            ?.copy(claimed = true),
+                )
+            }
         return claimed
     }
 
@@ -395,10 +423,12 @@ internal class LocalImportViewModel(
                     !pending.claimed
             )
                 return@acceptedWrite
-            ownership.begin()
+            owner = ownership.begin()
+            val request = owner
             listing?.cancel()
             reading?.cancel()
             session.update { it.copy(pending = null) }
+            mutableState.update { it.copy(registryNative = null, recovery = false) }
             if (value == null) return@acceptedWrite
             repository.setRoot(value)
             session.update {
@@ -406,7 +436,9 @@ internal class LocalImportViewModel(
             }
             directories = emptyList()
             if (value.startsWith("content:")) {
-                root = repository.root(value)
+                val resolved = repository.root(value)
+                if (!ownership.current(request)) return@acceptedWrite
+                root = resolved
                 loadDirectory(false)
             } else requestNative(LocalImportNativeKind.Permission, value)
         }
@@ -423,6 +455,7 @@ internal class LocalImportViewModel(
             )
                 return@acceptedWrite
             session.update { it.copy(pending = null) }
+            mutableState.update { it.copy(registryNative = null, recovery = false) }
             if (value != null) {
                 repository.setStorage(value)
                 mutableState.update { it.copy(storage = value, showStorage = false) }

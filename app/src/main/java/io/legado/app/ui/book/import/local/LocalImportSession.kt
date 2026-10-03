@@ -130,10 +130,15 @@ internal class LocalImportSession(
 
     suspend fun load() = writes.withLock { snapshot ?: read().also { snapshot = it } }
 
-    private suspend fun read() =
-        sessions.read(ticket)
-            ?: if (create) LocalImportCheckpoint()
-            else error("Local import session is unavailable; reopen import")
+    private suspend fun read(): LocalImportCheckpoint {
+        sessions.read(ticket)?.let {
+            return it
+        }
+        check(create) { "Local import session is unavailable; reopen import" }
+        val initial = LocalImportCheckpoint()
+        check(sessions.write(ticket, initial)) { "Local import session creation was superseded" }
+        return initial
+    }
 
     suspend fun update(
         change: (LocalImportCheckpoint) -> LocalImportCheckpoint
