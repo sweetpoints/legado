@@ -6,9 +6,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.preferences.AppMangaFooterSettingsRepository
 import io.legado.app.data.preferences.AppMangaReaderSettingsRepository
+import io.legado.app.data.preferences.MangaColorFilterValues
+import io.legado.app.data.preferences.MangaFooterDraft
 import io.legado.app.data.preferences.MangaReaderSetting
 import io.legado.app.data.preferences.MangaReaderSettingsValues
+import io.legado.app.data.preferences.PreferenceMangaColorFilterRepository
 import io.legado.app.data.repository.DefaultMangaReaderOperationsRepository
 import io.legado.app.data.repository.FileMangaReaderSessionRepository
 import io.legado.app.data.repository.MangaChapterRefreshRequest
@@ -38,6 +42,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 internal data class MangaReaderBookValues(
     val bookUrl: String,
@@ -72,6 +77,9 @@ internal data class MangaReaderUiState(
     val settings: MangaReaderSettingsValues = MangaReaderSettingsValues(),
     val autoPage: Boolean = false,
     val autoScroll: Boolean = false,
+    val footer: MangaFooterDraft = MangaFooterDraft(),
+    val colorFilter: MangaColorFilterValues = MangaColorFilterValues(),
+    val footerPage: MangaReaderItem.Page? = null,
 )
 
 /**
@@ -82,6 +90,8 @@ internal class MangaReaderComposeViewModel(
     private val savedState: SavedStateHandle,
 ) : AndroidViewModel(application) {
     private val repository = FileMangaReaderSessionRepository()
+    private val footerRepository = AppMangaFooterSettingsRepository()
+    private val colorFilterRepository = PreferenceMangaColorFilterRepository()
     private val settingsRepository = AppMangaReaderSettingsRepository()
     private val operations = DefaultMangaReaderOperationsRepository()
     private val transition = Mutex()
@@ -245,6 +255,11 @@ internal class MangaReaderComposeViewModel(
                             readingBook.isPdf,
                         ),
                     items = snapshotMangaItems(content.items),
+                    footerPage =
+                        if (restore)
+                            snapshotMangaItems(content.items).getOrNull(content.pos)
+                                as? MangaReaderItem.Page ?: current.footerPage
+                        else current.footerPage,
                     anchorIndex = content.pos,
                     chapterIndex = ReadManga.durChapterIndex,
                     pageIndex = ReadManga.durChapterPos,
@@ -313,7 +328,23 @@ internal class MangaReaderComposeViewModel(
     suspend fun reloadSettings() {
         val owner = generation
         val settings = settingsRepository.load()
-        if (generation == owner) mutableState.value = state.value.copy(settings = settings)
+        val footer = withContext(Dispatchers.IO) { footerRepository.load() }
+        val filter = colorFilterRepository.load()
+        if (generation == owner)
+            mutableState.value =
+                state.value.copy(
+                    settings = settings,
+                    footer = footer,
+                    colorFilter = filter,
+                )
+    }
+
+    fun previewFooter(footer: MangaFooterDraft) {
+        mutableState.value = state.value.copy(footer = footer)
+    }
+
+    fun previewColorFilter(filter: MangaColorFilterValues) {
+        mutableState.value = state.value.copy(colorFilter = filter)
     }
 
     fun setSetting(setting: MangaReaderSetting, enabled: Boolean) {
