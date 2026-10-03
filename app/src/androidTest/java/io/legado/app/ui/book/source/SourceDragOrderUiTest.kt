@@ -3,24 +3,29 @@ package io.legado.app.ui.book.source
 import android.app.Activity
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.InputDevice
-import android.view.MotionEvent
 import android.view.ViewConfiguration
-import androidx.appcompat.widget.SearchView
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.rssSourceManagementId
@@ -37,7 +42,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercise the real ItemTouchHelper gesture, database order and reopened management list. */
+/** Exercise real Compose gestures, held Room publications, database order and restored lists. */
 @RunWith(AndroidJUnit4::class)
 class SourceDragOrderUiTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -56,7 +61,7 @@ class SourceDragOrderUiTest {
 
     @Test fun filteredRssDragPreservesHiddenOrder() = verifyRssComposeDrag()
 
-    @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyDrag(Kind.REPLACE)
+    @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyReplaceComposeDrag()
 
     @Test
     fun heldBookDragWithDeletedTargetDoesNotMoveAnotherSource() =
@@ -93,16 +98,20 @@ class SourceDragOrderUiTest {
             val before = appDb.bookSourceDao.allPart.map { it.bookSourceUrl }
             val rawOrders =
                 appDb.bookSourceDao.allPart.associate { it.bookSourceUrl to it.customOrder }
+            var metadata = databaseMetadata(Kind.BOOK)
             ActivityScenario.launch(BookSourceActivity::class.java).use { scenario ->
                 waitUntil("book Compose manager loaded") {
                     var loaded = false
                     scenario.onActivity { loaded = !it.managerModel.state.value.loading }
                     loaded
                 }
-                scenario.onActivity {
-                    if (descending) it.managerModel.ascending()
-                    it.managerModel.query("group:$group")
+                if (descending) {
+                    compose.onNodeWithText(context.getString(R.string.menu)).performClick()
+                    compose.onNodeWithTag("source-manager-action:descending").performClick()
                 }
+                filter(Kind.BOOK, "Book source 0")
+                awaitItems(Kind.BOOK, scenario, listOf(fixtures.first().bookSourceUrl))
+                filter(Kind.BOOK, "group:$group")
                 fun waitRows(expected: List<String>) =
                     waitUntil("book Compose rows $expected") {
                         var matches = false
@@ -110,9 +119,10 @@ class SourceDragOrderUiTest {
                             matches =
                                 it.managerModel.state.value.rows.map { row -> row.url } == expected
                         }
-                        matches
+                        matches && renderedOrderMatches(Kind.BOOK, expected)
                     }
                 waitRows(keys)
+                screenshot("book-$descending-$removeTarget-before")
                 fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
                     val list = compose.onNodeWithTag("source-manager-list")
                     val bounds = list.fetchSemanticsNode().boundsInRoot
@@ -133,25 +143,39 @@ class SourceDragOrderUiTest {
                         advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
                         moveTo(destination, 500)
                     }
-                    waitRows(keys.drop(1) + keys.first())
-                    whileHeld()
-                    if (returnToStart) {
-                        list.performTouchInput {
-                            moveTo(Offset(start.x, start.y - first.height / 4), 500)
+                    try {
+                        waitRows(keys.drop(1) + keys.first())
+                        whileHeld()
+                        if (returnToStart) {
+                            list.performTouchInput {
+                                moveTo(Offset(start.x, start.y - first.height / 4), 500)
+                            }
+                            waitRows(keys)
                         }
-                        waitRows(keys)
+                    } finally {
+                        list.performTouchInput { up() }
                     }
-                    list.performTouchInput { up() }
                 }
                 drag(true) {
                     appDb.bookDao.insert(countBook)
                     waitUntil("bookshelf update during held book drag") {
                         var updated = false
                         scenario.onActivity {
-                            updated = it.managerModel.state.value.counts[keys.first()] == 1
+                            val state = it.managerModel.state.value
+                            updated =
+                                state.rows.getOrNull(2)?.url == keys.first() &&
+                                    state.counts[keys.first()] == 1
                         }
                         updated
                     }
+                    compose
+                        .onNode(
+                            hasText(context.getString(R.string.source_bookshelf_count, 1)) and
+                                hasAnyAncestor(hasTestTag("source-manager-row:${keys.first()}"))
+                        )
+                        .assertExists()
+                    assertEquals(before, appDb.bookSourceDao.allPart.map { it.bookSourceUrl })
+                    appDb.bookDao.delete(countBook)
                 }
                 assertEquals(before, appDb.bookSourceDao.allPart.map { it.bookSourceUrl })
                 assertEquals(
@@ -160,10 +184,26 @@ class SourceDragOrderUiTest {
                 )
                 drag(false) {
                     val refreshed = appDb.bookSourceDao.getBookSource(keys[1])!!
+                    val updatedName = "Book publication ${UUID.randomUUID()}"
                     appDb.bookSourceDao.update(
-                        refreshed.copy(bookSourceComment = "Edited during held book drag")
+                        refreshed.copy(
+                            bookSourceName = updatedName,
+                            bookSourceComment = "Edited during held book drag",
+                        )
                     )
+                    waitUntil("book name publication while pointer remains held") {
+                        var published = false
+                        scenario.onActivity { activity ->
+                            published =
+                                activity.managerModel.state.value.rows.any {
+                                    it.url == keys[1] && it.name == updatedName
+                                }
+                        }
+                        published
+                    }
+                    compose.onNodeWithText("$updatedName ($group)").assertExists()
                     if (removeTarget) appDb.bookSourceDao.delete(keys.last())
+                    metadata = databaseMetadata(Kind.BOOK)
                     assertEquals(
                         if (removeTarget) before.filter { it != keys.last() } else before,
                         appDb.bookSourceDao.allPart.map { it.bookSourceUrl },
@@ -192,9 +232,22 @@ class SourceDragOrderUiTest {
                     )
                 val expectedVisible =
                     expected.filter { it in keys }.let { if (descending) it.reversed() else it }
+                assertEquals(metadata, databaseMetadata(Kind.BOOK))
+                assertEquals(
+                    before.filter { it != keys.first() && (!removeTarget || it != keys.last()) },
+                    appDb.bookSourceDao.allPart
+                        .map { it.bookSourceUrl }
+                        .filter { it != keys.first() },
+                )
+                waitRows(expectedVisible)
+                screenshot("book-$descending-$removeTarget-after")
+                filter(Kind.BOOK, "")
+                awaitItems(Kind.BOOK, scenario, if (descending) expected.reversed() else expected)
+                filter(Kind.BOOK, "group:$group")
                 waitRows(expectedVisible)
                 scenario.recreate()
                 waitRows(expectedVisible)
+                screenshot("book-$descending-$removeTarget-recreated")
             }
         } finally {
             appDb.bookDao.delete(countBook)
@@ -229,13 +282,16 @@ class SourceDragOrderUiTest {
             appDb.rssSourceDao.insert(*fixtures.toTypedArray())
             val before = appDb.rssSourceDao.all.map { it.sourceUrl }
             val raw = appDb.rssSourceDao.all.associate { it.sourceUrl to it.customOrder }
+            var metadata = databaseMetadata(Kind.RSS)
             ActivityScenario.launch(RssSourceActivity::class.java).use { scenario ->
                 waitUntil("Compose RSS loaded") {
                     var ready = false
                     scenario.onActivity { ready = it.managementModel.state.value.loaded }
                     ready
                 }
-                scenario.onActivity { it.managementModel.query("group:$group") }
+                filter(Kind.RSS, "Source 0")
+                awaitItems(Kind.RSS, scenario, listOf(fixtures.first().sourceUrl))
+                filter(Kind.RSS, "group:$group")
                 fun waitRows(expected: List<String>) =
                     waitUntil("Compose RSS rows $expected") {
                         var ready = false
@@ -244,9 +300,10 @@ class SourceDragOrderUiTest {
                                 it.managementModel.state.value.rows.map { row -> row.id } ==
                                     expected
                         }
-                        ready
+                        ready && renderedOrderMatches(Kind.RSS, expected, rssIds = true)
                     }
                 waitRows(ids)
+                screenshot("rss-before")
                 fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
                     val list = compose.onNodeWithTag("rss-source-list")
                     val bounds = list.fetchSemanticsNode().boundsInRoot
@@ -271,15 +328,18 @@ class SourceDragOrderUiTest {
                         advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
                         moveTo(end, 500)
                     }
-                    waitRows(listOf(ids[1], ids[2], ids[0]))
-                    whileHeld()
-                    if (returnToStart) {
-                        list.performTouchInput {
-                            moveTo(Offset(start.x, start.y - first.height / 4), 500)
+                    try {
+                        waitRows(listOf(ids[1], ids[2], ids[0]))
+                        whileHeld()
+                        if (returnToStart) {
+                            list.performTouchInput {
+                                moveTo(Offset(start.x, start.y - first.height / 4), 500)
+                            }
+                            waitRows(ids)
                         }
-                        waitRows(ids)
+                    } finally {
+                        list.performTouchInput { up() }
                     }
-                    list.performTouchInput { up() }
                 }
                 drag(true)
                 assertEquals(before, appDb.rssSourceDao.all.map { it.sourceUrl })
@@ -289,7 +349,22 @@ class SourceDragOrderUiTest {
                 )
                 drag(false) {
                     val source = appDb.rssSourceDao.getByKey(visible[1].sourceUrl)!!
-                    appDb.rssSourceDao.update(source.copy(sourceComment = "Edited during drag"))
+                    val updatedName = "RSS publication ${UUID.randomUUID()}"
+                    appDb.rssSourceDao.update(
+                        source.copy(sourceName = updatedName, sourceComment = "Edited during drag")
+                    )
+                    waitUntil("RSS publication buffered while pointer remains held") {
+                        var published = false
+                        scenario.onActivity { activity ->
+                            published =
+                                activity.managementModel.observedRows.any {
+                                    it.id == ids[1] && it.name == updatedName
+                                }
+                        }
+                        published
+                    }
+                    waitRows(listOf(ids[1], ids[2], ids[0]))
+                    metadata = databaseMetadata(Kind.RSS)
                     assertEquals(before, appDb.rssSourceDao.all.map { it.sourceUrl })
                 }
                 val expected =
@@ -304,9 +379,21 @@ class SourceDragOrderUiTest {
                     "Edited during drag",
                     appDb.rssSourceDao.getByKey(visible[1].sourceUrl)!!.sourceComment,
                 )
+                assertEquals(metadata, databaseMetadata(Kind.RSS))
+                assertEquals(
+                    before.filter { it != visible[0].sourceUrl },
+                    appDb.rssSourceDao.all
+                        .map { it.sourceUrl }
+                        .filter { it != visible[0].sourceUrl },
+                )
+                waitRows(listOf(ids[1], ids[2], ids[0]))
+                filter(Kind.RSS, "")
+                awaitItems(Kind.RSS, scenario, expected)
+                filter(Kind.RSS, "group:$group")
                 waitRows(listOf(ids[1], ids[2], ids[0]))
                 scenario.recreate()
                 waitRows(listOf(ids[1], ids[2], ids[0]))
+                screenshot("rss-recreated")
             }
         } finally {
             appDb.rssSourceDao.delete(*fixtures.toTypedArray())
@@ -319,198 +406,103 @@ class SourceDragOrderUiTest {
         }
     }
 
-    private fun verifyDrag(kind: Kind, descending: Boolean = false, removeTarget: Boolean = false) {
-        val id = UUID.randomUUID().toString()
-        val group = "Drag $id"
-        val orders = listOf(100, 100, 400, 700, 900, 900)
-        val oldBooks = if (kind == Kind.BOOK) appDb.bookSourceDao.allPart else emptyList()
-        val oldRss = if (kind == Kind.RSS) appDb.rssSourceDao.all else emptyList()
-        val oldRules = if (kind == Kind.REPLACE) appDb.replaceRuleDao.all else emptyList()
-        val help = LocalConfig.all["bookSourceHelpVersion"]
-        val books = orders.mapIndexed { i, order ->
-            BookSource(
-                bookSourceUrl = "https://drag.invalid/$id/$i",
-                bookSourceName = "Drag source $i",
-                bookSourceGroup = if (i % 2 == 0) group else "Hidden $id",
-                bookSourceComment = "Metadata $i",
-                customOrder = order,
-            )
-        }
-        val rss = books.map {
-            RssSource(
-                sourceUrl = it.bookSourceUrl,
-                sourceName = it.bookSourceName,
-                sourceGroup = it.bookSourceGroup,
-                sourceComment = it.bookSourceComment,
-                customOrder = it.customOrder,
-                ruleContent = "body@text",
-            )
-        }
-        val firstRuleId = System.currentTimeMillis() * 1000
-        val rules = books.mapIndexed { i, item ->
-            ReplaceRule(
-                id = firstRuleId + i,
-                name = item.bookSourceName,
-                group = item.bookSourceGroup,
-                order = item.customOrder,
-                pattern = "original $i",
-                replacement = "replacement $i",
-                scope = "scope $i",
-            )
-        }
-        val countBook =
-            Book(
-                bookUrl = "https://count-drag.invalid/$id",
-                name = "Count drag $id",
-                origin = books[if (descending) 4 else 0].bookSourceUrl,
-            )
+    private fun verifyReplaceComposeDrag() {
+        val group = "Drag ${UUID.randomUUID()}"
+        val oldRules = appDb.replaceRuleDao.all
+        val firstId = System.currentTimeMillis() * 1000
+        val rules =
+            listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
+                ReplaceRule(
+                    id = firstId + index,
+                    name = "Drag source $index",
+                    group = if (index % 2 == 0) group else "Hidden $group",
+                    order = order,
+                    pattern = "original $index",
+                    replacement = "replacement $index",
+                    scope = "scope $index",
+                )
+            }
+        val visible = rules.filterIndexed { index, _ -> index % 2 == 0 }.map { it.id.toString() }
         var scenario: ActivityScenario<out Activity>? = null
         try {
-            LocalConfig.edit().putInt("bookSourceHelpVersion", 1).commit()
-            when (kind) {
-                Kind.BOOK -> appDb.bookSourceDao.insert(*books.toTypedArray())
-                Kind.RSS -> appDb.rssSourceDao.insert(*rss.toTypedArray())
-                Kind.REPLACE -> appDb.replaceRuleDao.insert(*rules.toTypedArray())
-            }
-            val fixtureKeys =
-                when (kind) {
-                    Kind.BOOK -> books.map { it.bookSourceUrl }
-                    Kind.RSS -> rss.map { it.sourceUrl }
-                    Kind.REPLACE -> rules.map { it.id.toString() }
-                }
-            val visible =
-                fixtureKeys
-                    .filterIndexed { index, _ -> index % 2 == 0 }
-                    .let { if (descending) it.reversed() else it }
-            val before = databaseKeys(kind)
-            var metadata = databaseMetadata(kind)
-            val rawOrders = databaseOrders(kind)
-            scenario = launch(kind)
-            if (descending)
-                scenario.onActivity { activity ->
-                    (activity as BookSourceActivity).managerModel.ascending()
-                }
-            filter(scenario, "group:$group")
-            awaitItems(scenario, visible)
-            screenshot("drag-${kind.name}-$descending-before")
+            appDb.replaceRuleDao.insert(*rules.toTypedArray())
+            val before = databaseKeys(Kind.REPLACE)
+            val rawOrders = databaseOrders(Kind.REPLACE)
+            scenario = launch(Kind.REPLACE)
+            val activeScenario = checkNotNull(scenario)
+            awaitLoaded(Kind.REPLACE, activeScenario)
+            filter(Kind.REPLACE, "Drag source 0")
+            awaitItems(Kind.REPLACE, activeScenario, listOf(rules.first().id.toString()))
+            filter(Kind.REPLACE, "group:$group")
+            awaitItems(Kind.REPLACE, activeScenario, visible)
+            screenshot("drag-REPLACE-before")
 
-            // Move out and back while holding the same pointer: no persisted reorder or
-            // renumbering.
-            drag(scenario, 0, 2, returnToStart = true) {
-                if (kind == Kind.BOOK) {
-                    appDb.bookDao.insert(countBook)
-                    waitUntil("live count follows the held source row") {
-                        var updated = false
-                        scenario!!.onActivity { activity ->
-                            val state = (activity as BookSourceActivity).managerModel.state.value
-                            updated =
-                                state.rows.getOrNull(2)?.url == countBook.origin &&
-                                    state.counts[countBook.origin] == 1
-                        }
-                        updated
-                    }
-                    assertEquals(
-                        "Count changes do not persist a drag before release",
-                        before,
-                        databaseKeys(kind),
-                    )
-                    appDb.bookDao.delete(countBook)
-                }
-            }
-            awaitItems(scenario, visible)
-            assertEquals(before, databaseKeys(kind))
-            assertEquals(rawOrders, databaseOrders(kind))
+            // A complete round trip with the same held pointer must not renumber duplicate orders.
+            drag(Kind.REPLACE, activeScenario, visible, returnToStart = true)
+            awaitItems(Kind.REPLACE, activeScenario, visible)
+            assertEquals(before, databaseKeys(Kind.REPLACE))
+            assertEquals(rawOrders, databaseOrders(Kind.REPLACE))
 
-            val moved = visible.first()
-            val target = visible.last()
-            val dragScenario = checkNotNull(scenario)
-            drag(
-                scenario,
-                0,
-                2,
-                whileHeld = {
-                    val version = listUpdateVersion(dragScenario)
-                    // A real Room invalidation reaches the manager while the pointer still owns A.
-                    updateComment(kind, visible[1], "Refreshed while dragging")
-                    if (removeTarget) appDb.bookSourceDao.delete(target)
-                    metadata = databaseMetadata(kind)
-                    waitUntil("Room publication during held $kind drag") {
-                        listUpdateVersion(dragScenario) > version
+            var metadata = databaseMetadata(Kind.REPLACE)
+            drag(Kind.REPLACE, activeScenario, visible) {
+                val updatedName = "Replacement publication ${UUID.randomUUID()}"
+                val refreshed = checkNotNull(appDb.replaceRuleDao.findById(visible[1].toLong()))
+                appDb.replaceRuleDao.update(
+                    refreshed.copy(name = updatedName, replacement = "Refreshed while dragging")
+                )
+                metadata = databaseMetadata(Kind.REPLACE)
+                waitUntil("Room publication during held replacement drag") {
+                    var published = false
+                    activeScenario.onActivity { activity ->
+                        published =
+                            (activity as ReplaceRuleActivity).managementModel.observedRows.any {
+                                it.id.toString() == visible[1] && it.name == updatedName
+                            }
                     }
-                    awaitItems(dragScenario, visible.drop(1) + moved)
-                    assertEquals(
-                        if (removeTarget) before.filter { it != target } else before,
-                        databaseKeys(kind),
-                    )
-                    screenshot("drag-${kind.name}-$descending-held-refresh-$removeTarget")
-                },
-            )
+                    published
+                }
+                awaitItems(Kind.REPLACE, activeScenario, visible.drop(1) + visible.first())
+                assertEquals(before, databaseKeys(Kind.REPLACE))
+                screenshot("drag-REPLACE-held-refresh")
+            }
             val expected =
-                if (removeTarget) before.filter { it != target }
-                else
-                    before.toMutableList().apply {
-                        remove(moved)
-                        add(indexOf(target) + if (descending) 0 else 1, moved)
-                    }
-            waitUntil("persisted $kind drag order") { databaseKeys(kind) == expected }
+                before.toMutableList().apply {
+                    remove(visible.first())
+                    add(indexOf(visible.last()) + 1, visible.first())
+                }
+            waitUntil("persisted replacement drag order") { databaseKeys(Kind.REPLACE) == expected }
             assertEquals(
-                before.filter { it != moved && (!removeTarget || it != target) },
-                databaseKeys(kind).filter { it != moved },
+                before.filter { it != visible.first() },
+                databaseKeys(Kind.REPLACE).filter { it != visible.first() },
             )
-            if (removeTarget)
-                assertEquals(rawOrders.filterKeys { it != target }, databaseOrders(kind))
-            assertEquals(metadata, databaseMetadata(kind))
-            awaitItems(
-                scenario,
-                if (removeTarget) visible.filter { it != target } else visible.drop(1) + moved,
-            )
-            screenshot("drag-${kind.name}-$descending-after")
-            filter(scenario, "")
-            awaitItems(scenario, if (descending) expected.reversed() else expected)
-            scenario.close()
-            scenario = launch(kind)
-            filter(scenario, "")
-            awaitItems(scenario, expected)
-            filter(scenario, "group:$group")
-            awaitItems(scenario, expected.filter { it in visible })
-            screenshot("drag-${kind.name}-$descending-reopened")
+            assertEquals(metadata, databaseMetadata(Kind.REPLACE))
+            awaitItems(Kind.REPLACE, activeScenario, visible.drop(1) + visible.first())
+            screenshot("drag-REPLACE-after")
+            filter(Kind.REPLACE, "")
+            awaitItems(Kind.REPLACE, activeScenario, expected)
+            filter(Kind.REPLACE, "group:$group")
+            activeScenario.recreate()
+            awaitItems(Kind.REPLACE, activeScenario, expected.filter { it in visible })
+            activeScenario.close()
+            scenario = launch(Kind.REPLACE)
+            val reopened = checkNotNull(scenario)
+            awaitLoaded(Kind.REPLACE, reopened)
+            filter(Kind.REPLACE, "")
+            awaitItems(Kind.REPLACE, reopened, expected)
+            filter(Kind.REPLACE, "group:$group")
+            awaitItems(Kind.REPLACE, reopened, expected.filter { it in visible })
+            screenshot("drag-REPLACE-reopened")
         } finally {
             scenario?.close()
-            appDb.bookDao.delete(countBook)
-            when (kind) {
-                Kind.BOOK -> {
-                    appDb.bookSourceDao.delete(*books.toTypedArray())
-                    appDb.bookSourceDao.upOrder(oldBooks)
-                }
-                Kind.RSS -> {
-                    appDb.rssSourceDao.delete(*rss.toTypedArray())
-                    val saved = oldRss.associate { it.sourceUrl to it.customOrder }
-                    appDb.rssSourceDao.update(
-                        *appDb.rssSourceDao.all
-                            .map {
-                                it.copy(customOrder = saved[it.sourceUrl] ?: it.customOrder)
-                            }
-                            .toTypedArray()
-                    )
-                }
-                Kind.REPLACE -> {
-                    appDb.replaceRuleDao.delete(*rules.toTypedArray())
-                    val saved = oldRules.associate { it.id to it.order }
-                    appDb.replaceRuleDao.update(
-                        *appDb.replaceRuleDao.all
-                            .map {
-                                it.copy(order = saved[it.id] ?: it.order)
-                            }
-                            .toTypedArray()
-                    )
-                }
-            }
-            LocalConfig.edit()
-                .apply {
-                    if (help is Int) putInt("bookSourceHelpVersion", help)
-                    else remove("bookSourceHelpVersion")
-                }
-                .commit()
+            appDb.replaceRuleDao.delete(*rules.toTypedArray())
+            val savedOrders = oldRules.associate { it.id to it.order }
+            appDb.replaceRuleDao.update(
+                *appDb.replaceRuleDao.all
+                    .map {
+                        it.copy(order = savedOrders[it.id] ?: it.order)
+                    }
+                    .toTypedArray()
+            )
         }
     }
 
@@ -536,35 +528,6 @@ class SourceDragOrderUiTest {
             Kind.REPLACE -> appDb.replaceRuleDao.all.associate { it.id.toString() to it.order }
         }
 
-    private fun updateComment(kind: Kind, key: String, comment: String) =
-        when (kind) {
-            Kind.BOOK ->
-                appDb.bookSourceDao.update(
-                    checkNotNull(appDb.bookSourceDao.getBookSource(key))
-                        .copy(bookSourceComment = comment)
-                )
-            Kind.RSS ->
-                appDb.rssSourceDao.update(
-                    checkNotNull(appDb.rssSourceDao.getByKey(key)).copy(sourceComment = comment)
-                )
-            Kind.REPLACE ->
-                appDb.replaceRuleDao.update(
-                    checkNotNull(appDb.replaceRuleDao.findById(key.toLong()))
-                        .copy(replacement = comment)
-                )
-        }
-
-    private fun listUpdateVersion(scenario: ActivityScenario<out Activity>): Long {
-        var version = -1L
-        scenario.onActivity { activity ->
-            version =
-                (activity.findViewById<RecyclerView>(R.id.recycler_view).adapter
-                        as RecyclerAdapter<*, *>)
-                    .listUpdateVersion
-        }
-        return version
-    }
-
     private fun databaseMetadata(kind: Kind): Map<String, String> =
         when (kind) {
             Kind.BOOK ->
@@ -581,113 +544,139 @@ class SourceDragOrderUiTest {
                 }
         }
 
-    private fun filter(scenario: ActivityScenario<out Activity>, query: String) {
-        scenario.onActivity { activity ->
-            activity.findViewById<SearchView>(R.id.search_view).apply {
-                setQuery(query, false)
-                clearFocus()
-            }
+    private fun searchTag(kind: Kind) =
+        when (kind) {
+            Kind.BOOK -> "source-manager-search"
+            Kind.RSS -> "rss-source-search"
+            Kind.REPLACE -> "replace-rule-search"
         }
+
+    private fun listTag(kind: Kind) =
+        when (kind) {
+            Kind.BOOK -> "source-manager-list"
+            Kind.RSS -> "rss-source-list"
+            Kind.REPLACE -> "replace-rule-list"
+        }
+
+    private fun rowTag(kind: Kind, key: String, rssIds: Boolean = false) =
+        when (kind) {
+            Kind.BOOK -> "source-manager-row:$key"
+            Kind.RSS -> "rss-source-row-${if (rssIds) key else rssSourceManagementId(key)}"
+            Kind.REPLACE -> "replace-rule-row-$key"
+        }
+
+    private fun filter(kind: Kind, query: String) {
+        compose.onNodeWithTag(searchTag(kind)).performTextReplacement(query)
+        if (kind != Kind.BOOK) compose.onNodeWithTag(searchTag(kind)).performImeAction()
+        closeSoftKeyboard()
+        compose.onNodeWithTag(searchTag(kind)).assertTextContains(query)
     }
 
-    private fun awaitItems(scenario: ActivityScenario<out Activity>, expected: List<String>) {
-        waitUntil("visible order $expected") {
+    private fun awaitLoaded(kind: Kind, scenario: ActivityScenario<out Activity>) {
+        waitUntil("$kind manager ready") {
+            var loaded = false
+            scenario.onActivity { activity ->
+                loaded =
+                    when (kind) {
+                        Kind.BOOK ->
+                            !(activity as BookSourceActivity).managerModel.state.value.loading
+                        Kind.RSS ->
+                            (activity as RssSourceActivity).managementModel.state.value.loaded
+                        Kind.REPLACE ->
+                            (activity as ReplaceRuleActivity).managementModel.state.value.loaded
+                    }
+            }
+            loaded
+        }
+        compose.onNodeWithTag(listTag(kind)).assertExists()
+    }
+
+    private fun awaitItems(
+        kind: Kind,
+        scenario: ActivityScenario<out Activity>,
+        expected: List<String>,
+    ) {
+        waitUntil("visible $kind order $expected") {
             var matches = false
             scenario.onActivity { activity ->
-                val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
                 val items =
-                    (recycler.adapter as RecyclerAdapter<*, *>).getItems().map {
-                        when (it) {
-                            is BookSourcePart -> it.bookSourceUrl
-                            is RssSource -> it.sourceUrl
-                            is ReplaceRule -> it.id.toString()
-                            else -> error("Unexpected row $it")
-                        }
+                    when (kind) {
+                        Kind.BOOK ->
+                            (activity as BookSourceActivity).managerModel.state.value.rows.map {
+                                it.url
+                            }
+                        Kind.RSS ->
+                            (activity as RssSourceActivity).managementModel.state.value.rows.map {
+                                it.id
+                            }
+                        Kind.REPLACE ->
+                            (activity as ReplaceRuleActivity).managementModel.state.value.rows.map {
+                                it.id.toString()
+                            }
                     }
-                matches =
-                    items == expected &&
-                        !recycler.isComputingLayout &&
-                        recycler.itemAnimator?.isRunning != true &&
-                        !recycler.hasPendingAdapterUpdates()
+                val expectedIds =
+                    if (kind == Kind.RSS) expected.map(::rssSourceManagementId) else expected
+                matches = items == expectedIds
             }
-            matches
+            matches && (expected.size > 3 || renderedOrderMatches(kind, expected))
+        }
+        compose.onNodeWithTag(listTag(kind)).assertExists()
+    }
+
+    private fun renderedOrderMatches(
+        kind: Kind,
+        expected: List<String>,
+        rssIds: Boolean = false,
+    ): Boolean {
+        return try {
+            val bounds = expected.map {
+                compose.onNodeWithTag(rowTag(kind, it, rssIds)).fetchSemanticsNode().boundsInRoot
+            }
+            bounds.all { it.height > 0 } &&
+                bounds.zipWithNext().all { (first, next) -> first.center.y < next.center.y }
+        } catch (_: AssertionError) {
+            false
         }
     }
 
     private fun drag(
+        kind: Kind,
         scenario: ActivityScenario<out Activity>,
-        from: Int,
-        to: Int,
+        original: List<String>,
         returnToStart: Boolean = false,
         whileHeld: () -> Unit = {},
     ) {
-        var x = 0f
-        var startY = 0f
-        var endY = 0f
-        var returnY = 0f
-        var movedItem: Any? = null
-        scenario.onActivity { activity ->
-            val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-            val source = checkNotNull(recycler.findViewHolderForAdapterPosition(from)).itemView
-            val target = checkNotNull(recycler.findViewHolderForAdapterPosition(to)).itemView
-            movedItem = (recycler.adapter as RecyclerAdapter<*, *>).getItem(from)
-            val start = IntArray(2).also(source::getLocationOnScreen)
-            val end = IntArray(2).also(target::getLocationOnScreen)
-            // The left padding is outside the checkbox slide-selection area (16..50 dp).
-            x = start[0] + 8 * context.resources.displayMetrics.density
-            startY = start[1] + source.height / 2f
-            val direction = if (to > from) 1 else -1
-            // chooseDropTarget requires crossing the target edge, not merely matching it.
-            endY = end[1] + target.height / 2f + direction * target.height / 4f
-            returnY = startY - direction * source.height / 4f
+        val list = compose.onNodeWithTag(listTag(kind))
+        val bounds = list.fetchSemanticsNode().boundsInRoot
+        val first =
+            compose.onNodeWithTag(rowTag(kind, original.first())).fetchSemanticsNode().boundsInRoot
+        val last =
+            compose.onNodeWithTag(rowTag(kind, original.last())).fetchSemanticsNode().boundsInRoot
+        // Stay outside the checkbox slide-selection band, matching the original drag baseline.
+        val start =
+            Offset(8 * context.resources.displayMetrics.density, first.center.y - bounds.top)
+        val end = Offset(start.x, last.center.y + last.height / 4 - bounds.top)
+        var returned = false
+        list.performTouchInput {
+            down(start)
+            advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
+            moveTo(end, 500)
         }
-        val downTime = SystemClock.uptimeMillis()
-        fun event(action: Int, y: Float) {
-            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0)
-            event.source = InputDevice.SOURCE_TOUCHSCREEN
-            try {
-                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
-            } finally {
-                event.recycle()
-            }
-        }
-        fun move(start: Float, end: Float) {
-            for (step in 1..16) {
-                event(MotionEvent.ACTION_MOVE, start + (end - start) * step / 16f)
-                SystemClock.sleep(30)
-            }
-            SystemClock.sleep(200)
-        }
-        event(MotionEvent.ACTION_DOWN, startY)
-        SystemClock.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 150)
         try {
-            move(startY, endY)
-            waitUntil("held row reaching $to") {
-                var atTarget = false
-                scenario.onActivity { activity ->
-                    val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                    atTarget = (recycler.adapter as RecyclerAdapter<*, *>).getItem(to) == movedItem
-                }
-                atTarget
-            }
+            awaitItems(kind, scenario, original.drop(1) + original.first())
             whileHeld()
-            if (returnToStart) move(endY, returnY)
+            if (returnToStart) {
+                list.performTouchInput { moveTo(Offset(start.x, start.y - first.height / 4), 500) }
+                awaitItems(kind, scenario, original)
+                returned = true
+            }
         } catch (failure: Throwable) {
             screenshot("drag-held-failure-${SystemClock.uptimeMillis()}")
-            scenario.onActivity { activity ->
-                val recycler = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                android.util.Log.e(
-                    "SourceDragOrderUiTest",
-                    "from=$from to=$to x=$x startY=$startY endY=$endY " +
-                        "rows=${(recycler.adapter as RecyclerAdapter<*, *>).getItems()}",
-                )
-            }
             throw failure
         } finally {
-            event(MotionEvent.ACTION_UP, if (returnToStart) returnY else endY)
+            list.performTouchInput { up() }
         }
-        instrumentation.waitForIdleSync()
-        SystemClock.sleep(400) // ItemTouchHelper calls clearView after its recovery animation.
+        if (returned) awaitItems(kind, scenario, original)
     }
 
     private fun screenshot(name: String) {
