@@ -92,7 +92,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
 
     internal fun clearCache(action: AudioCacheAction.Clear) {
         val treeUri = AppConfig.audioCacheTreeUri
-        viewModelScope.launch(NonCancellable) {
+        acceptedWrite {
             val removed = repository.clearCachedChapter(action, treeUri)
             getApplication<Application>()
                 .toastOnUi(
@@ -106,7 +106,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
         val book = AudioPlay.book ?: return
         val source = AudioPlay.bookSource
         update { copy(askShelf = false) }
-        viewModelScope.launch(NonCancellable) {
+        acceptedWrite {
             repository.addToShelf(book, source)
             if (AudioPlay.book?.bookUrl == book.bookUrl) update { copy(shelfAdded = true) }
         }
@@ -150,6 +150,12 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
             AudioPlay.durChapter?.getVariable("lyric")?.takeIf(String::isNotBlank)
                 ?: AudioPlay.durLyric
         )
+    }
+
+    private fun acceptedWrite(block: suspend () -> Unit): Job = viewModelScope.launch {
+        // Keep the accepted operation and its business receipt together while retaining the parent
+        // Job.
+        withContext(NonCancellable) { block() }
     }
 
     internal fun initialize(bookUrl: String?, freshRequest: Boolean = false) {
@@ -208,7 +214,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
         val generation = requestGeneration
         // Once a source migration is accepted, deliver its business completion even if the host
         // rotates.
-        viewModelScope.launch(NonCancellable) {
+        acceptedWrite {
             repository.changeSource(oldBook, source, book, toc)
             if (generation == requestGeneration) snapshot()
             onSuccess()
@@ -222,10 +228,10 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
     internal fun changeToText(book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
         val oldBook = AudioPlay.book
         val generation = requestGeneration
-        viewModelScope.launch(NonCancellable) {
+        acceptedWrite {
             repository.changeToText(oldBook, book, toc)
             onSuccess()
-            if (generation != requestGeneration) return@launch
+            if (generation != requestGeneration) return@acceptedWrite
             val key = java.util.UUID.randomUUID().toString()
             navigationSessions[key] = book
             update { copy(bookNavigation = key) }
@@ -234,7 +240,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun removeFromBookshelf() {
         val book = AudioPlay.book ?: return
-        viewModelScope.launch(NonCancellable) {
+        acceptedWrite {
             repository.removeFromBookshelf(book)
             if (AudioPlay.book?.bookUrl == book.bookUrl) update { copy(closeRequested = true) }
         }
