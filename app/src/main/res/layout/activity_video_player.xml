@@ -25,13 +25,10 @@
         android:orientation="horizontal"
         android:paddingBottom="12dp">
 
-        <io.legado.app.ui.widget.image.CoverImageView
-            android:id="@+id/iv_cover"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cover_compose"
             android:layout_width="110dp"
             android:layout_height="160dp"
-            android:contentDescription="@string/img_cover"
-            android:scaleType="centerCrop"
-            android:src="@drawable/image_cover_default"
             tools:ignore="MissingConstraints" />
 
         <LinearLayout

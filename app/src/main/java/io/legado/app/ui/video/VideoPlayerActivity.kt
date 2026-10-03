@@ -18,9 +18,11 @@ import android.webkit.WebViewClient
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -36,6 +38,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
+import io.legado.app.data.repository.CoverRequest
 import io.legado.app.databinding.ActivityVideoPlayerBinding
 import io.legado.app.help.GlideImageGetter
 import io.legado.app.help.TextViewTagHandler
@@ -60,6 +63,7 @@ import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
+import io.legado.app.ui.components.cover.ComposeCover
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
@@ -102,6 +106,7 @@ class VideoPlayerActivity :
     private val playerView: VideoPlayer by lazy { binding.playerView }
     private var chapterRailState by mutableStateOf(VideoChapterRailState())
     private var bookHeaderState by mutableStateOf(VideoBookHeaderState())
+    private var coverRequest by mutableStateOf(CoverRequest())
     private var starMenuItem: MenuItem? = null
     private var isIntroTextViewAttached = false
     private val introTextView by lazy {
@@ -224,6 +229,7 @@ class VideoPlayerActivity :
         }
         setupPlayerView()
         setupChapterRail()
+        setupCover()
         setupBookHeader()
         initView()
         upView()
@@ -420,7 +426,22 @@ class VideoPlayerActivity :
     }
 
     private fun showCover(book: Book) {
-        binding.ivCover.load(book, false)
+        coverRequest = CoverRequest.from(book)
+    }
+
+    private fun setupCover() {
+        binding.coverCompose.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.coverCompose.setContent {
+            LegadoComposeTheme {
+                ComposeCover(
+                    request = coverRequest,
+                    modifier = Modifier.fillMaxSize(),
+                    contentDescription = getString(R.string.img_cover),
+                )
+            }
+        }
     }
 
     private fun setupChapterRail() {

@@ -1634,3 +1634,5 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 
 视频播放 Activity 章节控制：分卷与选集横向列表、选中项滚动和目录入口迁为独立 Compose Screen；保留标题、尺寸、选中态、切卷/切集顺序及目录结果回调，并为迟到索引校验当前列表范围。Activity 仅在章节区域使用生命周期释放的 ComposeView，GSY VideoPlayer surface 与复杂简介渲染仍走各自原生宿主；删除 ChapterAdapter 和两份专属 item XML。新增 Compose 行为测试覆盖切卷、切集、目录及无分卷列表。完整 JVM/AndroidTest Kotlin 编译待运行。
 视频播放 Activity 书籍标题/作者：标题横向滚动、作者单行省略和主题颜色迁为纯 Compose，封面与 HTML/Markdown/useweb 简介继续各自沿用原生图片/内容 renderer；标题数据以不可变小状态投影进入 UI。新增标题/作者状态及空作者隐藏的 Compose 测试。完整 JVM/AndroidTest Kotlin 编译与章节批次统一验证。
+
+视频播放 Activity 封面：封面绘制迁到共享 ComposeCover，保留书籍封面地址、作者/标题叠字、来源标识、Wi-Fi 偏好配置和默认封面策略；GSY surface 与简介 renderer 不变。
