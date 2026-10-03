@@ -2,6 +2,7 @@ package io.legado.app.ui.book.source.edit
 
 import android.content.Context
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.repository.FileCodeDialogTransferRepository
@@ -16,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+@Keep
 internal data class JsSourceDraft(
     val text: String,
     val sourceUrl: String?,
