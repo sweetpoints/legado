@@ -5,9 +5,14 @@ package io.legado.app.ui.main
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.ComponentDialog
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -22,7 +27,6 @@ import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.SourceSharePassphraseImportPolicy
@@ -53,6 +57,7 @@ import io.legado.app.ui.main.interop.LegacyMainPager
 import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.ui.main.rss.RssFragment
 import io.legado.app.ui.navigation.MainDestination
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.clearClip
 import io.legado.app.utils.getClipText
@@ -64,6 +69,7 @@ import io.legado.app.utils.toastOnUi
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -289,29 +295,44 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack {
     }
 
     /** 设置本地密码 */
-    private suspend fun setLocalPassword() = suspendCancellableCoroutine sc@{ block ->
-        if (LocalConfig.password != null) {
-            block.resume(null)
-            return@sc
-        }
-        alert(R.string.set_local_password, R.string.set_local_password_summary) {
-            val editTextBinding =
-                DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = "password"
+    private suspend fun setLocalPassword() {
+        if (withContext(IO) { LocalConfig.password != null }) return
+        val chosen =
+            suspendCancellableCoroutine<String?> { continuation ->
+                val dialog = ComponentDialog(this)
+                var choice: String? = null
+                fun complete(value: String?) {
+                    choice = value
+                    dialog.dismiss()
                 }
-            customView {
-                editTextBinding.root
+                dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+                dialog.setContentView(
+                    ComposeView(this).apply {
+                        setViewCompositionStrategy(
+                            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+                        )
+                        setContent {
+                            LegadoComposeTheme {
+                                MainLocalPasswordScreen(
+                                    onConfirm = { complete(it) },
+                                    onSkip = { complete("") },
+                                    onDismiss = { complete(null) },
+                                )
+                            }
+                        }
+                    }
+                )
+                dialog.setOnDismissListener {
+                    if (continuation.isActive) continuation.resume(choice)
+                }
+                continuation.invokeOnCancellation { dialog.dismiss() }
+                dialog.show()
+                dialog.window?.apply {
+                    setBackgroundDrawableResource(R.color.transparent)
+                    setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+                }
             }
-            onDismiss {
-                block.resume(null)
-            }
-            okButton {
-                LocalConfig.password = editTextBinding.editView.text.toString()
-            }
-            cancelButton {
-                LocalConfig.password = ""
-            }
-        }
+        if (chosen != null) withContext(IO + NonCancellable) { LocalConfig.password = chosen }
     }
 
     private fun notifyAppCrash() {
