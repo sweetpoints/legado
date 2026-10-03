@@ -8,11 +8,11 @@ class ReadControlVisualStateTest {
 
     @Test
     fun chapterNavigationKeepsDisabledTextVisibleOnTheReaderBackground() {
-        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
-
-        assertTrue(source.contains(".setDisabledColor(ColorUtils.withAlpha(textColor, 0.4f))"))
-        assertTrue(source.contains("tvPre.setTextColor(chapterTextColor)"))
-        assertTrue(source.contains("tvNext.setTextColor(chapterTextColor)"))
+        val source =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenuBottomScreen.kt")
+        assertTrue(source.contains("foreground.copy(alpha = .4f)"))
+        assertTrue(source.contains("state.previousEnabled"))
+        assertTrue(source.contains("state.nextEnabled"))
     }
 
     @Test
@@ -20,8 +20,8 @@ class ReadControlVisualStateTest {
         val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
         val clickBlock =
             source
-                .substringAfter("llReadAloud.setOnClickListener")
-                .substringBefore("llReadAloud.onLongClick")
+                .substringAfter("ReadMenuAction.ReadAloud ->")
+                .substringBefore("ReadMenuAction.ReadAloudSettings ->")
 
         assertTrue(clickBlock.contains("if (BaseReadAloudService.isRun)"))
         assertTrue(clickBlock.contains("callBack.showReadAloudDialog()"))

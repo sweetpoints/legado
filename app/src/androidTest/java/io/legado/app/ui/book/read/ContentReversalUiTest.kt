@@ -903,8 +903,11 @@ class ContentReversalUiTest {
 
     private fun navigateTo(index: Int) {
         showReaderMenu()
-        onView(withId(if (index > ReadBook.durChapterIndex) R.id.tv_next else R.id.tv_pre))
-            .perform(click())
+        contentCompose
+            .onNodeWithTag(
+                if (index > ReadBook.durChapterIndex) "reader-next" else "reader-previous"
+            )
+            .performClick()
         awaitReader(index)
         closeReaderMenu()
     }

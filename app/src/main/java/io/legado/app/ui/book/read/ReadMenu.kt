@@ -2,7 +2,6 @@ package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.ColorStateList
 import android.database.ContentObserver
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
@@ -16,6 +15,11 @@ import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import android.view.animation.Animation
 import android.widget.FrameLayout
 import android.widget.SeekBar
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnLayout
@@ -33,7 +37,6 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.buttonDisabledColor
@@ -44,6 +47,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
@@ -63,7 +67,6 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import splitties.views.onClick
-import splitties.views.onLongClick
 
 /** 阅读界面菜单 */
 class ReadMenu
@@ -78,6 +81,7 @@ constructor(
 
     private val binding = ViewReadMenuBinding.inflate(LayoutInflater.from(context), this, true)
     private val chapterNameTextSize = binding.tvChapterName.textSize
+    private var bottomState by mutableStateOf(ReadMenuBottomState())
     private var confirmSkipToChapter: Boolean = false
     private var isMenuOutAnimating = false
     private val menuTopIn: Animation by lazy {
@@ -112,11 +116,6 @@ constructor(
             context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
         }
 
-    private var bottomBackgroundList: ColorStateList =
-        Selector.colorBuild()
-            .setDefaultColor(bgColor)
-            .setPressedColor(ColorUtils.darkenColor(bgColor))
-            .create()
     private var onMenuOutEnd: (() -> Unit)? = null
     private val showBrightnessView
         get() =
@@ -172,17 +171,27 @@ constructor(
         }
 
     init {
+        binding.bottomMenu.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.bottomMenu.setContent {
+            LegadoComposeTheme {
+                ReadMenuBottomScreen(
+                    bottomState,
+                    ::onBottomAction,
+                    ::setProgressDragging,
+                    ::commitProgress,
+                    ::confirmChapter,
+                    ::cancelChapter,
+                )
+            }
+        }
         initView()
         upBrightnessState()
         bindEvent()
     }
 
     private fun initView(reset: Boolean = false) = binding.run {
-        if (AppConfig.isNightTheme) {
-            fabNightTheme.setImageResource(R.drawable.ic_daytime)
-        } else {
-            fabNightTheme.setImageResource(R.drawable.ic_brightness)
-        }
         initAnimation()
         tvCustomBtn.setColorFilter(context.accentColor)
         if (immersiveMenu) {
@@ -207,35 +216,8 @@ constructor(
         llBrightness.background = brightnessBackground
         if (AppConfig.isEInkMode) {
             titleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
-            llBottomBg.setBackgroundResource(R.drawable.bg_eink_border_top)
-        } else {
-            llBottomBg.setBackgroundColor(bgColor)
         }
-        fabSearch.backgroundTintList = bottomBackgroundList
-        fabSearch.setColorFilter(textColor)
-        fabAutoPage.backgroundTintList = bottomBackgroundList
-        fabAutoPage.setColorFilter(textColor)
-        fabReplaceRule.backgroundTintList = bottomBackgroundList
-        fabReplaceRule.setColorFilter(textColor)
-        fabNightTheme.backgroundTintList = bottomBackgroundList
-        fabNightTheme.setColorFilter(textColor)
-        val chapterTextColor =
-            Selector.colorBuild()
-                .setDefaultColor(textColor)
-                .setDisabledColor(ColorUtils.withAlpha(textColor, 0.4f))
-                .create()
-        tvPre.setTextColor(chapterTextColor)
-        tvNext.setTextColor(chapterTextColor)
-        ivCatalog.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvCatalog.setTextColor(textColor)
-        ivReadAloud.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvReadAloud.setTextColor(textColor)
-        ivFont.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvFont.setTextColor(textColor)
-        ivSetting.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvSetting.setTextColor(textColor)
-        ivMemo.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvMemo.setTextColor(textColor)
+        updateBottomAppearance()
         vwBrightnessPosAdjust.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         seekBrightness.applyTint(context.accentColor)
         llBrightness.setOnClickListener(null)
@@ -281,11 +263,6 @@ constructor(
             } else {
                 context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
             }
-        bottomBackgroundList =
-            Selector.colorBuild()
-                .setDefaultColor(bgColor)
-                .setPressedColor(ColorUtils.darkenColor(bgColor))
-                .create()
     }
 
     fun upBrightnessState() {
@@ -381,9 +358,7 @@ constructor(
     }
 
     fun runMenuIn(anim: Boolean = !AppConfig.isEInkMode) {
-        val showMemo = context.getPrefBoolean(PreferKey.showBookMemo, false)
-        binding.llMemo.isVisible = showMemo
-        binding.memoSpacer.isVisible = showMemo
+        updateBottomAppearance()
         callBack.onMenuShow()
         this.visible()
         binding.titleBar.visible()
@@ -537,109 +512,68 @@ constructor(
             AppConfig.brightnessVwPos = !AppConfig.brightnessVwPos
             upBrightnessVwPos()
         }
-        // 阅读进度
-        seekReadPage.setOnSeekBarChangeListener(
-            object : SeekBarChangeListener {
+    }
 
-                override fun onStartTrackingTouch(seekBar: SeekBar) {
-                    binding.vwMenuBg.setOnClickListener(null)
-                }
+    private fun updateBottomAppearance() {
+        bottomState =
+            bottomState.copy(
+                background = Color(bgColor),
+                foreground = Color(textColor),
+                nightTheme = AppConfig.isNightTheme,
+                eInk = AppConfig.isEInkMode,
+                showMemo = context.getPrefBoolean(PreferKey.showBookMemo, false),
+            )
+    }
 
-                override fun onStopTrackingTouch(seekBar: SeekBar) {
-                    binding.vwMenuBg.setOnClickListener { runMenuOut() }
-                    when (AppConfig.progressBarBehavior) {
-                        "page" -> ReadBook.skipToPage(seekBar.progress)
-                        "chapter" -> {
-                            if (confirmSkipToChapter) {
-                                callBack.skipToChapter(seekBar.progress)
-                            } else {
-                                context.alert("章节跳转确认", "确定要跳转章节吗？") {
-                                    yesButton {
-                                        confirmSkipToChapter = true
-                                        callBack.skipToChapter(seekBar.progress)
-                                    }
-                                    noButton {
-                                        upSeekBar()
-                                    }
-                                    onCancelled {
-                                        upSeekBar()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    private fun setProgressDragging(dragging: Boolean) {
+        binding.vwMenuBg.setOnClickListener(
+            if (dragging) null else OnClickListener { runMenuOut() }
         )
+    }
 
-        // 搜索
-        fabSearch.setOnClickListener {
-            runMenuOut {
-                callBack.openSearchActivity(null)
+    private fun commitProgress(progress: Int) {
+        when (AppConfig.progressBarBehavior) {
+            "page" -> ReadBook.skipToPage(progress)
+            "chapter" ->
+                if (confirmSkipToChapter) callBack.skipToChapter(progress)
+                else bottomState = bottomState.copy(pendingChapter = progress)
+        }
+    }
+
+    private fun confirmChapter() {
+        val chapter = bottomState.pendingChapter ?: return
+        bottomState = bottomState.copy(pendingChapter = null)
+        confirmSkipToChapter = true
+        callBack.skipToChapter(chapter)
+    }
+
+    private fun cancelChapter() {
+        bottomState = bottomState.copy(pendingChapter = null)
+        upSeekBar()
+    }
+
+    private fun onBottomAction(action: ReadMenuAction) {
+        when (action) {
+            ReadMenuAction.Search -> runMenuOut { callBack.openSearchActivity(null) }
+            ReadMenuAction.AutoPage -> runMenuOut { callBack.autoPage() }
+            ReadMenuAction.ReplaceRule -> callBack.openReplaceRule()
+            ReadMenuAction.NightTheme -> {
+                AppConfig.isNightTheme = !AppConfig.isNightTheme
+                ThemeConfig.applyDayNight(context)
             }
-        }
-
-        // 自动翻页
-        fabAutoPage.setOnClickListener {
-            runMenuOut {
-                callBack.autoPage()
-            }
-        }
-
-        // 替换
-        fabReplaceRule.setOnClickListener { callBack.openReplaceRule() }
-
-        // 夜间模式
-        fabNightTheme.setOnClickListener {
-            AppConfig.isNightTheme = !AppConfig.isNightTheme
-            ThemeConfig.applyDayNight(context)
-        }
-
-        // 上一章
-        tvPre.setOnClickListener { ReadBook.moveToPrevChapter(upContent = true, toLast = false) }
-
-        // 下一章
-        tvNext.setOnClickListener { ReadBook.moveToNextChapter(true) }
-
-        // 目录
-        llCatalog.setOnClickListener {
-            runMenuOut {
-                callBack.openChapterList()
-            }
-        }
-
-        // 朗读
-        llReadAloud.setOnClickListener {
-            runMenuOut {
-                if (BaseReadAloudService.isRun) {
-                    callBack.showReadAloudDialog()
-                } else {
-                    callBack.onClickReadAloud()
+            ReadMenuAction.PreviousChapter ->
+                ReadBook.moveToPrevChapter(upContent = true, toLast = false)
+            ReadMenuAction.NextChapter -> ReadBook.moveToNextChapter(true)
+            ReadMenuAction.Catalog -> runMenuOut { callBack.openChapterList() }
+            ReadMenuAction.ReadAloud ->
+                runMenuOut {
+                    if (BaseReadAloudService.isRun) callBack.showReadAloudDialog()
+                    else callBack.onClickReadAloud()
                 }
-            }
-        }
-        llReadAloud.onLongClick {
-            runMenuOut {
-                callBack.showReadAloudDialog()
-            }
-        }
-        // 界面
-        llFont.setOnClickListener {
-            runMenuOut {
-                callBack.showReadStyle()
-            }
-        }
-
-        // 设置
-        llSetting.setOnClickListener {
-            runMenuOut {
-                callBack.showMoreSetting()
-            }
-        }
-        llMemo.setOnClickListener {
-            runMenuOut {
-                callBack.showBookMemo()
-            }
+            ReadMenuAction.ReadAloudSettings -> runMenuOut { callBack.showReadAloudDialog() }
+            ReadMenuAction.Style -> runMenuOut { callBack.showReadStyle() }
+            ReadMenuAction.Settings -> runMenuOut { callBack.showMoreSetting() }
+            ReadMenuAction.Memo -> runMenuOut { callBack.showBookMemo() }
         }
     }
 
@@ -661,8 +595,11 @@ constructor(
             }
             updateTitleAdditionLayout()
             upSeekBar()
-            binding.tvPre.isEnabled = ReadBook.durChapterIndex != 0
-            binding.tvNext.isEnabled = ReadBook.durChapterIndex != ReadBook.simulatedChapterSize - 1
+            bottomState =
+                bottomState.copy(
+                    previousEnabled = ReadBook.durChapterIndex != 0,
+                    nextEnabled = ReadBook.durChapterIndex != ReadBook.simulatedChapterSize - 1,
+                )
         }
             ?: let {
                 binding.tvChapterName.gone()
@@ -708,36 +645,29 @@ constructor(
     }
 
     fun upSeekBar() {
-        binding.seekReadPage.apply {
-            when (AppConfig.progressBarBehavior) {
-                "page" -> {
-                    ReadBook.curTextChapter?.let {
-                        max = it.pageSize.minus(1)
-                        progress = ReadBook.durPageIndex
-                    }
-                }
-
-                "chapter" -> {
-                    max = ReadBook.simulatedChapterSize - 1
-                    progress = ReadBook.durChapterIndex
-                }
+        val maximum: Int
+        val progress: Int
+        when (AppConfig.progressBarBehavior) {
+            "page" -> {
+                val chapter = ReadBook.curTextChapter ?: return
+                maximum = chapter.pageSize - 1
+                progress = ReadBook.durPageIndex
             }
+            "chapter" -> {
+                maximum = ReadBook.simulatedChapterSize - 1
+                progress = ReadBook.durChapterIndex
+            }
+            else -> return
         }
+        bottomState = bottomState.copy(maximum = maximum.coerceAtLeast(0), progress = progress)
     }
 
     fun setSeekPage(seek: Int) {
-        binding.seekReadPage.progress = seek
+        bottomState = bottomState.copy(progress = seek)
     }
 
-    fun setAutoPage(autoPage: Boolean) = binding.run {
-        if (autoPage) {
-            fabAutoPage.setImageResource(R.drawable.ic_auto_page_stop)
-            fabAutoPage.contentDescription = context.getString(R.string.auto_next_page_stop)
-        } else {
-            fabAutoPage.setImageResource(R.drawable.ic_auto_page)
-            fabAutoPage.contentDescription = context.getString(R.string.auto_next_page)
-        }
-        fabAutoPage.setColorFilter(textColor)
+    fun setAutoPage(autoPage: Boolean) {
+        bottomState = bottomState.copy(autoPage = autoPage)
     }
 
     private fun upBrightnessVwPos() {

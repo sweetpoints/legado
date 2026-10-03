@@ -406,7 +406,7 @@ class ReaderSourceReimportUiTest {
         assertEquals(source.bookSourceGroup, ReadBook.bookSource!!.bookSourceGroup)
         assertEquals(0, requests.get(2))
         showMenu()
-        onView(withId(R.id.tv_next)).perform(click())
+        compose.onNodeWithTag("reader-next").performClick()
         awaitReader(1)
         await("next uncached reader request finishes") {
             requests.get(2) > 0 &&
@@ -416,7 +416,7 @@ class ReaderSourceReimportUiTest {
         assertTrue(BookHelp.getContent(book, chapters[2])!!.contains("UPDATED HTTP body 2"))
         assertFalse(BookHelp.getContent(book, chapters[2])!!.contains("OLD HTTP body"))
         showMenu()
-        onView(withId(R.id.tv_next)).perform(click())
+        compose.onNodeWithTag("reader-next").performClick()
         awaitReader(2)
         screenshot("reader-reimport-next-http-chapter")
     }

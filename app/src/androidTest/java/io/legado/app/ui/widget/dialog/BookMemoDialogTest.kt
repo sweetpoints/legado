@@ -4,7 +4,6 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.view.View
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
@@ -12,11 +11,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
@@ -134,24 +128,24 @@ class BookMemoDialogTest {
         }
         scenario!!.onActivity {
             it.findViewById<ReadMenu>(R.id.read_menu).runMenuIn(false)
-            assertEquals(View.GONE, it.findViewById<View>(R.id.ll_memo).visibility)
         }
+        compose.onNodeWithTag("reader-memo").assertDoesNotExist()
         preferences.edit().putBoolean(PreferKey.showBookMemo, true).commit()
         scenario!!.onActivity {
             it.findViewById<ReadMenu>(R.id.read_menu).runMenuIn(false)
         }
-        for (id in
+        for (tag in
             listOf(
-                R.id.ll_catalog,
-                R.id.ll_read_aloud,
-                R.id.ll_font,
-                R.id.ll_setting,
-                R.id.ll_memo,
+                "reader-catalog",
+                "reader-read-aloud",
+                "reader-style",
+                "reader-settings",
+                "reader-memo",
             )) {
-            onView(withId(id)).check(matches(isCompletelyDisplayed()))
+            compose.onNodeWithTag(tag).assertIsDisplayed()
         }
         screenshot("book-memo-five-buttons")
-        onView(withId(R.id.ll_memo)).perform(click())
+        compose.onNodeWithTag("reader-memo").performClick()
         await {
             memoDialog(it)?.let { dialog ->
                 ViewModelProvider(dialog)[BookMemoViewModel::class.java].state.value.loaded
