@@ -291,10 +291,16 @@ class FileAssociationSessionRepository(
      * network requests and checkpoint writes must run outside this non-reentrant lease.
      */
     suspend fun <T> withOwnedDirectory(ticket: String, operation: suspend (File) -> T): T =
+        withOwnedSession(ticket) { directory, _ -> operation(directory) }
+
+    suspend fun <T> withOwnedSession(
+        ticket: String,
+        operation: suspend (File, AssociationSession) -> T,
+    ): T =
         withContext(dispatcher) {
             gate(ticket).withLock {
-                readBody(ticket)
-                operation(folder(ticket))
+                val session = readBody(ticket)
+                operation(folder(ticket), session)
             }
         }
 
