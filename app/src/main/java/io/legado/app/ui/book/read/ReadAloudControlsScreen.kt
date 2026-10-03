@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -27,8 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -60,6 +62,7 @@ internal fun ReadAloudControlsScreen(
     drag: (Float, Float) -> Unit,
     dragEnd: () -> Unit,
     dragCancel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val start = rememberUpdatedState(dragStart)
     val move = rememberUpdatedState(drag)
@@ -67,18 +70,17 @@ internal fun ReadAloudControlsScreen(
     val cancel = rememberUpdatedState(dragCancel)
     val scale = state.width / 288f
     val compact = scale < .65f
-    val view = LocalView.current
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val gesture =
         if (state.drag)
             Modifier.pointerInput(Unit) {
-                val location = IntArray(2)
                 var previousScreenX = 0f
                 var previousScreenY = 0f
                 detectDragGestures(
                     onDragStart = { position ->
-                        view.getLocationOnScreen(location)
-                        previousScreenX = location[0] + position.x
-                        previousScreenY = location[1] + position.y
+                        val screen = coordinates?.takeIf { it.isAttached }?.localToScreen(position)
+                        previousScreenX = screen?.x ?: position.x
+                        previousScreenY = screen?.y ?: position.y
                         start.value()
                     },
                     onDragEnd = { end.value() },
@@ -86,9 +88,11 @@ internal fun ReadAloudControlsScreen(
                 ) { change, _ ->
                     // The host moves while dragging. Screen coordinates avoid counting that motion
                     // again when Compose receives the next pointer position in its new local space.
-                    view.getLocationOnScreen(location)
-                    val screenX = location[0] + change.position.x
-                    val screenY = location[1] + change.position.y
+                    val screen =
+                        coordinates?.takeIf { it.isAttached }?.localToScreen(change.position)
+                            ?: return@detectDragGestures
+                    val screenX = screen.x
+                    val screenY = screen.y
                     change.consume()
                     move.value(screenX - previousScreenX, screenY - previousScreenY)
                     previousScreenX = screenX
@@ -97,7 +101,12 @@ internal fun ReadAloudControlsScreen(
             }
         else Modifier
     Surface(
-        modifier = Modifier.fillMaxSize().then(gesture).testTag("reader-aloud-controls"),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onGloballyPositioned { coordinates = it }
+                .then(gesture)
+                .testTag("reader-aloud-controls"),
         shape = RoundedCornerShape(50),
         color = state.background,
         contentColor = state.foreground,
