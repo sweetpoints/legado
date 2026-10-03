@@ -2,6 +2,7 @@ package io.legado.app.data.repository
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import com.google.gson.JsonObject
 import com.google.gson.stream.JsonWriter
 import io.legado.app.data.appDb
@@ -29,6 +30,7 @@ import io.legado.app.utils.readText
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -36,6 +38,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 
 /** Android/file/network operations run on the worker dispatcher chosen by the caller. */
 class BookshelfTransferRepository(private val context: Context) {
@@ -159,7 +162,12 @@ class BookshelfTransferRepository(private val context: Context) {
 }
 
 /** The file picker and system sharing use the same enabled-source matching. */
-internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutineScope {
+internal suspend fun importBookshelfJson(
+    json: String,
+    groupId: Long,
+    onBookAccepted: suspend (name: String, author: String, bookUrl: String) -> Unit = { _, _, _ ->
+    },
+) = coroutineScope {
     val books = parseBookshelfImport(json)
     val sources = appDb.bookSourceDao.allEnabledPart
     val semaphore = Semaphore(AppConfig.threadCount)
@@ -177,7 +185,7 @@ internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutin
                                     }
                                 } ?: throw NoStackTraceException("没有搜索到<$name>$author")
                             if (groupId > 0) book.group = groupId
-                            book.savePreservingCustomCoverUrl()
+                            commitBookshelfImport(book, name, author, onBookAccepted)
                         }
                     }
                         .onFailure { currentCoroutineContext().ensureActive() }
@@ -190,6 +198,24 @@ internal suspend fun importBookshelfJson(json: String, groupId: Long) = coroutin
         throw NoStackTraceException(failures.joinToString("\n") { it.localizedMessage.orEmpty() })
     }
     Unit
+}
+
+/** Only the completed Room mutation and its observer cross cancellation together, never HTTP. */
+internal suspend fun commitBookshelfImport(
+    book: Book,
+    requestedName: String,
+    requestedAuthor: String,
+    onBookAccepted: suspend (name: String, author: String, bookUrl: String) -> Unit,
+) {
+    currentCoroutineContext().ensureActive()
+    withContext(NonCancellable) {
+        appDb.withTransaction {
+            book.savePreservingCustomCoverUrl()
+            // Observer failure rolls the Room write back. A private receipt is committed here,
+            // before the worker can lose acceptance at its return hop to the native host.
+            onBookAccepted(requestedName, requestedAuthor, book.bookUrl)
+        }
+    }
 }
 
 internal fun parseBookshelfImport(json: String): List<Pair<String, String>> {
