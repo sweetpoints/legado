@@ -25,10 +25,9 @@ class SourceLoginWebViewLayoutTest {
     }
 
     @Test
-    fun `web view roots stay above system bars and keyboard`() {
+    fun `web login root stays above system bars and keyboard`() {
         val sources = listOf(
-            readProjectFile("src/main/java/io/legado/app/ui/login/WebViewLoginFragment.kt"),
-            readProjectFile("src/main/java/io/legado/app/ui/browser/WebViewActivity.kt")
+            readProjectFile("src/main/java/io/legado/app/ui/login/WebViewLoginFragment.kt")
         )
 
         sources.forEach { source ->

@@ -999,3 +999,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 背景模糊弹窗改为 Compose Slider、ViewModel 与偏好 Repository，移除专用 XML/ViewBinding；半径仍为 0..25，只有确认才持久化对应日/夜主题并发送刷新结果。取消不写入，旋转保留未确认半径，写入失败允许重试，提交期间禁止重复确认和退出。新增 5 个 JVM 状态测试、2 个 Compose 交互测试和 1 个实际偏好回归；Android 测试仅编译。
 
 规则订阅宿主、列表、菜单与编辑弹窗迁入 Compose，移除旧 Adapter、3 个布局 XML 和菜单 XML。保留类型导入、自动/静默更新与零间隔联动；拖拽只预览，释放提交，取消恢复，支持无障碍移动操作。导入回执持久化认领并校验 RESUMED，暂停取消恢复待交付项，关闭释放私有草稿。新增 7 个 Compose 交互、5 个 Route 和实际 Room 宿主回归，JVM 状态增加至 18 个；Android 测试仅编译。
+
+通用浏览器宿主、工具栏、菜单、进度、图片操作与视频覆盖层迁入 Compose，删除旧 WebViewModel、布局及菜单 XML。WebView/视频仅保留原生渲染核心；网页安装前在 IO 读取 Cookie、后台解析来源，RESUMED 校验后交付。验证回执优先于网页重装，配置变化保留会话，真正退出释放私有数据，旧宿主拒绝迟到回调。新增 1 个 JVM 菜单测试、9 个 Compose/Route 和 3 个实际宿主测试；Android 测试仅编译。
