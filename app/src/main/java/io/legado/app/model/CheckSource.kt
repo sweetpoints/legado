@@ -9,7 +9,10 @@ import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
 import io.legado.app.service.CheckSourceService
 import io.legado.app.utils.startService
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
@@ -19,7 +22,7 @@ object CheckSource {
 
     var keyword = "我的"
 
-    //校验设置
+    // 校验设置
     var timeout = CacheManager.getLong("checkSourceTimeout") ?: 180000L
     var wSourceComment = CacheManager.get("wSourceComment")?.toBoolean() ?: true
     var checkDomain = CacheManager.get("checkDomain")?.toBoolean() ?: false
@@ -28,29 +31,60 @@ object CheckSource {
     var checkInfo = CacheManager.get("checkInfo")?.toBoolean() ?: true
     var checkCategory = CacheManager.get("checkCategory")?.toBoolean() ?: true
     var checkContent = CacheManager.get("checkContent")?.toBoolean() ?: true
-    val summary get() = upSummary()
+    val summary
+        get() = upSummary()
 
-    suspend fun start(
-        context: Context,
-        sources: List<BookSourcePart>,
-        sessionId: Long,
-    ): String {
+    /** Owns the queued payload until a synchronous launch or explicit release consumes it. */
+    class PreparedCheck
+    internal constructor(
+        val sessionId: Long,
+        internal val selectedSourcesKey: String,
+    ) {
+        private val consumed = AtomicBoolean(false)
+
+        internal fun consume(): Boolean = consumed.compareAndSet(false, true)
+    }
+
+    suspend fun prepare(sources: List<BookSourcePart>, sessionId: Long): PreparedCheck {
         Debug.prepareCheckSession(sessionId, sources.map { it.bookSourceUrl })
         var selectedSourcesKey: String? = null
         try {
             val queued = withContext(IO) { appDb.bookSourceDao.beginCheck(sources) }
             selectedSourcesKey = IntentData.put(queued)
-            context.startService<CheckSourceService> {
-                action = IntentAction.start
-                putExtra(EXTRA_SESSION_ID, sessionId)
-                putExtra(EXTRA_SELECTED_SOURCES_KEY, selectedSourcesKey)
-            }
+            currentCoroutineContext().ensureActive()
+            return PreparedCheck(sessionId, selectedSourcesKey)
         } catch (error: Exception) {
             selectedSourcesKey?.let { IntentData.get<Any>(it) }
             Debug.finishChecking(sessionId)
             throw error
         }
-        return requireNotNull(selectedSourcesKey)
+    }
+
+    /** No suspension separates the caller's lifecycle gate from the actual service launch. */
+    fun launch(context: Context, prepared: PreparedCheck): String {
+        check(prepared.consume()) { "Check request was already launched or released" }
+        try {
+            context.startService<CheckSourceService> {
+                action = IntentAction.start
+                putExtra(EXTRA_SESSION_ID, prepared.sessionId)
+                putExtra(EXTRA_SELECTED_SOURCES_KEY, prepared.selectedSourcesKey)
+            }
+        } catch (error: Exception) {
+            IntentData.get<Any>(prepared.selectedSourcesKey)
+            Debug.finishChecking(prepared.sessionId)
+            throw error
+        }
+        return prepared.selectedSourcesKey
+    }
+
+    fun release(prepared: PreparedCheck) {
+        if (!prepared.consume()) return
+        IntentData.get<Any>(prepared.selectedSourcesKey)
+        Debug.finishChecking(prepared.sessionId)
+    }
+
+    suspend fun start(context: Context, sources: List<BookSourcePart>, sessionId: Long): String {
+        return launch(context, prepare(sources, sessionId))
     }
 
     fun stop(context: Context, sessionId: Long) {
@@ -88,7 +122,7 @@ object CheckSource {
         return appCtx.getString(
             R.string.check_source_config_summary,
             (timeout / 1000).toString(),
-            checkItem
+            checkItem,
         )
     }
 }
