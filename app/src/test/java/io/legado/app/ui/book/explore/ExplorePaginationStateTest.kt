@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ExplorePaginationStateTest {
 
@@ -32,28 +31,4 @@ class ExplorePaginationStateTest {
 
         assertEquals(11, state.nextPage)
     }
-
-    @Test
-    fun `page picker starts selected page explicitly`() {
-        val source = projectFile(
-            "src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt"
-        ).readText()
-        val skip = source.indexOf("viewModel.skipPage(it)")
-        val stopTop = source.indexOf("loadMoreViewTop.stopLoad()", skip)
-        val startBottom = source.indexOf("loadMoreView.hasMore()", stopTop)
-        val clear = source.indexOf("adapter.clearItems()", startBottom)
-        val explore = source.indexOf("viewModel.explore()", clear)
-
-        assertTrue(skip >= 0)
-        assertTrue(stopTop > skip)
-        assertTrue(startBottom > stopTop)
-        assertTrue(clear > startBottom)
-        assertTrue(explore > clear)
-        assertFalse(source.contains("if (!loadMoreView.hasMore)"))
-    }
-
-    private fun projectFile(pathInApp: String): File =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?: error("Missing project file: $pathInApp")
 }

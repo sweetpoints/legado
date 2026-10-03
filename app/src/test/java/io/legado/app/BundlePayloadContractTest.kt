@@ -37,7 +37,6 @@ class BundlePayloadContractTest {
             listOf(
                 "io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
                 "io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
-                "io/legado/app/ui/book/explore/ExploreShowActivity.kt",
                 "io/legado/app/ui/book/search/SearchActivity.kt",
                 "io/legado/app/ui/book/toc/rule/TxtTocRuleDialog.kt",
             )

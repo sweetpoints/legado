@@ -1569,3 +1569,23 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 - Actual formatter/check and diff checks passed. Complete JVM and Android test compilation are
   pending the full Explore results Compose host, per the coordinated build queue. No device tests
   have been executed.
+
+### Explore results Compose host
+
+- Replaced ExploreShowActivity's binding/RecyclerView implementation with a Compose host,
+  independent Route and stateless Screen. Kept balanced category rows, selection, page range
+  1–999, previous/next retries, overlapping-page anchors and add-loaded confirmation semantics.
+- Covers continue through the shared authenticated Compose cover repository, including Wi-Fi
+  policy; bookshelf membership and parser metadata stay detached from UI entities.
+- Added a synchronous public startPrepared(Context, UUID) entrance. Legacy source/title/URL
+  intents remain compatible; prepared callers transfer the entire request through private IO.
+- BookInfo navigation uses its formal prepared API. Four gated JVM delivery cases cover pause
+  during preparation, cancellation/unknown return after a durable claim and handoff cleanup.
+- Migrated the existing real HTTP category/prepend/recreation and backup scenarios to Compose,
+  adding a large prepared request host recovery case and five stateless Screen cases. Added a
+  sixteenth state case preserving the first-page indicator without another network request.
+- Removed ExploreShowViewModel, ExploreShowAdapter and exclusive activity_explore_show.xml.
+  Shared item_search.xml remains in use by BookSearch. The shared Bundle payload contract only
+  removes this eliminated RecyclerView consumer; all unrelated branches are unchanged.
+- Formatter/check and diff checks passed. Full JVM and Android test compilation remain pending
+  the coordinated clean integration rebase/build slot. Android scenarios have not run on a device.

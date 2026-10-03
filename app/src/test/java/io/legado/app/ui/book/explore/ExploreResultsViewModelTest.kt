@@ -379,6 +379,29 @@ class ExploreResultsViewModelTest {
         assertFalse(model.state.value.loaded)
     }
 
+    @Test
+    fun reachingTopOfFirstLoadedPageRestoresPageIndicatorWithoutFetching() = test {
+        val repository = Results()
+        val disk =
+            Sessions(
+                ExploreResultsCheckpoint(
+                    request,
+                    rows = listOf(row("a")),
+                    firstPage = 1,
+                    displayedPage = 4,
+                    nextPage = 5,
+                )
+            )
+        val model = model(repository = repository, disk = disk)
+        model.load()
+        runCurrent()
+        model.previous()
+        runCurrent()
+        assertEquals(1, model.state.value.checkpoint!!.displayedPage)
+        assertEquals(5, model.state.value.checkpoint!!.nextPage)
+        assertTrue(repository.pages.isEmpty())
+    }
+
     private fun copy(saved: SavedStateHandle): SavedStateHandle =
         SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
 

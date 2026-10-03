@@ -74,3 +74,15 @@ internal class ExplorePaginationState {
         return ExplorePageRequest(page, requestId, advancesNextPage)
     }
 }
+
+internal fun <T> splitExploreCategoryRows(categories: List<T>): List<List<T>> {
+    if (categories.isEmpty()) return emptyList()
+    val rowCount = ((categories.size - 1) / 10 + 1).coerceAtMost(3)
+    val perRow = categories.size / rowCount
+    val extra = categories.size % rowCount
+    var start = 0
+    return List(rowCount) { row ->
+        val end = start + perRow + if (row < extra) 1 else 0
+        categories.subList(start, end).also { start = end }
+    }
+}

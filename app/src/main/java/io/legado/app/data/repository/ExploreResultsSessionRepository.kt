@@ -39,6 +39,7 @@ data class ExploreResultsRow(
     val metadata: String,
 )
 
+@Keep
 enum class ExploreResultsNotice {
     AlreadyAdding,
     EmptyResults,
