@@ -37,8 +37,8 @@ class AssociationOnlineRepositoryTest {
             sessions.release(first)
             assertTrue(
                 runCatching {
-                        repository.determine(first, "http://127.0.0.1:${server.listeningPort}/json")
-                    }
+                    repository.determine(first, "http://127.0.0.1:${server.listeningPort}/json")
+                }
                     .exceptionOrNull() is AssociationSessionClosed
             )
             assertEquals(AssociationHostKind.Online, sessions.read(second).input.host)
