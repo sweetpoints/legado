@@ -14,6 +14,7 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isSameOrDescendantOf
 import io.legado.app.utils.writeBytes
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -203,6 +204,36 @@ class AppHandleFileChoicesRepository(
 
     override suspend fun upload(name: String, bytes: ByteArray, contentType: String): String =
         uploadRecorded(name, bytes, contentType) {}
+
+    override suspend fun uploadFileRecorded(
+        name: String,
+        sourceFileName: String,
+        bytes: ByteArray,
+        contentType: String,
+        receipt: suspend (String) -> Unit,
+    ): String =
+        withContext(Dispatchers.IO) {
+            require(sourceFileName.isNotEmpty() && File(sourceFileName).name == sourceFileName)
+            require(sourceFileName != "." && sourceFileName != "..")
+            val ownedDirectory = File(context.cacheDir, "handle-file-upload/${UUID.randomUUID()}")
+            try {
+                currentCoroutineContext().ensureActive()
+                check(ownedDirectory.mkdirs())
+                val disposableFile = File(ownedDirectory, sourceFileName)
+                disposableFile.writeBytes(bytes)
+                currentCoroutineContext().ensureActive()
+                // The File overload retains the original ZIP entry basename. Its cleanup may delete
+                // this copy, so neither the user's source nor the private session payload is passed
+                // in.
+                val result = uploadFile(name, disposableFile, contentType)
+                withContext(NonCancellable) { receipt(result) }
+                result
+            } finally {
+                // Cancellation owns only this UUID directory, never another upload's temporary
+                // file.
+                withContext(NonCancellable) { ownedDirectory.deleteRecursively() }
+            }
+        }
 
     override suspend fun uploadRecorded(
         name: String,

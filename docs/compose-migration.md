@@ -1277,3 +1277,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 文件选择的迟到权限完成与系统选择器失败回调现在同时验证 nonce 和 Native 阶段，已接受 Result 后忽略旧回调，避免重新打开手工编辑或替换当前回执。新增 2 个真实 VM 状态回归，验证结果与私有 checkpoint 均不回滚；格式检查通过，完整测试将在最终整合前同批复验。
 
 文件选择私有 Gson 持久模型 Choice/Input/Checkpoint/Pending 添加精确 @Keep，保留 release 压缩后的字段名称与磁盘恢复协议；未序列化的 Seed 不扩展保留范围。统一 Kotlin formatter/check 通过，最终完整 JVM 与 Android 测试编译按队列验证；本批未执行 release R8 或设备测试。
+
+文件选择生产仓库补齐 uploadFileRecorded 实际覆盖：独占 UUID 目录保留原 basename，经既有 File 上传分支处理，成功回执在 IO 内持久化，finally 仅清理自身副本。此前 Android ZIP/取消回归已编译但尚未设备执行；本修复最终完整编译与 JVM 验证按队列执行。
