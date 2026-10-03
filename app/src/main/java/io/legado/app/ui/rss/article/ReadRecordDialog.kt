@@ -17,16 +17,46 @@ import io.legado.app.utils.openUrl
 import io.legado.app.utils.setLayout
 
 class ReadRecordDialog() : BaseComposeDialogFragment() {
-    constructor(origin: String?) : this() { arguments = Bundle().apply { putString("origin", origin) } }
-    internal val model by viewModels<RssReadRecordViewModel> {
-        viewModelFactory { initializer { RssReadRecordViewModel(RoomRssReadRecordRepository(), createSavedStateHandle(), arguments?.getString("origin")) } }
+    constructor(origin: String?) : this() {
+        arguments = Bundle().apply { putString("origin", origin) }
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        RssReadRecordRoute(model, { isAdded && !parentFragmentManager.isStateSaved },
+
+    internal val model by
+        viewModels<RssReadRecordViewModel> {
+            viewModelFactory {
+                initializer {
+                    RssReadRecordViewModel(
+                        RoomRssReadRecordRepository(),
+                        createSavedStateHandle(),
+                        arguments?.getString("origin"),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    @Composable
+    override fun Content() {
+        RssReadRecordRoute(
+            model,
+            { isAdded && !parentFragmentManager.isStateSaved },
             { ReadRss.readRss(requireActivity() as AppCompatActivity, it) },
-            { requireContext().openUrl(it) }, ::dismissAllowingStateLoss, { isCancelable = it })
+            { requireContext().openUrl(it) },
+            ::dismissAllowingStateLoss,
+            { isCancelable = it },
+        )
     }
-    override fun onCancel(dialog: DialogInterface) { model.cancel(); super.onCancel(dialog) }
-    interface OnRecordClickListener { fun onRecordClick(record: RssReadRecord?) }
+
+    override fun onCancel(dialog: DialogInterface) {
+        model.cancel()
+        super.onCancel(dialog)
+    }
+
+    interface OnRecordClickListener {
+        fun onRecordClick(record: RssReadRecord?)
+    }
 }

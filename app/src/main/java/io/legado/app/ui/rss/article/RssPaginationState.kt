@@ -7,6 +7,7 @@ internal enum class RssRetryTarget {
 
 internal sealed interface RssRefreshAction {
     data object InProgress : RssRefreshAction
+
     data class Request(
         val page: Int,
         internal val requestId: Long,
@@ -15,7 +16,9 @@ internal sealed interface RssRefreshAction {
 
 internal sealed interface RssNextPageAction {
     data object InProgress : RssNextPageAction
+
     data class NoMore(internal val resultId: Long) : RssNextPageAction
+
     data class Request(
         val page: Int,
         val url: String,
@@ -81,8 +84,8 @@ internal class RssPaginationState {
     @Synchronized
     fun startNextPage(): RssNextPageAction {
         if (isLoading) return RssNextPageAction.InProgress
-        val pageUrl = nextPageUrl.normalizedPageUrl()
-            ?: return RssNextPageAction.NoMore(requestSequence)
+        val pageUrl =
+            nextPageUrl.normalizedPageUrl() ?: return RssNextPageAction.NoMore(requestSequence)
         isLoading = true
         return RssNextPageAction.Request(page + 1, pageUrl, startRequest())
     }
