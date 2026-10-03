@@ -7,16 +7,18 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -53,11 +55,13 @@ import org.hamcrest.Matcher
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class HighlightTriggerUiTest {
+    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = context.defaultSharedPreferences
@@ -275,28 +279,29 @@ class HighlightTriggerUiTest {
         val firstCharacter = point { it is TextBaseColumn && it.charData == "然" }
         val nextCharacter = point { it is TextBaseColumn && it.charData == "高" }
         taps(firstCharacter, nextCharacter)
-        onView(withText(R.string.highlight_rule_disable))
-            .inRoot(isPlatformPopup())
-            .check(matches(isDisplayed()))
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertIsDisplayed()
         pressBack()
         SystemClock.sleep(ViewConfiguration.getDoubleTapTimeout().toLong() + 50)
         taps(alpha, alpha)
-        onView(withText(R.string.highlight_rule_disable))
-            .inRoot(isPlatformPopup())
-            .check(matches(isDisplayed()))
-        var editY = 0
-        var manageY = 0
-        var disableY = 0
-        onView(withText(R.string.edit)).inRoot(isPlatformPopup()).check { view, _ ->
-            editY = screenY(view)
-        }
-        onView(withText(R.string.highlight_rule)).inRoot(isPlatformPopup()).check { view, _ ->
-            manageY = screenY(view)
-        }
-        onView(withText(R.string.highlight_rule_disable)).inRoot(isPlatformPopup()).check { view, _
-            ->
-            disableY = screenY(view)
-        }
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertIsDisplayed()
+        val editY =
+            compose
+                .onNodeWithTag("reader-context-highlightRuleEdit")
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .top
+        val manageY =
+            compose
+                .onNodeWithTag("reader-context-highlightRuleManage")
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .top
+        val disableY =
+            compose
+                .onNodeWithTag("reader-context-highlightRuleDisable")
+                .fetchSemanticsNode()
+                .boundsInRoot
+                .top
         assertTrue(
             "Manage rules belongs between edit and disable",
             editY < manageY && manageY < disableY,
@@ -305,7 +310,7 @@ class HighlightTriggerUiTest {
         val monitor =
             instrumentation.addMonitor(HighlightRuleActivity::class.java.name, null, false)
         try {
-            onView(withText(R.string.highlight_rule)).inRoot(isPlatformPopup()).perform(click())
+            compose.onNodeWithTag("reader-context-highlightRuleManage").performClick()
             val manager = instrumentation.waitForMonitorWithTimeout(monitor, 5000)
             assertNotNull("The existing rule manager must actually open", manager)
             screenshot("highlight-trigger-rule-manager")
@@ -337,9 +342,7 @@ class HighlightTriggerUiTest {
         clearSelection()
         val html = point { it is TextHtmlColumn && it.charData.contains("H") && it.linkUrl == null }
         taps(html, html)
-        onView(withText(R.string.highlight_rule_disable))
-            .inRoot(isPlatformPopup())
-            .check(matches(isDisplayed()))
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertIsDisplayed()
         pressBack()
         val link = point { it is TextHtmlColumn && it.linkUrl != null }
         hold(link)
@@ -376,9 +379,7 @@ class HighlightTriggerUiTest {
         awaitReader { ReadBook.book?.getVariable("imageDoubleTap") == "done" }
         prefs.edit().putString(PreferKey.highlightActionTrigger, "click").commit()
         taps(alpha)
-        onView(withText(R.string.highlight_rule_disable))
-            .inRoot(isPlatformPopup())
-            .check(matches(isDisplayed()))
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertIsDisplayed()
         pressBack()
         prefs
             .edit()
@@ -388,9 +389,7 @@ class HighlightTriggerUiTest {
         taps(alpha)
         noRulePopup()
         hold(alpha)
-        onView(withText(R.string.highlight_rule_disable))
-            .inRoot(isPlatformPopup())
-            .check(matches(isDisplayed()))
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertIsDisplayed()
         pressBack()
         prefs.edit().putString(PreferKey.highlightActionTrigger, "off").commit()
         taps(alpha, alpha)
@@ -473,10 +472,8 @@ class HighlightTriggerUiTest {
     }
 
     private fun noRulePopup() {
-        onView(withText(R.string.highlight_rule_disable)).check(doesNotExist())
+        compose.onNodeWithTag("reader-context-highlightRuleDisable").assertDoesNotExist()
     }
-
-    private fun screenY(view: View): Int = IntArray(2).also(view::getLocationOnScreen)[1]
 
     private fun awaitReader(condition: (ReadView) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15000

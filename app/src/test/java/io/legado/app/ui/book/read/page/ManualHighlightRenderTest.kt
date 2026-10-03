@@ -157,22 +157,19 @@ class ManualHighlightRenderTest {
     fun `page changes dismiss visible highlight actions`() {
         val activity =
             readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        val popupMenu = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionMenu.kt")
+        val popupMenu =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReaderContextMenuScreen.kt")
         val pageChanged =
             activity
                 .substringAfter("override fun pageChanged()")
                 .substringBefore("private fun upSeekBarProgress()")
         val onDestroy = activity.substringAfter("override fun onDestroy()")
 
-        assertTrue(
-            popupMenu.contains("fun show(anchor: View, onClick: (String) -> Unit): PopupAction")
-        )
-        assertTrue(popupMenu.contains("return PopupAction(context).apply"))
-        assertTrue(
-            activity.replace(Regex("\\s+"), "").contains("highlightPopup=popupActionMenu(this)")
-        )
-        assertTrue(pageChanged.contains("highlightPopup?.dismiss()"))
-        assertTrue(onDestroy.contains("highlightPopup?.dismiss()"))
+        assertTrue(popupMenu.contains("Popup("))
+        assertTrue(popupMenu.contains("PopupProperties(focusable = true)"))
+        assertTrue(activity.contains("showContextMenu("))
+        assertTrue(pageChanged.contains("dismissContextMenu()"))
+        assertTrue(onDestroy.contains("dismissContextMenu()"))
     }
 
     @Test

@@ -30,8 +30,8 @@ class HighlightRuleUiContractTest {
             projectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt").readText()
 
         assertTrue(activity.contains("ACTION_HIGHLIGHT_CREATE_RULE"))
-        assertTrue(activity.contains("popupActionMenu(this)"))
-        assertFalse(activity.contains("private var highlightActionMenu:"))
+        assertTrue(activity.contains("showContextMenu("))
+        assertFalse(activity.contains("popupActionMenu(this)"))
         assertFalse(activity.contains("HighlightRulePopup(this"))
     }
 

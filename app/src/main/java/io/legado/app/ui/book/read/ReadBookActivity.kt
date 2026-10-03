@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
-import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.Menu
@@ -76,7 +75,6 @@ import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
-import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
@@ -139,9 +137,7 @@ import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.theme.LegadoComposeTheme
-import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.utils.ACache
 import io.legado.app.utils.Debounce
 import io.legado.app.utils.GSON
@@ -299,9 +295,6 @@ class ReadBookActivity :
     val textActionMenu: TextActionMenu by lazy {
         TextActionMenu(this, this)
     }
-    private val popupAction: PopupAction by lazy {
-        PopupAction(this)
-    }
     override val isInitFinish: Boolean
         get() = viewModel.isInitFinish
 
@@ -417,6 +410,11 @@ class ReadBookActivity :
                     begin = { textActionMenu.dismiss() },
                     move = ::moveSelectionCursor,
                     end = ::finishSelectionCursor,
+                )
+                ReaderContextMenuScreen(
+                    state = contextMenuState,
+                    dismiss = ::dismissContextMenu,
+                    action = ::performContextAction,
                 )
             }
         }
@@ -1271,46 +1269,87 @@ class ReadBookActivity :
         }
 
     private var highlightStyleDialog: HighlightStyleDialog? = null
-    private var highlightPopup: PopupAction? = null
+    private var contextMenuState by mutableStateOf<ReaderContextMenuState?>(null)
+    private var contextMenuAction: ((String) -> Unit)? = null
+
+    private fun dismissContextMenu() {
+        contextMenuState = null
+        contextMenuAction = null
+    }
+
+    private fun showContextMenu(
+        x: Float,
+        y: Float,
+        actions: List<ReaderContextAction>,
+        action: (String) -> Unit,
+    ) {
+        val owner = ReadBook.book?.bookUrl ?: return
+        dismissContextMenu()
+        contextMenuState = ReaderContextMenuState(x, y, actions.toList())
+        contextMenuAction = { key ->
+            if (
+                lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                    ReadBook.book?.bookUrl == owner &&
+                    !supportFragmentManager.isStateSaved
+            ) {
+                action(key)
+            }
+        }
+    }
+
+    private fun performContextAction(key: String) {
+        val action = contextMenuAction
+        dismissContextMenu()
+        action?.invoke(key)
+    }
 
     private fun showHighlightActionMenu(highlight: BookHighlight, x: Float, y: Float) {
         editingHighlight = highlight
-        binding.textMenuPosition.x = x
-        binding.textMenuPosition.y = y
-        highlightPopup?.dismiss()
-        highlightPopup =
-            popupActionMenu(this) {
-                    item(getString(R.string.highlight_style), ACTION_HIGHLIGHT_STYLE)
-                    item(getString(R.string.highlight_note), ACTION_HIGHLIGHT_NOTE)
-                    item(getString(R.string.highlight_create_rule), ACTION_HIGHLIGHT_CREATE_RULE)
-                    item(getString(android.R.string.copy), ACTION_HIGHLIGHT_COPY)
-                    item(getString(R.string.delete), ACTION_HIGHLIGHT_DELETE)
-                    danger(ACTION_HIGHLIGHT_DELETE)
+        showContextMenu(
+            x = x,
+            y = y,
+            actions =
+                listOf(
+                    ReaderContextAction(
+                        getString(R.string.highlight_style),
+                        ACTION_HIGHLIGHT_STYLE,
+                    ),
+                    ReaderContextAction(getString(R.string.highlight_note), ACTION_HIGHLIGHT_NOTE),
+                    ReaderContextAction(
+                        getString(R.string.highlight_create_rule),
+                        ACTION_HIGHLIGHT_CREATE_RULE,
+                    ),
+                    ReaderContextAction(getString(android.R.string.copy), ACTION_HIGHLIGHT_COPY),
+                    ReaderContextAction(
+                        getString(R.string.delete),
+                        ACTION_HIGHLIGHT_DELETE,
+                        danger = true,
+                    ),
+                ),
+        ) { action ->
+            when (action) {
+                ACTION_HIGHLIGHT_STYLE -> {
+                    val dialog = HighlightStyleDialog()
+                    highlightStyleDialog = dialog
+                    showDialogFragment(dialog)
                 }
-                .show(binding.textMenuPosition) { action ->
-                    when (action) {
-                        ACTION_HIGHLIGHT_STYLE -> {
-                            val dialog = HighlightStyleDialog()
-                            highlightStyleDialog = dialog
-                            showDialogFragment(dialog)
-                        }
 
-                        ACTION_HIGHLIGHT_NOTE -> showDialogFragment(HighlightNoteDialog(highlight))
-                        ACTION_HIGHLIGHT_CREATE_RULE ->
-                            showDialogFragment(
-                                HighlightRuleEditDialog.create(
-                                    pattern = highlight.bookText,
-                                    scope = ReadBook.book?.name,
-                                    style = highlight.style,
-                                )
-                            )
-                        ACTION_HIGHLIGHT_COPY -> sendToClip(highlight.bookText)
-                        ACTION_HIGHLIGHT_DELETE -> {
-                            ReadBook.removeHighlight(highlight)
-                            if (editingHighlight?.time == highlight.time) editingHighlight = null
-                        }
-                    }
+                ACTION_HIGHLIGHT_NOTE -> showDialogFragment(HighlightNoteDialog(highlight))
+                ACTION_HIGHLIGHT_CREATE_RULE ->
+                    showDialogFragment(
+                        HighlightRuleEditDialog.create(
+                            pattern = highlight.bookText,
+                            scope = ReadBook.book?.name,
+                            style = highlight.style,
+                        )
+                    )
+                ACTION_HIGHLIGHT_COPY -> sendToClip(highlight.bookText)
+                ACTION_HIGHLIGHT_DELETE -> {
+                    ReadBook.removeHighlight(highlight)
+                    if (editingHighlight?.time == highlight.time) editingHighlight = null
                 }
+            }
+        }
     }
 
     override fun onHighlightClick(highlight: BookHighlight, x: Float, y: Float) {
@@ -1318,25 +1357,31 @@ class ReadBookActivity :
     }
 
     override fun onHighlightRuleClick(ruleId: Long, x: Float, y: Float) {
-        binding.textMenuPosition.x = x
-        binding.textMenuPosition.y = y
-        highlightPopup?.dismiss()
-        highlightPopup =
-            popupActionMenu(this) {
-                    item(getString(R.string.edit), ACTION_HIGHLIGHT_RULE_EDIT)
-                    item(getString(R.string.highlight_rule), ACTION_HIGHLIGHT_RULE_MANAGE)
-                    item(getString(R.string.highlight_rule_disable), ACTION_HIGHLIGHT_RULE_DISABLE)
-                    danger(ACTION_HIGHLIGHT_RULE_DISABLE)
-                }
-                .show(binding.textMenuPosition) { action ->
-                    when (action) {
-                        ACTION_HIGHLIGHT_RULE_EDIT ->
-                            showDialogFragment(HighlightRuleEditDialog.edit(ruleId))
+        showContextMenu(
+            x = x,
+            y = y,
+            actions =
+                listOf(
+                    ReaderContextAction(getString(R.string.edit), ACTION_HIGHLIGHT_RULE_EDIT),
+                    ReaderContextAction(
+                        getString(R.string.highlight_rule),
+                        ACTION_HIGHLIGHT_RULE_MANAGE,
+                    ),
+                    ReaderContextAction(
+                        getString(R.string.highlight_rule_disable),
+                        ACTION_HIGHLIGHT_RULE_DISABLE,
+                        danger = true,
+                    ),
+                ),
+        ) { action ->
+            when (action) {
+                ACTION_HIGHLIGHT_RULE_EDIT ->
+                    showDialogFragment(HighlightRuleEditDialog.edit(ruleId))
 
-                        ACTION_HIGHLIGHT_RULE_MANAGE -> startActivity<HighlightRuleActivity>()
-                        ACTION_HIGHLIGHT_RULE_DISABLE -> disableHighlightRule(ruleId)
-                    }
-                }
+                ACTION_HIGHLIGHT_RULE_MANAGE -> startActivity<HighlightRuleActivity>()
+                ACTION_HIGHLIGHT_RULE_DISABLE -> disableHighlightRule(ruleId)
+            }
+        }
     }
 
     private fun disableHighlightRule(ruleId: Long) {
@@ -1665,7 +1710,7 @@ class ReadBookActivity :
         pageChanged = true
         if (!isScroll) aloudControls.onMovement(100f)
         binding.readView.onPageChange()
-        highlightPopup?.dismiss()
+        dismissContextMenu()
         handler.post {
             upBookmarkIndicator()
             upSeekBarProgress()
@@ -2606,16 +2651,18 @@ class ReadBookActivity :
     /** 长按图片 */
     @SuppressLint("RtlHardcoded")
     override fun onImageLongPress(x: Float, y: Float, src: String) {
-        popupAction.setItems(
-            listOf(
-                SelectItem(getString(R.string.show), "show"),
-                SelectItem(getString(R.string.refresh), "refresh"),
-                SelectItem(getString(R.string.action_save), "save"),
-                SelectItem(getString(R.string.menu), "menu"),
-                SelectItem(getString(R.string.select_folder), "selectFolder"),
-            )
-        )
-        popupAction.onActionClick = {
+        showContextMenu(
+            x = x,
+            y = y,
+            actions =
+                listOf(
+                    ReaderContextAction(getString(R.string.show), "show"),
+                    ReaderContextAction(getString(R.string.refresh), "refresh"),
+                    ReaderContextAction(getString(R.string.action_save), "save"),
+                    ReaderContextAction(getString(R.string.menu), "menu"),
+                    ReaderContextAction(getString(R.string.select_folder), "selectFolder"),
+                ),
+        ) {
             when (it) {
                 "show" -> showDialogFragment(PhotoDialog(src, isBook = true))
                 "refresh" -> viewModel.refreshImage(src)
@@ -2633,14 +2680,7 @@ class ReadBookActivity :
                 "menu" -> showActionMenu()
                 "selectFolder" -> selectImageDir.launch()
             }
-            popupAction.dismiss()
         }
-        popupAction.showAtLocation(
-            binding.readView,
-            Gravity.BOTTOM or Gravity.LEFT,
-            x.toInt(),
-            binding.root.rootView.height - y.toInt(),
-        )
     }
 
     /** colorSelectDialog */
@@ -3075,8 +3115,7 @@ class ReadBookActivity :
         aloudControls.dispose()
         tts?.clearTts()
         textActionMenu.dismiss()
-        popupAction.dismiss()
-        highlightPopup?.dismiss()
+        dismissContextMenu()
         binding.readView.onDestroy()
         ReadBook.unregister(this)
         handler.removeCallbacksAndMessages(null) // 清理Handler消息
