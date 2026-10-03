@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.webkit.MimeTypeMap
+import androidx.annotation.Keep
 import androidx.documentfile.provider.DocumentFile
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.utils.FileUtils
@@ -21,11 +22,13 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
 /** Immutable choice data. Labels remain in the Compose resource layer. */
+@Keep
 data class HandleFileChoice(
     val title: String,
     val value: Int,
 )
 
+@Keep
 data class HandleFileInput(
     val mode: Int = 0,
     val title: String? = null,

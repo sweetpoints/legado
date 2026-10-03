@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -13,6 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
+@Keep
 data class HandleFileCheckpoint(
     val revision: Long = 0,
     val phase: String = "Choices",
@@ -24,6 +26,7 @@ data class HandleFileCheckpoint(
     val finished: Boolean = false,
 )
 
+@Keep
 data class HandleFilePending(
     val action: Int,
     val nonce: String,
