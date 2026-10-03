@@ -19,7 +19,7 @@ class BottomBarSkinCatalogViewModelTest {
         var imports = 0; var edits = 0; var zips = 0
         override suspend fun load() = BottomBarSkinCatalog(names, active)
         override suspend fun preview(name: String, sizePx: Int) = emptyList<Bitmap>()
-        override suspend fun activate(name: String): String { activated += name; active = name; return name }
+        override suspend fun activate(name: String): String { activated += name; gate?.await(); if (fail) error("Activate failed"); active = name; return name }
         override suspend fun delete(name: String) { if (fail) error("Delete failed"); deleted += name; names = names - name; if (active == name) active = "" }
         override suspend fun importZip(uri: String): BottomBarSkinStaged { imports++; gate?.await(); if (fail) throw BottomBarSkinCatalogException(BottomBarSkinCatalogIssue.NoImages, Exception()); return BottomBarSkinStaged("session", " Imported ") }
         override suspend fun edit(name: String): BottomBarSkinStaged { edits++; gate?.await(); return BottomBarSkinStaged("session", name, name) }
@@ -33,7 +33,7 @@ class BottomBarSkinCatalogViewModelTest {
         val repo = Fake(); val model = model(repo); runCurrent(); model.activate("Missing"); model.activate(""); model.activate("B"); runCurrent()
         assertEquals(listOf(""), repo.activated); assertEquals("", model.state.value.active)
         val effect = model.state.value.effect!!; assertEquals(BottomBarSkinCatalogEffectType.Changed, effect.type)
-        assertNull(model.delivered("Wrong")); assertEquals(effect, model.delivered(effect.id)); assertNull(model.delivered(effect.id))
+        assertNull(model.delivered("Wrong")); assertEquals(effect, model.delivered(effect.id)); assertNull(model.delivered(effect.id)); model.changedDelivered(effect.id)
         model.activate("B"); runCurrent(); assertEquals("B", model.state.value.active)
     }
     @Test fun longPressDeleteNeedsConfirmationAndFailureLeavesRetryableDialog() = test {
@@ -84,4 +84,22 @@ class BottomBarSkinCatalogViewModelTest {
         restored.importPicker(); restored.delivered(restored.state.value.effect!!.id); restored.importResult(null); restored.importResult("late"); runCurrent()
         assertEquals(0, repo.imports); assertTrue(repo.deleted.isEmpty())
     }
+    @Test fun changedMutationBlocksCloseUntilPostEventReturnsAndWrongTicketCannotUnlock() = test {
+        val repo = Fake(); val saved = SavedStateHandle(); val model = model(repo, saved); runCurrent(); repo.gate = CompletableDeferred()
+        model.activate(""); assertTrue(model.state.value.closeBlocked); runCurrent(); assertTrue(model.state.value.busy)
+        repo.gate!!.complete(Unit); runCurrent(); val changed = model.state.value.effect!!
+        model.delivered(changed.id); assertTrue(model.state.value.closeBlocked)
+        model.changedDelivered("wrong"); assertTrue(model.state.value.closeBlocked)
+        model.changedDelivered(changed.id); assertFalse(model.state.value.closeBlocked)
+        model.requestDelete("B"); model.confirmDelete(); runCurrent(); assertTrue(model.state.value.closeBlocked)
+        val deleted = model.state.value.effect!!; model.delivered(deleted.id); model.changedDelivered(deleted.id); assertFalse(model.state.value.closeBlocked)
+    }
+    @Test fun failedMutationUnblocksAndRestoredInterruptedMutationEmitsRefreshInsteadOfTrappingClose() = test {
+        val repo = Fake(); val model = model(repo); runCurrent(); repo.fail = true; model.activate(""); runCurrent()
+        assertFalse(model.state.value.closeBlocked); assertFalse(model.state.value.busy)
+        val restored = model(Fake(), SavedStateHandle(mapOf("skinCatalog.closeBlocked" to true))); runCurrent()
+        assertTrue(restored.state.value.closeBlocked); val effect = restored.state.value.effect!!; assertEquals(BottomBarSkinCatalogEffectType.Changed, effect.type)
+        restored.delivered(effect.id); restored.changedDelivered(effect.id); assertFalse(restored.state.value.closeBlocked)
+    }
+
 }

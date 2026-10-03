@@ -17,17 +17,24 @@ data class BottomBarSkinCatalogEffect(val id: String = UUID.randomUUID().toStrin
 data class BottomBarSkinCatalogState(val loaded: Boolean = false, val busy: Boolean = false,
     val names: List<String> = emptyList(), val active: String = "", val menu: String? = null, val delete: String? = null,
     val issue: BottomBarSkinCatalogIssue? = null, val effect: BottomBarSkinCatalogEffect? = null,
-    val scroll: Int = 0, val offset: Int = 0, val previewRevision: Long = 0)
+    val scroll: Int = 0, val offset: Int = 0, val previewRevision: Long = 0, val closeBlocked: Boolean = false)
 class BottomBarSkinCatalogViewModel(private val repository: BottomBarSkinCatalogRepository,
     private val saved: SavedStateHandle, private val sizePx: Int
 ) : ViewModel() {
-    private val mutable = MutableStateFlow(BottomBarSkinCatalogState(menu = saved.get<String>("skinCatalog.menu"),
+    private val mutable = MutableStateFlow(BottomBarSkinCatalogState(closeBlocked = saved.get<Boolean>("skinCatalog.closeBlocked") == true, menu = saved.get<String>("skinCatalog.menu"),
         delete = saved.get<String>("skinCatalog.delete"), scroll = saved.get<Int>("skinCatalog.scroll") ?: 0,
         offset = saved.get<Int>("skinCatalog.offset") ?: 0,
         effect = saved.get<String>("skinCatalog.effect")?.let { GSON.fromJsonObject<BottomBarSkinCatalogEffect>(it).getOrNull() }))
     val state: StateFlow<BottomBarSkinCatalogState> = mutable
     private var loadJob: Job? = null
-    init { load(); saved.get<String>("skinCatalog.work")?.let { resumeWork(it, saved.get<String>("skinCatalog.input").orEmpty()) } }
+    init {
+        load()
+        state.value.effect?.takeIf { it.type == BottomBarSkinCatalogEffectType.Changed }?.let {
+            blockClose(); saved["skinCatalog.changeId"] = it.id
+        }
+        if (state.value.closeBlocked && state.value.effect == null) effect(BottomBarSkinCatalogEffect(type = BottomBarSkinCatalogEffectType.Changed))
+        saved.get<String>("skinCatalog.work")?.let { resumeWork(it, saved.get<String>("skinCatalog.input").orEmpty()) }
+    }
     fun load() {
         if (state.value.busy) return
         loadJob?.cancel(); loadJob = viewModelScope.launch {
@@ -41,7 +48,7 @@ class BottomBarSkinCatalogViewModel(private val repository: BottomBarSkinCatalog
             catch (error: Exception) { currentCoroutineContext().ensureActive(); mutable.value = state.value.copy(issue = BottomBarSkinCatalogIssue.Invalid) }
         }
     }
-    private fun idle() = !state.value.busy && state.value.effect == null
+    private fun idle() = !state.value.busy && state.value.effect == null && !state.value.closeBlocked
     fun menu(name: String) {
         if (!idle() || name !in state.value.names) return
         saved["skinCatalog.menu"] = name; mutable.value = state.value.copy(menu = name)
@@ -54,12 +61,14 @@ class BottomBarSkinCatalogViewModel(private val repository: BottomBarSkinCatalog
     fun cancelDelete() { saved.remove<String>("skinCatalog.delete"); mutable.value = state.value.copy(delete = null) }
     fun activate(name: String) {
         if (!idle() || !state.value.loaded || name.isNotEmpty() && name !in state.value.names) return
+        blockClose()
         operation { val active = repository.activate(name); currentCoroutineContext().ensureActive()
             mutable.value = state.value.copy(active = active); effect(BottomBarSkinCatalogEffect(type = BottomBarSkinCatalogEffectType.Changed)) }
     }
     fun confirmDelete() {
         val name = state.value.delete ?: return
         if (!idle()) return
+        blockClose()
         operation { repository.delete(name); currentCoroutineContext().ensureActive(); cancelDelete()
             val data = repository.load(); currentCoroutineContext().ensureActive()
             mutable.value = state.value.copy(names = data.names, active = data.active, previewRevision = state.value.previewRevision + 1)
@@ -107,10 +116,17 @@ class BottomBarSkinCatalogViewModel(private val repository: BottomBarSkinCatalog
             catch (error: CancellationException) { throw error }
             catch (error: Exception) { currentCoroutineContext().ensureActive()
                 saved.remove<String>("skinCatalog.work"); saved.remove<String>("skinCatalog.input")
+                if (state.value.effect?.type != BottomBarSkinCatalogEffectType.Changed) unblockClose()
                 mutable.value = state.value.copy(busy = false, issue = (error as? BottomBarSkinCatalogException)?.issue ?: BottomBarSkinCatalogIssue.Invalid) }
         }
     }
-    private fun effect(value: BottomBarSkinCatalogEffect) { saved["skinCatalog.effect"] = GSON.toJson(value); mutable.value = state.value.copy(effect = value) }
+    private fun effect(value: BottomBarSkinCatalogEffect) {
+        if (value.type == BottomBarSkinCatalogEffectType.Changed) saved["skinCatalog.changeId"] = value.id
+        saved["skinCatalog.effect"] = GSON.toJson(value); mutable.value = state.value.copy(effect = value)
+    }
+    private fun blockClose() { saved["skinCatalog.closeBlocked"] = true; mutable.value = state.value.copy(closeBlocked = true) }
+    private fun unblockClose() { saved.remove<Boolean>("skinCatalog.closeBlocked"); saved.remove<String>("skinCatalog.changeId"); mutable.value = state.value.copy(closeBlocked = false) }
+    fun changedDelivered(id: String) { if (saved.get<String>("skinCatalog.changeId") == id) unblockClose() }
     fun delivered(id: String): BottomBarSkinCatalogEffect? {
         val value = state.value.effect?.takeIf { it.id == id } ?: return null
         if (value.type == BottomBarSkinCatalogEffectType.Import) saved["skinCatalog.importTicket"] = id
