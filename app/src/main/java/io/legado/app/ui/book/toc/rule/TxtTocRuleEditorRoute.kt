@@ -10,9 +10,16 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.repository.TxtTocRuleSnapshot
 
 @Composable
-fun TxtTocRuleEditorRoute(model: TxtTocRuleEditorViewModel, onCode: (TxtTocEditorCodeRequest) -> Unit,
-    onCopy: (String) -> Unit, onPaste: () -> String?, onNoFocus: () -> Unit,
-    onSaved: (TxtTocRuleSnapshot) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun TxtTocRuleEditorRoute(
+    model: TxtTocRuleEditorViewModel,
+    onCode: (TxtTocEditorCodeRequest) -> Unit,
+    onCopy: (String) -> Unit,
+    onPaste: () -> String?,
+    onNoFocus: () -> Unit,
+    onSaved: (TxtTocRuleSnapshot) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by model.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current
     val close by rememberUpdatedState(onClose)
@@ -24,13 +31,24 @@ fun TxtTocRuleEditorRoute(model: TxtTocRuleEditorViewModel, onCode: (TxtTocEdito
             model.state.collect {
                 if (it.finished && !closed) {
                     model.consumeSavedRule()?.let(saved)
-                    closed = true; close()
+                    closed = true
+                    close()
                 }
             }
         }
     }
-    TxtTocRuleEditorScreen(state, model::setInput, model::focus,
-        { model.codeRequest()?.let(onCode) ?: onNoFocus() }, model::save,
-        { onCopy(model.copyJson()) }, { model.paste(onPaste()) }, model::requestClose,
-        model::keepEditing, model::discard, model::load, modifier)
+    TxtTocRuleEditorScreen(
+        state,
+        model::setInput,
+        model::focus,
+        { model.codeRequest()?.let(onCode) ?: onNoFocus() },
+        model::save,
+        { onCopy(model.copyJson()) },
+        { model.paste(onPaste()) },
+        model::requestClose,
+        model::keepEditing,
+        model::discard,
+        model::load,
+        modifier,
+    )
 }

@@ -18,41 +18,73 @@ import io.legado.app.utils.showHelp
 import java.io.File
 
 class TxtTocRuleActivity : BaseComposeActivity(), TxtTocRuleEditDialog.Callback {
-    val viewModel by viewModels<TxtTocRuleManagementViewModel> {
-        viewModelFactory { initializer { TxtTocRuleManagementViewModel(RoomTxtTocRuleManagementRepository(applicationContext), createSavedStateHandle()) } }
-    }
-    private val qrCodeResult = registerForActivityResult(QrCodeResult()) { value ->
-        value?.let { showDialogFragment(ImportTxtTocRuleDialog(it)) }
-    }
-    private val importDoc = registerForActivityResult(HandleFileContract()) { result ->
-        result.uri?.let { showDialogFragment(ImportTxtTocRuleDialog(it.toString())) }
-    }
-    private val exportResult = registerForActivityResult(HandleFileContract()) { result ->
-        result.uri?.let { viewModel.exportFinished(it.toString()) }
-    }
+    val viewModel by
+        viewModels<TxtTocRuleManagementViewModel> {
+            viewModelFactory {
+                initializer {
+                    TxtTocRuleManagementViewModel(
+                        RoomTxtTocRuleManagementRepository(applicationContext),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+    private val qrCodeResult =
+        registerForActivityResult(QrCodeResult()) { value ->
+            value?.let { showDialogFragment(ImportTxtTocRuleDialog(it)) }
+        }
+    private val importDoc =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { showDialogFragment(ImportTxtTocRuleDialog(it.toString())) }
+        }
+    private val exportResult =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { viewModel.exportFinished(it.toString()) }
+        }
+
     @Composable
     override fun Content(savedInstanceState: Bundle?) {
-        TxtTocRuleManagementRoute(viewModel, ::finish,
+        TxtTocRuleManagementRoute(
+            viewModel,
+            ::finish,
             { showDialogFragment(TxtTocRuleEditDialog()) },
             { showDialogFragment(TxtTocRuleEditDialog(it)) },
-            { importDoc.launch { mode = HandleFileContract.FILE; allowExtensions = arrayOf("txt", "json") } },
-            { qrCodeResult.launch(null) }, { showHelp("txtTocRuleHelp") }, ::deliver)
+            {
+                importDoc.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("txt", "json")
+                }
+            },
+            { qrCodeResult.launch(null) },
+            { showHelp("txtTocRuleHelp") },
+            ::deliver,
+        )
     }
+
     private fun deliver(effect: TxtTocManagementEffect) {
         when (effect.kind) {
             TxtTocManagementEffectKind.ShareFile -> share(File(effect.value))
-            TxtTocManagementEffectKind.ExportJson -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData("exportTxtTocRule.json", effect.value, "application/json")
-            }
-            TxtTocManagementEffectKind.ImportText -> showDialogFragment(ImportTxtTocRuleDialog(effect.value))
+            TxtTocManagementEffectKind.ExportJson ->
+                exportResult.launch {
+                    mode = HandleFileContract.EXPORT
+                    fileData =
+                        HandleFileContract.FileData(
+                            "exportTxtTocRule.json",
+                            effect.value,
+                            "application/json",
+                        )
+                }
+            TxtTocManagementEffectKind.ImportText ->
+                showDialogFragment(ImportTxtTocRuleDialog(effect.value))
             TxtTocManagementEffectKind.Clipboard -> sendToClip(effect.value)
             TxtTocManagementEffectKind.ReturnRegex -> Unit
         }
     }
+
     override fun saveTxtTocRule(txtTocRule: io.legado.app.data.entities.TxtTocRule) {
         // The editor has already persisted successfully; observeAll refreshes this host.
     }
+
     override fun onPause() {
         viewModel.cancelGestures()
         super.onPause()

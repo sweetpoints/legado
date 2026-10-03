@@ -20,40 +20,94 @@ import io.legado.app.utils.showHelp
 
 /** Reader rule picker. Data mutations share the management repository; selection stays local. */
 class TxtTocRuleDialog() : BaseComposeDialogFragment(), TxtTocRuleEditDialog.Callback {
-    constructor(tocRegex: String?) : this() { arguments = Bundle().apply { putString("tocRegex", tocRegex) } }
-    private val viewModel by viewModels<TxtTocRuleManagementViewModel> {
-        viewModelFactory { initializer { TxtTocRuleManagementViewModel(RoomTxtTocRuleManagementRepository(requireContext().applicationContext), createSavedStateHandle(), picker = true, initialRegex = arguments?.getString("tocRegex")) } }
+    constructor(tocRegex: String?) : this() {
+        arguments = Bundle().apply { putString("tocRegex", tocRegex) }
     }
+
+    private val viewModel by
+        viewModels<TxtTocRuleManagementViewModel> {
+            viewModelFactory {
+                initializer {
+                    TxtTocRuleManagementViewModel(
+                        RoomTxtTocRuleManagementRepository(requireContext().applicationContext),
+                        createSavedStateHandle(),
+                        picker = true,
+                        initialRegex = arguments?.getString("tocRegex"),
+                    )
+                }
+            }
+        }
     private var requestedName by mutableStateOf<String?>(null)
     var selectedName: String?
-        get() = viewModel.state.value.rules.firstOrNull { it.id == viewModel.state.value.selectedId }?.name ?: requestedName
-        set(value) { requestedName = value }
-    private val qrCodeResult = registerForActivityResult(QrCodeResult()) { value -> value?.let { showDialogFragment(ImportTxtTocRuleDialog(it)) } }
-    private val importDoc = registerForActivityResult(HandleFileContract()) { result -> result.uri?.let { showDialogFragment(ImportTxtTocRuleDialog(it.toString())) } }
+        get() =
+            viewModel.state.value.rules
+                .firstOrNull { it.id == viewModel.state.value.selectedId }
+                ?.name ?: requestedName
+        set(value) {
+            requestedName = value
+        }
+
+    private val qrCodeResult =
+        registerForActivityResult(QrCodeResult()) { value ->
+            value?.let { showDialogFragment(ImportTxtTocRuleDialog(it)) }
+        }
+    private val importDoc =
+        registerForActivityResult(HandleFileContract()) { result ->
+            result.uri?.let { showDialogFragment(ImportTxtTocRuleDialog(it.toString())) }
+        }
+
     override fun onStart() {
-        super.onStart(); setLayout(0.9f, 0.8f)
+        super.onStart()
+        setLayout(0.9f, 0.8f)
         dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
+
     @Composable
     override fun Content() {
         val state by viewModel.state.collectAsStateWithLifecycle()
         LaunchedEffect(state.rules, state.loading, requestedName) {
-            if (!state.loading) requestedName?.let { name -> state.rules.firstOrNull { it.name == name }?.let { viewModel.choose(it.id) }; requestedName = null }
+            if (!state.loading)
+                requestedName?.let { name ->
+                    state.rules.firstOrNull { it.name == name }?.let { viewModel.choose(it.id) }
+                    requestedName = null
+                }
         }
-        TxtTocRuleManagementRoute(viewModel, ::dismissAllowingStateLoss,
-            { showDialogFragment(TxtTocRuleEditDialog()) }, { showDialogFragment(TxtTocRuleEditDialog(it)) },
-            { importDoc.launch { mode = HandleFileContract.FILE; allowExtensions = arrayOf("txt", "json") } },
-            { qrCodeResult.launch(null) }, { showHelp("txtTocRuleHelp") }, { effect ->
+        TxtTocRuleManagementRoute(
+            viewModel,
+            ::dismissAllowingStateLoss,
+            { showDialogFragment(TxtTocRuleEditDialog()) },
+            { showDialogFragment(TxtTocRuleEditDialog(it)) },
+            {
+                importDoc.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("txt", "json")
+                }
+            },
+            { qrCodeResult.launch(null) },
+            { showHelp("txtTocRuleHelp") },
+            { effect ->
                 when (effect.kind) {
-                    TxtTocManagementEffectKind.ImportText -> showDialogFragment(ImportTxtTocRuleDialog(effect.value))
-                    TxtTocManagementEffectKind.ReturnRegex -> (activity as? CallBack)?.onTocRegexDialogResult(effect.value)
+                    TxtTocManagementEffectKind.ImportText ->
+                        showDialogFragment(ImportTxtTocRuleDialog(effect.value))
+                    TxtTocManagementEffectKind.ReturnRegex ->
+                        (activity as? CallBack)?.onTocRegexDialogResult(effect.value)
                     else -> Unit
                 }
-            }, picker = true)
+            },
+            picker = true,
+        )
     }
+
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
         // The editor has already persisted successfully; observeAll refreshes this host.
     }
-    override fun onPause() { viewModel.cancelGestures(); super.onPause() }
-    interface CallBack { fun onTocRegexDialogResult(tocRegex: String) {} }
+
+    override fun onPause() {
+        viewModel.cancelGestures()
+        super.onPause()
+    }
+
+    interface CallBack {
+        fun onTocRegexDialogResult(tocRegex: String) {}
+    }
 }

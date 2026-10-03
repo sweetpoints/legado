@@ -1,32 +1,17 @@
 package io.legado.app.ui.book.toc
 
-
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
-import io.legado.app.data.repository.AppTocHostRepository
-import kotlinx.coroutines.runBlocking
 import io.legado.app.data.entities.Book
-import io.legado.app.help.book.update
-import io.legado.app.help.book.isPdf
-import io.legado.app.help.book.isEpub
+import io.legado.app.data.repository.AppTocHostRepository
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.globalExecutor
-import io.legado.app.model.AudioPlay
-import io.legado.app.model.ReadBook
-import io.legado.app.model.ReadManga
-import io.legado.app.model.VideoPlay
-import io.legado.app.model.localBook.LocalBook
-import io.legado.app.utils.FileDoc
-import io.legado.app.utils.GSON
-import io.legado.app.utils.createFileIfNotExist
-import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.writeText
+import kotlinx.coroutines.runBlocking
 
 class TocViewModel(application: Application) : BaseViewModel(application) {
     private val repository = AppTocHostRepository()
@@ -49,22 +34,28 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
     fun upBookTocRule(book: Book, complete: (Throwable?) -> Unit) {
         execute {
             repository.rebuild(book).also { bookData.postValue(it) }
-        }.onSuccess {
-            complete.invoke(null)
-        }.onError {
-            complete.invoke(it)
         }
+            .onSuccess {
+                complete.invoke(null)
+            }
+            .onError {
+                complete.invoke(it)
+            }
     }
 
     fun reverseToc(success: (book: Book) -> Unit) {
         execute {
-            bookData.value?.let { current -> repository.reverse(current).also { result ->
-                current.readConfig = result.readConfig?.copy()
-                repository.synchronizeReverse(result)
-            }; current }
-        }.onSuccess {
-            it?.let(success)
+            bookData.value?.let { current ->
+                repository.reverse(current).also { result ->
+                    current.readConfig = result.readConfig?.copy()
+                    repository.synchronizeReverse(result)
+                }
+                current
+            }
         }
+            .onSuccess {
+                it?.let(success)
+            }
     }
 
     fun setTocExpanded(expanded: Boolean) {
@@ -79,9 +70,10 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         globalExecutor.execute {
             runCatching {
                 runBlocking { repository.expanded(book.bookUrl, expanded) }
-            }.onFailure {
-                AppLog.put("保存目录展开设置失败\n${it.localizedMessage}", it)
             }
+                .onFailure {
+                    AppLog.put("保存目录展开设置失败\n${it.localizedMessage}", it)
+                }
         }
     }
 
@@ -107,26 +99,30 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
 
     fun saveBookmark(treeUri: Uri) {
         execute {
-            val book = bookData.value
-                ?: throw NoStackTraceException(context.getString(R.string.no_book))
+            val book =
+                bookData.value ?: throw NoStackTraceException(context.getString(R.string.no_book))
             repository.export(book, treeUri.toString(), false)
-        }.onError {
-            AppLog.put("导出失败\n${it.localizedMessage}", it, true)
-        }.onSuccess {
-            context.toastOnUi("导出成功")
         }
+            .onError {
+                AppLog.put("导出失败\n${it.localizedMessage}", it, true)
+            }
+            .onSuccess {
+                context.toastOnUi("导出成功")
+            }
     }
 
     fun saveBookmarkMd(treeUri: Uri) {
         execute {
-            val book = bookData.value
-                ?: throw NoStackTraceException(context.getString(R.string.no_book))
+            val book =
+                bookData.value ?: throw NoStackTraceException(context.getString(R.string.no_book))
             repository.export(book, treeUri.toString(), true)
-        }.onError {
-            AppLog.put("导出失败\n${it.localizedMessage}", it, true)
-        }.onSuccess {
-            context.toastOnUi("导出成功")
         }
+            .onError {
+                AppLog.put("导出失败\n${it.localizedMessage}", it, true)
+            }
+            .onSuccess {
+                context.toastOnUi("导出成功")
+            }
     }
 
     interface ChapterListCallBack {
