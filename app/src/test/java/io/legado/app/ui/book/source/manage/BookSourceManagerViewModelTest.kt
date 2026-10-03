@@ -282,6 +282,38 @@ class BookSourceManagerViewModelTest {
         }
 
     @Test
+    fun exportPromptAndPassphraseRestoreFullFeedbackAndCopyTheirImmutablePayload() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val store = MemoryStore()
+            val manager = model(repository, store)
+            runCurrent()
+            val url = "https://export.example/" + "payload".repeat(10_000)
+            manager.exportReturned(url)
+            runCurrent()
+            assertEquals(SourceManagerDialog.EXPORT_SUCCESS, manager.state.value.dialog)
+            assertEquals("upload summary", manager.state.value.feedback!!.summary)
+            manager.draft("edited display text")
+            runCurrent()
+            val restored = model(repository, store)
+            runCurrent()
+            assertEquals(url, restored.state.value.feedback!!.url)
+            restored.confirm()
+            runCurrent()
+            assertEquals(url, restored.state.value.effect!!.key)
+            restored.acceptEffect(restored.state.value.effect!!.id)
+            restored.exportReturned(url)
+            runCurrent()
+            restored.showPassphrase()
+            runCurrent()
+            assertEquals(SourceManagerDialog.PASSPHRASE, restored.state.value.dialog)
+            restored.draft("edited passphrase display")
+            restored.confirm()
+            runCurrent()
+            assertEquals("encoded:$url", restored.state.value.effect!!.key)
+        }
+
+    @Test
     fun durableReceiptRechecksCurrentOwnerBeforeSynchronousNativeLaunch() =
         runTest(dispatcher) {
             val store = MemoryStore()
@@ -350,6 +382,11 @@ class BookSourceManagerViewModelTest {
         override fun sources(query: String) = rows.map { rows ->
             rows.filter { query.isEmpty() || it.name.contains(query) }
         }
+
+        override suspend fun feedback(url: String) =
+            SourceManagerFeedback(url, "upload summary", true)
+
+        override suspend fun passphrase(url: String) = "encoded:$url"
 
         override suspend fun importHistory() = emptyList<String>()
 

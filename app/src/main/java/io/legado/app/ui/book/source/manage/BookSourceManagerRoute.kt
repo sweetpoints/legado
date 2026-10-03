@@ -100,6 +100,7 @@ internal fun BookSourceManagerRoute(
                 sort = model::sort,
                 status = model::status,
                 draft = model::draft,
+                passphrase = model::showPassphrase,
                 forgetImport = model::forgetImport,
                 confirm = model::confirm,
                 dismiss = model::dismiss,

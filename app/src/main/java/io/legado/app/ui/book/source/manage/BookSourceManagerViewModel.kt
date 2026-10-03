@@ -148,6 +148,7 @@ internal class BookSourceManagerViewModel(
                     dialog = session.dialog,
                     draft = session.draft,
                     effect = pendingEffect,
+                    feedback = session.feedback,
                     error = if (session.pendingOperation) "上次操作被中断，请检查结果后重试" else null,
                 )
             }
@@ -222,6 +223,7 @@ internal class BookSourceManagerViewModel(
                 exportPath = effect?.export?.file?.path,
                 exportName = effect?.export?.name,
                 exportMime = effect?.export?.mime,
+                feedback = current.feedback,
             )
         val snapshot = session
         withContext(ioDispatcher + NonCancellable) { store.write(snapshot) }
@@ -340,7 +342,7 @@ internal class BookSourceManagerViewModel(
         }
     }
 
-    fun dismiss() = edit { it.copy(dialog = null, draft = "") }
+    fun dismiss() = edit { it.copy(dialog = null, draft = "", feedback = null) }
 
     fun confirm() {
         val current = state.value
@@ -368,6 +370,10 @@ internal class BookSourceManagerViewModel(
                     }
                 }
             SourceManagerDialog.CHECK -> if (keys.isNotEmpty()) effect("check", current.draft, keys)
+            SourceManagerDialog.EXPORT_SUCCESS ->
+                state.value.feedback?.let { effect("copy", it.url) }
+            SourceManagerDialog.PASSPHRASE ->
+                state.value.feedback?.passphrase?.let { effect("copy", it) }
             null -> Unit
         }
     }
@@ -555,6 +561,47 @@ internal class BookSourceManagerViewModel(
         }
 
     suspend fun acceptEffect(id: String): Boolean = deliverEffect(id, { true }, {})
+
+    fun exportReturned(url: String) = preparePrompt {
+        val feedback = repository.feedback(url)
+        mutableState.update {
+            it.copy(feedback = feedback, dialog = SourceManagerDialog.EXPORT_SUCCESS, draft = url)
+        }
+    }
+
+    fun showPassphrase() {
+        val feedback = state.value.feedback ?: return
+        if (!feedback.canSharePassphrase) return
+        preparePrompt {
+            val text = repository.passphrase(feedback.url)
+            mutableState.update {
+                it.copy(
+                    feedback = feedback.copy(passphrase = text),
+                    dialog = SourceManagerDialog.PASSPHRASE,
+                    draft = text,
+                )
+            }
+        }
+    }
+
+    private fun preparePrompt(prepare: suspend () -> Unit) {
+        if (terminated || state.value.busy) return
+        mutableState.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            operationMutex.withLock {
+                try {
+                    withContext(NonCancellable) {
+                        prepare()
+                        persist()
+                    }
+                } catch (failure: Exception) {
+                    showFailure(failure)
+                } finally {
+                    mutableState.update { it.copy(busy = false) }
+                }
+            }
+        }
+    }
 
     fun checkProgress(message: String?) {
         mutableState.update { it.copy(checkMessage = message) }

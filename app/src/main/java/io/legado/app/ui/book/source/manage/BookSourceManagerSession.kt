@@ -28,6 +28,7 @@ internal data class SourceManagerSession(
     val exportName: String? = null,
     val exportMime: String? = null,
     val receipts: Set<String> = emptySet(),
+    val feedback: SourceManagerFeedback? = null,
 )
 
 internal interface SourceManagerSessionStorage {

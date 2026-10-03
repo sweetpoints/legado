@@ -70,6 +70,7 @@ internal data class SourceManagerState(
     val blockNavigation: Boolean = false,
     val draggingKey: String? = null,
     val importHistory: List<String> = emptyList(),
+    val feedback: SourceManagerFeedback? = null,
 ) {
     val canMove
         get() = sort == BookSourceSort.Default && !byDomain && !busy
@@ -82,6 +83,8 @@ internal enum class SourceManagerDialog {
     REMOVE_GROUP,
     IMPORT,
     CHECK,
+    EXPORT_SUCCESS,
+    PASSPHRASE,
 }
 
 internal data class SourceManagerEffect(
@@ -148,6 +151,14 @@ internal val sourceManagerBulkMutations =
         SourceMutation.BOTTOM,
     )
 internal val sourceManagerBulkActions = listOf("export", "share", "check", "interval")
+
+@Keep
+internal data class SourceManagerFeedback(
+    val url: String,
+    val summary: String,
+    val canSharePassphrase: Boolean,
+    val passphrase: String? = null,
+)
 
 internal data class PreparedSourceManagerEffect(
     val effect: SourceManagerEffect,

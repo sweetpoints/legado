@@ -4,6 +4,8 @@ import android.content.Context
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.toBookSource
+import io.legado.app.help.DirectLinkUpload
+import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
@@ -46,6 +48,10 @@ internal interface BookSourceManagerRepository {
     suspend fun rememberImport(value: String)
 
     suspend fun forgetImport(value: String)
+
+    suspend fun feedback(url: String): SourceManagerFeedback
+
+    suspend fun passphrase(url: String): String
 }
 
 internal enum class SourceMutation {
@@ -93,6 +99,24 @@ internal class AppBookSourceManagerRepository(private val context: Context) :
                     "bookSourceRecordKey",
                     importHistory().filter { it != value }.joinToString(","),
                 )
+        }
+
+    override suspend fun feedback(url: String): SourceManagerFeedback =
+        withContext(Dispatchers.IO) {
+            SourceManagerFeedback(
+                url,
+                if (url.isAbsUrl()) DirectLinkUpload.getSummary() else "",
+                url.isAbsUrl() && SourceSharePassphrase.canEncode(url),
+            )
+        }
+
+    override suspend fun passphrase(url: String): String =
+        withContext(Dispatchers.IO) {
+            SourceSharePassphrase.encode(
+                url,
+                SourceSharePassphrase.Type.BOOK_SOURCE,
+                DirectLinkUpload.getExpiryDate(),
+            )
         }
 
     override fun sources(query: String): Flow<List<SourceManagerRow>> {

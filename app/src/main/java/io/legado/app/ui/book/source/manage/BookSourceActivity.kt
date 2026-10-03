@@ -10,15 +10,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.help.DirectLinkUpload
-import io.legado.app.help.SourceSharePassphrase
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.sourceSharePassphraseButton
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
 import io.legado.app.ui.association.ImportBookSourceDialog
@@ -30,7 +24,6 @@ import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.sendToClip
@@ -68,24 +61,7 @@ class BookSourceActivity : BaseComposeActivity() {
     private val exportDirectory =
         registerForActivityResult(HandleFileContract()) { result ->
             result.uri?.let { uri ->
-                val url = uri.toString()
-                alert(R.string.export_success) {
-                    if (url.isAbsUrl()) {
-                        setMessage(DirectLinkUpload.getSummary())
-                        sourceSharePassphraseButton(
-                            layoutInflater,
-                            url,
-                            SourceSharePassphrase.Type.BOOK_SOURCE,
-                        )
-                    }
-                    val editBinding =
-                        DialogEditTextBinding.inflate(layoutInflater).apply {
-                            editView.hint = getString(R.string.path)
-                            editView.setText(url)
-                        }
-                    customView { editBinding.root }
-                    okButton { sendToClip(url) }
-                }
+                managerModel.exportReturned(uri.toString())
             }
         }
 
@@ -147,6 +123,7 @@ class BookSourceActivity : BaseComposeActivity() {
             "search" -> prepared.searchSource?.let { SearchActivity.start(this, it) }
             "cancel-check" -> checkSessionId?.let { CheckSource.stop(this, it) }
             "check" -> startCheck(prepared)
+            "copy" -> sendToClip(effect.key)
             "export" ->
                 effect.export?.let { output ->
                     exportDirectory.launch {

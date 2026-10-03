@@ -63,6 +63,7 @@ internal data class SourceManagerActions(
     val sort: (BookSourceSort) -> Unit,
     val status: (String) -> Unit,
     val draft: (String) -> Unit,
+    val passphrase: () -> Unit,
     val forgetImport: (String) -> Unit,
     val confirm: () -> Unit,
     val dismiss: () -> Unit,
@@ -279,6 +280,18 @@ internal fun BookSourceManagerScreen(
                     if (dialog == SourceManagerDialog.DELETE) {
                         Text(stringResource(R.string.sure_del))
                     } else {
+                        if (dialog == SourceManagerDialog.EXPORT_SUCCESS) {
+                            state.feedback?.summary?.takeIf { it.isNotEmpty() }?.let { Text(it) }
+                            if (state.feedback?.canSharePassphrase == true) {
+                                TextButton(
+                                    actions.passphrase,
+                                    enabled = !state.busy,
+                                    modifier = Modifier.testTag("source-manager-passphrase"),
+                                ) {
+                                    Text(stringResource(R.string.shibboleth))
+                                }
+                            }
+                        }
                         OutlinedTextField(
                             state.draft,
                             actions.draft,
@@ -530,6 +543,8 @@ private fun dialogName(dialog: SourceManagerDialog): String =
             SourceManagerDialog.REMOVE_GROUP -> R.string.remove_group
             SourceManagerDialog.IMPORT -> R.string.import_on_line
             SourceManagerDialog.CHECK -> R.string.search_book_key
+            SourceManagerDialog.EXPORT_SUCCESS -> R.string.export_success
+            SourceManagerDialog.PASSPHRASE -> R.string.shibboleth
         }
     )
 
