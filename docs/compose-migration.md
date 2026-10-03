@@ -1471,3 +1471,10 @@ The session controller serializes immutable checkpoints and native request recei
 ### Manga callback cleanup ownership
 
 Callback registration and teardown share the engine lock. An obsolete callback cannot clear or cancel a replacement owner. Current-owner teardown captures the exact existing child jobs and invalidates content receipts under that lock, then cancels only those captured jobs outside it; a new owner can create children without its work being included in late cleanup. An Android regression creates real engine and download jobs, replaces the callback, and verifies old-owner teardown leaves both jobs active while current-owner teardown cancels them. This test awaits device execution; it is included in the final candidate AndroidTest compile. Formatting and diff checks pass.
+
+
+### Manga Compose ViewModel and explicit restoration
+
+The new Compose ViewModel publishes detached immutable book/page/loading/menu values, uses a caller-owned engine repository scope, and cancels and joins the prior scope before accepting a new Intent generation. SavedState contains only `manga.reader.session`, a UUID; complete launch, native image-export book/source snapshots, and cloud-progress confirmation data are checkpointed in the private session file. Native dispatch uses durable controller receipts and a live resumed-state callback. Final ViewModel disposal unregisters only its callback and releases private ownership using independent IO cleanup because its regular scope has already been cancelled.
+
+Reader content publication snapshots under the engine lock. When pages arrive after an initially empty viewport, the ViewModel issues an explicit Jump command and ignores old viewport progress until that command is acknowledged. A Compose regression starts with empty items and then delivers content plus a nonzero restore Jump, verifying the requested logical page is reached. The ViewModel and this regression are not yet connected to the legacy Activity; Host migration is the next batch. Official formatting/check and diff checks pass; complete Gradle validation remains pending.

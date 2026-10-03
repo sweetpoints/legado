@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import io.legado.app.data.entities.BookProgress
 import java.util.UUID
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -51,6 +52,10 @@ class MangaReaderSessionController(
                 pageIndex = pageIndex,
             )
         }
+    }
+
+    suspend fun checkpointCloudProgress(progress: BookProgress?) {
+        update { it.copy(pendingCloudProgress = progress) }
     }
 
     suspend fun enqueue(request: MangaNativeRequest) {

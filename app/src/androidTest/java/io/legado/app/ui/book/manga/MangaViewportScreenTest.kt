@@ -78,6 +78,44 @@ class MangaViewportScreenTest {
     }
 
     @Test
+    fun delayedContentRestoresRequestedAnchorWithExplicitJump() {
+        val loaded = mutableStateOf<List<MangaReaderItem>>(emptyList())
+        val command = mutableStateOf<MangaScrollCommand?>(null)
+        var chapter = -1
+        var handled = 0L
+        compose.setContent {
+            LegadoComposeTheme {
+                Box(Modifier.size(300.dp, 500.dp)) {
+                    MangaViewportScreen(
+                        sessionKey = "delayed-restore-test",
+                        items = loaded.value,
+                        bookUrl = "book",
+                        sourceOrigin = null,
+                        repository = repository,
+                        options =
+                            MangaViewportOptions(horizontal = true, disablePageAnimation = true),
+                        colorFilter = MangaColorFilterValues(),
+                        anchorIndex = if (loaded.value.isEmpty()) 0 else 2,
+                        command = command.value,
+                        readerActive = false,
+                        onCurrentItem = { chapter = it.chapterIndex },
+                        onCommandHandled = { handled = it },
+                        onMenu = {},
+                        onPageTap = {},
+                        onLongPress = {},
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            loaded.value = items
+            command.value = MangaScrollCommand.Jump(42, 2)
+        }
+        compose.waitUntil { chapter == 2 && handled == 42L }
+    }
+
+    @Test
     fun onlyOriginalCenterAndBottomCornerTapRectanglesTriggerActions() {
         var menu = 0
         var direction = 0

@@ -2,6 +2,7 @@ package io.legado.app.data.repository
 
 import android.util.AtomicFile
 import androidx.annotation.Keep
+import io.legado.app.data.entities.BookProgress
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
@@ -52,6 +53,8 @@ data class MangaNativeRequest(
     val sourceOrigin: String? = null,
     val sourceName: String? = null,
     val sourceType: Int? = null,
+    val bookSnapshot: String? = null,
+    val sourceSnapshot: String? = null,
 )
 
 @Keep
@@ -62,6 +65,7 @@ data class MangaReaderSession(
     val chapterIndex: Int = 0,
     val pageIndex: Int = 0,
     val nativeRequests: List<MangaNativeRequest> = emptyList(),
+    val pendingCloudProgress: BookProgress? = null,
 )
 
 interface MangaReaderSessionRepository {
