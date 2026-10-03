@@ -32,7 +32,9 @@ import androidx.dynamicanimation.animation.FloatPropertyCompat
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.media3.common.util.UnstableApi
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import io.legado.app.R
 import io.legado.app.base.BaseService
@@ -83,6 +85,7 @@ class VideoPlayService : BaseService() {
     private val playerView by lazy {
         floatingView.findViewById<FloatingPlayer>(R.id.floatingPlayerView)
     }
+    private val floatingComposeOwner by lazy { FloatingPlayerSavedStateOwner(this) }
     private var isNew = true
     private var mediaNotificationReady = false
     private var upNotificationJob: Coroutine<*>? = null
@@ -505,6 +508,8 @@ class VideoPlayService : BaseService() {
                     x = 30
                     y = screenWidth / 10
                 }
+        floatingView.setViewTreeLifecycleOwner(floatingComposeOwner)
+        floatingView.setViewTreeSavedStateRegistryOwner(floatingComposeOwner)
         floatingView.setOnTouchListener(FloatingTouchListener())
         windowManager.addView(floatingView, params)
     }
@@ -555,10 +560,8 @@ class VideoPlayService : BaseService() {
     }
 
     private fun setupPlayerView() {
-        playerView.fullscreenB.setOnClickListener {
-            toggleFullScreen()
-        }
-        playerView.backButton.setOnClickListener { stop() }
+        playerView.onFullscreenRequested = ::toggleFullScreen
+        playerView.onCloseRequested = ::stop
         if (playerView.isInPlayingState) {
             upMediaMetadata()
             upPlayProgress()
@@ -653,6 +656,8 @@ class VideoPlayService : BaseService() {
                 notificationManager.cancel(NotificationId.VideoPlayService)
             }
             application.unregisterActivityLifecycleCallbacks(activityLifecycleCallbacks)
+            playerView.onFullscreenRequested = null
+            playerView.onCloseRequested = null
             playerView.release()
         } catch (e: Exception) {
             e.printStackTrace()
