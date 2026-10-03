@@ -29,18 +29,18 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.data.entities.rule.ExploreKind.Type
+import io.legado.app.databinding.ItemFilletCompleteTextBinding
+import io.legado.app.databinding.ItemFilletSelectorSingleBinding
 import io.legado.app.databinding.ItemFilletTextBinding
 import io.legado.app.databinding.ItemFindBookBinding
-import io.legado.app.databinding.ItemFilletSelectorSingleBinding
-import io.legado.app.databinding.ItemFilletCompleteTextBinding
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.widget.dialog.TextDialog
+import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.ui.widget.text.AccentTextView
 import io.legado.app.utils.InfoMap
 import io.legado.app.utils.activity
@@ -51,17 +51,16 @@ import io.legado.app.utils.setSelectionSafely
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.collections.set
+import kotlin.text.isNullOrEmpty
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import splitties.views.onLongClick
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.set
-import kotlin.text.isNullOrEmpty
 
 internal fun isExploreBindingCurrent(
     expectedLoadVersion: Int,
@@ -70,15 +69,17 @@ internal fun isExploreBindingCurrent(
     bindingPosition: Int,
     boundSourceUrl: String,
     currentSourceUrl: String?,
-): Boolean = expectedLoadVersion == currentLoadVersion &&
-    expandedPosition == bindingPosition &&
-    boundSourceUrl == currentSourceUrl
+): Boolean =
+    expectedLoadVersion == currentLoadVersion &&
+        expandedPosition == bindingPosition &&
+        boundSourceUrl == currentSourceUrl
 
 class ExploreAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<BookSourcePart, ItemFindBookBinding>(context) {
     companion object {
         val exploreInfoMapList = LruCache<String, InfoMap>(99)
     }
+
     private val recycler = arrayListOf<TextView>()
     private val textRecycler = arrayListOf<AutoCompleteTextView>()
     private val selectRecycler = arrayListOf<LinearLayout>()
@@ -98,7 +99,7 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
         holder: ItemViewHolder,
         binding: ItemFindBookBinding,
         item: BookSourcePart,
-        payloads: MutableList<Any>
+        payloads: MutableList<Any>,
     ) {
         binding.run {
             if (holder.layoutPosition == itemCount - 1) {
@@ -142,31 +143,39 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                 recyclerFlexbox(flexbox)
                 flexbox.gone()
                 Coroutine.async(callBack.scope) {
-                    item.exploreKinds()
-                }.onSuccess { kindList ->
-                    currentBindingPosition()?.let { position ->
-                        sourceKinds[item.bookSourceUrl] = kindList
-                        upKindList(this@run, item, kindList, position)
+                        item.exploreKinds()
                     }
-                }.onFinally {
-                    if (currentBindingPosition() == null) return@onFinally
+                    .onSuccess { kindList ->
+                        currentBindingPosition()?.let { position ->
+                            sourceKinds[item.bookSourceUrl] = kindList
+                            upKindList(this@run, item, kindList, position)
+                        }
+                    }
+                    .onFinally {
+                        if (currentBindingPosition() == null) return@onFinally
+                        rotateLoading.gone()
+                        if (scrollTo >= 0) {
+                            callBack.scrollTo(scrollTo)
+                            scrollTo = -1
+                        }
+                    }
+            } else
+                kotlin.runCatching {
+                    ivStatus.setImageResource(R.drawable.ic_arrow_right)
                     rotateLoading.gone()
-                    if (scrollTo >= 0) {
-                        callBack.scrollTo(scrollTo)
-                        scrollTo = -1
-                    }
+                    recyclerFlexbox(flexbox)
+                    flexbox.gone()
                 }
-            } else kotlin.runCatching {
-                ivStatus.setImageResource(R.drawable.ic_arrow_right)
-                rotateLoading.gone()
-                recyclerFlexbox(flexbox)
-                flexbox.gone()
-            }
         }
     }
 
     @SuppressLint("SetTextI18n", "ClickableViewAccessibility")
-    private fun upKindList(binding: ItemFindBookBinding, item: BookSourcePart, kinds: List<ExploreKind>, exIndex: Int) {
+    private fun upKindList(
+        binding: ItemFindBookBinding,
+        item: BookSourcePart,
+        kinds: List<ExploreKind>,
+        exIndex: Int,
+    ) {
         val flexbox = binding.flexbox
         recyclerFlexbox(flexbox)
         flexbox.gone()
@@ -178,22 +187,27 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
             flexbox.visible()
             val source by lazy { appDb.bookSourceDao.getBookSource(sourceUrl) }
             val infoMap by lazy {
-                exploreInfoMapList[sourceUrl] ?:  InfoMap(sourceUrl).also {
-                    exploreInfoMapList.put(sourceUrl, it)
-                }
+                exploreInfoMapList[sourceUrl]
+                    ?: InfoMap(sourceUrl).also {
+                        exploreInfoMapList.put(sourceUrl, it)
+                    }
             }
-            val sourceUiCallback = object : SourceLoginJsExtensions.Callback {
-                override fun upUiData(data: Map<String, Any?>?) {
-                }
+            val sourceUiCallback =
+                object : SourceLoginJsExtensions.Callback {
+                    override fun upUiData(data: Map<String, Any?>?) {}
 
-                override fun reUiView(deltaUp: Boolean) {
-                    refreshExplore(item, exIndex, binding)
+                    override fun reUiView(deltaUp: Boolean) {
+                        refreshExplore(item, exIndex, binding)
+                    }
                 }
-            }
             // The JS bridge holds callbacks weakly; the live controls own this one.
             flexbox.tag = sourceUiCallback
             val sourceJsExtensions by lazy {
-                SourceLoginJsExtensions(context as? AppCompatActivity, source, callback = sourceUiCallback)
+                SourceLoginJsExtensions(
+                    context as? AppCompatActivity,
+                    source,
+                    callback = sourceUiCallback,
+                )
             }
             kinds.forEach { kind ->
                 val type = kind.type
@@ -215,26 +229,32 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                         }
                         if (viewName == null) {
                             tv.text = title
-                        } else if (viewName.length in 3..19 && viewName.first() == '\'' && viewName.last() == '\'') {
+                        } else if (
+                            viewName.length in 3..19 &&
+                                viewName.first() == '\'' &&
+                                viewName.last() == '\''
+                        ) {
                             val n = viewName.substring(1, viewName.length - 1)
                             tv.text = n
                         } else {
                             tv.text = title
                             Coroutine.async(callBack.scope, IO) {
-                                evalUiJs(viewName, source, infoMap)
-                            }.onSuccess { n ->
-                                if (tv.tag !== viewNameToken) return@onSuccess
-                                if (n.isNullOrEmpty()) {
-                                    tv.text = "null"
-                                } else {
-                                    tv.text = n
+                                    evalUiJs(viewName, source, infoMap)
                                 }
-                            }.onError { _ ->
-                                if (tv.tag !== viewNameToken) return@onError
-                                tv.text = "err"
-                            }
+                                .onSuccess { n ->
+                                    if (tv.tag !== viewNameToken) return@onSuccess
+                                    if (n.isNullOrEmpty()) {
+                                        tv.text = "null"
+                                    } else {
+                                        tv.text = n
+                                    }
+                                }
+                                .onError { _ ->
+                                    if (tv.tag !== viewNameToken) return@onError
+                                    tv.text = "err"
+                                }
                         }
-                        tv.setOnClickListener {// 辅助触发无障碍功能正常
+                        tv.setOnClickListener { // 辅助触发无障碍功能正常
                             val url = kind.url ?: return@setOnClickListener
                             if (kind.title.startsWith("ERROR:")) {
                                 it.activity?.showDialogFragment(TextDialog("ERROR", url))
@@ -254,7 +274,9 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                                         return@setOnTouchListener true
                                     }
                                     lastClickTime = upTime
-                                    val url = kind.url?.takeIf { it.isNotBlank() } ?: return@setOnTouchListener true
+                                    val url =
+                                        kind.url?.takeIf { it.isNotBlank() }
+                                            ?: return@setOnTouchListener true
                                     if (kind.title.startsWith("ERROR:")) {
                                         view.activity?.showDialogFragment(TextDialog("ERROR", url))
                                     } else {
@@ -284,27 +306,34 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                         }
                         if (viewName == null) {
                             tv.text = title
-                        } else if (viewName.length in 3..19 && viewName.first() == '\'' && viewName.last() == '\'') {
+                        } else if (
+                            viewName.length in 3..19 &&
+                                viewName.first() == '\'' &&
+                                viewName.last() == '\''
+                        ) {
                             val n = viewName.substring(1, viewName.length - 1)
                             tv.text = n
                         } else {
                             tv.text = title
                             Coroutine.async(callBack.scope, IO) {
-                                evalUiJs(viewName, source, infoMap)
-                            }.onSuccess { n ->
-                                if (tv.tag !== viewNameToken) return@onSuccess
-                                if (n.isNullOrEmpty()) {
-                                    tv.text = "null"
-                                } else {
-                                    tv.text = n
+                                    evalUiJs(viewName, source, infoMap)
                                 }
-                            }.onError{ _ ->
-                                if (tv.tag !== viewNameToken) return@onError
-                                tv.text = "err"
-                            }
+                                .onSuccess { n ->
+                                    if (tv.tag !== viewNameToken) return@onSuccess
+                                    if (n.isNullOrEmpty()) {
+                                        tv.text = "null"
+                                    } else {
+                                        tv.text = n
+                                    }
+                                }
+                                .onError { _ ->
+                                    if (tv.tag !== viewNameToken) return@onError
+                                    tv.text = "err"
+                                }
                         }
                         tv.setOnClickListener {
-                            val action = kind.action?.takeIf { it.isNotBlank() } ?: return@setOnClickListener
+                            val action =
+                                kind.action?.takeIf { it.isNotBlank() } ?: return@setOnClickListener
                             callBack.scope.launch(IO) {
                                 evalButtonClick(action, source, infoMap, title, sourceJsExtensions)
                             }
@@ -321,9 +350,17 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                                         return@setOnTouchListener true
                                     }
                                     lastClickTime = upTime
-                                    val action = kind.action?.takeIf { it.isNotBlank() } ?: return@setOnTouchListener true
+                                    val action =
+                                        kind.action?.takeIf { it.isNotBlank() }
+                                            ?: return@setOnTouchListener true
                                     callBack.scope.launch(IO) {
-                                        evalButtonClick(action, source, infoMap, title, sourceJsExtensions)
+                                        evalButtonClick(
+                                            action,
+                                            source,
+                                            infoMap,
+                                            title,
+                                            sourceJsExtensions,
+                                        )
                                     }
                                 }
                                 MotionEvent.ACTION_CANCEL -> {
@@ -349,48 +386,73 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                         }
                         if (viewName == null) {
                             ti.hint = title
-                        } else if (viewName.length in 3..19 && viewName.first() == '\'' && viewName.last() == '\'') {
+                        } else if (
+                            viewName.length in 3..19 &&
+                                viewName.first() == '\'' &&
+                                viewName.last() == '\''
+                        ) {
                             val n = viewName.substring(1, viewName.length - 1)
                             ti.hint = n
                         } else {
                             ti.hint = title
                             Coroutine.async(callBack.scope, IO) {
-                                evalUiJs(viewName, source, infoMap)
-                            }.onSuccess { n ->
-                                if (ti.tag !== viewNameToken) return@onSuccess
-                                if (n.isNullOrEmpty()) {
-                                    ti.hint = "null"
-                                } else {
-                                    ti.hint = n
+                                    evalUiJs(viewName, source, infoMap)
                                 }
-                            }.onError{ _ ->
-                                if (ti.tag !== viewNameToken) return@onError
-                                ti.hint = "err"
-                            }
+                                .onSuccess { n ->
+                                    if (ti.tag !== viewNameToken) return@onSuccess
+                                    if (n.isNullOrEmpty()) {
+                                        ti.hint = "null"
+                                    } else {
+                                        ti.hint = n
+                                    }
+                                }
+                                .onError { _ ->
+                                    if (ti.tag !== viewNameToken) return@onError
+                                    ti.hint = "err"
+                                }
                         }
                         ti.setText(infoMap[title])
                         var actionJob: Job? = null
-                        val watcher = object : TextWatcher {
-                            var content: String? = null
-                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
-                                content = s.toString()
-                            }
+                        val watcher =
+                            object : TextWatcher {
+                                var content: String? = null
 
-                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                                override fun beforeTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    count: Int,
+                                    after: Int,
+                                ) {
+                                    content = s.toString()
+                                }
 
-                            override fun afterTextChanged(s: Editable?) {
-                                val reContent = s.toString()
-                                infoMap[title] = reContent
-                                if (kind.action != null && reContent != content) {
-                                    actionJob?.cancel()
-                                    actionJob = callBack.scope.launch(IO) {
-                                        delay(600) //防抖
-                                        evalButtonClick(kind.action, source, infoMap, title, sourceJsExtensions)
-                                        content = reContent
+                                override fun onTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    before: Int,
+                                    count: Int,
+                                ) {}
+
+                                override fun afterTextChanged(s: Editable?) {
+                                    val reContent = s.toString()
+                                    infoMap[title] = reContent
+                                    if (kind.action != null && reContent != content) {
+                                        actionJob?.cancel()
+                                        actionJob =
+                                            callBack.scope.launch(IO) {
+                                                delay(600) // 防抖
+                                                evalButtonClick(
+                                                    kind.action,
+                                                    source,
+                                                    infoMap,
+                                                    title,
+                                                    sourceJsExtensions,
+                                                )
+                                                content = reContent
+                                            }
                                     }
                                 }
                             }
-                        }
                         ti.setTag(R.id.text_watcher, watcher)
                         ti.addTextChangedListener(watcher)
                     }
@@ -411,37 +473,44 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                             }
                             apply(tv)
                         }
-                        val chars = kind.chars?.filterNotNull() ?: listOf("chars","is null")
+                        val chars = kind.chars?.filterNotNull() ?: listOf("chars", "is null")
                         val infoV = infoMap[title]
-                        var char = if (infoV.isNullOrEmpty()) {
-                            (kind.default ?: chars[0]).also {
-                                infoMap[title] = it
+                        var char =
+                            if (infoV.isNullOrEmpty()) {
+                                (kind.default ?: chars[0]).also {
+                                    infoMap[title] = it
+                                }
+                            } else {
+                                infoV
                             }
-                        } else {
-                            infoV
-                        }
                         if (viewName == null) {
                             tv.text = if (left) char + title else title + char
-                        } else if (viewName.length in 3..19 && viewName.first() == '\'' && viewName.last() == '\'') {
+                        } else if (
+                            viewName.length in 3..19 &&
+                                viewName.first() == '\'' &&
+                                viewName.last() == '\''
+                        ) {
                             val n = viewName.substring(1, viewName.length - 1)
                             newName = n
                             tv.text = if (left) char + n else n + char
                         } else {
                             tv.text = if (left) char + title else title + char
                             Coroutine.async(callBack.scope, IO) {
-                                evalUiJs(viewName, source, infoMap)
-                            }.onSuccess { n ->
-                                if (tv.tag !== viewNameToken) return@onSuccess
-                                if (n.isNullOrEmpty()) {
-                                    tv.text = char + "null"
-                                } else {
-                                    newName = n
-                                    tv.text = if (left) char + n else n + char
+                                    evalUiJs(viewName, source, infoMap)
                                 }
-                            }.onError{ _ ->
-                                if (tv.tag !== viewNameToken) return@onError
-                                tv.text = char + "err"
-                            }
+                                .onSuccess { n ->
+                                    if (tv.tag !== viewNameToken) return@onSuccess
+                                    if (n.isNullOrEmpty()) {
+                                        tv.text = char + "null"
+                                    } else {
+                                        newName = n
+                                        tv.text = if (left) char + n else n + char
+                                    }
+                                }
+                                .onError { _ ->
+                                    if (tv.tag !== viewNameToken) return@onError
+                                    tv.text = char + "err"
+                                }
                         }
                         tv.setOnClickListener {
                             val currentIndex = chars.indexOf(char)
@@ -449,7 +518,8 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                             char = chars.getOrNull(nextIndex) ?: ""
                             infoMap[title] = char
                             tv.text = if (left) char + newName else newName + char
-                            val action = kind.action?.takeIf { it.isNotBlank() } ?: return@setOnClickListener
+                            val action =
+                                kind.action?.takeIf { it.isNotBlank() } ?: return@setOnClickListener
                             callBack.scope.launch(IO) {
                                 evalButtonClick(action, source, infoMap, title, sourceJsExtensions)
                             }
@@ -471,9 +541,17 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                                     char = chars.getOrNull(nextIndex) ?: ""
                                     infoMap[title] = char
                                     tv.text = if (left) char + newName else newName + char
-                                    val action = kind.action?.takeIf { it.isNotBlank() } ?: return@setOnTouchListener true
+                                    val action =
+                                        kind.action?.takeIf { it.isNotBlank() }
+                                            ?: return@setOnTouchListener true
                                     callBack.scope.launch(IO) {
-                                        evalButtonClick(action, source, infoMap, title, sourceJsExtensions)
+                                        evalButtonClick(
+                                            action,
+                                            source,
+                                            infoMap,
+                                            title,
+                                            sourceJsExtensions,
+                                        )
                                     }
                                 }
                                 MotionEvent.ACTION_CANCEL -> {
@@ -500,61 +578,82 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                         spName.tag = viewNameToken
                         if (viewName == null) {
                             spName.text = title
-                        } else if (viewName.length in 3..19 && viewName.first() == '\'' && viewName.last() == '\'') {
+                        } else if (
+                            viewName.length in 3..19 &&
+                                viewName.first() == '\'' &&
+                                viewName.last() == '\''
+                        ) {
                             val n = viewName.substring(1, viewName.length - 1)
                             spName.text = n
                         } else {
                             spName.text = title
                             Coroutine.async(callBack.scope, IO) {
-                                evalUiJs(viewName, source, infoMap)
-                            }.onSuccess { n ->
-                                if (spName.tag !== viewNameToken) return@onSuccess
-                                if (n.isNullOrEmpty()) {
-                                    spName.text = "null"
-                                } else {
-                                    spName.text = n
+                                    evalUiJs(viewName, source, infoMap)
                                 }
-                            }.onError{ _ ->
-                                if (spName.tag !== viewNameToken) return@onError
-                                spName.text = "err"
-                            }
+                                .onSuccess { n ->
+                                    if (spName.tag !== viewNameToken) return@onSuccess
+                                    if (n.isNullOrEmpty()) {
+                                        spName.text = "null"
+                                    } else {
+                                        spName.text = n
+                                    }
+                                }
+                                .onError { _ ->
+                                    if (spName.tag !== viewNameToken) return@onError
+                                    spName.text = "err"
+                                }
                         }
-                        val chars = kind.chars?.filterNotNull() ?: listOf("chars","is null")
-                        val adapter = ArrayAdapter(
-                            context,
-                            R.layout.item_text_common,
-                            chars
-                        )
+                        val chars = kind.chars?.filterNotNull() ?: listOf("chars", "is null")
+                        val adapter =
+                            ArrayAdapter(
+                                context,
+                                R.layout.item_text_common,
+                                chars,
+                            )
                         adapter.setDropDownViewResource(R.layout.item_spinner_dropdown)
                         val selector = sl.findViewById<AppCompatSpinner>(R.id.sp_type)
                         selector.adapter = adapter
                         val infoV = infoMap[title]
-                        val char = if (infoV.isNullOrEmpty()) {
-                            (kind.default ?: chars[0]).also {
-                                infoMap[title] = it
+                        val char =
+                            if (infoV.isNullOrEmpty()) {
+                                (kind.default ?: chars[0]).also {
+                                    infoMap[title] = it
+                                }
+                            } else {
+                                infoV
                             }
-                        } else {
-                            infoV
-                        }
                         val i = chars.indexOf(char)
                         selector.setSelectionSafely(i)
-                        selector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                            var isInitializing = true
-                            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                                if (isInitializing) { //忽略初始化选择
-                                    isInitializing = false
-                                    return
-                                }
-                                infoMap[title] = chars[position]
-                                if (kind.action != null) {
-                                    callBack.scope.launch(IO) {
-                                        evalButtonClick(kind.action, source, infoMap, title, sourceJsExtensions)
+                        selector.onItemSelectedListener =
+                            object : AdapterView.OnItemSelectedListener {
+                                var isInitializing = true
+
+                                override fun onItemSelected(
+                                    parent: AdapterView<*>?,
+                                    view: View?,
+                                    position: Int,
+                                    id: Long,
+                                ) {
+                                    if (isInitializing) { // 忽略初始化选择
+                                        isInitializing = false
+                                        return
+                                    }
+                                    infoMap[title] = chars[position]
+                                    if (kind.action != null) {
+                                        callBack.scope.launch(IO) {
+                                            evalButtonClick(
+                                                kind.action,
+                                                source,
+                                                infoMap,
+                                                title,
+                                                sourceJsExtensions,
+                                            )
+                                        }
                                     }
                                 }
+
+                                override fun onNothingSelected(parent: AdapterView<*>?) {}
                             }
-                            override fun onNothingSelected(parent: AdapterView<*>?) {
-                            }
-                        }
                     }
                 }
             }
@@ -565,17 +664,28 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
         val source = source ?: return null
         return try {
             runScriptWithContext {
-                source.evalJS(jsStr) {
-                    put("infoMap", infoMap)
-                }.toString()
+                source
+                    .evalJS(jsStr) {
+                        put("infoMap", infoMap)
+                    }
+                    .toString()
             }
         } catch (e: Exception) {
-            AppLog.put(source.getTag() + " exploreUi err:" + (e.localizedMessage ?: e.toString()), e)
+            AppLog.put(
+                source.getTag() + " exploreUi err:" + (e.localizedMessage ?: e.toString()),
+                e,
+            )
             null
         }
     }
 
-    private suspend fun evalButtonClick(jsStr: String, source: BaseSource?, infoMap: InfoMap, name: String, java: SourceLoginJsExtensions) {
+    private suspend fun evalButtonClick(
+        jsStr: String,
+        source: BaseSource?,
+        infoMap: InfoMap,
+        name: String,
+        java: SourceLoginJsExtensions,
+    ) {
         val source = source ?: return
         try {
             runScriptWithContext {
@@ -638,7 +748,8 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
                         recycler.add(child)
                     }
                     is LinearLayout -> {
-                        child.findViewById<AppCompatSpinner>(R.id.sp_type)?.onItemSelectedListener = null
+                        child.findViewById<AppCompatSpinner>(R.id.sp_type)?.onItemSelectedListener =
+                            null
                         selectRecycler.add(child)
                     }
                 }
@@ -679,62 +790,81 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
     fun onPause() {
         sourceKinds.clear()
         saveInfoMapJob?.cancel()
-        saveInfoMapJob = callBack.scope.launch {
-            exploreInfoMapList.snapshot().filter { (_, infoMap) -> infoMap.needSave }.map { (_, infoMap) ->
-                launch {
-                    infoMap.saveNow()
-                }
-            }.joinAll()
-        }
+        saveInfoMapJob =
+            callBack.scope.launch {
+                exploreInfoMapList
+                    .snapshot()
+                    .filter { (_, infoMap) -> infoMap.needSave }
+                    .map { (_, infoMap) ->
+                        launch {
+                            infoMap.saveNow()
+                        }
+                    }
+                    .joinAll()
+            }
     }
 
-    private fun refreshExplore(source: BookSourcePart, position: Int, binding: ItemFindBookBinding) {
+    private fun refreshExplore(
+        source: BookSourcePart,
+        position: Int,
+        binding: ItemFindBookBinding,
+    ) {
         binding.rotateLoading.visible()
         Coroutine.async(callBack.scope) {
-            source.clearExploreKindsCache()
-            sourceKinds[source.bookSourceUrl] = source.exploreKinds()
-        }.onSuccess {
-            notifyItemChanged(position, false)
-        }.onFinally {
-            binding.rotateLoading.gone()
-        }
+                source.clearExploreKindsCache()
+                sourceKinds[source.bookSourceUrl] = source.exploreKinds()
+            }
+            .onSuccess {
+                notifyItemChanged(position, false)
+            }
+            .onFinally {
+                binding.rotateLoading.gone()
+            }
     }
 
     private fun showMenu(binding: ItemFindBookBinding, position: Int): Boolean {
         val source = getItem(position) ?: return true
         popupActionMenu(context) {
-            item(context.getString(R.string.edit), "edit")
-            item(context.getString(R.string.to_top), "top")
-            item(context.getString(R.string.login), "login", source.hasLoginUrl)
-            item(context.getString(R.string.search), "search")
-            item(context.getString(R.string.refresh), "refresh")
-            item(context.getString(R.string.delete), "delete")
-            danger("delete")
-        }.show(binding.llTitle) { action ->
-            when (action) {
-                "edit" -> callBack.editSource(source.bookSourceUrl)
-                "top" -> callBack.toTop(source)
-                "search" -> callBack.searchBook(source)
-                "login" -> context.startActivity<SourceLoginActivity> {
-                    putExtra("type", "bookSource")
-                    putExtra("key", source.bookSourceUrl)
-                }
-
-                "refresh" -> refreshExplore(source, position, binding)
-
-                "delete" -> callBack.deleteSource(source)
+                item(context.getString(R.string.edit), "edit")
+                item(context.getString(R.string.to_top), "top")
+                item(context.getString(R.string.login), "login", source.hasLoginUrl)
+                item(context.getString(R.string.search), "search")
+                item(context.getString(R.string.refresh), "refresh")
+                item(context.getString(R.string.delete), "delete")
+                danger("delete")
             }
-        }
+            .show(binding.llTitle) { action ->
+                when (action) {
+                    "edit" -> callBack.editSource(source.bookSourceUrl)
+                    "top" -> callBack.toTop(source)
+                    "search" -> callBack.searchBook(source)
+                    "login" ->
+                        context.startActivity<SourceLoginActivity> {
+                            putExtra("type", "bookSource")
+                            putExtra("key", source.bookSourceUrl)
+                        }
+
+                    "refresh" -> refreshExplore(source, position, binding)
+
+                    "delete" -> callBack.deleteSource(source)
+                }
+            }
         return true
     }
 
     interface CallBack {
         val scope: CoroutineScope
+
         fun scrollTo(pos: Int)
+
         fun openExplore(sourceUrl: String, title: String, exploreUrl: String?)
+
         fun editSource(sourceUrl: String)
+
         fun toTop(source: BookSourcePart)
+
         fun deleteSource(source: BookSourcePart)
+
         fun searchBook(bookSource: BookSourcePart)
     }
 }

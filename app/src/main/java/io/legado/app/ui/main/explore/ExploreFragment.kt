@@ -48,13 +48,13 @@ import kotlinx.coroutines.launch
 private const val GROUP_QUERY_PREFIX = "group:"
 
 internal fun exploreGroupFromQuery(query: CharSequence?): String? {
-    return query?.toString()
+    return query
+        ?.toString()
         ?.takeIf { it.startsWith(GROUP_QUERY_PREFIX) }
         ?.removePrefix(GROUP_QUERY_PREFIX)
 }
 
-internal fun isExploreAllQuery(query: CharSequence?): Boolean =
-    exploreGroupFromQuery(query) == null
+internal fun isExploreAllQuery(query: CharSequence?): Boolean = exploreGroupFromQuery(query) == null
 
 internal fun exploreScrollState(
     pending: Pair<Int, Int>?,
@@ -68,13 +68,12 @@ internal fun exploreScrollState(
 
 internal fun selectedExploreGroup(
     query: CharSequence?,
-    groups: Set<String>
+    groups: Set<String>,
 ): String? = exploreGroupFromQuery(query)?.takeIf(groups::contains)
 
-/**
- * 发现界面
- */
-class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_explore),
+/** 发现界面 */
+class ExploreFragment() :
+    VMBaseFragment<ExploreViewModel>(R.layout.fragment_explore),
     MainFragmentInterface,
     ExploreAdapter.CallBack {
 
@@ -84,7 +83,8 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         arguments = bundle
     }
 
-    override val position: Int? get() = arguments?.getInt("position")
+    override val position: Int?
+        get() = arguments?.getInt("position")
 
     override val viewModel by viewModels<ExploreViewModel>()
     private val binding by viewBinding(FragmentExploreBinding::bind)
@@ -118,17 +118,19 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         searchView.applyTint(primaryTextColor)
         searchView.isSubmitButtonEnabled = true
         searchView.queryHint = getString(R.string.screen_find)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
+        searchView.setOnQueryTextListener(
+            object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean {
+                    return false
+                }
 
-            override fun onQueryTextChange(newText: String?): Boolean {
-                upExploreData(newText)
-                updateGroupsMenuChecks(newText)
-                return false
+                override fun onQueryTextChange(newText: String?): Boolean {
+                    upExploreData(newText)
+                    updateGroupsMenuChecks(newText)
+                    return false
+                }
             }
-        })
+        )
     }
 
     private fun initRecyclerView() {
@@ -137,34 +139,38 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         binding.rvFind.adapter = adapter
         binding.fastScroller.attachRecyclerView(binding.rvFind)
         upFastScrollerBar()
-        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+        adapter.registerAdapterDataObserver(
+            object : RecyclerView.AdapterDataObserver() {
 
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                super.onItemRangeInserted(positionStart, itemCount)
-                if (positionStart == 0) {
-                    binding.rvFind.scrollToPosition(0)
+                override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+                    super.onItemRangeInserted(positionStart, itemCount)
+                    if (positionStart == 0) {
+                        binding.rvFind.scrollToPosition(0)
+                    }
                 }
             }
-        })
+        )
     }
 
     private fun upFastScrollerBar() {
         val show = AppConfig.showDiscoveryFastScroller
         binding.fastScroller.isEnabled = show
-        binding.rvFind.scrollBarSize = if (show) {
-            0
-        } else {
-            ViewConfiguration.get(requireContext()).scaledScrollBarSize
-        }
+        binding.rvFind.scrollBarSize =
+            if (show) {
+                0
+            } else {
+                ViewConfiguration.get(requireContext()).scaledScrollBarSize
+            }
     }
 
     private fun initGroupData() {
         viewLifecycleOwner.lifecycleScope.launch {
-            appDb.bookSourceDao.flowExploreGroups()
+            appDb.bookSourceDao
+                .flowExploreGroups()
                 .flowWithLifecycleAndDatabaseChange(
                     viewLifecycleOwner.lifecycle,
                     Lifecycle.State.RESUMED,
-                    AppDatabase.BOOK_SOURCE_TABLE_NAME
+                    AppDatabase.BOOK_SOURCE_TABLE_NAME,
                 )
                 .conflate()
                 .distinctUntilChanged()
@@ -179,32 +185,38 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     private fun upExploreData(searchKey: String? = null) {
         exploreFlowJob?.cancel()
-        exploreFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            val selectedGroup = exploreGroupFromQuery(searchKey)
-            when {
-                searchKey.isNullOrBlank() -> {
-                    appDb.bookSourceDao.flowExplore()
-                }
+        exploreFlowJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                val selectedGroup = exploreGroupFromQuery(searchKey)
+                when {
+                        searchKey.isNullOrBlank() -> {
+                            appDb.bookSourceDao.flowExplore()
+                        }
 
-                selectedGroup != null -> {
-                    appDb.bookSourceDao.flowGroupExplore(selectedGroup)
-                }
+                        selectedGroup != null -> {
+                            appDb.bookSourceDao.flowGroupExplore(selectedGroup)
+                        }
 
-                else -> {
-                    appDb.bookSourceDao.flowExplore(searchKey)
-                }
-            }.flowWithLifecycleAndDatabaseChange(
-                viewLifecycleOwner.lifecycle,
-                Lifecycle.State.RESUMED,
-                AppDatabase.BOOK_SOURCE_TABLE_NAME
-            ).catch {
-                AppLog.put("发现界面更新数据出错", it)
-            }.conflate().flowOn(IO).collect {
-                binding.tvEmptyMsg.isGone = it.isNotEmpty() || searchView.query.isNotEmpty()
-                adapter.setItems(it, diffItemCallBack)
-                delay(500)
+                        else -> {
+                            appDb.bookSourceDao.flowExplore(searchKey)
+                        }
+                    }
+                    .flowWithLifecycleAndDatabaseChange(
+                        viewLifecycleOwner.lifecycle,
+                        Lifecycle.State.RESUMED,
+                        AppDatabase.BOOK_SOURCE_TABLE_NAME,
+                    )
+                    .catch {
+                        AppLog.put("发现界面更新数据出错", it)
+                    }
+                    .conflate()
+                    .flowOn(IO)
+                    .collect {
+                        binding.tvEmptyMsg.isGone = it.isNotEmpty() || searchView.query.isNotEmpty()
+                        adapter.setItems(it, diffItemCallBack)
+                        delay(500)
+                    }
             }
-        }
     }
 
     override fun onResume() {
@@ -237,7 +249,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 R.id.menu_group_text,
                 R.id.menu_group_all,
                 Menu.NONE,
-                R.string.all_source
+                R.string.all_source,
             )
             groups.forEach { group ->
                 menu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, group)
@@ -254,11 +266,12 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             for (index in 0 until menu.size()) {
                 val item = menu.getItem(index)
                 if (item.groupId != R.id.menu_group_text) continue
-                item.isChecked = if (item.itemId == R.id.menu_group_all) {
-                    isExploreAllQuery(query)
-                } else {
-                    item.title.toString() == selectedGroup
-                }
+                item.isChecked =
+                    if (item.itemId == R.id.menu_group_all) {
+                        isExploreAllQuery(query)
+                    } else {
+                        item.title.toString() == selectedGroup
+                    }
             }
             menu.setGroupCheckable(R.id.menu_group_text, true, true)
         }
@@ -286,7 +299,8 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     override fun scrollTo(pos: Int) {
         val layoutManager = binding.rvFind.layoutManager as LinearLayoutManager
-        val currentTop = layoutManager.findViewByPosition(pos)?.let { layoutManager.getDecoratedTop(it) }
+        val currentTop =
+            layoutManager.findViewByPosition(pos)?.let { layoutManager.getDecoratedTop(it) }
         val (nextPending, offset) = exploreScrollState(pendingExploreScroll, pos, currentTop)
         pendingExploreScroll = nextPending
         layoutManager.scrollToPositionWithOffset(pos, offset)
@@ -334,5 +348,4 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             }
         }
     }
-
 }
