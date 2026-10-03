@@ -92,6 +92,17 @@ class HighlightManagementViewModelTest {
         val gate=CompletableDeferred<Unit>();store.gate=gate;val job=launch{vm.consume(effect.token){true};error("Canceled delivery")};runCurrent();job.cancel();gate.complete(Unit);runCurrent()
         assertTrue(job.isCancelled);assertEquals(effect,store.records[vm.ticket]!!.effects.single());assertEquals(effect,vm.consume(effect.token){true})
     }
+    @Test fun canceledClaimReturningFromRealIoDispatcherRestoresReceiptBeforeNextDelivery()=runTest(dispatcher) {
+        val store=Store();val vm=model(store=store);runCurrent()
+        vm.action(HighlightManagementAction.Import);runCurrent();val effect=vm.state.value.draft.effects.single()
+        val entered=CompletableDeferred<Unit>();val finish=CompletableDeferred<Unit>()
+        store.writeDispatcher=Dispatchers.IO;store.claimEntered=entered;store.gate=finish
+        val job=launch { vm.consume(effect.token){true};error("Canceled delivery") }
+        runCurrent();entered.await();job.cancel();finish.complete(Unit);job.join()
+        assertTrue(job.isCancelled);assertEquals(effect,store.records[vm.ticket]!!.effects.single())
+        assertEquals(effect,vm.state.value.draft.effects.single())
+        assertEquals(effect,vm.consume(effect.token){true});assertTrue(store.records[vm.ticket]!!.effects.isEmpty())
+    }
     @Test fun unreadSessionCannotBeOverwrittenAndFailedWriteRetriesLatestDraft()=runTest(dispatcher) {
         val store=Store();val saved=SavedStateHandle(mapOf(HighlightManagementViewModel.KEY to "ticket"));store.records["ticket"]=HighlightManagementDraft(selection=setOf("a"),revision=9);store.failRead=true
         val vm=model(store=store,saved=saved);runCurrent();vm.select("b");assertEquals(setOf("a"),store.records["ticket"]!!.selection)
@@ -150,8 +161,13 @@ class HighlightManagementViewModelTest {
     private class Store:HighlightManagementSessionRepository {
         val records=mutableMapOf<String,HighlightManagementDraft>();val released=mutableSetOf<String>();var failRead=false;var failWrite=false;var gate:CompletableDeferred<Unit>?=null
         override suspend fun read(ticket:String):HighlightManagementDraft?{if(failRead)error("read failed");return records[ticket]}
+        var writeDispatcher:CoroutineDispatcher?=null;var claimEntered:CompletableDeferred<Unit>?=null
         override suspend fun write(ticket:String,draft:HighlightManagementDraft){
-            if(records[ticket]?.effects?.isNotEmpty()==true && draft.effects.isEmpty()) {val current=gate;gate=null;current?.let{withContext(NonCancellable){it.await()}}}
+            val io=writeDispatcher
+            if(io!=null)withContext(io+NonCancellable){writeBody(ticket,draft)}else writeBody(ticket,draft)
+        }
+        private suspend fun writeBody(ticket:String,draft:HighlightManagementDraft){
+            if(records[ticket]?.effects?.isNotEmpty()==true && draft.effects.isEmpty()) {val current=gate;gate=null;claimEntered?.complete(Unit);current?.let{withContext(NonCancellable){it.await()}}}
             check(ticket !in released);if(failWrite)error("write failed");if((records[ticket]?.revision ?: -1)<=draft.revision)records[ticket]=draft
         }
         override suspend fun release(ticket:String){released+=ticket;records.remove(ticket)}

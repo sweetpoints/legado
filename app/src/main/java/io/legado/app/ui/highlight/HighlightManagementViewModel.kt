@@ -161,7 +161,8 @@ class HighlightManagementViewModel(private val saved: SavedStateHandle,
             val effect=before.effects.firstOrNull{it.token==token} ?: return@withLock null
             val next=before.copy(effects=before.effects.filterNot{it.token==token},
                 exporting=if(effect.action==HighlightManagementAction.Export)effect.token else before.exporting,revision=before.revision+1)
-            sessions.write(ticket,next)
+            // Keep dispatcher return cancellable only after the durable claim can be rolled back.
+            withContext(NonCancellable) { sessions.write(ticket,next) }
             // Non-cooperative IO may finish after PAUSE or cancellation: roll back the same receipt.
             if(state.value.closed) { currentCoroutineContext().ensureActive();return@withLock null }
             if(!currentCoroutineContext().isActive || !canDeliver()) {

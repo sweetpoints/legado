@@ -1047,3 +1047,5 @@ RSS 文章 B2：分类与文章实际宿主切换 Compose Activity/Route/Screen�
 封面设置 A2：图片输入只保存在私有 AtomicFile 草稿，SavedState 持有小 enum 目标票据，兼容文件选择器重建丢失 value，保留早到结果和取消消费。恢复的未完成图片需显式重试，成功发布后的清理失败只重试草稿写入，字体与规则导航在交付前消费。新增 7 个真实 JVM 状态用例及 1 个大载荷 AtomicFile Android 用例；Android 用例仅编译验证。
 
 封面设置 B：实际目的地使用 Compose Route/Screen，六个开关、四种图片菜单、字体/规则入口与独立搜索结果对话框替换 Preference 控件。移除独占 pref_config_cover.xml，共享渲染及字体测试保留实际断言并改用 Compose 控件。新增 5 个真实 Compose 与 2 个 ConfigActivity Android 用例；Android 用例仅编译验证。
+
+高亮凭据取消修复：真实 IO 调度器回到已取消 Main 时可跳过后置回滚，导致未交付动作从磁盘丢失。调用端保持非取消区直至写入返回，再检查原协程并回滚；新增跨真实 IO 调度器回归测试，旧实现已复现失败，修复后全量 JVM 与 Android 编译通过。
