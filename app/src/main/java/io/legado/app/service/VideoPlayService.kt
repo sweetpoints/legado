@@ -51,6 +51,7 @@ import io.legado.app.utils.activityPendingIntent
 import io.legado.app.utils.broadcastPendingIntent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.servicePendingIntent
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -60,18 +61,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import splitties.systemservices.notificationManager
-import kotlin.math.abs
 
-/**
- * 视频悬浮窗服务
- */
+/** 视频悬浮窗服务 */
 class VideoPlayService : BaseService() {
     companion object {
         @JvmStatic
         var pause = true
             private set
+
         private const val APP_ACTION_STOP = "Stop"
     }
+
     private lateinit var windowManager: WindowManager
     private lateinit var params: WindowManager.LayoutParams
     private val mediaSessionCompat by lazy {
@@ -80,7 +80,9 @@ class VideoPlayService : BaseService() {
     private val floatingView by lazy {
         LayoutInflater.from(this).inflate(R.layout.floating_video_player, FrameLayout(this), false)
     }
-    private val playerView by lazy { floatingView.findViewById<FloatingPlayer>(R.id.floatingPlayerView) }
+    private val playerView by lazy {
+        floatingView.findViewById<FloatingPlayer>(R.id.floatingPlayerView)
+    }
     private var isNew = true
     private var mediaNotificationReady = false
     private var upNotificationJob: Coroutine<*>? = null
@@ -89,23 +91,30 @@ class VideoPlayService : BaseService() {
         BitmapFactory.decodeResource(appCtx.resources, R.drawable.icon_read_book)
     private var upPlayProgressJob: Job? = null
     private var broadcastReceiver: BroadcastReceiver? = null
-    private val activityLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
-        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-            if (activity is VideoPlayerActivity &&
-                !activity.intent.getBooleanExtra("forwardedToFloatingWindow", false)
-            ) {
-                // 确保 Activity 创建完成后才停止服务,留够时间复制播放器
-                stop()
+    private val activityLifecycleCallbacks =
+        object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                if (
+                    activity is VideoPlayerActivity &&
+                        !activity.intent.getBooleanExtra("forwardedToFloatingWindow", false)
+                ) {
+                    // 确保 Activity 创建完成后才停止服务,留够时间复制播放器
+                    stop()
+                }
             }
-        }
 
-        override fun onActivityStarted(activity: Activity) {}
-        override fun onActivityResumed(activity: Activity) {}
-        override fun onActivityPaused(activity: Activity) {}
-        override fun onActivityStopped(activity: Activity) {}
-        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-        override fun onActivityDestroyed(activity: Activity) {}
-    }
+            override fun onActivityStarted(activity: Activity) {}
+
+            override fun onActivityResumed(activity: Activity) {}
+
+            override fun onActivityPaused(activity: Activity) {}
+
+            override fun onActivityStopped(activity: Activity) {}
+
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+
+            override fun onActivityDestroyed(activity: Activity) {}
+        }
 
     private fun updateViewPosition() {
         try {
@@ -138,13 +147,14 @@ class VideoPlayService : BaseService() {
         val viewWidth = floatingView.width
         val viewHeight = floatingView.height
         val currentX = params.x
-        val endX = if (viewWidth == screenWidth) {
-            0
-        } else if (currentX + viewWidth / 2 > screenWidth / 2) {
-            screenWidth - viewWidth - 30
-        } else {
-            30
-        }
+        val endX =
+            if (viewWidth == screenWidth) {
+                0
+            } else if (currentX + viewWidth / 2 > screenWidth / 2) {
+                screenWidth - viewWidth - 30
+            } else {
+                30
+            }
         val currentY = params.y
         var endY = currentY
         if (currentY < 30) {
@@ -163,11 +173,12 @@ class VideoPlayService : BaseService() {
                 start()
             }
         }
-        animator = SpringAnimation(params, layoutParamsXProperty, endX.toFloat()).apply {
-            spring.stiffness = SpringForce.STIFFNESS_LOW  // 低刚度更Q弹
-            spring.dampingRatio = SpringForce.DAMPING_RATIO_MEDIUM_BOUNCY  // 中等阻尼
-            start()
-        }
+        animator =
+            SpringAnimation(params, layoutParamsXProperty, endX.toFloat()).apply {
+                spring.stiffness = SpringForce.STIFFNESS_LOW // 低刚度更Q弹
+                spring.dampingRatio = SpringForce.DAMPING_RATIO_MEDIUM_BOUNCY // 中等阻尼
+                start()
+            }
     }
 
     override fun onCreate() {
@@ -177,27 +188,28 @@ class VideoPlayService : BaseService() {
         application.registerActivityLifecycleCallbacks(activityLifecycleCallbacks)
         val book = VideoPlay.book
         val coverPath = book?.getDisplayCover() ?: VideoPlay.getDisplayCover()
-        val sourceOrigin = if (book != null) {
-            book.getCoverSourceOrigin()
-        } else {
-            VideoPlay.source?.getKey()
-        }
+        val sourceOrigin =
+            if (book != null) {
+                book.getCoverSourceOrigin()
+            } else {
+                VideoPlay.source?.getKey()
+            }
         execute {
-            ImageLoader
-                .loadBitmap(
+            ImageLoader.loadBitmap(
                     this@VideoPlayService,
                     coverPath,
                     sourceOrigin,
                 )
                 .submit()
                 .get()
-        }.onSuccess {
-            if (it.width > 16 && it.height > 16) {
-                cover = it
-                upMediaMetadata()
-                upVideoPlayNotification()
-            }
         }
+            .onSuccess {
+                if (it.width > 16 && it.height > 16) {
+                    cover = it
+                    upMediaMetadata()
+                    upVideoPlayNotification()
+                }
+            }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -266,27 +278,34 @@ class VideoPlayService : BaseService() {
     private fun initMediaSession() {
         mediaSessionCompat.setFlags(
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         )
-        mediaSessionCompat.setCallback(object : MediaSessionCompat.Callback() {
-            override fun onSeekTo(pos: Long) = playerView.seekTo(pos)
-            override fun onPlay() = resume()
-            override fun onPause() = pause()
-            override fun onCustomAction(action: String?, extras: Bundle?) {
-                action ?: return
-                when (action) {
-                    APP_ACTION_STOP -> stop()
+        mediaSessionCompat.setCallback(
+            object : MediaSessionCompat.Callback() {
+                override fun onSeekTo(pos: Long) = playerView.seekTo(pos)
+
+                override fun onPlay() = resume()
+
+                override fun onPause() = pause()
+
+                override fun onCustomAction(action: String?, extras: Bundle?) {
+                    action ?: return
+                    when (action) {
+                        APP_ACTION_STOP -> stop()
+                    }
+                }
+
+                override fun onSkipToPrevious() {
+                    super.onSkipToPrevious()
+                    VideoPlay.upDurIndex(-1, playerView)
+                }
+
+                override fun onSkipToNext() {
+                    super.onSkipToNext()
+                    VideoPlay.upDurIndex(1, playerView)
                 }
             }
-            override fun onSkipToPrevious() {
-                super.onSkipToPrevious()
-                VideoPlay.upDurIndex(-1, playerView)
-            }
-            override fun onSkipToNext() {
-                super.onSkipToNext()
-                VideoPlay.upDurIndex(1, playerView)
-            }
-        })
+        )
         mediaSessionCompat.setMediaButtonReceiver(
             broadcastPendingIntent<MediaButtonReceiver>(Intent.ACTION_MEDIA_BUTTON)
         )
@@ -303,7 +322,7 @@ class VideoPlayService : BaseService() {
                     if (mediaNotificationReady) {
                         notificationManager.notify(
                             NotificationId.VideoPlayService,
-                            notification.build()
+                            notification.build(),
                         )
                     }
                 }
@@ -316,35 +335,33 @@ class VideoPlayService : BaseService() {
     }
 
     override fun startForegroundNotification() {
-        val notification = NotificationCompat.Builder(this, AppConst.channelIdReadAloud)
-            .setSmallIcon(R.drawable.ic_volume_up)
-            .setSubText(getString(R.string.video))
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentTitle(getString(R.string.video))
-            .setContentIntent(activityPendingIntent<VideoPlayerActivity>("activity"))
-            .build()
+        val notification =
+            NotificationCompat.Builder(this, AppConst.channelIdReadAloud)
+                .setSmallIcon(R.drawable.ic_volume_up)
+                .setSubText(getString(R.string.video))
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentTitle(getString(R.string.video))
+                .setContentIntent(activityPendingIntent<VideoPlayerActivity>("activity"))
+                .build()
         startForeground(NotificationId.VideoPlayService, notification)
     }
 
-    /**
-     * 断开耳机监听
-     */
+    /** 断开耳机监听 */
     private fun initBroadcastReceiver() {
-        broadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (AudioManager.ACTION_AUDIO_BECOMING_NOISY == intent.action) {
-                    pause()
+        broadcastReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (AudioManager.ACTION_AUDIO_BECOMING_NOISY == intent.action) {
+                        pause()
+                    }
                 }
             }
-        }
         val intentFilter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
         registerReceiver(broadcastReceiver, intentFilter)
     }
 
-    /**
-     * 暂停播放
-     */
+    /** 暂停播放 */
     private fun pause(fromCB: Boolean = false) {
         try {
             pause = true
@@ -359,9 +376,7 @@ class VideoPlayService : BaseService() {
         }
     }
 
-    /**
-     * 恢复播放
-     */
+    /** 恢复播放 */
     @SuppressLint("WakelockTimeout")
     private fun resume(fromCB: Boolean = false) {
         try {
@@ -377,9 +392,7 @@ class VideoPlayService : BaseService() {
         }
     }
 
-    /**
-     * 每隔0.5秒发送播放进度
-     */
+    /** 每隔0.5秒发送播放进度 */
     private fun upPlayProgress() {
         upPlayProgressJob?.cancel()
         upPlayProgressJob = lifecycleScope.launch {
@@ -399,7 +412,7 @@ class VideoPlayService : BaseService() {
                 .addCustomAction(
                     APP_ACTION_STOP,
                     getString(R.string.stop),
-                    R.drawable.ic_stop_black_24dp
+                    R.drawable.ic_stop_black_24dp,
                 )
                 .build()
         )
@@ -409,44 +422,43 @@ class VideoPlayService : BaseService() {
         val videoTitle = VideoPlay.videoTitle ?: getString(R.string.video)
         val nTitle = getString(R.string.audio_play_t) + ": $videoTitle"
         val nSubtitle = getString(R.string.audio_play_s)
-        val builder = NotificationCompat.Builder(this@VideoPlayService, AppConst.channelIdReadAloud)
-            .setSmallIcon(R.drawable.ic_volume_up)
-            .setSubText(getString(R.string.video))
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentTitle(nTitle)
-            .setContentText(nSubtitle)
-            .setContentIntent(
-                activityPendingIntent<VideoPlayerActivity>("activity")
-            )
+        val builder =
+            NotificationCompat.Builder(this@VideoPlayService, AppConst.channelIdReadAloud)
+                .setSmallIcon(R.drawable.ic_volume_up)
+                .setSubText(getString(R.string.video))
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentTitle(nTitle)
+                .setContentText(nSubtitle)
+                .setContentIntent(activityPendingIntent<VideoPlayerActivity>("activity"))
         builder.setLargeIcon(cover)
         builder.addAction(
             R.drawable.ic_skip_previous,
             getString(R.string.previous),
-            servicePendingIntent<VideoPlayService>(IntentAction.prev)
+            servicePendingIntent<VideoPlayService>(IntentAction.prev),
         )
         if (pause) {
             builder.addAction(
                 R.drawable.ic_play_24dp,
                 getString(R.string.resume),
-                servicePendingIntent<VideoPlayService>(IntentAction.resume)
+                servicePendingIntent<VideoPlayService>(IntentAction.resume),
             )
         } else {
             builder.addAction(
                 R.drawable.ic_pause_24dp,
                 getString(R.string.pause),
-                servicePendingIntent<VideoPlayService>(IntentAction.pause)
+                servicePendingIntent<VideoPlayService>(IntentAction.pause),
             )
         }
         builder.addAction(
             R.drawable.ic_skip_next,
             getString(R.string.next),
-            servicePendingIntent<VideoPlayService>(IntentAction.next)
+            servicePendingIntent<VideoPlayService>(IntentAction.next),
         )
         builder.addAction(
             R.drawable.ic_stop_black_24dp,
             getString(R.string.stop),
-            servicePendingIntent<VideoPlayService>(IntentAction.stop)
+            servicePendingIntent<VideoPlayService>(IntentAction.stop),
         )
         builder.setStyle(
             androidx.media.app.NotificationCompat.MediaStyle()
@@ -464,34 +476,37 @@ class VideoPlayService : BaseService() {
         val screenWidth = resources.displayMetrics.widthPixels
         val videoWidth = playerView.currentVideoWidth
         val videoHeight = playerView.currentVideoHeight
-        val windowWidth = if (videoHeight > videoWidth * 1.2) {
-            screenWidth / 2 //竖屏时为屏幕的1/2
-        } else {
-            screenWidth * 3 / 4 //默认为屏幕3/4宽
-        }
-        val windowHeight = if (videoWidth > 0 && videoHeight > 0) (windowWidth * videoHeight / videoWidth) else (windowWidth * 9 / 16) // 默认16:9比例
-        // 设置窗口参数
-        params = WindowManager.LayoutParams(
-            windowWidth,
-            windowHeight,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        val windowWidth =
+            if (videoHeight > videoWidth * 1.2) {
+                screenWidth / 2 // 竖屏时为屏幕的1/2
             } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.START or Gravity.TOP
-            x = 30
-            y = screenWidth / 10
-        }
+                screenWidth * 3 / 4 // 默认为屏幕3/4宽
+            }
+        val windowHeight =
+            if (videoWidth > 0 && videoHeight > 0) (windowWidth * videoHeight / videoWidth)
+            else (windowWidth * 9 / 16) // 默认16:9比例
+        // 设置窗口参数
+        params =
+            WindowManager.LayoutParams(
+                    windowWidth,
+                    windowHeight,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    } else {
+                        @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+                    },
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT,
+                )
+                .apply {
+                    gravity = Gravity.START or Gravity.TOP
+                    x = 30
+                    y = screenWidth / 10
+                }
         floatingView.setOnTouchListener(FloatingTouchListener())
         windowManager.addView(floatingView, params)
-
     }
 
     inner class FloatingTouchListener : OnTouchListener {
@@ -533,13 +548,11 @@ class VideoPlayService : BaseService() {
                     } else {
                         startEdgeAnimation()
                     }
-
                 }
             }
             return false
         }
     }
-
 
     private fun setupPlayerView() {
         playerView.fullscreenB.setOnClickListener {
@@ -550,45 +563,52 @@ class VideoPlayService : BaseService() {
             upMediaMetadata()
             upPlayProgress()
         }
-        playerView.setVideoAllCallBack(object : GSYSampleCallBack() {
-            override fun onPrepared(url: String?, vararg objects: Any?) {
-                mediaNotificationReady = true
-                upMediaMetadata()
-                upPlayProgress()
-                upVideoPlayNotification()
-                //根据实际视频比例再次调整悬浮窗高度,来适配竖屏视频。如果是全屏切换过来的时候不会触发
-                val videoWidth = playerView.currentVideoWidth
-                val videoHeight = playerView.currentVideoHeight
-                val screenWidth = resources.displayMetrics.widthPixels
-                if (videoWidth > 0 && videoHeight > 0) {
-                    val parentWidth = if (videoHeight > videoWidth * 1.2) {
-                        VideoPlay.isPortraitVideo = true
-                        screenWidth / 2 //竖屏时为屏幕的1/2
-                    } else {
-                        VideoPlay.isPortraitVideo = false
-                        params.width
+        playerView.setVideoAllCallBack(
+            object : GSYSampleCallBack() {
+                override fun onPrepared(url: String?, vararg objects: Any?) {
+                    mediaNotificationReady = true
+                    upMediaMetadata()
+                    upPlayProgress()
+                    upVideoPlayNotification()
+                    // 根据实际视频比例再次调整悬浮窗高度,来适配竖屏视频。如果是全屏切换过来的时候不会触发
+                    val videoWidth = playerView.currentVideoWidth
+                    val videoHeight = playerView.currentVideoHeight
+                    val screenWidth = resources.displayMetrics.widthPixels
+                    if (videoWidth > 0 && videoHeight > 0) {
+                        val parentWidth =
+                            if (videoHeight > videoWidth * 1.2) {
+                                VideoPlay.isPortraitVideo = true
+                                screenWidth / 2 // 竖屏时为屏幕的1/2
+                            } else {
+                                VideoPlay.isPortraitVideo = false
+                                params.width
+                            }
+                        val aspectRatio = videoHeight.toFloat() / videoWidth.toFloat()
+                        val height = (parentWidth * aspectRatio).toInt()
+                        params.height = height
+                        windowManager.updateViewLayout(floatingView, params)
                     }
-                    val aspectRatio = videoHeight.toFloat() / videoWidth.toFloat()
-                    val height = (parentWidth * aspectRatio).toInt()
-                    params.height = height
-                    windowManager.updateViewLayout(floatingView, params)
+                }
+
+                override fun onAutoComplete(url: String?, vararg objects: Any?) {
+                    if (!VideoPlay.upDurIndex(1, playerView)) {
+                        stop()
+                    }
+                }
+
+                override fun onClickStartIcon(url: String?, vararg objects: Any?) {
+                    resume(true)
+                }
+
+                override fun onClickResume(url: String?, vararg objects: Any?) {
+                    resume(true)
+                }
+
+                override fun onClickStop(url: String?, vararg objects: Any?) {
+                    pause(true)
                 }
             }
-            override fun onAutoComplete(url: String?, vararg objects: Any?) {
-                if (!VideoPlay.upDurIndex(1, playerView)) {
-                    stop()
-                }
-            }
-            override fun onClickStartIcon(url: String?, vararg objects: Any?) {
-                resume(true)
-            }
-            override fun onClickResume(url: String?, vararg objects: Any?) {
-                resume(true)
-            }
-            override fun onClickStop(url: String?, vararg objects: Any?) {
-                pause(true)
-            }
-        })
+        )
     }
 
     private fun stop() {
@@ -598,23 +618,24 @@ class VideoPlayService : BaseService() {
 
     private fun toggleFullScreen() {
         VideoPlay.savePlayState(playerView)
-        val fullscreenIntent = Intent(this, VideoPlayerActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra("isNew", false)
-        }
+        val fullscreenIntent =
+            Intent(this, VideoPlayerActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("isNew", false)
+            }
         startActivity(fullscreenIntent)
         playerView.needDestroy = false
     }
 
-
     private fun upMediaMetadata() {
-        val metadata = MediaMetadataCompat.Builder()
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, VideoPlay.videoTitle ?: "null")
-            .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, VideoPlay.book?.name ?: "视频播放")
-            .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, VideoPlay.book?.author ?: "null")
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, playerView.getDuration())
-            .build()
+        val metadata =
+            MediaMetadataCompat.Builder()
+                .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, VideoPlay.videoTitle ?: "null")
+                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, VideoPlay.book?.name ?: "视频播放")
+                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, VideoPlay.book?.author ?: "null")
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, playerView.getDuration())
+                .build()
         mediaSessionCompat.setMetadata(metadata)
     }
 
@@ -637,5 +658,4 @@ class VideoPlayService : BaseService() {
             e.printStackTrace()
         }
     }
-
 }

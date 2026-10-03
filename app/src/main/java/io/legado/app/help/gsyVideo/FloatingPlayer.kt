@@ -12,10 +12,11 @@ import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
 
-
 class FloatingPlayer : StandardGSYVideoPlayer {
     constructor(context: Context, fullFlag: Boolean) : super(context, fullFlag)
+
     constructor(context: Context) : super(context)
+
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
     lateinit var fullscreenB: ImageView
@@ -43,8 +44,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         return R.layout.video_layout_floating
     }
 
-
-    override fun onAutoCompletion() { //自动播放完成
+    override fun onAutoCompletion() { // 自动播放完成
         setStateAndUi(CURRENT_STATE_AUTO_COMPLETE)
         mSaveChangeViewTIme = 0
         if (mTextureViewContainer.isNotEmpty()) {
@@ -86,7 +86,11 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     }
 
     override fun setProgressAndTime(
-        progress: Long, secProgress: Long, currentTime: Long, totalTime: Long, forceChange: Boolean
+        progress: Long,
+        secProgress: Long,
+        currentTime: Long,
+        totalTime: Long,
+        forceChange: Boolean,
     ) {
         if (mHadSeekTouch) {
             return
@@ -105,6 +109,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     }
 
     override fun getFullWindowPlayer(): GSYVideoPlayer? = null
+
     override fun getSmallWindowPlayer(): GSYVideoPlayer? = null
 
     override fun onError(what: Int, extra: Int) {
@@ -112,17 +117,20 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
     }
+
     override fun getCurrentPlayer(): FloatingPlayer {
         return this
     }
 
-    /**********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现***********/
+    /** ********以下重载GSYVideoPlayer的GSYVideoViewBridge相关实现********** */
     override fun getGSYVideoManager(): ExoVideoManager {
         return VideoPlay.videoManager.apply { initContext(context.applicationContext) }
     }
+
     override fun releaseVideos() {
         VideoPlay.releaseAllVideos()
     }
+
     override fun getFullId(): Int {
         return ExoVideoManager.FULLSCREEN_ID
     }
@@ -130,6 +138,7 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     override fun getSmallId(): Int {
         return ExoVideoManager.SMALL_ID
     }
+
     override fun setDisplay(surface: Surface?) {
         if (surface != null && mTextureView.getShowView() is SurfaceView) {
             val surfaceView = (mTextureView.getShowView() as SurfaceView?)
@@ -140,9 +149,12 @@ class FloatingPlayer : StandardGSYVideoPlayer {
             gsyVideoManager.setDisplayNew(null)
         }
     }
-    fun nextUI() { resetProgressAndTime() }
 
-    //播放器转移
+    fun nextUI() {
+        resetProgressAndTime()
+    }
+
+    // 播放器转移
     fun setSurfaceToPlay() {
         addTextureView()
         gsyVideoManager.setListener(this)
