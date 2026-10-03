@@ -21,7 +21,6 @@ class SourcePopupActionMigrationTest {
             )
             assertContains(path, source, "popupActionMenu(context)")
         }
-        assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
 
         assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
         legacyMenuFiles.forEach { path ->
@@ -34,15 +33,6 @@ class SourcePopupActionMigrationTest {
 
     @Test
     fun `dynamic source menu entries keep their visibility and labels`() {
-        val bookSource = readProjectFile(BOOK_SOURCE)
-        listOf(
-                "val defaultOrder = callBack.sort == BookSourceSort.Default",
-                "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
-                "if (source.enabledExplore) R.string.disable_explore else R.string.enable_explore",
-                "source.hasExploreUrl",
-            )
-            .forEach { assertContains(BOOK_SOURCE, bookSource, it) }
-
         assertContains(
             EXPLORE,
             readProjectFile(EXPLORE),
@@ -52,16 +42,6 @@ class SourcePopupActionMigrationTest {
 
     @Test
     fun `source menu labels keep their previous order`() {
-        assertOrdered(
-            BOOK_SOURCE,
-            "R.string.to_top",
-            "R.string.to_bottom",
-            "R.string.login",
-            "R.string.search",
-            "R.string.debug",
-            "R.string.delete",
-            "R.string.disable_explore else R.string.enable_explore",
-        )
         org.junit.Assert.assertEquals(
             listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
             io.legado.app.ui.book.changesource.chapterSourceRowActions.map { it.name },
@@ -83,18 +63,7 @@ class SourcePopupActionMigrationTest {
 
     @Test
     fun `source menu callbacks and delete side effects are preserved`() {
-        assertActions(
-            BOOK_SOURCE,
-            "\"top\" -> callBack.toTop(source)",
-            "\"bottom\" -> callBack.toBottom(source)",
-            "\"login\" -> context.startActivity<SourceLoginActivity>",
-            "\"search\" -> callBack.searchBook(source)",
-            "\"debug\" -> callBack.debug(source)",
-            "\"delete\" -> {",
-            "callBack.del(source)",
-            "selected.remove(source)",
-            "\"toggleExplore\" -> callBack.enableExplore(!source.enabledExplore, source)",
-        )
+        // Compose manager row actions are covered by BookSourceManagerViewModelTest.
         // Book callbacks and delete confirmation: BookSourceViewModelTest/BookSourceComposeTest.
         // Chapter callback ordering is covered independently by
         // ChapterSourceViewModelTest/ChapterSourceComposeTest.
@@ -135,10 +104,8 @@ class SourcePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val BOOK_SOURCE =
-            "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, EXPLORE)
+        val sourceMenuFiles = listOf(EXPLORE)
         val legacyMenuFiles =
             listOf(
                 "src/main/res/menu/book_source_item.xml",

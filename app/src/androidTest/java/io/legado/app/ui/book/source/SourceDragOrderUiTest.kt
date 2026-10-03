@@ -24,7 +24,6 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.rssSourceManagementId
-import io.legado.app.databinding.ItemBookSourceBinding
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
@@ -52,9 +51,9 @@ class SourceDragOrderUiTest {
         REPLACE,
     }
 
-    @Test fun filteredBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK)
+    @Test fun filteredBookDragPreservesHiddenOrder() = verifyBookComposeDrag()
 
-    @Test fun descendingBookDragPreservesHiddenOrder() = verifyDrag(Kind.BOOK, true)
+    @Test fun descendingBookDragPreservesHiddenOrder() = verifyBookComposeDrag(descending = true)
 
     @Test fun filteredRssDragPreservesHiddenOrder() = verifyRssComposeDrag()
 
@@ -62,7 +61,148 @@ class SourceDragOrderUiTest {
 
     @Test
     fun heldBookDragWithDeletedTargetDoesNotMoveAnotherSource() =
-        verifyDrag(Kind.BOOK, removeTarget = true)
+        verifyBookComposeDrag(removeTarget = true)
+
+    private fun verifyBookComposeDrag(descending: Boolean = false, removeTarget: Boolean = false) {
+        val group = "Compose book drag ${UUID.randomUUID()}"
+        val oldRows = appDb.bookSourceDao.allPart
+        val help = LocalConfig.all["bookSourceHelpVersion"]
+        val fixtures =
+            listOf(100, 100, 400, 700, 900, 900).mapIndexed { index, order ->
+                BookSource(
+                    bookSourceUrl = "https://book-drag.invalid/$group/$index",
+                    bookSourceName = "Book source $index",
+                    bookSourceGroup = if (index % 2 == 0) group else "Hidden $group",
+                    customOrder = order,
+                    bookSourceComment = "Metadata $index",
+                )
+            }
+        val visible =
+            fixtures
+                .filterIndexed { index, _ -> index % 2 == 0 }
+                .let { if (descending) it.reversed() else it }
+        val keys = visible.map { it.bookSourceUrl }
+        val countBook =
+            Book(
+                bookUrl = "https://book-drag-count.invalid/$group",
+                name = group,
+                origin = keys.first(),
+            )
+        try {
+            LocalConfig.edit().putInt("bookSourceHelpVersion", 1).commit()
+            appDb.bookSourceDao.insert(*fixtures.toTypedArray())
+            val before = appDb.bookSourceDao.allPart.map { it.bookSourceUrl }
+            val rawOrders =
+                appDb.bookSourceDao.allPart.associate { it.bookSourceUrl to it.customOrder }
+            ActivityScenario.launch(BookSourceActivity::class.java).use { scenario ->
+                waitUntil("book Compose manager loaded") {
+                    var loaded = false
+                    scenario.onActivity { loaded = !it.managerModel.state.value.loading }
+                    loaded
+                }
+                scenario.onActivity {
+                    if (descending) it.managerModel.ascending()
+                    it.managerModel.query("group:$group")
+                }
+                fun waitRows(expected: List<String>) =
+                    waitUntil("book Compose rows $expected") {
+                        var matches = false
+                        scenario.onActivity {
+                            matches =
+                                it.managerModel.state.value.rows.map { row -> row.url } == expected
+                        }
+                        matches
+                    }
+                waitRows(keys)
+                fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
+                    val handle = compose.onNodeWithTag("source-manager-drag:${keys.first()}")
+                    val first = handle.fetchSemanticsNode().boundsInRoot
+                    val last =
+                        compose
+                            .onNodeWithTag("source-manager-drag:${keys.last()}")
+                            .fetchSemanticsNode()
+                            .boundsInRoot
+                    val destination = Offset(first.width / 2, last.center.y - first.top)
+                    handle.performTouchInput {
+                        down(center)
+                        advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
+                        moveTo(destination, 500)
+                    }
+                    waitRows(keys.drop(1) + keys.first())
+                    whileHeld()
+                    if (returnToStart) {
+                        handle.performTouchInput {
+                            moveTo(Offset(first.width / 2, first.height / 4), 500)
+                        }
+                        waitRows(keys)
+                    }
+                    handle.performTouchInput { up() }
+                }
+                drag(true) {
+                    appDb.bookDao.insert(countBook)
+                    waitUntil("bookshelf update during held book drag") {
+                        var updated = false
+                        scenario.onActivity {
+                            updated = it.managerModel.state.value.counts[keys.first()] == 1
+                        }
+                        updated
+                    }
+                }
+                assertEquals(before, appDb.bookSourceDao.allPart.map { it.bookSourceUrl })
+                assertEquals(
+                    rawOrders,
+                    appDb.bookSourceDao.allPart.associate { it.bookSourceUrl to it.customOrder },
+                )
+                drag(false) {
+                    val refreshed = appDb.bookSourceDao.getBookSource(keys[1])!!
+                    appDb.bookSourceDao.update(
+                        refreshed.copy(bookSourceComment = "Edited during held book drag")
+                    )
+                    if (removeTarget) appDb.bookSourceDao.delete(keys.last())
+                    assertEquals(
+                        if (removeTarget) before.filter { it != keys.last() } else before,
+                        appDb.bookSourceDao.allPart.map { it.bookSourceUrl },
+                    )
+                }
+                val expected =
+                    if (removeTarget) before.filter { it != keys.last() }
+                    else
+                        before.toMutableList().apply {
+                            remove(keys.first())
+                            add(indexOf(keys.last()) + if (descending) 0 else 1, keys.first())
+                        }
+                waitUntil("book Compose drag committed") {
+                    appDb.bookSourceDao.allPart.map { it.bookSourceUrl } == expected
+                }
+                assertEquals(
+                    "Edited during held book drag",
+                    appDb.bookSourceDao.getBookSource(keys[1])!!.bookSourceComment,
+                )
+                if (removeTarget)
+                    assertEquals(
+                        rawOrders.filterKeys { it != keys.last() },
+                        appDb.bookSourceDao.allPart.associate {
+                            it.bookSourceUrl to it.customOrder
+                        },
+                    )
+                val expectedVisible =
+                    expected.filter { it in keys }.let { if (descending) it.reversed() else it }
+                waitRows(expectedVisible)
+                scenario.recreate()
+                waitRows(expectedVisible)
+            }
+        } finally {
+            appDb.bookDao.delete(countBook)
+            appDb.bookSourceDao.delete(*fixtures.toTypedArray())
+            appDb.bookSourceDao.upOrder(oldRows)
+            LocalConfig.edit()
+                .apply {
+                    if (help is Int) putInt("bookSourceHelpVersion", help)
+                    else remove("bookSourceHelpVersion")
+                }
+                .commit()
+        }
+    }
 
     private fun verifyRssComposeDrag() {
         val group = "Compose drag ${UUID.randomUUID()}"
@@ -248,7 +388,7 @@ class SourceDragOrderUiTest {
                             .findViewById<TitleBar>(R.id.title_bar)
                             .menu
                             .findItem(R.id.menu_sort_desc)
-                    (activity as BookSourceActivity).onCompatOptionsItemSelected(item)
+                    (activity as BookSourceActivity).managerModel.ascending()
                 }
             filter(scenario, "group:$group")
             awaitItems(scenario, visible)
@@ -262,18 +402,10 @@ class SourceDragOrderUiTest {
                     waitUntil("live count follows the held source row") {
                         var updated = false
                         scenario!!.onActivity { activity ->
-                            val list = activity.findViewById<RecyclerView>(R.id.recycler_view)
-                            val adapter = list.adapter as RecyclerAdapter<*, *>
-                            val row = list.findViewHolderForAdapterPosition(2)?.itemView
+                            val state = (activity as BookSourceActivity).managerModel.state.value
                             updated =
-                                (adapter.getItem(2) as? BookSourcePart)?.bookSourceUrl ==
-                                    countBook.origin &&
-                                    row != null &&
-                                    ItemBookSourceBinding.bind(row)
-                                        .tvBookshelfCount
-                                        .text
-                                        .toString() ==
-                                        context.getString(R.string.source_bookshelf_count, 1)
+                                state.rows.getOrNull(2)?.url == countBook.origin &&
+                                    state.counts[countBook.origin] == 1
                         }
                         updated
                     }

@@ -1,14 +1,14 @@
 package io.legado.app.ui.book.source.manage
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BookSourceViewModelGroupContractTest {
 
     private val source by lazy {
-        projectFile("src/main/java/io/legado/app/ui/book/source/manage/BookSourceViewModel.kt")
+        projectFile("src/main/java/io/legado/app/data/repository/BookSourceGroupRepository.kt")
             .readText()
             .replace("\r\n", "\n")
             .replace(Regex("\\s+"), " ")
@@ -16,13 +16,12 @@ class BookSourceViewModelGroupContractTest {
 
     @Test
     fun `group deletion delegates to exact group update`() {
-        assertTrue(source.contains("fun delGroup(group: String) = upGroup(group, null)"))
+        assertTrue(source.contains("renameGroupExact"))
         assertFalse(source.contains("source.removeGroup(group)"))
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }

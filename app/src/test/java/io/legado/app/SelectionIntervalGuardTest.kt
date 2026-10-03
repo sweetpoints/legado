@@ -7,20 +7,11 @@ import org.junit.Test
 class SelectionIntervalGuardTest {
 
     @Test
-    fun `selection interval returns before reading empty bounds`() {
-        sources.forEach { relativePath ->
-            val source = File(sourceRoot, relativePath).readText()
-            val methodStart = source.indexOf("fun checkSelectedInterval()")
-            val guard = source.indexOf("if (selectedPosition.isEmpty()) return", methodStart)
-            val min = source.indexOf("Collections.min(selectedPosition)", methodStart)
-
-            assertTrue("missing checkSelectedInterval in $relativePath", methodStart >= 0)
-            assertTrue("missing empty selection guard in $relativePath", guard > methodStart)
-            assertTrue(
-                "empty selection guard must precede Collections.min in $relativePath",
-                guard < min,
-            )
-        }
+    fun `empty source manager selection interval preserves its state`() {
+        val source =
+            File(sourceRoot, "io/legado/app/ui/book/source/manage/BookSourceManagerViewModel.kt")
+                .readText()
+        assertTrue(source.contains("if (positions.isEmpty()) current"))
     }
 
     // Compose shelf interval and stable-ID behavior: BookshelfManagementViewModelTest.
@@ -30,6 +21,6 @@ class SelectionIntervalGuardTest {
     }
 
     private companion object {
-        val sources = listOf("io/legado/app/ui/book/source/manage/BookSourceAdapter.kt")
+        val sources = listOf()
     }
 }
