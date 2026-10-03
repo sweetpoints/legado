@@ -1296,11 +1296,13 @@ class ReadBookActivity :
         x: Float,
         y: Float,
         actions: List<ReaderContextAction>,
+        preferAbove: Boolean = false,
+        alignToStart: Boolean = true,
         action: (String) -> Unit,
     ) {
         val owner = ReadBook.book?.bookUrl ?: return
         dismissContextMenu()
-        contextMenuState = ReaderContextMenuState(x, y, actions.toList())
+        contextMenuState = ReaderContextMenuState(x, y, actions.toList(), preferAbove, alignToStart)
         contextMenuAction = { key ->
             if (
                 lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
@@ -2668,6 +2670,8 @@ class ReadBookActivity :
         showContextMenu(
             x = x,
             y = y,
+            preferAbove = true,
+            alignToStart = false,
             actions =
                 listOf(
                     ReaderContextAction(getString(R.string.show), "show"),

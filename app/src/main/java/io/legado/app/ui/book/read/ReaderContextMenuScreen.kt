@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -33,6 +34,8 @@ internal data class ReaderContextMenuState(
     val x: Float,
     val y: Float,
     val actions: List<ReaderContextAction>,
+    val preferAbove: Boolean = false,
+    val alignToStart: Boolean = true,
 )
 
 /** Context actions are Compose; only their anchor coordinates originate from the native canvas. */
@@ -43,8 +46,9 @@ internal fun ReaderContextMenuScreen(
     action: (String) -> Unit,
 ) {
     if (state == null) return
+    val gap = with(LocalDensity.current) { 4.dp.roundToPx() }
     val position =
-        remember(state.x, state.y) {
+        remember(state.x, state.y, state.preferAbove, state.alignToStart, gap) {
             object : PopupPositionProvider {
                 override fun calculatePosition(
                     anchorBounds: IntRect,
@@ -52,19 +56,13 @@ internal fun ReaderContextMenuScreen(
                     layoutDirection: LayoutDirection,
                     popupContentSize: IntSize,
                 ): IntOffset =
-                    IntOffset(
-                        state.x
-                            .roundToInt()
-                            .coerceIn(
-                                0,
-                                (windowSize.width - popupContentSize.width).coerceAtLeast(0),
-                            ),
-                        state.y
-                            .roundToInt()
-                            .coerceIn(
-                                0,
-                                (windowSize.height - popupContentSize.height).coerceAtLeast(0),
-                            ),
+                    readerContextPopupOffset(
+                        state,
+                        anchorBounds,
+                        windowSize,
+                        popupContentSize,
+                        layoutDirection,
+                        gap,
                     )
             }
         }
@@ -94,4 +92,34 @@ internal fun ReaderContextMenuScreen(
             }
         }
     }
+}
+
+/** Preserve above-image placement and keep actions inside the window when the page edge is near. */
+internal fun readerContextPopupOffset(
+    state: ReaderContextMenuState,
+    anchorBounds: IntRect,
+    windowSize: IntSize,
+    contentSize: IntSize,
+    layoutDirection: LayoutDirection,
+    gap: Int,
+): IntOffset {
+    val anchorX = anchorBounds.left + state.x.roundToInt()
+    val anchorY = anchorBounds.top + state.y.roundToInt()
+    val x =
+        if (state.alignToStart && layoutDirection == LayoutDirection.Rtl)
+            anchorX - contentSize.width
+        else anchorX
+    val below = anchorY + gap
+    val above = anchorY - contentSize.height - if (state.preferAbove) 0 else gap
+    val y =
+        when {
+            state.preferAbove -> above
+            below + contentSize.height <= windowSize.height -> below
+            above >= 0 -> above
+            else -> below
+        }
+    return IntOffset(
+        x.coerceIn(0, (windowSize.width - contentSize.width).coerceAtLeast(0)),
+        y.coerceIn(0, (windowSize.height - contentSize.height).coerceAtLeast(0)),
+    )
 }
