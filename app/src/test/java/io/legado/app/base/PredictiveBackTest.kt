@@ -49,7 +49,16 @@ class PredictiveBackTest {
             )
             .forEach { path ->
                 val source = File(path).readText()
-                assertTrue(guardedFinishCallback.containsMatchIn(source))
+                if (path.endsWith("ReadMangaActivity.kt")) {
+                    val guardedMangaCallback =
+                        Regex(
+                            """onBackPressedDispatcher\.addCallback\(this\)\s*\{\s*viewModel\.requestExit\(\)"""
+                        )
+                    assertTrue(guardedMangaCallback.containsMatchIn(source))
+                    assertTrue(source.contains("override fun finish() = viewModel.requestExit()"))
+                    assertTrue(source.contains("private fun finishPlatform("))
+                    assertTrue(source.contains("super.finish()"))
+                } else assertTrue(guardedFinishCallback.containsMatchIn(source))
                 assertTrue(source.contains("override fun finish()"))
             }
     }

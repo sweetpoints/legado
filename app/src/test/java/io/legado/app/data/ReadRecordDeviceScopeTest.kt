@@ -51,9 +51,13 @@ class ReadRecordDeviceScopeTest {
     @Test
     fun `manga resume excludes time spent in background`() {
         val activity = projectFile("src/main/java/io/legado/app/ui/book/manga/ReadMangaActivity.kt")
-        assertTrue(methodBody(activity, "onPause").contains("ReadManga.upReadTime()"))
+        assertTrue(methodBody(activity, "onPause").contains("viewModel.paused()"))
+        assertTrue(methodBody(activity, "onResume").contains("viewModel.resumed()"))
+        val model =
+            projectFile("src/main/java/io/legado/app/ui/book/manga/MangaReaderComposeViewModel.kt")
+        assertTrue(methodBody(model, "paused").contains("ReadManga.upReadTime()"))
         assertTrue(
-            methodBody(activity, "onResume")
+            methodBody(model, "resumed")
                 .contains("ReadManga.readStartTime = System.currentTimeMillis()")
         )
 
