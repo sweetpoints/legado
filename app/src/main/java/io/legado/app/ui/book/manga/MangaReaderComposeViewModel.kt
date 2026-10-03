@@ -38,6 +38,7 @@ import io.legado.app.model.localBook.PdfFile
 import io.legado.app.ui.book.info.BookInfoNavigation
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart

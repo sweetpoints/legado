@@ -1525,3 +1525,5 @@ Source consumer audit and git diff check passed; final compile/JVM/device eviden
 ### Manga accepted export and refresh completion
 
 Accepted full image requests now enter their IO operation before caller disposal and complete the destination file without cancellation leaving a partial export. A real cached PNG/FileDoc regression gates the repository IO dispatcher, cancels the actual caller, then verifies the destination bytes after release. Chapter refresh now handles a missing fresh row or IO failure without stranding the loading overlay. Unified formatter/check passed; the new Android regression is awaiting compilation and device execution.
+
+Manga final Host candidate fcc8723bb reached app Kotlin compilation and exposed one missing Gson extension import in captured PDF result decoding. Added the explicit import; full standard verification is rerun on the new precise commit. Initial log: /private/tmp/compose-manga-host-final-01.log.
