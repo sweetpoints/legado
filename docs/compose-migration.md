@@ -1211,3 +1211,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 搜索结果新增完整不可变投影，保留所有 SearchBook 字段、合并书源及临时 HTML，公开实体转换每次返回独立副本；UI identity 沿用书名/作者身份并避免拼接碰撞。不可变过滤保持旧纯文本与字段规则，完整载荷后续进入私有草稿而非 Bundle；新增 3 个 JVM 回归，完整 JVM 与 Android 测试编译通过。
 
 搜索引擎新增 IO adapter 与不可变运行状态，每次查询独立拥有旧 SearchModel 和回调，generation 拒绝替换/停止/关闭后的迟到结果；正常分页保留同一引擎身份，手动停止继续时保留已有 UI 结果并重新创建原查询。pause/resume 沿用原引擎门控，已接受 stop/close 即使调用者取消也释放资源。新增 5 个真实 fake-engine/IO JVM 回归，完整 JVM 与 Android 测试编译通过；旧宿主尚未接入。
+
+书籍详情在线文件下载恢复原目录选择行为：未接受下载时的 NoBooksDirException 持久清理阻塞请求并交付 ChooseFolder；同一失败 token 恢复不重复下载，选择目录后仍由用户重试。新增真实 Room/Atomic 用例覆盖待请求解除、目录请求恢复和不误改书籍。专属批次完整 JVM 回归与 Android 测试 Kotlin 编译通过，设备端未执行。

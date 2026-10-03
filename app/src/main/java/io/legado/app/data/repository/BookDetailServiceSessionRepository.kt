@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import kotlinx.coroutines.*
+import io.legado.app.exception.NoBooksDirException
 
 enum class BookDetailServiceKind { Refresh,ClearCache,Delete,UploadCheck,Upload,Download,ArchiveList,ArchiveImport }
 data class BookDetailServiceRequest(val token:String,val kind:BookDetailServiceKind,val book:BookDetailBook,
@@ -50,6 +51,15 @@ class DefaultBookDetailServiceSessionRepository(private val services:BookDetailA
         }catch(error:Throwable) {
             currentCoroutineContext().ensureActive()
             if(error is BookDetailServiceReceiptFailure)throw error.cause ?: error
+            if(error is NoBooksDirException && active.kind==BookDetailServiceKind.Download) {
+                // No download was accepted. Release its blocking intent and durably open the directory picker.
+                // Choosing a folder keeps the original user-controlled retry rather than repeating a transfer.
+                val next=current.copy(pendingService=null,effects=current.effects+
+                    BookDetailNativeEffect(active.token+":folder",BookDetailNativeKind.ChooseFolder,active.book,active.source),
+                    completedOperations=(current.completedOperations+active.token).takeLast(64),revision=current.revision+1)
+                withContext(NonCancellable){sessions.write(ticket,next)}
+                currentCoroutineContext().ensureActive();return@withContext next
+            }
             if(error is BookDetailUploadConflict) {
                 val next=current.copy(pendingService=null,prompt=BookDetailPrompt(BookDetailPromptKind.OverwriteUpload,
                     readAfter=active.readAfter),revision=current.revision+1)

@@ -71,15 +71,32 @@ class BookDetailServiceSessionRoomTest {
             assertEquals(1,engine.deletes);assertEquals(1,engine.snapshots);assertEquals(BookDetailNativeKind.Deleted,restored.effects.single().kind)
         }finally{continueWrite.countDown();job.cancelAndJoin();ownedDispatcher.close()}
     }
+    @Test fun missingDirectoryDurablyUnblocksFolderPickerAndDoesNotRepeatDownloadOnRestore()=runBlocking {
+        val ticket=UUID.randomUUID().toString();val initial=initial(ticket);val engine=Engine().apply{missingDirectory=true}
+        val source=BookDetailSource.from(BookSource(bookSourceUrl="source",bookSourceName="Source"))
+        val request=BookDetailServiceRequest("download",BookDetailServiceKind.Download,initial.data!!.book,source,
+            file=BookDetailWebFile("https://example.invalid/book.txt","book.txt"),readAfter=true)
+        val restored=runner(sessions(),engine).execute(ticket,initial,request)
+        assertNull(restored.pendingService);assertEquals(1,engine.downloads)
+        assertEquals(BookDetailNativeKind.ChooseFolder,restored.effects.single().kind)
+        assertEquals("download:folder",restored.effects.single().token)
+        val disk=sessions().read(ticket)!!
+        assertEquals(restored,disk)
+        assertEquals(disk,runner(sessions(),engine).execute(ticket,disk,request))
+        assertEquals(1,engine.downloads)
+        assertNotNull(withContext(Dispatchers.IO){database.bookDao.getBook("remote")})
+    }
     private class Engine:BookDetailServiceEngine {
-        var deletes=0;var snapshots=0
+        var deletes=0;var snapshots=0;var downloads=0;var missingDirectory=false
         override suspend fun refresh(book:Book,source:BookSource?)=Unit
         override suspend fun remoteExists(book:Book)=false
         override suspend fun upload(book:Book,overwrite:Boolean)=Unit
         override suspend fun deleteRemote(book:Book):Boolean{deletes++;return true}
         override suspend fun deleteLocal(book:Book,deleteOriginal:Boolean)=Unit
         override suspend fun clearCache(book:Book)=Unit
-        override suspend fun download(book:Book,source:BookSource,file:BookDetailWebFile)=error("unexpected download")
+        override suspend fun download(book:Book,source:BookSource,file:BookDetailWebFile):BookDetailDownload {
+            downloads++;if(missingDirectory)throw io.legado.app.exception.NoBooksDirException();error("unexpected download")
+        }
         override suspend fun archiveEntries(uri:String)=emptyList<String>()
         override suspend fun importArchive(book:Book,uri:String,entry:String)=error("unexpected archive")
     }
