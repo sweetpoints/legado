@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
@@ -94,9 +95,11 @@ abstract class BaseReadBookActivity : BaseComposeActivity(imageBg = false) {
             _,
             result ->
             if (ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) == result.getString("owner"))
-                viewModel.initData(intent)
+                initializeReaderData(intent)
         }
     }
+
+    protected abstract fun initializeReaderData(requestIntent: Intent)
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         viewModel.permissionDenialLiveData.observe(this) {

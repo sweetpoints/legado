@@ -17,13 +17,24 @@ class ScrollReadPositionContractTest {
             activity
                 .substringAfter("override fun onPostCreate")
                 .substringBefore("override fun onNewIntent")
-        val layout = onPostCreate.indexOf("readView.doOnLayout")
-        val idle = onPostCreate.indexOf("Looper.myQueue().addIdleHandler")
-        val init = onPostCreate.indexOf("viewModel.initData(intent)")
+        assertTrue(onPostCreate.contains("initializeReaderData(intent)"))
+        val initialization =
+            activity
+                .substringAfter("override fun initializeReaderData")
+                .substringBefore("override fun onNewIntent")
+        val layout = initialization.indexOf("readView.doOnLayout")
+        val canvas = initialization.indexOf("page.doOnCanvasReady")
+        val idle = initialization.indexOf("Looper.myQueue().addIdleHandler")
+        val init = initialization.indexOf("viewModel.initData(requestIntent)")
 
         assertTrue(layout >= 0)
-        assertTrue(layout < idle)
+        assertTrue(layout < canvas)
+        assertTrue(canvas < idle)
         assertTrue(idle < init)
+        assertTrue(initialization.contains("requestEpoch == readerInitializationEpoch"))
+        assertTrue(initialization.contains("readView.curPage === page"))
+        assertTrue(initialization.contains("page.isCanvasReady"))
+        assertTrue(initialization.indexOf("started = true") < init)
     }
 
     @Test

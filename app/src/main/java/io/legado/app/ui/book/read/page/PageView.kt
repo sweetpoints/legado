@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
 import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.BookHighlight
@@ -85,6 +86,10 @@ class PageView(context: Context) : FrameLayout(context) {
     private var bookmarkVisible by mutableStateOf(false)
     private var bookmarkInHeader by mutableStateOf(false)
     private var bookmarkOffset by mutableStateOf(IntOffset.Zero)
+
+    private data class CanvasReadyCallback(val isCurrent: () -> Boolean, val action: () -> Unit)
+
+    private val canvasReadyCallbacks = mutableListOf<CanvasReadyCallback>()
     private var isMainView = false
     var isScroll = false
 
@@ -233,11 +238,47 @@ class PageView(context: Context) : FrameLayout(context) {
         updateBookmarkOffset()
     }
 
+    internal val isCanvasReady: Boolean
+        get() =
+            isAttachedToWindow &&
+                contentView.isAttachedToWindow &&
+                contentBounds.width > 0 &&
+                contentBounds.height > 0 &&
+                !contentView.isLayoutRequested &&
+                contentView.isLaidOut &&
+                contentView.width == contentBounds.width &&
+                contentView.height == contentBounds.height &&
+                contentView.top == pageRoot.paddingTop + contentBounds.top
+
+    /** Register once against actual canvas layout, after Compose has measured the page chrome. */
+    internal fun doOnCanvasReady(isCurrent: () -> Boolean, action: () -> Unit) {
+        canvasReadyCallbacks += CanvasReadyCallback(isCurrent, action)
+        awaitCanvasLayout()
+    }
+
+    private fun awaitCanvasLayout() {
+        if (canvasReadyCallbacks.isEmpty() || contentBounds.width <= 0 || contentBounds.height <= 0)
+            return
+        contentView.doOnLayout {
+            if (isCanvasReady) {
+                val callbacks = canvasReadyCallbacks.toList()
+                canvasReadyCallbacks.clear()
+                callbacks.forEach { if (it.isCurrent()) it.action() }
+            }
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        canvasReadyCallbacks.clear()
+        super.onDetachedFromWindow()
+    }
+
     private fun updateContentBounds(bounds: IntRect) {
         if (contentBounds != bounds) {
             contentBounds = bounds
             updateContentLayout()
         }
+        awaitCanvasLayout()
     }
 
     private fun updateContentLayout() {

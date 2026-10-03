@@ -293,6 +293,7 @@ class ReadBookActivity :
     }
     private var bookInfoNavigationJob: Job? = null
     private var bookInfoNavigationEpoch = 0L
+    private var readerInitializationEpoch = 0L
     private var backupJob: Job? = null
     private var bookmarkJob: Job? = null
     private var replacePreviewJob: Job? = null
@@ -465,13 +466,42 @@ class ReadBookActivity :
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
         ChapterProvider.clearReviewProviders()
-        readView.doOnLayout {
-            Looper.myQueue().addIdleHandler {
-                viewModel.initData(intent)
-                false
+        initializeReaderData(intent)
+        justInitData = true
+    }
+
+    override fun initializeReaderData(requestIntent: Intent) {
+        val requestEpoch = ++readerInitializationEpoch
+        val page = readView.curPage
+        var started = false
+        fun isCurrent(): Boolean =
+            !started &&
+                requestEpoch == readerInitializationEpoch &&
+                intent === requestIntent &&
+                readView.curPage === page &&
+                !isFinishing &&
+                !isDestroyed &&
+                readView.isAttachedToWindow &&
+                page.isAttachedToWindow
+        fun waitForCanvas() {
+            readView.doOnLayout {
+                if (!isCurrent()) return@doOnLayout
+                page.doOnCanvasReady(::isCurrent) {
+                    Looper.myQueue().addIdleHandler {
+                        if (isCurrent()) {
+                            if (page.isCanvasReady) {
+                                started = true
+                                viewModel.initData(requestIntent)
+                            } else {
+                                waitForCanvas()
+                            }
+                        }
+                        false
+                    }
+                }
             }
         }
-        justInitData = true
+        waitForCanvas()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -483,7 +513,7 @@ class ReadBookActivity :
         editingHighlight = null
         resetBookmarkObserver()
         resetReviewSummaryState()
-        viewModel.initData(intent)
+        initializeReaderData(intent)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -516,7 +546,7 @@ class ReadBookActivity :
         if (bookChanged) {
             bookChanged = false
             ReadBook.callBack = this
-            viewModel.initData(intent)
+            initializeReaderData(intent)
             justInitData = true
         } else {
             // web端阅读时，app处于阅读界面，本地记录会覆盖web保存的进度，在此处恢复
@@ -3134,6 +3164,7 @@ class ReadBookActivity :
     }
 
     override fun onDestroy() {
+        readerInitializationEpoch++
         bookInfoNavigationEpoch++
         bookInfoNavigationJob?.cancel()
         super.onDestroy()
