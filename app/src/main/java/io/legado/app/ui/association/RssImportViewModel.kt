@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import androidx.annotation.Keep
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@Keep
 internal enum class RssImportAction {
     Code,
     ReplaceRules,
@@ -24,6 +26,7 @@ internal enum class RssImportAction {
     Toast,
 }
 
+@Keep
 internal data class RssImportEffect(
     val id: Long,
     val action: RssImportAction,

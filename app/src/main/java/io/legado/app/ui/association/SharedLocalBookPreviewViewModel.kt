@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import androidx.annotation.Keep
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+@Keep
 enum class SharedLocalBookPreviewAction {
     Import,
     Directory,
