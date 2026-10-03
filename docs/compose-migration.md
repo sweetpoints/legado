@@ -1399,3 +1399,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 书源宿主审查修复：原生 Registry 以私有 request UUID 注册并捕获固定 owner，重建沿用同 key；扫码结果独立核对 owner/action/delivered，paste 保持独立导入，旧扫码/同类型旧编辑/文件结果不能消费新请求。真实 launch 接受后持久 handedOff 回执，活会话回执失败仅重写回执；进程恢复无法证明交付时保留明确手动重试入口，不自动重开子页，迟到无效结果不隐藏恢复错误。原生返回私有 IO 失败保留 immutable 结果，不能复活旧交付；新增5项VM回归及2项真实 ActivityResultRegistry + Room/Atomic 恢复设备用例，设备测试只待编译并未运行。统一actualformat/check与diff check通过，完整AndroidTest编译/JVM双task等待协调slot，先前不完整rebase时的失败构建不计验证。
 
 书源完整候选首次冻结验证：生产Kotlin通过，AndroidTest编译暴露 Screen 用例旧extension import与DpRect高度API兼容问题；独立修为成员assert及bottom-top实际触摸边界，断言含义保留，同slot标准双task复验待完成，未宣称通过。
+
+书源完整页面最终验证：clean候选f0565f312在e77a03e73基线上执行标准AndroidTest Kotlin编译及全量JVM双task（offline/max-workers2），29秒EXIT0，625 suites/3814 JVM/零failure/error/skipped；BookVM15、Document3、Form8真实运行。7Room/Atomic、7Screen、1Route、2Registry设备用例完成Kotlin编译，未设备执行。全部触达Kotlin统一actualformat/check及diff check通过，本候选新增书源页面尚未实际release/R8打包，整合旧release证据不覆盖此页面。日志/private/tmp/legado-compose-source-editor-book-full-06.log。
