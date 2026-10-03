@@ -1,12 +1,12 @@
 package io.legado.app.ui.main
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Document
 import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class HomeFastScrollerContractTest {
 
@@ -18,9 +18,8 @@ class HomeFastScrollerContractTest {
             constraintTarget = "rv_find",
         )
 
-        val explore = projectFile(
-            "src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt",
-        ).readText()
+        val explore =
+            projectFile("src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt").readText()
         assertInOrder(
             explore.sourceSection(
                 "private fun initRecyclerView() {",
@@ -46,22 +45,24 @@ class HomeFastScrollerContractTest {
             explore.sourceSection(
                 "override fun onDestroyView() {",
                 "private fun upGroupsMenu(",
-            ),
+            )
         )
 
-        val config = projectFile(
-            "src/main/java/io/legado/app/help/config/AppConfig.kt",
-        ).readText()
+        val config = projectFile("src/main/java/io/legado/app/help/config/AppConfig.kt").readText()
         assertTrue(
             config.contains(
-                "get() = appCtx.getPrefBoolean(PreferKey.showDiscoveryFastScroller, false)",
-            ),
+                "get() = appCtx.getPrefBoolean(PreferKey.showDiscoveryFastScroller, false)"
+            )
         )
 
         val setting = io.legado.app.model.settings.OtherSwitch.DiscoveryScroller
         assertEquals("showDiscoveryFastScroller", setting.key)
-        assertEquals(false, io.legado.app.model.settings.OtherSettingsSnapshot().switches.getValue(setting))
-        // OtherSettingsComposeTest verifies the actual row title, default toggle and search visibility.
+        assertEquals(
+            false,
+            io.legado.app.model.settings.OtherSettingsSnapshot().switches.getValue(setting),
+        )
+        // OtherSettingsComposeTest verifies the actual row title, default toggle and search
+        // visibility.
 
     }
 
@@ -92,23 +93,26 @@ class HomeFastScrollerContractTest {
             fastScroller.androidAttribute("layout_marginBottom"),
         )
         listOf(
-            "layout_constraintTop_toTopOf",
-            "layout_constraintBottom_toBottomOf",
-            "layout_constraintEnd_toEndOf",
-        ).forEach { attribute ->
-            assertEquals("@id/$constraintTarget", fastScroller.appAttribute(attribute))
-        }
+                "layout_constraintTop_toTopOf",
+                "layout_constraintBottom_toBottomOf",
+                "layout_constraintEnd_toEndOf",
+            )
+            .forEach { attribute ->
+                assertEquals("@id/$constraintTarget", fastScroller.appAttribute(attribute))
+            }
     }
 
     private fun parseProjectXml(pathInApp: String): Document {
-        return DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }.newDocumentBuilder().parse(projectFile(pathInApp))
+        return DocumentBuilderFactory.newInstance()
+            .apply {
+                isNamespaceAware = true
+            }
+            .newDocumentBuilder()
+            .parse(projectFile(pathInApp))
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 
@@ -171,8 +175,7 @@ class HomeFastScrollerContractTest {
     private fun Element.androidAttribute(name: String): String =
         getAttributeNS(ANDROID_NAMESPACE, name)
 
-    private fun Element.appAttribute(name: String): String =
-        getAttributeNS(APP_NAMESPACE, name)
+    private fun Element.appAttribute(name: String): String = getAttributeNS(APP_NAMESPACE, name)
 
     private companion object {
         const val ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
