@@ -126,11 +126,29 @@ class WebViewActivity : BaseComposeActivity() {
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         navigationTicket = intent.getStringExtra(BrowserNavigation.PREPARED_TICKET)
         if (navigationTicket == null) {
-            navigationRequest = readLegacyRequest()
-            eraseLegacyRequestExtras()
-            requestReady()
+            prepareLegacyNavigation()
         } else {
             loadPreparedNavigation()
+        }
+    }
+
+    private fun prepareLegacyNavigation() {
+        val request = readLegacyRequest()
+        startupLoading = true
+        startupError = null
+        lifecycleScope.launch {
+            try {
+                val ticket = BrowserNavigation.prepare(applicationContext, request)
+                navigationTicket = ticket
+                intent.putExtra(BrowserNavigation.PREPARED_TICKET, ticket)
+                eraseLegacyRequestExtras()
+                loadPreparedNavigation()
+            } catch (canceled: kotlinx.coroutines.CancellationException) {
+                throw canceled
+            } catch (error: Exception) {
+                startupLoading = false
+                startupError = error.localizedMessage.orEmpty()
+            }
         }
     }
 
@@ -207,7 +225,12 @@ class WebViewActivity : BaseComposeActivity() {
             Column(Modifier.fillMaxSize().padding(16.dp)) {
                 Text(startupError ?: getString(R.string.loading))
                 if (startupError != null) {
-                    TextButton(onClick = ::loadPreparedNavigation) {
+                    TextButton(
+                        onClick = {
+                            if (navigationTicket == null) prepareLegacyNavigation()
+                            else loadPreparedNavigation()
+                        }
+                    ) {
                         Text(getString(R.string.retry))
                     }
                 }

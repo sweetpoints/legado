@@ -15,6 +15,8 @@ import kotlinx.coroutines.sync.withLock
 internal interface BrowserNavigationStore {
     suspend fun prepare(request: BrowserRequest): String
 
+    suspend fun prepare(ticket: String, request: BrowserRequest)
+
     suspend fun read(ticket: String): BrowserRequest
 
     suspend fun abandon(ticket: String)
@@ -26,11 +28,15 @@ internal class AppBrowserNavigationStore(context: Context) : BrowserNavigationSt
 
     override suspend fun prepare(request: BrowserRequest): String {
         val ticket = UUID.randomUUID().toString()
+        prepare(ticket, request)
+        return ticket
+    }
+
+    override suspend fun prepare(ticket: String, request: BrowserRequest) {
         locked(ticket) {
             check(directory.isDirectory || directory.mkdirs()) { "无法创建网页导航目录" }
             writeFile(file(ticket), GSON.toJson(PreparedBrowserNavigation(request)))
         }
-        return ticket
     }
 
     override suspend fun read(ticket: String): BrowserRequest =

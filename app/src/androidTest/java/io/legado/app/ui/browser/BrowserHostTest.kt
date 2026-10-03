@@ -11,6 +11,7 @@ import io.legado.app.model.browser.BrowserBackAction
 import io.legado.app.model.browser.BrowserHistoryItem
 import io.legado.app.model.browser.browserBackAction
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
 import org.junit.*
 import org.junit.Assert.*
 
@@ -68,6 +69,84 @@ class BrowserHostTest {
             compose.onNodeWithTag("browser-menu").assertDoesNotExist()
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.onNodeWithTag("browser-menu").assertExists()
+        }
+    }
+
+    @Test
+    fun legacyLargeRequestMovesToPrivateTicketBeforeVerificationAttachesAndSurvivesRecreation() {
+        val verificationKey =
+            io.legado.app.help.source.SourceVerificationHelp.registerVerificationAttempt(
+                Thread.currentThread()
+            )
+        val largeHtml =
+            "<html><head><title>Legacy private title</title></head><body>" +
+                "legacy-private-body-".repeat(20_000) +
+                "</body></html>"
+        val legacyIntent =
+            intent()
+                .putExtra("title", "Legacy request title")
+                .putExtra("sourceName", "Legacy source")
+                .putExtra("sourceOrigin", "https://source.invalid")
+                .putExtra("sourceType", 3)
+                .putExtra("html", largeHtml)
+                .putExtra("sourceVerificationEnable", true)
+                .putExtra("verificationResultKey", verificationKey)
+
+        try {
+            ActivityScenario.launch<WebViewActivity>(legacyIntent).use { scenario ->
+                compose.waitUntil(15000) {
+                    compose.onAllNodesWithTag("browser-title").fetchSemanticsNodes().any { node ->
+                        node.config
+                            .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Text) {
+                                emptyList()
+                            }
+                            .any { it.text == "Legacy private title" }
+                    }
+                }
+                scenario.onActivity { activity ->
+                    val ticket =
+                        requireNotNull(
+                            activity.intent.getStringExtra(BrowserNavigation.PREPARED_TICKET)
+                        )
+                    val request = requireNotNull(activity.model.state.value.page).request
+                    assertEquals(verificationKey, request.verificationKey)
+                    assertTrue(request.verificationEnabled)
+                    assertEquals("https://example.com/local-browser-test", request.url)
+                    assertEquals("Legacy source", request.sourceName)
+                    assertEquals("https://source.invalid", request.sourceOrigin)
+                    assertEquals(3, request.sourceType)
+                    assertEquals(largeHtml, request.html)
+                    assertFalse(activity.intent.hasExtra("html"))
+                    assertFalse(activity.intent.hasExtra("verificationResultKey"))
+                    assertEquals(
+                        request,
+                        kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                            AppBrowserNavigationStore(activity).read(ticket)
+                        },
+                    )
+                }
+                scenario.recreate()
+                compose.waitUntil(15000) {
+                    compose.onAllNodesWithTag("browser-title").fetchSemanticsNodes().any { node ->
+                        node.config
+                            .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Text) {
+                                emptyList()
+                            }
+                            .any { it.text == "Legacy private title" }
+                    }
+                }
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        verificationKey,
+                        activity.model.state.value.page?.request?.verificationKey,
+                    )
+                    assertFalse(activity.intent.hasExtra("html"))
+                }
+            }
+        } finally {
+            io.legado.app.help.source.SourceVerificationHelp.cancelVerificationAttempt(
+                verificationKey
+            )
         }
     }
 
