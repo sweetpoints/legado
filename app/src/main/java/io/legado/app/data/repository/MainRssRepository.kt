@@ -14,9 +14,6 @@ import java.security.MessageDigest
 
 /** Immutable card data; parser and Room entities never escape into a composable. */
 data class MainRssRow(val id: String, val sourceUrl: String, val name: String, val icon: String?, val hasLogin: Boolean)
-enum class MainRssDestination { Categories, ReaderLink, ReaderHtml, External }
-data class MainRssNavigation(val destination: MainRssDestination, val sourceUrl: String, val sourceName: String,
-    val value: String? = null)
 interface MainRssRepository {
     fun rows(query: String): Flow<List<MainRssRow>>
     fun groups(): Flow<List<String>>

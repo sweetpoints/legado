@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.rss
 
+import androidx.annotation.Keep
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
+@Keep
 enum class MainRssAction {
     Open,
     Edit,

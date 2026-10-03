@@ -11,11 +11,6 @@ import java.io.File
 import java.util.UUID
 
 /** Reader HTML, queries and complete source identity remain outside the saved-instance bundle. */
-data class MainRssCheckpoint(val revision: Long = 0, val query: String = "", val queryStart: Int = 0,
-    val queryEnd: Int = 0, val deletingId: String? = null, val deletingName: String? = null,
-    val pending: MainRssPrepared? = null)
-data class MainRssPrepared(val action: String, val nonce: String, val sourceId: String? = null,
-    val sourceUrl: String? = null, val navigation: MainRssNavigation? = null)
 interface MainRssSessionRepository {
     suspend fun read(id: String): MainRssCheckpoint?
     suspend fun write(id: String, checkpoint: MainRssCheckpoint)
