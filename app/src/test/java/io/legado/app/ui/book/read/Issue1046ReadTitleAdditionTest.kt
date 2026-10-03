@@ -47,8 +47,8 @@ class Issue1046ReadTitleAdditionTest {
         assertTrue(screen.contains("Alignment.CenterStart"))
         assertTrue(screen.contains("reader-chapter-name"))
         assertTrue(screen.contains("reader-chapter-url"))
-        assertTrue(screen.contains("onClick = chapterClick"))
-        assertTrue(screen.contains("onLongClick = chapterLongClick"))
+        assertTrue(screen.contains("onClick = click"))
+        assertTrue(screen.contains("onLongClick = longClick"))
         assertTrue(readMenu.contains("chapterNameOnly = AppConfig.showReadTitleChapterNameOnly"))
     }
 

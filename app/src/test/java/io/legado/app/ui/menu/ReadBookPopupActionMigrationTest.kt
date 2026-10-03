@@ -155,8 +155,12 @@ class ReadBookPopupActionMigrationTest {
     fun `toolbar clicks route through the same reader actions`() {
         val source = readProjectFile(READ_BOOK_ACTIVITY)
 
-        assertContains(source, "menu.iconItemOnLongClick(R.id.menu_change_source)")
-        assertContains(source, "menu.iconItemOnLongClick(R.id.menu_refresh)")
+        val host = readProjectFile(READ_MENU).replace(Regex("\\s+"), " ")
+        assertContains(host, "longPress && id == R.id.menu_change_source")
+        assertContains(host, "openPopup(ReaderPopup.ChangeSource)")
+        assertContains(host, "longPress && id == R.id.menu_refresh")
+        assertContains(host, "openPopup(ReaderPopup.Refresh)")
+        assertContains(host, "else if (!longPress) callBack.readerToolbarAction(id)")
         assertContains(source, "R.id.menu_change_source -> showBookChangeSource()")
         assertContains(source, "R.id.menu_refresh -> refreshDurChapter()")
         listOf(
