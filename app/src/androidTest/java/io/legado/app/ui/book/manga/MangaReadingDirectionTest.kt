@@ -426,8 +426,11 @@ class MangaReadingDirectionTest {
             val next = compose.onNodeWithTag("manga-next-chapter").fetchSemanticsNode().boundsInRoot
             assertTrue(if (rightToLeft) next.left < previous.left else previous.left < next.left)
             seekAtEdge(left = true)
+            scenario!!.onActivity { it.viewModel.setMenu(false) }
             awaitPage(1, if (rightToLeft) 3 else 0)
+            scenario!!.onActivity { it.viewModel.setMenu(true) }
             seekAtEdge(left = false)
+            scenario!!.onActivity { it.viewModel.setMenu(false) }
             awaitPage(1, if (rightToLeft) 0 else 3)
             scenario!!.onActivity { it.viewModel.setMenu(false) }
         }

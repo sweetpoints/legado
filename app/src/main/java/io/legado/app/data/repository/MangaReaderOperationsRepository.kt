@@ -18,8 +18,11 @@ import io.legado.app.utils.createFileIfNotExist
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.writeFile
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /** Immutable identities are captured before IO, so work never consults the current reader. */
@@ -47,9 +50,14 @@ interface MangaReaderOperationsRepository {
     suspend fun removeFromBookshelf(bookUrl: String)
 }
 
-class DefaultMangaReaderOperationsRepository : MangaReaderOperationsRepository {
-    override suspend fun saveImage(request: MangaImageSaveRequest): Unit =
-        withContext(Dispatchers.IO) {
+class DefaultMangaReaderOperationsRepository(
+    private val imageDispatcher: CoroutineDispatcher = Dispatchers.IO
+) : MangaReaderOperationsRepository {
+    override suspend fun saveImage(request: MangaImageSaveRequest) {
+        currentCoroutineContext().ensureActive()
+        // A destination and full request have been accepted; disposal must not leave a partial
+        // file.
+        withContext(imageDispatcher + NonCancellable) {
             // Detached full snapshots preserve transient books and original source request headers.
             val book = GSON.fromJsonObject<Book>(request.bookSnapshot).getOrThrow()
             check(book.bookUrl == request.bookUrl)
@@ -75,6 +83,7 @@ class DefaultMangaReaderOperationsRepository : MangaReaderOperationsRepository {
                 throw error
             }
         }
+    }
 
     override suspend fun refreshChapter(request: MangaChapterRefreshRequest): Boolean =
         withContext(Dispatchers.IO) {

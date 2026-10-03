@@ -1521,3 +1521,7 @@ Tests are implemented and formatted; Android compilation, JVM execution and devi
 A complete app/src consumer search after Host and regression migration found no remaining users of ReadMangaViewModel, MangaAdapter, MangaVH, WebtoonFrame/WebtoonRecyclerView, MangaLayoutManager, ScrollTimer or their gesture wrapper. Removed these legacy renderers and the unreferenced activity_manga, item_book_manga_page/item_book_manga_edge and book_manga menu resources. Core manga chapter/page models, parsing, Glide pipeline and source/download engines remain. The separately owned old MangaMenu/view_manga_menu last consumer cleanup is coordinated with the Reader owner.
 
 Source consumer audit and git diff check passed; final compile/JVM/device evidence is still pending.
+
+### Manga accepted export and refresh completion
+
+Accepted full image requests now enter their IO operation before caller disposal and complete the destination file without cancellation leaving a partial export. A real cached PNG/FileDoc regression gates the repository IO dispatcher, cancels the actual caller, then verifies the destination bytes after release. Chapter refresh now handles a missing fresh row or IO failure without stranding the loading overlay. Unified formatter/check passed; the new Android regression is awaiting compilation and device execution.

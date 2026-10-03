@@ -40,6 +40,7 @@ import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -560,7 +561,7 @@ internal class MangaReaderComposeViewModel(
                 try {
                     // Once a cached destination is accepted, a book switch cannot cancel its
                     // export.
-                    viewModelScope.launch {
+                    viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
                         try {
                             operations.saveImage(captured.copy(directoryUri = directory))
                         } catch (error: Exception) {
@@ -683,7 +684,7 @@ internal class MangaReaderComposeViewModel(
         val captured =
             MangaImageSaveRequest(bookUrl, snapshot, request.sourceSnapshot, imageUrl, directoryUri)
         // Accepted export work captures its full payload and survives switching the reader's book.
-        viewModelScope.launch {
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 operations.saveImage(captured)
             } catch (error: Exception) {
@@ -705,14 +706,27 @@ internal class MangaReaderComposeViewModel(
                 ReadManga.durChapterPos,
             )
         ownerScope?.launch {
-            if (
-                operations.refreshChapter(request) &&
+            try {
+                val refreshed = operations.refreshChapter(request)
+                if (
                     generation == owner &&
-                    ReadManga.book === book &&
-                    ReadManga.durChapterIndex == request.chapterIndex &&
-                    ReadManga.durChapterPos == request.pageIndex
-            ) {
-                engine?.openChapter(request.chapterIndex, request.pageIndex)
+                        ReadManga.book === book &&
+                        ReadManga.durChapterIndex == request.chapterIndex &&
+                        ReadManga.durChapterPos == request.pageIndex
+                ) {
+                    if (refreshed) engine?.openChapter(request.chapterIndex, request.pageIndex)
+                    else mutableState.value = state.value.copy(loading = false, error = "未找到漫画章节")
+                }
+            } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
+                AppLog.put("刷新漫画章节失败", error)
+                if (generation == owner && ReadManga.book === book) {
+                    mutableState.value =
+                        state.value.copy(
+                            loading = false,
+                            error = error.localizedMessage ?: "刷新漫画章节失败",
+                        )
+                }
             }
         }
     }
