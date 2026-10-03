@@ -231,7 +231,10 @@ internal class BookSearchViewModel(
     fun openFilter() {
         if (!usable()) return
         updateDraft {
-            it.copy(filterDraft = state.value.preferences.resultFilter, filterSelection = 0)
+            it.copy(
+                filterDraft = state.value.preferences.resultFilter,
+                filterSelection = state.value.preferences.resultFilter.length,
+            )
         }
     }
 

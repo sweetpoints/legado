@@ -1432,3 +1432,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 搜索设置/Scope命令接入纯不可变菜单投影：选中组移除不改全局缓存、无可选组菜单显式fallback全源、单书源身份与原逗号分组规则保留；精准搜索重提交、阅读记录只更新marker、过滤仅确认trim保存。失败retry保留原目标且不清除后来新编辑文本，空精准确认保留旧raw查询和不重复历史合同；历史写失败继续实际搜索。新增4设置VM、1历史失败及3纯菜单行为用例，不积累每次查询的完成Job引用，formatter/check通过；统一全量构建仍pending。
 
 搜索原生动作新增私有完整回执与SavedState小sequence消费fence：durable后由RESUMED Host准备并消费再交付，队列移除落盘失败恢复不重播。Scope请求按owned UUID拒绝迟到结果，早到结果跨初始化失败保留，完整结果先私有落盘再更新偏好/清票据；恢复只重放幂等scope配置、不自动重复网络。新增3真实VM回归，相关序列化模型继续@Keep；formatter/check通过，统一编译/JVM仍pending，Host另批接入。
+
+搜索纯Compose页面拆为Screen、结果行、输入帮助、确认/过滤对话框及不可变动作接口，复用正式ComposeCover；保留原阅读/书架marker、来源数量、author/latest/三行intro、分类/字数折行和RTL logical start。IME composition不被VM echo清除，光标从私有草稿恢复，触控至少48dp；菜单和手动分页仍按原合同。新增4个实际Compose布局/点击/过滤payload编译用例，formatter/check通过；当前独立UI提交尚未替换旧Host，完整双task统一待最终宿主接线执行，设备端未运行。
