@@ -13,10 +13,7 @@ internal fun installFontFile(
     directory: File,
     isValid: (File) -> Boolean,
 ): File {
-    val fileName = displayName
-        .replace('\\', '/')
-        .substringAfterLast('/')
-        .trim()
+    val fileName = displayName.replace('\\', '/').substringAfterLast('/').trim()
     require(fontFileNameRegex.matches(fileName)) { "invalid font file name" }
     if ((!directory.exists() && !directory.mkdirs()) || !directory.isDirectory) {
         throw IOException("unable to create font directory")

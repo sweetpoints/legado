@@ -1,9 +1,9 @@
 package io.legado.app.data.dao
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class RssSourceDaoGroupFilterContractTest {
 
@@ -36,9 +36,7 @@ class RssSourceDaoGroupFilterContractTest {
         assertTrue(enabledGroupQuery.contains("t2.enabled = 1"))
 
         assertTrue(groupFilter.contains("trim(:sourceGroup, \$GROUP_TRIM_CHARACTERS) <> ''"))
-        assertTrue(
-            groupFilter.contains("with recursive rss_source_groups(group_name, rest) as (")
-        )
+        assertTrue(groupFilter.contains("with recursive rss_source_groups(group_name, rest) as ("))
         assertTrue(
             groupFilter.contains(
                 "replace(replace(replace(coalesce(t2.sourceGroup, ''), ';', ','), " +
@@ -51,13 +49,8 @@ class RssSourceDaoGroupFilterContractTest {
             )
         )
         assertTrue(groupFilter.contains("where rest <> ''"))
-        assertTrue(
-            groupFilter.contains(
-                "group_name = trim(:sourceGroup, \$GROUP_TRIM_CHARACTERS)"
-            )
-        )
+        assertTrue(groupFilter.contains("group_name = trim(:sourceGroup, \$GROUP_TRIM_CHARACTERS)"))
         assertFalse(groupFilter.contains(" like ", ignoreCase = true))
-
     }
 
     private fun queryBefore(functionMarker: String): String {
@@ -68,15 +61,11 @@ class RssSourceDaoGroupFilterContractTest {
     }
 
     private fun normalizedSource(pathInApp: String): String {
-        return projectFile(pathInApp)
-            .readText()
-            .replace("\r\n", "\n")
-            .replace(Regex("\\s+"), " ")
+        return projectFile(pathInApp).readText().replace("\r\n", "\n").replace(Regex("\\s+"), " ")
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }

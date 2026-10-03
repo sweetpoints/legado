@@ -13,13 +13,19 @@ import io.legado.app.data.repository.CoverConfiguration
 import io.legado.app.data.repository.CoverRequest
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
-import kotlinx.coroutines.*
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.*
 
 /** Uses the registered Legado URL/source/decryption loaders and retains animated resources. */
 class GlideCoverImageLoader(context: Context) {
     private val context = context.applicationContext
-    suspend fun load(request: CoverRequest, configuration: CoverConfiguration, width: Int, height: Int): CoverLoadResult {
+
+    suspend fun load(
+        request: CoverRequest,
+        configuration: CoverConfiguration,
+        width: Int,
+        height: Int,
+    ): CoverLoadResult {
         require(width > 0 && height > 0)
         if (configuration.useDefault || request.normalizedPath == null)
             return CoverLoadResult(CoverImage.Static(configuration.defaultBitmap), true)
@@ -28,41 +34,64 @@ class GlideCoverImageLoader(context: Context) {
         var animation: AnimatedDrawableResource? = null
         var delivered = false
         try {
-            val image = withContext(Dispatchers.IO) {
-                try {
-                    withContext(Dispatchers.Main.immediate) {
-                        var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, request.loadOnlyWifi)
-                        request.sourceOrigin?.let { options = options.set(OkHttpModelLoader.sourceOriginOption, it) }
-                        target = ImageLoader.load(context, request.normalizedPath).apply(options).centerCrop().submit(width, height)
-                    }
-                    val requestTarget = checkNotNull(target)
-                    val drawable = runInterruptible { requestTarget.get() }
-                    coroutineContext.ensureActive()
-                    if (drawable is Animatable) {
-                        val resource = AnimatedDrawableResource(drawable) { Glide.with(context).clear(requestTarget) }
-                        animation = resource
-                        CoverLoadResult(CoverImage.Animated(resource), false)
-                    } else {
-                        val bitmap = if (drawable is BitmapDrawable) checkNotNull(drawable.bitmap.copy(Bitmap.Config.ARGB_8888, false)) else {
-                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
-                                drawable.setBounds(0, 0, width, height); drawable.draw(Canvas(it))
+            val image =
+                withContext(Dispatchers.IO) {
+                    try {
+                        withContext(Dispatchers.Main.immediate) {
+                            var options =
+                                RequestOptions()
+                                    .set(OkHttpModelLoader.loadOnlyWifiOption, request.loadOnlyWifi)
+                            request.sourceOrigin?.let {
+                                options = options.set(OkHttpModelLoader.sourceOriginOption, it)
                             }
+                            target =
+                                ImageLoader.load(context, request.normalizedPath)
+                                    .apply(options)
+                                    .centerCrop()
+                                    .submit(width, height)
                         }
-                        ownedBitmap = bitmap
-                        CoverLoadResult(CoverImage.Static(bitmap), false)
+                        val requestTarget = checkNotNull(target)
+                        val drawable = runInterruptible { requestTarget.get() }
+                        coroutineContext.ensureActive()
+                        if (drawable is Animatable) {
+                            val resource =
+                                AnimatedDrawableResource(drawable) {
+                                    Glide.with(context).clear(requestTarget)
+                                }
+                            animation = resource
+                            CoverLoadResult(CoverImage.Animated(resource), false)
+                        } else {
+                            val bitmap =
+                                if (drawable is BitmapDrawable)
+                                    checkNotNull(
+                                        drawable.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                    )
+                                else {
+                                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                                        .also {
+                                            drawable.setBounds(0, 0, width, height)
+                                            drawable.draw(Canvas(it))
+                                        }
+                                }
+                            ownedBitmap = bitmap
+                            CoverLoadResult(CoverImage.Static(bitmap), false)
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        coroutineContext.ensureActive()
+                        CoverLoadResult(CoverImage.Static(configuration.defaultBitmap), true)
                     }
-                } catch (error: CancellationException) { throw error }
-                catch (_: Exception) {
-                    coroutineContext.ensureActive()
-                    CoverLoadResult(CoverImage.Static(configuration.defaultBitmap), true)
                 }
-            }
             coroutineContext.ensureActive()
             delivered = true
             return image
         } finally {
             if (animation == null || !delivered) {
-                animation?.release() ?: withContext(NonCancellable + Dispatchers.Main.immediate) { target?.let { Glide.with(context).clear(it) } }
+                animation?.release()
+                    ?: withContext(NonCancellable + Dispatchers.Main.immediate) {
+                        target?.let { Glide.with(context).clear(it) }
+                    }
             }
             if (!delivered) ownedBitmap?.recycle()
         }

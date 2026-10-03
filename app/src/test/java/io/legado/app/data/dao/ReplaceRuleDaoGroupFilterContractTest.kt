@@ -1,9 +1,9 @@
 package io.legado.app.data.dao
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReplaceRuleDaoGroupFilterContractTest {
 
@@ -44,14 +44,8 @@ class ReplaceRuleDaoGroupFilterContractTest {
             )
         )
         assertTrue(groupFilter.contains("where rest <> ''"))
-        assertTrue(
-            groupFilter.contains(
-                "group_name = trim(:groupName, \$GROUP_TRIM_CHARACTERS)"
-            )
-        )
+        assertTrue(groupFilter.contains("group_name = trim(:groupName, \$GROUP_TRIM_CHARACTERS)"))
         assertFalse(groupFilter.contains(" like ", ignoreCase = true))
-
-
     }
 
     private fun queryBefore(functionMarker: String): String {
@@ -62,15 +56,11 @@ class ReplaceRuleDaoGroupFilterContractTest {
     }
 
     private fun normalizedSource(pathInApp: String): String {
-        return projectFile(pathInApp)
-            .readText()
-            .replace("\r\n", "\n")
-            .replace(Regex("\\s+"), " ")
+        return projectFile(pathInApp).readText().replace("\r\n", "\n").replace(Regex("\\s+"), " ")
     }
 
     private fun projectFile(pathInApp: String): File {
-        return listOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull { it.isFile }
+        return listOf(File(pathInApp), File("app/$pathInApp")).firstOrNull { it.isFile }
             ?: error("Missing project file: $pathInApp")
     }
 }
