@@ -14,16 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -49,15 +45,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
@@ -207,7 +207,10 @@ private fun ExploreHomeToolbar(state: ExploreHomeState, actions: ExploreHomeActi
             }
         }
         IconButton({ actions.action("manage", "") }, enabled = !state.busy && state.sessionLoaded) {
-            Icon(Icons.Default.Settings, stringResource(R.string.book_source_manage))
+            Icon(
+                painterResource(R.drawable.ic_settings),
+                stringResource(R.string.book_source_manage),
+            )
         }
     }
 }
@@ -221,6 +224,7 @@ private fun ExploreHomeCard(
 ) {
     var menu by remember(source.url) { mutableStateOf(false) }
     val expanded = source.url == state.expandedUrl
+    val direction = LocalLayoutDirection.current
     Card(
         Modifier.fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -240,13 +244,20 @@ private fun ExploreHomeCard(
             if (expanded && state.panelLoading)
                 CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), strokeWidth = 1.dp)
             Icon(
-                if (expanded) Icons.Default.KeyboardArrowDown
-                else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                painterResource(
+                    if (expanded) R.drawable.ic_expand_more else R.drawable.ic_arrow_right
+                ),
                 null,
+                Modifier.size(24.dp).graphicsLayer {
+                    scaleX = if (!expanded && direction == LayoutDirection.Rtl) -1f else 1f
+                },
             )
             Box {
                 IconButton({ menu = true }, enabled = !state.busy && state.sessionLoaded) {
-                    Icon(Icons.Default.MoreVert, "${stringResource(R.string.menu)} ${source.name}")
+                    Icon(
+                        painterResource(R.drawable.ic_more_vert),
+                        "${stringResource(R.string.menu)} ${source.name}",
+                    )
                 }
                 DropdownMenu(menu, { menu = false }) {
                     listOf(
