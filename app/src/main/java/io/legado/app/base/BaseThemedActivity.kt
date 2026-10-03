@@ -12,7 +12,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.view.Window
 import android.widget.FrameLayout
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
@@ -29,7 +28,6 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyBackgroundTint
 import io.legado.app.utils.applyOpenTint
@@ -53,7 +51,7 @@ abstract class BaseThemedActivity(
     private val toolBarTheme: Theme = Theme.Auto,
     private val transparent: Boolean = false,
     private val imageBg: Boolean = true,
-    private val showOpenMenuIcon: Boolean = true
+    private val showOpenMenuIcon: Boolean = true,
 ) : AppCompatActivity() {
 
     protected abstract fun createContentView()
@@ -76,7 +74,7 @@ abstract class BaseThemedActivity(
         parent: View?,
         name: String,
         context: Context,
-        attrs: AttributeSet
+        attrs: AttributeSet,
     ): View? {
         if (AppConst.menuViewNames.contains(name) && parent?.parent is FrameLayout) {
             (parent.parent as View).setBackgroundColor(backgroundColor)
@@ -96,41 +94,31 @@ abstract class BaseThemedActivity(
         setupPredictiveBack()
         createContentView()
         upBackgroundImage()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            findViewById<TitleBar>(R.id.title_bar)
-                ?.onMultiWindowModeChanged(isInMultiWindowMode, fullScreen)
-        }
         observeLiveBus()
         onActivityCreated(savedInstanceState)
     }
 
-    /**
-     * 注册返回回调接管返回操作,系统不再播放预测性返回动画
-     */
+    /** 注册返回回调接管返回操作,系统不再播放预测性返回动画 */
     private fun setupPredictiveBack() {
-        if (!AppConfig.disablePredictiveBack
-            || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+        if (
+            !AppConfig.disablePredictiveBack || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
         ) {
             return
         }
         onBackInvokedDispatcher.registerOnBackInvokedCallback(
             OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-            OnBackInvokedCallback { onBackPressedDispatcher.onBackPressed() }
+            OnBackInvokedCallback { onBackPressedDispatcher.onBackPressed() },
         )
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
-        findViewById<TitleBar>(R.id.title_bar)
-            ?.onMultiWindowModeChanged(isInMultiWindowMode, fullScreen)
         setupSystemBar()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        findViewById<TitleBar>(R.id.title_bar)
-            ?.onMultiWindowModeChanged(isInMultiWindow, fullScreen)
         setupSystemBar()
     }
 
@@ -142,15 +130,7 @@ abstract class BaseThemedActivity(
 
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
         val bool = onCompatCreateOptionsMenu(menu)
-        val titleBar: TitleBar? = findViewById<TitleBar>(R.id.title_bar)
-            ?: findViewById(R.id.titleBar)
-        menu.applyTint(
-            this,
-            toolBarTheme,
-            transparentBar = titleBar?.usesTransparentForeground == true
-        )
-        titleBar?.applyForegroundColor()
-        titleBar?.toolbar?.installActivityOverflowMenu()
+        menu.applyTint(this, toolBarTheme)
         return bool
     }
 
@@ -160,26 +140,6 @@ abstract class BaseThemedActivity(
     }
 
     open fun onCompatCreateOptionsMenu(menu: Menu) = super.onCreateOptionsMenu(menu)
-
-    private fun Toolbar.installActivityOverflowMenu() {
-        installMd3OverflowMenu(
-            showIcons = showOpenMenuIcon,
-            onPrepareMenu = { toolbarMenu -> onPrepareOptionsMenu(toolbarMenu) },
-            onOpenCustomMenu = { toolbarMenu ->
-                onMenuOpened(Window.FEATURE_OPTIONS_PANEL, toolbarMenu)
-            },
-            onShowCustomMenu = { anchor, toolbarMenu ->
-                onShowActivityOverflowMenu(anchor, toolbarMenu)
-            }
-        )
-    }
-
-    /**
-     * Gives an activity a chance to render its own overflow menu.
-     *
-     * Returning true means the shared popup has already been shown.
-     */
-    open fun onShowActivityOverflowMenu(anchor: View, menu: Menu): Boolean = false
 
     final override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) {
@@ -227,15 +187,16 @@ abstract class BaseThemedActivity(
         if (!imageBg) return
         val metrics = windowManager.windowSize
         lifecycleScope.launch(Dispatchers.IO) {
-            val drawable = try {
-                ThemeConfig.getBgImage(this@BaseThemedActivity, metrics)
-            } catch (_: OutOfMemoryError) {
-                toastOnUi("背景图片太大,内存溢出")
-                null
-            } catch (e: Exception) {
-                AppLog.put("加载背景出错\n${e.localizedMessage}", e)
-                null
-            } ?: return@launch
+            val drawable =
+                try {
+                    ThemeConfig.getBgImage(this@BaseThemedActivity, metrics)
+                } catch (_: OutOfMemoryError) {
+                    toastOnUi("背景图片太大,内存溢出")
+                    null
+                } catch (e: Exception) {
+                    AppLog.put("加载背景出错\n${e.localizedMessage}", e)
+                    null
+                } ?: return@launch
             withContext(Dispatchers.Main) {
                 if (!isFinishing && !isDestroyed) {
                     window.decorView.background = drawable
@@ -268,8 +229,7 @@ abstract class BaseThemedActivity(
         }
     }
 
-    open fun observeLiveBus() {
-    }
+    open fun observeLiveBus() {}
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         return try {

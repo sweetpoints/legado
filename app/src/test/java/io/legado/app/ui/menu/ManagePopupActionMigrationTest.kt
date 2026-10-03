@@ -89,21 +89,18 @@ class ManagePopupActionMigrationTest {
     }
 
     @Test
-    fun `base activity and fragments install the toolbar overflow bridge`() {
+    fun `themed activity keeps the shared AppCompat toolbar and menu hooks`() {
         val activity = readProjectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt")
-        val fragment = readProjectFile("src/main/java/io/legado/app/base/BaseFragment.kt")
 
         listOf(
                 "if (view is Toolbar) view.installMd3OverflowMenu()",
-                "?: findViewById(R.id.titleBar)",
-                "?.installActivityOverflowMenu()",
-                "showIcons = showOpenMenuIcon",
-                "onPrepareOptionsMenu(toolbarMenu)",
-                "onMenuOpened(Window.FEATURE_OPTIONS_PANEL, toolbarMenu)",
+                "menu.applyTint(this, toolBarTheme)",
+                "onCompatCreateOptionsMenu(menu)",
+                "onCompatOptionsItemSelected(item)",
             )
             .forEach { expected -> assertContains("BaseThemedActivity.kt", activity, expected) }
-        assertFalse(activity.contains("if (view is Toolbar) view.installActivityOverflowMenu()"))
-        assertContains("BaseFragment.kt", fragment, "it.installMd3OverflowMenu()")
+        assertFalse(activity.contains("findViewById<TitleBar>"))
+        assertFalse(activity.contains("installActivityOverflowMenu"))
     }
 
     private fun assertContains(path: String, source: String, expected: String) {

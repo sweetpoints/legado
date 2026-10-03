@@ -17,7 +17,6 @@ class ReaderMenuConfigContractTest {
     fun readerOverflowUsesConfigAndKeepsHiddenActionsReachable() {
         val source = read("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
         listOf(
-                "override fun onShowActivityOverflowMenu(anchor: View, menu: Menu): Boolean",
                 "loadReaderMenuConfig(this)",
                 "readMenu.openPopup(ReaderPopup.Overflow)",
                 "readMenu.openPopup(ReaderPopup.More)",
@@ -29,6 +28,8 @@ class ReaderMenuConfigContractTest {
                 "invalidateOptionsMenu()",
             )
             .forEach { expected -> assertTrue("missing $expected", source.contains(expected)) }
+        val composeMenu = read("src/main/java/io/legado/app/ui/book/read/ReadMenuScreen.kt")
+        assertTrue(composeMenu.contains("openPopup(ReaderPopup.Overflow)"))
         assertFalse(source.contains("androidx.appcompat.widget.PopupMenu"))
     }
 

@@ -628,11 +628,6 @@ class ReadBookActivity :
         return super.onCompatCreateOptionsMenu(menu)
     }
 
-    override fun onShowActivityOverflowMenu(anchor: View, menu: Menu): Boolean {
-        readMenu.openPopup(ReaderPopup.Overflow)
-        return true
-    }
-
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         this.menu = menu
         upMenu()
