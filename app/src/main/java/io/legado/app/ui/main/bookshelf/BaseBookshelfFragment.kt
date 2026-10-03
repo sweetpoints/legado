@@ -43,24 +43,43 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
 
     private val importBookshelf =
         registerForActivityResult(HandleFileContract()) { result ->
-            val targetGroup =
-                viewModel.transfer.importReturned() ?: return@registerForActivityResult
-            val uri = result.uri ?: return@registerForActivityResult
-            viewModel.importBookshelfFile(uri.toString(), targetGroup)
+            val requestId =
+                importRequestId
+                    ?: viewModel.transfer.pendingImportRequestId
+                    ?: return@registerForActivityResult
+            val targetGroup = viewModel.transfer.importReturned(requestId)
+            val host = activity as? MainBookshelfHost
+            if (host != null) {
+                host.acceptLegacyImportResult(this, requestId, result.uri?.toString(), targetGroup)
+            } else {
+                val uri = result.uri ?: return@registerForActivityResult
+                if (targetGroup != null) viewModel.importBookshelfFile(uri.toString(), targetGroup)
+            }
         }
     private val exportResult =
         registerForActivityResult(HandleFileContract()) { result ->
-            result.uri?.let { uri ->
-                showDialogFragment(
-                    BookshelfInputDialog.create(
-                        2,
-                        value = uri.toString(),
-                        summary =
-                            if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else "",
-                    )
-                )
-            }
+            val transfer = viewModel.transfer
+            val requestId =
+                exportRequestId
+                    ?: transfer.pendingExportRequestId
+                    ?: return@registerForActivityResult
+            val path = transfer.pendingExport.value
+            if (path != null) transfer.exportReturned(path, requestId)
+            val host = activity as? MainBookshelfHost
+            if (host != null)
+                host.acceptLegacyExportResult(this, requestId, path, result.uri?.toString())
+            else result.uri?.let(::showExportLinkDialog)
         }
+    private var importRequestId: String? = null
+    private var exportRequestId: String? = null
+
+    internal var resultBridgeOnly: Boolean = false
+        private set
+
+    internal fun retainForPendingResult() {
+        resultBridgeOnly = true
+    }
+
     abstract val groupId: Long
     abstract val books: List<Book>
     abstract var onlyUpdateRead: Boolean
@@ -121,8 +140,11 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                 launch {
                     viewModel.transfer.pendingExport.collect { path ->
                         if (path == null) return@collect
+                        val requestId = viewModel.transfer.pendingExportRequestId ?: return@collect
+                        if (viewModel.transfer.exportPickerInFlight) return@collect
                         val file = java.io.File(path)
                         if (file.exists()) {
+                            exportRequestId = requestId
                             exportResult.launch {
                                 mode = HandleFileContract.EXPORT
                                 fileData =
@@ -132,8 +154,11 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
                                         "application/json",
                                     )
                             }
-                        } else toastOnUi(getString(R.string.error))
-                        viewModel.transfer.exportLaunched(path)
+                            viewModel.transfer.exportLaunched(path, requestId)
+                        } else {
+                            toastOnUi(getString(R.string.error))
+                            viewModel.transfer.exportReturned(path, requestId)
+                        }
                     }
                 }
             }
@@ -160,11 +185,21 @@ abstract class BaseBookshelfFragment(layoutId: Int) :
     }
 
     internal fun selectBookshelfImportFile(groupId: Long) {
-        viewModel.transfer.importRequested(groupId)
+        importRequestId = viewModel.transfer.importRequested(groupId)
         importBookshelf.launch {
             mode = HandleFileContract.FILE
             allowExtensions = arrayOf("txt", "json")
         }
+    }
+
+    private fun showExportLinkDialog(value: String) {
+        showDialogFragment(
+            BookshelfInputDialog.create(
+                2,
+                value = value,
+                summary = if (value.isAbsUrl()) DirectLinkUpload.getSummary() else "",
+            )
+        )
     }
 
     internal fun applySettingsEffects(effects: BookshelfSettingsEffects) {
