@@ -56,9 +56,43 @@ internal data class LocalImportResult(
     val groupError: String?,
 )
 
+internal interface LocalImportOperations {
+    suspend fun settings(): LocalImportSettings
+
+    suspend fun setRoot(value: String)
+
+    suspend fun setStorage(value: String)
+
+    suspend fun privateStorage(): String
+
+    suspend fun setSort(value: Int)
+
+    suspend fun setScript(value: String)
+
+    suspend fun root(value: String): FileDoc
+
+    suspend fun list(directory: FileDoc): List<LocalImportFile>
+
+    suspend fun scan(directory: FileDoc, emit: suspend (List<LocalImportFile>) -> Unit)
+
+    suspend fun canAddGroup(): Boolean
+
+    suspend fun importFiles(files: List<FileDoc>, groupName: String?): LocalImportResult
+
+    suspend fun deleteFiles(files: List<FileDoc>)
+
+    suspend fun archiveEntries(document: FileDoc): List<String>
+
+    suspend fun archiveBook(name: String): Book?
+
+    suspend fun importArchive(document: FileDoc, name: String): Book?
+
+    suspend fun readBook(document: FileDoc): Book?
+}
+
 /** All provider metadata, parser work, preferences and Room access stay on IO. */
-internal class LocalImportRepository(private val context: Context) {
-    suspend fun settings() =
+internal class LocalImportRepository(private val context: Context) : LocalImportOperations {
+    override suspend fun settings() =
         withContext(Dispatchers.IO) {
             LocalImportSettings(
                 AppConfig.importBookPath,
@@ -69,34 +103,34 @@ internal class LocalImportRepository(private val context: Context) {
             )
         }
 
-    suspend fun setRoot(value: String) =
+    override suspend fun setRoot(value: String) =
         withContext(Dispatchers.IO) {
             AppConfig.importBookPath = value
         }
 
-    suspend fun setStorage(value: String) =
+    override suspend fun setStorage(value: String) =
         withContext(Dispatchers.IO) {
             AppConfig.defaultBookTreeUri = value
         }
 
-    suspend fun privateStorage(): String =
+    override suspend fun privateStorage(): String =
         withContext(Dispatchers.IO) {
             Uri.fromFile(File(context.filesDir, "books")).toString().also {
                 AppConfig.defaultBookTreeUri = it
             }
         }
 
-    suspend fun setSort(value: Int) =
+    override suspend fun setSort(value: Int) =
         withContext(Dispatchers.IO) {
             context.putPrefInt(PreferKey.localBookImportSort, value)
         }
 
-    suspend fun setScript(value: String) =
+    override suspend fun setScript(value: String) =
         withContext(Dispatchers.IO) {
             AppConfig.bookImportFileName = value
         }
 
-    suspend fun root(value: String): FileDoc =
+    override suspend fun root(value: String): FileDoc =
         withContext(Dispatchers.IO) {
             val uri = if (value.isUri()) value.toUri() else Uri.fromFile(File(value))
             val document =
@@ -132,7 +166,7 @@ internal class LocalImportRepository(private val context: Context) {
             document,
         )
 
-    suspend fun list(directory: FileDoc): List<LocalImportFile> =
+    override suspend fun list(directory: FileDoc): List<LocalImportFile> =
         withContext(Dispatchers.IO) {
             val shelf = shelfFiles()
             requireNotNull(
@@ -146,7 +180,7 @@ internal class LocalImportRepository(private val context: Context) {
     private fun supported(name: String) =
         name.matches(AppPattern.bookFileRegex) || name.matches(AppPattern.archiveFileRegex)
 
-    suspend fun scan(directory: FileDoc, emit: suspend (List<LocalImportFile>) -> Unit) =
+    override suspend fun scan(directory: FileDoc, emit: suspend (List<LocalImportFile>) -> Unit) =
         withContext(Dispatchers.IO) {
             val shelf = shelfFiles()
             val pending = ArrayDeque<FileDoc>()
@@ -165,10 +199,11 @@ internal class LocalImportRepository(private val context: Context) {
             }
         }
 
-    suspend fun canAddGroup() = withContext(Dispatchers.IO) { appDb.bookGroupDao.canAddGroup }
+    override suspend fun canAddGroup() =
+        withContext(Dispatchers.IO) { appDb.bookGroupDao.canAddGroup }
 
     /** Accepted synchronous parsers and their Room products finish as one bounded receipt. */
-    suspend fun importFiles(files: List<FileDoc>, groupName: String?): LocalImportResult =
+    override suspend fun importFiles(files: List<FileDoc>, groupName: String?): LocalImportResult =
         withContext(Dispatchers.IO + NonCancellable) {
             if (groupName != null && !appDb.bookGroupDao.canAddGroup) {
                 throw NoStackTraceException(context.getString(R.string.book_group_limit))
@@ -211,27 +246,27 @@ internal class LocalImportRepository(private val context: Context) {
             )
         }
 
-    suspend fun deleteFiles(files: List<FileDoc>) =
+    override suspend fun deleteFiles(files: List<FileDoc>) =
         withContext(Dispatchers.IO + NonCancellable) {
             files.forEach { it.delete() }
         }
 
-    suspend fun archiveEntries(document: FileDoc): List<String> =
+    override suspend fun archiveEntries(document: FileDoc): List<String> =
         withContext(Dispatchers.IO) {
             ArchiveUtils.getArchiveFilesName(document) { it.matches(AppPattern.bookFileRegex) }
         }
 
-    suspend fun archiveBook(name: String): Book? =
+    override suspend fun archiveBook(name: String): Book? =
         withContext(Dispatchers.IO) {
             appDb.bookDao.getBookByFileName(name)
         }
 
-    suspend fun importArchive(document: FileDoc, name: String): Book? =
+    override suspend fun importArchive(document: FileDoc, name: String): Book? =
         withContext(Dispatchers.IO + NonCancellable) {
             LocalBook.importArchiveFile(document.uri, name) { it.contains(name) }.firstOrNull()
         }
 
-    suspend fun readBook(document: FileDoc): Book? =
+    override suspend fun readBook(document: FileDoc): Book? =
         withContext(Dispatchers.IO) {
             val filePath = document.toString()
             val book =

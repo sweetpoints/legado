@@ -1369,3 +1369,9 @@ BookInfo 全页最终验证：clean 源码候选 b191736b6 在 ae5cfc089 整合�
 - Audited the local import Activity as the sole BaseImportBookActivity consumer and its two exclusive layouts/menus. Saved pinned formatting separately before behavior work.
 - Added an IO repository for preferences, provider directory metadata/listing/recursive scans, archive lookup, existing-book URI rebinding and local parser imports. It retains LocalBook parser calls and the original Room transaction for directory groups, including partial imported-file receipt semantics and custom book identity preservation. Recursive scan cancellation checks isolate future owner state publication; accepted synchronous parser/Room writes finish before returning their receipt.
 - This foundation is not yet wired into the old host; immutable ViewModel and Compose host follow in separate commits. Formatter/check and whitespace checks passed; full Gradle validation waits for the complete host candidate.
+
+### Local book import immutable state and private receipts
+
+- Added an immutable ViewModel state for directory browsing, recursive scan, sorting/filtering, selection, group/archive confirmations and parser progress. Directory ownership gates late scan/read publication while accepted import writes retain their Room products.
+- Private AtomicFile UUID sessions retain unrestricted paths/search, selections and Book navigation snapshots. Strictly increasing accepted revisions prevent stale controller claims. Only UUID enters future SavedState; recovered native/import claims require manual review, not automatic parser or navigation replay. Native result acceptance matches its UUID receipt.
+- Added actual gated cancellation/supersession unit regressions for directory ownership and durable import acceptance. New persisted graph has precise `@Keep`. This batch remains alongside the old host until the next Compose host commit; formatting/check and whitespace checks passed, final full validation is pending.
