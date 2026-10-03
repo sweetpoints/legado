@@ -71,37 +71,49 @@ class ReadMangaActivity :
             }
         }
     private val networkListener by lazy { NetworkChangedListener(this) }
-    private var bookInfoTicket: String? = null
-    private var catalogTicket: String? = null
-    private var imageTicket: String? = null
+    private val nativeResults by lazy { MangaNativeResultRegistry(activityResultRegistry) }
+    private val bookInfoTickets = linkedSetOf<String>()
+    private val catalogTickets = linkedSetOf<String>()
+    private val imageTickets = linkedSetOf<String>()
     private var sourceTicket: String? = null
     private var menuKeyPressed = false
     private var appliedMenuVisibility: Boolean? = null
     private var appliedFilterRevision = 0
 
-    private val bookInfo =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val ticket = bookInfoTicket
-            bookInfoTicket = null
-            viewModel.handleBookInfoResult(ticket, result.resultCode == RESULT_OK)
+    private fun bookInfoLauncher(ticket: String) =
+        nativeResults.launcher(
+            "bookInfo",
+            ticket,
+            ActivityResultContracts.StartActivityForResult(),
+        ) { capturedTicket, result ->
+            bookInfoTickets.remove(capturedTicket)
+            viewModel.handleBookInfoResult(capturedTicket, result.resultCode == RESULT_OK)
         }
-    private val catalog =
-        registerForActivityResult(TocActivityResult()) { result ->
-            val ticket = catalogTicket
-            catalogTicket = null
+
+    private fun catalogLauncher(ticket: String) =
+        nativeResults.launcher(
+            "catalog",
+            ticket,
+            TocActivityResult(),
+        ) { capturedTicket, result ->
+            catalogTickets.remove(capturedTicket)
             val pdfPage = result?.get(TocActivityResult.PDF_PAGE_INDEX) as? Int ?: -1
             viewModel.handleCatalogResult(
-                ticket,
+                capturedTicket,
                 result?.get(0) as? Int,
                 result?.get(1) as? Int,
                 pdfPage,
             )
         }
-    private val imageDirectory =
-        registerForActivityResult(HandleFileContract()) { result ->
-            val ticket = imageTicket
-            imageTicket = null
-            viewModel.handleImageDirectoryResult(ticket, result.uri?.toString())
+
+    private fun imageDirectoryLauncher(ticket: String) =
+        nativeResults.launcher(
+            "imageDirectory",
+            ticket,
+            HandleFileContract(),
+        ) { capturedTicket, result ->
+            imageTickets.remove(capturedTicket)
+            viewModel.handleImageDirectoryResult(capturedTicket, result.uri?.toString())
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,9 +128,13 @@ class ReadMangaActivity :
     }
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {
-        bookInfoTicket = savedInstanceState?.getString(BOOK_INFO_TICKET)
-        catalogTicket = savedInstanceState?.getString(CATALOG_TICKET)
-        imageTicket = savedInstanceState?.getString(IMAGE_TICKET)
+        bookInfoTickets.addAll(savedInstanceState?.getStringArrayList(BOOK_INFO_TICKET).orEmpty())
+        catalogTickets.addAll(savedInstanceState?.getStringArrayList(CATALOG_TICKET).orEmpty())
+        imageTickets.addAll(savedInstanceState?.getStringArrayList(IMAGE_TICKET).orEmpty())
+        // Register every still-launched UUID, including an older external Activity's late result.
+        bookInfoTickets.toList().forEach { bookInfoLauncher(it) }
+        catalogTickets.toList().forEach { catalogLauncher(it) }
+        imageTickets.toList().forEach { imageDirectoryLauncher(it) }
         sourceTicket = savedInstanceState?.getString(SOURCE_TICKET)
         onBackPressedDispatcher.addCallback(this) { viewModel.requestExit() }
         supportFragmentManager.registerFragmentLifecycleCallbacks(
@@ -168,9 +184,9 @@ class ReadMangaActivity :
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(BOOK_INFO_TICKET, bookInfoTicket)
-        outState.putString(CATALOG_TICKET, catalogTicket)
-        outState.putString(IMAGE_TICKET, imageTicket)
+        outState.putStringArrayList(BOOK_INFO_TICKET, ArrayList(bookInfoTickets))
+        outState.putStringArrayList(CATALOG_TICKET, ArrayList(catalogTickets))
+        outState.putStringArrayList(IMAGE_TICKET, ArrayList(imageTickets))
         outState.putString(SOURCE_TICKET, sourceTicket)
         super.onSaveInstanceState(outState)
     }
@@ -185,11 +201,12 @@ class ReadMangaActivity :
         when (request.kind) {
             MangaNativeKind.BookInfo -> {
                 val ticket = checkNotNull(request.preparedTicket)
-                bookInfoTicket = request.ticket
+                bookInfoTickets.add(request.ticket)
                 try {
-                    bookInfo.launch(BookInfoNavigation.intent(this, ticket))
+                    bookInfoLauncher(request.ticket).launch(BookInfoNavigation.intent(this, ticket))
                 } catch (error: Throwable) {
-                    bookInfoTicket = null
+                    bookInfoTickets.remove(request.ticket)
+                    nativeResults.unregister("bookInfo", request.ticket)
                     val context = applicationContext
                     // Failed launch still owns this child ticket; late cleanup does not touch
                     // others.
@@ -200,13 +217,13 @@ class ReadMangaActivity :
                 }
             }
             MangaNativeKind.Catalog -> {
-                catalogTicket = request.ticket
-                catalog.launch(checkNotNull(request.bookUrl))
+                catalogTickets.add(request.ticket)
+                catalogLauncher(request.ticket).launch(checkNotNull(request.bookUrl))
             }
             MangaNativeKind.ImageDirectory -> {
-                imageTicket = request.ticket
+                imageTickets.add(request.ticket)
                 // The contract's returned value is only an operation UUID; image URLs stay private.
-                imageDirectory.launch { value = request.ticket }
+                imageDirectoryLauncher(request.ticket).launch { value = request.ticket }
             }
             MangaNativeKind.ChapterBrowser -> {
                 startActivity(mangaChapterBrowserIntent(this, request))
@@ -270,6 +287,11 @@ class ReadMangaActivity :
         networkListener.unRegister()
         if (!BuildConfig.DEBUG) Backup.autoBack(this)
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        nativeResults.close()
+        super.onDestroy()
     }
 
     override fun onLowMemory() {
