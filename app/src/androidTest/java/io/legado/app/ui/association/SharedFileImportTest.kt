@@ -15,8 +15,11 @@ import android.os.Environment
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,17 +27,12 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.core.content.FileProvider
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -46,6 +44,7 @@ import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.data.association.AssociationPhase
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.HighlightRule
@@ -59,6 +58,7 @@ import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.ui.association.compose.AssociationDataImportDialog
 import io.legado.app.ui.book.import.local.ImportBookActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.file.HandleFileActivity
@@ -225,23 +225,23 @@ class SharedFileImportTest {
         try {
             launchShare(file, "application/json").use { scenario ->
                 awaitDialog(scenario)
-                onView(withText(R.string.import_bookshelf))
-                    .inRoot(isDialog())
-                    .check(matches(isDisplayed()))
+                compose
+                    .onNodeWithText(context.getString(R.string.import_bookshelf))
+                    .assertIsDisplayed()
                 assertFalse(appDb.bookDao.has(name, author))
                 assertEquals(0, requests.get())
                 scenario.recreate()
                 awaitDialog(scenario)
-                onView(withText(R.string.import_bookshelf))
-                    .inRoot(isDialog())
-                    .check(matches(isDisplayed()))
+                compose
+                    .onNodeWithText(context.getString(R.string.import_bookshelf))
+                    .assertIsDisplayed()
                 screenshot("share-bookshelf-confirmation")
                 lateinit var model: FileAssociationViewModel
                 scenario.onActivity {
                     model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
                 }
-                onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
-                await { model.importedData.value == true }
+                clickDialogText(R.string.ok)
+                await { model.state.value.session?.phase == AssociationPhase.Finished }
                 val book = checkNotNull(appDb.bookDao.getBook(name, author))
                 books.add(book)
                 assertEquals("${source.bookSourceUrl}/book/$id", book.bookUrl)
@@ -265,7 +265,7 @@ class SharedFileImportTest {
                 )
                 launchShare(file, "application/json").use { scenario ->
                     awaitDialog(scenario)
-                    onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+                    clickDialogText(R.string.ok)
                     await {
                         appDb.bookDao.has(name, author) &&
                             AppLog.logs.any { it.second.contains(missing) }
@@ -403,12 +403,12 @@ class SharedFileImportTest {
         prefs.edit().remove(marker).commit()
         launchShare(renamed, "application/zip").use { scenario ->
             awaitDialog(scenario)
-            onView(withText(R.string.restore_confirmation))
-                .inRoot(isDialog())
-                .check(matches(isDisplayed()))
+            compose
+                .onNodeWithText(context.getString(R.string.restore_confirmation))
+                .assertIsDisplayed()
             assertFalse(appDb.bookDao.has(book.bookUrl))
             screenshot("share-backup-confirmation")
-            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+            clickDialogText(R.string.cancel)
         }
         assertFalse(appDb.bookDao.has(book.bookUrl))
         assertFalse(prefs.contains(marker))
@@ -418,8 +418,8 @@ class SharedFileImportTest {
             scenario.onActivity {
                 model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
             }
-            onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
-            await { model.importedData.value == true }
+            clickDialogText(R.string.ok)
+            await { model.state.value.session?.phase == AssociationPhase.Finished }
             assertEquals("restored value", prefs.getString(marker, null))
             assertEquals(7, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
             assertEquals(
@@ -563,11 +563,11 @@ class SharedFileImportTest {
                 }
                 awaitLocalPreview(scenario)
                 confirmLocalPreview(scenario)
-                onView(withText(R.string.shared_local_books_storage))
-                    .inRoot(isDialog())
-                    .check(matches(isDisplayed()))
+                compose
+                    .onNodeWithText(context.getString(R.string.shared_local_books_storage))
+                    .assertIsDisplayed()
                 screenshot("share-local-folder-after-confirmation")
-                onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+                clickDialogText(R.string.select_folder)
                 val copied = File(directory, "books/${file.name}")
                 await { copied.exists() && appDb.bookDao.has(copied.path) }
                 val book = appDb.bookDao.getBook(copied.path)!!
@@ -626,15 +626,17 @@ class SharedFileImportTest {
                         // menu usable.
                         pressBack()
                     }
-                    openActionBarOverflowOrOptionsMenu(context)
-                    onView(withText(R.string.local_book_save_path))
-                        .inRoot(isPlatformPopup())
-                        .perform(click())
-                    onView(withText(R.string.local_book_save_path))
-                        .inRoot(isDialog())
-                        .check(matches(isDisplayed()))
+                    compose
+                        .onNodeWithContentDescription(context.getString(R.string.menu))
+                        .performClick()
+                    compose
+                        .onNodeWithText(context.getString(R.string.local_book_save_path))
+                        .performClick()
+                    compose
+                        .onNodeWithText(context.getString(R.string.local_book_save_path))
+                        .assertIsDisplayed()
                     screenshot("local-import-save-folder-menu")
-                    onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+                    clickDialogText(R.string.select_folder)
                     await { AppConfig.defaultBookTreeUri == Uri.fromFile(newDirectory).toString() }
                 }
             destination = finalDirectory
@@ -645,7 +647,7 @@ class SharedFileImportTest {
                 compose.onNodeWithTag("shared-local-menu").performClick()
                 compose.onNodeWithTag("shared-local-directory").performClick()
                 screenshot("share-local-preview-save-folder-menu")
-                onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+                clickDialogText(R.string.select_folder)
                 await { AppConfig.defaultBookTreeUri == Uri.fromFile(finalDirectory).toString() }
                 assertTrue(finalDirectory.listFiles()!!.isEmpty())
                 confirmLocalPreview(scenario)
@@ -758,6 +760,7 @@ class SharedFileImportTest {
                 if (omittedBook.author.isBlank()) omittedBook.name
                 else "${omittedBook.name} / ${omittedBook.author}"
             compose.onNodeWithText(label).performClick()
+            await { model.selectedLocalBooks.size == 4 }
             assertEquals(4, model.selectedLocalBooks.size)
             scenario.recreate()
             awaitLocalPreview(scenario)
@@ -773,7 +776,7 @@ class SharedFileImportTest {
             screenshot("share-local-archive-selection")
             val selected = items.filter { it.file.uri in model.selectedLocalBooks }
             confirmLocalPreview(scenario)
-            await { model.importedLocalBooks.value == true }
+            await { model.state.value.session?.phase == AssociationPhase.Finished }
             assertEquals(previousBook, ReadBook.book?.bookUrl)
             selected.forEach { item ->
                 val book = appDb.bookDao.getBook(File(directory, "books/${item.file.name}").path)!!
@@ -812,7 +815,7 @@ class SharedFileImportTest {
                 assertTrue(cancelledCover.length() > 0)
                 assertFalse(appDb.bookDao.has(preview.name, preview.author))
             }
-            onView(withId(R.id.tv_cancel)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithTag("shared-local-cancel").assertIsDisplayed().performClick()
         }
         await { !cancelledCover.exists() }
         assertArrayEquals(coverBytes, acceptedCover.readBytes())
@@ -867,7 +870,7 @@ class SharedFileImportTest {
             preview.forEach { assertFalse(appDb.bookDao.has(it.name, it.author)) }
             screenshot("share-local-multiple-conflicts")
             confirmLocalPreview(scenario)
-            await { model.importedLocalBooks.value == true }
+            await { model.state.value.session?.phase == AssociationPhase.Finished }
             preview.forEachIndexed { index, item ->
                 val copy = appDb.bookDao.getBook(item.name, item.author)!!
                 books.add(copy)
@@ -902,17 +905,20 @@ class SharedFileImportTest {
         )
         val original = archive.readBytes()
         launchShare(archive, "application/zip").use { scenario ->
-            onView(withText(R.string.shared_local_books_mixed_types))
-                .inRoot(isDialog())
-                .check(matches(isDisplayed()))
+            compose
+                .onNodeWithText(context.getString(R.string.shared_local_books_mixed_types))
+                .assertIsDisplayed()
             scenario.onActivity {
                 assertNull(it.supportFragmentManager.findFragmentByTag("sharedLocalBooks"))
-                assertFalse(it.findViewById<android.view.View>(R.id.rotate_loading).isShown)
+                val owner = ViewModelProvider(it)[FileAssociationViewModel::class.java].state.value
+                assertTrue(owner.session?.previews.orEmpty().isEmpty())
+                assertFalse(owner.busy)
             }
             assertTrue(File(directory, "books").listFiles()!!.isEmpty())
             assertFalse(appDb.highlightRuleDao.all.any { it.uuid == rule.uuid })
+            compose.onNodeWithTag("association-loading").assertDoesNotExist()
             screenshot("share-local-mixed-types-rejected")
-            onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+            clickDialogText(R.string.ok)
             await { scenario.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
             assertArrayEquals(original, archive.readBytes())
         }
@@ -976,12 +982,13 @@ class SharedFileImportTest {
                 model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
             }
             await {
-                model.errorLive.value == context.getString(R.string.unsupport_archivefile_entry)
+                (model.state.value.restoreError ?: model.state.value.session?.error) ==
+                    context.getString(R.string.unsupport_archivefile_entry)
             }
             assertNull(model.localBookBatch.value)
-            scenario.onActivity {
-                assertFalse(it.findViewById<android.view.View>(R.id.rotate_loading).isShown)
-            }
+            assertTrue(model.state.value.session?.previews.orEmpty().isEmpty())
+            assertFalse(model.state.value.busy)
+            compose.onNodeWithTag("association-loading").assertDoesNotExist()
             screenshot("share-local-unsupported-archive")
             await { scenario.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
             assertTrue(archive.isFile)
@@ -1024,9 +1031,11 @@ class SharedFileImportTest {
                     scenario.use {
                         if (!open) confirmLocalPreview(scenario)
                         if (round == 0) {
-                            onView(withText(R.string.shared_local_books_storage))
-                                .inRoot(isDialog())
-                                .check(matches(isDisplayed()))
+                            compose
+                                .onNodeWithText(
+                                    context.getString(R.string.shared_local_books_storage)
+                                )
+                                .assertIsDisplayed()
                             if (open)
                                 scenario.onActivity {
                                     assertNull(
@@ -1036,10 +1045,7 @@ class SharedFileImportTest {
                                     )
                                 }
                             if (choice == "dismiss") pressBack()
-                            else
-                                onView(withId(android.R.id.button1))
-                                    .inRoot(isDialog())
-                                    .perform(click())
+                            else clickDialogText(R.string.select_folder)
                             awaitLocalPreview(scenario)
                             scenario.onActivity {
                                 val model =
@@ -1053,11 +1059,13 @@ class SharedFileImportTest {
                             assertNull(AppConfig.defaultBookTreeUri)
                             scenario.recreate()
                             confirmLocalPreview(scenario)
-                            onView(withText(R.string.shared_local_books_storage))
-                                .inRoot(isDialog())
-                                .check(matches(isDisplayed()))
+                            compose
+                                .onNodeWithText(
+                                    context.getString(R.string.shared_local_books_storage)
+                                )
+                                .assertIsDisplayed()
                             screenshot("share-local-explicit-path-$firstOpen-$choice")
-                            onView(withId(android.R.id.button2)).inRoot(isDialog()).perform(click())
+                            clickDialogText(R.string.shared_local_books_private)
                         }
                         await { copy.isFile && appDb.bookDao.has(copy.path) }
                         val book = appDb.bookDao.getBook(copy.path)!!.also(books::add)
@@ -1083,6 +1091,14 @@ class SharedFileImportTest {
         } finally {
             instrumentation.removeMonitor(monitor)
         }
+    }
+
+    private fun clickDialogText(resource: Int) {
+        compose
+            .onNodeWithText(context.getString(resource))
+            .assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
     }
 
     private fun providerUri(file: File): Uri =
@@ -1112,21 +1128,55 @@ class SharedFileImportTest {
                     state =
                         "batch=${model.localBookBatch.value?.size}; selected=${model.selectedLocalBooks.size}; " +
                             "pending=${model.pendingLocalBooks.size}; destination=${model.localBookDestination.value}; " +
-                            "error=${model.errorLive.value}; fragments=${activity.supportFragmentManager.fragments.map { it.javaClass.simpleName to it.tag }}; " +
+                            "error=${model.state.value.restoreError ?: model.state.value.session?.error}; fragments=${activity.supportFragmentManager.fragments.map { it.javaClass.simpleName to it.tag }}; " +
                             "view=${fragment?.view}; loaded=${preview?.loaded}; count=${preview?.rows?.size}; " +
                             "focus=${fragment?.dialog?.window?.decorView?.hasWindowFocus()}"
                     ready =
-                        preview?.loaded == true &&
+                        model.state.value.loaded &&
+                            !model.state.value.busy &&
+                            !model.state.value.nativeResultPending &&
+                            preview?.loaded == true &&
+                            !preview.loading &&
+                            !preview.busy &&
                             preview.rows.isNotEmpty() &&
                             fragment?.view?.isShown == true &&
                             fragment?.dialog?.window?.decorView?.hasWindowFocus() == true
                 }
                 ready
             }
+            assertPreviewRows(scenario)
         } catch (error: AssertionError) {
             screenshot("share-local-preview-failure-$id")
             throw AssertionError(state, error)
         }
+    }
+
+    private fun assertPreviewRows(scenario: ActivityScenario<FileAssociationActivity>) {
+        var rowCount = 0
+        var selectedCount = 0
+        var selectableCount = 0
+        scenario.onActivity { activity ->
+            val pipeline = ViewModelProvider(activity)[FileAssociationViewModel::class.java]
+            val dialog =
+                activity.supportFragmentManager.findFragmentByTag("sharedLocalBooks")
+                    as ImportLocalBookDialog
+            rowCount = dialog.model.state.value.rows.size
+            selectedCount = dialog.model.state.value.selected.size
+            selectableCount = dialog.model.state.value.selectableCount
+            assertEquals(pipeline.localBookBatch.value!!.size, rowCount)
+            assertEquals(pipeline.selectedLocalBooks.size, selectedCount)
+        }
+        compose.onNodeWithTag("shared-local-list").assertIsDisplayed()
+        compose
+            .onNodeWithTag("shared-local-select-all")
+            .assertTextContains(
+                context.getString(
+                    if (selectedCount == selectableCount) R.string.select_cancel_count
+                    else R.string.select_all_count,
+                    selectedCount,
+                    rowCount,
+                )
+            )
     }
 
     private fun confirmLocalPreview(scenario: ActivityScenario<FileAssociationActivity>) {
@@ -1182,22 +1232,56 @@ class SharedFileImportTest {
     }
 
     private fun awaitDialog(scenario: ActivityScenario<FileAssociationActivity>) {
+        var dialog: DialogFragment? = null
         await {
             var ready = false
             scenario.onActivity { activity ->
-                ready =
+                val owner =
+                    ViewModelProvider(activity)[FileAssociationViewModel::class.java].state.value
+                dialog =
                     activity.supportFragmentManager.fragments
                         .filterIsInstance<DialogFragment>()
-                        .any { dialog ->
-                            dialog.dialog?.isShowing == true &&
-                                dialog.dialog?.window?.decorView?.hasWindowFocus() == true &&
-                                (dialog.view
-                                    ?.findViewById<RecyclerView>(R.id.recycler_view)
-                                    ?.adapter
-                                    ?.itemCount ?: 1) > 0
+                        .firstOrNull {
+                            it.dialog?.isShowing == true &&
+                                it.dialog?.window?.decorView?.hasWindowFocus() == true
                         }
+                val contentReady =
+                    when (val current = dialog) {
+                        is ImportHighlightRuleDialog ->
+                            ViewModelProvider(current)[ImportHighlightRuleViewModel::class.java]
+                                .state
+                                .value
+                                .let { !it.loading && !it.busy && it.items.isNotEmpty() }
+                        is ImportReplaceRuleDialog ->
+                            ViewModelProvider(current)[ImportReplaceRuleViewModel::class.java]
+                                .state
+                                .value
+                                .let { !it.loading && !it.busy && it.items.isNotEmpty() }
+                        is AssociationDataImportDialog ->
+                            owner.session?.importType in setOf("bookshelf", "backup")
+                        else -> false
+                    }
+                ready = owner.loaded && !owner.busy && !owner.nativeResultPending && contentReady
             }
             ready
+        }
+        when (dialog) {
+            is ImportHighlightRuleDialog ->
+                compose
+                    .onNodeWithTag("highlight-import-confirm")
+                    .assertIsDisplayed()
+                    .assertIsEnabled()
+            is ImportReplaceRuleDialog ->
+                compose
+                    .onNodeWithTag("replace-import-confirm")
+                    .assertIsDisplayed()
+                    .assertIsEnabled()
+            is AssociationDataImportDialog ->
+                compose
+                    .onNodeWithText(context.getString(R.string.ok))
+                    .assertIsDisplayed()
+                    .assertIsEnabled()
+            else -> error("Unexpected import dialog ${dialog?.javaClass?.simpleName}")
         }
     }
 
