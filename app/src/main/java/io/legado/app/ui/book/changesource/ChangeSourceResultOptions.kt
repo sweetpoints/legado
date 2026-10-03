@@ -8,9 +8,29 @@ internal object ChangeSourceResultOptions {
     const val FILTER_OFF = Policy.FILTER_OFF
     const val FILTER_ABSOLUTE = Policy.FILTER_ABSOLUTE
     const val FILTER_RELATIVE = Policy.FILTER_RELATIVE
-    fun apply(books: List<SearchBook>, filterMode: Int, minimum: Int, maximum: Int,
-        referenceWordCount: Int?, comparator: Comparator<SearchBook>, pinnedBookUrl: String? = null) =
-        Policy.apply(books, filterMode, minimum, maximum, referenceWordCount, comparator, pinnedBookUrl)
-    fun responseTimeComparator(fallback: Comparator<SearchBook>) = Policy.responseTimeComparator(fallback)
-    fun measuredFirstComparator(fallback: Comparator<SearchBook>) = Policy.measuredFirstComparator(fallback)
+
+    fun apply(
+        books: List<SearchBook>,
+        filterMode: Int,
+        minimum: Int,
+        maximum: Int,
+        referenceWordCount: Int?,
+        comparator: Comparator<SearchBook>,
+        pinnedBookUrl: String? = null,
+    ) =
+        Policy.apply(
+            books,
+            filterMode,
+            minimum,
+            maximum,
+            referenceWordCount,
+            comparator,
+            pinnedBookUrl,
+        )
+
+    fun responseTimeComparator(fallback: Comparator<SearchBook>) =
+        Policy.responseTimeComparator(fallback)
+
+    fun measuredFirstComparator(fallback: Comparator<SearchBook>) =
+        Policy.measuredFirstComparator(fallback)
 }

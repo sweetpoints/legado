@@ -20,14 +20,38 @@ import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 
 class BookSourceDebugActivity : BaseComposeActivity() {
-    val viewModel by viewModels<BookSourceDebugViewModel> { viewModelFactory { initializer {
-        BookSourceDebugViewModel(AppBookSourceDebugRepository(applicationContext),createSavedStateHandle().apply { remove<String>("key") },intent.getStringExtra("key"))
-    } } }
-    private val qrCodeResult=registerForActivityResult(QrCodeResult()) { result -> result?.let(viewModel::run) }
-    @Composable override fun Content(savedInstanceState:Bundle?) {
-        val transparent=transparentNavBar && !AppConfig.isEInkMode
-        BookSourceDebugRoute(viewModel,{super.finish()},{showDialogFragment(TextDialog("html",it))},{toastOnUi(it)},
-            {qrCodeResult.launch()},{showHelp("debugHelp")},BookSourceDebugStyle(transparent,Color(getToolbarTextColor(transparent))),{!supportFragmentManager.isStateSaved})
+    val viewModel by
+        viewModels<BookSourceDebugViewModel> {
+            viewModelFactory {
+                initializer {
+                    BookSourceDebugViewModel(
+                        AppBookSourceDebugRepository(applicationContext),
+                        createSavedStateHandle().apply { remove<String>("key") },
+                        intent.getStringExtra("key"),
+                    )
+                }
+            }
+        }
+    private val qrCodeResult =
+        registerForActivityResult(QrCodeResult()) { result -> result?.let(viewModel::run) }
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
+        val transparent = transparentNavBar && !AppConfig.isEInkMode
+        BookSourceDebugRoute(
+            viewModel,
+            { super.finish() },
+            { showDialogFragment(TextDialog("html", it)) },
+            { toastOnUi(it) },
+            { qrCodeResult.launch() },
+            { showHelp("debugHelp") },
+            BookSourceDebugStyle(transparent, Color(getToolbarTextColor(transparent))),
+            { !supportFragmentManager.isStateSaved },
+        )
     }
-    override fun finish() { viewModel.close();super.finish() }
+
+    override fun finish() {
+        viewModel.close()
+        super.finish()
+    }
 }

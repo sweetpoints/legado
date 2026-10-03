@@ -4,24 +4,21 @@ import android.os.SystemClock
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import io.legado.app.data.repository.rssSourceManagementId
-import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
+import io.legado.app.data.repository.rssSourceManagementId
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.utils.GSON
+import java.util.UUID
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.UUID
 
 /** A displayed row can predate a committed move or an edit from another screen. */
 @RunWith(AndroidJUnit4::class)
@@ -33,64 +30,103 @@ class SourceOrderMetadataUpdateTest {
     fun staleRssSwitchAndSelectionPreserveCommittedOrderAndMetadata() {
         val group = "Enable ${UUID.randomUUID()}"
         val before = appDb.rssSourceDao.all
-        val stale = (0..2).map { index ->
-            RssSource(sourceUrl = "https://enable.invalid/$group/$index",
-                sourceName = "Source $index", sourceGroup = group, enabled = false,
-                customOrder = index * 100, sourceComment = "Before $index")
-        }
+        val stale =
+            (0..2).map { index ->
+                RssSource(
+                    sourceUrl = "https://enable.invalid/$group/$index",
+                    sourceName = "Source $index",
+                    sourceGroup = group,
+                    enabled = false,
+                    customOrder = index * 100,
+                    sourceComment = "Before $index",
+                )
+            }
         val keys = stale.map { it.sourceUrl }.toSet()
         try {
             appDb.rssSourceDao.insert(*stale.toTypedArray())
             ActivityScenario.launch(RssSourceActivity::class.java).use { scenario ->
-                val expectedOrder = appDb.rssSourceDao.all.map { it.sourceUrl }.toMutableList().apply {
-                    remove(stale[0].sourceUrl)
-                    add(indexOf(stale[2].sourceUrl) + 1, stale[0].sourceUrl)
-                }
+                val expectedOrder =
+                    appDb.rssSourceDao.all
+                        .map { it.sourceUrl }
+                        .toMutableList()
+                        .apply {
+                            remove(stale[0].sourceUrl)
+                            add(indexOf(stale[2].sourceUrl) + 1, stale[0].sourceUrl)
+                        }
                 waitUntil("RSS model loaded") {
-                    var loaded = false; scenario.onActivity { loaded = it.managementModel.state.value.loaded }; loaded
+                    var loaded = false
+                    scenario.onActivity { loaded = it.managementModel.state.value.loaded }
+                    loaded
                 }
                 val ids = stale.map { rssSourceManagementId(it.sourceUrl) }
                 scenario.onActivity { it.managementModel.query("group:$group") }
                 waitUntil("RSS filter ready") {
-                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == ids }; ready
+                    var ready = false
+                    scenario.onActivity {
+                        ready = it.managementModel.state.value.rows.map { row -> row.id } == ids
+                    }
+                    ready
                 }
                 scenario.onActivity { activity ->
-                    activity.managementModel.beginDrag(ids[0]); activity.managementModel.dragTo(ids[2], true)
+                    activity.managementModel.beginDrag(ids[0])
+                    activity.managementModel.dragTo(ids[2], true)
                     activity.managementModel.finishDrag()
                 }
                 waitUntil("RSS move committed") {
                     appDb.rssSourceDao.all.map { it.sourceUrl } == expectedOrder
                 }
-                appDb.rssSourceDao.update(*appDb.rssSourceDao.getRssSources(*keys.toTypedArray()).map {
-                    it.copy(sourceComment = "Updated comment", ruleContent = "body@text")
-                }.toTypedArray())
+                appDb.rssSourceDao.update(
+                    *appDb.rssSourceDao
+                        .getRssSources(*keys.toTypedArray())
+                        .map {
+                            it.copy(sourceComment = "Updated comment", ruleContent = "body@text")
+                        }
+                        .toTypedArray()
+                )
                 val committed = appDb.rssSourceDao.all
                 fun assertState(enabledKeys: Set<String>) {
                     val expected = committed.associate { source ->
-                        source.sourceUrl to GSON.toJson(if (source.sourceUrl in keys)
-                            source.copy(enabled = source.sourceUrl in enabledKeys) else source)
+                        source.sourceUrl to
+                            GSON.toJson(
+                                if (source.sourceUrl in keys)
+                                    source.copy(enabled = source.sourceUrl in enabledKeys)
+                                else source
+                            )
                     }
-                    assertEquals(expected, appDb.rssSourceDao.all.associate {
-                        it.sourceUrl to GSON.toJson(it)
-                    })
+                    assertEquals(
+                        expected,
+                        appDb.rssSourceDao.all.associate {
+                            it.sourceUrl to GSON.toJson(it)
+                        },
+                    )
                 }
                 // Immutable IDs captured before the concurrent edit target only the enabled column.
                 compose.onNodeWithTag("rss-source-enabled-${ids[0]}").performClick()
-                waitUntil("RSS switch enabled") { appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true }
+                waitUntil("RSS switch enabled") {
+                    appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true
+                }
                 assertState(setOf(stale[0].sourceUrl))
                 scenario.onActivity { it.managementModel.enabled(ids, true) }
-                waitUntil("RSS selection enabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true } }
+                waitUntil("RSS selection enabled") {
+                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true }
+                }
                 assertState(keys)
                 scenario.onActivity { it.managementModel.enabled(ids, false) }
-                waitUntil("RSS selection disabled") { keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false } }
+                waitUntil("RSS selection disabled") {
+                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false }
+                }
                 assertState(emptySet())
             }
         } finally {
             appDb.rssSourceDao.delete(*stale.toTypedArray())
             val orders = before.associate { it.sourceUrl to it.customOrder }
-            appDb.rssSourceDao.update(*appDb.rssSourceDao.all.map {
-                it.copy(customOrder = orders[it.sourceUrl] ?: it.customOrder)
-            }.toTypedArray())
+            appDb.rssSourceDao.update(
+                *appDb.rssSourceDao.all
+                    .map {
+                        it.copy(customOrder = orders[it.sourceUrl] ?: it.customOrder)
+                    }
+                    .toTypedArray()
+            )
         }
     }
 
@@ -99,65 +135,120 @@ class SourceOrderMetadataUpdateTest {
         val group = "Enable ${UUID.randomUUID()}"
         val before = appDb.replaceRuleDao.all
         val firstId = System.currentTimeMillis() * 1000
-        val stale = (0..2).map { index ->
-            ReplaceRule(id = firstId + index, name = "Rule $index", group = group,
-                pattern = "Before $index", replacement = "Before", order = index * 100,
-                isEnabled = false)
-        }
+        val stale =
+            (0..2).map { index ->
+                ReplaceRule(
+                    id = firstId + index,
+                    name = "Rule $index",
+                    group = group,
+                    pattern = "Before $index",
+                    replacement = "Before",
+                    order = index * 100,
+                    isEnabled = false,
+                )
+            }
         val keys = stale.map { it.id }.toSet()
         try {
             appDb.replaceRuleDao.insert(*stale.toTypedArray())
             ActivityScenario.launch(ReplaceRuleActivity::class.java).use { scenario ->
-                val expectedOrder = appDb.replaceRuleDao.all.map { it.id }.toMutableList().apply {
-                    remove(stale[0].id)
-                    add(indexOf(stale[2].id) + 1, stale[0].id)
-                }
+                val expectedOrder =
+                    appDb.replaceRuleDao.all
+                        .map { it.id }
+                        .toMutableList()
+                        .apply {
+                            remove(stale[0].id)
+                            add(indexOf(stale[2].id) + 1, stale[0].id)
+                        }
                 waitUntil("replacement model loaded") {
-                    var loaded = false; scenario.onActivity { loaded = it.managementModel.state.value.loaded }; loaded
+                    var loaded = false
+                    scenario.onActivity { loaded = it.managementModel.state.value.loaded }
+                    loaded
                 }
                 scenario.onActivity { it.managementModel.query("group:$group") }
                 waitUntil("replacement filter ready") {
-                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == stale.map { row -> row.id } }; ready
+                    var ready = false
+                    scenario.onActivity {
+                        ready =
+                            it.managementModel.state.value.rows.map { row -> row.id } ==
+                                stale.map { row -> row.id }
+                    }
+                    ready
                 }
                 scenario.onActivity { activity ->
-                    activity.managementModel.beginDrag(stale[0].id); activity.managementModel.dragTo(stale[2].id, true)
+                    activity.managementModel.beginDrag(stale[0].id)
+                    activity.managementModel.dragTo(stale[2].id, true)
                     activity.managementModel.finishDrag()
                 }
                 waitUntil("replacement move committed") {
                     appDb.replaceRuleDao.all.map { it.id } == expectedOrder
                 }
-                appDb.replaceRuleDao.update(*appDb.replaceRuleDao.findByIds(*keys.toLongArray()).map {
-                    it.copy(pattern = "Updated pattern", replacement = "Updated replacement", scope = "Updated scope")
-                }.toTypedArray())
+                appDb.replaceRuleDao.update(
+                    *appDb.replaceRuleDao
+                        .findByIds(*keys.toLongArray())
+                        .map {
+                            it.copy(
+                                pattern = "Updated pattern",
+                                replacement = "Updated replacement",
+                                scope = "Updated scope",
+                            )
+                        }
+                        .toTypedArray()
+                )
                 val committed = appDb.replaceRuleDao.all
                 fun assertState(enabledKeys: Set<Long>) {
                     val expected = committed.associate { rule ->
-                        rule.id to GSON.toJson(if (rule.id in keys)
-                            rule.copy(isEnabled = rule.id in enabledKeys) else rule)
+                        rule.id to
+                            GSON.toJson(
+                                if (rule.id in keys) rule.copy(isEnabled = rule.id in enabledKeys)
+                                else rule
+                            )
                     }
-                    assertEquals(expected, appDb.replaceRuleDao.all.associate {
-                        it.id to GSON.toJson(it)
-                    })
+                    assertEquals(
+                        expected,
+                        appDb.replaceRuleDao.all.associate {
+                            it.id to GSON.toJson(it)
+                        },
+                    )
                 }
                 waitUntil("replacement switch row") {
-                    var ready = false; scenario.onActivity { ready = it.managementModel.state.value.rows.map { row -> row.id } == listOf(stale[1].id, stale[2].id, stale[0].id) }; ready
+                    var ready = false
+                    scenario.onActivity {
+                        ready =
+                            it.managementModel.state.value.rows.map { row -> row.id } ==
+                                listOf(stale[1].id, stale[2].id, stale[0].id)
+                    }
+                    ready
                 }
                 compose.onNodeWithTag("replace-rule-enabled-${stale[0].id}").performClick()
-                waitUntil("replacement switch enabled") { appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true }
+                waitUntil("replacement switch enabled") {
+                    appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true
+                }
                 assertState(setOf(stale[0].id))
-                scenario.onActivity { it.managementModel.enabled(stale.map { row -> row.id }, true) }
-                waitUntil("replacement selection enabled") { keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true } }
+                scenario.onActivity {
+                    it.managementModel.enabled(stale.map { row -> row.id }, true)
+                }
+                waitUntil("replacement selection enabled") {
+                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true }
+                }
                 assertState(keys)
-                scenario.onActivity { it.managementModel.enabled(stale.map { row -> row.id }, false) }
-                waitUntil("replacement selection disabled") { keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false } }
+                scenario.onActivity {
+                    it.managementModel.enabled(stale.map { row -> row.id }, false)
+                }
+                waitUntil("replacement selection disabled") {
+                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false }
+                }
                 assertState(emptySet())
             }
         } finally {
             appDb.replaceRuleDao.delete(*stale.toTypedArray())
             val orders = before.associate { it.id to it.order }
-            appDb.replaceRuleDao.update(*appDb.replaceRuleDao.all.map {
-                it.copy(order = orders[it.id] ?: it.order)
-            }.toTypedArray())
+            appDb.replaceRuleDao.update(
+                *appDb.replaceRuleDao.all
+                    .map {
+                        it.copy(order = orders[it.id] ?: it.order)
+                    }
+                    .toTypedArray()
+            )
         }
     }
 
