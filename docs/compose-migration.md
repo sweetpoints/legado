@@ -1426,3 +1426,5 @@ JS编辑及88字段基础含审查修复最终rebase 71c03c0c0，tip83c7e954c的
 搜索页新增不可变私有状态VM基础：磁盘revision优先恢复，长查询/筛选及selection仅进入私有会话，初始化失败阻止空草稿覆盖，写入失败保留最新编辑并可retry。历史/书架提示/分组/偏好持续观察，外部配置不覆盖打开的编辑器与private scope，元数据失败可重订阅；真实finish仅释放自有会话。新增7个实际JVM行为用例，formatter/check通过；按统一构建队列完整回归待后续引擎增量完成后执行，旧宿主尚未切换。
 
 搜索VM接入正式引擎适配器与历史命令：提交trim后保存历史，查询文字改变立即失效旧回调而selection-only编辑保持搜索；手动stop阻止自动分页，显式continue与恢复不重复历史写入。历史命中书架先展示提示，迟到name查询不启动旧搜索；pause/resume仍调用原引擎语义，退出cleanup不保留Activity。新增5个真实VM命令用例，formatter/check通过；按统一队列完整编译/JVM仍pending，旧Host未切换。
+
+搜索scope偏好写入补齐旧searchGroup伴随键：单组保留组名，多组/全源/单书源清空，两键同一次commit且保留其它字段。不改共享AppConfig；新增隔离synthetic命名SharedPreferences实际Android合同，只编译待统一验证，不读写真实用户default偏好。

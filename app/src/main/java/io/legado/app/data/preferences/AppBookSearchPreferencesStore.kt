@@ -8,9 +8,12 @@ import io.legado.app.utils.defaultSharedPreferences
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 
-internal class AppBookSearchPreferencesStore(context: Context) : BookSearchPreferencesStore {
+internal class AppBookSearchPreferencesStore(
+    context: Context,
+    private val ownedPreferences: SharedPreferences? = null,
+) : BookSearchPreferencesStore {
     private val application = context.applicationContext
-    private val preferences by lazy { application.defaultSharedPreferences }
+    private val preferences by lazy { ownedPreferences ?: application.defaultSharedPreferences }
 
     override fun changes() = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -44,7 +47,10 @@ internal class AppBookSearchPreferencesStore(context: Context) : BookSearchPrefe
     }
 
     override suspend fun scope(value: String) {
-        save(preferences.edit().putString(scopeKey, value))
+        val group =
+            if (value.isEmpty() || value.contains("::") || value.contains(",")) "" else value
+        // Scope and its legacy single-group companion must describe the same accepted choice.
+        save(preferences.edit().putString(scopeKey, value).putString("searchGroup", group))
     }
 
     private fun save(editor: SharedPreferences.Editor) {
