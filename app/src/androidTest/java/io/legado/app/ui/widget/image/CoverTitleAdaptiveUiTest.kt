@@ -2,7 +2,10 @@ package io.legado.app.ui.widget.image
 
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertTextContains
 import org.junit.Rule
@@ -36,7 +39,6 @@ import io.legado.app.model.BookCover
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
-import io.legado.app.ui.config.CoverConfigFragment
 import io.legado.app.ui.config.CoverFontConfigFragment
 import io.legado.app.ui.file.HandleFileActivity
 import io.legado.app.ui.file.HandleFileContract
@@ -284,11 +286,9 @@ class CoverTitleAdaptiveUiTest {
             PreferKey.coverAuthorSmallSize to R.string.cover_author_small_size)
         ActivityScenario.launch<ConfigActivity>(Intent(context, ConfigActivity::class.java)
             .putExtra("configTag", ConfigTag.COVER_CONFIG)).use { settings ->
-            settings.onActivity {
-                (it.supportFragmentManager.findFragmentByTag(ConfigTag.COVER_CONFIG) as CoverConfigFragment)
-                    .scrollToPreference(ConfigTag.COVER_FONT_CONFIG)
-            }
-            onView(withText(R.string.cover_font_config)).perform(click())
+            compose.waitUntil(timeoutMillis=10000) { compose.onAllNodesWithTag("cover-settings-list").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("cover-settings-list").performScrollToNode(hasTestTag("cover-row-font"))
+            compose.onNodeWithTag("cover-row-font").performClick()
             scrollCoverStylePreference(PreferKey.coverCustomFontSize)
             onView(withText(R.string.cover_custom_font_size)).perform(click())
             sizes.forEachIndexed { index, (key, label) ->
@@ -389,11 +389,9 @@ class CoverTitleAdaptiveUiTest {
                 .putExtra("configTag", ConfigTag.COVER_CONFIG)).use { settings ->
                 for ((key, label) in listOf(PreferKey.readRecordCover to R.string.read_record_cover_day,
                     PreferKey.readRecordCoverDark to R.string.read_record_cover_night)) {
-                    settings.onActivity {
-                        (it.supportFragmentManager.findFragmentByTag(ConfigTag.COVER_CONFIG) as CoverConfigFragment)
-                            .scrollToPreference(key)
-                    }
-                    onView(withText(label)).perform(click())
+                    compose.waitUntil(timeoutMillis=10000) { compose.onAllNodesWithTag("cover-settings-list").fetchSemanticsNodes().isNotEmpty() }
+                    compose.onNodeWithTag("cover-settings-list").performScrollToNode(hasTestTag("cover-row-$key"))
+                    compose.onNodeWithTag("cover-row-$key").performClick()
                     val deadline = SystemClock.uptimeMillis() + 5000
                     while (preferences.getString(key, null) == null && SystemClock.uptimeMillis() < deadline) {
                         instrumentation.waitForIdleSync()

@@ -1045,3 +1045,5 @@ RSS 文章 B1：新增五种 Compose 卡片样式及独立图片仓库，保留�
 RSS 文章 B2：分类与文章实际宿主切换 Compose Activity/Route/Screen，五种列表保留刷新分页、筛选搜索、切换样式、变量、登录、阅读记录及 singleTop 入口。每个页面独立控制可见生命周期；阅读前在 IO 读取完整最新文章来源并记录阅读，交付先消费小凭据再调用原生入口，图片正文解析后在 Main 等待 RESUMED。移除九个旧类及八份布局和独占菜单，保留共享加载组件。增加 24 个真实 Android 界面/宿主/Room 用例，分页 JVM 状态用例增至 16；Android 用例仅编译验证。
 
 封面设置 A2：图片输入只保存在私有 AtomicFile 草稿，SavedState 持有小 enum 目标票据，兼容文件选择器重建丢失 value，保留早到结果和取消消费。恢复的未完成图片需显式重试，成功发布后的清理失败只重试草稿写入，字体与规则导航在交付前消费。新增 7 个真实 JVM 状态用例及 1 个大载荷 AtomicFile Android 用例；Android 用例仅编译验证。
+
+封面设置 B：实际目的地使用 Compose Route/Screen，六个开关、四种图片菜单、字体/规则入口与独立搜索结果对话框替换 Preference 控件。移除独占 pref_config_cover.xml，共享渲染及字体测试保留实际断言并改用 Compose 控件。新增 5 个真实 Compose 与 2 个 ConfigActivity Android 用例；Android 用例仅编译验证。

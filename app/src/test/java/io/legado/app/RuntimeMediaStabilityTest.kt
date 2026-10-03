@@ -181,7 +181,8 @@ class RuntimeMediaStabilityTest {
         val configSource = File("src/main/java/io/legado/app/ui/config/CoverConfigFragment.kt")
             .takeIf { it.isFile }
             ?: File("app/src/main/java/io/legado/app/ui/config/CoverConfigFragment.kt")
-        assertTrue(configSource.readText().contains("postEvent(EventBus.BOOKSHELF_REFRESH, \"\")"))
+
+        // Cover refresh IO/Main delivery is verified by CoverSettingsRepositoryTest.
         val fontConfigSource = configSource.resolveSibling("CoverFontConfigFragment.kt").readText()
         assertTrue(fontConfigSource.contains("PreferKey.coverTitleAdaptive"))
     }
