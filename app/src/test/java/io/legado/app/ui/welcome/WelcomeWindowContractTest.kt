@@ -14,9 +14,6 @@ class WelcomeWindowContractTest {
         val base = projectFile("src/main/java/io/legado/app/base/BaseThemedActivity.kt")
         val manifest = projectFile("src/main/AndroidManifest.xml")
         val styles = projectFile("src/main/res/values/styles.xml")
-        val config = projectFile(
-            "src/main/java/io/legado/app/ui/config/WelcomeConfigFragment.kt"
-        )
         assertTrue(activity.contains("override fun shouldCreateContentView()"))
         assertTrue(activity.contains("override fun shouldShowWindowBackground()"))
         assertTrue(activity.contains("FLAG_ACTIVITY_BROUGHT_TO_FRONT"))
@@ -25,12 +22,10 @@ class WelcomeWindowContractTest {
         assertTrue(manifest.contains("android:name=\".ui.welcome.WelcomeActivity\""))
         assertTrue(manifest.contains("android:theme=\"@style/AppTheme.Welcome\""))
         assertTrue(styles.contains("android:windowBackground\">@color/background"))
-        assertTrue(config.contains("private fun deleteStoredImage(path: String?)"))
-        assertTrue(config.contains("deleteStoredImage(getPrefString(preference.key))"))
-        assertTrue(config.contains("file.canonicalFile.parentFile == coversDir.canonicalFile"))
-        assertTrue(config.contains("if (oldPath != file.absolutePath) deleteStoredImage(oldPath)"))
     }
 
+    // Welcome image ownership, same-file protection and deletion are exercised by
+    // WelcomeSettingsRepositoryTest and AppWelcomeSettingsStoreTest against actual stores/files.
     private fun projectFile(pathInApp: String): String =
         sequenceOf(File(pathInApp), File("app/$pathInApp"))
             .firstOrNull(File::isFile)
