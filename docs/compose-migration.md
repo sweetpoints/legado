@@ -987,3 +987,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 书源调试页面迁入 Compose Activity/Route/Screen，保留帮助与日志切换、日志选择/复制/链接、发现长按选择、所有示例与 QR 输入、四阶段 HTML TextDialog 查看复制分享。大输入不进入默认 SavedState 参数，已加载草稿写失败也提供重试；真实关闭清理 HTML 私有会话，旋转与暂停保留。删除旧 Model/Adapter、专属布局与菜单，新增 8 个 Compose、4 个 Route、1 个真实宿主回归；共享引擎/网页 API/主题测试只删除本页陈旧镜像断言。隔离全量 JVM 与 Android 测试编译通过；设备测试尚未执行。
 
 目录宿主会话层独立迁移：完整书籍 URL 与搜索词放 UUID 私有 AtomicFile，SavedState 只保存标签、搜索/菜单展开和选区等小状态；首次落盘前禁用编辑，换书清查询，磁盘修订基线和围栏阻止迟到覆盖/复活，失败重试保留可编辑草稿。新增 9 个 JVM 与 4 个实际文件回归；隔离全量 JVM 与 Android 测试编译通过。
+
+补齐书源调试已关闭会话的恢复边界：初始化即清除 loading，Route 在 RESUMED 清理并退出一次，不重新加载或执行。新增实际 Compose Route 回归；隔离全量 JVM 与 Android 测试编译通过。

@@ -51,6 +51,13 @@ class BookSourceDebugRouteTest {
         BookSourceDebugStage.entries.forEach { stage -> compose.onNodeWithTag("book-debug-menu").performClick(); compose.onNodeWithTag("book-debug-html-${stage.name}").performClick() }
         assertEquals(BookSourceDebugStage.entries.map{it.name+" fixture"},bodies); assertEquals(0,lease.closes); assertTrue(model.state.value.running)
     }
+    @Test fun restoredClosedReceiptCleansPrivateRecordAndClosesOnceWithoutLoadingOrRunning() {
+        val repo=Fake();val session="closed-session";repo.records[session]=BookSourceDebugRecord("key",contentHtml="private")
+        lateinit var vm:BookSourceDebugViewModel;var closes=0
+        compose.runOnIdle { vm=BookSourceDebugViewModel(repo,SavedStateHandle(mapOf("book.debug.session" to session,"book.debug.closed" to true)),"key");models+=vm;repos+=repo }
+        compose.setContent { LegadoComposeTheme { BookSourceDebugRoute(vm,{closes++},{},{error(it)},{},{}) } }
+        compose.waitUntil { closes==1 && repo.records.isEmpty() };compose.waitForIdle();assertEquals(1,closes);assertTrue(repo.leases.isEmpty());assertEquals(setOf(session),repo.released)
+    }
     private class Owner : LifecycleOwner { val registry = LifecycleRegistry(this); override val lifecycle get() = registry }
     private class Fake : BookSourceDebugRepository {
         var missing = false; val released = mutableSetOf<String>(); val leases = mutableListOf<Lease>(); val records = mutableMapOf<String, BookSourceDebugRecord>()

@@ -24,7 +24,7 @@ class BookSourceDebugViewModel(private val repository: BookSourceDebugRepository
     initialKey: String? = null, cleanupScope: CoroutineScope? = null) : ViewModel() {
     private val key = initialKey
     private val session = saved.get<String>(PREFIX + "session") ?: UUID.randomUUID().toString().also { saved[PREFIX + "session"] = it }
-    private val mutable = MutableStateFlow(BookSourceDebugState(closed = saved[PREFIX + "closed"] ?: false))
+    private val mutable = MutableStateFlow(BookSourceDebugState(closed = saved[PREFIX + "closed"] ?: false, loading = saved.get<Boolean>(PREFIX + "closed") != true))
     val state = mutable.asStateFlow()
     // Independent from the Activity/ViewModel parent: real close cleanup survives onCleared.
     private val cleanup = cleanupScope ?: CoroutineScope(SupervisorJob() + viewModelScope.coroutineContext.minusKey(Job))
