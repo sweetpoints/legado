@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-/** Additive public online-call compatibility; the original online VM/Host remain installed. */
+/** Public online-call compatibility over the private, owner-gated import state machine. */
 open class OnlineAssociationCompatibilityModel
 private constructor(
     savedState: SavedStateHandle,

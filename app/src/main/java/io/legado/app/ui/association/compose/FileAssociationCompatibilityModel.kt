@@ -26,8 +26,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Read-only compatibility for the existing Compose local-preview/confirmation dialogs. This new
- * class is not yet installed by either legacy Host; replacing those concrete VMs is a later step.
+ * Read-only compatibility for the existing Compose local-preview/confirmation dialogs. Public file
+ * import ViewModels delegate to the private state machine through this adapter.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 open class FileAssociationCompatibilityModel
