@@ -937,3 +937,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 缓存下载和导出页面迁移至 Compose Activity/Route/Screen，保留分组、下载确认、单书操作、六项布尔设置、类型/编码、命名脚本与自定义 EPUB 范围及预览。原下载、导出服务继续执行后台任务；页面退出清理未交付票据，已开始的服务交付完成后再释放。目录返回结果先写入票据，早于状态恢复的返回及重复旧回执不会丢失或重复交付。普通命名脚本和编码编辑草稿也存磁盘，SavedState 不包含长文本。删除两旧类、三个布局和独占菜单；新增 6 个 JVM 测试及 12 个 Android 行为测试，完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
 
 底栏图集管理页面迁移至 Compose Activity/Route/Screen，保留默认图集、响应式网格、当前标记、长按编辑/导出/分享/删除及 ZIP 导入；使用独立文件选择器并向导出宿主交付 ZIP 文件路径。同名编辑后按预览版本刷新缩略图。启用和删除阶段保护返回，待主界面变更通知交付后解除，恢复中断操作也能刷新并退出；长耗时 ZIP 暂存仍可退出并清理会话。删除两个独占布局和菜单。新增 2 个 JVM 与 9 个 Compose/宿主 Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
+
+全部书签页面迁移至 Compose Activity/Route/Screen，按书名与作者分组显示粘性标题，保留单击阅读/缺书编辑、长按编辑和 JSON/Markdown 导出。导航读取后再次检查 RESUMED 与 FragmentManager 状态，消费回执后才调用阅读器或正式书签编辑器，旋转不重复打开。滚动恢复等待数据到达；保留 TOC 使用的共享 item_bookmark 布局。删除本页旧 ViewModel、已无消费者的 Adapter/Decoration、独占布局与菜单。新增 6 个 Compose 和 2 个真实宿主 Android 测试；完整 JVM 测试和 Android 测试编译验证，设备测试待运行。
