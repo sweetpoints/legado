@@ -6,6 +6,12 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.graphics.asAndroidBitmap
+import io.legado.app.data.repository.GlideCoverRepository
+import io.legado.app.data.repository.CoverRequest
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 
 import android.content.Intent
@@ -93,20 +99,14 @@ class CoverStylePreviewUiTest {
             .putBoolean(PreferKey.coverKeepPunctuation, false)
             .putBoolean(PreferKey.coverCustomFontSize, false).putString(PreferKey.coverFont, "").commit()
         launch().use { settings ->
-            settings.onActivity { activity ->
-                val screen = fragment(activity).preferenceScreen
-                assertEquals(styleKeys + "coverPreview", (0 until screen.preferenceCount)
-                    .map { screen.getPreference(it).key })
-            }
+            styleKeys.forEach { key -> scroll(settings, key); compose.onNodeWithTag("cover-font-row-$key").assertIsDisplayed() }
             val before = previews(settings)
-            settings.onActivity { assertTrue("small screens scroll through all options",
-                fragment(it).listView.canScrollVertically(-1)) }
             for ((key, label) in listOf(PreferKey.coverHorizontal to R.string.cover_horizontal,
                 PreferKey.coverTitleAdaptive to R.string.cover_title_adaptive,
                 PreferKey.coverKeepPunctuation to R.string.cover_keep_punctuation,
                 PreferKey.coverCustomFontSize to R.string.cover_custom_font_size)) {
                 scroll(settings, key)
-                onView(withText(label)).perform(click())
+                compose.onNodeWithTag("cover-font-row-$key").performClick()
             }
             val after = previews(settings)
             assertFalse("real cover pixels update without leaving settings", before[1].contentEquals(after[1]))
@@ -153,7 +153,7 @@ class CoverStylePreviewUiTest {
                 val background = previews(settings)
                 background.forEach { assertEquals("current custom background is rendered", color, it[0]) }
                 scroll(settings, PreferKey.coverFont)
-                onView(withText(R.string.cover_font_select)).perform(click())
+                compose.onNodeWithTag("cover-font-row-coverFont").performClick()
                 compose.waitUntil(5_000) {
                     compose.onAllNodesWithTag("font-list").fetchSemanticsNodes().isNotEmpty() &&
                         compose.onAllNodesWithTag("font-progress").fetchSemanticsNodes().isEmpty()
@@ -171,7 +171,7 @@ class CoverStylePreviewUiTest {
                 previews(settings)
                 assertEquals(font.path, preferences.getString(PreferKey.coverFont, ""))
                 scroll(settings, PreferKey.coverFont)
-                onView(withText(R.string.cover_font_select)).perform(click())
+                compose.onNodeWithTag("cover-font-row-coverFont").performClick()
                 compose.onNodeWithTag("font-actions").performClick()
                 compose.onNodeWithTag("font-default").performClick()
                 assertEquals("", preferences.getString(PreferKey.coverFont, ""))
@@ -183,48 +183,43 @@ class CoverStylePreviewUiTest {
         }
     }
 
-    private fun fragment(activity: ConfigActivity) = activity.supportFragmentManager
-        .findFragmentByTag(ConfigTag.COVER_FONT_CONFIG) as CoverFontConfigFragment
-
     private fun scroll(settings: ActivityScenario<ConfigActivity>, key: String) {
-        settings.onActivity { fragment(it).scrollToPreference(key) }
-        instrumentation.waitForIdleSync()
-        if (key == "coverPreview") {
-            settings.onActivity {
-                val list = fragment(it).listView
-                list.scrollBy(0, list.computeVerticalScrollRange())
-            }
-            instrumentation.waitForIdleSync()
-        }
+        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("cover-font-settings-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("cover-font-settings-list").performScrollToNode(hasTestTag("cover-font-row-$key"))
     }
 
+    /** Compare actual Compose raster output to the live cover renderer, rather than View internals. */
     private fun previews(settings: ActivityScenario<ConfigActivity>): List<IntArray> {
         scroll(settings, "coverPreview")
+        val repo = GlideCoverRepository.get(context)
         var result: List<IntArray>? = null
+        val titles = listOf("开源阅读", "开源阅读可以看小说、看漫画、听书")
+        val authors = listOf("开源阅读LegadoTeam", "开源阅读")
         waitUntil {
-            settings.onActivity { activity ->
-                val ids = listOf(R.id.cover_preview_short, R.id.cover_preview_long)
-                val titles = listOf("开源阅读", "开源阅读可以看小说、看漫画、听书")
-                val authors = listOf("开源阅读LegadoTeam", "开源阅读")
-                val views = ids.map { activity.findViewById<CoverImageView>(it) }
-                if (views.any { it == null || it.width <= 0 || it.drawable == null }) return@onActivity
-                val field = CoverImageView::class.java.getDeclaredField("currentNameBitmap").apply { isAccessible = true }
-                val frames = views.map { view ->
-                    Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
-                }
-                val ready = views.withIndex().all { (index, view) ->
-                    val expected = coverBitmapCacheKey(normalizeCoverText(titles[index], BookCover.keepPunctuation)!!,
-                        normalizeCoverText(authors[index], BookCover.keepPunctuation), view.width, view.height,
-                        BookCover.drawBookNameHorizontal, BookCover.drawBookAuthor,
-                        context.backgroundColor, context.accentColor, BookCover.adaptiveTitleSize,
-                        BookCover.fontSizes, BookCover.fontCacheKey)
-                    (field.get(view) as? Pair<*, *>)?.first == expected
-                }
-                if (ready) result = frames.map { bitmap ->
-                    IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
-                }
-                frames.forEach(Bitmap::recycle)
+            val config = repo.configurations.value ?: return@waitUntil false
+            if (config.horizontal != BookCover.drawBookNameHorizontal || config.adaptive != BookCover.adaptiveTitleSize ||
+                config.keepPunctuation != BookCover.keepPunctuation || config.fontCacheKey != BookCover.fontCacheKey) return@waitUntil false
+            val frames = listOf("short", "long").map { suffix -> compose.onNodeWithTag("cover-font-preview-$suffix").captureToImage().asAndroidBitmap() }
+            val ready = frames.withIndex().all { (index, frame) ->
+                val expected = Bitmap.createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
+                try {
+                    val canvas = Canvas(expected); val source = config.defaultBitmap
+                    val scale = maxOf(frame.width.toFloat() / source.width, frame.height.toFloat() / source.height)
+                    val left = (frame.width - source.width * scale) / 2; val top = (frame.height - source.height * scale) / 2
+                    canvas.drawBitmap(source, null, android.graphics.RectF(left, top, left + source.width * scale, top + source.height * scale), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                    runBlocking { repo.title(CoverRequest(name = titles[index], author = authors[index]), config, frame.width, frame.height) }?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+                    // ComposeCover rounds only the outer corners; compare the full interior including actual text pixels.
+                    (14 until frame.height - 14).all { y -> (14 until frame.width - 14).all { x ->
+                        val a = frame.getPixel(x, y); val b = expected.getPixel(x, y)
+                        kotlin.math.abs(Color.red(a) - Color.red(b)) <= 3 && kotlin.math.abs(Color.green(a) - Color.green(b)) <= 3 && kotlin.math.abs(Color.blue(a) - Color.blue(b)) <= 3
+                    } }
+                } finally { expected.recycle() }
             }
+            if (ready) result = frames.map { bitmap -> IntArray(bitmap.width * bitmap.height).also {
+                bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                // First entry is the top-center background sample, outside the rounded corner and title.
+                it[0] = bitmap.getPixel(bitmap.width / 2, 2)
+            } }
             result != null
         }
         return result!!

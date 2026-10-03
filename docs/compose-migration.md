@@ -1057,3 +1057,5 @@ RSS 文章 B2：分类与文章实际宿主切换 Compose Activity/Route/Screen�
 封面字体设置 A2：新增小字号编辑状态与私有字体输入草稿，取消不写配置、确认/默认值单次执行。字体选择保留公开 callback 并支持初始化前结果，恢复未完成字体需显式重试，应用成功后清理失败只重写草稿；停止后非合作任务不发布迟到状态。新增 9 个真实 JVM 状态用例及 1 个实际 AtomicFile Android 用例；Android 用例仅编译验证。
 
 RSS 阅读 A1：新增 IO 页面加载与收藏仓库、独立 HTML/预加载脚本样式算法及私有完整请求会话，保留收藏缓存优先、正文规则/URL/启动 HTML 等原路径。规则解析变量按基线逐键合并最新记录，保护并发修改和其它文章元数据，收藏只更新原有正文字段。会话释放校验 AtomicFile 所有副文件。新增 7 个真实 JVM 算法用例与 15 个真实 Room/文件 Android 用例；Android 用例仅编译验证。
+
+封面字体设置 B：实际目的地使用纯 Compose 控件与两份正式 ComposeCover 预览，保留字体选择公共 callback、默认字体隔离、百分比编辑/默认值/取消及设置搜索。删除旧 CoverPreviewPreference、独占 Preference XML 与预览布局，共享像素和安装测试改为实际 Compose 控件与渲染捕获。新增 4 个 Compose 与 2 个 ConfigActivity Android 用例；Android 用例仅编译验证。

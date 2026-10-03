@@ -290,12 +290,12 @@ class CoverTitleAdaptiveUiTest {
             compose.onNodeWithTag("cover-settings-list").performScrollToNode(hasTestTag("cover-row-font"))
             compose.onNodeWithTag("cover-row-font").performClick()
             scrollCoverStylePreference(PreferKey.coverCustomFontSize)
-            onView(withText(R.string.cover_custom_font_size)).perform(click())
+            compose.onNodeWithTag("cover-font-row-${PreferKey.coverCustomFontSize}").performClick()
             sizes.forEachIndexed { index, (key, label) ->
                 scrollCoverStylePreference(key)
-                onView(withText(label)).perform(click())
-                compose.onNodeWithTag("number-input").performTextReplacement((110 + index * 10).toString())
-                compose.onNodeWithTag("number-confirm").performClick()
+                compose.onNodeWithTag("cover-font-row-$key").performClick()
+                compose.onNodeWithTag("cover-font-number").performTextReplacement((110 + index * 10).toString())
+                compose.onNodeWithTag("cover-font-confirm").performClick()
             }
             var before: ConfigActivity? = null
             instrumentation.runOnMainSync {
@@ -420,11 +420,11 @@ class CoverTitleAdaptiveUiTest {
         ActivityScenario.launch<ConfigActivity>(Intent(context, ConfigActivity::class.java)
             .putExtra("configTag", ConfigTag.COVER_FONT_CONFIG)).use {
             scrollCoverStylePreference(PreferKey.coverTitleAdaptive)
-            onView(withText(R.string.cover_title_adaptive)).perform(click())
+            compose.onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}").performClick()
             assertFalse(preferences.getBoolean(PreferKey.coverTitleAdaptive, true))
             assertFalse(BookCover.adaptiveTitleSize)
             screenshot("cover-title-setting-off")
-            onView(withText(R.string.cover_title_adaptive)).perform(click())
+            compose.onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}").performClick()
             assertTrue(preferences.getBoolean(PreferKey.coverTitleAdaptive, false))
             assertTrue(BookCover.adaptiveTitleSize)
             screenshot("cover-title-setting-on")
@@ -432,13 +432,8 @@ class CoverTitleAdaptiveUiTest {
     }
 
     private fun scrollCoverStylePreference(key: String) {
-        instrumentation.runOnMainSync {
-            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<ConfigActivity>().single()
-            (activity.supportFragmentManager.findFragmentByTag(ConfigTag.COVER_FONT_CONFIG)
-                as CoverFontConfigFragment).scrollToPreference(key)
-        }
-        instrumentation.waitForIdleSync()
+        compose.waitUntil(timeoutMillis = 10000) { compose.onAllNodesWithTag("cover-font-settings-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("cover-font-settings-list").performScrollToNode(hasTestTag("cover-font-row-$key"))
     }
 
     private fun screenshot(name: String) {
