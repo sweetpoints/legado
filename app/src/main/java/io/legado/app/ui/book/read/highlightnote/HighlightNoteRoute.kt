@@ -7,12 +7,23 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun HighlightNoteRoute(viewModel: HighlightNoteViewModel, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun HighlightNoteRoute(
+    viewModel: HighlightNoteViewModel,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(state.finished) {
         if (state.finished) onClose()
-        onPauseOrDispose { }
+        onPauseOrDispose {}
     }
-    HighlightNoteScreen(state, viewModel::setBookText, viewModel::setNote, viewModel::submit,
-        viewModel::cancel, viewModel::retry, modifier)
+    HighlightNoteScreen(
+        state,
+        viewModel::setBookText,
+        viewModel::setNote,
+        viewModel::submit,
+        viewModel::cancel,
+        viewModel::retry,
+        modifier,
+    )
 }

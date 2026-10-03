@@ -19,24 +19,34 @@ class UnderlineEditDialog : BaseComposeDialogFragment() {
     }
 
     private val initialUnderline: Underline
-        get() = Underline(
-            kind = arguments?.getString(ARG_KIND)?.let { runCatching { Kind.valueOf(it) }.getOrNull() }
-                ?: Underline().kind,
-            color = arguments?.getInt(ARG_COLOR) ?: Underline().color,
-            width = arguments?.getFloat(ARG_WIDTH) ?: Underline().width,
-            distance = arguments?.getFloat(ARG_DISTANCE) ?: Underline().distance
-        ).normalized()
+        get() =
+            Underline(
+                    kind =
+                        arguments?.getString(ARG_KIND)?.let {
+                            runCatching { Kind.valueOf(it) }.getOrNull()
+                        } ?: Underline().kind,
+                    color = arguments?.getInt(ARG_COLOR) ?: Underline().color,
+                    width = arguments?.getFloat(ARG_WIDTH) ?: Underline().width,
+                    distance = arguments?.getFloat(ARG_DISTANCE) ?: Underline().distance,
+                )
+                .normalized()
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    @Composable override fun Content() {
-        UnderlineEditRoute(initialUnderline, {
-            (parentFragment as? Callback)?.onUnderlineChanged(it)
-            dismiss()
-        }, { dismiss() }, Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
+    @Composable
+    override fun Content() {
+        UnderlineEditRoute(
+            initialUnderline,
+            {
+                (parentFragment as? Callback)?.onUnderlineChanged(it)
+                dismiss()
+            },
+            { dismiss() },
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f),
+        )
     }
 
     companion object {
@@ -46,14 +56,17 @@ class UnderlineEditDialog : BaseComposeDialogFragment() {
         private const val ARG_DISTANCE = "distance"
 
         fun show(fragmentManager: androidx.fragment.app.FragmentManager, underline: Underline) {
-            UnderlineEditDialog().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_KIND, underline.kind.name)
-                    putInt(ARG_COLOR, underline.color)
-                    putFloat(ARG_WIDTH, underline.width)
-                    putFloat(ARG_DISTANCE, underline.distance)
+            UnderlineEditDialog()
+                .apply {
+                    arguments =
+                        Bundle().apply {
+                            putString(ARG_KIND, underline.kind.name)
+                            putInt(ARG_COLOR, underline.color)
+                            putFloat(ARG_WIDTH, underline.width)
+                            putFloat(ARG_DISTANCE, underline.distance)
+                        }
                 }
-            }.show(fragmentManager, UnderlineEditDialog::class.simpleName)
+                .show(fragmentManager, UnderlineEditDialog::class.simpleName)
         }
     }
 }

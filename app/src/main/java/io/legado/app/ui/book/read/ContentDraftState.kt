@@ -15,6 +15,7 @@ internal data class ContentEditTarget(
 internal class ContentDraftState {
     var text: String? = null
         private set
+
     private var baseline: String? = null
     private var restoredChanges = false
     private var revision = 0L

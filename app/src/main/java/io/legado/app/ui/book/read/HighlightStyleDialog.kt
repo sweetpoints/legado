@@ -27,58 +27,139 @@ import io.legado.app.utils.showDialogFragment
 import kotlin.math.roundToInt
 
 /** The existing bottom-sheet window shell hosts only Compose content. */
-class HighlightStyleDialog : BottomSheetDialogFragment(), ShadowEditDialog.Callback,
-    UnderlineEditDialog.Callback, FontSelectDialog.CallBack {
+class HighlightStyleDialog :
+    BottomSheetDialogFragment(),
+    ShadowEditDialog.Callback,
+    UnderlineEditDialog.Callback,
+    FontSelectDialog.CallBack {
     interface StyleHost {
         fun currentHighlightStyle(): HighlightStyle
+
         fun onHighlightStyleChanged(style: HighlightStyle)
+
         fun pickHighlightColor(dialogId: Int, initial: Int, withAlpha: Boolean)
     }
-    private val styleHost get() = resolveStyleHost(parentFragment, activity)
-    private val viewModel by viewModels<HighlightStyleViewModel> {
-        viewModelFactory { initializer { HighlightStyleViewModel(createSavedStateHandle()) } }
-    }
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+
+    private val styleHost
+        get() = resolveStyleHost(parentFragment, activity)
+
+    private val viewModel by
+        viewModels<HighlightStyleViewModel> {
+            viewModelFactory { initializer { HighlightStyleViewModel(createSavedStateHandle()) } }
+        }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View =
         ComposeView(requireContext()).apply {
             id = io.legado.app.R.id.compose_dialog_content
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme {
-                HighlightStyleRoute(viewModel, ReadBookConfig.textSize, (ReadBookConfig.letterSpacing * 100).roundToInt(),
-                    { isAdded && !childFragmentManager.isStateSaved }, { currentStyle() }, { style, fontChanged ->
-                        if (fontChanged) ChapterProvider.invalidateHighlightTypeface(style.resolvedFontPath)
-                        styleHost?.onHighlightStyleChanged(style)
-                    }, { channel, style ->
-                        styleHost?.pickHighlightColor(channelDialogId(channel), HighlightStyleRepository().color(style, channel),
-                            channel == HighlightChannel.Fill || channel == HighlightChannel.Shadow)
-                    }, { if (childFragmentManager.findFragmentByTag(FontSelectDialog::class.simpleName) == null) showDialogFragment<FontSelectDialog>() },
-                    { shadow -> if (childFragmentManager.findFragmentByTag(ShadowEditDialog::class.simpleName) == null) ShadowEditDialog.show(childFragmentManager, shadow) },
-                    { underline -> if (childFragmentManager.findFragmentByTag(UnderlineEditDialog::class.simpleName) == null) UnderlineEditDialog.show(childFragmentManager, underline) },
-                    Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .85f))
-            } }
+            setContent {
+                LegadoComposeTheme {
+                    HighlightStyleRoute(
+                        viewModel,
+                        ReadBookConfig.textSize,
+                        (ReadBookConfig.letterSpacing * 100).roundToInt(),
+                        { isAdded && !childFragmentManager.isStateSaved },
+                        { currentStyle() },
+                        { style, fontChanged ->
+                            if (fontChanged)
+                                ChapterProvider.invalidateHighlightTypeface(style.resolvedFontPath)
+                            styleHost?.onHighlightStyleChanged(style)
+                        },
+                        { channel, style ->
+                            styleHost?.pickHighlightColor(
+                                channelDialogId(channel),
+                                HighlightStyleRepository().color(style, channel),
+                                channel == HighlightChannel.Fill ||
+                                    channel == HighlightChannel.Shadow,
+                            )
+                        },
+                        {
+                            if (
+                                childFragmentManager.findFragmentByTag(
+                                    FontSelectDialog::class.simpleName
+                                ) == null
+                            )
+                                showDialogFragment<FontSelectDialog>()
+                        },
+                        { shadow ->
+                            if (
+                                childFragmentManager.findFragmentByTag(
+                                    ShadowEditDialog::class.simpleName
+                                ) == null
+                            )
+                                ShadowEditDialog.show(childFragmentManager, shadow)
+                        },
+                        { underline ->
+                            if (
+                                childFragmentManager.findFragmentByTag(
+                                    UnderlineEditDialog::class.simpleName
+                                ) == null
+                            )
+                                UnderlineEditDialog.show(childFragmentManager, underline)
+                        },
+                        Modifier.heightIn(
+                            max = LocalConfiguration.current.screenHeightDp.dp * .85f
+                        ),
+                    )
+                }
+            }
         }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val host = styleHost ?: run { dismiss(); return }
+        val host =
+            styleHost
+                ?: run {
+                    dismiss()
+                    return
+                }
         viewModel.attach(host.currentHighlightStyle())
     }
-    override fun onStart() { super.onStart(); styleHost?.let { viewModel.attach(it.currentHighlightStyle()) } }
-    private fun currentStyle() = styleHost?.currentHighlightStyle() ?: HighlightStyle()
-    fun refresh() { if (view != null) viewModel.refresh(currentStyle()) }
-    override val curFontPath: String get() = currentStyle().resolvedFontPath
-    override val selectSystemTypefaceOnDefault = false
-    override fun selectFont(path: String) { viewModel.selectFont(path) }
-    override fun onShadowChanged(shadow: Shadow) { viewModel.shadow(shadow) }
-    override fun onUnderlineChanged(underline: Underline) { viewModel.underline(underline) }
-    private fun channelDialogId(channel: HighlightChannel): Int = when (channel) {
-        HighlightChannel.Fill -> HL_FILL
-        HighlightChannel.Text -> HL_TEXT
-        HighlightChannel.Underline -> HL_UNDERLINE
-        HighlightChannel.Strike -> HL_STRIKE
-        HighlightChannel.Box -> HL_BOX
-        HighlightChannel.Emphasis -> HL_EMPHASIS
-        HighlightChannel.Shadow -> HL_SHADOW
-        else -> -1
+
+    override fun onStart() {
+        super.onStart()
+        styleHost?.let { viewModel.attach(it.currentHighlightStyle()) }
     }
+
+    private fun currentStyle() = styleHost?.currentHighlightStyle() ?: HighlightStyle()
+
+    fun refresh() {
+        if (view != null) viewModel.refresh(currentStyle())
+    }
+
+    override val curFontPath: String
+        get() = currentStyle().resolvedFontPath
+
+    override val selectSystemTypefaceOnDefault = false
+
+    override fun selectFont(path: String) {
+        viewModel.selectFont(path)
+    }
+
+    override fun onShadowChanged(shadow: Shadow) {
+        viewModel.shadow(shadow)
+    }
+
+    override fun onUnderlineChanged(underline: Underline) {
+        viewModel.underline(underline)
+    }
+
+    private fun channelDialogId(channel: HighlightChannel): Int =
+        when (channel) {
+            HighlightChannel.Fill -> HL_FILL
+            HighlightChannel.Text -> HL_TEXT
+            HighlightChannel.Underline -> HL_UNDERLINE
+            HighlightChannel.Strike -> HL_STRIKE
+            HighlightChannel.Box -> HL_BOX
+            HighlightChannel.Emphasis -> HL_EMPHASIS
+            HighlightChannel.Shadow -> HL_SHADOW
+            else -> -1
+        }
+
     companion object {
         const val HL_FILL = 8101
         const val HL_TEXT = 8102
@@ -100,25 +181,23 @@ class HighlightStyleDialog : BottomSheetDialogFragment(), ShadowEditDialog.Callb
         fun applyChannelColor(
             style: HighlightStyle,
             dialogId: Int,
-            color: Int
-        ): HighlightStyle = when (dialogId) {
-            HL_FILL -> style.copy(fill = color)
-            HL_TEXT -> style.copy(textColor = color)
-            HL_UNDERLINE -> style.copy(
-                underline = (style.underline ?: Underline()).copy(color = color)
-            )
-            HL_STRIKE -> style.copy(strike = Deco(color))
-            HL_BOX -> style.copy(box = Deco(color))
-            HL_EMPHASIS -> style.copy(emphasis = Deco(color))
-            HL_SHADOW -> style.copy(
-                shadow = (style.shadow ?: Shadow()).copy(color = color)
-            )
-            else -> style
-        }
+            color: Int,
+        ): HighlightStyle =
+            when (dialogId) {
+                HL_FILL -> style.copy(fill = color)
+                HL_TEXT -> style.copy(textColor = color)
+                HL_UNDERLINE ->
+                    style.copy(underline = (style.underline ?: Underline()).copy(color = color))
+                HL_STRIKE -> style.copy(strike = Deco(color))
+                HL_BOX -> style.copy(box = Deco(color))
+                HL_EMPHASIS -> style.copy(emphasis = Deco(color))
+                HL_SHADOW -> style.copy(shadow = (style.shadow ?: Shadow()).copy(color = color))
+                else -> style
+            }
 
         internal fun shouldOpenShadowEditor(
             previousStyle: HighlightStyle,
-            newStyle: HighlightStyle
+            newStyle: HighlightStyle,
         ): Boolean = previousStyle.shadow == null && newStyle.shadow != null
     }
 }

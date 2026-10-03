@@ -18,23 +18,30 @@ class ShadowEditDialog : BaseComposeDialogFragment() {
     }
 
     private val initialShadow: Shadow
-        get() = Shadow(
-            radius = arguments?.getFloat(ARG_RADIUS) ?: Shadow().radius,
-            dx = arguments?.getFloat(ARG_DX) ?: Shadow().dx,
-            dy = arguments?.getFloat(ARG_DY) ?: Shadow().dy,
-            color = arguments?.getInt(ARG_COLOR) ?: Shadow().color
-        )
+        get() =
+            Shadow(
+                radius = arguments?.getFloat(ARG_RADIUS) ?: Shadow().radius,
+                dx = arguments?.getFloat(ARG_DX) ?: Shadow().dx,
+                dy = arguments?.getFloat(ARG_DY) ?: Shadow().dy,
+                color = arguments?.getInt(ARG_COLOR) ?: Shadow().color,
+            )
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    @Composable override fun Content() {
-        ShadowEditRoute(initialShadow, {
-            (parentFragment as? Callback)?.onShadowChanged(it)
-            dismiss()
-        }, { dismiss() }, Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f))
+    @Composable
+    override fun Content() {
+        ShadowEditRoute(
+            initialShadow,
+            {
+                (parentFragment as? Callback)?.onShadowChanged(it)
+                dismiss()
+            },
+            { dismiss() },
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .8f),
+        )
     }
 
     companion object {
@@ -44,14 +51,17 @@ class ShadowEditDialog : BaseComposeDialogFragment() {
         private const val ARG_COLOR = "color"
 
         fun show(fragmentManager: androidx.fragment.app.FragmentManager, shadow: Shadow) {
-            ShadowEditDialog().apply {
-                arguments = Bundle().apply {
-                    putFloat(ARG_RADIUS, shadow.radius)
-                    putFloat(ARG_DX, shadow.dx)
-                    putFloat(ARG_DY, shadow.dy)
-                    putInt(ARG_COLOR, shadow.color)
+            ShadowEditDialog()
+                .apply {
+                    arguments =
+                        Bundle().apply {
+                            putFloat(ARG_RADIUS, shadow.radius)
+                            putFloat(ARG_DX, shadow.dx)
+                            putFloat(ARG_DY, shadow.dy)
+                            putInt(ARG_COLOR, shadow.color)
+                        }
                 }
-            }.show(fragmentManager, ShadowEditDialog::class.simpleName)
+                .show(fragmentManager, ShadowEditDialog::class.simpleName)
         }
     }
 }
