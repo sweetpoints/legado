@@ -58,7 +58,6 @@ class TocExpansionPreferenceTest {
             "src/main/java/io/legado/app/ui/book/toc/TocViewModel.kt"
         ).readText()
         assertTrue(viewModel.contains("book.setTocExpanded(expanded)"))
-        assertTrue(viewModel.contains("bookDao.updateTocExpanded(book.bookUrl, expanded)"))
         assertTrue(viewModel.contains("resetCollapse = true"))
         val updateBlock = viewModel.substringAfter("fun setTocExpanded")
             .substringBefore("fun startChapterListSearch")

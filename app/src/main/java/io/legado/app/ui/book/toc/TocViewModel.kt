@@ -8,6 +8,8 @@ import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
+import io.legado.app.data.repository.AppTocHostRepository
+import kotlinx.coroutines.runBlocking
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.update
 import io.legado.app.help.book.isPdf
@@ -27,6 +29,7 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeText
 
 class TocViewModel(application: Application) : BaseViewModel(application) {
+    private val repository = AppTocHostRepository()
     var bookUrl: String = ""
     var bookData = MutableLiveData<Book>()
     var chapterListCallBack: ChapterListCallBack? = null
@@ -37,7 +40,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
     fun initBook(bookUrl: String) {
         this.bookUrl = bookUrl
         execute {
-            appDb.bookDao.getBook(bookUrl)?.let {
+            repository.load(bookUrl)?.let {
                 bookData.postValue(it)
             }
         }
@@ -45,14 +48,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
 
     fun upBookTocRule(book: Book, complete: (Throwable?) -> Unit) {
         execute {
-            book.update()
-            LocalBook.getChapterList(book).let {
-                appDb.bookChapterDao.delByBook(book.bookUrl)
-                appDb.bookChapterDao.insert(*it.toTypedArray())
-                book.update()
-                ReadBook.onChapterListUpdated(book)
-                bookData.postValue(book)
-            }
+            repository.rebuild(book).also { bookData.postValue(it) }
         }.onSuccess {
             complete.invoke(null)
         }.onError {
@@ -62,22 +58,10 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
 
     fun reverseToc(success: (book: Book) -> Unit) {
         execute {
-            bookData.value?.apply {
-                if (isPdf || isEpub) {
-                    setReverseToc(!getReverseToc())
-                    listOf(ReadBook.book, ReadManga.book, AudioPlay.book, VideoPlay.book)
-                        .filter { it?.bookUrl == bookUrl }
-                        .forEach { it?.setReverseToc(getReverseToc()) }
-                    appDb.bookDao.updateReverseToc(bookUrl, getReverseToc())
-                    return@apply
-                }
-                // Keep source parsing and index-based reading/cache identities unchanged.
-                setReverseTocDisplay(!getReverseTocDisplay())
-                listOf(ReadBook.book, ReadManga.book, AudioPlay.book, VideoPlay.book)
-                    .filter { it?.bookUrl == bookUrl }
-                    .forEach { it?.setReverseTocDisplay(getReverseTocDisplay()) }
-                appDb.bookDao.updateReverseTocDisplay(bookUrl, getReverseTocDisplay())
-            }
+            bookData.value?.let { current -> repository.reverse(current).also { result ->
+                current.readConfig = result.readConfig?.copy()
+                repository.synchronizeReverse(result)
+            }; current }
         }.onSuccess {
             it?.let(success)
         }
@@ -94,7 +78,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         )
         globalExecutor.execute {
             runCatching {
-                appDb.bookDao.updateTocExpanded(book.bookUrl, expanded)
+                runBlocking { repository.expanded(book.bookUrl, expanded) }
             }.onFailure {
                 AppLog.put("保存目录展开设置失败\n${it.localizedMessage}", it)
             }
@@ -102,9 +86,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
     }
 
     private fun updateActiveReaderBooks(bookUrl: String, expanded: Boolean) {
-        listOf(ReadBook.book, ReadManga.book, AudioPlay.book, VideoPlay.book)
-            .filter { it?.bookUrl == bookUrl }
-            .forEach { it?.setTocExpanded(expanded) }
+        repository.synchronizeExpanded(bookUrl, expanded)
     }
 
     fun startChapterListSearch(newText: String?) {
@@ -127,13 +109,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         execute {
             val book = bookData.value
                 ?: throw NoStackTraceException(context.getString(R.string.no_book))
-            val fileName = "bookmark-${book.name} ${book.author}.json"
-            val doc = FileDoc.fromUri(treeUri, true)
-            doc.createFileIfNotExist(fileName).writeText(
-                GSON.toJson(
-                    appDb.bookmarkDao.getByBook(book.name, book.author)
-                )
-            )
+            repository.export(book, treeUri.toString(), false)
         }.onError {
             AppLog.put("导出失败\n${it.localizedMessage}", it, true)
         }.onSuccess {
@@ -145,19 +121,7 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         execute {
             val book = bookData.value
                 ?: throw NoStackTraceException(context.getString(R.string.no_book))
-            val fileName = "bookmark-${book.name} ${book.author}.md"
-            val treeDoc = FileDoc.fromUri(treeUri, true)
-            val fileDoc = treeDoc.createFileIfNotExist(fileName)
-                .openOutputStream()
-                .getOrThrow()
-            fileDoc.use { outputStream ->
-                outputStream.write("## ${book.name} ${book.author}\n\n".toByteArray())
-                appDb.bookmarkDao.getByBook(book.name, book.author).forEach {
-                    outputStream.write("#### ${it.chapterName}\n\n".toByteArray())
-                    outputStream.write("###### 原文\n ${it.bookText}\n\n".toByteArray())
-                    outputStream.write("###### 摘要\n ${it.content}\n\n".toByteArray())
-                }
-            }
+            repository.export(book, treeUri.toString(), true)
         }.onError {
             AppLog.put("导出失败\n${it.localizedMessage}", it, true)
         }.onSuccess {
