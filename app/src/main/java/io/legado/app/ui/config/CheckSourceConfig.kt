@@ -11,12 +11,30 @@ import io.legado.app.data.repository.AppSourceCheckSettingsRepository
 import io.legado.app.utils.setLayout
 
 class CheckSourceConfig : BaseComposeDialogFragment() {
-    private val model by viewModels<SourceCheckSettingsViewModel> {
-        viewModelFactory { initializer { SourceCheckSettingsViewModel(AppSourceCheckSettingsRepository(requireContext()), createSavedStateHandle()) } }
+    private val model by
+        viewModels<SourceCheckSettingsViewModel> {
+            viewModelFactory {
+                initializer {
+                    SourceCheckSettingsViewModel(
+                        AppSourceCheckSettingsRepository(requireContext()),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
+
+    override fun onStart() {
+        super.onStart()
+        setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    override fun onStart() { super.onStart(); setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT) }
-    @Composable override fun Content() {
-        SourceCheckSettingsRoute(model, { isAdded && !parentFragmentManager.isStateSaved },
-            ::dismiss, { isCancelable = it })
+
+    @Composable
+    override fun Content() {
+        SourceCheckSettingsRoute(
+            model,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            ::dismiss,
+            { isCancelable = it },
+        )
     }
 }

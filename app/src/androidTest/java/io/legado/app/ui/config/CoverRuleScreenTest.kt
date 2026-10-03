@@ -21,7 +21,8 @@ import org.junit.Test
 class CoverRuleScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun editingAndButtonsEmitCallbacks() {
+    @Test
+    fun editingAndButtonsEmitCallbacks() {
         var enabled: Boolean? = null
         var url: String? = null
         var rule: String? = null
@@ -30,9 +31,17 @@ class CoverRuleScreenTest {
         var cancels = 0
         compose.setContent {
             LegadoComposeTheme {
-                CoverRuleScreen(CoverRuleUiState(CoverRuleDraft(false, "old", "old rule"), isLoading = false),
-                    { enabled = it }, { url = it }, { rule = it }, { saves++ }, { deletes++ },
-                    { cancels++ }, {}, Modifier.heightIn(max = 600.dp))
+                CoverRuleScreen(
+                    CoverRuleUiState(CoverRuleDraft(false, "old", "old rule"), isLoading = false),
+                    { enabled = it },
+                    { url = it },
+                    { rule = it },
+                    { saves++ },
+                    { deletes++ },
+                    { cancels++ },
+                    {},
+                    Modifier.heightIn(max = 600.dp),
+                )
             }
         }
         compose.onNodeWithTag("cover-rule-enabled").assertIsOff().performClick()
@@ -51,12 +60,22 @@ class CoverRuleScreenTest {
         }
     }
 
-    @Test fun loadingDisablesEditingAndPersistenceButAllowsCancel() {
+    @Test
+    fun loadingDisablesEditingAndPersistenceButAllowsCancel() {
         var cancels = 0
         compose.setContent {
             LegadoComposeTheme {
-                CoverRuleScreen(CoverRuleUiState(), {}, {}, {}, {}, {}, { cancels++ }, {},
-                    Modifier.heightIn(max = 600.dp))
+                CoverRuleScreen(
+                    CoverRuleUiState(),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { cancels++ },
+                    {},
+                    Modifier.heightIn(max = 600.dp),
+                )
             }
         }
         compose.onNodeWithTag("cover-rule-search-url").assertIsNotEnabled()
@@ -68,16 +87,32 @@ class CoverRuleScreenTest {
         compose.runOnIdle { assertEquals(1, cancels) }
     }
 
-    @Test fun validationAndErrorAppearAndRetryEmitsCallback() {
+    @Test
+    fun validationAndErrorAppearAndRetryEmitsCallback() {
         var retries = 0
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         compose.setContent {
             LegadoComposeTheme {
-                CoverRuleScreen(CoverRuleUiState(isLoading = false, showValidation = true, error = "read failed"),
-                    {}, {}, {}, {}, {}, {}, { retries++ }, Modifier.heightIn(max = 600.dp))
+                CoverRuleScreen(
+                    CoverRuleUiState(
+                        isLoading = false,
+                        showValidation = true,
+                        error = "read failed",
+                    ),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { retries++ },
+                    Modifier.heightIn(max = 600.dp),
+                )
             }
         }
-        compose.onNodeWithText(context.getString(R.string.cover_rule_required_fields)).assertExists()
+        compose
+            .onNodeWithText(context.getString(R.string.cover_rule_required_fields))
+            .assertExists()
         compose.onNodeWithText("read failed").assertExists()
         compose.onNodeWithText(context.getString(R.string.retry)).performClick()
         compose.runOnIdle { assertEquals(1, retries) }

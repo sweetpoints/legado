@@ -14,55 +14,118 @@ import org.junit.Test
 class ConfigScaffoldTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun queryEditsOnlyDraftAndImeDispatchesTrimmedSearchWithoutNavigating() {
+    @Test
+    fun queryEditsOnlyDraftAndImeDispatchesTrimmedSearchWithoutNavigating() {
         var searching by mutableStateOf(false)
         var query by mutableStateOf(TextFieldValue())
-        val searches = mutableListOf<String>(); var backs = 0
-        compose.setContent { LegadoComposeTheme {
-            ConfigScaffold("Settings", searching, query, { query = it }, { searching = it }, { searches += it }, { backs++ }) { Text("Owned page") }
-        } }
+        val searches = mutableListOf<String>()
+        var backs = 0
+        compose.setContent {
+            LegadoComposeTheme {
+                ConfigScaffold(
+                    "Settings",
+                    searching,
+                    query,
+                    { query = it },
+                    { searching = it },
+                    { searches += it },
+                    { backs++ },
+                ) {
+                    Text("Owned page")
+                }
+            }
+        }
         compose.onNodeWithTag("config-title").assertTextEquals("Settings")
         compose.onNodeWithTag("config-open-search").performClick()
         compose.onNodeWithTag("config-search-input").performTextReplacement("  Automatic backup  ")
         assertTrue(searches.isEmpty())
         compose.onNodeWithTag("config-search-input").performImeAction()
-        assertEquals(listOf("Automatic backup"), searches); assertEquals(0, backs)
+        assertEquals(listOf("Automatic backup"), searches)
+        assertEquals(0, backs)
         compose.onNodeWithText("Owned page").assertIsDisplayed()
     }
 
-    @Test fun emptySearchDoesNotDispatchAndToolbarBackClosesSearchBeforeNavigating() {
+    @Test
+    fun emptySearchDoesNotDispatchAndToolbarBackClosesSearchBeforeNavigating() {
         var searching by mutableStateOf(true)
         var query by mutableStateOf(TextFieldValue("   "))
-        var searches = 0; var backs = 0
-        compose.setContent { LegadoComposeTheme {
-            ConfigScaffold("Settings", searching, query, { query = it }, { searching = it }, { searches++ }, { backs++ }) {}
-        } }
-        compose.onNodeWithTag("config-submit-search").performClick(); assertEquals(0, searches)
-        compose.onNodeWithTag("config-back").performClick(); assertFalse(searching); assertEquals(0, backs)
+        var searches = 0
+        var backs = 0
+        compose.setContent {
+            LegadoComposeTheme {
+                ConfigScaffold(
+                    "Settings",
+                    searching,
+                    query,
+                    { query = it },
+                    { searching = it },
+                    { searches++ },
+                    { backs++ },
+                ) {}
+            }
+        }
+        compose.onNodeWithTag("config-submit-search").performClick()
+        assertEquals(0, searches)
+        compose.onNodeWithTag("config-back").performClick()
+        assertFalse(searching)
+        assertEquals(0, backs)
         compose.onNodeWithTag("config-title").assertIsDisplayed()
-        compose.onNodeWithTag("config-back").performClick(); assertEquals(1, backs)
+        compose.onNodeWithTag("config-back").performClick()
+        assertEquals(1, backs)
     }
 
-    @Test fun restoredDraftSelectionAndChangingPageTitleRemainOwnedByCaller() {
+    @Test
+    fun restoredDraftSelectionAndChangingPageTitleRemainOwnedByCaller() {
         var searching by mutableStateOf(true)
         var title by mutableStateOf("Backup")
         var query by mutableStateOf(TextFieldValue("restored query", TextRange(2, 7)))
-        compose.setContent { LegadoComposeTheme {
-            ConfigScaffold(title, searching, query, { query = it }, { searching = it }, {}, {}) {}
-        } }
+        compose.setContent {
+            LegadoComposeTheme {
+                ConfigScaffold(
+                    title,
+                    searching,
+                    query,
+                    { query = it },
+                    { searching = it },
+                    {},
+                    {},
+                ) {}
+            }
+        }
         compose.onNodeWithTag("config-search-input").assertTextEquals("restored query")
-        compose.runOnIdle { assertEquals(TextRange(2, 7), query.selection); title = "Theme"; searching = false }
+        compose.runOnIdle {
+            assertEquals(TextRange(2, 7), query.selection)
+            title = "Theme"
+            searching = false
+        }
         compose.onNodeWithTag("config-title").assertTextEquals("Theme")
         compose.runOnIdle { searching = true }
         compose.onNodeWithTag("config-search-input").assertTextEquals("restored query")
     }
-    @Test fun pendingPrivateWriteDisablesEditingAndSearchButKeepsNativeBack() {
-        var searched = false; var opened = false; var back = false
-        compose.setContent { LegadoComposeTheme {
-            ConfigScaffold("Settings", false, TextFieldValue(), {}, { opened = it }, { searched = true }, { back = true }, enabled = false) {}
-        } }
+
+    @Test
+    fun pendingPrivateWriteDisablesEditingAndSearchButKeepsNativeBack() {
+        var searched = false
+        var opened = false
+        var back = false
+        compose.setContent {
+            LegadoComposeTheme {
+                ConfigScaffold(
+                    "Settings",
+                    false,
+                    TextFieldValue(),
+                    {},
+                    { opened = it },
+                    { searched = true },
+                    { back = true },
+                    enabled = false,
+                ) {}
+            }
+        }
         compose.onNodeWithTag("config-open-search").assertIsNotEnabled()
         compose.onNodeWithTag("config-back").performClick()
-        assertTrue(back); assertFalse(opened); assertFalse(searched)
+        assertTrue(back)
+        assertFalse(opened)
+        assertFalse(searched)
     }
 }

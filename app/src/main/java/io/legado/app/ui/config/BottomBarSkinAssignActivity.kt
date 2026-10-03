@@ -17,16 +17,31 @@ import kotlinx.coroutines.launch
 
 /** Keeps the import/edit intent contract; staging transactions remain owned by the skin manager. */
 class BottomBarSkinAssignActivity : BaseComposeActivity() {
-    internal val model by viewModels<BottomBarAssignmentViewModel> {
-        viewModelFactory { initializer { BottomBarAssignmentViewModel(AppBottomBarAssignmentRepository(), createSavedStateHandle(),
-            intent.getStringExtra("sessionId").orEmpty(), intent.getStringExtra("editName"), intent.getStringExtra("name").orEmpty(), 56.dpToPx()) } }
-    }
+    internal val model by
+        viewModels<BottomBarAssignmentViewModel> {
+            viewModelFactory {
+                initializer {
+                    BottomBarAssignmentViewModel(
+                        AppBottomBarAssignmentRepository(),
+                        createSavedStateHandle(),
+                        intent.getStringExtra("sessionId").orEmpty(),
+                        intent.getStringExtra("editName"),
+                        intent.getStringExtra("name").orEmpty(),
+                        56.dpToPx(),
+                    )
+                }
+            }
+        }
+
     override fun onComposeCreated(savedInstanceState: Bundle?) {
         onBackPressedDispatcher.addCallback(this) { model.close() }
     }
-    @Composable override fun Content(savedInstanceState: Bundle?) {
+
+    @Composable
+    override fun Content(savedInstanceState: Bundle?) {
         BottomBarAssignmentRoute(model, { !isFinishing }, ::finish, { toastOnUi(it) })
     }
+
     override fun onDestroy() {
         if (isFinishing && !isChangingConfigurations && !model.state.value.finished) {
             lifecycleScope.launch(NonCancellable) { runCatching { model.releaseIfNeeded() } }

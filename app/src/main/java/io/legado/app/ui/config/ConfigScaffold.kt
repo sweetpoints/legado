@@ -39,43 +39,82 @@ internal fun ConfigScaffold(
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     val submit = {
-        if (enabled) query.text.trim().takeIf { it.isNotEmpty() }?.let {
-            keyboard?.hide()
-            onSearch(it)
-        }
+        if (enabled)
+            query.text
+                .trim()
+                .takeIf { it.isNotEmpty() }
+                ?.let {
+                    keyboard?.hide()
+                    onSearch(it)
+                }
         Unit
     }
-    BackHandler(searching) { keyboard?.hide(); onSearching(false) }
+    BackHandler(searching) {
+        keyboard?.hide()
+        onSearching(false)
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    if (searching) OutlinedTextField(
-                        value = query,
-                        onValueChange = onQuery,
-                        singleLine = true,
-                        enabled = enabled,
-                        placeholder = { Text(stringResource(R.string.search)) },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { submit() }),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("config-search-input"),
-                    ) else Text(title, Modifier.testTag("config-title"))
+                    if (searching)
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = onQuery,
+                            singleLine = true,
+                            enabled = enabled,
+                            placeholder = { Text(stringResource(R.string.search)) },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { submit() }),
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .focusRequester(focus)
+                                    .testTag("config-search-input"),
+                        )
+                    else Text(title, Modifier.testTag("config-title"))
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (searching) { keyboard?.hide(); onSearching(false) } else onBack() },
-                        modifier = Modifier.testTag("config-back")) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.back))
+                    IconButton(
+                        onClick = {
+                            if (searching) {
+                                keyboard?.hide()
+                                onSearching(false)
+                            } else onBack()
+                        },
+                        modifier = Modifier.testTag("config-back"),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_arrow_back),
+                            stringResource(R.string.back),
+                        )
                     }
                 },
                 actions = {
-                    if (searching) IconButton(onClick = submit, enabled = enabled, modifier = Modifier.testTag("config-submit-search")) {
-                        Icon(painterResource(R.drawable.ic_search), stringResource(R.string.search))
-                    } else IconButton(onClick = { onSearching(true) }, enabled = enabled, modifier = Modifier.testTag("config-open-search")) {
-                        Icon(painterResource(R.drawable.ic_search), stringResource(R.string.search))
-                    }
+                    if (searching)
+                        IconButton(
+                            onClick = submit,
+                            enabled = enabled,
+                            modifier = Modifier.testTag("config-submit-search"),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_search),
+                                stringResource(R.string.search),
+                            )
+                        }
+                    else
+                        IconButton(
+                            onClick = { onSearching(true) },
+                            enabled = enabled,
+                            modifier = Modifier.testTag("config-open-search"),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_search),
+                                stringResource(R.string.search),
+                            )
+                        }
                 },
             )
-        },
+        }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).testTag("config-page")) { content() }
     }
