@@ -68,7 +68,7 @@ internal class AppBrowserNavigationStore(context: Context) : BrowserNavigationSt
     private suspend fun <T> locked(ticket: String, block: () -> T): T {
         require(UUID.fromString(ticket).toString() == ticket)
         val canonical = File(directory, "$ticket.json").canonicalPath
-        return stripes[(canonical.hashCode() and Int.MAX_VALUE) % stripes.size].withLock(block)
+        return stripes[(canonical.hashCode() and Int.MAX_VALUE) % stripes.size].withLock { block() }
     }
 
     private companion object {
