@@ -6,6 +6,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.normalizeUnderlineConfigs
 import io.legado.app.utils.GSON
+import io.legado.app.utils.externalCache
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.putPrefInt
 import java.io.ByteArrayOutputStream

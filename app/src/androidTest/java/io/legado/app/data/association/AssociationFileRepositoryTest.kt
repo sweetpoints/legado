@@ -2,6 +2,7 @@ package io.legado.app.data.association
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.util.UUID
@@ -13,6 +14,43 @@ import org.junit.Test
 
 class AssociationFileRepositoryTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test
+    fun readableOwnedProviderNeedsNoExplicitGrantButMissingProviderContentIsRejected() =
+        runBlocking {
+            val directory = File(context.cacheDir, "association-provider-${UUID.randomUUID()}")
+            val sessions = FileAssociationSessionRepository(context, directory)
+            val ticket =
+                sessions.create(
+                    AssociationInput(AssociationHostKind.File, AssociationInputKind.SharedUri)
+                )
+            val incoming =
+                File(context.cacheDir, "association-provider-input-${UUID.randomUUID()}.json")
+            try {
+                incoming.writeText("[{\"pattern\":\"needle\",\"replacement\":\"new\"}]")
+                val uri =
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileProvider",
+                        incoming,
+                    )
+                val input =
+                    AssociationInput(
+                        AssociationHostKind.File,
+                        AssociationInputKind.SharedUri,
+                        listOf(uri.toString()),
+                    )
+                assertEquals(0, input.intentFlags)
+                val repository = LocalAssociationFileRepository(context, sessions)
+                assertEquals("replaceRule", repository.inspect(ticket, input).importType)
+                assertTrue(incoming.delete())
+                assertTrue(runCatching { repository.inspect(ticket, input) }.isFailure)
+            } finally {
+                sessions.release(ticket)
+                incoming.delete()
+                directory.deleteRecursively()
+            }
+        }
 
     @Test
     fun fileInspectionPreservesJsonBeforeExtensionAndUnsupportedConfirmation() = runBlocking {
