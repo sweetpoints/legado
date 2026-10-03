@@ -156,37 +156,27 @@ class PullBookmarkGestureTest {
         assertFalse(update.contains("binding.bookmarkIndicator"))
 
         val pageView = source("app/src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
-        val render =
-            pageView
-                .substringAfter("private fun renderReaderInfo()")
-                .substringBefore("private data class ReaderInfoView")
-        assertTrue(render.contains("view === binding.tvHeaderRight"))
-        assertTrue(render.contains("bookmarkIndicatorVisible"))
-        assertTrue(render.contains("view.minimumWidth = 32.dpToPx()"))
-        assertTrue(render.contains("view.setTextIfNotEqual(\" \")"))
-        assertTrue(
-            render.contains("view.contentDescription = context.getString(R.string.bookmark)")
-        )
         val showInHeader =
             pageView
                 .substringAfter("fun showBookmarkIndicator(show: Boolean)")
-                .substringBefore("private data class ReaderInfoView")
-        assertTrue(showInHeader.contains("pageBookmarkIndicator.isVisible = show"))
-        assertTrue(showInHeader.contains("if (showInHeader) 32 else 20"))
-        assertTrue(showInHeader.contains("if (showInHeader) 32 else 40"))
-        assertTrue(showInHeader.contains("R.drawable.ic_bookmark_long"))
-        assertTrue(showInHeader.contains("View.IMPORTANT_FOR_ACCESSIBILITY_AUTO"))
-        assertTrue(showInHeader.contains("doOnLayout"))
-        assertTrue(showInHeader.contains("translationX"))
-        assertTrue(showInHeader.contains("translationY"))
-        assertTrue(showInHeader.contains("bookmarkIndicatorMarginRight("))
-        assertTrue(showInHeader.contains("bookmarkIndicatorTop("))
-        assertTrue(showInHeader.contains("binding.vwRoot.paddingRight"))
-        assertTrue(showInHeader.contains("translationY = (headerHeight - top).toFloat()"))
+                .substringBefore("private fun updateReaderInfo")
+        assertTrue(showInHeader.contains("val showInHeader = show && headerVisible"))
+        assertTrue(showInHeader.contains("bookmarkVisible = show"))
+        assertTrue(showInHeader.contains("bookmarkInHeader = showInHeader"))
+        assertTrue(pageView.contains("BookmarkIndicatorGeometry.marginRight("))
+        assertTrue(pageView.contains("BookmarkIndicatorGeometry.top("))
+        assertTrue(pageView.contains("bookmarkIndicatorTop(32.dpToPx(), indicatorPadding)"))
+        assertTrue(pageView.contains("bookmarkIndicatorMarginRight(indicatorPadding)"))
+        assertTrue(pageView.contains("ViewCompat.requestApplyInsets(pageRoot)"))
+        assertTrue(
+            pageView.contains(
+                "if (paddingChanged && isMainView) readBookActivity?.upBookmarkIndicator()"
+            )
+        )
         val insets =
             pageView
-                .substringAfter("fun upPaddingDisplayCutouts()")
-                .substringBefore("private fun upTipStyle()")
+                .substringAfter("pageRoot.setOnApplyWindowInsetsListenerCompat")
+                .substringBefore("ViewCompat.requestApplyInsets(pageRoot)")
         assertTrue(insets.contains("readBookActivity?.upBookmarkIndicator()"))
 
         val styleRefresh = activity.substringAfter("2 -> {").substringBefore("3 ->")
@@ -197,18 +187,25 @@ class PullBookmarkGestureTest {
                 styleRefresh.indexOf("upBookmarkIndicator()")
         )
 
-        val pageLayout = source("app/src/main/res/layout/view_book_page.xml")
-        val pageOverlayId = "android:id=\"@+id/page_bookmark_indicator\""
-        assertTrue(pageLayout.contains(pageOverlayId))
-        val pageOverlay = pageLayout.substringAfter(pageOverlayId).substringBefore("/>")
-        assertFalse(pageLayout.contains("android:id=\"@+id/bookmark_indicator\""))
-        assertTrue(pageOverlay.contains("android:layout_width=\"32dp\""))
-        assertTrue(pageOverlay.contains("android:layout_height=\"32dp\""))
-        assertTrue(pageOverlay.contains("android:contentDescription=\"@string/bookmark\""))
-        assertTrue(pageOverlay.contains("android:importantForAccessibility=\"no\""))
-        assertTrue(pageOverlay.contains("android:src=\"@drawable/ic_bookmark_filled\""))
-        assertTrue(pageOverlay.contains("app:layout_constraintTop_toTopOf=\"parent\""))
-        assertTrue(pageOverlay.contains("app:layout_constraintRight_toRightOf=\"parent\""))
+        val pageChrome =
+            source("app/src/main/java/io/legado/app/ui/book/read/page/ReaderPageChrome.kt")
+        assertTrue(pageChrome.contains("BookmarkPageIndicator("))
+        assertTrue(
+            pageChrome.contains("val rightTemplate = if (bookmarkInHeader) \" \" else templates[2]")
+        )
+        assertTrue(
+            pageChrome.contains(
+                "contentDescription = if (bookmarkInHeader) bookmarkDescription else null"
+            )
+        )
+        assertTrue(pageChrome.contains("val iconSize = if (inHeader) 32.dp else 20.dp"))
+        assertTrue(pageChrome.contains("val iconHeight = if (inHeader) 32.dp else 40.dp"))
+        assertTrue(pageChrome.contains("contentDescription = if (inHeader) null else description"))
+        assertTrue(pageChrome.contains("R.drawable.ic_bookmark_filled"))
+        assertTrue(pageChrome.contains("R.drawable.ic_bookmark_long"))
+        assertTrue(pageChrome.contains("Modifier.align(Alignment.TopEnd)"))
+        assertTrue(pageChrome.contains("Modifier.padding(4.dp)"))
+        assertTrue(pageChrome.contains(".alpha(0.88f)"))
 
         val activityLayout =
             source("app/src/main/java/io/legado/app/ui/book/read/ReaderHostScreen.kt")
@@ -251,12 +248,10 @@ class PullBookmarkGestureTest {
         assertEquals(8, BookmarkIndicatorGeometry.top(10, 32, 4, 8))
 
         val pageView = source("app/src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
-        val indicator =
-            pageView
-                .substringAfter("if (bookmarkIndicatorVisible)")
-                .substringBefore("return@forEach")
-        assertTrue(indicator.contains("view.setTextIfNotEqual(\" \")"))
-        assertFalse(indicator.contains("setCompoundDrawablesRelative"))
+        val chrome = source("app/src/main/java/io/legado/app/ui/book/read/page/ReaderPageChrome.kt")
+        assertTrue(chrome.contains("if (bookmarkInHeader) \" \" else templates[2]"))
+        assertTrue(pageView.contains("headerRightPosition.y.toInt() + headerRightBaseline"))
+        assertFalse(chrome.contains("setCompoundDrawablesRelative"))
         assertFalse(pageView.contains("BookmarkIndicatorSpan"))
     }
 
