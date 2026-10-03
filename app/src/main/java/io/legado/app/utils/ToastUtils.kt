@@ -4,16 +4,19 @@ package io.legado.app.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.TypedValue
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import io.legado.app.BuildConfig
-import io.legado.app.databinding.ViewToastBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
-import splitties.systemservices.layoutInflater
+import io.legado.app.ui.widget.toast.ToastComposePresentation
 
-private var toast: Toast? = null
+private var toastSession: CustomToastSession? = null
 
 private var toastLegacy: Toast? = null
 
@@ -21,22 +24,23 @@ fun Context.toastOnUi(message: Int, duration: Int = Toast.LENGTH_SHORT) {
     toastOnUi(getString(message), duration)
 }
 
-@SuppressLint("InflateParams")
-@Suppress("DEPRECATION")
+@SuppressLint("ShowToast")
 fun Context.toastOnUi(message: CharSequence?, duration: Int = Toast.LENGTH_SHORT) {
     runOnUI {
         kotlin.runCatching {
-            toast?.cancel()
-            toast = Toast(this)
-            val isLight = ColorUtils.isColorLight(bottomBackground)
-            ViewToastBinding.inflate(layoutInflater).run {
-                toast?.view = root
-                cvToast.setCardBackgroundColor(bottomBackground)
-                tvText.setTextColor(getPrimaryTextColor(isLight))
-                tvText.text = message
+            toastSession?.cancel()
+            toastSession = null
+            val session =
+                CustomToastSession(this, message, duration) { closed ->
+                    if (toastSession === closed) toastSession = null
+                }
+            toastSession = session
+            try {
+                session.show()
+            } catch (error: Throwable) {
+                session.cancel()
+                throw error
             }
-            toast?.duration = duration
-            toast?.show()
         }
     }
 }
@@ -84,3 +88,66 @@ fun Fragment.toastOnUi(message: CharSequence) = requireActivity().toastOnUi(mess
 fun Fragment.longToast(message: Int) = requireContext().longToastOnUi(message)
 
 fun Fragment.longToast(message: CharSequence) = requireContext().longToastOnUi(message)
+
+private class CustomToastSession(
+    context: Context,
+    message: CharSequence?,
+    private val duration: Int,
+    private val onClosed: (CustomToastSession) -> Unit,
+) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val toast = Toast(context)
+    private val backgroundColor = context.bottomBackground
+    private val textColor = context.getPrimaryTextColor(ColorUtils.isColorLight(backgroundColor))
+    private val metrics = context.resources.displayMetrics
+    private val toastMessage =
+        message.toToastMessage(
+            baseTextSizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16f, metrics),
+            scaledDensity = metrics.scaledDensity,
+            color = textColor,
+        )
+    private val presentation =
+        ToastComposePresentation(
+            context = context,
+            message = toastMessage,
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+        )
+    private var closed = false
+    private val cleanup = Runnable { close() }
+    private val toastCallback =
+        object : Toast.Callback() {
+            override fun onToastHidden() {
+                close()
+            }
+        }
+
+    init {
+        @Suppress("DEPRECATION") run { toast.view = presentation.view }
+        toast.duration = duration
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            toast.addCallback(toastCallback)
+        }
+    }
+
+    fun show() {
+        toast.show()
+        presentation.onShown()
+        val timeoutMillis = if (duration == Toast.LENGTH_LONG) 4_000L else 2_500L
+        handler.postDelayed(cleanup, timeoutMillis)
+    }
+
+    fun cancel() {
+        toast.cancel()
+        close()
+    }
+
+    private fun close() {
+        if (closed) return
+        closed = true
+        handler.removeCallbacks(cleanup)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) toast.removeCallback(toastCallback)
+        presentation.close()
+        onClosed(this)
+    }
+}
