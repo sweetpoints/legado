@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.data.repository.AppExploreResultsSessionRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -18,6 +19,7 @@ import kotlinx.coroutines.ensureActive
 internal data class ExploreHomePrepared(
     val effect: ExploreHomeEffect,
     val searchSource: BookSourcePart?,
+    val resultsSessionId: String? = null,
 )
 
 @Composable
@@ -77,8 +79,24 @@ internal suspend fun dispatchExploreHomeEffects(
             model.state.collect { current ->
                 val effect = current.effect
                 if (effect != null && !current.busy && current.error == null) {
+                    val resultsSessions = AppExploreResultsSessionRepository()
+                    var resultsSessionId: String? = null
+                    var handedOff = false
                     try {
-                        val prepared = ExploreHomePrepared(effect, model.prepareSearch(effect))
+                        if (effect.action == "open") {
+                            resultsSessionId =
+                                resultsSessions.prepare(
+                                    effect.sourceUrl,
+                                    effect.title,
+                                    effect.value,
+                                )
+                        }
+                        val prepared =
+                            ExploreHomePrepared(
+                                effect,
+                                model.prepareSearch(effect),
+                                resultsSessionId,
+                            )
                         currentCoroutineContext().ensureActive()
                         model.deliver(
                             effect,
@@ -87,11 +105,16 @@ internal suspend fun dispatchExploreHomeEffects(
                             },
                         ) {
                             onNative(prepared)
+                            handedOff = effect.action != "open" || resultsSessionId != null
                         }
                     } catch (failure: CancellationException) {
                         throw failure
                     } catch (failure: Exception) {
                         model.hostFailure(failure)
+                    } finally {
+                        if (!handedOff && resultsSessionId != null) {
+                            resultsSessions.release(resultsSessionId)
+                        }
                     }
                 }
             }

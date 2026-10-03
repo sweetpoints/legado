@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ internal class ExploreHomeViewModel(
     private val repository: ExploreHomeRepository,
     private val storage: ExploreHomeSessionStorage,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    internal val sessionToken: String? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ExploreHomeState())
     val state = mutableState.asStateFlow()
@@ -38,16 +40,24 @@ internal class ExploreHomeViewModel(
     private var session = ExploreHomeSession()
     private var restored = false
     private val restorationReady = MutableStateFlow(false)
+    private val restorationCompleted = CompletableDeferred<Unit>()
     @Volatile private var terminated = false
     private var generation = 0L
     private var panelJob: Job? = null
     private var sourcesJob: Job? = null
     private var groupsJob: Job? = null
     private var resumed = false
+    private var retainSessionOnClear = false
     private val activeCallbacks = mutableMapOf<String, SourceLoginJsExtensions.Callback>()
 
     init {
-        viewModelScope.launch { operationMutex.withLock { restoreSession() } }
+        viewModelScope.launch {
+            try {
+                operationMutex.withLock { restoreSession() }
+            } finally {
+                restorationCompleted.complete(Unit)
+            }
+        }
     }
 
     private suspend fun restoreSession() {
@@ -149,6 +159,27 @@ internal class ExploreHomeViewModel(
         panelJob?.cancel()
         generation++
         viewModelScope.launch { runCatching { repository.savePendingValues() }.onFailure(::fail) }
+    }
+
+    /** Flushes private session state before the old Fragment owner is retired. */
+    suspend fun prepareForHostMigration() {
+        restorationCompleted.await()
+        check(restored) { state.value.error ?: "发现会话恢复尚未完成" }
+        resumed = false
+        groupsJob?.cancel()
+        sourcesJob?.cancel()
+        panelJob?.cancel()
+        generation++
+        operationMutex.withLock {
+            repository.savePendingValues()
+            if (restored) persist()
+        }
+        retainSessionOnClear = true
+    }
+
+    suspend fun awaitHostRestore() {
+        restorationCompleted.await()
+        check(state.value.sessionLoaded) { state.value.error ?: "发现会话恢复尚未完成" }
     }
 
     fun hostFailure(failure: Throwable) = fail(failure)
@@ -479,12 +510,14 @@ internal class ExploreHomeViewModel(
 
     override fun onCleared() {
         terminated = true
-        val cleanup = CoroutineScope(SupervisorJob() + ioDispatcher)
-        cleanup.launch {
-            try {
-                operationMutex.withLock { storage.delete() }
-            } finally {
-                cleanup.cancel()
+        if (!retainSessionOnClear) {
+            val cleanup = CoroutineScope(SupervisorJob() + ioDispatcher)
+            cleanup.launch {
+                try {
+                    operationMutex.withLock { storage.delete() }
+                } finally {
+                    cleanup.cancel()
+                }
             }
         }
         super.onCleared()

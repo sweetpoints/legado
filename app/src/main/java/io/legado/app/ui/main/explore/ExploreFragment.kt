@@ -35,12 +35,14 @@ class ExploreFragment() : Fragment(), MainFragmentInterface {
             viewModelFactory {
                 initializer {
                     val savedState = createSavedStateHandle()
+                    val sessionToken = ExploreHomeViewModel.token(savedState)
                     ExploreHomeViewModel(
                         AppExploreHomeRepository(),
                         FileExploreHomeSessionStorage(
                             requireContext().applicationContext,
-                            ExploreHomeViewModel.token(savedState),
+                            sessionToken,
                         ),
+                        sessionToken = sessionToken,
                     )
                 }
             }
