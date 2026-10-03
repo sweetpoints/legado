@@ -62,6 +62,27 @@ class SelectActionBarPopupActionMigrationTest {
     }
 
     @Test
+    fun `Compose book source selection menu preserves its previous item order`() {
+        assertEquals(
+            listOf(
+                "ENABLE",
+                "DISABLE",
+                "ADD_GROUP",
+                "REMOVE_GROUP",
+                "ENABLE_EXPLORE",
+                "DISABLE_EXPLORE",
+                "TOP",
+                "BOTTOM",
+            ),
+            io.legado.app.ui.book.source.manage.sourceManagerBulkMutations.map { it.name },
+        )
+        assertEquals(
+            listOf("export", "share", "check", "interval"),
+            io.legado.app.ui.book.source.manage.sourceManagerBulkActions,
+        )
+    }
+
+    @Test
     fun `unused popup reflection helper is removed`() {
         val source = readProjectFile(VIEW_EXTENSIONS)
 
@@ -106,23 +127,9 @@ class SelectActionBarPopupActionMigrationTest {
 
         val expectedMenuIds =
             mapOf(
-                "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
+                "import_book_sel.xml" to listOf("@+id/menu_del_selection")
                 // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
-                "book_source_sel.xml" to
-                    listOf(
-                        "@+id/menu_enable_selection",
-                        "@+id/menu_disable_selection",
-                        "@+id/menu_add_group",
-                        "@+id/menu_remove_group",
-                        "@+id/menu_enable_explore",
-                        "@+id/menu_disable_explore",
-                        "@+id/menu_top_sel",
-                        "@+id/menu_bottom_sel",
-                        "@+id/menu_export_selection",
-                        "@+id/menu_share_source",
-                        "@+id/menu_check_source",
-                        "@+id/menu_check_selected_interval",
-                    ),
+                // Compose book source order is checked by the immutable action lists below.
 
                 // Replace selection order is exercised in ReplaceManagementScreenTest.
 

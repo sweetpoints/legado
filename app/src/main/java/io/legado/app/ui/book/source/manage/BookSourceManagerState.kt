@@ -127,3 +127,17 @@ internal fun sortSourceManagerRows(
         )
     return rows.sortedWith(if (ascending) comparator else comparator.reversed())
 }
+
+/** Preserve the former selection menu order independently of enum declaration order. */
+internal val sourceManagerBulkMutations =
+    listOf(
+        SourceMutation.ENABLE,
+        SourceMutation.DISABLE,
+        SourceMutation.ADD_GROUP,
+        SourceMutation.REMOVE_GROUP,
+        SourceMutation.ENABLE_EXPLORE,
+        SourceMutation.DISABLE_EXPLORE,
+        SourceMutation.TOP,
+        SourceMutation.BOTTOM,
+    )
+internal val sourceManagerBulkActions = listOf("export", "share", "check", "interval")

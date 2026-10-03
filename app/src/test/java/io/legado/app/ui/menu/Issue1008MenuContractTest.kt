@@ -8,11 +8,12 @@ class Issue1008MenuContractTest {
 
     @Test
     fun sourceIconsAndRssOverflowFollowReportedMenuContract() {
-        assertItemIcon(
-            "src/main/res/menu/book_source.xml",
-            "menu_group_sources_by_domain",
-            "ic_add_online",
-        )
+        val source =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/source/manage/BookSourceManagerScreen.kt"
+            )
+        assertTrue(source.contains("R.drawable.ic_add_online"))
+        assertTrue(source.contains("action == \"domain\""))
 
         // RSS overflow behavior is covered by RssReaderScreenTest using the real Compose menu.
 

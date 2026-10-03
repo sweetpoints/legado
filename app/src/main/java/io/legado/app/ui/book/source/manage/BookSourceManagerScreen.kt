@@ -23,6 +23,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -41,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -99,6 +101,11 @@ internal fun BookSourceManagerScreen(
                                     actions.action(action, "")
                                 },
                                 enabled = !state.busy,
+                                modifier = Modifier.testTag("source-manager-action:$action"),
+                                leadingIcon =
+                                    if (action == "domain") {
+                                        { Icon(painterResource(R.drawable.ic_add_online), null) }
+                                    } else null,
                             )
                         }
                         listOf(
@@ -240,32 +247,24 @@ internal fun BookSourceManagerScreen(
                         { selectionMenu = false },
                         Modifier.heightIn(max = 450.dp),
                     ) {
-                        SourceMutation.entries
-                            .filter { it != SourceMutation.DELETE }
-                            .forEach { mutation ->
-                                DropdownMenuItem(
-                                    text = { Text(mutationName(mutation)) },
-                                    onClick = {
-                                        selectionMenu = false
-                                        actions.mutation(mutation, null)
-                                    },
-                                )
-                            }
-                        listOf(
-                                stringResource(R.string.check_select_source) to "check",
-                                stringResource(R.string.export_selection) to "export",
-                                stringResource(R.string.share_selected_source) to "share",
-                                stringResource(R.string.check_selected_interval) to "interval",
+                        sourceManagerBulkMutations.forEach { mutation ->
+                            DropdownMenuItem(
+                                text = { Text(mutationName(mutation)) },
+                                onClick = {
+                                    selectionMenu = false
+                                    actions.mutation(mutation, null)
+                                },
                             )
-                            .forEach { (label, action) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        selectionMenu = false
-                                        actions.action(action, "")
-                                    },
-                                )
-                            }
+                        }
+                        sourceManagerBulkActions.forEach { action ->
+                            DropdownMenuItem(
+                                text = { Text(bulkActionName(action)) },
+                                onClick = {
+                                    selectionMenu = false
+                                    actions.action(action, "")
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -509,6 +508,17 @@ private fun mutationName(action: SourceMutation): String =
     )
 
 @Composable
+private fun bulkActionName(action: String): String =
+    stringResource(
+        when (action) {
+            "export" -> R.string.export_selection
+            "share" -> R.string.share_selected_source
+            "check" -> R.string.check_select_source
+            else -> R.string.check_selected_interval
+        }
+    )
+
+@Composable
 private fun dialogName(dialog: SourceManagerDialog): String =
     stringResource(
         when (dialog) {
@@ -550,6 +560,7 @@ private fun sourceManagerDragModifier(
         var pointerY = 0f
         var anchor = 0
         var selectedAtStart = emptySet<String>()
+        var selectionKeys = emptyList<String>()
         var scrollJob: Job? = null
         fun updateTarget() {
             if (!active) return
@@ -557,11 +568,13 @@ private fun sourceManagerDragModifier(
                 listState.layoutInfo.visibleItemsInfo.lastOrNull { pointerY >= it.offset }?.index
                     ?: anchor
             if (selecting) {
+                val targetKey =
+                    listState.layoutInfo.visibleItemsInfo.lastOrNull { pointerY >= it.offset }?.key
+                val selectionTarget =
+                    selectionKeys.indexOfFirst { it == targetKey }.takeIf { it >= 0 } ?: anchor
                 val keys =
-                    (minOf(anchor, target)..maxOf(anchor, target))
-                        .mapNotNull {
-                            latestState.rows.getOrNull(it)?.url
-                        }
+                    selectionKeys
+                        .subList(minOf(anchor, selectionTarget), maxOf(anchor, selectionTarget) + 1)
                         .toSet()
                 actions.slide(keys, selectedAtStart)
             } else {
@@ -579,6 +592,7 @@ private fun sourceManagerDragModifier(
                                 .firstOrNull { it.key == key }
                                 ?.offset ?: 0) + position.y
                         selectedAtStart = latestState.selected.toSet()
+                        selectionKeys = latestState.rows.map { it.url }
                         if (selecting) actions.slide(setOf(key), selectedAtStart)
                         else actions.beginDrag(key)
                         scrollJob = gestureScope.launch {

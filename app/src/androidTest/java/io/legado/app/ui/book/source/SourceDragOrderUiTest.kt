@@ -114,28 +114,34 @@ class SourceDragOrderUiTest {
                     }
                 waitRows(keys)
                 fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
-                    val handle = compose.onNodeWithTag("source-manager-drag:${keys.first()}")
-                    val first = handle.fetchSemanticsNode().boundsInRoot
+                    val list = compose.onNodeWithTag("source-manager-list")
+                    val bounds = list.fetchSemanticsNode().boundsInRoot
+                    val first =
+                        compose
+                            .onNodeWithTag("source-manager-drag:${keys.first()}")
+                            .fetchSemanticsNode()
+                            .boundsInRoot
                     val last =
                         compose
                             .onNodeWithTag("source-manager-drag:${keys.last()}")
                             .fetchSemanticsNode()
                             .boundsInRoot
-                    val destination = Offset(first.width / 2, last.center.y - first.top)
-                    handle.performTouchInput {
-                        down(center)
+                    val start = Offset(first.center.x - bounds.left, first.center.y - bounds.top)
+                    val destination = Offset(start.x, last.center.y - bounds.top)
+                    list.performTouchInput {
+                        down(start)
                         advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
                         moveTo(destination, 500)
                     }
                     waitRows(keys.drop(1) + keys.first())
                     whileHeld()
                     if (returnToStart) {
-                        handle.performTouchInput {
-                            moveTo(Offset(first.width / 2, first.height / 4), 500)
+                        list.performTouchInput {
+                            moveTo(Offset(start.x, start.y - first.height / 4), 500)
                         }
                         waitRows(keys)
                     }
-                    handle.performTouchInput { up() }
+                    list.performTouchInput { up() }
                 }
                 drag(true) {
                     appDb.bookDao.insert(countBook)
