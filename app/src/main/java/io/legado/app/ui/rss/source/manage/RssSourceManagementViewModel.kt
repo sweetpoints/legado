@@ -117,6 +117,11 @@ class RssSourceManagementViewModel(
             )
         )
     val state: StateFlow<RssSourceManagementState> = mutable
+    // Drag previews intentionally keep their original rows. Tests can synchronize a real Room
+    // publication without releasing the pointer or exposing mutable entities/flow ownership.
+    internal val observedRows: List<RssSourceManagementRow>
+        get() = (bufferedRows ?: state.value.rows).toList()
+
     private var checkpoint = RssSourceManagementCheckpoint()
     private var revision = saved.get<Long>("rssManagement.revision") ?: 0L
     private var labels: RssSourceManagementLabels? = null

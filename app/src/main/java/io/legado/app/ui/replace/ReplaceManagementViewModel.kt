@@ -112,6 +112,11 @@ class ReplaceManagementViewModel(
             )
         )
     val state = mutable.asStateFlow()
+    // Drag previews intentionally keep their original rows. Tests can synchronize a real Room
+    // publication without releasing the pointer or exposing mutable entities/flow ownership.
+    internal val observedRows: List<ReplaceManagementRow>
+        get() = (buffered ?: state.value.rows).toList()
+
     private var checkpoint = ReplaceManagementCheckpoint()
     private var revision = saved.get<Long>("replaceManagement.revision") ?: 0L
     private var labels: ReplaceManagementLabels? = null
