@@ -26,6 +26,9 @@ class MyFragment() : Fragment(), MainFragmentInterface {
 
     private val viewModel by viewModels<MyViewModel>()
 
+    internal fun captureCustomizationDraftForHostMigration(): MyCustomizationDraft? =
+        viewModel.captureCustomizationDraftForHostMigration()
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,

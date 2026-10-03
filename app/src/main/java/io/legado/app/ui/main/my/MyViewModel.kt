@@ -25,11 +25,18 @@ data class MyUiState(
     val mcpAddress: String = "",
 )
 
-class MyViewModel(application: Application, private val savedStateHandle: SavedStateHandle) : BaseViewModel(application) {
+internal data class MyCustomizationDraft(val selectedKeys: Set<String>)
+
+class MyViewModel(application: Application, private val savedStateHandle: SavedStateHandle) :
+    BaseViewModel(application) {
     private val repository = MySettingsRepository(application)
-    private val _uiState = MutableStateFlow(
-        MyUiState(repository.read(), savedStateHandle.get<ArrayList<String>>(DRAFT_KEY)?.toSet())
-    )
+    private val _uiState =
+        MutableStateFlow(
+            MyUiState(
+                repository.read(),
+                savedStateHandle.get<ArrayList<String>>(DRAFT_KEY)?.toSet(),
+            )
+        )
     val uiState = _uiState.asStateFlow()
     private var observation: AutoCloseable? = null
     private var syncingRuntime = false
@@ -41,11 +48,17 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
             if (!syncingRuntime) {
                 val prefs = repository.read()
                 when (key) {
-                    PreferKey.webService -> if (prefs.webEnabled) WebService.start(context) else WebService.stop(context)
-                    PreferKey.mcpService -> if (prefs.mcpEnabled) McpService.start(context) else McpService.stop(context)
-                    PreferKey.autoTaskService -> viewModelScope.launch(Dispatchers.IO) {
-                        if (prefs.autoTaskEnabled) AutoTaskScheduler.refresh(context) else AutoTaskScheduler.cancelAll(context)
-                    }
+                    PreferKey.webService ->
+                        if (prefs.webEnabled) WebService.start(context)
+                        else WebService.stop(context)
+                    PreferKey.mcpService ->
+                        if (prefs.mcpEnabled) McpService.start(context)
+                        else McpService.stop(context)
+                    PreferKey.autoTaskService ->
+                        viewModelScope.launch(Dispatchers.IO) {
+                            if (prefs.autoTaskEnabled) AutoTaskScheduler.refresh(context)
+                            else AutoTaskScheduler.cancelAll(context)
+                        }
                     "recordLog" -> LogUtils.upLevel()
                 }
             }
@@ -73,12 +86,17 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
             syncingRuntime = false
         }
         _uiState.update {
-            it.copy(preferences = repository.read(), webAddress = WebService.hostAddress, mcpAddress = McpService.hostAddress)
+            it.copy(
+                preferences = repository.read(),
+                webAddress = WebService.hostAddress,
+                mcpAddress = McpService.hostAddress,
+            )
         }
     }
 
     fun setSwitch(key: String, enabled: Boolean) {
-        if (key !in setOf(PreferKey.webService, PreferKey.mcpService, PreferKey.autoTaskService)) return
+        if (key !in setOf(PreferKey.webService, PreferKey.mcpService, PreferKey.autoTaskService))
+            return
         repository.setSwitch(key, enabled)
         refreshPreferences()
     }
@@ -109,6 +127,15 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
 
     fun dismissCustomization() = setDraft(null)
 
+    internal fun captureCustomizationDraftForHostMigration(): MyCustomizationDraft? =
+        _uiState.value.customizationDraft?.let { MyCustomizationDraft(it.toSet()) }
+
+    internal fun seedCustomizationDraftFromLegacy(draft: MyCustomizationDraft?) {
+        if (_uiState.value.customizationDraft == null && draft != null) {
+            setDraft(draft.selectedKeys.intersect(customizableMySettings.map { it.key }.toSet()))
+        }
+    }
+
     private fun setDraft(draft: Set<String>?) {
         savedStateHandle[DRAFT_KEY] = draft?.let { ArrayList(it) }
         _uiState.update { it.copy(customizationDraft = draft) }
@@ -119,5 +146,7 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
         super.onCleared()
     }
 
-    companion object { private const val DRAFT_KEY = "myCustomizationDraft" }
+    companion object {
+        private const val DRAFT_KEY = "myCustomizationDraft"
+    }
 }
