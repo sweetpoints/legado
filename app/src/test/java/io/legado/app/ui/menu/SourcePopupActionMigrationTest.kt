@@ -1,9 +1,9 @@
 package io.legado.app.ui.menu
 
+import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class SourcePopupActionMigrationTest {
 
@@ -11,8 +11,14 @@ class SourcePopupActionMigrationTest {
     fun `source related row menus use the shared vertical builder`() {
         sourceMenuFiles.forEach { path ->
             val source = readProjectFile(path)
-            assertFalse("$path should not import platform PopupMenu", source.contains("import android.widget.PopupMenu"))
-            assertFalse("$path should not import AppCompat PopupMenu", source.contains("import androidx.appcompat.widget.PopupMenu"))
+            assertFalse(
+                "$path should not import platform PopupMenu",
+                source.contains("import android.widget.PopupMenu"),
+            )
+            assertFalse(
+                "$path should not import AppCompat PopupMenu",
+                source.contains("import androidx.appcompat.widget.PopupMenu"),
+            )
             assertContains(path, source, "popupActionMenu(context)")
         }
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
@@ -21,7 +27,7 @@ class SourcePopupActionMigrationTest {
         legacyMenuFiles.forEach { path ->
             assertFalse(
                 "$path should be removed",
-                sequenceOf(File(path), File("app/$path")).any(File::isFile)
+                sequenceOf(File(path), File("app/$path")).any(File::isFile),
             )
         }
     }
@@ -30,16 +36,17 @@ class SourcePopupActionMigrationTest {
     fun `dynamic source menu entries keep their visibility and labels`() {
         val bookSource = readProjectFile(BOOK_SOURCE)
         listOf(
-            "val defaultOrder = callBack.sort == BookSourceSort.Default",
-            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
-            "if (source.enabledExplore) R.string.disable_explore else R.string.enable_explore",
-            "source.hasExploreUrl"
-        ).forEach { assertContains(BOOK_SOURCE, bookSource, it) }
+                "val defaultOrder = callBack.sort == BookSourceSort.Default",
+                "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
+                "if (source.enabledExplore) R.string.disable_explore else R.string.enable_explore",
+                "source.hasExploreUrl",
+            )
+            .forEach { assertContains(BOOK_SOURCE, bookSource, it) }
 
         assertContains(
             EXPLORE,
             readProjectFile(EXPLORE),
-            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)"
+            "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)",
         )
     }
 
@@ -53,12 +60,16 @@ class SourcePopupActionMigrationTest {
             "R.string.search",
             "R.string.debug",
             "R.string.delete",
-            "R.string.disable_explore else R.string.enable_explore"
+            "R.string.disable_explore else R.string.enable_explore",
         )
-        org.junit.Assert.assertEquals(listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
-            io.legado.app.ui.book.changesource.chapterSourceRowActions.map { it.name })
-        org.junit.Assert.assertEquals(listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
-            io.legado.app.ui.book.changesource.bookSourceRowActions.map { it.name })
+        org.junit.Assert.assertEquals(
+            listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
+            io.legado.app.ui.book.changesource.chapterSourceRowActions.map { it.name },
+        )
+        org.junit.Assert.assertEquals(
+            listOf("Top", "Bottom", "Edit", "Disable", "Delete"),
+            io.legado.app.ui.book.changesource.bookSourceRowActions.map { it.name },
+        )
         assertOrdered(
             EXPLORE,
             "R.string.edit",
@@ -66,7 +77,7 @@ class SourcePopupActionMigrationTest {
             "R.string.login",
             "R.string.search",
             "R.string.refresh",
-            "R.string.delete"
+            "R.string.delete",
         )
     }
 
@@ -82,10 +93,11 @@ class SourcePopupActionMigrationTest {
             "\"delete\" -> {",
             "callBack.del(source)",
             "selected.remove(source)",
-            "\"toggleExplore\" -> callBack.enableExplore(!source.enabledExplore, source)"
+            "\"toggleExplore\" -> callBack.enableExplore(!source.enabledExplore, source)",
         )
         // Book callbacks and delete confirmation: BookSourceViewModelTest/BookSourceComposeTest.
-        // Chapter callback ordering is covered independently by ChapterSourceViewModelTest/ChapterSourceComposeTest.
+        // Chapter callback ordering is covered independently by
+        // ChapterSourceViewModelTest/ChapterSourceComposeTest.
         assertActions(
             EXPLORE,
             "\"edit\" -> callBack.editSource(source.bookSourceUrl)",
@@ -93,7 +105,7 @@ class SourcePopupActionMigrationTest {
             "\"search\" -> callBack.searchBook(source)",
             "\"login\" -> context.startActivity<SourceLoginActivity>",
             "\"refresh\" -> refreshExplore(source, position, binding)",
-            "\"delete\" -> callBack.deleteSource(source)"
+            "\"delete\" -> callBack.deleteSource(source)",
         )
     }
 
@@ -123,14 +135,16 @@ class SourcePopupActionMigrationTest {
             .orEmpty()
 
     private companion object {
-        const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
+        const val BOOK_SOURCE =
+            "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
         val sourceMenuFiles = listOf(BOOK_SOURCE, EXPLORE)
-        val legacyMenuFiles = listOf(
-            "src/main/res/menu/book_source_item.xml",
-            "src/main/res/menu/change_source_item.xml",
-            "src/main/res/menu/explore_item.xml",
-            "src/main/res/menu/rss_main_item.xml"
-        )
+        val legacyMenuFiles =
+            listOf(
+                "src/main/res/menu/book_source_item.xml",
+                "src/main/res/menu/change_source_item.xml",
+                "src/main/res/menu/explore_item.xml",
+                "src/main/res/menu/rss_main_item.xml",
+            )
     }
 }

@@ -1,8 +1,8 @@
 package io.legado.app
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class BundlePayloadContractTest {
 
@@ -12,8 +12,7 @@ class BundlePayloadContractTest {
         val violations = migratedPayloadSources.mapNotNull { relativePath ->
             val file = File(sourceRoot, relativePath)
             val source = file.readText()
-            val importsAndroidxBundleOf =
-                source.contains("import androidx.core.os.bundleOf")
+            val importsAndroidxBundleOf = source.contains("import androidx.core.os.bundleOf")
             val callsBundleOf = Regex("""\bbundleOf\s*\(""").containsMatchIn(source)
             val usesPlatformBundle = Regex("""\bBundle\s*\(""").containsMatchIn(source)
             if (importsAndroidxBundleOf || callsBundleOf || !usesPlatformBundle) {
@@ -30,19 +29,19 @@ class BundlePayloadContractTest {
     }
 
     private fun sourceRoot(): File {
-        return sequenceOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
+        return sequenceOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
     }
 
     private companion object {
-        val migratedPayloadSources = listOf(
-            "io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
-            "io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
-            "io/legado/app/ui/book/explore/ExploreShowActivity.kt",
-            "io/legado/app/ui/book/search/SearchActivity.kt",
-            "io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
-            "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
-            "io/legado/app/ui/book/toc/rule/TxtTocRuleDialog.kt",
-        )
+        val migratedPayloadSources =
+            listOf(
+                "io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt",
+                "io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt",
+                "io/legado/app/ui/book/explore/ExploreShowActivity.kt",
+                "io/legado/app/ui/book/search/SearchActivity.kt",
+                "io/legado/app/ui/book/source/manage/BookSourceActivity.kt",
+                "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
+                "io/legado/app/ui/book/toc/rule/TxtTocRuleDialog.kt",
+            )
     }
 }

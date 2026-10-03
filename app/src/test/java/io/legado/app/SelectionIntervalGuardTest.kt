@@ -1,8 +1,8 @@
 package io.legado.app
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class SelectionIntervalGuardTest {
 
@@ -16,20 +16,20 @@ class SelectionIntervalGuardTest {
 
             assertTrue("missing checkSelectedInterval in $relativePath", methodStart >= 0)
             assertTrue("missing empty selection guard in $relativePath", guard > methodStart)
-            assertTrue("empty selection guard must precede Collections.min in $relativePath", guard < min)
+            assertTrue(
+                "empty selection guard must precede Collections.min in $relativePath",
+                guard < min,
+            )
         }
     }
 
     // Compose shelf interval and stable-ID behavior: BookshelfManagementViewModelTest.
 
     private val sourceRoot: File by lazy {
-        sequenceOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
+        sequenceOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
     }
 
     private companion object {
-        val sources = listOf(
-            "io/legado/app/ui/book/source/manage/BookSourceAdapter.kt",
-        )
+        val sources = listOf("io/legado/app/ui/book/source/manage/BookSourceAdapter.kt")
     }
 }
