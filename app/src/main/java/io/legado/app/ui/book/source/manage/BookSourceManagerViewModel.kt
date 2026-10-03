@@ -58,6 +58,7 @@ internal class BookSourceManagerViewModel(
     private val operationMutex = Mutex()
     private var session = SourceManagerSession()
     private var sourceJob: Job? = null
+    private var restoringSession = true
     private var filteredRows = emptyList<SourceManagerRow>()
     private var dragStartRows = emptyList<SourceManagerRow>()
     private var dragRows = emptyList<SourceManagerRow>()
@@ -146,7 +147,10 @@ internal class BookSourceManagerViewModel(
             // ordering/deletion effect when the process died after its database transaction.
             session = session.copy(pendingOperation = false)
         } catch (failure: Exception) {
+            session = SourceManagerSession()
             showFailure(failure)
+        } finally {
+            restoringSession = false
         }
     }
 
@@ -188,39 +192,54 @@ internal class BookSourceManagerViewModel(
         }
     }
 
-    private suspend fun persist() =
-        withContext(ioDispatcher + NonCancellable) {
-            val current = state.value
-            val effect = current.effect
-            session =
-                session.copy(
-                    query = current.query,
-                    selected = current.selected.toSet(),
-                    sort = current.sort,
-                    ascending = current.ascending,
-                    domain = current.byDomain,
-                    status = current.status,
-                    dialog = current.dialog,
-                    draft = current.draft,
-                    effectId = effect?.id,
-                    effectAction = effect?.action,
-                    effectKey = effect?.key.orEmpty(),
-                    effectKeys = effect?.keys.orEmpty(),
-                    exportPath = effect?.export?.file?.path,
-                    exportName = effect?.export?.name,
-                    exportMime = effect?.export?.mime,
-                )
-            store.write(session)
-        }
+    private suspend fun persist() {
+        val current = state.value
+        val effect = current.effect
+        // Build the immutable disk snapshot on Main. The mutex serializes its IO write, so
+        // older completions cannot replace a newer draft or an accepted operation receipt.
+        session =
+            session.copy(
+                query = current.query,
+                selected = current.selected.toSet(),
+                sort = current.sort,
+                ascending = current.ascending,
+                domain = current.byDomain,
+                status = current.status,
+                dialog = current.dialog,
+                draft = current.draft,
+                effectId = effect?.id,
+                effectAction = effect?.action,
+                effectKey = effect?.key.orEmpty(),
+                effectKeys = effect?.keys.orEmpty(),
+                exportPath = effect?.export?.file?.path,
+                exportName = effect?.export?.name,
+                exportMime = effect?.export?.mime,
+            )
+        val snapshot = session
+        withContext(ioDispatcher + NonCancellable) { store.write(snapshot) }
+    }
 
     private fun edit(transform: (SourceManagerState) -> SourceManagerState) {
+        if (state.value.busy || restoringSession) return
+        val previous = state.value
+        mutableState.update(transform)
+        val updated = state.value
+        if (previous.query != updated.query) {
+            watchQuery()
+        } else if (
+            previous.sort != updated.sort ||
+                previous.ascending != updated.ascending ||
+                previous.byDomain != updated.byDomain ||
+                previous.status != updated.status ||
+                previous.showStatus != updated.showStatus
+        ) {
+            publishRows()
+        }
+        // Text input and checkboxes respond immediately. Disk work is serialized separately;
+        // operation() saves the current snapshot before entering its accepted mutation segment.
         viewModelScope.launch {
             operationMutex.withLock {
-                if (state.value.busy) return@withLock
                 try {
-                    val previousQuery = state.value.query
-                    mutableState.update(transform)
-                    if (previousQuery != state.value.query) watchQuery() else publishRows()
                     persist()
                 } catch (failure: Exception) {
                     showFailure(failure)

@@ -217,6 +217,44 @@ class BookSourceManagerViewModelTest {
             assertEquals(1, repository.moves.size)
         }
 
+    @Test
+    fun editingLargeDraftUpdatesImmediatelyBeforePendingDiskWritesRun() =
+        runTest(dispatcher) {
+            val store = MemoryStore()
+            val manager = model(FakeRepository(), store)
+            runCurrent()
+            manager.open(SourceManagerDialog.IMPORT)
+            runCurrent()
+            manager.draft("first draft")
+            val latest = "large input".repeat(20_000)
+            manager.draft(latest)
+            assertEquals(latest, manager.state.value.draft)
+            runCurrent()
+            assertEquals(latest, store.session.draft)
+        }
+
+    @Test
+    fun selectingEveryPassedRowExportsOnlyPassedVisibleUrls() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            repository.rows.value =
+                repository.rows.value.mapIndexed { index, row ->
+                    row.copy(checkStatus = if (index == 0) "PASSED" else "FAILED")
+                }
+            val manager = model(repository)
+            runCurrent()
+            manager.showStatus()
+            manager.status("PASSED")
+            manager.selectAll()
+            runCurrent()
+            assertEquals(listOf("a"), manager.state.value.rows.map { it.url })
+            manager.export(false)
+            runCurrent()
+            // The legacy 100%-selected optimization re-queried without this status filter and
+            // exported a,b,c. The immutable selection snapshot deliberately exports only a.
+            assertEquals(listOf("a"), repository.exportKeys)
+        }
+
     private class MemoryStore : SourceManagerSessionStorage {
         var session = SourceManagerSession()
 
