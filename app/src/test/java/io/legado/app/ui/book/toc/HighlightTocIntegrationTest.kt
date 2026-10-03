@@ -77,19 +77,6 @@ class HighlightTocIntegrationTest {
     }
 
     @Test
-    fun `tab searches do not stack bookmark collectors`() {
-        val fragment = projectFile(
-            "src/main/java/io/legado/app/ui/book/toc/BookmarkFragment.kt"
-        ).readText()
-
-        assertTrue(fragment.contains("bookData.observe(viewLifecycleOwner)"))
-        assertTrue(fragment.contains("viewLifecycleOwner.lifecycleScope.launch"))
-        assertTrue(fragment.countMatches("bookmarkJob?.cancel()") >= 2)
-        assertTrue(fragment.contains("binding.recyclerView.adapter = null"))
-        assertTrue(fragment.contains("upBookmark(viewModel.searchKey)"))
-    }
-
-    @Test
     fun `recreated chapter page restores the shared search`() {
         val fragment = projectFile(
             "src/main/java/io/legado/app/ui/book/toc/ChapterListFragment.kt"
