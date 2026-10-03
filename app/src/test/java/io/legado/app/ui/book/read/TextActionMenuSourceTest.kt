@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextActionMenuSourceTest {
