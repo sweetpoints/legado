@@ -125,6 +125,7 @@ class BookDetailViewModel(
             mutable.update { it.copy(loading = true, error = null) }
             try {
                 val stored = sessions.read(ticket)
+                val needsInitialFetch = stored?.data == null
                 var record =
                     stored
                         ?: BookDetailSession(
@@ -166,7 +167,7 @@ class BookDetailViewModel(
                 }
                 if (record.pendingNetwork != null || record.pendingMutation != null)
                     recoverPending()
-                else if (stored == null && !interrupted) {
+                else if (needsInitialFetch && !interrupted) {
                     val data = checkNotNull(record.data)
                     val tocBlank =
                         withContext(Dispatchers.IO) { data.book.materializeBook().tocUrl.isBlank() }
