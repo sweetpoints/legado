@@ -14,15 +14,28 @@ interface BookGroupSelectionRepository {
 
     suspend fun reorder(ids: List<Long>)
 }
-class RoomBookGroupSelectionRepository(private val database: AppDatabase = appDb) : BookGroupSelectionRepository {
-    override fun observe() = database.bookGroupDao.flowSelect().map { rows -> rows.map(BookGroupEditorSnapshot::from) }.flowOn(Dispatchers.IO)
-    override suspend fun reorder(ids: List<Long>) = withContext(Dispatchers.IO) {
-        database.withTransaction {
-            val current = database.bookGroupDao.all.filter { it.groupId >= 0 }
-            val byId = current.associateBy { it.groupId }
-            val requested = ids.distinct().filter(byId::containsKey)
-            val order = requested + current.map { it.groupId }.filterNot(requested.toSet()::contains)
-            database.bookGroupDao.update(*order.mapIndexed { index, id -> byId.getValue(id).copy(order = index + 1) }.toTypedArray())
+
+class RoomBookGroupSelectionRepository(private val database: AppDatabase = appDb) :
+    BookGroupSelectionRepository {
+    override fun observe() =
+        database.bookGroupDao
+            .flowSelect()
+            .map { rows -> rows.map(BookGroupEditorSnapshot::from) }
+            .flowOn(Dispatchers.IO)
+
+    override suspend fun reorder(ids: List<Long>) =
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                val current = database.bookGroupDao.all.filter { it.groupId >= 0 }
+                val byId = current.associateBy { it.groupId }
+                val requested = ids.distinct().filter(byId::containsKey)
+                val order =
+                    requested + current.map { it.groupId }.filterNot(requested.toSet()::contains)
+                database.bookGroupDao.update(
+                    *order
+                        .mapIndexed { index, id -> byId.getValue(id).copy(order = index + 1) }
+                        .toTypedArray()
+                )
+            }
         }
-    }
 }
