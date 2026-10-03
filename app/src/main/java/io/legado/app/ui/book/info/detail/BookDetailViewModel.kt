@@ -124,6 +124,24 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
             }}catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}finally{mutable.update{it.copy(busy=false)}}
         }
     }
+    /** Reader/Toc launch uses the settled owner after cancellation/join of any pre-update request. */
+    fun navigate(change:BookDetailMutation,navigation:BookDetailNativeKind) {
+        if(!state.value.canInteract)return
+        val previous=networkJob;generation++;previous?.cancel()
+        mutable.update{it.copy(busy=true,error=null)}
+        mutationJob=viewModelScope.launch {
+            try {
+                previous?.join();ensureActive();if(state.value.closed)return@launch
+                mutable.update{it.copy(networkLoading=false)}
+                writes.withLock {
+                    flushLocked();val record=checkNotNull(state.value.session)
+                    val completed=sessions.mutate(ticket,record,BookDetailOperation(UUID.randomUUID().toString(),change,navigation))
+                    ensureActive();if(!state.value.closed)publish(completed)
+                }
+            }catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}
+            finally{if(!state.value.closed)mutable.update{it.copy(busy=false,networkLoading=false)}}
+        }
+    }
     fun queue(kind:BookDetailNativeKind,value:String?=null,flag:Boolean=false) {
         if(!state.value.canInteract)return
         val before=state.value.session ?: return;val data=before.data ?: return
@@ -165,13 +183,13 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
         runService(BookDetailServiceRequest(UUID.randomUUID().toString(),kind,data.book,data.source,file,uri,entry,
             deleteOriginal,deleteRemote,overwrite,readAfter,uploadImported))
     }
-    private fun runService(request:BookDetailServiceRequest) {
+    private fun runService(request:BookDetailServiceRequest,waitForChild:Job?=null) {
         if(state.value.closed || state.value.busy || serviceSession==null)return
         val previous=networkJob;generation++;previous?.cancel()
         mutable.update{it.copy(busy=true,error=null)}
         serviceJob=viewModelScope.launch {
             try {
-                previous?.join();ensureActive();if(state.value.closed)return@launch
+                waitForChild?.join();previous?.join();ensureActive();if(state.value.closed)return@launch
                 mutable.update{it.copy(networkLoading=false)}
                 writes.withLock {
                     flushLocked();val stored=checkNotNull(state.value.session)
@@ -264,10 +282,18 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                         if(next!==current)publish(next)
                         withContext(NonCancellable){ledger.complete(ticket,result.owner.token)}
                         ensureActive()
+                        if(state.value.session?.pendingService!=null) {
+                            val remaining=ledger.read(ticket).pending.isNotEmpty();ensureActive()
+                            mutable.update{it.copy(childPending=remaining)};break
+                        }
                     }
                 }
             }catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}
-            finally{if(!state.value.closed)mutable.update{it.copy(busy=false)}}
+            finally{if(!state.value.closed) {
+                mutable.update{it.copy(busy=false)}
+                val continuation=state.value.session?.pendingService?.request
+                if(continuation!=null && state.value.error==null && currentCoroutineContext().isActive)runService(continuation,currentCoroutineContext()[Job])
+            }}
         }
     }
     private suspend fun applyChild(record:BookDetailSession,result:BookDetailChildResult):BookDetailSession {
@@ -335,9 +361,12 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                 if(latest!=null)return persist(record.copy(data=latest,revision=record.revision+1))
             }
             BookDetailChildKind.InfoEditor,BookDetailChildKind.SourceEditor->if(!result.canceled) {
-                val latest=details.reload(data.book.bookUrl) ?: throw BookDetailMissing()
+                val latest=details.reload(data.book.bookUrl) ?: if(!data.inBookshelf && result.owner.kind==BookDetailChildKind.SourceEditor)
+                    details.describe(data.book,false)else throw BookDetailMissing()
                 currentCoroutineContext().ensureActive()
-                return persist(record.copy(data=latest,revision=record.revision+1))
+                val continuation=if(result.owner.kind==BookDetailChildKind.SourceEditor && serviceSession!=null)
+                    BookDetailPendingService(BookDetailServiceRequest(token+":refresh",BookDetailServiceKind.Refresh,latest.book,latest.source))else null
+                return persist(record.copy(data=latest,pendingService=continuation,revision=record.revision+1))
             }
         }
         return record
