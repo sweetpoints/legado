@@ -8,9 +8,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
-@Composable internal fun BookImportRoute(viewModel: BookImportViewModel, canHandle: () -> Boolean,
-    onEffect: (BookImportEffect) -> Unit, onBusy: (Boolean) -> Unit, onReaderSource: (String) -> Unit, onClose: () -> Unit,
-    modifier: Modifier = Modifier) {
+@Composable
+internal fun BookImportRoute(
+    viewModel: BookImportViewModel,
+    canHandle: () -> Boolean,
+    onEffect: (BookImportEffect) -> Unit,
+    onBusy: (Boolean) -> Unit,
+    onReaderSource: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ready by rememberUpdatedState(canHandle)
     val handle by rememberUpdatedState(onEffect)
@@ -26,29 +33,58 @@ import androidx.lifecycle.repeatOnLifecycle
                 if (ready()) {
                     busy(value.loading || value.busy || value.pendingRefresh)
                     if (value.finished && value.effects.isEmpty() && !closed) {
-                        try { viewModel.consumeReaderSource()?.let(reader) }
-                        catch (error: Exception) {
+                        try {
+                            viewModel.consumeReaderSource()?.let(reader)
+                        } catch (error: Exception) {
                             if (error is kotlinx.coroutines.CancellationException) throw error
-                            handle(BookImportEffect(-1, BookImportAction.Toast, text = "ImportError:${error.localizedMessage}"))
+                            handle(
+                                BookImportEffect(
+                                    -1,
+                                    BookImportAction.Toast,
+                                    text = "ImportError:${error.localizedMessage}",
+                                )
+                            )
                         }
-                        closed = true; close()
+                        closed = true
+                        close()
                     }
-                    if (!value.loading && !value.busy && !value.pendingRefresh) value.effects.firstOrNull()?.let { event ->
-                        viewModel.consume(event.id); handle(event)
-                    }
+                    if (!value.loading && !value.busy && !value.pendingRefresh)
+                        value.effects.firstOrNull()?.let { event ->
+                            viewModel.consume(event.id)
+                            handle(event)
+                        }
                 }
             }
         }
     }
-    BookImportScreen(state, viewModel::search, viewModel::toggle, viewModel::selectVisible, viewModel::code,
-        viewModel::expand, { menu -> when (menu) {
-            BookImportMenu.Automatic -> viewModel.refresh(automatic = !state.automatic)
-            BookImportMenu.Effective -> viewModel.effective()
-            BookImportMenu.Manual -> viewModel.manual()
-            BookImportMenu.ReplaceRules -> viewModel.replaceRules()
-            BookImportMenu.SelectNew -> viewModel.selectStatus(io.legado.app.data.repository.BookImportStatus.New)
-            BookImportMenu.SelectUpdate -> viewModel.selectStatus(io.legado.app.data.repository.BookImportStatus.Update)
-            else -> viewModel.preferences(bookImportMenuPreferences(menu, state))
-        } }, viewModel::openGroup, viewModel::groupDraft, viewModel::addGroupDraft, viewModel::acceptGroup,
-        viewModel::closeGroup, viewModel::confirm, viewModel::cancel, viewModel::load, modifier)
+    BookImportScreen(
+        state,
+        viewModel::search,
+        viewModel::toggle,
+        viewModel::selectVisible,
+        viewModel::code,
+        viewModel::expand,
+        { menu ->
+            when (menu) {
+                BookImportMenu.Automatic -> viewModel.refresh(automatic = !state.automatic)
+                BookImportMenu.Effective -> viewModel.effective()
+                BookImportMenu.Manual -> viewModel.manual()
+                BookImportMenu.ReplaceRules -> viewModel.replaceRules()
+                BookImportMenu.SelectNew ->
+                    viewModel.selectStatus(io.legado.app.data.repository.BookImportStatus.New)
+                BookImportMenu.SelectUpdate ->
+                    viewModel.selectStatus(io.legado.app.data.repository.BookImportStatus.Update)
+                else -> viewModel.preferences(bookImportMenuPreferences(menu, state))
+            }
+        },
+        viewModel::openGroup,
+        viewModel::groupDraft,
+        viewModel::addGroupDraft,
+        viewModel::acceptGroup,
+        viewModel::closeGroup,
+        viewModel::confirm,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+    )
 }

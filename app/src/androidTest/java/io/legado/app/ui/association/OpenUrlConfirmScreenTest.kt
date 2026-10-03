@@ -15,32 +15,54 @@ import org.junit.Test
 
 class OpenUrlConfirmScreenTest {
     @get:Rule val compose = createComposeRule()
-    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private val context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun cancelDoesNotOpenTheUri() {
+    @Test
+    fun cancelDoesNotOpenTheUri() {
         var opens = 0
         var closes = 0
         compose.setContent {
             LegadoComposeTheme {
-                OpenUrlConfirmScreen(OpenUrlConfirmUiState("legado://target"),
-                    { opens++ }, { closes++ }, {}, {}, {}, {})
+                OpenUrlConfirmScreen(
+                    OpenUrlConfirmUiState("legado://target"),
+                    { opens++ },
+                    { closes++ },
+                    {},
+                    {},
+                    {},
+                    {},
+                )
             }
         }
         compose.onNodeWithTag("open-url-cancel").performClick()
-        compose.runOnIdle { assertEquals(0, opens); assertEquals(1, closes) }
+        compose.runOnIdle {
+            assertEquals(0, opens)
+            assertEquals(1, closes)
+        }
         compose.onNodeWithTag("open-url-confirm").performClick()
         compose.runOnIdle { assertEquals(1, opens) }
     }
 
-    @Test fun deletingASourceRequiresAnExplicitConfirmation() {
-        val state = mutableStateOf(OpenUrlConfirmUiState("legado://target", sourceName = "My source"))
+    @Test
+    fun deletingASourceRequiresAnExplicitConfirmation() {
+        val state =
+            mutableStateOf(OpenUrlConfirmUiState("legado://target", sourceName = "My source"))
         var deletes = 0
         compose.setContent {
             LegadoComposeTheme {
-                OpenUrlConfirmScreen(state.value, {}, {}, {},
+                OpenUrlConfirmScreen(
+                    state.value,
+                    {},
+                    {},
+                    {},
                     { state.value = state.value.copy(showDeleteConfirmation = true) },
-                    { deletes++; state.value = state.value.copy(showDeleteConfirmation = false) },
-                    { state.value = state.value.copy(showDeleteConfirmation = false) })
+                    {
+                        deletes++
+                        state.value = state.value.copy(showDeleteConfirmation = false)
+                    },
+                    { state.value = state.value.copy(showDeleteConfirmation = false) },
+                )
             }
         }
         compose.onNodeWithTag("open-url-menu").performClick()
@@ -54,11 +76,19 @@ class OpenUrlConfirmScreenTest {
         compose.runOnIdle { assertEquals(1, deletes) }
     }
 
-    @Test fun busyStateDisablesDuplicateSourceAndOpenActions() {
+    @Test
+    fun busyStateDisablesDuplicateSourceAndOpenActions() {
         compose.setContent {
             LegadoComposeTheme {
-                OpenUrlConfirmScreen(OpenUrlConfirmUiState("legado://target", isWorking = true),
-                    {}, {}, {}, {}, {}, {})
+                OpenUrlConfirmScreen(
+                    OpenUrlConfirmUiState("legado://target", isWorking = true),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                )
             }
         }
         compose.onNodeWithTag("open-url-menu").assertIsNotEnabled()
@@ -66,12 +96,20 @@ class OpenUrlConfirmScreenTest {
         compose.onNodeWithTag("open-url-progress").assertExists()
     }
 
-    @Test fun sourceFailureIsVisibleAndSourceActionsCanBeRetried() {
+    @Test
+    fun sourceFailureIsVisibleAndSourceActionsCanBeRetried() {
         var disables = 0
         compose.setContent {
             LegadoComposeTheme {
-                OpenUrlConfirmScreen(OpenUrlConfirmUiState("legado://target", error = "database unavailable"),
-                    {}, {}, { disables++ }, {}, {}, {})
+                OpenUrlConfirmScreen(
+                    OpenUrlConfirmUiState("legado://target", error = "database unavailable"),
+                    {},
+                    {},
+                    { disables++ },
+                    {},
+                    {},
+                    {},
+                )
             }
         }
         compose.onNodeWithTag("open-url-error").assertExists()

@@ -12,15 +12,31 @@ import org.junit.Test
 
 class AddBookLinkScreenTest {
     @get:Rule val compose = createComposeRule()
-    @Test fun loadingRemainsCancellableAndShowsProgressInShortWindow() {
+
+    @Test
+    fun loadingRemainsCancellableAndShowsProgressInShortWindow() {
         var cancels = 0
-        compose.setContent { LegadoComposeTheme { AddBookLinkScreen(AddBookLinkState(), { cancels++ }, Modifier.height(180.dp)) } }
+        compose.setContent {
+            LegadoComposeTheme {
+                AddBookLinkScreen(AddBookLinkState(), { cancels++ }, Modifier.height(180.dp))
+            }
+        }
         compose.onNodeWithTag("add-book-link-progress").assertExists()
-        compose.onNodeWithTag("add-book-link-cancel").assertIsDisplayed().assertIsEnabled().performClick()
+        compose
+            .onNodeWithTag("add-book-link-cancel")
+            .assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
         compose.runOnIdle { assertEquals(1, cancels) }
     }
-    @Test fun completedStateRemovesProgressAndDisablesFurtherCancel() {
-        compose.setContent { LegadoComposeTheme { AddBookLinkScreen(AddBookLinkState(loading = false, finished = true), {}) } }
+
+    @Test
+    fun completedStateRemovesProgressAndDisablesFurtherCancel() {
+        compose.setContent {
+            LegadoComposeTheme {
+                AddBookLinkScreen(AddBookLinkState(loading = false, finished = true), {})
+            }
+        }
         compose.onNodeWithTag("add-book-link-progress").assertDoesNotExist()
         compose.onNodeWithTag("add-book-link-cancel").assertIsNotEnabled()
     }

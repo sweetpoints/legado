@@ -8,8 +8,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
-@Composable internal fun ImportHighlightRuleRoute(viewModel: ImportHighlightRuleViewModel, canHandle: () -> Boolean,
-    onImported: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+@Composable
+internal fun ImportHighlightRuleRoute(
+    viewModel: ImportHighlightRuleViewModel,
+    canHandle: () -> Boolean,
+    onImported: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ready by rememberUpdatedState(canHandle)
     val imported by rememberUpdatedState(onImported)
@@ -21,7 +27,8 @@ import androidx.lifecycle.repeatOnLifecycle
             viewModel.state.collect { value ->
                 if (ready() && value.finished) {
                     if (value.refreshPending) {
-                        // Consume before touching the reader; lifecycle recreation cannot replay delivery.
+                        // Consume before touching the reader; lifecycle recreation cannot replay
+                        // delivery.
                         viewModel.consumeRefresh()
                         imported()
                     } else close()
@@ -29,6 +36,13 @@ import androidx.lifecycle.repeatOnLifecycle
             }
         }
     }
-    ImportHighlightRuleScreen(state, viewModel::toggle, viewModel::toggleAll, viewModel::confirm,
-        viewModel::cancel, viewModel::load, modifier)
+    ImportHighlightRuleScreen(
+        state,
+        viewModel::toggle,
+        viewModel::toggleAll,
+        viewModel::confirm,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+    )
 }

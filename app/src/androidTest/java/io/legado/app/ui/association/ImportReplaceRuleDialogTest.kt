@@ -15,19 +15,38 @@ import org.junit.Test
 
 class ImportReplaceRuleDialogTest {
     @get:Rule val compose = createEmptyComposeRule()
-    @Test fun actualDialogRestoresCodeSelectionAndOpenGroupDraftWithoutImportingOnRecreationOrCancel() {
-        val rule = ReplaceRule(id = System.nanoTime(), name = "Unconfirmed replacement", pattern = "target", replacement = "new", isRegex = false)
+
+    @Test
+    fun actualDialogRestoresCodeSelectionAndOpenGroupDraftWithoutImportingOnRecreationOrCancel() {
+        val rule =
+            ReplaceRule(
+                id = System.nanoTime(),
+                name = "Unconfirmed replacement",
+                pattern = "target",
+                replacement = "new",
+                isRegex = false,
+            )
         val edited = rule.copy(name = "Edited replacement")
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
-            scenario.onActivity { ImportReplaceRuleDialog(GSON.toJson(rule), finishOnDismiss = true)
-                .show(it.supportFragmentManager, "replace-import") }
-            compose.waitUntil { compose.onAllNodesWithTag("replace-import-check-0").fetchSemanticsNodes().isNotEmpty() }
+            scenario.onActivity {
+                ImportReplaceRuleDialog(GSON.toJson(rule), finishOnDismiss = true)
+                    .show(it.supportFragmentManager, "replace-import")
+            }
+            compose.waitUntil {
+                compose
+                    .onAllNodesWithTag("replace-import-check-0")
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
             compose.onNodeWithTag("replace-import-check-0").performClick().assertIsOff()
             scenario.onActivity {
-                (it.supportFragmentManager.findFragmentByTag("replace-import") as ImportReplaceRuleDialog)
+                (it.supportFragmentManager.findFragmentByTag("replace-import")
+                        as ImportReplaceRuleDialog)
                     .onCodeSave(GSON.toJson(edited), "0")
             }
-            compose.waitUntil { compose.onAllNodesWithText(edited.name).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil {
+                compose.onAllNodesWithText(edited.name).fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNodeWithTag("replace-import-group").performClick()
             compose.onNodeWithTag("replace-import-group-name").performTextInput("Restore group")
             compose.onNodeWithTag("replace-import-add-group").performClick().assertIsOn()

@@ -14,25 +14,57 @@ import io.legado.app.model.ReadBook
 
 class ImportHighlightRuleDialog() : BaseComposeDialogFragment() {
     constructor(source: String, finishOnDismiss: Boolean = false) : this() {
-        arguments = Bundle().apply { putString("source", source); putBoolean("finishOnDismiss", finishOnDismiss) }
+        arguments =
+            Bundle().apply {
+                putString("source", source)
+                putBoolean("finishOnDismiss", finishOnDismiss)
+            }
     }
-    private val viewModel by viewModels<ImportHighlightRuleViewModel> {
-        viewModelFactory { initializer { ImportHighlightRuleViewModel(AppHighlightImportRepository(requireContext()),
-            createSavedStateHandle(), arguments?.getString("source").orEmpty()) } }
+
+    private val viewModel by
+        viewModels<ImportHighlightRuleViewModel> {
+            viewModelFactory {
+                initializer {
+                    ImportHighlightRuleViewModel(
+                        AppHighlightImportRepository(requireContext()),
+                        createSavedStateHandle(),
+                        arguments?.getString("source").orEmpty(),
+                    )
+                }
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        isCancelable = false
     }
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); isCancelable = false }
+
     override fun onStart() {
         super.onStart()
-        dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog
+            ?.window
+            ?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
-    @Composable override fun Content() {
-        ImportHighlightRuleRoute(viewModel, { isAdded && !parentFragmentManager.isStateSaved },
-            { ReadBook.upHighlightRules() }, { dismissAllowingStateLoss() })
+
+    @Composable
+    override fun Content() {
+        ImportHighlightRuleRoute(
+            viewModel,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            { ReadBook.upHighlightRules() },
+            { dismissAllowingStateLoss() },
+        )
     }
-    override fun dismiss() { viewModel.cancel() }
+
+    override fun dismiss() {
+        viewModel.cancel()
+    }
 }
 
-internal fun AppCompatActivity.showImportHighlightRuleDialog(source: String, finishOnDismiss: Boolean = false) {
+internal fun AppCompatActivity.showImportHighlightRuleDialog(
+    source: String,
+    finishOnDismiss: Boolean = false,
+) {
     val tag = ImportHighlightRuleDialog::class.simpleName
     if (supportFragmentManager.findFragmentByTag(tag) == null) {
         ImportHighlightRuleDialog(source, finishOnDismiss).show(supportFragmentManager, tag)

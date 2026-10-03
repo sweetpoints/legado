@@ -9,8 +9,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
-internal fun ImportDictRuleRoute(viewModel: ImportDictRuleViewModel, canHandle: () -> Boolean,
-    onCode: (ImportDictRuleCode) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ImportDictRuleRoute(
+    viewModel: ImportDictRuleViewModel,
+    canHandle: () -> Boolean,
+    onCode: (ImportDictRuleCode) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ready by rememberUpdatedState(canHandle)
     val code by rememberUpdatedState(onCode)
@@ -22,11 +27,23 @@ internal fun ImportDictRuleRoute(viewModel: ImportDictRuleViewModel, canHandle: 
             viewModel.state.collect { value ->
                 if (ready()) {
                     if (value.finished) close()
-                    else value.code?.let { event -> viewModel.consumeCode(event.key); code(event) }
+                    else
+                        value.code?.let { event ->
+                            viewModel.consumeCode(event.key)
+                            code(event)
+                        }
                 }
             }
         }
     }
-    ImportDictRuleScreen(state, viewModel::toggle, viewModel::toggleAll, viewModel::openCode,
-        viewModel::confirm, viewModel::cancel, viewModel::load, modifier)
+    ImportDictRuleScreen(
+        state,
+        viewModel::toggle,
+        viewModel::toggleAll,
+        viewModel::openCode,
+        viewModel::confirm,
+        viewModel::cancel,
+        viewModel::load,
+        modifier,
+    )
 }
