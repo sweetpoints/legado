@@ -1011,3 +1011,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 主题设置数据层按 Store、Repository、平台接口分离，偏好快照及图片读取/下载复制在 IO，启动图标、壁纸跟随和主题刷新在 Main。过程级锁串行设置，完整原子图片写入成功后才更新背景地址，保留 MD5 命名及 9patch 后缀。新增异步昼夜切换，封面准备移至 IO，既有入口保留；6 个 JVM 行为测试执行、2 个实际偏好/文件 Android 测试仅编译。
 
 文件管理宿主、面包屑、过滤、文件列表、长按删除及快速滚动改为 Compose，删除旧 ViewModel 和 3 个独占布局 XML。父目录入口不弹删除菜单，FileProvider 的精确 URI/MIME/读取授权仍通过原生文件打开接口交付；恢复导航认领前后校验 RESUMED，暂停取消时回滚私有回执。新增 7 个 Compose 交互、6 个 Route 和实际外置目录宿主回归，状态 JVM 增至 15 个；Android 测试仅编译。
+
+模拟阅读编辑状态迁入 ViewModel。完整书籍 URL 与初始表单留私有请求文件，弹窗 Bundle 只携带 UUID，SavedState 保留有长度上限的表单及完成票据。取消不写入，旋转保留草稿和日期选择，保存失败显式重试，确认提交期间阻止重复保存/取消；提交后使用规范化值更新阅读器。6 个 JVM 状态回归执行，1 个完整 URL/AtomicFile Android 回归仅编译。
