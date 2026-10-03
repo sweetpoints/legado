@@ -1242,3 +1242,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 漫画启动参数、完整原生操作载荷与认领回执进入独立 private UUID Atomic session，SavedState 后续只保留小票据；revision（含同版本写入）拒绝迟到覆盖已接受回执，durable release tombstone 和 backup 阻止排队写入复活。清理仅删除自身 session body，不影响邻居或已交付文件。新增 3 个实际多兆载荷/Atomic备份/释放与回执回归，官方实际格式化/check 已通过，完整 tip 构建待 slot，VM/native Route 后续接入。
 
 漫画图像进度监听收尾也按 owner 原子移除：完成回调中重新安装同 URL 请求时，旧 complete 分支不删除后来监听器；保持旧公开 API 与下载百分比算法。新增实际重入 callback 回归，官方实际格式化/check 与 diff check 通过，最终 rebase 候选整体验证待 slot，其余功能冻结。
+
+漫画 private checkpoint 的 3 个 DTO 与 2 个枚举补 AndroidX @Keep，保护 minify release 中完整 Gson 字段与枚举名称，避免跨版本恢复依赖被改名字段。rebase 候选 5626e1e1 的 AndroidTest Kotlin 与全部 3738 JVM 回归已通过；本保名小修后再次冻结增量完整验证。这里只具备源码保名审计与 debug 编译证据，未实际执行 release/R8 打包或设备测试。

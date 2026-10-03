@@ -1,6 +1,7 @@
 package io.legado.app.data.repository
 
 import android.util.AtomicFile
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
@@ -13,12 +14,14 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
 /** Public reader input is captured once; full URLs live on private disk rather than SavedState. */
+@Keep
 data class MangaReaderLaunch(
     val bookUrl: String? = null,
     val inBookshelf: Boolean = true,
     val chapterChanged: Boolean = false,
 )
 
+@Keep
 enum class MangaNativeKind {
     BookInfo,
     Catalog,
@@ -28,6 +31,7 @@ enum class MangaNativeKind {
     ChangeSource,
 }
 
+@Keep
 enum class MangaNativePhase {
     Pending,
     Claimed,
@@ -36,6 +40,7 @@ enum class MangaNativePhase {
 }
 
 /** Payload fields are deliberately flat so restored JSON retains their entire original values. */
+@Keep
 data class MangaNativeRequest(
     val ticket: String,
     val kind: MangaNativeKind,
@@ -49,6 +54,7 @@ data class MangaNativeRequest(
     val sourceType: Int? = null,
 )
 
+@Keep
 data class MangaReaderSession(
     val revision: Long,
     val launch: MangaReaderLaunch,
@@ -66,7 +72,10 @@ interface MangaReaderSessionRepository {
     suspend fun release(session: String)
 }
 
-/** Atomic checkpoints are independent for each reader and cannot be revived after owner release. */
+/**
+ * Atomic checkpoints are independent for each reader and cannot be revived after owner release. The
+ * persisted DTOs and enums keep their Gson names across minified release updates.
+ */
 class FileMangaReaderSessionRepository(
     private val directory: File = File(appCtx.filesDir, "manga-reader-state")
 ) : MangaReaderSessionRepository {
