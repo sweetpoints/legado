@@ -3,13 +3,17 @@ package io.legado.app.data.repository
 import android.net.Uri
 import android.os.Looper
 import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.utils.compress.ZipUtils
 import java.io.File
 import java.util.UUID
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -264,6 +268,103 @@ class HandleFileChoicesRepositoryTest {
             )
         } finally {
             scope.cancel()
+        }
+    }
+
+    @Test
+    fun fileOriginRestoresBasenameAndUsesDisposableFileForOriginalZipBranch() = runBlocking {
+        directory.mkdirs()
+        val original = File(directory, "source-basename.json").apply { writeText("Exact payload") }
+        val sessionDirectory = File(directory, "sessions")
+        val sessions = FileHandleFileChoicesSessionRepository(sessionDirectory)
+        val sessionId = UUID.randomUUID().toString()
+        sessions.stage(
+            sessionId,
+            HandleFileSeed(
+                HandleFileInput(
+                    3,
+                    fileName = "display-name.json",
+                    contentType = "application/json",
+                ),
+                original,
+            ),
+        )
+        val input = FileHandleFileChoicesSessionRepository(sessionDirectory).input(sessionId)!!
+        assertEquals(original.name, input.sourceFileName)
+        var uploadedCopy: File? = null
+        val archive = File(directory, "compressed.zip")
+        val repository =
+            AppHandleFileChoicesRepository(
+                context,
+                uploadFile = { name, payload, contentType ->
+                    assertEquals("display-name.json", name)
+                    assertEquals("application/json", contentType)
+                    val source = payload as File
+                    uploadedCopy = source
+                    assertEquals(original.name, source.name)
+                    assertEquals("Exact payload", source.readText())
+                    assertTrue(ZipUtils.zipFile(source, archive))
+                    source.delete() // DirectLinkUpload may delete the File that it was given.
+                    "https://accepted-file"
+                },
+            )
+        val result =
+            repository.uploadFileRecorded(
+                input.fileName!!,
+                input.sourceFileName!!,
+                sessions.bytes(sessionId),
+                input.contentType!!,
+            ) { uri ->
+                sessions.write(sessionId, HandleFileCheckpoint(3, "Result", result = uri))
+            }
+        assertEquals("https://accepted-file", result)
+        ZipInputStream(archive.inputStream()).use { zip ->
+            assertEquals(original.name, zip.nextEntry.name)
+            assertEquals("Exact payload", zip.readBytes().decodeToString())
+        }
+        assertTrue(original.exists())
+        assertEquals("Exact payload", sessions.bytes(sessionId).decodeToString())
+        assertFalse(uploadedCopy!!.parentFile!!.exists())
+        assertEquals(result, sessions.read(sessionId)!!.result)
+    }
+
+    @Test
+    fun cancelledFileUploadRemovesOnlyDisposableCopyAndNeverPublishesReceipt() = runBlocking {
+        val neighbor = File(context.cacheDir, "handle-file-upload/neighbor-${UUID.randomUUID()}")
+        neighbor.mkdirs()
+        File(neighbor, "keep.json").writeText("Keep")
+        val enteredUpload = CompletableDeferred<Unit>()
+        var disposableCopy: File? = null
+        var receipts = 0
+        val repository =
+            AppHandleFileChoicesRepository(
+                context,
+                uploadFile = { _, payload, _ ->
+                    disposableCopy = payload as File
+                    enteredUpload.complete(Unit)
+                    awaitCancellation()
+                },
+            )
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        try {
+            val job = scope.launch {
+                repository.uploadFileRecorded(
+                    "display.json",
+                    "source.json",
+                    "Exact".toByteArray(),
+                    "application/json",
+                ) {
+                    receipts += 1
+                }
+            }
+            enteredUpload.await()
+            job.cancelAndJoin()
+            assertEquals(0, receipts)
+            assertFalse(disposableCopy!!.parentFile!!.exists())
+            assertEquals("Keep", File(neighbor, "keep.json").readText())
+        } finally {
+            scope.cancel()
+            neighbor.deleteRecursively()
         }
     }
 }

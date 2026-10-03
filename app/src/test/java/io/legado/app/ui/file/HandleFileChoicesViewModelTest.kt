@@ -73,6 +73,7 @@ class HandleFileChoicesViewModelTest {
         var saves = 0
         var manualIssue: HandleFileIssue? = null
         var acceptedGate: CompletableDeferred<Unit>? = null
+        val uploadedFileNames = mutableListOf<String>()
 
         override suspend fun mimeTypes(extensions: List<String>) = listOf("*/*")
 
@@ -106,6 +107,17 @@ class HandleFileChoicesViewModelTest {
                 acceptedGate?.await()
                 result
             }
+        }
+
+        override suspend fun uploadFileRecorded(
+            name: String,
+            sourceFileName: String,
+            bytes: ByteArray,
+            contentType: String,
+            receipt: suspend (String) -> Unit,
+        ): String {
+            uploadedFileNames += sourceFileName
+            return uploadRecorded(name, bytes, contentType, receipt)
         }
     }
 
@@ -411,6 +423,29 @@ class HandleFileChoicesViewModelTest {
         val restored = model(restoredSaved, files, disk)
         restored.load()
         runCurrent()
+        assertEquals("https://accepted", restored.state.value.result)
+        assertEquals(1, files.uploads)
+    }
+
+    @Test
+    fun originalFileBasenameSelectsFileUploadBranchAfterPrivateInputRestore() = test {
+        val files = Files()
+        val disk =
+            Disk().apply {
+                input =
+                    HandleFileInput(
+                        mode = 3,
+                        fileName = "display-rule.json",
+                        contentType = "application/json",
+                        sourceFileName = "original-source.json",
+                    )
+            }
+        val restored = model(repo = files, disk = disk)
+        restored.load()
+        runCurrent()
+        restored.choose(111)
+        runCurrent()
+        assertEquals(listOf("original-source.json"), files.uploadedFileNames)
         assertEquals("https://accepted", restored.state.value.result)
         assertEquals(1, files.uploads)
     }

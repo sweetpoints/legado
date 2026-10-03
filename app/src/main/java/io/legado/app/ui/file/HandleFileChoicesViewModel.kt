@@ -291,7 +291,8 @@ class HandleFileChoicesViewModel(
         val type =
             input.contentType ?: throw HandleFileIssueException(HandleFileIssue.PayloadMissing)
         val base = checkpoint
-        repository.uploadRecorded(name, sessionRepository.bytes(sessionId), type) { result ->
+        val bytes = sessionRepository.bytes(sessionId)
+        val recordSuccess: suspend (String) -> Unit = { result ->
             val receipt =
                 base.copy(
                     revision = base.revision + 1,
@@ -300,6 +301,12 @@ class HandleFileChoicesViewModel(
                 )
             acceptedResult = receipt
             sessionRepository.write(sessionId, receipt)
+        }
+        val sourceFileName = input.sourceFileName
+        if (sourceFileName == null) {
+            repository.uploadRecorded(name, bytes, type, recordSuccess)
+        } else {
+            repository.uploadFileRecorded(name, sourceFileName, bytes, type, recordSuccess)
         }
         currentCoroutineContext().ensureActive()
         publish(checkNotNull(acceptedResult))

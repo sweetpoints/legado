@@ -34,6 +34,7 @@ data class HandleFileInput(
     val fileName: String? = null,
     val contentType: String? = null,
     val value: String? = null,
+    val sourceFileName: String? = null,
 )
 
 data class HandleFileSeed(
@@ -113,6 +114,14 @@ interface HandleFileChoicesRepository {
         withContext(NonCancellable) { receipt(result) }
         return result
     }
+
+    suspend fun uploadFileRecorded(
+        name: String,
+        sourceFileName: String,
+        bytes: ByteArray,
+        contentType: String,
+        receipt: suspend (String) -> Unit,
+    ): String = uploadRecorded(name, bytes, contentType, receipt)
 }
 
 /** Retains the established document-tree/file and DirectLinkUpload algorithms on IO. */
