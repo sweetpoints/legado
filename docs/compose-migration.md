@@ -1232,3 +1232,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 漫画阅读图像基础抽离为独立 IO repository，沿用 BookCover 漫画缓存、sourceOrigin/header/proxy、本地已下载图片、Bitmap transformation 与 preload 管线；GIF/WebP 和静态 Drawable 持有 Glide lease，取消与未交付结果在 Main 清理，晚到清理通过原子 owner listener 移除保留后来请求的下载进度。页面/章节边界发布 detached 不可变投影，保留旧中心和底角触摸区域及 RTL 行为。新增 3 个 JVM 与 4 个实际 PNG/GIF/WebP/监听 Android 回归；初版双 task 构建与全部 3726 JVM 通过，后补 owner/WebP 的最终 tip 等统一构建 slot 验证，设备端未执行；宿主后续接入。
 
 漫画进度保存保留原引擎串行 executor，入队前捕获书籍和章节/图片位置；新 IO Room 仓库在事务内重读当前书籍，仅合入阅读字段，保留并发书名、封面、简介、分组、排序与阅读设置，并不复活已删除书籍。回执只更新仍持有同一书籍引用和位置的引擎内存，避免迟到保存污染新书/新章。新增 2 个真实 Room 元数据/删除/章节标题回归，最终 tip 构建排队，设备端未执行；model/ReadManga 其它算法仅按统一 ktfmt 格式化。
+
+漫画图片改为纯 Compose Image Screen/Route，以共享 lifecycle Drawable painter 保留真实动画帧；连续模式按视口宽度和原图比例排高，末图保留 2/3 视口最小高度，横向整页 Fit、ARGB 不可变滤镜、墨水屏加载提示及失败重试延续原语义。Route 在取消/离开时释放请求，停止 drawable callback 后才释放池化静态像素或动画帧。新增 2 个实际 Compose 尺寸和资源生命周期回归，最终 tip 构建排队，设备端未执行；旧漫画宿主尚未接入，不宣称整页已迁移。
