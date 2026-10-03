@@ -5,16 +5,23 @@ import androidx.test.core.app.ApplicationProvider
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.SourceType
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.repository.AppBrowserNavigationStore
 import io.legado.app.data.repository.MangaNativeKind
 import io.legado.app.data.repository.MangaNativeRequest
 import io.legado.app.model.ReadBook
+import io.legado.app.model.browser.BrowserRequest
+import io.legado.app.ui.browser.BrowserNavigation
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class MangaBrowserNavigationTest {
     @Test
-    fun usesMangaSourceKindAndPreservesCompleteBrowserPayload() {
+    fun chapterBrowserKeepsFullPayloadPrivateAndCarriesOnlyAnOpaqueTicket() = runBlocking {
         val mangaSource =
             BookSource(
                 bookSourceUrl = "https://manga.invalid/source",
@@ -35,16 +42,32 @@ class MangaBrowserNavigationTest {
                     sourceName = mangaSource.bookSourceName,
                     sourceType = mangaBrowserSourceKind(mangaSource),
                 )
-            val intent =
-                mangaChapterBrowserIntent(
-                    ApplicationProvider.getApplicationContext<Context>(),
-                    request,
+            assertEquals(SourceType.book, mangaBrowserSourceKind(mangaSource))
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val ticket =
+                withContext(Dispatchers.IO) {
+                    BrowserNavigation.prepare(context, mangaChapterBrowserRequest(request))
+                }
+            try {
+                val intent = BrowserNavigation.intent(context, ticket)
+                assertEquals(setOf(BrowserNavigation.PREPARED_TICKET), intent.extras!!.keySet())
+                assertFalse(intent.hasExtra("url"))
+                assertFalse(intent.hasExtra("sourceOrigin"))
+                assertEquals(
+                    BrowserRequest(
+                        url = url,
+                        title = "Full chapter title",
+                        sourceOrigin = mangaSource.bookSourceUrl,
+                        sourceName = mangaSource.bookSourceName,
+                        sourceType = SourceType.book,
+                    ),
+                    withContext(Dispatchers.IO) {
+                        AppBrowserNavigationStore(context).read(ticket)
+                    },
                 )
-            assertEquals(SourceType.book, intent.getIntExtra("sourceType", -1))
-            assertEquals(mangaSource.bookSourceUrl, intent.getStringExtra("sourceOrigin"))
-            assertEquals(mangaSource.bookSourceName, intent.getStringExtra("sourceName"))
-            assertEquals("Full chapter title", intent.getStringExtra("title"))
-            assertEquals(url, intent.getStringExtra("url"))
+            } finally {
+                withContext(Dispatchers.IO) { AppBrowserNavigationStore(context).abandon(ticket) }
+            }
         } finally {
             ReadBook.bookSource = savedTextSource
         }

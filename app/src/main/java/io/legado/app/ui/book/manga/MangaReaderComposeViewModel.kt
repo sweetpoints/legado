@@ -36,6 +36,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadManga
 import io.legado.app.model.localBook.PdfFile
 import io.legado.app.ui.book.info.BookInfoNavigation
+import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -499,23 +500,40 @@ internal class MangaReaderComposeViewModel(
         val controller = session ?: return
         ownerScope?.launch {
             try {
-                if (kind == MangaNativeKind.BookInfo) {
+                if (kind == MangaNativeKind.BookInfo || kind == MangaNativeKind.ChapterBrowser) {
                     withContext(NonCancellable) {
+                        val context = getApplication<Application>()
                         val ticket =
-                            BookInfoNavigation.prepare(
-                                getApplication<Application>(),
-                                BookDetailIdentity(book.name, book.author, book.bookUrl),
-                            )
+                            if (kind == MangaNativeKind.BookInfo) {
+                                BookInfoNavigation.prepare(
+                                    context,
+                                    BookDetailIdentity(book.name, book.author, book.bookUrl),
+                                )
+                            } else {
+                                BrowserNavigation.prepare(
+                                    context,
+                                    mangaChapterBrowserRequest(request),
+                                )
+                            }
                         var transferred = false
                         try {
-                            if (generation == owner && ownerJob?.isActive == true) {
+                            if (
+                                generation == owner &&
+                                    ownerJob?.isActive == true &&
+                                    session === controller
+                            ) {
                                 controller.enqueue(request.copy(preparedTicket = ticket))
                                 transferred = true
                             }
                         } finally {
                             // A cancelled preparation owns only its freshly created child ticket.
-                            if (!transferred)
-                                BookInfoNavigation.abandon(getApplication<Application>(), ticket)
+                            if (!transferred) {
+                                if (kind == MangaNativeKind.BookInfo) {
+                                    BookInfoNavigation.abandon(context, ticket)
+                                } else {
+                                    BrowserNavigation.abandon(context, ticket)
+                                }
+                            }
                         }
                     }
                 } else controller.enqueue(request)
@@ -605,8 +623,68 @@ internal class MangaReaderComposeViewModel(
         ticket: String,
         resumed: () -> Boolean,
         dispatch: (MangaNativeRequest) -> Unit,
-    ) {
-        session?.claimAndDispatch(ticket, resumed, dispatch)
+    ): Boolean {
+        val controller = session ?: return false
+        val owner = generation
+        val request =
+            controller.state.value?.nativeRequests?.firstOrNull {
+                it.ticket == ticket && it.phase == MangaNativePhase.Pending
+            } ?: return false
+        if (!resumed()) return false
+
+        var temporaryBrowserTicket: String? = null
+        var handedOff = false
+        try {
+            val browserTicket =
+                if (request.kind == MangaNativeKind.ChapterBrowser) {
+                    request.preparedTicket
+                        ?: BrowserNavigation.prepare(
+                                getApplication<Application>(),
+                                mangaChapterBrowserRequest(request),
+                            )
+                            .also { temporaryBrowserTicket = it }
+                } else null
+
+            currentCoroutineContext().ensureActive()
+            if (
+                generation != owner ||
+                    session !== controller ||
+                    state.value.sessionId != controller.sessionId ||
+                    !resumed()
+            )
+                return false
+
+            return try {
+                controller.claimAndDispatch(ticket, resumed) { claimed ->
+                    dispatch(
+                        if (claimed.kind == MangaNativeKind.ChapterBrowser)
+                            claimed.copy(preparedTicket = checkNotNull(browserTicket))
+                        else claimed
+                    )
+                    if (claimed.kind == MangaNativeKind.ChapterBrowser) handedOff = true
+                }
+            } catch (error: Throwable) {
+                if (
+                    request.kind == MangaNativeKind.ChapterBrowser &&
+                        request.preparedTicket != null &&
+                        controller.state.value?.nativeRequests?.any {
+                            it.ticket == ticket && it.phase == MangaNativePhase.Cancelled
+                        } == true
+                ) {
+                    BrowserNavigation.abandon(
+                        getApplication<Application>(),
+                        request.preparedTicket,
+                    )
+                }
+                throw error
+            }
+        } finally {
+            temporaryBrowserTicket
+                ?.takeIf { !handedOff }
+                ?.let { prepared ->
+                    BrowserNavigation.abandon(getApplication<Application>(), prepared)
+                }
+        }
     }
 
     fun completeNative(ticket: String, cancelled: Boolean = false) {
@@ -800,7 +878,13 @@ internal class MangaReaderComposeViewModel(
                         (request.phase == MangaNativePhase.Pending ||
                             request.phase == MangaNativePhase.Cancelled)
                 ) {
-                    BookInfoNavigation.abandon(getApplication<Application>(), ticket)
+                    when (request.kind) {
+                        MangaNativeKind.BookInfo ->
+                            BookInfoNavigation.abandon(getApplication<Application>(), ticket)
+                        MangaNativeKind.ChapterBrowser ->
+                            BrowserNavigation.abandon(getApplication<Application>(), ticket)
+                        else -> Unit
+                    }
                 }
             }
             controller.release()

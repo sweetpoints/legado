@@ -41,6 +41,7 @@ import io.legado.app.ui.book.manga.config.MangaFooterSettingDialog
 import io.legado.app.ui.book.read.ReadBookActivity.Companion.RESULT_DELETED
 import io.legado.app.ui.book.read.showBookDownloadDialog
 import io.legado.app.ui.book.toc.TocActivityResult
+import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.GSON
 import io.legado.app.utils.NetworkUtils
@@ -227,7 +228,7 @@ class ReadMangaActivity :
                 imageDirectoryLauncher(request.ticket).launch { value = request.ticket }
             }
             MangaNativeKind.ChapterBrowser -> {
-                startActivity(mangaChapterBrowserIntent(this, request))
+                BrowserNavigation.startPrepared(this, checkNotNull(request.preparedTicket))
                 viewModel.completeNative(request.ticket)
             }
             MangaNativeKind.ExternalBrowser -> {

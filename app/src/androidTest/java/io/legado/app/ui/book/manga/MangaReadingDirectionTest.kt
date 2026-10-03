@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.manga
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.Activity
+import android.app.Instrumentation
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
@@ -28,11 +30,15 @@ import io.legado.app.R
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
+import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.repository.AppBrowserNavigationStore
+import io.legado.app.data.repository.MangaNativeKind
+import io.legado.app.data.repository.MangaNativePhase
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.BackupConfig
@@ -40,10 +46,13 @@ import io.legado.app.help.storage.Restore
 import io.legado.app.help.storage.readPreferenceSnapshot
 import io.legado.app.help.storage.writePreferenceSnapshot
 import io.legado.app.model.ReadManga
+import io.legado.app.ui.browser.BrowserNavigation
+import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
@@ -174,6 +183,57 @@ class MangaReadingDirectionTest {
             instrumentation.uiAutomation.serviceInfo.apply {
                 flags = accessibilityFlags
             }
+    }
+
+    @Test
+    fun chapterBrowserNativeActionDispatchesItsPreparedPayloadOnlyForTheCapturedReaderSession() {
+        launchReader()
+        val starts = CopyOnWriteArrayList<Intent>()
+        val monitor =
+            object : Instrumentation.ActivityMonitor() {
+                override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                    if (intent.component?.className == WebViewActivity::class.java.name) {
+                        starts += intent
+                        return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+                    }
+                    return null
+                }
+            }
+        instrumentation.addMonitor(monitor)
+        var ticket: String? = null
+        val fullUrl =
+            "https://manga.invalid/chapter/" + "opaque-path/".repeat(30_000) + ",{header:full}"
+        try {
+            scenario!!.onActivity { activity ->
+                activity.viewModel.enqueueNative(MangaNativeKind.ChapterBrowser, fullUrl)
+            }
+            compose.waitUntil(15000) { starts.isNotEmpty() }
+            assertEquals(1, starts.size)
+            val intent = starts.single()
+            assertEquals(setOf(BrowserNavigation.PREPARED_TICKET), intent.extras!!.keySet())
+            ticket = requireNotNull(intent.getStringExtra(BrowserNavigation.PREPARED_TICKET))
+            val request =
+                runBlocking(Dispatchers.IO) { AppBrowserNavigationStore(context).read(ticket!!) }
+            assertEquals(fullUrl, request.url)
+            assertEquals("Chapter 2", request.title)
+            assertEquals(source.bookSourceUrl, request.sourceOrigin)
+            assertEquals(source.bookSourceName, request.sourceName)
+            assertEquals(SourceType.book, request.sourceType)
+
+            awaitActivity("browser action receipt accepted") { activity ->
+                activity.viewModel.state.value.nativeRequests.any {
+                    it.kind == MangaNativeKind.ChapterBrowser &&
+                        it.imageUrl == fullUrl &&
+                        it.preparedTicket == ticket &&
+                        it.phase == MangaNativePhase.Complete
+                }
+            }
+        } finally {
+            ticket?.let { prepared ->
+                runBlocking(Dispatchers.IO) { AppBrowserNavigationStore(context).abandon(prepared) }
+            }
+            instrumentation.removeMonitor(monitor)
+        }
     }
 
     @Test
