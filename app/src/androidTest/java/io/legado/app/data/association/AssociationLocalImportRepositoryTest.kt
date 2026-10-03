@@ -122,6 +122,71 @@ class AssociationLocalImportRepositoryTest {
         }
     }
 
+    @Test
+    fun acceptedReceiptFailureStopsBatchBeforeFurtherImportsUntilRecovery() = runBlocking {
+        val fixture = fixture()
+        val accepted = linkedMapOf<String, Book>()
+        var importCalls = 0
+        val engine =
+            object : AssociationBookImportEngine {
+                override fun current(bookUrl: String): Book? = accepted[bookUrl]
+
+                override fun import(uri: Uri, preview: Book): Book {
+                    importCalls++
+                    accepted[preview.bookUrl] = preview
+                    return preview
+                }
+            }
+        try {
+            val original = fixture.sessions.read(fixture.ticket)
+            val secondFile =
+                File(fixture.root, "input/second.txt").apply {
+                    writeText("第二本正文")
+                }
+            val secondBook = Book(bookUrl = secondFile.path, name = "Second fixture")
+            val second =
+                AssociationBookPreview(
+                    "second",
+                    Uri.fromFile(secondFile).toString(),
+                    secondFile.name,
+                    GSON.toJson(secondBook),
+                )
+            fixture.sessions.write(
+                fixture.ticket,
+                original.copy(
+                    revision = original.revision + 1,
+                    previews = original.previews + second,
+                    selectedIds = original.selectedIds + second.id,
+                ),
+            )
+            val failing =
+                AssociationLocalImportRepository(
+                    fixture.sessions,
+                    engine,
+                    beforeJournalWrite = { journal ->
+                        if (journal.copies.any { it.imported })
+                            throw IOException("accepted receipt unavailable")
+                    },
+                )
+            assertTrue(
+                runCatching {
+                    failing.import(fixture.ticket, fixture.token, fixture.destinationUri)
+                }
+                    .isFailure
+            )
+            assertEquals(1, importCalls)
+            assertEquals(1, accepted.size)
+            val restored =
+                AssociationLocalImportRepository(fixture.sessions, engine)
+                    .import(fixture.ticket, fixture.token, fixture.destinationUri)
+            assertEquals(2, restored.bookJson.size)
+            assertEquals(2, importCalls)
+            assertEquals(2, fixture.destination.listFiles()!!.size)
+        } finally {
+            fixture.close()
+        }
+    }
+
     private suspend fun fixture(): Fixture {
         val root =
             File(context.cacheDir, "association-import-${UUID.randomUUID()}").apply { mkdirs() }

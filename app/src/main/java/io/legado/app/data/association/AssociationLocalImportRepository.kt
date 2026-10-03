@@ -125,32 +125,38 @@ class AssociationLocalImportRepository(
                 val books = mutableListOf<String>()
                 var firstFailure: Throwable? = null
                 for (copy in journal.copies) {
-                    try {
-                        val preview = GSON.fromJsonObject<Book>(copy.bookJson).getOrThrow()
-                        val existing = engine.current(preview.bookUrl)
-                        check(!copy.imported || existing != null) { "An imported book was deleted" }
-                        // A failed receipt write after Room acceptance is recovered by this exact
-                        // reserved URL. Never rerun importFile on an existing reading-position row.
-                        val book =
+                    val book =
+                        try {
+                            val preview = GSON.fromJsonObject<Book>(copy.bookJson).getOrThrow()
+                            val existing = engine.current(preview.bookUrl)
+                            check(!copy.imported || existing != null) {
+                                "An imported book was deleted"
+                            }
+                            // A failed receipt write after Room acceptance is recovered by this
+                            // exact
+                            // reserved URL. Never rerun importFile on an existing reading-position
+                            // row.
                             existing ?: engine.import(Uri.parse(copy.destinationUri), preview)
-                        if (!copy.imported) {
-                            val updated =
-                                journal.copy(
-                                    copies =
-                                        journal.copies.map {
-                                            if (it.previewId == copy.previewId)
-                                                it.copy(imported = true)
-                                            else it
-                                        }
-                                )
-                            writeJournal(file, updated)
-                            journal = updated
+                        } catch (failure: Throwable) {
+                            if (firstFailure == null) firstFailure = failure
+                            AppLog.put("导入分享书籍失败\n${failure.localizedMessage}", failure)
+                            continue
                         }
-                        books += GSON.toJson(book)
-                    } catch (failure: Throwable) {
-                        if (firstFailure == null) firstFailure = failure
-                        AppLog.put("导入分享书籍失败\n${failure.localizedMessage}", failure)
+                    if (!copy.imported) {
+                        val updated =
+                            journal.copy(
+                                copies =
+                                    journal.copies.map {
+                                        if (it.previewId == copy.previewId) it.copy(imported = true)
+                                        else it
+                                    }
+                            )
+                        // A receipt failure is not a rejected book. Stop before any success UI
+                        // or next import; restoration reconciles the already accepted Room row.
+                        writeJournal(file, updated)
+                        journal = updated
                     }
+                    books += GSON.toJson(book)
                 }
                 if (books.isEmpty())
                     throw firstFailure ?: IllegalStateException("No books could be imported")
