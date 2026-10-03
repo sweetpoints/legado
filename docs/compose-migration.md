@@ -969,3 +969,5 @@ RSS 源调试页面迁移至 Compose Activity/Route/Screen，保留搜索帮助�
 目录标注 Fragment 改为 Compose Route/Screen，保留卡片、颜色条、章节/原文/备注、点击阅读及长按备注，复用 Compose 快速滚动。异步解析后再次核对 RESUMED 和宿主状态，消费票据后交付，孤立章节继续可编辑但不跳转。删除旧 Adapter 及最后两个专属布局；新增 7 个 Compose 和 3 个宿主回归，只替换共享测试中该页旧 XML/源码断言。隔离 JVM 回归与 Android 测试编译通过；设备测试尚未执行。
 
 二维码页面迁入 Compose Activity/Route/Screen，保留图片选择与 RESULT_OK/result 可空字符串协议。CameraX PreviewView 作为原生扫码内核，QR-only/full-area/0.8 区域与缩放、灯光感应、手电筒保留；工具栏、扫描框、进度及错误重试由 Compose 绘制，原 Fragment/布局/菜单删除。结果认领失败显示可重试错误，暂停认领后恢复仅交付一次；真实结束清理会话，旋转保留。新增 4 个实际 Compose/生命周期回归；隔离全量 JVM 与 Android 测试编译通过，尚未执行设备相机测试。
+
+书内搜索页面改为 Compose Activity/Route/Screen，保留输入、替换/正则开关、逐章进度、停止、上下滚动、电子墨水高亮与全部阅读器 ABI 字段。完成标志绑定已落盘结果修订，恢复不把部分结果误报完成；真实关闭清理 AtomicFile 的 base/bak/new，旋转保留完整会话。旧 VM/Adapter、两个专属布局和菜单删除，新增 9 个 Compose、2 个宿主与 1 个阅读器 ABI 回归，状态层另补两个恢复/跨页设置用例。隔离全量 JVM 与 Android 测试编译通过；设备测试尚未执行。

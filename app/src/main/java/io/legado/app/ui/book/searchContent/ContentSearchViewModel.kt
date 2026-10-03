@@ -49,6 +49,9 @@ internal class ContentSearchViewModel(private val repository: ContentSearchRepos
                 var snapshot = repository.read(session) ?: repository.create(session, seed())
                 // The durable revision can exceed both SavedState and a rebooted monotonic clock.
                 revision = maxOf(revision, snapshot.revision)
+                val completed = saved.get<Boolean>("completed") == true &&
+                    (saved.get<Long>("completedRevision") ?: Long.MAX_VALUE) <= snapshot.revision
+                saved["completed"] = completed
                 val loaded = repository.load(snapshot.bookUrl); currentCoroutineContext().ensureActive()
                 if (stopped) return@launch
                 if (saved.get<String>("process") != null && saved.get<String>("process") != process) options.restore(snapshot.options)
@@ -63,7 +66,7 @@ internal class ContentSearchViewModel(private val repository: ContentSearchRepos
                 mutable.value = ContentSearchState(loading = false, query = snapshot.query, results = snapshot.results,
                     options = snapshot.options, currentChapter = loaded.book.currentChapter,
                     position = saved.get<Int>("position") ?: snapshot.position, focusInput = snapshot.searchOpen,
-                    completed = saved.get<Boolean>("completed") == true, pendingResult = snapshot.pendingResult, finished = snapshot.finished)
+                    completed = completed, pendingResult = snapshot.pendingResult, finished = snapshot.finished)
                 if (autoSubmit) submit()
             } catch (canceled: CancellationException) { throw canceled }
             catch (_: ContentSearchSessionClosedException) { currentCoroutineContext().ensureActive()
@@ -83,9 +86,10 @@ internal class ContentSearchViewModel(private val repository: ContentSearchRepos
     }
     fun replace(value: Boolean) { if (!stopped && current != null && !state.value.finished && !state.value.selecting) settings(options.replace(value)) }
     fun regex(value: Boolean) { if (!stopped && current != null && !state.value.finished && !state.value.selecting) settings(options.regex(value)) }
+    fun refreshOptions() = settings(options.current())
     private fun settings(value: ContentSearchOptions) {
         val snapshot = current ?: return
-        if (stopped || snapshot.finished || state.value.selecting) return
+        if (stopped || snapshot.finished || state.value.selecting || snapshot.options == value) return
         change(snapshot.copy(options = value)); mutable.value = state.value.copy(options = value)
     }
     fun position(value: Int) { if (!stopped) saved["position"] = value.coerceAtLeast(0) }
@@ -105,6 +109,7 @@ internal class ContentSearchViewModel(private val repository: ContentSearchRepos
                     val latest = current ?: return@collect
                     change(latest.copy(results = update.results.toList()))
                     saved["completed"] = !update.running
+                    if (!update.running) saved["completedRevision"] = current?.revision
                     mutable.value = state.value.copy(results = update.results.toList(), running = update.running,
                         completed = !update.running, searchedChapters = update.searchedChapters, totalChapters = update.totalChapters)
                 }
@@ -150,7 +155,7 @@ internal class ContentSearchViewModel(private val repository: ContentSearchRepos
         else if (state.value.persistError) { current?.let { writes.value = it.copy(revision = nextRevision()).also { value -> current = value } } }
         else submit()
     }
-    suspend fun flush() { current?.let { repository.write(session, it) } }
+    suspend fun flush() { if (!stopped) current?.let { repository.write(session, it) } }
     /** Called only for a real host finish, never for configuration recreation. */
     suspend fun releaseOwnedSession() { stop(); repository.release(session) }
     fun stop() { if (stopped) return; stopped = true; ++generation; load?.cancel(); search?.cancel(); selection?.cancel(); writer.cancel() }

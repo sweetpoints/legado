@@ -123,6 +123,22 @@ class ContentSearchViewModelTest {
             finally { other.clear() }
         } finally { owner.clear() }
     }
+    @Test fun savedCompletionAheadOfDurableResultsCannotClaimPartialSearchFinishedEvenAfterAnotherRestore() = runTest(dispatcher) {
+        val original = snapshot(results = listOf(result())).copy(revision = 10)
+        val repo = Fake(original); val saved = SavedStateHandle(mapOf("completed" to true, "completedRevision" to 11L))
+        val vm = model(repo, saved); val owner = own(vm)
+        try { ready(vm); assertFalse(vm.state.value.completed); assertEquals(original.results, vm.state.value.results)
+            val restored = model(repo, copy(saved)); val other = own(restored)
+            try { ready(restored); assertFalse(restored.state.value.completed) } finally { other.clear() }
+        } finally { owner.clear() }
+    }
+    @Test fun anotherPageProcessOptionChangeRefreshesChecksOnResumeWithoutSubmittingOrClobberingItsFlags() = runTest(dispatcher) {
+        val options = Options(); val repo = Fake(); val vm = model(repo, options = options); val owner = own(vm)
+        try { ready(vm); options.regex(true); options.replace(true); vm.refreshOptions(); vm.flush()
+            assertEquals(ContentSearchOptions(true, true), vm.state.value.options); assertEquals(options.current(), repo.value!!.options)
+            assertTrue(repo.queries.isEmpty())
+        } finally { owner.clear() }
+    }
     private class Options : ContentSearchOptionsRepository {
         private var value = ContentSearchOptions()
         override fun current() = value

@@ -60,9 +60,8 @@ internal class AppContentSearchStore(context: Context, private val database: App
             catch (error: Throwable) { atomic.failWrite(output); throw error }
         }
         val file = target(session)
-        check(!file.exists() || file.delete()) { "无法清理全文搜索结果" }
-        val backup = File(file.path + ".bak")
-        check(!backup.exists() || backup.delete()) { "无法清理全文搜索备份" }
+        AtomicFile(file).delete()
+        check(listOf(file, File(file.path + ".bak"), File(file.path + ".new")).none { it.exists() }) { "无法清理全文搜索结果" }
     }
     private fun ensureOpen(session: String) {
         val marker = marker(session)

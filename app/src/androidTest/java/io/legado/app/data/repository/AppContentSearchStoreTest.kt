@@ -40,7 +40,8 @@ class AppContentSearchStoreTest {
             val snapshot = ContentSearchSession("book", results = listOf(ContentSearchMatch("large", resultText = "x".repeat(1200000))), revision = 10)
             first.create(session, snapshot); other.create(otherSession, snapshot.copy(bookUrl = "other"))
             val file = File(directory, "$session.json"); assertTrue(file.renameTo(File(file.path + ".bak")))
-            first.release(session); assertFalse(file.exists()); assertFalse(File(file.path + ".bak").exists())
+            File(file.path + ".new").writeText("unfinished large payload")
+            first.release(session); assertFalse(file.exists()); assertFalse(File(file.path + ".bak").exists()); assertFalse(File(file.path + ".new").exists())
             assertEquals("other", first.read(otherSession)!!.bookUrl)
             val late = listOf<suspend () -> Unit>(
                 { other.write(session, snapshot.copy(revision = 100)) }, { other.create(session, snapshot) }, { other.read(session); Unit })
@@ -50,7 +51,7 @@ class AppContentSearchStoreTest {
             // Ordinary updates cannot create an owner that has never initialized its private session.
             try { first.write(UUID.randomUUID().toString(), snapshot); fail("Expected missing owner") } catch (_: ContentSearchSessionClosedException) { }
         } } finally { withContext(Dispatchers.IO) {
-            listOf(session, otherSession).forEach { key -> listOf("json", "json.bak", "closed", "closed.bak").forEach { File(directory, "$key.$it").delete() } }
+            listOf(session, otherSession).forEach { key -> listOf("json", "json.bak", "json.new", "closed", "closed.bak").forEach { File(directory, "$key.$it").delete() } }
         } }
     }
     @Test fun actualRoomAndBookHelpCacheReadOnlyCachedOnlineChaptersWithoutMutatingChapterMetadata() = runBlocking {
