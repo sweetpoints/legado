@@ -49,6 +49,8 @@ class ReadAloudComposeControls(
     private var barWidth by mutableStateOf(1)
     private var barHeight by mutableStateOf(1)
     private var viewport = ReaderControlsViewport()
+    val bounds: ReadAloudControlsBounds
+        get() = ReadAloudControlsBounds(x, y, barWidth, barHeight)
 
     init {
         prefs.registerOnSharedPreferenceChangeListener(this)
@@ -261,3 +263,14 @@ private data class ReaderControlsViewport(
     val right: Int = 0,
     val bottom: Int = 0,
 )
+
+/** Read-only pixel geometry for native integration and rendered UI verification. */
+data class ReadAloudControlsBounds(val x: Float, val y: Float, val width: Int, val height: Int)
+
+internal fun readAloudControlWidth(prefs: SharedPreferences): Int =
+    prefs
+        .getInt(
+            PreferKey.readAloudControlsWidth,
+            prefs.getInt(PreferKey.readAloudControlsSize, 48).coerceIn(48, 72) * 6,
+        )
+        .coerceIn(85, 432)

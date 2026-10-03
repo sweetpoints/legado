@@ -41,7 +41,7 @@ import io.legado.app.utils.startActivity
 /** Reader-owned menu state and actions; the host composes Content directly. */
 class ReaderMenuController(
     private val activity: AppCompatActivity,
-    private val callBack: ReadMenu.CallBack,
+    private val callBack: ReaderMenuCallbacks,
     private val visibilityChanged: (Boolean) -> Unit = {},
 ) {
     var canShowMenu = false

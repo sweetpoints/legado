@@ -10,24 +10,22 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.repository.*
-import io.legado.app.databinding.ActivityBookReadBinding
 import io.legado.app.help.book.cacheLocalUri
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
-import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.book.download.showChapterDownloadDialog
@@ -41,14 +39,11 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.find
 import io.legado.app.utils.getPrefString
-import io.legado.app.utils.gone
 import io.legado.app.utils.isTv
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 
@@ -57,14 +52,15 @@ fun Context.showBookDownloadDialog(book: Book) {
 }
 
 /** 阅读界面 */
-abstract class BaseReadBookActivity :
-    VMBaseActivity<ActivityBookReadBinding, ReadBookViewModel>(imageBg = false) {
+abstract class BaseReadBookActivity : BaseComposeActivity(imageBg = false) {
+    protected val viewModel by viewModels<ReadBookViewModel>()
+    abstract val readMenu: ReaderMenuController
+    abstract val searchMenu: ReaderSearchControls
+    protected var navigationBarVisible by mutableStateOf(false)
+        private set
 
-    override val binding by viewBinding(ActivityBookReadBinding::inflate)
-    override val viewModel by viewModels<ReadBookViewModel>()
     protected val menuLayoutIsVisible
-        get() =
-            bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
+        get() = bottomDialog > 0 || readMenu.isVisible || searchMenu.bottomMenuVisible
 
     var bottomDialog = 0
         set(value) {
@@ -100,17 +96,9 @@ abstract class BaseReadBookActivity :
             if (ReadBook.book?.bookUrl?.let(MD5Utils::md5Encode) == result.getString("owner"))
                 viewModel.initData(intent)
         }
-        binding.navigationBar.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updateLayoutParams {
-                height = insets.bottom
-            }
-            windowInsets
-        }
     }
 
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.navigationBar.setBackgroundColor(bottomBackground)
+    override fun onComposeCreated(savedInstanceState: Bundle?) {
         viewModel.permissionDenialLiveData.observe(this) {
             selectBookFolderResult.launch {
                 mode = HandleFileContract.DIR_SYS
@@ -231,8 +219,8 @@ abstract class BaseReadBookActivity :
     override fun upNavigationBarColor() {
         upNavigationBar()
         when {
-            binding.readMenu.isVisible -> super.upNavigationBarColor()
-            binding.searchMenu.bottomMenuVisible -> super.upNavigationBarColor()
+            readMenu.isVisible -> super.upNavigationBarColor()
+            searchMenu.bottomMenuVisible -> super.upNavigationBarColor()
             bottomDialog > 0 -> super.upNavigationBarColor()
             !AppConfig.immNavigationBar -> super.upNavigationBarColor()
             else -> setNavigationBarColorAuto(ReadBookConfig.bgMeanColor)
@@ -241,7 +229,7 @@ abstract class BaseReadBookActivity :
 
     @SuppressLint("RtlHardcoded")
     private fun upNavigationBar() {
-        binding.navigationBar.gone(!menuLayoutIsVisible)
+        navigationBarVisible = menuLayoutIsVisible
     }
 
     /** 保持亮屏 */

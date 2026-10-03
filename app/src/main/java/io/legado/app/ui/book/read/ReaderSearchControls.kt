@@ -16,7 +16,7 @@ import io.legado.app.utils.ColorUtils
 /** Reader-owned search actions; result payloads remain ephemeral in its state controller. */
 class ReaderSearchControls(
     context: Context,
-    private val callBack: SearchMenu.CallBack,
+    private val callBack: ReaderSearchCallbacks,
     private val visibilityChanged: (Boolean) -> Unit = {},
 ) {
     private val controller = ReaderSearchMenuController()
