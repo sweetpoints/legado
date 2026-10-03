@@ -47,15 +47,6 @@ import kotlinx.coroutines.launch
 
 private const val GROUP_QUERY_PREFIX = "group:"
 
-internal fun exploreGroupFromQuery(query: CharSequence?): String? {
-    return query
-        ?.toString()
-        ?.takeIf { it.startsWith(GROUP_QUERY_PREFIX) }
-        ?.removePrefix(GROUP_QUERY_PREFIX)
-}
-
-internal fun isExploreAllQuery(query: CharSequence?): Boolean = exploreGroupFromQuery(query) == null
-
 internal fun exploreScrollState(
     pending: Pair<Int, Int>?,
     position: Int,
@@ -65,11 +56,6 @@ internal fun exploreScrollState(
     val nextPending: Pair<Int, Int>? = if (pending?.first == position) null else position to offset
     return nextPending to offset
 }
-
-internal fun selectedExploreGroup(
-    query: CharSequence?,
-    groups: Set<String>,
-): String? = exploreGroupFromQuery(query)?.takeIf(groups::contains)
 
 /** 发现界面 */
 class ExploreFragment() :
