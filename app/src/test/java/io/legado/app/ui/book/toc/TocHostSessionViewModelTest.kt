@@ -299,4 +299,43 @@ class TocHostSessionViewModelTest {
         assertEquals(accepted, repo.disk.values.single())
         assertEquals("Saved", restored.state.value.query)
     }
+
+    @Test
+    fun restoredSessionNeedsNoLegacyUrlAndPreservesQueryAndPresentation() = test {
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        val url = "large-private-url".repeat(50000)
+        val original = model(repo, saved)
+        original.bind(url)
+        runCurrent()
+        original.query("Restored query", 2, 7)
+        original.tab(2)
+        original.search(true)
+        runCurrent()
+        original.stop()
+        val restored = model(repo, copy(saved))
+        restored.bind(null)
+        runCurrent()
+        assertTrue(restored.state.value.ready)
+        assertEquals(url, restored.state.value.bookUrl)
+        assertEquals("Restored query", restored.state.value.query)
+        assertEquals(2, restored.state.value.tab)
+        assertTrue(restored.state.value.searchOpen)
+        assertEquals(2, restored.state.value.selectionStart)
+        assertEquals(7, restored.state.value.selectionEnd)
+    }
+
+    @Test
+    fun missingPreparedSessionFailsWithoutCreatingAnEmptyBookOwner() = test {
+        val repo = Fake()
+        val model = model(repo)
+        model.bind(null)
+        runCurrent()
+        assertFalse(model.state.value.ready)
+        assertNotNull(model.state.value.error)
+        assertTrue(repo.disk.isEmpty())
+        model.retry()
+        runCurrent()
+        assertTrue(repo.disk.isEmpty())
+    }
 }
