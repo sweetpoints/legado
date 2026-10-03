@@ -39,7 +39,8 @@ class Issue1046ReadTitleAdditionTest {
     fun `changing the preference refreshes both title menus without losing URL actions`() {
         val moreConfig =
             source("app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt")
-        val readMenu = source("app/src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
+        val readMenu =
+            source("app/src/main/java/io/legado/app/ui/book/read/ReaderMenuController.kt")
 
         assertTrue(moreConfig.contains("PreferKey.showReadTitleChapterNameOnly"))
         val screen = source("app/src/main/java/io/legado/app/ui/book/read/ReadMenuScreen.kt")

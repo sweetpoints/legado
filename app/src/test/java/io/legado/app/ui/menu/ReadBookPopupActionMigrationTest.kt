@@ -209,7 +209,7 @@ class ReadBookPopupActionMigrationTest {
     private companion object {
         const val READ_BOOK_ACTIVITY =
             "src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
-        const val READ_MENU = "src/main/java/io/legado/app/ui/book/read/ReadMenu.kt"
+        const val READ_MENU = "src/main/java/io/legado/app/ui/book/read/ReaderMenuController.kt"
         const val CHANGE_SOURCE_MENU = "src/main/res/menu/book_read_change_source.xml"
         const val REFRESH_MENU = "src/main/res/menu/book_read_refresh.xml"
         const val SOURCE_MENU = "src/main/res/menu/book_read_source.xml"

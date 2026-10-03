@@ -11,7 +11,7 @@ class LoginEntryRoutingTest {
         val paths =
             listOf(
                 "src/main/java/io/legado/app/ui/book/audio/AudioPlayViewModel.kt",
-                "src/main/java/io/legado/app/ui/book/read/ReadMenu.kt",
+                "src/main/java/io/legado/app/ui/book/read/ReaderMenuController.kt",
                 "src/main/java/io/legado/app/ui/video/VideoPlayerActivity.kt",
                 "src/main/java/io/legado/app/ui/rss/read/RssJsExtensions.kt",
             )

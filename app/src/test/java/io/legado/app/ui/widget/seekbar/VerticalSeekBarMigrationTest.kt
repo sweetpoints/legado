@@ -34,7 +34,8 @@ class VerticalSeekBarMigrationTest {
             projectFile("src/main/java/io/legado/app/ui/widget/seekbar/VerticalSeekBarWrapper.kt")
                 .readText()
         val readMenu =
-            projectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt").readText()
+            projectFile("src/main/java/io/legado/app/ui/book/read/ReaderMenuController.kt")
+                .readText()
 
         assertTrue(source.contains("ViewCompat.LAYOUT_DIRECTION_LTR"))
         assertTrue(source.contains("MeasureSpec.makeMeasureSpec(contentHeight"))

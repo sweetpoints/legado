@@ -17,7 +17,8 @@ class ReadControlVisualStateTest {
 
     @Test
     fun runningReadAloudOpensControlsInsteadOfTogglingPlayback() {
-        val source = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadMenu.kt")
+        val source =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReaderMenuController.kt")
         val clickBlock =
             source
                 .substringAfter("ReadMenuAction.ReadAloud ->")
