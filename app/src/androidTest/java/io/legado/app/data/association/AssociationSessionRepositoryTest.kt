@@ -2,6 +2,9 @@ package io.legado.app.data.association
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.legado.app.data.entities.Book
+import io.legado.app.model.localBook.LocalBook
+import io.legado.app.utils.FileDoc
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -103,6 +106,47 @@ class AssociationSessionRepositoryTest {
         } finally {
             first.release(ticket)
             first.release(neighbor)
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun releaseRemovesOnlyItsStagedParserCoverAndPreservesPermanentBookCover() = runBlocking {
+        val directory = File(context.cacheDir, "association-session-${UUID.randomUUID()}")
+        val repository = FileAssociationSessionRepository(context, directory)
+        val input = AssociationInput(AssociationHostKind.File, AssociationInputKind.View)
+        val ticket = repository.create(input)
+        val neighbor = repository.create(input)
+        val permanentBook = Book(bookUrl = "permanent-book-${UUID.randomUUID()}")
+        val permanentCover = File(LocalBook.getCoverPath(permanentBook))
+        var stagedCover: File? = null
+        try {
+            permanentCover.parentFile?.mkdirs()
+            permanentCover.writeBytes(byteArrayOf(4, 5, 6))
+            repository.withOwnedDirectory(ticket) { ownedDirectory ->
+                val stagedBook = File(ownedDirectory, "partial-preview.txt")
+                stagedBook.writeText("temporary book")
+                val preview = Book(bookUrl = FileDoc.fromFile(stagedBook).toString())
+                stagedCover =
+                    File(LocalBook.getCoverPath(preview)).apply {
+                        parentFile?.mkdirs()
+                        writeBytes(byteArrayOf(1, 2, 3))
+                    }
+            }
+            repository.release(ticket)
+            assertFalse(checkNotNull(stagedCover).exists())
+            assertFalse(File(directory, ticket).exists())
+            assertTrue(permanentCover.readBytes().contentEquals(byteArrayOf(4, 5, 6)))
+            assertEquals(input, repository.read(neighbor).input)
+            assertTrue(
+                runCatching { repository.read(ticket) }.exceptionOrNull()
+                    is AssociationSessionClosed
+            )
+        } finally {
+            repository.release(ticket)
+            repository.release(neighbor)
+            stagedCover?.delete()
+            permanentCover.delete()
             directory.deleteRecursively()
         }
     }

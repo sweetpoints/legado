@@ -303,6 +303,7 @@ class FileAssociationSessionRepository(
             gate(ticket).withLock {
                 if (!closed(ticket)) writeAtomic(fence(ticket), byteArrayOf(1))
                 val ownedFolder = folder(ticket)
+                clearAssociationStagingResources(ownedFolder)
                 if (ownedFolder.exists())
                     check(ownedFolder.deleteRecursively()) {
                         "Import session cleanup failed"

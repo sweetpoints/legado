@@ -5,6 +5,7 @@ import androidx.documentfile.provider.DocumentFile
 import io.legado.app.R
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
 import io.legado.app.data.repository.FileSharedLocalBookPreviewRepository
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.utils.ArchiveUtils
@@ -98,4 +99,26 @@ internal fun copyAssociationLocalBook(file: FileDoc, directory: Uri): Uri {
         throw error
     }
     return Uri.fromFile(copy)
+}
+
+/**
+ * Release parser handles and generated covers for private staged files, including partial previews.
+ */
+internal fun clearAssociationStagingResources(directory: File) {
+    if (!directory.isDirectory) return
+    val prefix = directory.canonicalPath + File.separator
+    directory
+        .walkTopDown()
+        .filter { it.isFile && it.name.matches(AppPattern.bookFileRegex) }
+        .forEach { file ->
+            require(file.canonicalPath.startsWith(prefix)) {
+                "Staged file escaped its import session"
+            }
+            val document = FileDoc.fromFile(file)
+            LocalBook.withParserCacheInvalidated(document.uri, document.name) {}
+            // The generated cover key is the private staged URI, never the permanent destination.
+            val preview = Book(bookUrl = document.toString())
+            val cover = File(LocalBook.getCoverPath(preview))
+            if (cover.exists()) check(cover.delete()) { "Staged cover cleanup failed" }
+        }
 }
