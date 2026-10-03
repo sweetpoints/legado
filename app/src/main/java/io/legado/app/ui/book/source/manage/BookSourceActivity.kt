@@ -84,17 +84,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-private const val BOOK_SOURCE_GROUP_QUERY_PREFIX = "group:"
-
-internal fun isMissingBookSourceGroupFilter(
-    query: CharSequence?,
-    groups: Set<String>,
-): Boolean {
-    val searchKey = query?.toString() ?: return false
-    if (!searchKey.startsWith(BOOK_SOURCE_GROUP_QUERY_PREFIX)) return false
-    return searchKey.removePrefix(BOOK_SOURCE_GROUP_QUERY_PREFIX) !in groups
-}
-
 /**
  * 书源管理界面
  */
