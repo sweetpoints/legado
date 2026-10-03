@@ -18,7 +18,6 @@ class ReaderMenuConfigContractTest {
         val source = read("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
         listOf(
                 "loadReaderMenuConfig(this)",
-                "readMenu.openPopup(ReaderPopup.Overflow)",
                 "readMenu.openPopup(ReaderPopup.More)",
                 "readerOverflowItemsByKey()",
                 "\"_more\"",
