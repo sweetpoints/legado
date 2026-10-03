@@ -284,10 +284,12 @@ class JsSourceWebApiContractTest {
     fun `editor delegates persistence to shared upsert`() {
         val activity =
             readProjectFile(
-                "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditActivity.kt"
+                "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditRepository.kt"
             )
 
-        assertTrue(activity.contains("JsSourceUpsert.save(text, openedSourceUrl)"))
+        assertTrue(
+            activity.contains("JsSourceUpsert.save(text, sourceUrl, onAccepted = onAccepted)")
+        )
         assertFalse(activity.contains("private fun preserveUserState"))
         assertFalse(activity.contains("private fun stampSource"))
     }

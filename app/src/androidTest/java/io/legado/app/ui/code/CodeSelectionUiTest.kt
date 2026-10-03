@@ -18,8 +18,14 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.webkit.WebView
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.performTextReplacement
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -79,7 +85,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.hamcrest.Matchers.allOf
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -607,9 +618,9 @@ class CodeSelectionUiTest {
                 assertEquals(Activity.RESULT_OK, result.resultCode)
                 val data = checkNotNull(result.resultData)
                 returnedFile = data.getStringExtra("textFile")
-                if (fileMode && expected == large) {
+                if (fileMode) {
                     assertFalse(
-                        "Large drafts must stay out of the result Bundle",
+                        "File-transport drafts must stay out of the result Bundle",
                         data.hasExtra("text"),
                     )
                     assertNotNull(returnedFile)

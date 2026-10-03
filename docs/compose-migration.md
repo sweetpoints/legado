@@ -1260,3 +1260,5 @@ RSS 主页改为完整 Compose Screen/Route，保留四列订阅入口、搜索/
 代码编辑宿主、选区回归与JS Web API契约测试独立整理为统一ktfmt 0.64 Kotlinlang格式；选区用例展开Kotlin语句分隔符，保留嵌入JS/HTML字符串。实际format/check与git diff --check执行，当前专属worktree完整JVM 3737项零失败及AndroidTest Kotlin编译通过，设备端未执行。
 
 书源编辑新增不可变七页88字段投影与typed materialization基础，保留原RuleComplete文字/链接/图片、列表预处理、空值/整数解析及可选段评规则；投影不调用会修改实体的getRule方法，重建保留排序/权重/发现screen并隔离原规则对象。新增5项真实JVM回归；统一format/check、完整JVM 3737项零失败和AndroidTest Kotlin编译通过，设备端未执行，Compose宿主接入另批提交。
+
+JS书源编辑宿主迁为BaseComposeActivity与独立Screen/Route，保留原Sora代码编辑、规则解析、调试、登录和保存/取消结果契约。完整JS及返回文本进入私有UUID Atomic草稿，SavedState仅保留UUID；显式文件传输即使短代码也返回文件，关闭只清理会话登记的文件。原生交付在RESUMED后先持久认领，返回读取失败及接受回执落盘失败可恢复重试，后者不重新解析或写DB。JsSourceUpsert新增可选接受回调，未传回调的原调用路径不变，Rhino解析及锁等待仍可取消，仅接受写入及回执使用短NonCancellable段；Room与私有文件不构成跨存储事务，进程在DB接受后且回执无法落盘时仍存在恢复边界。新增13项VM和3项真实IO接受段JVM回归，另有10项真实Room/Atomic/Compose/生命周期Android测试编译覆盖。统一format/check及git diff --check执行，专属worktree最终双任务通过，614 suites共3747 JVM用例零失败；日志/private/tmp/legado-compose-source-editor-js-final-02.log，设备端未执行。
