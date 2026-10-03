@@ -10,20 +10,18 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.ReplacementSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
-import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.assertExists
-import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.utils.runToastCallbackOnApi30
@@ -132,12 +130,12 @@ class ToastComposeContentTest {
             assertNotNull(viewOwner)
             owner = requireNotNull(viewOwner).lifecycle
             assertEquals(Lifecycle.State.CREATED, owner.currentState)
-            val contentRoot = compose.activity.findViewById<ViewGroup>(android.R.id.content)
+            val contentRoot = FrameLayout(ApplicationProvider.getApplicationContext())
             contentRoot.addView(
                 presentation.view,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
                 ),
             )
             presentation.onShown()
