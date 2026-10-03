@@ -171,14 +171,22 @@ class ReadingHistoryViewModel(private val repository: ReadingHistoryRepository,
             } catch (error: Throwable) { currentCoroutineContext().ensureActive(); fail(error) }
         }
     }
-    suspend fun consumeNavigation(id: String): ReadingHistoryDestination? = actions.withLock {
+    suspend fun consumeNavigation(id: String, canDeliver: () -> Boolean = { true }): ReadingHistoryDestination? = actions.withLock {
         if (stopped || state.value.navigation?.id != id) return@withLock null
         val navigation = checkNotNull(state.value.navigation)
-        // Durable consume before host delivery; a recreated route cannot launch the same reader again.
-        withContext(NonCancellable) { persist(changeDraft { it.copy(navigation = null) }) }
-        currentCoroutineContext().ensureActive()
-        publish { it.copy(navigation = null) }; navigation.destination
+        val caller = currentCoroutineContext()
+        // Disk IO can outlive a paused collector. Roll back its claim before allowing a new owner.
+        withContext(NonCancellable) {
+            persist(changeDraft { it.copy(navigation = null) })
+            if (!caller.isActive || !canDeliver() || stopped) {
+                if (!stopped) persist(changeDraft { it.copy(navigation = navigation) })
+                null
+            } else {
+                publish { it.copy(navigation = null) }; navigation.destination
+            }
+        }
     }
+
     fun dismissError() { publish { it.copy(error = null) } }
     suspend fun flush() { if (ticket != null) withContext(NonCancellable) { persist(draft) } }
     suspend fun abandon() {

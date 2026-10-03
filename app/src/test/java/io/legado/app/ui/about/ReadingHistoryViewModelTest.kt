@@ -18,9 +18,11 @@ class ReadingHistoryViewModelTest {
     private class Drafts : ReadingHistoryDraftRepository {
         val values = mutableMapOf<String, ReadingHistoryDraft>()
         var fail = false
+        var writeGate: CompletableDeferred<Unit>? = null
+        var claimed = false
         override suspend fun create() = UUID.randomUUID().toString().also { values[it] = ReadingHistoryDraft() }
         override suspend fun read(ticket: String) = checkNotNull(values[ticket])
-        override suspend fun write(ticket: String, draft: ReadingHistoryDraft) { check(!fail) { "Disk failure" }; val old = checkNotNull(values[ticket]); if (draft.revision > old.revision) values[ticket] = draft }
+        override suspend fun write(ticket: String, draft: ReadingHistoryDraft) { if (draft.navigation == null && values[ticket]?.navigation != null) { claimed = true; writeGate?.await() }; check(!fail) { "Disk failure" }; val old = checkNotNull(values[ticket]); if (draft.revision > old.revision) values[ticket] = draft }
         override suspend fun release(ticket: String) { values.remove(ticket) }
     }
     private class Repo(var rows: List<ReadingHistoryRow>) : ReadingHistoryRepository {
@@ -149,6 +151,27 @@ class ReadingHistoryViewModelTest {
             assertTrue(model.state.value.preferencesDirty); assertTrue(model.state.value.preferences.days); assertFalse(model.state.value.preferences.simple); assertFalse(repo.prefs.days)
             model.resume(); advanceUntilIdle(); assertTrue(model.state.value.preferences.days)
             repo.preferenceWrite = null; model.retry(); advanceUntilIdle(); assertTrue(repo.prefs.days); assertFalse(model.state.value.preferencesDirty)
+        } finally { model.stop(); advanceUntilIdle() }
+    }
+
+    @Test fun cancelledDiskClaimRollsBackNavigationForRestorationWithoutDelivering() = runTest(dispatcher) {
+        val repo = Repo(listOf(row())); val drafts = Drafts(); val saved = SavedStateHandle(); val model = ReadingHistoryViewModel(repo, drafts, saved); val gate = CompletableDeferred<Unit>()
+        try {
+            advanceUntilIdle(); model.open(identity); advanceUntilIdle(); val navigation = model.state.value.navigation!!
+            drafts.writeGate = gate; var delivery: ReadingHistoryDestination? = null
+            val claim = launch { delivery = model.consumeNavigation(navigation.id) }; runCurrent(); assertTrue(drafts.claimed)
+            claim.cancel(); gate.complete(Unit); advanceUntilIdle(); assertNull(delivery); assertEquals(navigation, drafts.read(saved.get<String>("history.ticket")!!).navigation)
+            val restored = ReadingHistoryViewModel(repo, drafts, SavedStateHandle(mapOf("history.ticket" to saved.get<String>("history.ticket"))))
+            try { advanceUntilIdle(); assertEquals("book-url", restored.consumeNavigation(navigation.id)!!.key); assertNull(restored.consumeNavigation(navigation.id)) }
+            finally { restored.stop(); advanceUntilIdle() }
+        } finally { gate.complete(Unit); model.stop(); advanceUntilIdle() }
+    }
+    @Test fun nativeNotReadyDuringClaimRetainsDurableRequestUntilResume() = runTest(dispatcher) {
+        val repo = Repo(listOf(row())); val drafts = Drafts(); val saved = SavedStateHandle(); val model = ReadingHistoryViewModel(repo,drafts,saved)
+        try {
+            advanceUntilIdle(); model.open(identity); advanceUntilIdle(); val navigation = model.state.value.navigation!!
+            assertNull(model.consumeNavigation(navigation.id) { false }); assertEquals(navigation,drafts.read(saved.get<String>("history.ticket")!!).navigation)
+            assertEquals("book-url",model.consumeNavigation(navigation.id) { true }!!.key)
         } finally { model.stop(); advanceUntilIdle() }
     }
 
