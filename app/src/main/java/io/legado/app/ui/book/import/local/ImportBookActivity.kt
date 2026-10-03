@@ -38,18 +38,17 @@ import io.legado.app.utils.isUri
 import io.legado.app.utils.launch
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.visible
+import java.io.File
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
-/**
- * 导入本地书籍界面
- */
-class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
+/** 导入本地书籍界面 */
+class ImportBookActivity :
+    BaseImportBookActivity<ImportBookViewModel>(),
     PopupMenu.OnMenuItemClickListener,
     ImportBookAdapter.CallBack,
     SelectActionBar.CallBack {
@@ -60,12 +59,13 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     private var startReadJob: Job? = null
     private var isRecursiveScan = false
 
-    private val selectFolder = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            AppConfig.importBookPath = uri.toString()
-            initRootDoc(true)
+    private val selectFolder =
+        registerForActivityResult(HandleFileContract()) {
+            it.uri?.let { uri ->
+                AppConfig.importBookPath = uri.toString()
+                initRootDoc(true)
+            }
         }
-    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         searchView.queryHint = getString(R.string.screen) + " • " + getString(R.string.local_book)
@@ -101,19 +101,21 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             R.id.menu_select_folder -> selectFolder.launch()
             R.id.menu_scan_folder -> scanFolder()
             R.id.menu_import_file_name -> alertImportFileName()
-            R.id.menu_local_book_save_path -> AlertDialog.Builder(this)
-                .setTitle(R.string.local_book_save_path)
-                .setMessage(AppConfig.defaultBookTreeUri ?: File(filesDir, "books").path)
-                .setPositiveButton(R.string.select_folder) { _, _ ->
-                    localBookTreeSelect.launch {
-                        title = getString(R.string.local_book_save_path)
-                        mode = HandleFileContract.DIR_SYS
+            R.id.menu_local_book_save_path ->
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.local_book_save_path)
+                    .setMessage(AppConfig.defaultBookTreeUri ?: File(filesDir, "books").path)
+                    .setPositiveButton(R.string.select_folder) { _, _ ->
+                        localBookTreeSelect.launch {
+                            title = getString(R.string.local_book_save_path)
+                            mode = HandleFileContract.DIR_SYS
+                        }
                     }
-                }
-                .setNegativeButton(R.string.shared_local_books_private) { _, _ ->
-                    AppConfig.defaultBookTreeUri = Uri.fromFile(File(filesDir, "books")).toString()
-                }
-                .show()
+                    .setNegativeButton(R.string.shared_local_books_private) { _, _ ->
+                        AppConfig.defaultBookTreeUri =
+                            Uri.fromFile(File(filesDir, "books")).toString()
+                    }
+                    .show()
             R.id.menu_sort_name -> upSort(0)
             R.id.menu_sort_size -> upSort(1)
             R.id.menu_sort_time -> upSort(2)
@@ -123,9 +125,10 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
-            R.id.menu_del_selection -> viewModel.deleteDoc(adapter.selected) {
-                adapter.removeSelection()
-            }
+            R.id.menu_del_selection ->
+                viewModel.deleteDoc(adapter.selected) {
+                    adapter.removeSelection()
+                }
         }
         return false
     }
@@ -155,9 +158,11 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     private fun addToBookshelf(selected: HashSet<ImportBook>, groupName: String? = null) {
         viewModel.addToBookshelf(selected, groupName) { importedUris ->
-            selected.filter { it.file.uri in importedUris }.forEach {
-                it.isOnBookShelf = true
-            }
+            selected
+                .filter { it.file.uri in importedUris }
+                .forEach {
+                    it.isOnBookShelf = true
+                }
             adapter.selectAll(false)
         }
     }
@@ -167,27 +172,30 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         groupName: String,
         canAddGroup: Boolean,
     ) {
-        val checkBox = CheckBox(this).apply {
-            setText(R.string.import_directory_group)
-            isEnabled = canAddGroup
-        }
-        val view = LinearLayout(this).apply {
-            setPadding(16.dpToPx(), 0, 16.dpToPx(), 0)
-            addView(checkBox)
-        }
-        val dialog = alert(
-            titleResource = R.string.import_directory_group_title,
-            messageResource = if (canAddGroup) null else R.string.book_group_limit,
-        ) {
-            setCancelable(false)
-            customView { view }
-            okButton {
-                addToBookshelf(selected, groupName.takeIf { checkBox.isChecked })
+        val checkBox =
+            CheckBox(this).apply {
+                setText(R.string.import_directory_group)
+                isEnabled = canAddGroup
             }
-            cancelButton {
-                addToBookshelf(selected)
+        val view =
+            LinearLayout(this).apply {
+                setPadding(16.dpToPx(), 0, 16.dpToPx(), 0)
+                addView(checkBox)
             }
-        }
+        val dialog =
+            alert(
+                titleResource = R.string.import_directory_group_title,
+                messageResource = if (canAddGroup) null else R.string.book_group_limit,
+            ) {
+                setCancelable(false)
+                customView { view }
+                okButton {
+                    addToBookshelf(selected, groupName.takeIf { checkBox.isChecked })
+                }
+                cancelButton {
+                    addToBookshelf(selected)
+                }
+            }
         if (!canAddGroup) {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
         }
@@ -231,11 +239,12 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
                 binding.tvEmptyMsg.visible()
                 selectFolder.launch()
             } else {
-                val rootUri = if (lastPath.isUri()) {
-                    lastPath.toUri()
-                } else {
-                    Uri.fromFile(File(lastPath))
-                }
+                val rootUri =
+                    if (lastPath.isUri()) {
+                        lastPath.toUri()
+                    } else {
+                        Uri.fromFile(File(lastPath))
+                    }
                 when {
                     rootUri.isContentScheme() -> initRootPath(rootUri)
                     else -> initRootPath(rootUri.path!!)
@@ -245,20 +254,22 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     }
 
     private fun initRootPath(rootUri: Uri) {
-        kotlin.runCatching {
-            val doc = DocumentFile.fromTreeUri(this, rootUri)
-            if (doc == null || doc.name.isNullOrEmpty() || !doc.isDirectory) {
+        kotlin
+            .runCatching {
+                val doc = DocumentFile.fromTreeUri(this, rootUri)
+                if (doc == null || doc.name.isNullOrEmpty() || !doc.isDirectory) {
+                    binding.tvEmptyMsg.visible()
+                    selectFolder.launch()
+                } else {
+                    viewModel.subDocs.clear()
+                    viewModel.rootDoc = FileDoc.fromDocumentFile(doc)
+                    upPath()
+                }
+            }
+            .onFailure {
                 binding.tvEmptyMsg.visible()
                 selectFolder.launch()
-            } else {
-                viewModel.subDocs.clear()
-                viewModel.rootDoc = FileDoc.fromDocumentFile(doc)
-                upPath()
             }
-        }.onFailure {
-            binding.tvEmptyMsg.visible()
-            selectFolder.launch()
-        }
     }
 
     private fun initRootPath(path: String) {
@@ -267,20 +278,22 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             .addPermissions(*Permissions.Group.STORAGE)
             .rationale(R.string.tip_perm_request_storage)
             .onGranted {
-                kotlin.runCatching {
-                    val file = File(path)
-                    if (!file.isDirectory) {
+                kotlin
+                    .runCatching {
+                        val file = File(path)
+                        if (!file.isDirectory) {
+                            binding.tvEmptyMsg.visible()
+                            selectFolder.launch()
+                        } else {
+                            viewModel.subDocs.clear()
+                            viewModel.rootDoc = FileDoc.fromFile(file)
+                            upPath()
+                        }
+                    }
+                    .onFailure {
                         binding.tvEmptyMsg.visible()
                         selectFolder.launch()
-                    } else {
-                        viewModel.subDocs.clear()
-                        viewModel.rootDoc = FileDoc.fromFile(file)
-                        upPath()
                     }
-                }.onFailure {
-                    binding.tvEmptyMsg.visible()
-                    selectFolder.launch()
-                }
             }
             .request()
     }
@@ -317,9 +330,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         viewModel.loadDoc(lastDoc)
     }
 
-    /**
-     * 扫描当前文件夹及所有子文件夹
-     */
+    /** 扫描当前文件夹及所有子文件夹 */
     private fun scanFolder() {
         viewModel.rootDoc?.let { doc ->
             isRecursiveScan = true
@@ -327,22 +338,24 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             val lastDoc = viewModel.subDocs.lastOrNull() ?: doc
             binding.refreshProgressBar.isAutoLoading = true
             scanDocJob?.cancel()
-            scanDocJob = lifecycleScope.launch(IO) {
-                viewModel.scanDoc(lastDoc)
-                withContext(Main) {
-                    binding.refreshProgressBar.isAutoLoading = false
+            scanDocJob =
+                lifecycleScope.launch(IO) {
+                    viewModel.scanDoc(lastDoc)
+                    withContext(Main) {
+                        binding.refreshProgressBar.isAutoLoading = false
+                    }
                 }
-            }
         }
     }
 
     private fun alertImportFileName() {
         alert(R.string.import_file_name) {
             setMessage("""使用js处理文件名变量src，将书名作者分别赋值到变量name author""")
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "js"
-                editView.setText(AppConfig.bookImportFileName)
-            }
+            val alertBinding =
+                DialogEditTextBinding.inflate(layoutInflater).apply {
+                    editView.hint = "js"
+                    editView.setText(AppConfig.bookImportFileName)
+                }
             customView { alertBinding.root }
             okButton {
                 AppConfig.bookImportFileName = alertBinding.editView.text?.toString()
@@ -379,27 +392,28 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     override fun startRead(fileDoc: FileDoc) {
         if (!ArchiveUtils.isArchive(fileDoc.name)) {
             if (startReadJob?.isActive == true) return
-            startReadJob = lifecycleScope.launch(IO) {
-                val filePath = fileDoc.toString()
-                val book = appDb.bookDao.getBook(filePath)
-                    ?: appDb.bookDao.getBookByFileName(fileDoc.name)
-                    ?: return@launch
-                LocalBook.withParserCacheInvalidated(
-                    book.bookUrl,
-                    book.originName,
-                ) {
-                    book.removeLocalUriCache()
-                    book.cacheLocalUri(fileDoc.uri)
-                }
-                withContext(Main) {
-                    if (!isFinishing && !isDestroyed) {
-                        startReadBook(book)
+            startReadJob =
+                lifecycleScope.launch(IO) {
+                    val filePath = fileDoc.toString()
+                    val book =
+                        appDb.bookDao.getBook(filePath)
+                            ?: appDb.bookDao.getBookByFileName(fileDoc.name)
+                            ?: return@launch
+                    LocalBook.withParserCacheInvalidated(
+                        book.bookUrl,
+                        book.originName,
+                    ) {
+                        book.removeLocalUriCache()
+                        book.cacheLocalUri(fileDoc.uri)
+                    }
+                    withContext(Main) {
+                        if (!isFinishing && !isDestroyed) {
+                            startReadBook(book)
+                        }
                     }
                 }
-            }
         } else {
             onArchiveFileClick(fileDoc)
         }
     }
-
 }

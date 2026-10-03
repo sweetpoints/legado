@@ -14,7 +14,6 @@ import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
 
-
 class ImportBookAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<ImportBook, ItemImportBookBinding>(context) {
     val selected = hashSetOf<ImportBook>()
@@ -32,7 +31,7 @@ class ImportBookAdapter(context: Context, val callBack: CallBack) :
         holder: ItemViewHolder,
         binding: ItemImportBookBinding,
         item: ImportBook,
-        payloads: MutableList<Any>
+        payloads: MutableList<Any>,
     ) {
         binding.run {
             if (payloads.isEmpty()) {
@@ -57,9 +56,10 @@ class ImportBookAdapter(context: Context, val callBack: CallBack) :
                     tvDate.text = AppConst.dateFormat.format(item.lastModified)
                     cbSelect.isChecked = selected.contains(item)
                 }
-                tvName.text = item.preview?.let { book ->
-                    if (book.author.isBlank()) book.name else "${book.name} / ${book.author}"
-                } ?: item.name
+                tvName.text =
+                    item.preview?.let { book ->
+                        if (book.author.isBlank()) book.name else "${book.name} / ${book.author}"
+                    } ?: item.name
             } else {
                 cbSelect.isChecked = selected.contains(item)
             }
@@ -136,8 +136,9 @@ class ImportBookAdapter(context: Context, val callBack: CallBack) :
 
     interface CallBack {
         fun nextDoc(fileDoc: FileDoc)
+
         fun upCountView()
+
         fun startRead(fileDoc: FileDoc)
     }
-
 }
