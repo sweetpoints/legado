@@ -12,16 +12,18 @@ class HighlightRuleEditDialogTest {
 
     @Test
     fun `color picker uses the requested channel presets`() {
-        val textConfig = HighlightRuleEditDialog.colorPickerConfig(
-            HighlightStyleDialog.HL_TEXT,
-            initial = 0,
-            withAlpha = false
-        )
-        val fillConfig = HighlightRuleEditDialog.colorPickerConfig(
-            HighlightStyleDialog.HL_FILL,
-            initial = 0,
-            withAlpha = true
-        )
+        val textConfig =
+            HighlightRuleEditDialog.colorPickerConfig(
+                HighlightStyleDialog.HL_TEXT,
+                initial = 0,
+                withAlpha = false,
+            )
+        val fillConfig =
+            HighlightRuleEditDialog.colorPickerConfig(
+                HighlightStyleDialog.HL_FILL,
+                initial = 0,
+                withAlpha = true,
+            )
 
         assertEquals(HighlightColors.text.first(), textConfig.color)
         assertArrayEquals(HighlightColors.text, textConfig.presets)
@@ -33,11 +35,12 @@ class HighlightRuleEditDialogTest {
     fun `color picker keeps an existing color`() {
         val color = 0xFF123456.toInt()
 
-        val config = HighlightRuleEditDialog.colorPickerConfig(
-            HighlightStyleDialog.HL_FILL,
-            color,
-            withAlpha = true
-        )
+        val config =
+            HighlightRuleEditDialog.colorPickerConfig(
+                HighlightStyleDialog.HL_FILL,
+                color,
+                withAlpha = true,
+            )
 
         assertEquals(color, config.color)
     }
@@ -46,7 +49,7 @@ class HighlightRuleEditDialogTest {
     fun `new rules default to the first visible highlight preset`() {
         assertEquals(
             GSON.toJson(HighlightStyles.presets.first()),
-            HighlightRuleEditDialog.initialStyle(null)
+            HighlightRuleEditDialog.initialStyle(null),
         )
     }
 
@@ -56,5 +59,4 @@ class HighlightRuleEditDialogTest {
 
         assertEquals(sourceStyle, HighlightRuleEditDialog.initialStyle(sourceStyle))
     }
-
 }
