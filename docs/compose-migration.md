@@ -1343,3 +1343,4 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 文件选择恢复中断的 Saving/Uploading 时展示本地化提示与显式重试，不自动重复未经接受的文件/网络操作；已 claim 的系统选择器恢复仍注册原结果，并允许用户确认后以新 nonce 重试。新增三个 VM 恢复回归及一个 Compose 重试入口用例，已接受 Result 恢复沿原回执交付。完整验证在最终共同基线执行。
 
 文件选择 missed-handoff rollback 与 URI 接受共用 busy 所有权：已有接受操作时不竞争 revision，rollback 自身读写期间 registry 返回进入匹配缓冲，完成后消费。新增 gated VM 用例，最终共同基线完整验证排队执行。
+书籍详情状态 VM 独立执行统一 Kotlin formatter，并以显式导入替代 repository/coroutine/flow 通配导入，保持现有所有权、持久回执及取消行为；prepared 入口功能另批提交，两批最终验证统一排队。
