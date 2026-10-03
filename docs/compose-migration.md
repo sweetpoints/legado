@@ -1270,3 +1270,4 @@ JS草稿审查修复：进程级路径锁改为固定64个striped Mutex，避免
 JS恢复审查修复：恢复SAVING/SAVE_FOR_DEBUG/SAVE_FOR_LOGIN只发布明确错误及手动重试入口，不自动重新执行用户脚本或Room写入；活会话编辑返回仍继续原保存，已接受且持久回执继续原下一阶段。为什么需要确认写入边界在VM旁注释：Room与草稿无法跨存储原子提交，中断阶段可能已产生脚本副作用。新增所有三种中断阶段的真实VM回归及真实Atomic恢复/显式重试前后Room状态设备用例，设备执行待可用设备；后续整合验证另记。
 
 JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其JsSourceEditStage枚举加@Keep，保护字段与枚举标识，未修改共享ProGuard规则。当前尚未实际R8 release打包验证，最终format/check及debug编译/JVM验证纳入整合候选。
+文件选择新增独立不可变 VM：选择器 nonce、早到/迟到结果、手工草稿光标与取消/恢复由私有 checkpoint 管理，SavedState 仅保存会话 ID 与 revision。上传/保存接受成功后在 IO 内用短 NonCancellable 写结果回执，再返回 Main；回执写失败保留已接受结果，重试不重复当前已成功传输，停止后的迟到返回不发布 UI。原手工输入无效提示后关闭行为与 EXPORT 返回合同保留。新增 10 个 JVM 与 2 个真实 IO 返回取消 Android 编译用例；统一 Kotlin formatter/check、AndroidTest Kotlin 编译及全 JVM 回归通过，设备端未执行，Compose 宿主接入另批提交。
