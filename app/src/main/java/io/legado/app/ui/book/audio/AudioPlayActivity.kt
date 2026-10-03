@@ -87,7 +87,7 @@ class AudioPlayActivity :
         setIntent(intent)
         val requestedBookUrl = intent.getStringExtra("bookUrl")
         if (shouldReuseCurrentAudioPlay(requestedBookUrl, AudioPlay.book?.bookUrl)) return
-        viewModel.initialize(requestedBookUrl)
+        viewModel.initialize(requestedBookUrl, freshRequest = true)
     }
 
     private fun menuAction(id: Int) {

@@ -7,13 +7,13 @@ import io.legado.app.ui.widget.image.coverBitmapCacheKey
 import io.legado.app.ui.widget.image.normalizeCoverText
 import io.legado.app.utils.calculateSvgBitmapSize
 import io.legado.app.utils.isForegroundServiceStartDenied
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class RuntimeMediaStabilityTest {
 
@@ -28,7 +28,7 @@ class RuntimeMediaStabilityTest {
         assertEquals("book", normalizeWebFileName("book", "../txt"))
         assertEquals(
             "Version 2.0.txt",
-            normalizeWebFileName("Version 2.0", "txt", replaceExistingSuffix = false)
+            normalizeWebFileName("Version 2.0", "txt", replaceExistingSuffix = false),
         )
     }
 
@@ -43,10 +43,11 @@ class RuntimeMediaStabilityTest {
 
     @Test
     fun customCoverOnlyInheritsIdentityOnTheSameOrigin() {
-        val book = Book(
-            origin = "https://books.example.com",
-            coverUrl = "https://books.example.com/cover.jpg",
-        )
+        val book =
+            Book(
+                origin = "https://books.example.com",
+                coverUrl = "https://books.example.com/cover.jpg",
+            )
         assertEquals(book.origin, book.getCoverSourceOrigin())
 
         book.customCoverUrl = "https://books.example.com/custom-cover.jpg"
@@ -68,14 +69,19 @@ class RuntimeMediaStabilityTest {
 
     @Test
     fun emptyCoverSkipsDelayedNetworkFallback() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
-            .readText()
-        val load = source.substringAfter("path: String? = null,")
-            .substringBefore("override fun onDetachedFromWindow")
-        val emptyPath = load.substringAfter("if (currentPath == null) {")
-            .substringBefore("if (BookCover.drawBookName")
+        val source =
+            listOf(File("src/main/java"), File("app/src/main/java"))
+                .first { it.isDirectory }
+                .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+                .readText()
+        val load =
+            source
+                .substringAfter("path: String? = null,")
+                .substringBefore("override fun onDetachedFromWindow")
+        val emptyPath =
+            load
+                .substringAfter("if (currentPath == null) {")
+                .substringBefore("if (BookCover.drawBookName")
 
         assertTrue(load.contains("currentJob?.cancel()"))
         assertTrue(load.contains("triggerChannel.tryReceive()"))
@@ -92,16 +98,23 @@ class RuntimeMediaStabilityTest {
 
     @Test
     fun visibleTextCoverSurvivesSharedCacheEviction() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
-            .readText()
-        val cache = source.substringAfter("companion object {")
-            .substringBefore("private val needNameBitmap")
-        val generation = source.substringAfter("private fun generateCoverAsync")
-            .substringBefore("private fun generateCoverBitmap")
-        val localCache = source.substringAfter("private fun getNameBitmap")
-            .substringBefore("private fun drawNameAuthor")
+        val source =
+            listOf(File("src/main/java"), File("app/src/main/java"))
+                .first { it.isDirectory }
+                .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+                .readText()
+        val cache =
+            source
+                .substringAfter("companion object {")
+                .substringBefore("private val needNameBitmap")
+        val generation =
+            source
+                .substringAfter("private fun generateCoverAsync")
+                .substringBefore("private fun generateCoverBitmap")
+        val localCache =
+            source
+                .substringAfter("private fun getNameBitmap")
+                .substringBefore("private fun drawNameAuthor")
 
         assertTrue(cache.contains("LruCache<String, Bitmap>(33)"))
         assertTrue(source.contains("private var currentNameBitmap: Pair<String, Bitmap>? = null"))
@@ -115,12 +128,15 @@ class RuntimeMediaStabilityTest {
 
     @Test
     fun verticalTextCoverRestoresOriginalStaggeredLayout() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
-            .readText()
-        val titleLoop = source.substringAfter("var startY = viewHeight * 0.2f")
-            .substringBefore("if (!drawAuthor)")
+        val source =
+            listOf(File("src/main/java"), File("app/src/main/java"))
+                .first { it.isDirectory }
+                .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+                .readText()
+        val titleLoop =
+            source
+                .substringAfter("var startY = viewHeight * 0.2f")
+                .substringBefore("if (!drawAuthor)")
 
         assertTrue(titleLoop.contains("namePaint.textSize = viewWidth / 7"))
         assertTrue(titleLoop.contains("?: (viewWidth / 10)"))
@@ -136,34 +152,57 @@ class RuntimeMediaStabilityTest {
         assertEquals("Title", normalizeCoverText("  Title  ", true))
         assertNotEquals(
             coverBitmapCacheKey("ab", "c", 105, 140, false, true, 1, 2),
-            coverBitmapCacheKey("a", "bc", 105, 140, false, true, 1, 2)
+            coverBitmapCacheKey("a", "bc", 105, 140, false, true, 1, 2),
         )
         assertNotEquals(
             coverBitmapCacheKey("Title", "Author", 105, 140, false, true, 1, 2),
-            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2)
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2),
         )
         assertNotEquals(
             coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2),
-            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 3, 4)
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 3, 4),
         )
         assertNotEquals(
             coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2, true),
-            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2, false)
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2, false),
         )
         assertNotEquals(
-            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2, fontCacheKey = "font-a"),
-            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2, fontCacheKey = "font-b")
+            coverBitmapCacheKey(
+                "Title",
+                "Author",
+                105,
+                140,
+                true,
+                true,
+                1,
+                2,
+                fontCacheKey = "font-a",
+            ),
+            coverBitmapCacheKey(
+                "Title",
+                "Author",
+                105,
+                140,
+                true,
+                true,
+                1,
+                2,
+                fontCacheKey = "font-b",
+            ),
         )
     }
 
     @Test
     fun horizontalTextCoverHonorsReportedLayoutContract() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
-            .readText()
-        val horizontal = source.substringAfter("private fun drawHorizontalTextCover")
-            .substringBefore("fun setHeight")
+        val source =
+            listOf(File("src/main/java"), File("app/src/main/java"))
+                .first { it.isDirectory }
+                .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+                .readText()
+        val horizontal =
+            source
+                .substringAfter("private fun drawHorizontalTextCover")
+                .substringBefore("fun setHeight")
 
         assertTrue(horizontal.contains("HORIZONTAL_TITLE_MAX_LINES"))
         assertTrue(horizontal.contains("setMaxLines(HORIZONTAL_TITLE_MAX_LINES)"))
@@ -184,29 +223,27 @@ class RuntimeMediaStabilityTest {
 
     @Test
     fun audioCoverUsesTheBookScopedSourceOrigin() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java"))
-            .first { it.isDirectory }
-            .resolve("io/legado/app/ui/book/audio/AudioPlayActivity.kt")
-            .readText()
-        val upCover = source.substringAfter("private fun upCover(path: String?)")
-            .substringBefore("override fun upLyric")
-
-        assertTrue(upCover.contains("val sourceOrigin = AudioPlay.book?.getCoverSourceOrigin()"))
-        assertTrue(upCover.contains("BookCover.load(this, path, sourceOrigin = sourceOrigin)"))
-        assertTrue(upCover.contains("BookCover.loadBlur(this, path, sourceOrigin = sourceOrigin)"))
-        assertFalse(upCover.contains("AudioPlay.bookSource?.bookSourceUrl"))
+        val root = listOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
+        val model = root.resolve("io/legado/app/ui/book/audio/AudioPlayViewModel.kt").readText()
+        val repository =
+            root.resolve("io/legado/app/ui/book/audio/AudioPlayRepository.kt").readText()
+        assertTrue(model.contains("coverOrigin = book?.getCoverSourceOrigin()"))
+        assertTrue(repository.contains("BookCover.load(context, path, sourceOrigin = origin)"))
+        assertTrue(repository.contains("BookCover.loadBlur(context, path, sourceOrigin = origin)"))
+        assertFalse(model.contains("AudioPlay.bookSource?.bookSourceUrl"))
     }
 
     @Test
     fun httpTtsCacheKeyTracksSessionInputs() {
-        val base = buildHttpTtsCacheFileName(
-            "chapter",
-            "https://tts.example",
-            10,
-            "voice=a",
-            "Authorization: token-a",
-            "content",
-        )
+        val base =
+            buildHttpTtsCacheFileName(
+                "chapter",
+                "https://tts.example",
+                10,
+                "voice=a",
+                "Authorization: token-a",
+                "content",
+            )
         assertEquals(
             base,
             buildHttpTtsCacheFileName(
@@ -216,7 +253,7 @@ class RuntimeMediaStabilityTest {
                 "voice=a",
                 "Authorization: token-a",
                 "content",
-            )
+            ),
         )
         assertNotEquals(
             base,
@@ -227,7 +264,7 @@ class RuntimeMediaStabilityTest {
                 "voice=b",
                 "Authorization: token-a",
                 "content",
-            )
+            ),
         )
         assertNotEquals(
             base,
@@ -238,7 +275,7 @@ class RuntimeMediaStabilityTest {
                 "voice=a",
                 "Authorization: token-b",
                 "content",
-            )
+            ),
         )
         assertNotEquals(
             buildHttpTtsCacheFileName("chapter", "url", 10, "a", "b-|-c", "content"),

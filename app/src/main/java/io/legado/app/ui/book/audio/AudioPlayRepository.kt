@@ -128,10 +128,14 @@ internal class AudioPlayRepository(private val context: Application) {
             source
         }
 
-    suspend fun changeSource(source: BookSource, book: Book, toc: List<BookChapter>) =
+    suspend fun changeSource(
+        oldBook: Book?,
+        source: BookSource,
+        book: Book,
+        toc: List<BookChapter>,
+    ) =
         withContext(IO + NonCancellable) {
             engineWrites.withLock {
-                val oldBook = AudioPlay.book
                 val wasNotShelf =
                     oldBook?.let { appDb.bookDao.getBook(it.bookUrl)?.isNotShelf ?: true }
                         ?: !AudioPlay.inBookshelf
@@ -139,11 +143,14 @@ internal class AudioPlayRepository(private val context: Application) {
                 book.removeType(BookType.updateError)
                 if (wasNotShelf) book.addType(BookType.notShelf)
                 replaceBookAfterSourceChange(oldBook, book, toc)
-                AudioPlay.replaceBook(book)
-                AudioPlay.inBookshelf = !wasNotShelf
-                AudioPlay.setBookSource(source)
-                AudioPlay.upData(book, preserveProgress = false)
-                AudioPlayService.updateNotification(context)
+                // Finish the accepted DB migration, but do not retarget a newer playback request.
+                if (AudioPlay.book?.bookUrl == oldBook?.bookUrl) {
+                    AudioPlay.replaceBook(book)
+                    AudioPlay.inBookshelf = !wasNotShelf
+                    AudioPlay.setBookSource(source)
+                    AudioPlay.upData(book, preserveProgress = false)
+                    AudioPlayService.updateNotification(context)
+                }
                 postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
             }
         }

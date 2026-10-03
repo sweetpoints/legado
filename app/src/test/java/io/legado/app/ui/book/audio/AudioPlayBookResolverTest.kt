@@ -109,7 +109,9 @@ class AudioPlayBookResolverTest {
         assertTrue(onNewIntent.containsCode("setIntent(intent)"))
         assertTrue(beforeInit.containsCode("shouldReuseCurrentAudioPlay("))
         assertTrue(onNewIntent.containsCode("viewModel.initialize("))
-        assertTrue(onNewIntent.containsCode("viewModel.initialize(requestedBookUrl)"))
+        assertTrue(
+            onNewIntent.containsCode("viewModel.initialize(requestedBookUrl, freshRequest = true)")
+        )
     }
 
     @Test

@@ -37,6 +37,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
         mutableState.update { it.change() }
     }
 
+    private var requestGeneration = 0L
     private var initTask: Job? = null
     private var lyricTask: Job? = null
     private var coverTask: Job? = null
@@ -151,7 +152,13 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    internal fun initialize(bookUrl: String?) {
+    internal fun initialize(bookUrl: String?, freshRequest: Boolean = false) {
+        // A replacement host reuses its retained request, including any accepted source change.
+        if (!freshRequest && (state.value.ready || initTask?.isActive == true)) {
+            if (state.value.ready) snapshot()
+            return
+        }
+        requestGeneration++
         initTask?.cancel()
         update { copy(ready = false, closeRequested = false) }
         initTask = viewModelScope.launch {
@@ -188,11 +195,13 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
+        val oldBook = AudioPlay.book
+        val generation = requestGeneration
         // Once a source migration is accepted, deliver its business completion even if the host
         // rotates.
         viewModelScope.launch(NonCancellable) {
-            repository.changeSource(source, book, toc)
-            snapshot()
+            repository.changeSource(oldBook, source, book, toc)
+            if (generation == requestGeneration) snapshot()
             onSuccess()
         }
     }
@@ -203,9 +212,11 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
 
     internal fun changeToText(book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
         val oldBook = AudioPlay.book
+        val generation = requestGeneration
         viewModelScope.launch(NonCancellable) {
             repository.changeToText(oldBook, book, toc)
             onSuccess()
+            if (generation != requestGeneration) return@launch
             val key = java.util.UUID.randomUUID().toString()
             navigationSessions[key] = book
             update { copy(bookNavigation = key) }

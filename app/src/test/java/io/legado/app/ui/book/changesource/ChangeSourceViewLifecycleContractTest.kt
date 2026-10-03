@@ -68,7 +68,18 @@ class ChangeSourceViewLifecycleContractTest {
         assertTrue(audioActivity.contains("viewModel.changeTo(source, book, toc, onSuccess)"))
         assertTrue(infoActivity.contains("viewModel.changeTo(source, book, toc, onSuccess)"))
         assertTrue(mangaActivity.contains("viewModel.changeTo(book, toc, onSuccess)"))
-        listOf(readActivity, audioActivity).forEach { changeTo ->
+        val audioTextMigration =
+            appSource("book/audio/AudioPlayViewModel.kt")
+                .section("internal fun changeToText(", "fun removeFromBookshelf")
+        assertTrue(
+            audioTextMigration.indexOf("repository.changeToText(") <
+                audioTextMigration.indexOf("onSuccess()")
+        )
+        val audioRepository =
+            appSource("book/audio/AudioPlayRepository.kt")
+                .section("suspend fun changeToText(", "suspend fun removeFromBookshelf")
+        assertTrue(audioRepository.contains("replaceBookAfterSourceChange(oldBook, book, toc)"))
+        listOf(readActivity).forEach { changeTo ->
             assertTrue(
                 changeTo.indexOf("appDb.bookDao.insert(book)") < changeTo.indexOf("onSuccess()")
             )
