@@ -15,7 +15,8 @@ enum class BookDetailNativeKind { EditInfo,EditSource,ChangeCover,Photo,ChangeSo
     CustomButton,IntroImage,ReaderSync,ShelfAdded,SourceChanged,Deleted }
 data class BookDetailNativeEffect(val token:String,val kind:BookDetailNativeKind,val book:BookDetailBook?=null,
     val source:BookDetailSource?=null,val value:String?=null,val flag:Boolean=false,val mutation:BookDetailMutationKind?=null,
-    val position:BookDetailPosition?=null,val highlightTitleLength:Int?=null,val highlightAnchor:String?=null)
+    val position:BookDetailPosition?=null,val highlightTitleLength:Int?=null,val highlightAnchor:String?=null,
+    val expectedBookUrl:String?=null)
 data class BookDetailOperation(val token:String,val change:BookDetailMutation,val navigation:BookDetailNativeKind?=null,
     val highlightTitleLength:Int?=null,val highlightAnchor:String?=null)
 data class BookDetailPendingMutation(val operation:BookDetailOperation,val plan:BookDetailWritePlan,val inBookshelf:Boolean)
@@ -88,7 +89,7 @@ class FileBookDetailSessionRepository(context:Context,private val storage:BookDe
             val updated=details.describe(committed,result.inBookshelf)
             val effects=current.effects.toMutableList()
             if(result.inBookshelf && !data.inBookshelf)effects+=BookDetailNativeEffect(active.token+":shelf",BookDetailNativeKind.ShelfAdded,updated.book,updated.source)
-            if(result.inBookshelf)effects+=BookDetailNativeEffect(active.token,BookDetailNativeKind.ReaderSync,updated.book,updated.source,mutation=active.change.kind)
+            if(result.inBookshelf)effects+=BookDetailNativeEffect(active.token,BookDetailNativeKind.ReaderSync,updated.book,updated.source,mutation=active.change.kind,expectedBookUrl=data.book.bookUrl)
             active.navigation?.let{effects+=BookDetailNativeEffect(active.token+":navigate",it,updated.book,updated.source,
                 flag=current.chapterChanged,position=active.change.position,highlightTitleLength=active.highlightTitleLength,highlightAnchor=active.highlightAnchor)}
             val completed=current.copy(data=updated,pendingMutation=null,effects=effects.toList(),
@@ -124,7 +125,7 @@ class FileBookDetailSessionRepository(context:Context,private val storage:BookDe
         val updated=details.describe(BookDetailBook.from(native),result.inBookshelf)
         val effects=current.effects.toMutableList()
         if(result.inBookshelf && !pending.request.inBookshelf)effects+=BookDetailNativeEffect(pending.token+":shelf",BookDetailNativeKind.ShelfAdded,updated.book,updated.source)
-        if(result.inBookshelf)effects+=BookDetailNativeEffect(pending.token,BookDetailNativeKind.ReaderSync,updated.book,updated.source,flag=true)
+        if(result.inBookshelf)effects+=BookDetailNativeEffect(pending.token,BookDetailNativeKind.ReaderSync,updated.book,updated.source,flag=true,expectedBookUrl=pending.request.book.bookUrl)
         if(pending.sourceChanged)effects+=BookDetailNativeEffect(pending.token+":source",BookDetailNativeKind.SourceChanged,updated.book,updated.source)
         val completed=current.copy(data=updated,webFiles=pending.result.webFiles,pendingNetwork=null,running=false,
             chapterChanged=true,effects=effects,completedOperations=rememberCompleted(current,pending.token),revision=current.revision+1)
