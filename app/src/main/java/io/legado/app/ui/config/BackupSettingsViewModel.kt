@@ -3,6 +3,8 @@ package io.legado.app.ui.config
 import androidx.lifecycle.*
 import io.legado.app.data.preferences.*
 import io.legado.app.model.backup.*
+import io.legado.app.data.repository.BackupOperationsRepository
+import io.legado.app.data.repository.BackupLanRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -10,7 +12,7 @@ import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 internal data class BackupSettingsState(val loading: Boolean = true, val failed: Boolean = false, val busy: Boolean = false,
-    val settings: BackupSettingsSnapshot? = null, val draft: BackupSettingsDraft? = null,
+    val taskBusy: Boolean = false, val settings: BackupSettingsSnapshot? = null, val draft: BackupSettingsDraft? = null,
     val choices: List<BackupChoice> = emptyList(), val pendingCommit: Boolean = false, val invalidInterval: Boolean = false, val error: String? = null, val draftFailed: Boolean = false)
 /** Settings editor foundation: accepted mutations finish; large text and credentials are private files. */
 internal class BackupSettingsViewModel(private val repository: BackupSettingsRepository, private val choices: BackupChoicesRepository,
@@ -20,6 +22,7 @@ internal class BackupSettingsViewModel(private val repository: BackupSettingsRep
     private var stopped = false; private var generation = 0; private var revision = 0L; private var initialized = false
     private var current = BackupSettingsDraft(); private var observer: Job? = null; private var operation: Job? = null
     private val updates = MutableStateFlow<BackupSettingsDraft?>(null); private val writeGate = Mutex()
+    private var ownedController: BackupOperationsController? = null
     private var pendingClear: BackupSettingsDraft? = null; private var retryAction: (suspend () -> Unit)? = null
     private val writer = viewModelScope.launch {
         updates.filterNotNull().collect { value ->
@@ -31,7 +34,7 @@ internal class BackupSettingsViewModel(private val repository: BackupSettingsRep
     }
     init { initialize() }
     private fun nextRevision() = maxOf(System.nanoTime(), revision + 1).also { revision = it }
-    private fun usable() = !stopped && !state.value.loading && !state.value.failed && !state.value.busy && state.value.settings != null
+    private fun usable() = !stopped && !state.value.loading && !state.value.failed && !state.value.busy && !state.value.taskBusy && state.value.settings != null
     private suspend fun persist(value: BackupSettingsDraft) = writeGate.withLock { drafts.write(session, value) }
     private fun update(value: BackupSettingsDraft) {
         current = value.copy(revision = nextRevision()); mutable.value = state.value.copy(draft = current); updates.value = current
@@ -143,9 +146,21 @@ internal class BackupSettingsViewModel(private val repository: BackupSettingsRep
             finally { if (!stopped && currentCoroutineContext().isActive) mutable.value = state.value.copy(busy = false) }
         }
     }
+    /** Recreated fragments reuse the same coordinator and its operation, never orphan another collector. */
+    internal fun operations(operations: BackupOperationsRepository, lan: BackupLanRepository): BackupOperationsController =
+        ownedController ?: BackupOperationsController(viewModelScope, this, repository, operations, lan, saved).also { ownedController = it }
+    internal fun taskAvailable() = usable() && !state.value.pendingCommit && !state.value.draftFailed && current.form == null
+    internal fun taskBusy(value: Boolean) { if (!stopped) mutable.value = state.value.copy(taskBusy = value) }
+    /** Called on Main by the owned task controller; shared revision ordering preserves every form field. */
+    internal suspend fun stageTask(task: BackupTaskDraft?, names: List<String>? = null) {
+        check(initialized && !stopped) { "Backup settings not initialized" }
+        current = current.copy(revision = nextRevision(), task = task, restoreNames = names?.toList() ?: current.restoreNames)
+        mutable.value = state.value.copy(draft = current)
+        persist(current); currentCoroutineContext().ensureActive()
+    }
     suspend fun flush() { if (!stopped && initialized) persist(current) }
-    fun stop() { if (!stopped) { stopped = true; generation++; observer?.cancel(); operation?.cancel(); writer.cancel() } }
-    suspend fun release() { stop(); drafts.release(session) }
+    fun stop() { if (!stopped) { stopped = true; ownedController?.stop(); generation++; observer?.cancel(); operation?.cancel(); writer.cancel() } }
+    suspend fun release() { stop(); try { ownedController?.release() } finally { drafts.release(session) } }
     override fun onCleared() { stop() }
     private fun BackupForm.choiceGroup(): BackupChoiceGroup? = when (this) { BackupForm.Content -> BackupChoiceGroup.Content; BackupForm.Ignore -> BackupChoiceGroup.Ignore; else -> null }
 }

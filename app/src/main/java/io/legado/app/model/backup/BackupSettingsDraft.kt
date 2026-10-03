@@ -1,7 +1,7 @@
 package io.legado.app.model.backup
 
 internal enum class BackupForm { Url, Account, Password, Directory, Device, LocalPassword, Automatic, Content, Ignore }
-internal enum class BackupTaskKind { Backup, RestoreNames, RestoreWebDav, RestoreLocal, ImportOld, LanReceive }
+internal enum class BackupTaskKind { Backup, RestoreNames, RestoreWebDav, RestoreLocal, ImportOld, LanSend, LanReceive }
 internal enum class BackupTaskPhase { Requested, Running, Complete }
 /** Arbitrary text, credentials, QR descriptors and restore names are private files, never Bundle values. */
 internal data class BackupTaskDraft(val id: String, val kind: BackupTaskKind, val payload: String? = null,
