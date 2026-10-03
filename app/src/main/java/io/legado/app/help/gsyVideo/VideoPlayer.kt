@@ -2,6 +2,7 @@ package io.legado.app.help.gsyVideo
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -10,6 +11,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -171,8 +173,44 @@ class VideoPlayer : StandardGSYVideoPlayer {
         dismissGestureFeedback()
     }
 
-    override fun getLayoutId(): Int {
-        return R.layout.video_player_surface
+    // GSY calls this virtually from its constructor, before this subclass's fields are initialized.
+    override fun initInflate(context: Context?) {
+        val playerContext = requireNotNull(context)
+        val nativeContent =
+            FrameLayout(playerContext).apply {
+                setBackgroundColor(Color.BLACK)
+                addView(
+                    FrameLayout(playerContext).apply { id = R.id.surface_container },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    DanmakuView(playerContext).apply {
+                        id = R.id.danmaku_view
+                        visibility = View.GONE
+                    },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    ComposeView(playerContext).apply { id = R.id.video_player_compose },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        addView(
+            nativeContent,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
     override fun getFullWindowPlayer(): VideoPlayer? {

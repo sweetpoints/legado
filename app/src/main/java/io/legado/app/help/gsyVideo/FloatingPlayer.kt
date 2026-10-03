@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.Surface
 import android.view.SurfaceView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -46,8 +48,37 @@ class FloatingPlayer : StandardGSYVideoPlayer {
         mScreenHeight = activityContext!!.resources.displayMetrics.heightPixels
     }
 
-    override fun getLayoutId(): Int {
-        return R.layout.floating_player_surface
+    // GSY calls this virtually from its constructor, before this subclass's fields are initialized.
+    override fun initInflate(context: Context?) {
+        val playerContext = requireNotNull(context)
+        val nativeContent =
+            FrameLayout(playerContext).apply {
+                setBackgroundResource(R.drawable.floating_rounded_background)
+                clipChildren = true
+                clipToOutline = true
+                clipToPadding = true
+                addView(
+                    FrameLayout(playerContext).apply { id = R.id.surface_container },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                addView(
+                    ComposeView(playerContext).apply { id = R.id.floating_player_compose },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        addView(
+            nativeContent,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
     private fun initializeComposeControls() {

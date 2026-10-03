@@ -1648,3 +1648,5 @@ GSY 全屏控制栏的下一集、弹幕开关、选集与倍速按钮改为生�
 视频悬浮窗关闭、全屏、播放/暂停及底部进度迁为 Compose，浮窗服务仍负责原有 WindowManager 拖动/贴边、停止服务、Activity 克隆播放状态和通知/媒体会话回调。服务窗口显式提供跟随 LifecycleService 的 LifecycleOwner 与空 SavedStateRegistryOwner，控制 View 移除/服务销毁时释放组合；删除原悬浮窗控制布局。新增浮窗动作 Compose 用例；最终集成构建待排队验证。
 
 视频 Activity 顶栏与原生选项菜单迁为 Compose；保留状态栏 inset、返回、定制按钮、RSS 收藏、悬浮播放、配置、书源登录、复制/外部打开播放地址、书源编辑及日志入口，并继续按当前书源能力和 RSS 收藏状态显示条件项。标题订阅事件同步 Compose toolbar 与 GSY overlay，删除独占 `video_play.xml` 菜单资源。播放器 Activity 进一步成为 BaseComposeActivity，页面用一个 Compose Column 承载顶栏、书籍信息、章节轨道和 GSY host；Activity XML 与 ViewBinding 均删除，唯一 AndroidView 只创建保留的 GSY 播放引擎。
+
+GSY 播放器与悬浮窗只保留程序化 native engine 容器：通过 GSY 的 `initInflate` 扩展点创建 surface、danmaku renderer 和 Compose 宿主，服务直接创建原 WindowManager wrapper 与 FloatingPlayer。固定兼容 IDs，保留圆角裁剪及 GSY 构造期间虚调用所需的无状态初始化；删除三份播放器专属 layout XML。

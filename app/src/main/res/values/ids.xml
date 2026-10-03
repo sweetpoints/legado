@@ -24,4 +24,11 @@
     <item name="view_pager_main" type="id" />
     <item name="compose_dialog_content" type="id" />
     <item name="custom_web_view" type="id" />
+
+    <!-- Stable IDs required by the GSY native playback and Compose overlay bridge. -->
+    <item name="surface_container" type="id" />
+    <item name="danmaku_view" type="id" />
+    <item name="video_player_compose" type="id" />
+    <item name="floating_player_compose" type="id" />
+    <item name="floatingPlayerView" type="id" />
 </resources>
