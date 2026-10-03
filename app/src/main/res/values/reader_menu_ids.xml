@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Kept while the independently migrated manga menu still uses this constraint anchor. -->
-    <item name="ll_brightness" type="id" />
-    <!-- The public onTouch ABI still accepts native cursor IDs during the host transition. -->
+    <!-- Retained for callers of the public native cursor onTouch ABI. -->
     <item name="cursor_left" type="id" />
     <item name="cursor_right" type="id" />
     <!-- Native canvas ID is retained for integrations and real paging regression tests. -->
