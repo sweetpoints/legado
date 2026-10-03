@@ -1,11 +1,11 @@
 package io.legado.app.model
 
 import io.legado.app.ui.book.read.page.movedBeyondTouchSlop
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ReplacePreviewTest {
 
@@ -19,7 +19,7 @@ class ReplacePreviewTest {
                 sourcePosition = 11,
                 previewText = "New title\ntarget suffix",
                 previewTitleLength = 10,
-            )
+            ),
         )
     }
 
@@ -33,7 +33,7 @@ class ReplacePreviewTest {
                 sourcePosition = 14,
                 previewText = "t\nx",
                 previewTitleLength = 2,
-            )
+            ),
         )
     }
 
@@ -47,25 +47,26 @@ class ReplacePreviewTest {
     @Test
     fun `preview stays isolated from reader state and persistent chapter work`() {
         val readBook = source("app/src/main/java/io/legado/app/model/ReadBook.kt")
-        val build = readBook.substringAfter("suspend fun buildReplacePreview")
-            .substringBefore("fun isCurrentReplacePreview")
+        val build =
+            readBook
+                .substringAfter("suspend fun buildReplacePreview")
+                .substringBefore("fun isCurrentReplacePreview")
         assertTrue(build.contains("replaceEnabledOverride = replaceEnabled"))
         assertTrue(build.contains("saveChapterData = false"))
         assertFalse(build.contains("setUseReplaceRule"))
         assertFalse(build.contains("saveRead()"))
         assertFalse(build.contains("curTextChapter ="))
 
-        val chapterProvider = source(
-            "app/src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        )
+        val chapterProvider =
+            source("app/src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt")
         assertTrue(chapterProvider.contains("isTransient = !saveChapterData"))
-        val layout = source(
-            "app/src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
-        )
+        val layout =
+            source(
+                "app/src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
+            )
         assertTrue(layout.contains("if (saveChapterData)"))
-        val contentView = source(
-            "app/src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt"
-        )
+        val contentView =
+            source("app/src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
         assertTrue(contentView.contains("chapter.isTransient ||"))
     }
 
@@ -81,14 +82,18 @@ class ReplacePreviewTest {
         assertTrue(readView.contains("override val allowPageMove"))
         assertTrue(readView.contains("replacePreview?.previewChapter"))
         assertTrue(readView.contains("if (replacePreview != null) return null"))
-        val touchHandler = readView.substringAfter("override fun onTouchEvent")
-            .substringBefore("private fun startReplacePreviewGesture")
+        val touchHandler =
+            readView
+                .substringAfter("override fun onTouchEvent")
+                .substringBefore("private fun startReplacePreviewGesture")
         assertTrue(
             touchHandler.indexOf("replacePreviewGestureState !=") <
                 touchHandler.indexOf("Build.VERSION.SDK_INT")
         )
-        val clearPreview = readView.substringAfter("private fun clearReplacePreview()")
-            .substringBefore("fun showReplacePreview")
+        val clearPreview =
+            readView
+                .substringAfter("private fun clearReplacePreview()")
+                .substringBefore("fun showReplacePreview")
         assertOrder(
             clearPreview,
             "val stillCurrent = ReadBook.isCurrentReplacePreview(preview)",
@@ -97,17 +102,21 @@ class ReplacePreviewTest {
             "upContent(resetPageOffset = true)",
         )
 
-        val activity = source(
-            "app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt"
-        )
-        val preview = activity.substringAfter("override fun setReplacePreview")
-            .substringBefore("private fun startBackupJob")
+        val activity = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
+        val preview =
+            activity
+                .substringAfter("override fun setReplacePreview")
+                .substringBefore("private fun startBackupJob")
         assertTrue(preview.contains("++replacePreviewGeneration"))
         assertTrue(preview.contains("generation != replacePreviewGeneration"))
-        assertTrue(preview.contains("binding.readView.getReadPosition()"))
+        assertTrue(
+            preview.replace(Regex("\\s+"), "").contains("binding.readView.getReadPosition()")
+        )
 
-        val pause = activity.substringAfter("override fun onPause()")
-            .substringBefore("override fun onCompatCreateOptionsMenu")
+        val pause =
+            activity
+                .substringAfter("override fun onPause()")
+                .substringBefore("override fun onCompatCreateOptionsMenu")
         assertOrder(
             pause,
             "binding.readView.cancelTouchGestures()",
@@ -123,9 +132,10 @@ class ReplacePreviewTest {
         val preferences = source("app/src/main/res/xml/pref_config_read.xml")
         assertTrue(key.contains("twoFingerReplacePreview"))
         assertTrue(config.contains("PreferKey.twoFingerReplacePreview, false"))
-        val preference = preferences
-            .substringBefore("android:key=\"twoFingerReplacePreview\"")
-            .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference")
+        val preference =
+            preferences
+                .substringBefore("android:key=\"twoFingerReplacePreview\"")
+                .substringAfterLast("<io.legado.app.lib.prefs.SwitchPreference")
         assertTrue(preference.contains("android:defaultValue=\"false\""))
     }
 
@@ -140,8 +150,9 @@ class ReplacePreviewTest {
 
     private fun source(relativePath: String): String {
         val userDir = requireNotNull(System.getProperty("user.dir"))
-        val root = generateSequence(File(userDir)) { it.parentFile }
-            .first { File(it, "app/src/main").isDirectory }
+        val root =
+            generateSequence(File(userDir)) { it.parentFile }
+                .first { File(it, "app/src/main").isDirectory }
         return File(root, relativePath).readText().replace("\r\n", "\n")
     }
 }

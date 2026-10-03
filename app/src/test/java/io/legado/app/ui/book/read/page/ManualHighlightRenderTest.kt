@@ -2,20 +2,23 @@ package io.legado.app.ui.book.read.page
 
 import io.legado.app.help.HighlightRuleMatcher.RuleMatch
 import io.legado.app.help.HighlightStyle
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class ManualHighlightRenderTest {
 
     @Test
     fun `manual ranges cover every text column but skip titles`() {
-        val content = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
-        val ranges = readProjectFile("src/main/java/io/legado/app/model/ReadBook.kt")
-            .substringAfter("fun highlightRangesOfChapter(").substringBefore("private fun highlightLayoutState")
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
+        val ranges =
+            readProjectFile("src/main/java/io/legado/app/model/ReadBook.kt")
+                .substringAfter("fun highlightRangesOfChapter(")
+                .substringBefore("private fun highlightLayoutState")
 
         assertTrue(content.contains("ReadBook.highlightRangesOfChapter(chapter)"))
         assertTrue(ranges.contains("anchoredHighlightsOfChapter(chapter, titleLength)"))
@@ -32,11 +35,11 @@ class ManualHighlightRenderTest {
     @Test
     fun `chapters without manual highlights skip full text reconstruction`() {
         val readBook = readProjectFile("src/main/java/io/legado/app/model/ReadBook.kt")
-        val anchors = readBook.substringAfter("fun anchoredHighlightsOfChapter(")
-            .substringBefore("fun addHighlight(")
-        val emptyHighlights = anchors.indexOf(
-            "val anchors = if (chapterHighlights.isEmpty())"
-        )
+        val anchors =
+            readBook
+                .substringAfter("fun anchoredHighlightsOfChapter(")
+                .substringBefore("fun addHighlight(")
+        val emptyHighlights = anchors.indexOf("val anchors = if (chapterHighlights.isEmpty())")
         val rebuild = anchors.indexOf("chapterText(chapter)")
         val cache = anchors.indexOf("chapter.manualHighlightAnchors = anchors")
 
@@ -46,9 +49,10 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `layout captures the exact raw title prefix before body content`() {
-        val layout = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
-        )
+        val layout =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/provider/TextChapterLayout.kt"
+            )
         val capture = layout.indexOf("textChapter.layoutTitleLength =")
         val body = layout.indexOf("contents.forEach")
 
@@ -60,9 +64,12 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `highlight creation rejects cross chapter selections`() {
-        val content = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
 
-        assertTrue(content.contains("if (startPage.chapterIndex != endPage.chapterIndex) return null"))
+        assertTrue(
+            content.contains("if (startPage.chapterIndex != endPage.chapterIndex) return null")
+        )
         assertTrue(content.contains("if (startLine.isTitle || endLine.isTitle) return null"))
         assertTrue(content.contains("if (page.getLine(textPos.lineIndex).isTitle) return null"))
         assertTrue(content.contains("highlightSelectionEndLength(selectEnd.columnIndex)"))
@@ -75,10 +82,11 @@ class ManualHighlightRenderTest {
     fun `line start boundary does not read or include the previous column`() {
         var invoked = false
 
-        val length = highlightSelectionEndLength(-1) {
-            invoked = true
-            4
-        }
+        val length =
+            highlightSelectionEndLength(-1) {
+                invoked = true
+                4
+            }
 
         assertEquals(0, length)
         assertFalse(invoked)
@@ -94,7 +102,8 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `html links and review columns keep click priority`() {
-        val content = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
         val click = content.indexOf("fun click(")
         val review = content.indexOf("is ReviewColumn ->", click)
         val html = content.indexOf("is TextHtmlColumn ->", review)
@@ -112,14 +121,17 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `highlight actions support click double tap long press and off modes`() {
-        val content = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
         val appConfig = readProjectFile("src/main/java/io/legado/app/help/config/AppConfig.kt")
         val preferences = readProjectFile("src/main/res/xml/pref_config_read.xml")
         val values = readProjectFile("src/main/res/values/array_values.xml")
         val longPress = content.substringAfter("fun longPress(").substringBefore("fun click(")
         val click = content.substringAfter("fun click(").substringBefore("fun selectText(")
-        val notify = content.substringAfter("private fun notifyHighlightClick(")
-            .substringBefore("private fun highlightAt(")
+        val notify =
+            content
+                .substringAfter("private fun notifyHighlightClick(")
+                .substringBefore("private fun highlightAt(")
         val clickValue = values.indexOf("<item>click</item>")
         val doubleTapValue = values.indexOf("<item>doubleTap</item>")
         val longPressValue = values.indexOf("<item>longPress</item>")
@@ -133,7 +145,8 @@ class ManualHighlightRenderTest {
         assertTrue(longPressValue in 0 until offValue)
         assertTrue(longPress.contains("highlightActionTrigger == \"longPress\""))
         assertTrue(click.contains("highlightActionTrigger != \"longPress\""))
-        val offGate = notify.indexOf("if (AppConfig.highlightActionTrigger == \"off\") return false")
+        val offGate =
+            notify.indexOf("if (AppConfig.highlightActionTrigger == \"off\") return false")
         val manual = notify.indexOf("highlightAt(column, textPos, page)?.let")
         val automatic = notify.indexOf("highlightRuleAt(column, textPos, page)?.let")
         assertTrue(offGate in 0 until manual)
@@ -142,25 +155,36 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `page changes dismiss visible highlight actions`() {
-        val activity = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
+        val activity =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
         val popupMenu = readProjectFile("src/main/java/io/legado/app/ui/widget/PopupActionMenu.kt")
-        val pageChanged = activity.substringAfter("override fun pageChanged()")
-            .substringBefore("private fun upSeekBarProgress()")
+        val pageChanged =
+            activity
+                .substringAfter("override fun pageChanged()")
+                .substringBefore("private fun upSeekBarProgress()")
         val onDestroy = activity.substringAfter("override fun onDestroy()")
 
-        assertTrue(popupMenu.contains("fun show(anchor: View, onClick: (String) -> Unit): PopupAction"))
+        assertTrue(
+            popupMenu.contains("fun show(anchor: View, onClick: (String) -> Unit): PopupAction")
+        )
         assertTrue(popupMenu.contains("return PopupAction(context).apply"))
-        assertTrue(activity.contains("highlightPopup = popupActionMenu(this)"))
+        assertTrue(
+            activity.replace(Regex("\\s+"), "").contains("highlightPopup=popupActionMenu(this)")
+        )
         assertTrue(pageChanged.contains("highlightPopup?.dismiss()"))
         assertTrue(onDestroy.contains("highlightPopup?.dismiss()"))
     }
 
     @Test
     fun `automatic highlight clicks fall back to the visible matching rule`() {
-        val content = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
-        val activity = readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
-        val notify = content.substringAfter("private fun notifyHighlightClick(")
-            .substringBefore("private fun relativeOffset(")
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
+        val activity =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
+        val notify =
+            content
+                .substringAfter("private fun notifyHighlightClick(")
+                .substringBefore("private fun relativeOffset(")
         val manual = notify.indexOf("highlightAt(column, textPos, page)?.let")
         val automatic = notify.indexOf("highlightRuleAt(column, textPos, page)?.let")
 
@@ -187,10 +211,11 @@ class ManualHighlightRenderTest {
     @Test
     fun `automatic click match respects title gate and last rule priority`() {
         val style = HighlightStyle(fill = 1)
-        val matches = listOf(
-            RuleMatch(1, 2, 1, style, applyToTitle = false, applyToBody = true),
-            RuleMatch(1, 2, 2, style, applyToTitle = true, applyToBody = false)
-        )
+        val matches =
+            listOf(
+                RuleMatch(1, 2, 1, style, applyToTitle = false, applyToBody = true),
+                RuleMatch(1, 2, 2, style, applyToTitle = true, applyToBody = false),
+            )
 
         assertEquals(1L, highlightRuleAtColumn(matches, 0, 2, isTitle = false)?.ruleId)
         assertEquals(2L, highlightRuleAtColumn(matches, 0, 2, isTitle = true)?.ruleId)
@@ -201,16 +226,27 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `column drawing uses isolated temporary paint styles`() {
-        val text = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt")
-        val html = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt")
+        val text =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt"
+            )
+        val html =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
+            )
         val draw = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/HighlightDraw.kt")
-        val provider = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
-        )
+        val provider =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/provider/ChapterProvider.kt"
+            )
 
-        assertTrue(text.contains("HighlightDraw.obtainTextPaint(textPaint, it, textColor, charData)"))
+        assertTrue(
+            text.contains("HighlightDraw.obtainTextPaint(textPaint, it, textColor, charData)")
+        )
         assertTrue(text.contains("HighlightDraw::recycleTextPaint"))
-        assertTrue(html.contains("HighlightDraw.obtainTextPaint(textPaint, it, textColor, charData)"))
+        assertTrue(
+            html.contains("HighlightDraw.obtainTextPaint(textPaint, it, textColor, charData)")
+        )
         assertTrue(html.contains("HighlightDraw::recycleTextPaint"))
         assertTrue(text.contains("it.resolvedFontPath.isNotEmpty()"))
         assertTrue(html.contains("it.resolvedFontPath.isNotEmpty()"))
@@ -227,10 +263,18 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `shadow styles are normalized once and use padded page caches`() {
-        val line = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
-        val page = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt")
-        val text = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt")
-        val html = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt")
+        val line =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
+        val page =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt")
+        val text =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt"
+            )
+        val html =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
+            )
         val draw = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/HighlightDraw.kt")
 
         assertTrue(line.contains("style.shadow != null || style.resolvedFontPath.isNotEmpty()"))
@@ -272,12 +316,14 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `underline takes drawing priority over emphasis`() {
-        val text = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt"
-        )
-        val html = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
-        )
+        val text =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt"
+            )
+        val html =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
+            )
         val guardedEmphasis = "style?.takeIf { it.underline == null }?.emphasis?.let"
 
         assertTrue(text.contains(guardedEmphasis))
@@ -286,9 +332,16 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `fill shapes share one run renderer across fast and styled text`() {
-        val line = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
-        val text = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt")
-        val html = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt")
+        val line =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
+        val text =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextColumn.kt"
+            )
+        val html =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
+            )
         val draw = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/HighlightDraw.kt")
 
         assertTrue(line.indexOf("drawHighlightFills(canvas)") < line.indexOf("checkFastDraw()"))
@@ -301,7 +354,8 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `run decorations follow html text size`() {
-        val line = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
+        val line =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextLine.kt")
         val draw = readProjectFile("src/main/java/io/legado/app/ui/book/read/page/HighlightDraw.kt")
 
         assertTrue(line.contains("val sizeSensitive = strike != null || box != null"))
@@ -312,18 +366,20 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `html horizontal rules consume one chapter position`() {
-        val column = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/BaseColumn.kt"
-        )
-        val baseColumn = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextBaseColumn.kt"
-        )
-        val htmlColumn = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
-        )
-        val page = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt"
-        )
+        val column =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/BaseColumn.kt"
+            )
+        val baseColumn =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextBaseColumn.kt"
+            )
+        val htmlColumn =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/TextHtmlColumn.kt"
+            )
+        val page =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/entities/TextPage.kt")
 
         assertTrue(column.contains("val positionLength: Int get() = 0"))
         assertTrue(baseColumn.contains("override val positionLength: Int get() = charData.length"))
@@ -334,20 +390,18 @@ class ManualHighlightRenderTest {
 
     @Test
     fun `inline images consume one chapter position without counting review controls`() {
-        val image = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/entities/column/ImageColumn.kt"
-        )
-        val content = readProjectFile(
-            "src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt"
-        )
+        val image =
+            readProjectFile(
+                "src/main/java/io/legado/app/ui/book/read/page/entities/column/ImageColumn.kt"
+            )
+        val content =
+            readProjectFile("src/main/java/io/legado/app/ui/book/read/page/ContentTextView.kt")
 
         assertTrue(image.contains("override val positionLength: Int = 1"))
         assertTrue(content.contains("line.columns.map { it.positionLength }"))
     }
 
     private fun readProjectFile(pathInApp: String): String {
-        return sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .first(File::isFile)
-            .readText()
+        return sequenceOf(File(pathInApp), File("app/$pathInApp")).first(File::isFile).readText()
     }
 }
