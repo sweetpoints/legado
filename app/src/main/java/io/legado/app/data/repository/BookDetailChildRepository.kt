@@ -3,6 +3,8 @@ package io.legado.app.data.repository
 import android.content.Context
 import android.util.AtomicFile
 import androidx.annotation.Keep
+import com.google.gson.JsonArray
+import com.google.gson.JsonParser
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
@@ -55,6 +57,7 @@ data class BookDetailChildren(
     val owners: List<BookDetailChildOwner> = emptyList(),
     val pending: List<BookDetailChildResult> = emptyList(),
     val completed: List<String> = emptyList(),
+    val deliveredCallbacks: List<String> = emptyList(),
 ) {
     fun owner(value: BookDetailChildOwner): BookDetailChildren {
         if (value.token in completed || owners.any { it == value }) return this
@@ -122,7 +125,13 @@ class FileBookDetailChildRepository(
         if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists())
             return BookDetailChildren()
         return file.openRead().bufferedReader().use {
-            GSON.fromJsonObject<BookDetailChildren>(it.readText()).getOrThrow()
+            val document = JsonParser.parseString(it.readText()).asJsonObject
+            // Older ledgers predate the callback receipt. Gson does not apply Kotlin defaults
+            // to a missing field when it allocates an instance without invoking its constructor.
+            if (!document.has("deliveredCallbacks")) {
+                document.add("deliveredCallbacks", JsonArray())
+            }
+            GSON.fromJsonObject<BookDetailChildren>(document.toString()).getOrThrow()
         }
     }
 
@@ -165,6 +174,41 @@ class FileBookDetailChildRepository(
 
     override suspend fun complete(ticket: String, token: String) =
         update(ticket) { it.complete(token) }
+
+    /** Room completion and delivery to a parent source dialog are separate receipts. */
+    suspend fun claimCallback(ticket: String, token: String): Boolean =
+        withContext(Dispatchers.IO + NonCancellable) {
+            gate(ticket).withLock {
+                if (closed(ticket)) return@withLock false
+                val current = readBody(ticket)
+                if (token !in current.completed || token in current.deliveredCallbacks) {
+                    return@withLock false
+                }
+                writeBody(
+                    ticket,
+                    current.copy(
+                        deliveredCallbacks = (current.deliveredCallbacks + token).takeLast(64)
+                    ),
+                )
+                true
+            }
+        }
+
+    /** Roll back a claim if the resumed owner disappeared before the synchronous callback. */
+    suspend fun rollbackCallback(ticket: String, token: String) {
+        withContext(Dispatchers.IO + NonCancellable) {
+            gate(ticket).withLock {
+                if (closed(ticket)) return@withLock
+                val current = readBody(ticket)
+                if (token in current.deliveredCallbacks) {
+                    writeBody(
+                        ticket,
+                        current.copy(deliveredCallbacks = current.deliveredCallbacks - token),
+                    )
+                }
+            }
+        }
+    }
 
     override suspend fun release(ticket: String) =
         withContext(Dispatchers.IO + NonCancellable) {

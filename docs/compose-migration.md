@@ -1354,3 +1354,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 书籍详情清缓存来源脚本 fallback 保留原点击的不可变 native effect；异步脚本结束后，仅当前书籍 URL/来源/书名/作者与书源快照仍匹配且可交互时执行，Host 以 RESUMED 生命周期等待交付。新增实际 ViewModel 回归覆盖脚本等待期间换源后旧 fallback 丢弃、新点击仍可清理。交互边界与 Host 接入分开提交，最终全页回归统一验证。
 
 书籍详情既有 Compose Screen/Route、简介/网页渲染、偏好状态、Reader bridge 与背景组件完成独立纯格式整理，Compose 参数和布局多行展开，全部通配导入改为显式导入；原稿的 HTML/脚本权限、生命周期和 native 认领门控保持。本批不包含 Host 功能或旧测试迁移，formatter check 与 diff check 通过，最终完整验证统一排队。
+
+书籍详情换源完成新增私有 callback 交付回执，与 Room mutation 完成独立记录；暂停或宿主身份变化时未交付 claim 回滚，重复结果与恢复后已交付结果不再回调，关闭围栏阻止迟到回执复活。兼容旧账本缺失的新字段，新增 4 个真实 Atomic 文件 Android 回归，覆盖恢复、回滚、释放和写失败；本独立基础批 formatter/diff 检查通过，全页最终 JVM/Android 测试编译待排队，设备端未执行。
