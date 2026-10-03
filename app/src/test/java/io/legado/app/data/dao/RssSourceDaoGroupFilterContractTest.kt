@@ -11,10 +11,6 @@ class RssSourceDaoGroupFilterContractTest {
         normalizedSource("src/main/java/io/legado/app/data/dao/RssSourceDao.kt")
     }
 
-    private val fragmentSource by lazy {
-        normalizedSource("src/main/java/io/legado/app/ui/main/rss/RssFragment.kt")
-    }
-
     private val groupQuery by lazy {
         queryBefore("fun flowGroupSearch(sourceGroup: String)")
     }
@@ -62,9 +58,6 @@ class RssSourceDaoGroupFilterContractTest {
         )
         assertFalse(groupFilter.contains(" like ", ignoreCase = true))
 
-        assertTrue(fragmentSource.contains("val key = searchKey.substringAfter(\"group:\")"))
-        assertTrue(fragmentSource.contains("rssSourceDao.flowEnabledByGroup(key)"))
-        assertFalse(fragmentSource.contains("flowEnabledByGroup(\"%"))
     }
 
     private fun queryBefore(functionMarker: String): String {

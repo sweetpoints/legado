@@ -1,25 +1,20 @@
 package io.legado.app.ui.main.rss
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
+import android.view.LayoutInflater
 import android.view.View
-import androidx.appcompat.widget.SearchView
+import android.view.ViewGroup
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
-import io.legado.app.base.VMBaseFragment
-import io.legado.app.constant.AppLog
-import io.legado.app.data.AppDatabase
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.RssSource
-import io.legado.app.databinding.FragmentRssBinding
-import io.legado.app.databinding.ItemRssBinding
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import io.legado.app.data.repository.*
+import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.rss.article.ReadRecordDialog
 import io.legado.app.ui.rss.article.RssSortActivity
@@ -28,217 +23,43 @@ import io.legado.app.ui.rss.read.ReadRssActivity
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.rss.subscription.RuleSubActivity
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
+import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
-import io.legado.app.ui.login.SourceLoginActivity
 
-/**
- * 订阅界面
- */
-class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainFragmentInterface,
-    RssAdapter.CallBack {
-
-    constructor(position: Int) : this() {
-        val bundle = Bundle()
-        bundle.putInt("position", position)
-        arguments = bundle
-    }
-
+/** Keep Main's Fragment/position entry point while the entire destination is Compose. */
+class RssFragment() : Fragment(), MainFragmentInterface {
+    constructor(position: Int) : this() { arguments = Bundle().apply { putInt("position", position) } }
     override val position: Int? get() = arguments?.getInt("position")
-
-    private val binding by viewBinding(FragmentRssBinding::bind)
-    override val viewModel by viewModels<RssViewModel>()
-    private val adapter by lazy {
-        RssAdapter(requireContext(), this, this, viewLifecycleOwner.lifecycle)
+    internal val homeModel by viewModels<MainRssViewModel> {
+        viewModelFactory { initializer { MainRssViewModel(AppMainRssRepository(), FileMainRssSessionRepository(),
+            createSavedStateHandle().apply { keys().filterNot { it.startsWith("mainRss.") }.forEach { remove<Any?>(it) } }) } }
     }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private var groupsFlowJob: Job? = null
-    private var rssFlowJob: Job? = null
-    private val groups = linkedSetOf<String>()
-    private var groupsMenu: SubMenu? = null
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        initSearchView()
-        initRecyclerView()
-        initGroupData()
-        upRssFlowJob()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_rss, menu)
-        groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupsMenu()
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
-            R.id.menu_read_record -> showDialogFragment<ReadRecordDialog>()
-            R.id.menu_rss_config -> startActivity<RssSourceActivity>()
-            R.id.menu_rss_star -> startActivity<RssFavoritesActivity>()
-            else -> if (item.groupId == R.id.menu_group_text) {
-                searchView.setQuery("group:${item.title}", true)
-            }
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent { LegadoComposeTheme {
+                val context = LocalContext.current
+                val images = remember(context) { GlideRssArticleImageRepository(context) }
+                MainRssRoute(homeModel, images, ::ready, ::native)
+            } }
         }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        searchView.clearFocus()
-    }
-
-    private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
-        subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
-            subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
+    private fun ready() = isAdded && isResumed && activity?.isFinishing == false && !parentFragmentManager.isStateSaved
+    private fun native(request: MainRssPrepared, readerTicket: String?) {
+        when (MainRssAction.valueOf(request.action)) {
+            MainRssAction.Open -> request.navigation?.let { navigation -> when (navigation.destination) {
+                MainRssDestination.Categories -> startActivity<RssSortActivity> { putExtra("sourceUrl", navigation.sourceUrl) }
+                MainRssDestination.ReaderLink -> ReadRssActivity.startPrepared(requireContext(), requireNotNull(readerTicket))
+                MainRssDestination.ReaderHtml -> ReadRssActivity.startPrepared(requireContext(), requireNotNull(readerTicket))
+                MainRssDestination.External -> navigation.value?.let { requireContext().openUrl(it) }
+            } }
+            MainRssAction.Edit -> request.sourceUrl?.let { url -> startActivity<RssSourceEditActivity> { putExtra("sourceUrl", url) } }
+            MainRssAction.Login -> request.sourceUrl?.let { url -> startActivity<SourceLoginActivity> { putExtra("type", "rssSource"); putExtra("key", url) } }
+            MainRssAction.Subscriptions -> startActivity<RuleSubActivity>()
+            MainRssAction.History -> showDialogFragment<ReadRecordDialog>()
+            MainRssAction.Favorites -> startActivity<RssFavoritesActivity>()
+            MainRssAction.Settings -> startActivity<RssSourceActivity>()
         }
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.rss)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                upRssFlowJob(newText)
-                return false
-            }
-        })
-    }
-
-    private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.adapter = adapter
-        adapter.addHeaderView {
-            ItemRssBinding.inflate(layoutInflater, it, false).apply {
-                tvName.setText(R.string.rule_subscription)
-                ivIcon.setImageResource(R.drawable.image_legado)
-                root.setOnClickListener {
-                    startActivity<RuleSubActivity>()
-                }
-            }
-        }
-    }
-
-    private fun initGroupData() {
-        groupsFlowJob?.cancel()
-        groupsFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            appDb.rssSourceDao.flowEnabledGroups().catch {
-                AppLog.put("订阅界面获取分组数据失败\n${it.localizedMessage}", it)
-            }.flowWithLifecycleAndDatabaseChange(
-                viewLifecycleOwner.lifecycle,
-                Lifecycle.State.RESUMED,
-                AppDatabase.RSS_SOURCE_TABLE_NAME
-            ).conflate().collect {
-                groups.clear()
-                groups.addAll(it)
-                upGroupsMenu()
-            }
-        }
-    }
-
-    private fun upRssFlowJob(searchKey: String? = null) {
-        rssFlowJob?.cancel()
-        rssFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            when {
-                searchKey.isNullOrEmpty() -> appDb.rssSourceDao.flowEnabled()
-                searchKey.startsWith("group:") -> {
-                    val key = searchKey.substringAfter("group:")
-                    appDb.rssSourceDao.flowEnabledByGroup(key)
-                }
-
-                else -> appDb.rssSourceDao.flowEnabled(searchKey)
-            }.flowWithLifecycleAndDatabaseChange(
-                viewLifecycleOwner.lifecycle,
-                Lifecycle.State.RESUMED,
-                AppDatabase.RSS_SOURCE_TABLE_NAME
-            ).catch {
-                AppLog.put("订阅界面更新数据出错", it)
-            }.flowOn(IO).collect {
-                adapter.setItems(it)
-            }
-        }
-    }
-
-    override fun openRss(rssSource: RssSource) {
-        if (rssSource.singleUrl) {
-            viewModel.getSingleUrl(rssSource) { url ->
-                if (url.startsWith("http", true)) {
-                    ReadRssActivity.start(
-                        requireContext(),
-                        true,
-                        rssSource.sourceUrl,
-                        rssSource.sourceName,
-                        url
-                    )
-                } else {
-                    context?.openUrl(url)
-                }
-            }
-        } else {
-            viewModel.launchRssWithHtml(rssSource, {
-                startActivity<RssSortActivity> {
-                    putExtra("sourceUrl", rssSource.sourceUrl)
-                }
-            }) { html ->
-                ReadRssActivity.start(
-                    requireContext(),
-                    true,
-                    rssSource.sourceUrl,
-                    rssSource.sourceName,
-                    startHtml = html
-                )
-            }
-        }
-    }
-
-    override fun toTop(rssSource: RssSource) {
-        viewModel.topSource(rssSource)
-    }
-
-    override fun login(rssSource: RssSource) {
-        startActivity<SourceLoginActivity> {
-            putExtra("type", "rssSource")
-            putExtra("key", rssSource.sourceUrl)
-        }
-    }
-
-    override fun edit(rssSource: RssSource) {
-        startActivity<RssSourceEditActivity> {
-            putExtra("sourceUrl", rssSource.sourceUrl)
-        }
-    }
-
-    override fun del(rssSource: RssSource) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + rssSource.sourceName)
-            noButton()
-            yesButton {
-                viewModel.del(rssSource)
-            }
-        }
-    }
-
-    override fun disable(rssSource: RssSource) {
-        viewModel.disable(rssSource)
     }
 }

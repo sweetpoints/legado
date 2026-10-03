@@ -18,7 +18,6 @@ class SourcePopupActionMigrationTest {
         assertContains(BOOK_SOURCE, readProjectFile(BOOK_SOURCE), "danger(\"delete\")")
 
         assertContains(EXPLORE, readProjectFile(EXPLORE), "danger(\"delete\")")
-        assertContains(RSS, readProjectFile(RSS), "danger(\"delete\")")
         legacyMenuFiles.forEach { path ->
             assertFalse(
                 "$path should be removed",
@@ -41,11 +40,6 @@ class SourcePopupActionMigrationTest {
             EXPLORE,
             readProjectFile(EXPLORE),
             "item(context.getString(R.string.login), \"login\", source.hasLoginUrl)"
-        )
-        assertContains(
-            RSS,
-            readProjectFile(RSS),
-            "item(context.getString(R.string.login), \"login\", !rssSource.loginUrl.isNullOrBlank())"
         )
     }
 
@@ -74,14 +68,6 @@ class SourcePopupActionMigrationTest {
             "R.string.refresh",
             "R.string.delete"
         )
-        assertOrdered(
-            RSS,
-            "R.string.edit",
-            "R.string.to_top",
-            "R.string.login",
-            "R.string.disable_source",
-            "R.string.delete"
-        )
     }
 
     @Test
@@ -108,14 +94,6 @@ class SourcePopupActionMigrationTest {
             "\"login\" -> context.startActivity<SourceLoginActivity>",
             "\"refresh\" -> refreshExplore(source, position, binding)",
             "\"delete\" -> callBack.deleteSource(source)"
-        )
-        assertActions(
-            RSS,
-            "\"edit\" -> callBack.edit(rssSource)",
-            "\"top\" -> callBack.toTop(rssSource)",
-            "\"login\" -> callBack.login(rssSource)",
-            "\"disable\" -> callBack.disable(rssSource)",
-            "\"delete\" -> callBack.del(rssSource)"
         )
     }
 
@@ -147,8 +125,7 @@ class SourcePopupActionMigrationTest {
     private companion object {
         const val BOOK_SOURCE = "src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt"
         const val EXPLORE = "src/main/java/io/legado/app/ui/main/explore/ExploreAdapter.kt"
-        const val RSS = "src/main/java/io/legado/app/ui/main/rss/RssAdapter.kt"
-        val sourceMenuFiles = listOf(BOOK_SOURCE, EXPLORE, RSS)
+        val sourceMenuFiles = listOf(BOOK_SOURCE, EXPLORE)
         val legacyMenuFiles = listOf(
             "src/main/res/menu/book_source_item.xml",
             "src/main/res/menu/change_source_item.xml",
