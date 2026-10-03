@@ -28,14 +28,19 @@ class MangaEpaperViewModel(
     private var edited = savedState.get<Boolean>(EDITED) == true
     private var dismissed = false
     private val restored = savedState.contains(THRESHOLD)
-    private val mutableState = MutableStateFlow(MangaEpaperUiState(
-        threshold = (savedState.get<Int>(THRESHOLD) ?: 150).coerceIn(0, 255),
-        isLoading = !restored,
-    ))
+    private val mutableState =
+        MutableStateFlow(
+            MangaEpaperUiState(
+                threshold = (savedState.get<Int>(THRESHOLD) ?: 150).coerceIn(0, 255),
+                isLoading = !restored,
+            )
+        )
     val state = mutableState.asStateFlow()
     private var loadJob: Job? = null
 
-    init { if (!restored) load() }
+    init {
+        if (!restored) load()
+    }
 
     fun load() {
         if (dismissed || loadJob?.isActive == true) return
@@ -53,7 +58,9 @@ class MangaEpaperViewModel(
                 throw error
             } catch (error: Exception) {
                 coroutineContext.ensureActive()
-                mutableState.update { it.copy(isLoading = false, error = error.localizedMessage ?: error.toString()) }
+                mutableState.update {
+                    it.copy(isLoading = false, error = error.localizedMessage ?: error.toString())
+                }
             }
         }
     }

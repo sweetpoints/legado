@@ -33,20 +33,35 @@ fun MangaEpaperScreen(
 ) {
     Surface(modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(stringResource(R.string.manga_epaper_stting), style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary)
-            Text("${stringResource(R.string.manga_epaper_value)}: ${state.threshold}",
-                modifier = Modifier.padding(top = 16.dp).testTag("manga-epaper-value"))
+            Text(
+                stringResource(R.string.manga_epaper_stting),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "${stringResource(R.string.manga_epaper_value)}: ${state.threshold}",
+                modifier = Modifier.padding(top = 16.dp).testTag("manga-epaper-value"),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onThresholdChanged(state.threshold - 1) }, enabled = state.threshold > 0,
-                    modifier = Modifier.testTag("manga-epaper-minus")) {
+                IconButton(
+                    onClick = { onThresholdChanged(state.threshold - 1) },
+                    enabled = state.threshold > 0,
+                    modifier = Modifier.testTag("manga-epaper-minus"),
+                ) {
                     Icon(painterResource(R.drawable.ic_reduce), stringResource(R.string.reduce))
                 }
-                Slider(value = state.threshold.toFloat(), onValueChange = { onThresholdChanged(it.roundToInt()) },
-                    valueRange = 0f..255f, steps = 254,
-                    modifier = Modifier.weight(1f).testTag("manga-epaper-slider"))
-                IconButton(onClick = { onThresholdChanged(state.threshold + 1) }, enabled = state.threshold < 255,
-                    modifier = Modifier.testTag("manga-epaper-plus")) {
+                Slider(
+                    value = state.threshold.toFloat(),
+                    onValueChange = { onThresholdChanged(it.roundToInt()) },
+                    valueRange = 0f..255f,
+                    steps = 254,
+                    modifier = Modifier.weight(1f).testTag("manga-epaper-slider"),
+                )
+                IconButton(
+                    onClick = { onThresholdChanged(state.threshold + 1) },
+                    enabled = state.threshold < 255,
+                    modifier = Modifier.testTag("manga-epaper-plus"),
+                ) {
                     Icon(painterResource(R.drawable.ic_add), stringResource(R.string.plus))
                 }
             }

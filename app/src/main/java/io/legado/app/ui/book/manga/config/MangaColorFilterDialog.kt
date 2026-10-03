@@ -18,11 +18,17 @@ import io.legado.app.data.preferences.PreferenceMangaColorFilterRepository
 import io.legado.app.utils.setLayout
 
 class MangaColorFilterDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<MangaColorFilterViewModel> {
-        viewModelFactory { initializer {
-            MangaColorFilterViewModel(PreferenceMangaColorFilterRepository(), createSavedStateHandle())
-        } }
-    }
+    private val viewModel by
+        viewModels<MangaColorFilterViewModel> {
+            viewModelFactory {
+                initializer {
+                    MangaColorFilterViewModel(
+                        PreferenceMangaColorFilterRepository(),
+                        createSavedStateHandle(),
+                    )
+                }
+            }
+        }
 
     override fun onStart() {
         super.onStart()
@@ -33,8 +39,12 @@ class MangaColorFilterDialog : BaseComposeDialogFragment() {
 
     @Composable
     override fun Content() {
-        MangaColorFilterRoute(viewModel, { (activity as? Callback)?.updateColorFilter(it) },
-            Modifier.fillMaxWidth().heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f))
+        MangaColorFilterRoute(
+            viewModel,
+            { (activity as? Callback)?.updateColorFilter(it) },
+            Modifier.fillMaxWidth()
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 
     override fun onDismiss(dialog: DialogInterface) {

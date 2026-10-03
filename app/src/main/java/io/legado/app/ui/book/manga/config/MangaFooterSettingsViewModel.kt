@@ -8,14 +8,23 @@ import io.legado.app.data.preferences.MangaFooterSettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class MangaFooterField { ChapterLabel, Chapter, ChapterName, PageLabel, Page, ProgressLabel, Progress }
+enum class MangaFooterField {
+    ChapterLabel,
+    Chapter,
+    ChapterName,
+    PageLabel,
+    Page,
+    ProgressLabel,
+    Progress,
+}
 
 class MangaFooterSettingsViewModel(
     private val repository: MangaFooterSettingsRepository,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val restored = savedState.get<String>(DRAFT_KEY)
-    private val mutableState = MutableStateFlow(restored?.let(MangaFooterJson::decode) ?: repository.load())
+    private val mutableState =
+        MutableStateFlow(restored?.let(MangaFooterJson::decode) ?: repository.load())
     val state = mutableState.asStateFlow()
     private var finished = false
 
@@ -34,10 +43,14 @@ class MangaFooterSettingsViewModel(
             MangaFooterField.Progress -> it.copy(hideProgressRatio = hidden)
         }
     }
+
     fun setFooterHidden(hidden: Boolean) = change { it.copy(hideFooter = hidden) }
+
     fun setOrientation(orientation: Int) {
-        if (orientation == 0 || orientation == 1) change { it.copy(footerOrientation = orientation) }
+        if (orientation == 0 || orientation == 1)
+            change { it.copy(footerOrientation = orientation) }
     }
+
     private fun change(update: (MangaFooterDraft) -> MangaFooterDraft) {
         if (finished) return
         val draft = update(state.value)
@@ -58,5 +71,7 @@ class MangaFooterSettingsViewModel(
         finished = true
     }
 
-    companion object { private const val DRAFT_KEY = "manga.footer.draft" }
+    companion object {
+        private const val DRAFT_KEY = "manga.footer.draft"
+    }
 }

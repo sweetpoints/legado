@@ -24,8 +24,11 @@ fun MangaEpaperRoute(
     val updateReader by rememberUpdatedState(onThresholdChanged)
     LaunchedEffect(viewModel, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            viewModel.state.filter { !it.isLoading && it.error == null }
-                .map { it.threshold }.distinctUntilChanged().collect { updateReader(it) }
+            viewModel.state
+                .filter { !it.isLoading && it.error == null }
+                .map { it.threshold }
+                .distinctUntilChanged()
+                .collect { updateReader(it) }
         }
     }
     MangaEpaperScreen(state, viewModel::setThreshold, viewModel::load, modifier)

@@ -23,7 +23,11 @@ internal fun MangaColorFilterRoute(
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             var deliveredRevision = -1
             viewModel.state.collect {
-                if (!it.finished && it.previewRevision > 0 && it.previewRevision != deliveredRevision) {
+                if (
+                    !it.finished &&
+                        it.previewRevision > 0 &&
+                        it.previewRevision != deliveredRevision
+                ) {
                     deliveredRevision = it.previewRevision
                     preview(it.values.toReaderConfig())
                 }

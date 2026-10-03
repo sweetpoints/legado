@@ -17,11 +17,14 @@ import io.legado.app.data.preferences.AppMangaEpaperPreferences
 import io.legado.app.utils.setLayout
 
 class MangaEpaperDialog : BaseComposeDialogFragment() {
-    private val viewModel by viewModels<MangaEpaperViewModel> {
-        viewModelFactory {
-            initializer { MangaEpaperViewModel(AppMangaEpaperPreferences(), createSavedStateHandle()) }
+    private val viewModel by
+        viewModels<MangaEpaperViewModel> {
+            viewModelFactory {
+                initializer {
+                    MangaEpaperViewModel(AppMangaEpaperPreferences(), createSavedStateHandle())
+                }
+            }
         }
-    }
 
     override fun onStart() {
         super.onStart()
@@ -31,8 +34,11 @@ class MangaEpaperDialog : BaseComposeDialogFragment() {
 
     @Composable
     override fun Content() {
-        MangaEpaperRoute(viewModel, { (activity as? Callback)?.updateEepaper(it) },
-            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f))
+        MangaEpaperRoute(
+            viewModel,
+            { (activity as? Callback)?.updateEepaper(it) },
+            Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.8f),
+        )
     }
 
     override fun onDismiss(dialog: DialogInterface) {
