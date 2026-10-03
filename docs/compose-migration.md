@@ -1598,3 +1598,13 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
   the remaining LabelsBar flexbox business assertions stay intact.
 - Added the explicit Flow collection import required by Explore's Route. Formatter/check and
   diff checks passed; the complete candidate is entering the coordinated final build slot.
+
+### Explore position persistence recovery
+
+- The first complete candidate passed all 3,876 JVM tests with zero failures/errors, and Android
+  test Kotlin compilation passed (61 seconds; /private/tmp/legado-explore-compose-final-build.log).
+- A subsequent source audit found that a scroll-only checkpoint IO failure could escape its
+  coroutine. Added a bounded error state that keeps rows/last durable anchor usable and permits
+  the next scroll to retry; added a seventeenth state behavior case for failure then recovery.
+- Formatter/check and diff checks passed. The exact follow-up commit will repeat both full tasks
+  before integration. No Android device scenarios or release shrinker have been executed for it.

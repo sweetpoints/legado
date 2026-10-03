@@ -402,6 +402,27 @@ class ExploreResultsViewModelTest {
         assertTrue(repository.pages.isEmpty())
     }
 
+    @Test
+    fun failedScrollCheckpointKeepsRowsUsableAndNextScrollCanRetry() = test {
+        val disk = Sessions(ExploreResultsCheckpoint(request, rows = listOf(row("a"))))
+        val model = model(disk = disk)
+        model.load()
+        runCurrent()
+        model.scrolled(model.state.value.scrollRequest)
+        disk.rejectScroll = true
+        model.scroll("a", 4, 17)
+        runCurrent()
+        assertEquals("scroll disk failure", model.state.value.loadError)
+        assertEquals(listOf("a"), model.state.value.rows.map { it.bookUrl })
+        assertEquals(0, disk.value!!.scrollIndex)
+        disk.rejectScroll = false
+        model.scroll("a", 4, 17)
+        runCurrent()
+        assertNull(model.state.value.loadError)
+        assertEquals(4, disk.value!!.scrollIndex)
+        assertEquals(17, disk.value!!.scrollOffset)
+    }
+
     private fun copy(saved: SavedStateHandle): SavedStateHandle =
         SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
 
@@ -422,6 +443,7 @@ class ExploreResultsViewModelTest {
     private class Sessions(var value: ExploreResultsCheckpoint? = null) :
         ExploreResultsSessionRepository {
         var rejectReceipts = false
+        var rejectScroll = false
 
         override suspend fun prepare(sourceUrl: String, title: String, exploreUrl: String): String =
             UUID.randomUUID().toString()
@@ -432,6 +454,7 @@ class ExploreResultsViewModelTest {
             sessionId: String,
             checkpoint: ExploreResultsCheckpoint,
         ): Boolean {
+            if (rejectScroll && checkpoint.scrollIndex > 0) error("scroll disk failure")
             if (rejectReceipts && checkpoint.addedCount != null) error("receipt disk failure")
             if (value != null && value!!.revision >= checkpoint.revision) return false
             value = checkpoint

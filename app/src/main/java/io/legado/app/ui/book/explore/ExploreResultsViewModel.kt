@@ -426,13 +426,25 @@ class ExploreResultsViewModel(
         val previousWrite = scrollWriteJob
         val epoch = generation
         scrollWriteJob = viewModelScope.launch {
-            previousWrite?.join()
-            update(epoch) {
-                it.copy(
-                    scrollKey = key,
-                    scrollIndex = index.coerceAtLeast(0),
-                    scrollOffset = offset.coerceAtLeast(0),
+            try {
+                previousWrite?.join()
+                if (
+                    update(epoch) {
+                        it.copy(
+                            scrollKey = key,
+                            scrollIndex = index.coerceAtLeast(0),
+                            scrollOffset = offset.coerceAtLeast(0),
+                        )
+                    }
                 )
+                    mutableState.value = state.value.copy(loadError = null)
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                // A failed position checkpoint must leave the visible list usable. Keep the last
+                // durable anchor and allow the next scroll to retry instead of crashing Main.
+                if (owns(epoch))
+                    mutableState.value =
+                        state.value.copy(loadError = error.message ?: error.toString())
             }
         }
     }
