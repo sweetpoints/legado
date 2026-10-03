@@ -1461,3 +1461,8 @@ Image exports, current-chapter cache refresh, and shelf removal now delegate to 
 ### Manga engine repository extraction
 
 Reader initialization, chapter list replacement, book-info loading, automatic source search, source migration, cloud progress application, and chapter opening now reside in `MangaReaderEngineRepository`. It consumes captured launch values rather than an Android Intent and executes the original WebBook/BookHelp/ReadManga business rules in the caller-owned scope. The existing ViewModel keeps its public methods as thin delegates while the immutable controller is introduced. Source-search and sync notifications use a callback so the forthcoming controller can publish immutable effects. Cancellation is checked before publishing a fetched chapter list or accepting fetched book details. Formatting and diff checks pass; final candidate build validation remains pending.
+
+
+### Manga immutable session controller
+
+The session controller serializes immutable checkpoints and native request receipts. SavedState consumers will retain only its private-file UUID. Native claims require a resumed owner and are written before synchronous platform dispatch; cancellation during accepted IO cannot strand the receipt before dispatch. Duplicate concurrent claims dispatch once, completion records a terminal phase, platform-launch failure records cancellation, and owner release prevents further controller writes. JVM tests exercise concurrent claims with a full large URL, cancellation held inside accepted IO, and release against late checkpoints. Formatting/checks pass; final complete candidate Gradle validation is pending.
