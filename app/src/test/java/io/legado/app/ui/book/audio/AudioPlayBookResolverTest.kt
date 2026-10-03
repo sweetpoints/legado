@@ -179,16 +179,18 @@ class AudioPlayBookResolverTest {
             projectFile("src/main/java/io/legado/app/ui/book/audio/AudioPlayRepository.kt")
                 .readText()
 
-        assertTrue(viewModel.containsCode("private suspend fun initBook(book: Book): Boolean"))
+        assertTrue(
+            viewModel.containsCode("private suspend fun initBook(book: Book, owner: Long): Boolean")
+        )
         assertTrue(
             viewModel.containsCode(
-                "if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book))"
+                "if (AudioPlay.chapterSize == 0 && workingBook.tocUrl.isEmpty())"
             )
         )
         assertTrue(
-            viewModel.containsCode("if (AudioPlay.chapterSize == 0 && !loadChapterList(book))")
+            viewModel.containsCode("loadChapterList(workingBook, source, owner, engineIdentity)")
         )
-        assertTrue(viewModel.containsCode("if (cList.isEmpty()) return false"))
+        assertTrue(viewModel.containsCode("if (chapters.isEmpty()) return false"))
         assertTrue(viewModel.containsCode("return false"))
     }
 

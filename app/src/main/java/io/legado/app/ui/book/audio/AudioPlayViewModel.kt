@@ -37,6 +37,7 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
         mutableState.update { it.change() }
     }
 
+    private var requestOwner: Long? = null
     private var requestGeneration = 0L
     private var initTask: Job? = null
     private var lyricTask: Job? = null
@@ -176,9 +177,13 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
                 shelfAdded = false,
             )
         }
+        val owner = repository.beginRequest()
+        requestOwner = owner
         initTask = viewModelScope.launch {
             try {
-                when (repository.initialize(bookUrl)) {
+                val initialized = repository.initialize(bookUrl, owner)
+                if (!repository.ownsRequest(owner)) return@launch
+                when (initialized) {
                     true -> {
                         snapshot()
                         update { copy(ready = true) }
@@ -203,8 +208,10 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun upSource() {
+        val owner = requestOwner ?: return
         viewModelScope.launch {
-            repository.source()
+            repository.source(owner)
+            if (!repository.ownsRequest(owner)) return@launch
             snapshot()
         }
     }
@@ -212,10 +219,11 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
     fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>, onSuccess: () -> Unit) {
         val oldBook = AudioPlay.book
         val generation = requestGeneration
+        val owner = requestOwner ?: return
         // Once a source migration is accepted, deliver its business completion even if the host
         // rotates.
         acceptedWrite {
-            repository.changeSource(oldBook, source, book, toc)
+            repository.changeSource(oldBook, source, book, toc, owner)
             if (generation == requestGeneration) snapshot()
             onSuccess()
         }
@@ -244,5 +252,10 @@ class AudioPlayViewModel(application: Application) : AndroidViewModel(applicatio
             repository.removeFromBookshelf(book)
             if (AudioPlay.book?.bookUrl == book.bookUrl) update { copy(closeRequested = true) }
         }
+    }
+
+    override fun onCleared() {
+        requestOwner?.let(repository::retireRequest)
+        super.onCleared()
     }
 }

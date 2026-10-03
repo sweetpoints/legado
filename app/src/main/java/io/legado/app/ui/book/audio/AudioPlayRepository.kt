@@ -34,11 +34,23 @@ import kotlinx.coroutines.withContext
 internal class AudioPlayRepository(private val context: Application) {
     companion object {
         private val engineWrites = Mutex()
+        private val requests = AudioRequestGate()
     }
 
-    suspend fun initialize(requestedBookUrl: String?): Boolean? =
+    fun beginRequest(): Long = requests.claim()
+
+    fun retireRequest(owner: Long) = requests.retire(owner)
+
+    fun ownsRequest(owner: Long): Boolean = requests.current(owner)
+
+    private fun identity(book: Book?): String? = book?.let {
+        "${it.bookUrl.length}:${it.bookUrl}${it.origin}"
+    }
+
+    suspend fun initialize(requestedBookUrl: String?, owner: Long): Boolean? =
         withContext(IO) {
             engineWrites.withLock {
+                if (!requests.current(owner)) return@withLock null
                 val cachedBook = AudioPlay.book
                 val cachedInBookshelf = AudioPlay.inBookshelf
                 var databaseBook =
@@ -61,59 +73,85 @@ internal class AudioPlayRepository(private val context: Application) {
                         targetBook = checkNotNull(databaseBook)
                     } else targetBook = temporaryBook
                 }
-                AudioPlay.inBookshelf =
-                    if (requestedBookUrl.isNullOrBlank()) cachedInBookshelf
-                    else !(databaseBook ?: targetBook).isNotShelf
-                initBook(targetBook)
+                if (
+                    !requests.publish(owner) {
+                        AudioPlay.inBookshelf =
+                            if (requestedBookUrl.isNullOrBlank()) cachedInBookshelf
+                            else !(databaseBook ?: targetBook).isNotShelf
+                    }
+                )
+                    return@withLock null
+                initBook(targetBook, owner)
             }
         }
 
-    private suspend fun initBook(book: Book): Boolean {
-        val isSameBook = AudioPlay.book?.bookUrl == book.bookUrl
-        if (isSameBook) {
-            AudioPlay.upData(book, preserveProgress = true)
-        } else {
-            AudioPlay.resetData(book)
+    private suspend fun initBook(book: Book, owner: Long): Boolean {
+        val initial =
+            requests.publish(owner) {
+                if (AudioPlay.book?.bookUrl == book.bookUrl)
+                    AudioPlay.upData(book, preserveProgress = true)
+                else AudioPlay.resetData(book)
+            }
+        if (!initial) return false
+        var engineIdentity = identity(AudioPlay.book)
+        val workingBook = book.copy(readConfig = book.readConfig?.copy())
+        if (AudioPlay.chapterSize == 0 && workingBook.tocUrl.isEmpty()) {
+            val source = AudioPlay.bookSource ?: return false
+            if (!loadBookInfo(workingBook, source)) return false
+            if (
+                !requests.publish(owner, engineIdentity, { identity(AudioPlay.book) }) {
+                    // The parser works on a detached snapshot, so an old response cannot mutate the
+                    // engine.
+                    AudioPlay.book = workingBook.copy(readConfig = workingBook.readConfig?.copy())
+                }
+            )
+                return false
+            engineIdentity = identity(AudioPlay.book)
         }
-        if (AudioPlay.chapterSize == 0 && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
-            return false
+        if (!requests.current(owner)) return false
+        if (AudioPlay.chapterSize == 0) {
+            val source = AudioPlay.bookSource ?: return false
+            if (!loadChapterList(workingBook, source, owner, engineIdentity)) return false
         }
-        if (AudioPlay.chapterSize == 0 && !loadChapterList(book)) {
-            return false
-        }
-        return AudioPlay.chapterSize > 0
+        return requests.current(owner) && AudioPlay.chapterSize > 0
     }
 
-    private suspend fun loadBookInfo(book: Book): Boolean {
-        val bookSource = AudioPlay.bookSource ?: return false
+    private suspend fun loadBookInfo(book: Book, source: BookSource): Boolean {
         try {
-            WebBook.getBookInfoAwait(bookSource, book)
+            WebBook.getBookInfoAwait(source, book)
             return true
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
-        } catch (e: Exception) {
-            AppLog.put("详情页出错: ${e.localizedMessage}", e, true)
+        } catch (error: Exception) {
+            AppLog.put("详情页出错: ${error.localizedMessage}", error, true)
             return false
         }
     }
 
-    private suspend fun loadChapterList(book: Book): Boolean {
-        val bookSource = AudioPlay.bookSource ?: return false
+    private suspend fun loadChapterList(
+        book: Book,
+        source: BookSource,
+        owner: Long,
+        engineIdentity: String?,
+    ): Boolean {
         try {
-            val oldBook = book.copy()
-            val cList = WebBook.getChapterListAwait(bookSource, book).getOrThrow()
-            if (cList.isEmpty()) return false
-            if (oldBook.bookUrl == book.bookUrl) {
-                book.update()
-            } else {
-                appDb.bookDao.replace(oldBook, book)
+            val oldBook = book.copy(readConfig = book.readConfig?.copy())
+            val chapters = WebBook.getChapterListAwait(source, book).getOrThrow()
+            if (chapters.isEmpty()) return false
+            // Preserve an accepted database result even if a replacement request now owns the
+            // engine.
+            withContext(IO + NonCancellable) {
+                if (oldBook.bookUrl == book.bookUrl) book.update()
+                else appDb.bookDao.replace(oldBook, book)
+                appDb.bookChapterDao.delByBook(book.bookUrl)
+                appDb.bookChapterDao.insert(*chapters.toTypedArray())
             }
-            appDb.bookChapterDao.delByBook(book.bookUrl)
-            appDb.bookChapterDao.insert(*cList.toTypedArray())
-            AudioPlay.chapterSize = cList.size
-            AudioPlay.simulatedChapterSize = book.simulatedTotalChapterNum()
-            AudioPlay.upDurChapter()
-            return true
+            return requests.publish(owner, engineIdentity, { identity(AudioPlay.book) }) {
+                AudioPlay.book = book
+                AudioPlay.chapterSize = chapters.size
+                AudioPlay.simulatedChapterSize = book.simulatedTotalChapterNum()
+                AudioPlay.upDurChapter()
+            }
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -121,10 +159,14 @@ internal class AudioPlayRepository(private val context: Application) {
         }
     }
 
-    suspend fun source() =
+    suspend fun source(owner: Long) =
         withContext(IO) {
-            val source = AudioPlay.book?.getBookSource()
-            AudioPlay.setBookSource(source)
+            val book = AudioPlay.book
+            val expected = identity(book)
+            val source = book?.getBookSource()
+            requests.publish(owner, expected, { identity(AudioPlay.book) }) {
+                AudioPlay.setBookSource(source)
+            }
             source
         }
 
@@ -133,6 +175,7 @@ internal class AudioPlayRepository(private val context: Application) {
         source: BookSource,
         book: Book,
         toc: List<BookChapter>,
+        owner: Long,
     ) =
         withContext(IO + NonCancellable) {
             engineWrites.withLock {
@@ -144,7 +187,7 @@ internal class AudioPlayRepository(private val context: Application) {
                 if (wasNotShelf) book.addType(BookType.notShelf)
                 replaceBookAfterSourceChange(oldBook, book, toc)
                 // Finish the accepted DB migration, but do not retarget a newer playback request.
-                if (AudioPlay.book?.bookUrl == oldBook?.bookUrl) {
+                requests.publish(owner, identity(oldBook), { identity(AudioPlay.book) }) {
                     AudioPlay.replaceBook(book)
                     AudioPlay.inBookshelf = !wasNotShelf
                     AudioPlay.setBookSource(source)
