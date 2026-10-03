@@ -58,7 +58,7 @@ class TocHostSessionViewModel(
     private var reading: Job? = null
     private var expectedUrl: String? = null
 
-    fun bind(bookUrl: String) {
+    fun bind(bookUrl: String?) {
         if (expectedUrl == bookUrl && (reading?.isActive == true || state.value.ready)) return
         expectedUrl = bookUrl
         reading?.cancel()
@@ -75,7 +75,8 @@ class TocHostSessionViewModel(
                 revision = accepted.revision
                 saved["tocHost.revision"] = revision
                 val query = accepted.query
-                val changedOwner = previous != null && previous.bookUrl != bookUrl
+                val changedOwner = previous != null && previous.bookUrl != accepted.bookUrl
+                expectedUrl = accepted.bookUrl
                 if (changedOwner) {
                     saved["tocHost.tab"] = 0
                     saved["tocHost.searchOpen"] = false
@@ -84,7 +85,7 @@ class TocHostSessionViewModel(
                 mutable.value =
                     state.value.copy(
                         ready = true,
-                        bookUrl = bookUrl,
+                        bookUrl = accepted.bookUrl,
                         query = query,
                         tab = if (changedOwner) 0 else state.value.tab,
                         searchOpen = !changedOwner && state.value.searchOpen,
@@ -175,7 +176,7 @@ class TocHostSessionViewModel(
     }
 
     fun retry() {
-        if (state.value.ready) persist() else expectedUrl?.let(::bind)
+        if (state.value.ready) persist() else bind(expectedUrl)
     }
 
     fun stop() {

@@ -36,7 +36,17 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                 initializer {
                     TocHostSessionViewModel(
                         FileTocHostSessionRepository(),
-                        createSavedStateHandle().apply { remove<String>("bookUrl") },
+                        createSavedStateHandle().apply {
+                            remove<String>("bookUrl")
+                            remove<String>(TocNavigation.PREPARED_SESSION)
+                            if (get<String>("tocHost.session") == null) {
+                                intent.getStringExtra(TocNavigation.PREPARED_SESSION)?.let { ticket
+                                    ->
+                                    TocNavigation.validate(ticket)
+                                    this["tocHost.session"] = ticket
+                                }
+                            }
+                        },
                     )
                 }
             }
@@ -47,7 +57,10 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                 initializer {
                     TocHostViewModel(
                         AppTocHostRepository(),
-                        createSavedStateHandle().apply { remove<String>("bookUrl") },
+                        createSavedStateHandle().apply {
+                            remove<String>("bookUrl")
+                            remove<String>(TocNavigation.PREPARED_SESSION)
+                        },
                     )
                 }
             }
@@ -58,7 +71,10 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                 initializer {
                     TocChapterViewModel(
                         AppTocChapterRepository(),
-                        createSavedStateHandle().apply { remove<String>("bookUrl") },
+                        createSavedStateHandle().apply {
+                            remove<String>("bookUrl")
+                            remove<String>(TocNavigation.PREPARED_SESSION)
+                        },
                     )
                 }
             }
@@ -69,7 +85,10 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                 initializer {
                     TocBookmarksViewModel(
                         RoomTocBookmarksRepository(),
-                        createSavedStateHandle().apply { remove<String>("bookUrl") },
+                        createSavedStateHandle().apply {
+                            remove<String>("bookUrl")
+                            remove<String>(TocNavigation.PREPARED_SESSION)
+                        },
                     )
                 }
             }
@@ -80,7 +99,10 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                 initializer {
                     TocHighlightsViewModel(
                         RoomTocHighlightsRepository(),
-                        createSavedStateHandle().apply { remove<String>("bookUrl") },
+                        createSavedStateHandle().apply {
+                            remove<String>("bookUrl")
+                            remove<String>(TocNavigation.PREPARED_SESSION)
+                        },
                     )
                 }
             }
@@ -115,9 +137,12 @@ class TocActivity : BaseComposeActivity(), TxtTocRuleDialog.CallBack {
                     .apply { old.forEach(::remove) }
                     .commitNow()
             }
-        val bookUrl = intent.getStringExtra("bookUrl").orEmpty()
-        hostModel.load(bookUrl)
-        sessionModel.bind(bookUrl)
+        val bookUrl = intent.getStringExtra("bookUrl")
+        // Initialize the factory before retiring compatible public launch extras.
+        val session = sessionModel
+        intent.removeExtra("bookUrl")
+        intent.removeExtra(TocNavigation.PREPARED_SESSION)
+        session.bind(bookUrl)
         onBackPressedDispatcher.addCallback(this) { closeOrCollapseSearch() }
     }
 
