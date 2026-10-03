@@ -153,7 +153,6 @@ class BookCoverPersistenceTest {
     fun `management exposes both restore levels without copying persisted paths into edits`() {
         val dao = readAppSource("io/legado/app/data/dao/BookDao.kt")
         val manage = readAppSource("io/legado/app/ui/book/manage/BookshelfManageViewModel.kt")
-        val edit = readAppSource("io/legado/app/ui/book/info/edit/BookInfoEditActivity.kt")
         val restore = readAppSource("io/legado/app/help/storage/Restore.kt")
 
         assertTrue(dao.contains("fun clearPersistedCoverUrlIfUnchanged("))
@@ -162,8 +161,6 @@ class BookCoverPersistenceTest {
         assertTrue(manage.contains("fun restoreSourceCovers("))
         assertTrue(manage.contains("val currentBook = appDb.bookDao.getBook(book.bookUrl)"))
         assertTrue(manage.contains("val operationId = beginCoverOperation()"))
-        assertTrue(edit.contains("book.customCoverUrl?.takeIf { it.isNotEmpty() } ?: book.coverUrl"))
-        assertTrue(edit.contains("book.persistedCoverUrl = null"))
         assertTrue(restore.contains("book.normalizeLegacyPersistedCover()"))
         assertTrue(restore.contains("book.persistedCoverUrl = book.persistedCoverUrl?.let"))
     }

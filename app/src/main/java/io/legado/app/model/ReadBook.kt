@@ -287,6 +287,15 @@ object ReadBook : CoroutineScope by MainScope() {
         highlightsVersion++
     }
 
+    /** Publish an IO-prepared result only while its reader still owns the active book. */
+    fun applyPreparedHighlights(bookUrl: String, prepared: List<BookHighlight>): Boolean {
+        if (book?.bookUrl != bookUrl) return false
+        invalidateHighlightSpacing()
+        highlights = prepared.toList()
+        highlightsVersion++
+        return true
+    }
+
     fun loadHighlightRules(book: Book) {
         invalidateHighlightRuleMatches()
         highlightRules = appDb.highlightRuleDao.findEnabledByBook(book.name, book.origin)

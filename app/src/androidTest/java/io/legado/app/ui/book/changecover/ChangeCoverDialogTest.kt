@@ -2,8 +2,6 @@ package io.legado.app.ui.book.changecover
 
 import android.content.Context
 import android.content.Intent
-import androidx.lifecycle.ViewModelProvider
-import io.legado.app.ui.book.info.edit.BookInfoEditViewModel
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -28,9 +26,10 @@ class ChangeCoverDialogTest {
             scenario.onActivity { ChangeCoverDialog(book.name, "作者：${book.author} 著").show(it.supportFragmentManager, "change-cover") }
             waitDefault(); scenario.recreate(); waitDefault()
             compose.onNodeWithTag("change-cover-item-default").performClick()
-            compose.waitUntil { var received = false; scenario.onActivity { received = model(it).book?.customCoverUrl == "use_default_cover" }; received }
+            compose.waitUntil { var received = false; scenario.onActivity { received = model(it).state.value.draft?.input?.cover == "use_default_cover" }; received }
             scenario.onActivity {
-                assertNull(model(it).book?.persistedCoverUrl)
+                assertTrue(model(it).state.value.draft!!.input!!.refreshCover)
+                assertEquals(model(it).state.value.draft!!.input!!.cover,model(it).state.value.draft!!.preview!!.path)
                 it.supportFragmentManager.executePendingTransactions(); assertNull(it.supportFragmentManager.findFragmentByTag("change-cover"))
             }
         }
@@ -41,20 +40,21 @@ class ChangeCoverDialogTest {
             scenario.onActivity { ChangeCoverDialog(book.name, book.author).show(it.supportFragmentManager, "change-cover") }
             waitDefault(); compose.onNodeWithTag("change-cover-close").performClick()
             scenario.onActivity {
-                it.supportFragmentManager.executePendingTransactions(); assertNull(model(it).book?.customCoverUrl)
+                it.supportFragmentManager.executePendingTransactions(); assertTrue(model(it).state.value.draft!!.input!!.changed.isEmpty())
                 ChangeCoverDialog(book.name, book.author).show(it.supportFragmentManager, "change-cover")
             }
             waitDefault()
             val sourceBook = "${book.bookUrl}/candidate/1"
             compose.onNodeWithTag("change-cover-item-book:$sourceBook").performClick()
-            compose.waitUntil { var received = false; scenario.onActivity { received = model(it).book?.customCoverUrl == "/nonexistent-cover-1.jpg" }; received }
-            scenario.onActivity { assertNull(model(it).book?.persistedCoverUrl) }
+            compose.waitUntil { var received = false; scenario.onActivity { received = model(it).state.value.draft?.input?.cover == "/nonexistent-cover-1.jpg" }; received }
+            scenario.onActivity { assertTrue(model(it).state.value.draft!!.input!!.refreshCover)
+                assertEquals(model(it).state.value.draft!!.input!!.cover,model(it).state.value.draft!!.preview!!.path) }
         }
     }
-    private fun model(activity: BookInfoEditActivity) = ViewModelProvider(activity)[BookInfoEditViewModel::class.java]
+    private fun model(activity: BookInfoEditActivity) = activity.viewModel
     private fun intent(book: Book) = Intent(ApplicationProvider.getApplicationContext<Context>(), BookInfoEditActivity::class.java).putExtra("bookUrl", book.bookUrl)
     private fun waitBook(scenario: ActivityScenario<BookInfoEditActivity>) = compose.waitUntil {
-        var loaded = false; scenario.onActivity { loaded = model(it).book != null }; loaded
+        var loaded = false; scenario.onActivity { loaded = model(it).state.value.loaded }; loaded
     }
     private fun waitDefault() = compose.waitUntil { compose.onAllNodesWithTag("change-cover-item-default").fetchSemanticsNodes().isNotEmpty() }
     private fun withBook(body: (Book) -> Unit) {

@@ -13,8 +13,8 @@ import java.util.UUID
 data class BookMetadataCursor(val start:Int=0,val end:Int=0)
 data class BookMetadataEditorState(val draft:BookMetadataDraft?=null,val loading:Boolean=true,
     val loaded:Boolean=false,val busy:Boolean=false,val saveFailed:Boolean=false,val error:String?=null,
-    val cursors:Map<BookMetadataField,BookMetadataCursor> = emptyMap(),val closed:Boolean=false) {
-    val finished:Boolean get()=draft?.finished==true
+    val cursors:Map<BookMetadataField,BookMetadataCursor> = emptyMap(),val closed:Boolean=false,val completed:Boolean=false) {
+    val finished:Boolean get()=draft?.finished==true || completed
     val canEdit:Boolean get()=loaded && !busy && !closed && !saveFailed && draft?.pendingSave==null && draft?.completion==null && !finished
 }
 
@@ -23,7 +23,7 @@ class BookMetadataEditorViewModel(private val saved:SavedStateHandle,
     private val covers:BookMetadataCoverImportRepository,private val initialBookUrl:String?,
     private val cleanupScope:CoroutineScope?=null) : ViewModel() {
     val ticket:String=saved.get<String>(KEY) ?: UUID.randomUUID().toString().also{saved[KEY]=it}
-    private val mutable=MutableStateFlow(BookMetadataEditorState(closed=saved.get<Boolean>(CLOSED)==true,loading=saved.get<Boolean>(CLOSED)!=true))
+    private val mutable=MutableStateFlow(BookMetadataEditorState(closed=saved.get<Boolean>(CLOSED)==true,loading=saved.get<Boolean>(CLOSED)!=true,completed=saved.get<Boolean>(DONE)==true))
     val state:StateFlow<BookMetadataEditorState> = mutable.asStateFlow()
     private val writes=Mutex();private val ready=CompletableDeferred<Unit>()
     private var dirty=false;private var loadJob:Job?=null;private var importJob:Job?=null;private var saveJob:Job?=null
@@ -77,6 +77,7 @@ class BookMetadataEditorViewModel(private val saved:SavedStateHandle,
     }
     fun type(index:Int){if(state.value.canEdit && index in 0..4)edit{copy(input=checkNotNull(input).copy(typeIndex=index,changed=input!!.changed+BookMetadataField.Type))}}
     fun refreshCover(){state.value.draft?.input?.cover?.let(::coverChanged)}
+    fun receiveCover(url:String)=viewModelScope.launch{ready.await();if(!state.value.closed)coverChanged(url)}
     fun coverChanged(url:String) {
         if(!state.value.canEdit)return
         edit{val original=checkNotNull(input);copy(input=original.copy(cover=url,changed=original.changed+BookMetadataField.Cover,refreshCover=true),preview=checkNotNull(this.original).preview(url,null))}
@@ -163,7 +164,8 @@ class BookMetadataEditorViewModel(private val saved:SavedStateHandle,
             withContext(NonCancellable){sessions.write(ticket,rollback)};mutable.update{it.copy(draft=rollback)};dirty=false
             currentCoroutineContext().ensureActive();return false
         }
-        mutable.update{it.copy(draft=next)};dirty=false;return true
+        if(next.finished)saved[DONE]=true
+        mutable.update{it.copy(draft=next,completed=it.completed || next.finished)};dirty=false;return true
     }
     fun retry(){
         if(!state.value.loaded){load();return}
@@ -190,5 +192,5 @@ class BookMetadataEditorViewModel(private val saved:SavedStateHandle,
     fun close(){if(state.value.closed)return;saved[CLOSED]=true;mutable.update{it.copy(closed=true,loading=false,busy=false)};loadJob?.cancel();importJob?.cancel();saveJob?.cancel();releaseSession()}
     private fun releaseSession(){(cleanupScope ?: CoroutineScope(viewModelScope.coroutineContext.minusKey(Job)+SupervisorJob())).launch{runCatching{sessions.release(ticket)}}}
     fun stop(){viewModelScope.cancel()}
-    companion object{const val KEY="book.metadata.ticket";private const val CLOSED="book.metadata.closed"}
+    companion object{const val KEY="book.metadata.ticket";private const val CLOSED="book.metadata.closed";private const val DONE="book.metadata.completed"}
 }

@@ -100,6 +100,20 @@ class BookMetadataEditorViewModelTest {
         assertTrue(vm.state.value.closed);assertTrue(store.records.isEmpty());val loads=books.loads
         val next=model(books,store,saved=restored(saved));runCurrent();assertTrue(next.state.value.closed);assertEquals(loads,books.loads);assertEquals(0,books.saves)
     }
+    @Test fun childCoverCallbackArrivingBeforeLoadWaitsForDraftAndClosedHostIgnoresLateCallback()=runTest(dispatcher) {
+        val books=Books();val gate=CompletableDeferred<Unit>();gates+=gate;books.gate=gate
+        val vm=model(books);vm.receiveCover("use_default_cover");runCurrent();assertNull(vm.state.value.draft)
+        gate.complete(Unit);runCurrent();assertEquals("use_default_cover",vm.state.value.draft!!.input!!.cover)
+        assertEquals("use_default_cover",vm.state.value.draft!!.preview!!.path);assertTrue(vm.state.value.draft!!.input!!.refreshCover)
+        vm.close();runCurrent();val closed=vm.state.value;vm.receiveCover("late cover");runCurrent();assertEquals(closed,vm.state.value)
+    }
+    @Test fun consumedSuccessfulSaveRetainsOkResultAfterCloseDeletesPrivateDraftAndHostRestores()=runTest(dispatcher) {
+        val books=Books();val store=Store(books);val saved=SavedStateHandle();val vm=model(books,store,saved=saved);runCurrent();vm.save();runCurrent()
+        val effect=vm.state.value.draft!!.completion!!;assertNotNull(vm.consumeCompletion(effect.token){true});vm.close();runCurrent()
+        assertTrue(store.records.isEmpty());val beforeLoads=books.loads;val next=model(books,store,saved=restored(saved),url=null);runCurrent()
+        assertTrue(next.state.value.closed);assertTrue(next.state.value.finished);assertNull(next.state.value.draft)
+        assertNull(next.consumeCompletion(effect.token){true});assertEquals(1,books.saves);assertEquals(beforeLoads,books.loads)
+    }
     private class Books:BookMetadataEditorRepository {
         var book:BookMetadataSnapshot?=BookMetadataSnapshot("book","Original","Author",8,"origin","source-cover",null,"cached-cover","source intro","custom intro")
         var loads=0;var saves=0;var recovers=0;var lastInput:BookMetadataInput?=null;var conflict=false;var gate:CompletableDeferred<Unit>?=null
