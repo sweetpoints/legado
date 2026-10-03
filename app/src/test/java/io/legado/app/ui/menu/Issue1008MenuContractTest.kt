@@ -1,9 +1,8 @@
 package io.legado.app.ui.menu
 
-import org.junit.Assert.assertFalse
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class Issue1008MenuContractTest {
 
@@ -12,7 +11,7 @@ class Issue1008MenuContractTest {
         assertItemIcon(
             "src/main/res/menu/book_source.xml",
             "menu_group_sources_by_domain",
-            "ic_add_online"
+            "ic_add_online",
         )
 
         // RSS overflow behavior is covered by RssReaderScreenTest using the real Compose menu.

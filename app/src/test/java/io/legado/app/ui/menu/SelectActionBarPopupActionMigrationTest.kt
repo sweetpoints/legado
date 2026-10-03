@@ -1,12 +1,12 @@
 package io.legado.app.ui.menu
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 class SelectActionBarPopupActionMigrationTest {
 
@@ -15,22 +15,23 @@ class SelectActionBarPopupActionMigrationTest {
         val source = readProjectFile(SELECT_ACTION_BAR)
 
         listOf(
-            "private var selMenu: Menu? = null",
-            "private var menuItemClickListener: PopupMenu.OnMenuItemClickListener? = null",
-            "MenuBuilder(context)",
-            "SupportMenuInflater(context).inflate(resId, this)",
-            "private fun showMoreMenu()",
-            "setVertical(true)",
-            "setDangerValues(",
-            "setDisabledValues(",
-            "if (item.isVisible)",
-            "it.isEnabled && it.itemId.toString() == action",
-            "menuItemClickListener?.onMenuItemClick(menuItem)",
-            "R.id.menu_del_selection",
-            "R.id.menu_del"
-        ).forEach { expected ->
-            assertTrue("SelectActionBar should contain $expected", source.contains(expected))
-        }
+                "private var selMenu: Menu? = null",
+                "private var menuItemClickListener: PopupMenu.OnMenuItemClickListener? = null",
+                "MenuBuilder(context)",
+                "SupportMenuInflater(context).inflate(resId, this)",
+                "private fun showMoreMenu()",
+                "setVertical(true)",
+                "setDangerValues(",
+                "setDisabledValues(",
+                "if (item.isVisible)",
+                "it.isEnabled && it.itemId.toString() == action",
+                "menuItemClickListener?.onMenuItemClick(menuItem)",
+                "R.id.menu_del_selection",
+                "R.id.menu_del",
+            )
+            .forEach { expected ->
+                assertTrue("SelectActionBar should contain $expected", source.contains(expected))
+            }
 
         assertFalse(source.contains("selMenu?.show()"))
         assertFalse(source.contains("PopupMenu(context"))
@@ -43,13 +44,14 @@ class SelectActionBarPopupActionMigrationTest {
         val source = readProjectFile(POPUP_ACTION)
 
         listOf(
-            "private var disabledValues: Set<String> = emptySet()",
-            "fun setDisabledValues(values: Set<String>)",
-            "item.enabled && item.value !in disabledValues",
-            "context.secondaryDisabledTextColor"
-        ).forEach { expected ->
-            assertTrue("PopupAction should contain $expected", source.contains(expected))
-        }
+                "private var disabledValues: Set<String> = emptySet()",
+                "fun setDisabledValues(values: Set<String>)",
+                "item.enabled && item.value !in disabledValues",
+                "context.secondaryDisabledTextColor",
+            )
+            .forEach { expected ->
+                assertTrue("PopupAction should contain $expected", source.contains(expected))
+            }
     }
 
     @Test
@@ -76,12 +78,11 @@ class SelectActionBarPopupActionMigrationTest {
     }
 
     private fun readMenuItemIds(path: String): List<String> {
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-        }
-        val document = factory
-            .newDocumentBuilder()
-            .parse(resolveFile("src/main/res/menu/$path"))
+        val factory =
+            DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+            }
+        val document = factory.newDocumentBuilder().parse(resolveFile("src/main/res/menu/$path"))
         val items = document.getElementsByTagName("item")
         return (0 until items.length).map { index ->
             (items.item(index) as Element).getAttributeNS(ANDROID_NS, "id")
@@ -95,9 +96,7 @@ class SelectActionBarPopupActionMigrationTest {
         resolveFile("src/main/assets/$path").takeIf(File::isFile)?.readText().orEmpty()
 
     private fun resolveFile(path: String): File =
-        sequenceOf(File(path), File("app/$path"))
-            .firstOrNull(File::isFile)
-            ?: File("app/$path")
+        sequenceOf(File(path), File("app/$path")).firstOrNull(File::isFile) ?: File("app/$path")
 
     private companion object {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
@@ -105,26 +104,28 @@ class SelectActionBarPopupActionMigrationTest {
         const val POPUP_ACTION = "src/main/java/io/legado/app/ui/widget/PopupAction.kt"
         const val VIEW_EXTENSIONS = "src/main/java/io/legado/app/utils/ViewExtensions.kt"
 
-        val expectedMenuIds = mapOf(
-            "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
-            // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
-            "book_source_sel.xml" to listOf(
-                "@+id/menu_enable_selection",
-                "@+id/menu_disable_selection",
-                "@+id/menu_add_group",
-                "@+id/menu_remove_group",
-                "@+id/menu_enable_explore",
-                "@+id/menu_disable_explore",
-                "@+id/menu_top_sel",
-                "@+id/menu_bottom_sel",
-                "@+id/menu_export_selection",
-                "@+id/menu_share_source",
-                "@+id/menu_check_source",
-                "@+id/menu_check_selected_interval"
-            ),
+        val expectedMenuIds =
+            mapOf(
+                "import_book_sel.xml" to listOf("@+id/menu_del_selection"),
+                // The Compose shelf menu order is checked in BookshelfManagementComposeTest.
+                "book_source_sel.xml" to
+                    listOf(
+                        "@+id/menu_enable_selection",
+                        "@+id/menu_disable_selection",
+                        "@+id/menu_add_group",
+                        "@+id/menu_remove_group",
+                        "@+id/menu_enable_explore",
+                        "@+id/menu_disable_explore",
+                        "@+id/menu_top_sel",
+                        "@+id/menu_bottom_sel",
+                        "@+id/menu_export_selection",
+                        "@+id/menu_share_source",
+                        "@+id/menu_check_source",
+                        "@+id/menu_check_selected_interval",
+                    ),
 
-            // Replace selection order is exercised in ReplaceManagementScreenTest.
+                // Replace selection order is exercised in ReplaceManagementScreenTest.
 
-        )
+            )
     }
 }
