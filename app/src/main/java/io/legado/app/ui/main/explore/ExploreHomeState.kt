@@ -51,6 +51,7 @@ internal data class ExploreHomeEffect(
     val sourceUrl: String = "",
     val title: String = "",
     val value: String = "",
+    val values: Map<String, String> = emptyMap(),
 )
 
 internal fun exploreGroupFromQuery(query: CharSequence?): String? =
