@@ -42,9 +42,11 @@ class RoomBookDetailStorageRepository(private val database:AppDatabase=appDb,
             val persist=inBookshelf || add || prepare || (change.kind==BookDetailMutationKind.Top && current!=null)
             val inherited=current ?: if(add || prepare)database.bookDao.getBook(preview.name,preview.author)else null
             val target=GSON.fromJsonObject<Book>(GSON.toJson((inherited ?: preview).copy())).getOrThrow()
+            val skipCoverRule=change.kind==BookDetailMutationKind.Cover && change.onlyIfCoverMissing &&
+                (target.origin!=preview.origin || target.name!=preview.name || target.author!=preview.author || !target.getDisplayCover().isNullOrBlank())
             when(change.kind) {
                 BookDetailMutationKind.Cover->{
-                    if(!change.onlyIfCoverMissing || (target.origin==preview.origin && target.getDisplayCover().isNullOrBlank())) {
+                    if(!skipCoverRule) {
                         target.customCoverUrl=change.text;target.persistedCoverUrl=null
                     }
                 }
@@ -60,7 +62,7 @@ class RoomBookDetailStorageRepository(private val database:AppDatabase=appDb,
             change.position?.let{target.durChapterIndex=it.index;target.durChapterPos=it.pos;target.durVolumeIndex=it.volume;target.chapterInVolumeIndex=it.chapterInVolume}
             if(add)target.removeType(BookType.notShelf)
             if(persist) {
-                if(target.order==0)target.order=database.bookDao.minOrder-1
+                if(target.order==0 && !skipCoverRule)target.order=database.bookDao.minOrder-1
                 // Search promotion keeps its selected source, with the latest owner's progress and user metadata.
                 if(inherited!=null && inherited.bookUrl!=preview.bookUrl && (add || prepare)) {
                     target.bookUrl=preview.bookUrl;target.origin=preview.origin;target.originName=preview.originName;target.tocUrl=preview.tocUrl

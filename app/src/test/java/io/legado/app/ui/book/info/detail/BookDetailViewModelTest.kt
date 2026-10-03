@@ -18,8 +18,45 @@ class BookDetailViewModelTest {
     private fun data(book:BookDetailBook=book(),shelf:Boolean=true)=BookDetailData(book,null,listOf(BookDetailChapter("{}",0,"chapter","Chapter",false)),emptyList(),emptyList(),shelf)
     private fun record()=BookDetailSession(BookDetailIdentity("Name","Author","book"),data())
     private fun saved(ticket:String)=SavedStateHandle(mapOf("book.detail.ticket" to ticket))
-    private fun vm(sessions:Sessions,engine:Network=Network(),handle:SavedStateHandle=saved(sessions.ticket),details:Details=Details())=
-        BookDetailViewModel(handle,details,sessions,engine,BookDetailIdentity("Name","Author","book"))
+    private fun vm(sessions:Sessions,engine:Network=Network(),handle:SavedStateHandle=saved(sessions.ticket),details:Details=Details(),service:BookDetailServiceSessionRepository?=null)=
+        BookDetailViewModel(handle,details,sessions,engine,BookDetailIdentity("Name","Author","book"),serviceSession=service)
+    @Test fun queuedCoverRechecksBusyAfterWriteLockAndWaitsForServiceOwnerBeforeWriting()=runTest(dispatcher) {
+        val sessions=Sessions(record());val write=CompletableDeferred<Unit>();val cover=CompletableDeferred<Unit>();val service=CompletableDeferred<Unit>()
+        val network=Network().apply{coverPath="rule";coverGate=cover}
+        var serviceStarted=false
+        val runner=object:BookDetailServiceSessionRepository {
+            override suspend fun execute(ticket:String,record:BookDetailSession,request:BookDetailServiceRequest):BookDetailSession {
+                serviceStarted=true;service.await();return record.copy(revision=record.revision+1).also{sessions.record=it}
+            }
+        }
+        val model=vm(sessions,network,service=runner)
+        try{runCurrent();sessions.writeGate=write;model.queue(BookDetailNativeKind.Share);runCurrent()
+            cover.complete(Unit);runCurrent();model.service(BookDetailServiceKind.Refresh);runCurrent()
+            assertTrue(model.state.value.busy);write.complete(Unit);runCurrent()
+            assertTrue(serviceStarted);assertTrue(model.state.value.busy);assertNull(sessions.lastMutation)
+            service.complete(Unit);runCurrent();assertEquals("rule",model.state.value.data!!.book.cover.path)
+            assertTrue(sessions.lastMutation!!.change.onlyIfCoverMissing);assertFalse(model.state.value.busy)
+        }finally{write.complete(Unit);cover.complete(Unit);service.complete(Unit);model.stop();runCurrent()}
+    }
+    @Test fun completingCoverDoesNotReleaseBusyOwnedByAQueuedNativeClaim()=runTest(dispatcher) {
+        val sessions=Sessions(record());val cover=CompletableDeferred<Unit>();val mutate=CompletableDeferred<Unit>();val claimWrite=CompletableDeferred<Unit>()
+        val network=Network().apply{coverPath="rule";coverGate=cover};val model=vm(sessions,network)
+        var claim:Job?=null
+        try{runCurrent();model.queue(BookDetailNativeKind.Share);runCurrent();val token=model.state.value.session!!.effects.first().token
+            sessions.mutateGate=mutate;cover.complete(Unit);runCurrent();assertTrue(model.state.value.busy)
+            claim=launch{model.consumeEffect(token){true}};runCurrent();sessions.writeGate=claimWrite
+            mutate.complete(Unit);runCurrent();assertTrue(model.state.value.busy)
+            claimWrite.complete(Unit);runCurrent();claim.join();assertFalse(model.state.value.busy)
+            assertEquals("rule",model.state.value.data!!.book.cover.path)
+        }finally{cover.complete(Unit);mutate.complete(Unit);claimWrite.complete(Unit);claim?.cancelAndJoin();model.stop();runCurrent()}
+    }
+    @Test fun ruleLookupCannotWriteAfterIdentityRenameWhilePending()=runTest(dispatcher) {
+        val sessions=Sessions(record());val cover=CompletableDeferred<Unit>();val network=Network().apply{coverPath="old-name-rule";coverGate=cover}
+        val model=vm(sessions,network,details=Details().apply{reloaded=data(BookDetailBook.from(book().materializeBook().apply{name="Renamed"}))})
+        try{runCurrent();model.reload();runCurrent();assertEquals("Renamed",model.state.value.data!!.book.name)
+            cover.complete(Unit);runCurrent();assertNull(sessions.lastMutation);assertNull(model.state.value.data!!.book.cover.path)
+        }finally{cover.complete(Unit);model.stop();runCurrent()}
+    }
     @Test fun missingCoverRunsRuleAndDurablyPatchesWithoutRepeatingDetailNetwork()=runTest(dispatcher) {
         val sessions=Sessions(record());val network=Network().apply{coverPath="generated"};val model=vm(sessions,network)
         try{runCurrent();assertEquals("generated",model.state.value.data!!.book.cover.path)
@@ -143,10 +180,11 @@ class BookDetailViewModelTest {
     }
     private class Sessions(var record:BookDetailSession?):BookDetailSessionRepository {
         val ticket=UUID.randomUUID().toString();var recoveries=0;var networkCommits=0;var releases=0;var recoverFailure=false
-        var lastMutation:BookDetailOperation?=null
+        var lastMutation:BookDetailOperation?=null;var writeGate:CompletableDeferred<Unit>?=null;var mutateGate:CompletableDeferred<Unit>?=null
         var claimGate:CompletableDeferred<Unit>?=null;var claimEntered:CompletableDeferred<Unit>?=null;var realIoClaim=false
         override suspend fun read(ticket:String)=record
         override suspend fun write(ticket:String,record:BookDetailSession) {
+            writeGate?.let{writeGate=null;it.await()}
             if(this.record?.effects?.isNotEmpty()==true && record.effects.isEmpty()) {
                 val wait=claimGate;claimGate=null
                 if(wait!=null) {
@@ -158,7 +196,7 @@ class BookDetailViewModelTest {
             this.record=record
         }
         override suspend fun mutate(ticket:String,record:BookDetailSession,operation:BookDetailOperation):BookDetailSession {
-            lastMutation=operation
+            lastMutation=operation;mutateGate?.await()
             val data=checkNotNull(record.data);val native=data.book.materializeBook();native.customCoverUrl=operation.change.text
             val next=record.copy(data=data.copy(book=BookDetailBook.from(native)),effects=record.effects+BookDetailNativeEffect(operation.token,BookDetailNativeKind.ReaderSync),revision=record.revision+1)
             this.record=next;return next

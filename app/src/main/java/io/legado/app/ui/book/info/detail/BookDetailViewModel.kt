@@ -30,6 +30,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     val state:StateFlow<BookDetailState> = mutable.asStateFlow()
     private val writes=Mutex();private val ready=CompletableDeferred<Unit>()
     private var dirty=false;private var loadJob:Job?=null;private var networkJob:Job?=null;private var mutationJob:Job?=null
+    private var busyEpoch=0L
     private var coverJob:Job?=null
     private var generation=0L;private var childJob:Job?=null;private var serviceJob:Job?=null
     init{if(state.value.closed){ready.complete(Unit);release()}else load()}
@@ -67,27 +68,41 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
             }catch(error:Throwable){ensureActive();if(!state.value.closed)mutable.update{it.copy(loading=false,error=error.message ?: error.toString())}}
         }
     }
-    /** Rule lookup is independent of detail parsing; only a still-missing fresh cover may be patched. */
+    private fun markBusy(change:(BookDetailState)->BookDetailState={it}):Long {
+        val owner=++busyEpoch;mutable.update{change(it).copy(busy=true)};return owner
+    }
+    /** A queued lookup rechecks ownership inside the write gate, then owns only its own busy generation. */
     private fun coverByRule() {
         val request=state.value.data?.book ?: return
         if(!request.cover.path.isNullOrBlank() || coverJob?.isActive==true)return
         coverJob=viewModelScope.launch {
-            var claimed=false
+            var busyOwner:Long?=null
             try {
                 val generated=network.cover(request) ?: return@launch
                 ensureActive();val path=generated.cover.path?.takeIf{it.isNotBlank()} ?: return@launch
-                state.first{it.closed || (!it.networkLoading && it.canInteract)}
-                ensureActive();if(state.value.closed)return@launch
-                writes.withLock {
-                    val current=state.value.data?.book ?: return@withLock
-                    if(current.bookUrl!=request.bookUrl || current.origin!=request.origin || !current.cover.path.isNullOrBlank())return@withLock
-                    claimed=true;mutable.update{it.copy(busy=true)};flushLocked()
-                    val completed=sessions.mutate(ticket,checkNotNull(state.value.session),BookDetailOperation(UUID.randomUUID().toString(),
-                        BookDetailMutation(BookDetailMutationKind.Cover,text=path,onlyIfCoverMissing=true)))
-                    ensureActive();if(!state.value.closed)publish(completed)
+                while(!state.value.closed) {
+                    state.first{it.closed || (!it.networkLoading && it.canInteract)}
+                    ensureActive();if(state.value.closed)return@launch
+                    var settled=false
+                    writes.withLock {
+                        ensureActive();if(state.value.closed){settled=true;return@withLock}
+                        // Another service/child may acquire busy while this coroutine queues on writes.
+                        if(!state.value.canInteract || state.value.networkLoading)return@withLock
+                        val current=state.value.data?.book
+                        if(current==null || current.bookUrl!=request.bookUrl || current.origin!=request.origin ||
+                            current.name!=request.name || current.author!=request.author || !current.cover.path.isNullOrBlank()) {
+                            settled=true;return@withLock
+                        }
+                        busyOwner=markBusy();flushLocked()
+                        val completed=sessions.mutate(ticket,checkNotNull(state.value.session),BookDetailOperation(UUID.randomUUID().toString(),
+                            BookDetailMutation(BookDetailMutationKind.Cover,text=path,onlyIfCoverMissing=true)))
+                        ensureActive();if(!state.value.closed)publish(completed)
+                        settled=true
+                    }
+                    if(settled)break
                 }
             }catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}
-            finally{if(claimed && !state.value.closed && childJob?.isActive!=true)mutable.update{it.copy(busy=false)}}
+            finally{if(busyOwner!=null && busyEpoch==busyOwner && !state.value.closed)mutable.update{it.copy(busy=false)}}
         }
     }
     suspend fun flush()=writes.withLock{flushLocked()}
@@ -123,7 +138,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                 ensureActive();if(state.value.closed || owner!=generation)return@launch
                 writes.withLock {
                     ensureActive();if(state.value.closed || owner!=generation)return@withLock
-                    mutable.update{it.copy(busy=true)};flushLocked()
+                    markBusy();flushLocked()
                     val record=checkNotNull(state.value.session)
                     val completed=sessions.completeNetwork(ticket,record,request,result,false,UUID.randomUUID().toString())
                     ensureActive();if(!state.value.closed && owner==generation)publish(completed)
@@ -139,7 +154,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     fun mutate(change:BookDetailMutation,navigation:BookDetailNativeKind?=null,
         highlightTitleLength:Int?=null,highlightAnchor:String?=null) {
         if(!state.value.canInteract)return
-        mutable.update{it.copy(busy=true,error=null)}
+        markBusy{it.copy(error=null)}
         mutationJob=viewModelScope.launch {
             try{writes.withLock {
                 flushLocked();val record=checkNotNull(state.value.session)
@@ -153,7 +168,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     fun navigate(change:BookDetailMutation,navigation:BookDetailNativeKind) {
         if(!state.value.canInteract)return
         val previous=networkJob;generation++;previous?.cancel()
-        mutable.update{it.copy(busy=true,error=null)}
+        markBusy{it.copy(error=null)}
         mutationJob=viewModelScope.launch {
             try {
                 previous?.join();ensureActive();if(state.value.closed)return@launch
@@ -175,7 +190,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
         viewModelScope.launch{try{flush()}catch(error:Throwable){ensureActive();failure(error)}}
     }
     suspend fun consumeEffect(token:String,canDeliver:()->Boolean):BookDetailNativeEffect? {
-        ready.await();mutable.update{it.copy(busy=true)}
+        ready.await();markBusy()
         try{return writes.withLock {
             flushLocked();currentCoroutineContext().ensureActive();if(state.value.closed || state.value.childPending || state.value.session?.pendingService!=null || !canDeliver())return@withLock null
             val before=state.value.session ?: return@withLock null
@@ -194,7 +209,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     }
     private fun recoverPending() {
         if(state.value.closed || state.value.busy)return
-        mutable.update{it.copy(busy=true,error=null)}
+        markBusy{it.copy(error=null)}
         mutationJob=viewModelScope.launch {
             try{writes.withLock{val recovered=sessions.recover(ticket);ensureActive();if(recovered!=null && !state.value.closed)publish(recovered)}}
             catch(error:Throwable){ensureActive();reloadReceipt();failure(error)}finally{mutable.update{it.copy(busy=false)}}
@@ -211,7 +226,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     private fun runService(request:BookDetailServiceRequest,waitForChild:Job?=null) {
         if(state.value.closed || state.value.busy || serviceSession==null)return
         val previous=networkJob;generation++;previous?.cancel()
-        mutable.update{it.copy(busy=true,error=null)}
+        markBusy{it.copy(error=null)}
         serviceJob=viewModelScope.launch {
             try {
                 waitForChild?.join();previous?.join();ensureActive();if(state.value.closed)return@launch
@@ -250,7 +265,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
     }
     fun reload() {
         if(!state.value.loaded || state.value.closed || state.value.busy || state.value.networkLoading)return
-        mutable.update{it.copy(busy=true,error=null)}
+        markBusy{it.copy(error=null)}
         mutationJob=viewModelScope.launch {
             try{writes.withLock {
                 flushLocked();val record=checkNotNull(state.value.session);val data=checkNotNull(record.data)
@@ -286,7 +301,7 @@ class BookDetailViewModel(private val saved:SavedStateHandle,private val details
                 ensureActive();mutable.update{it.copy(childPending=true)}
                 // A returned child owns the next mutation; stop and join the earlier network request first.
                 val previous=networkJob;generation++;previous?.cancelAndJoin()
-                mutable.update{it.copy(networkLoading=false,busy=true,error=null)}
+                markBusy{it.copy(networkLoading=false,error=null)}
                 writes.withLock {
                     flushLocked()
                     while(!state.value.closed) {

@@ -27,10 +27,16 @@ class BookDetailStorageRepositoryTest {
         val rule=BookDetailMutation(BookDetailMutationKind.Cover,text="rule-cover",onlyIfCoverMissing=true)
         val first=repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
         assertEquals("rule-cover",first.book.cover.path);assertEquals(42,read("book")!!.durChapterPos);assertEquals(7L,read("book")!!.group)
-        insert(read("book")!!.copy(customCoverUrl="external",persistedCoverUrl="external-cache"))
+        insert(read("book")!!.copy(customCoverUrl="external",persistedCoverUrl="external-cache",order=0))
         val fresh=repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
-        assertEquals("external",fresh.book.cover.path);assertEquals("external-cache",read("book")!!.persistedCoverUrl)
-        insert(read("book")!!.copy(origin="new-source",customCoverUrl=null,persistedCoverUrl=null))
+        assertEquals("external",fresh.book.cover.path);assertEquals("external-cache",read("book")!!.persistedCoverUrl);assertEquals(0,read("book")!!.order)
+        insert(read("book")!!.copy(name="Renamed",customCoverUrl=null,persistedCoverUrl=null))
+        repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
+        assertNull(read("book")!!.customCoverUrl);assertEquals("Renamed",read("book")!!.name)
+        insert(read("book")!!.copy(name=stale.name,author="New author"))
+        repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
+        assertNull(read("book")!!.customCoverUrl);assertEquals("New author",read("book")!!.author)
+        insert(read("book")!!.copy(origin="new-source",author=stale.author,customCoverUrl=null,persistedCoverUrl=null))
         repo().mutate(BookDetailBook.from(stale),true,emptyList(),rule){}
         assertNull(read("book")!!.customCoverUrl);assertEquals("new-source",read("book")!!.origin)
     }
