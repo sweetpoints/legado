@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.info.detail
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import io.legado.app.data.entities.Book
 import io.legado.app.data.repository.BookDetailBook
 import io.legado.app.data.repository.BookDetailChapter
@@ -18,11 +20,15 @@ import io.legado.app.data.repository.BookDetailWebFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -97,8 +103,21 @@ class BookDetailPreparedEntryTest {
                 },
                 null,
             )
+        val store = ViewModelStore().apply { put("detail", model) }
+        val ownerJob = checkNotNull(model.viewModelScope.coroutineContext[Job])
         try {
-            runCurrent()
+            // The production bootstrap deliberately parses the potentially large book JSON on IO.
+            // Wait for that real dispatcher and its Main return, rather than treating runCurrent
+            // as completion of work outside the virtual test scheduler.
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) {
+                    model.state.first {
+                        it.loaded &&
+                            !it.networkLoading &&
+                            it.error == "controlled initial request failure"
+                    }
+                }
+            }
             assertTrue(model.state.value.loaded)
             assertEquals(expectedIdentity.bookUrl, model.state.value.data!!.book.bookUrl)
             assertEquals(1, infoRequests)
@@ -108,7 +127,10 @@ class BookDetailPreparedEntryTest {
             assertFalse(saved.contains("bookUrl"))
             assertEquals(ticket, saved.get<String>("book.detail.ticket"))
         } finally {
-            model.stop()
+            store.clear()
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) { ownerJob.join() }
+            }
             runCurrent()
             Dispatchers.resetMain()
         }

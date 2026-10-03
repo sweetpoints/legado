@@ -1360,3 +1360,5 @@ JS私有草稿release恢复保名修复：仅对Gson落盘的JsSourceDraft及其
 书籍详情宿主完整切换为 BaseComposeActivity，页面、菜单和确认流程由既有纯 Compose Screen/Route 驱动；兼容旧 name/author/bookUrl 入口并接入 private prepared UUID，会话 SavedState 移除大身份键。子页面结果在 IO 私有账本恢复，换源完成仅 RESUMED 当前 owner 一次回调，清缓存迟到来源回调保留快照身份校验。保留目录选区阅读位置、音频/视频/漫画入口、登录/编辑/分组/封面/变量和原服务算法，搜索预览封面草稿不误落书架。删除专属旧 VM、横竖两个 XML 和菜单，Video 仍使用的共享简介 XML 保留。新增 5 个实际 Activity Android 回归（prepared/legacy/recreate/早到目录/NoRoom/暂停换源），补真实小屏标签换行与触控控件尺寸；陈旧源字符串断言仅定点移除 BookInfo 分支，核心实体、Reader、WebDAV 和其它页面合同保留。全批 Kotlin formatter/diff 检查通过，完整 JVM/Android Kotlin 编译在 clean rebase 后排队，设备端未执行。
 
 BookInfo 最终编译准备增量：补齐纯格式整理后漏掉的显式 import，最后专属 XML 删除后以独立 values ID 保留共享 BaseDialogFragment 对可选背景的查询，不改变共享基类行为。首轮生产编译暴露的问题精确单独修复；完整 JVM/Android Kotlin 编译继续同一协调 slot 重跑，未执行设备用例。
+
+BookInfo 回归收尾：prepared 入口用例等待真实 IO bootstrap 的 Main 返回后断言首次请求，并在重置 Main 前 clear/join 整个 VM，防真实 dispatcher 迟到退出串扰下一个用例；移除 Compose member assertDoesNotExist 的错误 extension import。完整首轮 JVM 3805 项暴露 1 个该等待竞态及 1 个派生串扰，本独立测试修复后按同 slot 重跑全量；生产行为不改。
