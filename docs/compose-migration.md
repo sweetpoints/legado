@@ -1553,3 +1553,19 @@ After clean rebase to 236cfc5d2a5166ca9edf62f17125e9c36527b8ce, the exact code c
 发现结果页新增不可变私有会话与 prepared UUID 基础：完整 sourceUrl/title/exploreUrl、类别/分页/行元数据/滚动状态保存在 AtomicFile，跨页面预备入口只返回 UUID。严格 revision 与固定 stripe gate 保持输入身份，release 栅栏删除自有 body/bak/new 并拒绝迟到复活；IO 返回取消窗口清理未交付 session。新增三个真实磁盘 Android 回归（大脚本恢复、重复版本/身份拒绝、取消仅清本票据），实际 formatter/check 与 diffcheck 通过，完整 JVM/Android编译按队列验证，设备端未执行；Host 接入另批。
 
 发现结果页的数据仓库独立封装 source/categories/page/cache/membership 与批量加入书架，解析与 DAO 在 IO，发布完整 JSON 元数据的 detached 不可变行。保留 WebBook/source.exploreKinds 原引擎、URL 去重、名字作者/URL 书架提示和原 SearchBookShelfHelp 事务；接受加入后仍同步四类 active reader 与 SourceCallBack。新增三个 JVM projection 用例和两个实际 Room/IO 用例，统一 formatter/check 与 diffcheck 通过；随完整 Host 最终执行全量 JVM/Android编译，设备端未执行。
+
+### Explore results state foundation
+
+- Added immutable pagination, category, scroll and native detail-navigation state. Large inputs,
+  parsed rows and add confirmations remain in the private UUID session; saved state holds only
+  small identifiers, counters and the bounded page picker.
+- Kept the original pagination algorithm and stale request invalidation, moving its reusable
+  primitives out of the legacy ViewModel without changing existing consumer behavior.
+- Accepted shelf operations now record their receipt before the cancellable IO return. A failed
+  receipt can retry its accepted result without running the shelf transaction again.
+- Added 15 JVM behavior cases covering EOF/deduplication, prepend anchors, stale responses,
+  exact page selection, continuous recovery, interrupted requests, confirmation snapshots,
+  accepted-operation cancellation, receipt retry and detail ticket ownership.
+- Actual formatter/check and diff checks passed. Complete JVM and Android test compilation are
+  pending the full Explore results Compose host, per the coordinated build queue. No device tests
+  have been executed.

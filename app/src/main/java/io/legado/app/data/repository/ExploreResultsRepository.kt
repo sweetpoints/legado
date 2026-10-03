@@ -51,7 +51,17 @@ interface ExploreResultsRepository {
 
     suspend fun showCategories(value: Boolean)
 
+    suspend fun loadCoverOnlyWifi(): Boolean
+
     suspend fun addToShelf(rows: List<ExploreResultsRow>): ExploreResultsAddResult
+
+    suspend fun addToShelfRecorded(
+        rows: List<ExploreResultsRow>,
+        accepted: suspend (ExploreResultsAddResult) -> Unit,
+    ): ExploreResultsAddResult =
+        withContext(NonCancellable) {
+            addToShelf(rows).also { accepted(it) }
+        }
 }
 
 class AppExploreResultsRepository(
@@ -125,7 +135,18 @@ class AppExploreResultsRepository(
             AppConfig.showExploreCategories = value
         }
 
+    override suspend fun loadCoverOnlyWifi(): Boolean =
+        withContext(Dispatchers.IO) {
+            AppConfig.loadCoverOnlyWifi
+        }
+
     override suspend fun addToShelf(rows: List<ExploreResultsRow>): ExploreResultsAddResult =
+        addToShelfRecorded(rows) {}
+
+    override suspend fun addToShelfRecorded(
+        rows: List<ExploreResultsRow>,
+        accepted: suspend (ExploreResultsAddResult) -> Unit,
+    ): ExploreResultsAddResult =
         withContext(Dispatchers.IO) {
             currentCoroutineContext().ensureActive()
             val books = rows.map(::decodeBook)
@@ -156,7 +177,9 @@ class AppExploreResultsRepository(
                         },
                     )
                 }
-                ExploreResultsAddResult(added.added, added.skipped)
+                // Record the receipt before the cancellable IO-to-Main return. Accepted shelf
+                // changes must not lose their acknowledgement when their screen stops.
+                ExploreResultsAddResult(added.added, added.skipped).also { accepted(it) }
             }
         }
 

@@ -39,6 +39,11 @@ data class ExploreResultsRow(
     val metadata: String,
 )
 
+enum class ExploreResultsNotice {
+    AlreadyAdding,
+    EmptyResults,
+}
+
 @Keep
 data class ExploreResultsCheckpoint(
     val request: ExploreResultsRequest,
@@ -56,6 +61,19 @@ data class ExploreResultsCheckpoint(
     val scrollKey: String? = null,
     val scrollIndex: Int = 0,
     val scrollOffset: Int = 0,
+    val pendingPage: Int? = null,
+    val pendingPrevious: Boolean = false,
+    val addRows: List<ExploreResultsRow>? = null,
+    val messageId: String? = null,
+    val addedCount: Int? = null,
+    val skippedCount: Int? = null,
+    val message: String? = null,
+    val notice: ExploreResultsNotice? = null,
+    val detailKey: String? = null,
+    val detailNonce: String? = null,
+    val detailDelivered: Boolean = false,
+    val detailTicket: String? = null,
+    val ownedDetailTickets: List<String> = emptyList(),
     val finished: Boolean = false,
 )
 
