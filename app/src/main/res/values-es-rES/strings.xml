@@ -31,8 +31,6 @@
     <string name="invalid_directory">Ruta de directorio no válida</string>
     <string name="empty_directory_input">La ruta del directorio no puede estar vacía</string>
 
-    <string name="dynamic_click_retry">Reintentar</string>
-    <string name="dynamic_loading">Cargando</string>
     <string name="draw">Advertencia</string>
     <string name="edit">Editar</string>
     <string name="delete">Borrar</string>

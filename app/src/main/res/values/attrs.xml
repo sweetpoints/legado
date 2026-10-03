@@ -56,14 +56,6 @@
 
     <attr name="titleBarStyle" format="reference" />
 
-    <declare-styleable name="DynamicFrameLayout">
-        <attr name="errorSrc" format="reference" />
-        <attr name="emptySrc" format="reference" />
-        <attr name="errorActionDescription" format="string|reference" />
-        <attr name="emptyActionDescription" format="string|reference" />
-        <attr name="emptyDescription" format="string|reference" />
-    </declare-styleable>
-
     <declare-styleable name="RefreshProgressBar">
         <attr name="max_progress" format="integer" />
         <attr name="dur_progress" format="integer" />

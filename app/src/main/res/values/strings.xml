@@ -32,8 +32,6 @@
     <string name="invalid_directory">Invalid directory path</string>
     <string name="empty_directory_input">Directory path cannot be empty</string>
 
-    <string name="dynamic_click_retry">Retry</string>
-    <string name="dynamic_loading">Loading</string>
     <string name="draw">Warning</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
