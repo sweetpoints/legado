@@ -70,8 +70,8 @@ internal fun CodeDialogScreen(
             colorResource(R.color.md_light_blue_600),
         )
     // Android's immutable SpannableString scans every span when drawing each text run.
-    // Keep the document and UTF-16 offsets intact, but style the viewport plus one screen
-    // of overscan so scrolling never brings an unstyled line into view.
+    // Keep the document and UTF-16 offsets intact, but style the settled viewport plus
+    // one screen of overscan without recoloring the entire document during scroll motion.
     var projection by remember {
         mutableStateOf(CodeViewportSyntax(AnnotatedString(state.displayed), IntRange.EMPTY, null))
     }
@@ -82,7 +82,8 @@ internal fun CodeDialogScreen(
                 val start = minOf(state.selectionStart, state.selectionEnd).coerceIn(0, state.displayed.length)
                 val end = maxOf(state.selectionStart, state.selectionEnd).coerceIn(start, state.displayed.length)
                 CodeSyntaxViewport(start until end,
-                    (start - 2048).coerceAtLeast(0) until (end + 2048).coerceAtMost(state.displayed.length))
+                    (start - 2048).coerceAtLeast(0) until (end + 2048).coerceAtMost(state.displayed.length),
+                    scroll.isScrollInProgress)
             } else {
                 fun range(top: Int, bottom: Int): IntRange {
                     val first = result.getLineForVerticalPosition(top.coerceAtLeast(0).toFloat())
@@ -92,28 +93,40 @@ internal fun CodeDialogScreen(
                 CodeSyntaxViewport(
                     range(scroll.value, scroll.value + viewportHeight),
                     range(scroll.value - viewportHeight, scroll.value + viewportHeight * 2),
+                    scroll.isScrollInProgress,
                 )
             }
         }.collectLatest { viewport ->
             val current = projection
+            val freshTextOrColors = current.text.text != state.displayed || current.colors != colors
+            // Animated caret relocation and dragging must not continually recolor and lay out
+            // the entire document. New input/theme still gets styled, then motion's final
+            // viewport publishes its accurate overscan as soon as the scroll mutation ends.
+            if (viewport.scrolling && !freshTextOrColors) return@collectLatest
             // The existing screen of overscan already styles these visible lines. Moving inside
             // it must not publish another AnnotatedString and lay out the whole document again.
-            if (current.text.text == state.displayed && current.colors == colors &&
+            if (!freshTextOrColors && current.settledViewport &&
                 current.range.first <= viewport.visible.first &&
                 current.range.last >= viewport.visible.last
             ) return@collectLatest
+            val targetRange = if (viewport.scrolling) {
+                val start = minOf(state.selectionStart, state.selectionEnd)
+                val end = maxOf(state.selectionStart, state.selectionEnd)
+                (start - 2048).coerceAtLeast(0) until (end + 2048).coerceAtMost(state.displayed.length)
+            } else viewport.overscan
             val projectionStart = performance?.start()
-            performance?.record("syntax-start", state.displayed.length, "range=${viewport.overscan}")
+            performance?.record("syntax-start", state.displayed.length,
+                "range=$targetRange scrolling=${viewport.scrolling}")
             var computeMs = 0L
             val projected = withContext(Dispatchers.Default) {
                 val computeStart = performance?.start()
-                projectCodeSyntax(state.displayed, colors, viewport.overscan).also {
+                projectCodeSyntax(state.displayed, colors, targetRange).also {
                     if (computeStart != null) computeMs = checkNotNull(performance).start() - computeStart
                 }
             }
             performance?.record("syntax-ready", projected.length,
-                "range=${viewport.overscan} spans=${projected.spanStyles.size} computeMs=$computeMs", projectionStart)
-            projection = CodeViewportSyntax(projected, viewport.overscan, colors)
+                "range=$targetRange spans=${projected.spanStyles.size} computeMs=$computeMs", projectionStart)
+            projection = CodeViewportSyntax(projected, targetRange, colors, !viewport.scrolling)
         }
     }
     val syntax = projection.text
@@ -342,12 +355,17 @@ internal fun CodeDialogScreen(
     }
 }
 
-private data class CodeSyntaxViewport(val visible: IntRange, val overscan: IntRange)
+private data class CodeSyntaxViewport(
+    val visible: IntRange,
+    val overscan: IntRange,
+    val scrolling: Boolean,
+)
 
 private data class CodeViewportSyntax(
     val text: AnnotatedString,
     val range: IntRange,
     val colors: CodeSyntaxColors?,
+    val settledViewport: Boolean = false,
 )
 
 @Composable
