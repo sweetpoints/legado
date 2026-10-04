@@ -71,6 +71,17 @@
         "string",
         "null"
       ]
+    },
+    "headers": {
+      "type": "object",
+      "default": {},
+      "propertyNames": {
+        "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[^\\r\\n]*$"
+      }
     }
   },
   "additionalProperties": true,
@@ -106,6 +117,36 @@
           "minimum": 1,
           "maximum": 1000,
           "default": 20
+        },
+        "method": {
+          "type": "string",
+          "default": "GET",
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+        },
+        "body": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "charset": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[^\\r\\n]*$"
+          }
         }
       },
       "additionalProperties": true

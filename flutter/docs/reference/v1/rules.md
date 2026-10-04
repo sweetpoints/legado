@@ -14,6 +14,7 @@
 | `@xpath:expression` | HTML → 查询节点的文本 |
 | `@regex:pattern` | 文本 → 所有匹配的第一捕获组；无捕获组时为全匹配 |
 | `@js:script` | 交给运行时，注入当前输入为 `result` |
+| `@legacy:rule` | 使用明确的 [JSoup 兼容子集](../legacy/html.md)，与新版 CSS 语义分开 |
 
 模式前缀不区分大小写；CSS 输出名字和属性名保持大小写。CSS 输出按最后一个 `@` 分割，所以含该符号的选择器可能不符合预期。`@text/@html` 仅是两个固定输出名字，其他名字按属性查询。
 
@@ -50,7 +51,7 @@ JSON 配置中反斜杠还需要 JSON 转义：`"@regex:Book (\\d+)"`。测试�
 
 ## URL 与字段
 
-stage URL 将 `{{name}}` 替换为输入对应值。名字必须以 ASCII 字母开头，可继续使用数字与下划线。缺失或 null 值报 `missing_input`。名字以 `Url` 结尾时原样插入；其他值采用 URL component 编码，然后相对于 `baseUrl` 解析。
+stage URL 将 `{{name}}` 替换为输入对应值。名字必须以 ASCII 字母开头，可继续使用数字与下划线。缺失或 null 值报 `missing_input`。名字以 `Url` 结尾时原样插入；其他值采用 UTF-8 URL component 编码一次，模板中原有 URL 转义保留，随后相对于 `baseUrl` 解析。
 
 字段名为 `url` 或以 `Url` 结尾时，非空结果相对于最终响应 URL 转成绝对链接。字段列表先转文本并以换行连接，然后才进行该转换，因此一个 URL 字段应只提取一个链接。
 
@@ -61,3 +62,9 @@ stage URL 将 `{{name}}` 替换为输入对应值。名字必须以 ASCII 字母
 stage 配置 `nextPage` 时，每页提取结束后在整份响应正文上执行该规则，选取第一个非空文本结果，相对于最终响应 URL 解析下一页；无结果则结束。`maxPages` 默认20，允许1..1000。
 
 各阶段分页结果按顺序累积，不自动去重。content 阶段若产生多条记录，保留第一条记录的其他字段，把所有记录的 `content` 按换行连接为一条记录。循环 URL 报 `pagination_cycle`；达到页数限制时仍存在下一页报 `pagination_limit`，不会静默返回截断结果。脚本模式自行编排分页，不使用 stage 的 nextPage。
+
+## 阶段请求体
+
+stage method 默认 GET，允许有效 HTTP token；实际请求转成大写。body 为字符串模板，使用同样的 {{name}} 上下文占位符，但插入原始字符串，不进行 URL component 编码或 JS 执行。缺少输入报 missing_input；JSON、表单等 body 编码格式由作者明确构造。全局/阶段静态 headers 不执行变量或脚本。新引擎不自动推断 Content-Type，表单/JSON 请求应显式设置。
+
+charset 可指定该阶段原始请求体字节编码和响应解码；它不改变 URL 查询变量的UTF-8编码，也不是旧 AnalyzeUrl 的表单/查询charset语义。未指定时使用默认请求编码与响应检测。分页请求沿用该阶段 method、body、headers 和 charset，不自动改写成网站特有翻页表单。

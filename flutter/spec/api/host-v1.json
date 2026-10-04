@@ -25,6 +25,16 @@
       "returns": "Promise<NetworkResponse>"
     },
     {
+      "name": "cookies.get",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
       "name": "variables.get",
       "arguments": [
         {
@@ -67,21 +77,120 @@
         }
       ],
       "returns": "Promise<string>"
+    },
+    {
+      "name": "parse.getString",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getStringList",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string[]>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getElement",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string|JsonValue|null>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getElements",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<Array<string|JsonValue>>",
+      "nestedJavaScript": false
     }
   ],
   "types": {
     "RequestOptions": {
       "url": "string",
       "method": "string = GET",
-      "headers": "Record<string,string> = {}",
+      "headers": "Record<string,string>?; explicit replaces defaults",
       "body": "string?",
-      "timeoutMs": "integer = 30000"
+      "timeoutMs": "integer = 30000",
+      "followRedirects": "boolean = true",
+      "inheritHeaders": "boolean = true; only used when headers absent",
+      "charset": "string?; override request-body encoding and response decoding"
     },
     "NetworkResponse": {
       "url": "string",
       "status": "integer",
       "headers": "Record<string,string>",
-      "body": "string"
+      "body": "string",
+      "message": "string",
+      "bytes": "integer[0..255][]",
+      "multiHeaders": "Record<string,string[]>",
+      "cookies": "string[] Set-Cookie"
     },
     "JsonValue": "null | boolean | number | string | JsonValue[] | Record<string,JsonValue>"
   },
@@ -148,5 +257,41 @@
       "default": 0,
       "minimum": 0
     }
+  },
+  "session": {
+    "export": "exportSession(sourceId)",
+    "import": "importSession(sourceId,{variables,cookies})",
+    "automaticCorePersistence": false
+  },
+  "sourceHeaders": {
+    "default": {},
+    "inheritFor": [
+      "stage HTTP",
+      "net.get",
+      "net.request without explicit headers"
+    ],
+    "explicitHeaders": "replace entire mapping",
+    "reject": "Invalid header name or CR/LF value"
+  },
+  "utilityMethods": {
+    "requires": "SourceUtilityHost adapter",
+    "methods": {
+      "encoding.base64EncodeWithFlags": "text, flags? -> string",
+      "encoding.base64DecodeWithCharset": "text, charset? -> string|null",
+      "encoding.base64DecodeWithFlags": "text, flags? -> string|null",
+      "encoding.base64DecodeBytes": "text, flags? -> integer[]|null",
+      "encoding.strToBytes": "text, charset? -> integer[]",
+      "encoding.bytesToStr": "bytes, charset? -> string",
+      "encoding.hexEncode": "text -> string",
+      "encoding.hexDecode": "hex -> string",
+      "encoding.hexDecodeBytes": "hex -> integer[]",
+      "encoding.formEncode": "text, charset? -> string",
+      "encoding.formDecode": "text, charset? -> string",
+      "crypto.md5": "text -> string",
+      "crypto.md5Short": "text -> string",
+      "crypto.digestHex": "text, algorithm -> string",
+      "crypto.digestBase64": "text, algorithm -> string"
+    },
+    "allReturns": "Promise"
   }
 }

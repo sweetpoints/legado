@@ -17,29 +17,20 @@
 | `ruleContent` | `stages.content`，URL 为 `{{chapterUrl}}` |
 | `nextTocUrl`、`nextContentUrl` | 对应 stage 的 `nextPage` |
 
-普通裸 CSS 规则添加 `@css:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified；复杂脚本、组合规则、XPath、变量、URL 请求选项及应用能力产生 review issue。JSoup `class./tag./id.` 简写、数字索引、ownText/textNodes、链式提取等产生 `legacy.jsoup_dsl`，不得当作普通 CSS 宣称兼容。部分管线扩展产生 `legacy.pipeline_requires_review`。`mainJs`、`jsLib`、`header`、登录字段、封面解码、并发配置等仅保存原始信息，不自动转换。非文本书源也需要人工处理。
+未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified；复杂脚本、组合规则、XPath、变量、URL 请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。`mainJs`、`jsLib`、登录字段、封面解码、并发配置等仅保存原始信息，不自动转换。非文本书源也需要人工处理。
+
+静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。读取 enabledCookieJar 且值不是 true 时产生 `legacy.cookie_policy_requires_review`，不会悄悄改成自动 Cookie 策略。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
 
 没有 issue 时状态仍是 `unverified`；存在 issue 时为 `manualRequired`。两者都不表示行为对照已通过。
 
 ## `java.*` 宿主分派
 
-`LegacyScriptHost.call(method, arguments)` 在 Dart 侧为异步。使用 `legacyScriptPrelude` 注入的 `java` Proxy 调用 V8 的同步桥；脚本工作 isolate 等待，父 isolate 处理异步宿主能力。以下行为已实现：
+完整参数、返回值与差异见 [`java.*` 宿主 API Reference](host.md)。目前覆盖部分 HTTP、变量、Base64、字符集、字节、hex 和摘要能力，通过同步桥运行。
 
-| 方法 | 参数 | 返回及语义 |
-|---|---|---|
-| `java.base64Encode` | 一个字符串 | UTF-8 字节的 Base64 字符串 |
-| `java.base64Decode` | 一个 Base64 字符串 | UTF-8 解码字符串；非法编码抛出异常 |
-| `java.md5Encode` | 一个字符串 | UTF-8 字节的 MD5 小写十六进制 |
-| `java.ajax` | 一个不带旧请求选项的 URL 字符串 | 委托 `net.get`，同步返回正文 |
-| `java.get` | 字符串键 | 已存字符串；缺失时返回空字符串 |
-| `java.put` | 字符串键、字符串值 | 存储并返回值 |
+这不是任意 Java 类互操作，也没有完整旧 API 覆盖。新版只使用 `source.*`；迁移器能转换的调用仍少于兼容层支持的调用。
 
-变量在该 host 实例中保存；不意味着已实现旧引擎所有持久化及作用域行为。必须明确选择带 `legacyScriptPrelude` 的运行时和 `LegacyScriptHost`；新版运行时默认不注入 `java`。
+## HTML 兼容
 
-`java.getRequest`、`java.post`、`java.connect` 明确拒绝，错误包含 `legacy.sync_network_unsupported`。未列出的参数重载报 `legacy.unsupported_overload`，例如 `java.get(url, headers)`、Base64 字节/字符集参数。其他 `java.*` 方法报 `legacy.unsupported_api`。非 `java.*` 调用交给新版宿主。
+显式 `@legacy:` 使用 [JSoup 提取兼容子集](html.md)。其中 html 是 outer HTML，新版 CSS 的 html 是 inner HTML。支持语法与导入转换必须分别验证，不能因为提取器支持就认为所有旧书源已自动转换。
 
-## 兼容边界
-
-上述少量接口可通过同步桥保留返回语义；它不是全量旧 API 兼容。通过 Dart 直接调用分派得到的 Future 也不能替代同步桥。任意 Java 类、Rhino 互操作、网页登录、验证码、持久化 Cookie 和旧脚本库均未因导入成功而获得兼容。
-
-测试依据：`packages/source_legacy/test/source_legacy_test.dart`。转换方法及限制见[迁移 Reference](../../migration/README.md)。
+测试依据：`packages/source_legacy/test`。转换方法及限制见[迁移 Reference](../../migration/README.md)。

@@ -35,11 +35,12 @@
       "jsonpath",
       "xpath",
       "regex",
-      "javascript"
+      "javascript",
+      "explicit @legacy JSoup subset"
     ],
     "automaticNextPage": true,
     "rateLimit": true,
-    "cookiePersistence": false,
+    "cookiePersistence": "Core export/import; Android source_host persists via PlatformSessionStore",
     "webViewCookieSynchronization": "browser.open result imported into HTTP jar; no continuous bidirectional synchronization",
     "paginationContract": "Explicit nextPage rule; maxPages default20, allowed1..1000; cycle/limit errors",
     "networkScheduling": {
@@ -57,29 +58,67 @@
     "browserCookieImport": {
       "setCookieArray": "Preserves supplied attributes; validates domain",
       "cookieHeader": "host-only, response directory path, HTTPS secure; original attributes unavailable"
-    }
+    },
+    "sessionExportImport": true,
+    "responseCharsetDetection": [
+      "Content-Type",
+      "UTF8 BOM",
+      "HTML meta",
+      "UTF8 default"
+    ],
+    "staticHeaders": true,
+    "parseHostMethods": [
+      "getString",
+      "getStringList",
+      "getElement",
+      "getElements"
+    ],
+    "parseNestedJavaScript": false,
+    "stageRequestOptions": [
+      "method",
+      "body string template",
+      "static headers replacement",
+      "charset"
+    ]
   },
   "legacy": {
     "status": "partial",
     "syncApis": [
-      "java.ajax(one plain URL)",
-      "java.base64Encode(one UTF8 string)",
-      "java.base64Decode(one UTF8 string)",
-      "java.md5Encode(one UTF8 string)",
-      "java.get(one variable key)",
-      "java.put(key, string value)"
+      "java.ajax",
+      "java.ajaxAll",
+      "java.connect",
+      "java.get(variable key or HTTP overload)",
+      "java.post",
+      "java.head",
+      "java.put",
+      "java.base64Encode",
+      "java.base64Decode",
+      "java.base64DecodeToByteArray",
+      "java.strToBytes",
+      "java.bytesToStr",
+      "java.hexDecodeToByteArray",
+      "java.hexDecodeToString",
+      "java.hexEncodeToString",
+      "java.md5Encode",
+      "java.md5Encode16",
+      "java.digestHex",
+      "java.digestBase64Str",
+      "java.encodeURI"
     ],
     "unsupportedApis": [
-      "java.getRequest",
-      "java.post",
-      "java.connect",
       "arbitrary Java classes",
-      "unlisted overloads"
+      "unlisted methods and overloads",
+      "legacy comma URL options",
+      "skipRateLimit=true"
     ],
     "importStatuses": [
       "unverified",
       "manualRequired"
-    ]
+    ],
+    "responseFacadeDifference": "body/url callable primitive facade is not strict-equality-equivalent to string properties",
+    "staticHeaders": true,
+    "dynamicHeaders": false,
+    "domFacade": "read-only subset; no JVM identity or arbitrary methods; html() explicitly unsupported"
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -89,12 +128,31 @@
     "scriptLibraries": false,
     "urlScripts": false,
     "stageListScripts": true,
-    "stageNextPageScripts": true
+    "stageNextPageScripts": true,
+    "fullAsyncCallGraphTransform": false
   },
   "androidBridge": {
     "protocolVersion": 1,
     "channel": "legado/source_engine",
     "incrementalResults": false,
-    "silentFallback": false
+    "silentFallback": false,
+    "startupSelfCheck": "Actual V8 1 + 1 before ready",
+    "startupError": "runtime_initialization_failed",
+    "isolatedDebugApplicationId": "com.legado.app.fluttertest",
+    "isolatedTestApplicationId": "com.legado.app.fluttertest.test",
+    "enabledApkAbis": [
+      "arm64-v8a"
+    ],
+    "sessionPersistence": {
+      "formatVersion": 1,
+      "perSourceModeIsolation": true,
+      "sameSourceSerialExecution": true,
+      "reservedPrefix": "__engine.session.",
+      "errors": [
+        "session_restore_failed",
+        "session_write_failed"
+      ],
+      "commit": "finally after task, including error/cancel"
+    }
   }
 }

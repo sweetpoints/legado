@@ -25,13 +25,25 @@
 
 | 旧直接调用 | 新调用 |
 |---|---|
-| `java.ajax(...)` | `(await source.net.get(...))` |
-| `java.base64Encode(...)` | `(await source.encoding.base64Encode(...))` |
-| `java.base64Decode(...)` | `(await source.encoding.base64Decode(...))` |
-| `java.get(...)` | `((await source.variables.get(...)) ?? "")` |
-| `java.put(...)` | `(await source.variables.put(...))` |
+| java.ajax(url) | await source.net.get(url) |
+| java.ajax(literalUrl,literalTimeoutOrNull) | await source.net.request({url,timeoutMs}) 后读取 body |
+| java.base64Encode | 单参数基础方法；双参数 encoding.base64EncodeWithFlags |
+| java.base64Decode | encoding.base64DecodeWithFlags；字面量 charset 用 WithCharset |
+| java.base64DecodeToByteArray | encoding.base64DecodeBytes |
+| java.strToBytes / bytesToStr | encoding.strToBytes / bytesToStr |
+| java.hexEncodeToString / hexDecodeToString / hexDecodeToByteArray | encoding.hexEncode / hexDecode / hexDecodeBytes |
+| java.md5Encode / md5Encode16 | crypto.md5 / md5Short |
+| java.digestHex / digestBase64Str | crypto.digestHex / digestBase64 |
+| java.encodeURI | encoding.formEncode |
+| java.get(key) | ((await source.variables.get(key)) ?? "") |
+| java.put(key,value) | await source.variables.put(key,value) |
+| java.getString / getStringList | 字面量规则转换为 source.parse 对应方法，捕获 result/baseUrl |
 
-已带 `await` 的旧调用需要人工审查，不自动转换。变量读取额外把 null 转成空字符串，保持旧缺失值语义。支持的调用必须符合表中简单参数数量；字节、字符集、标志及 HTTP 重载不自动转换。加括号是为了让属性访问和字符串拼接作用于最终结果。字符串和注释中的接口名字保留原字节，不按文本全局替换。
+规则提取转换只接受可解析字面量、无嵌套脚本的规则；默认内容 result、URL 标志 false 和当前 baseUrl 显式传入。空规则保持旧 getString 空字符串/getStringList null。动态规则报 migration.dynamic_rule；HTTP get/connect/post/head 和 Java DOM 方法不自动迁移，只在兼容模式中使用。
+
+base64Decode 第二参数必须是可判断的字面量 charset 或整数 flags；动态重载与非字面量 timed ajax 报 migration.ambiguous_overload。转换仍是受限直线脚本处理，不进行任意调用链异步传播。工具 API 必须由运行宿主注入 SourceUtilityHost，Reference 见[新版工具 API](../reference/v1/utilities.md)。
+
+已带 `await` 的旧调用需要人工审查，不自动转换。变量读取额外把 null 转成空字符串，保持旧缺失值语义。支持的调用必须符合表中简单参数数量；已列出的字节、字符集和标志方法可转换；HTTP response 对象调用及未列出的重载需要人工处理。加括号是为了让属性访问和字符串拼接作用于最终结果。字符串和注释中的接口名字保留原字节，不按文本全局替换。
 
 例如，转换输入：
 
@@ -63,6 +75,8 @@ return body;
 | `migration.unsupported_api` | 没有对应的新接口转换 |
 | `migration.unsupported_overload` | 超出文档中的简单参数数量 |
 | `migration.already_async` | 已带等待的旧调用需要审查 |
+| `migration.ambiguous_overload` | 无法静态确定重载或 timed ajax 参数 |
+| `migration.dynamic_rule` | 非字面量、不可解析或嵌套脚本的提取规则 |
 | `migration.java_binding` | 可能存在别名或遮蔽 |
 
 受限扫描并不验证整个脚本语法和行为；没有 issue 的候选也必须交给实际运行时校验并进行行为对照。禁止把 `unverified` 报告当作自动发布依据。

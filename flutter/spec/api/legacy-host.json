@@ -1,0 +1,201 @@
+{
+  "referenceVersion": 1,
+  "namespace": "java",
+  "execution": "synchronous script callback via parent Dart isolate",
+  "coverage": "partial",
+  "overloads": {
+    "ajax": [
+      "urlOrFirstArrayEntry",
+      "urlOrFirstArrayEntry, timeoutMs"
+    ],
+    "ajaxAll": [
+      "stringUrls[]",
+      "stringUrls[], false"
+    ],
+    "connect": [
+      "url",
+      "url, headerJsonOrNull",
+      "url, headerJsonOrNull, timeoutMs"
+    ],
+    "get": [
+      "variableKey",
+      "url, headers",
+      "url, headers, timeoutMs"
+    ],
+    "post": [
+      "url, body, headers",
+      "url, body, headers, timeoutMs"
+    ],
+    "head": [
+      "url, headers",
+      "url, headers, timeoutMs"
+    ],
+    "put": [
+      "key, stringValue"
+    ],
+    "base64Encode": [
+      "text",
+      "text, androidFlags"
+    ],
+    "base64Decode": [
+      "textOrNull",
+      "textOrNull, androidFlagsOrCharset"
+    ],
+    "base64DecodeToByteArray": [
+      "textOrNull",
+      "textOrNull, androidFlags"
+    ],
+    "strToBytes": [
+      "text",
+      "text, charset"
+    ],
+    "bytesToStr": [
+      "integerArray",
+      "integerArray, charset"
+    ],
+    "hexDecodeToByteArray": [
+      "hex"
+    ],
+    "hexDecodeToString": [
+      "hex"
+    ],
+    "hexEncodeToString": [
+      "text"
+    ],
+    "md5Encode": [
+      "text"
+    ],
+    "md5Encode16": [
+      "text"
+    ],
+    "digestHex": [
+      "text, algorithm"
+    ],
+    "digestBase64Str": [
+      "text, algorithm"
+    ],
+    "encodeURI": [
+      "text",
+      "text, charset"
+    ],
+    "getString": [
+      "rule",
+      "rule, content",
+      "rule, content, isUrl"
+    ],
+    "getStringList": [
+      "rule",
+      "rule, content",
+      "rule, content, isUrl"
+    ],
+    "getElement": [
+      "rule"
+    ],
+    "getElements": [
+      "rule"
+    ]
+  },
+  "http": {
+    "followRedirects": [
+      "ajax",
+      "ajaxAll",
+      "connect"
+    ],
+    "noRedirects": [
+      "get",
+      "post",
+      "head"
+    ],
+    "legacyCommaOptions": false,
+    "responseMethods": [
+      "body",
+      "url",
+      "code",
+      "statusCode",
+      "headers",
+      "header",
+      "hasHeader",
+      "message",
+      "statusMessage",
+      "isSuccessful",
+      "callTime",
+      "toString",
+      "bodyAsBytes",
+      "multiHeaders",
+      "cookies",
+      "cookie",
+      "hasCookie"
+    ],
+    "responsePropertyDifference": "body/url callable facades coerce to string but are not strict-equality-equivalent to string properties",
+    "unsupportedResponseMethods": [
+      "raw",
+      "errorBody"
+    ],
+    "jsoupHttpErrors": "status >=400 throws legacy.http_error",
+    "headerSemantics": {
+      "str": "last repeated value",
+      "jsoup": "joined values"
+    }
+  },
+  "codec": {
+    "androidFlags": {
+      "minimum": 0,
+      "maximum": 31,
+      "defaultEncode": 2,
+      "defaultDecode": 0
+    },
+    "signedOutputBytes": true,
+    "charsets": [
+      "UTF8",
+      "GBK",
+      "GB2312",
+      "CP936",
+      "ISO88591",
+      "LATIN1",
+      "ASCII",
+      "USASCII",
+      "UTF16",
+      "UTF16BE",
+      "UTF16LE"
+    ],
+    "digests": [
+      "MD5",
+      "SHA1",
+      "SHA224",
+      "SHA256",
+      "SHA384",
+      "SHA512"
+    ]
+  },
+  "errors": [
+    "legacy.unsupported_api",
+    "legacy.unsupported_overload",
+    "legacy.unsupported_skip_rate_limit",
+    "legacy.url_options_require_migration",
+    "legacy.unsupported_digest",
+    "legacy.unsupported_charset"
+  ],
+  "elements": {
+    "methods": [
+      "text",
+      "attr",
+      "outerHtml",
+      "select",
+      "selectFirst",
+      "toString",
+      "toJSON"
+    ],
+    "listMethods": [
+      "size",
+      "get",
+      "first",
+      "last",
+      "text",
+      "attr",
+      "select"
+    ],
+    "htmlMethod": false,
+    "identityPreserved": false,
+    "fullJsoupObject": false
+  }
+}
