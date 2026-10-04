@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read
 import android.content.Intent
 import android.graphics.Rect
 import android.view.View
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.core.view.ViewCompat
@@ -184,46 +185,80 @@ class ReaderWindowInsetsTest {
         }
     }
 
+    @Suppress("DEPRECATION") // API 26 geometry diagnostics require the legacy system UI flags.
     private fun assertGeometry(hidden: Boolean) {
-        compose.waitUntil(30000) {
-            compose.mainClock.advanceTimeByFrame()
-            var settled = false
-            scenario!!.onActivity { activity ->
-                val decor = activity.window.decorView
-                val insets = ViewCompat.getRootWindowInsets(decor) ?: return@onActivity
-                val bars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-                val caption = insets.getInsets(WindowInsetsCompat.Type.captionBar())
-                val navigation = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-                val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-                val reader = activity.findViewById<ReadView>(R.id.read_view)
-                val background = Rect()
-                if (ReadBookConfig.isNineBgImg) reader.curPage.getChildAt(0).background?.getPadding(background)
-                val avoidCutout = AppConfig.paddingDisplayCutouts || !ReadBookConfig.readBodyToLh
-                val visibleTop = !hidden || activity.isInMultiWindow
-                val expectedTop = maxOf(background.top,
-                    if (avoidCutout && !visibleTop) cutout.top else 0) +
-                    if (visibleTop) maxOf(bars.top, caption.top,
-                        if (avoidCutout) cutout.top else 0) else 0
-                val expectedLeft = maxOf(background.left, navigation.left,
-                    if (avoidCutout) cutout.left else 0)
-                val expectedRight = reader.width - maxOf(background.right, navigation.right,
-                    if (avoidCutout) cutout.right else 0)
-                val navigationHeight = if (!ReadBookConfig.hideNavigationBar) insets.navigationBarHeight else 0
-                val expectedBottom = reader.height - navigationHeight - maxOf(background.bottom,
-                    if (avoidCutout) (cutout.bottom - insets.navigationBarHeight).coerceAtLeast(0) else 0)
-                val body = reader.curPage.findViewById<View>(R.id.content_text_view)
-                val bodyPosition = IntArray(2)
-                body.getLocationInWindow(bodyPosition)
-                settled = insets.isVisible(WindowInsetsCompat.Type.statusBars()) ==
-                    (!hidden || activity.isInMultiWindow) &&
-                    reader.curPage.contentViewTop == expectedTop.toFloat() &&
-                    bodyPosition[0] == expectedLeft && bodyPosition[1] == expectedTop &&
-                    bodyPosition[0] + body.width == expectedRight &&
-                    bodyPosition[1] + body.height == expectedBottom
-                if (settled) File(context.getExternalFilesDir("ui-regression"), "reader-insets-geometry.txt")
-                    .appendText("bodyToCutout=${ReadBookConfig.readBodyToLh} padCutout=${AppConfig.paddingDisplayCutouts} hidden=$hidden cutout=$cutout navigation=$navigation caption=$caption body=${bodyPosition.toList()} ${body.width}x${body.height} expected=[$expectedLeft,$expectedTop,$expectedRight,$expectedBottom]\n")
+        var lastGeometry = "No geometry sample received"
+        try {
+            compose.waitUntil(30000) {
+                compose.mainClock.advanceTimeByFrame()
+                var settled = false
+                scenario!!.onActivity { activity ->
+                    val decor = activity.window.decorView
+                    val rawInsets = decor.rootWindowInsets ?: run {
+                        lastGeometry = "Root window insets unavailable; hidden=$hidden decor=${decor.width}x${decor.height}"
+                        return@onActivity
+                    }
+                    // The view-aware conversion includes legacy window flags; getRootWindowInsets
+                    // alone omits them in Core 1.18.0 and reports a hidden API 26 bar as visible.
+                    val insets = WindowInsetsCompat.toWindowInsetsCompat(rawInsets, decor)
+                    val bars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+                    val caption = insets.getInsets(WindowInsetsCompat.Type.captionBar())
+                    val navigation = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+                    val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                    val reader = activity.findViewById<ReadView>(R.id.read_view)
+                    val background = Rect()
+                    if (ReadBookConfig.isNineBgImg) reader.curPage.getChildAt(0).background?.getPadding(background)
+                    val avoidCutout = AppConfig.paddingDisplayCutouts || !ReadBookConfig.readBodyToLh
+                    val visibleTop = !hidden || activity.isInMultiWindow
+                    val expectedTop = maxOf(background.top,
+                        if (avoidCutout && !visibleTop) cutout.top else 0) +
+                        if (visibleTop) maxOf(bars.top, caption.top,
+                            if (avoidCutout) cutout.top else 0) else 0
+                    val expectedLeft = maxOf(background.left, navigation.left,
+                        if (avoidCutout) cutout.left else 0)
+                    val expectedRight = reader.width - maxOf(background.right, navigation.right,
+                        if (avoidCutout) cutout.right else 0)
+                    val navigationHeight = if (!ReadBookConfig.hideNavigationBar) insets.navigationBarHeight else 0
+                    val expectedBottom = reader.height - navigationHeight - maxOf(background.bottom,
+                        if (avoidCutout) (cutout.bottom - insets.navigationBarHeight).coerceAtLeast(0) else 0)
+                    val body = reader.curPage.findViewById<View>(R.id.content_text_view)
+                    val bodyPosition = IntArray(2)
+                    body.getLocationInWindow(bodyPosition)
+                    val pageRoot = reader.curPage.getChildAt(0)
+                    val readerPosition = IntArray(2).also(reader::getLocationInWindow)
+                    val visibleFrame = Rect().also(decor::getWindowVisibleDisplayFrame)
+                    lastGeometry = "sdk=${android.os.Build.VERSION.SDK_INT} hidden=$hidden " +
+                        "configuredHidden=${ReadBookConfig.hideStatusBar} bodyToCutout=${ReadBookConfig.readBodyToLh} " +
+                        "padCutout=${AppConfig.paddingDisplayCutouts} multiWindow=${activity.isInMultiWindow} " +
+                        "menuVisible=${activity.readMenu.isVisible} searchMenuVisible=${activity.searchMenu.bottomMenuVisible} " +
+                        "bottomDialog=${activity.bottomDialog} flags=0x${decor.systemUiVisibility.toString(16)} " +
+                        "windowFlags=0x${activity.window.attributes.flags.toString(16)} " +
+                        "statusVisible=${insets.isVisible(WindowInsetsCompat.Type.statusBars())} " +
+                        "status=$bars caption=$caption navigation=$navigation cutout=$cutout " +
+                        "ime=${insets.getInsets(WindowInsetsCompat.Type.ime())} " +
+                        "stableBars=${insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())} " +
+                        "navigationHeight=${insets.navigationBarHeight} hideNavigation=${ReadBookConfig.hideNavigationBar} " +
+                        "decor=${decor.width}x${decor.height} visibleFrame=$visibleFrame " +
+                        "reader=${readerPosition.toList()} ${reader.width}x${reader.height} " +
+                        "pagePadding=[${pageRoot.paddingLeft},${pageRoot.paddingTop},${pageRoot.paddingRight},${pageRoot.paddingBottom}] " +
+                        "contentViewTop=${reader.curPage.contentViewTop} canvasReady=${reader.curPage.isCanvasReady} " +
+                        "body=${bodyPosition.toList()} ${body.width}x${body.height} " +
+                        "expected=[$expectedLeft,$expectedTop,$expectedRight,$expectedBottom]"
+                    settled = insets.isVisible(WindowInsetsCompat.Type.statusBars()) ==
+                        (!hidden || activity.isInMultiWindow) &&
+                        reader.curPage.contentViewTop == expectedTop.toFloat() &&
+                        bodyPosition[0] == expectedLeft && bodyPosition[1] == expectedTop &&
+                        bodyPosition[0] + body.width == expectedRight &&
+                        bodyPosition[1] + body.height == expectedBottom
+                    if (settled) File(context.getExternalFilesDir("ui-regression"), "reader-insets-geometry.txt")
+                        .appendText("bodyToCutout=${ReadBookConfig.readBodyToLh} padCutout=${AppConfig.paddingDisplayCutouts} hidden=$hidden cutout=$cutout navigation=$navigation caption=$caption body=${bodyPosition.toList()} ${body.width}x${body.height} expected=[$expectedLeft,$expectedTop,$expectedRight,$expectedBottom]\n")
+                }
+                settled
             }
-            settled
+        } catch (timeout: ComposeTimeoutException) {
+            File(context.getExternalFilesDir("ui-regression"), "reader-insets-geometry.txt")
+                .appendText("TIMEOUT $lastGeometry\n")
+            throw AssertionError("Reader window geometry did not settle: $lastGeometry", timeout)
         }
         val host = compose.onNodeWithTag("reader-host").fetchSemanticsNode().boundsInRoot
         scenario!!.onActivity { activity ->
