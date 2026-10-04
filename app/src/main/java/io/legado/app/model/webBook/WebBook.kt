@@ -1,5 +1,6 @@
 package io.legado.app.model.webBook
 
+import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -7,6 +8,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.removeAllBookType
@@ -31,6 +33,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import splitties.init.appCtx
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
@@ -387,15 +390,28 @@ object WebBook {
                     require(!runPerJs || bookSource.ruleToc?.preUpdateJs.isNullOrBlank()) {
                         "Dart engine does not support legacy preUpdateJs; migrate the source first"
                     }
-                    DartSourceEngine.execute(bookSource, "toc", DartSourceEngine.jsonObject(book))
-                        .mapIndexed { index, row ->
-                            GSON.fromJson(GSON.toJson(row), BookChapter::class.java).apply {
-                                url = (row["chapterUrl"] as? String) ?: url
-                                bookUrl = book.bookUrl
-                                baseUrl = book.tocUrl
-                                this.index = index
+                    val chapters =
+                        DartSourceEngine.execute(
+                                bookSource,
+                                "toc",
+                                DartSourceEngine.jsonObject(book),
+                            )
+                            .mapIndexed { index, row ->
+                                GSON.fromJson(GSON.toJson(row), BookChapter::class.java).apply {
+                                    url = (row["chapterUrl"] as? String) ?: url
+                                    bookUrl = book.bookUrl
+                                    baseUrl = book.tocUrl
+                                    this.index = index
+                                }
                             }
-                        }
+                    if (chapters.isEmpty()) {
+                        throw TocEmptyException(appCtx.getString(R.string.chapter_list_empty))
+                    }
+                    currentCoroutineContext().ensureActive()
+                    book.removeAllBookType()
+                    book.addType(bookSource.getBookType())
+                    BookChapterList.updateBookTocInfo(book, ArrayList(chapters))
+                    chapters
                 }
                 .onFailure { currentCoroutineContext().ensureActive() }
         }

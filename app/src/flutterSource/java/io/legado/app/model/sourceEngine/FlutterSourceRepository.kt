@@ -165,34 +165,34 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
-            channel!!.invokeMethod(
-                "execute",
-                mapOf(
-                    "protocolVersion" to 1,
-                    "taskId" to taskId,
-                    "operation" to operation,
-                    "sourceJson" to sourceJson,
-                    "input" to input,
-                ),
-                object : MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        response.complete(result)
-                    }
-
-                    override fun error(code: String, message: String?, details: Any?) {
-                        response.completeExceptionally(
-                            IllegalStateException("$code: ${message.orEmpty()}")
-                        )
-                    }
-
-                    override fun notImplemented() {
-                        response.completeExceptionally(
-                            IllegalStateException("Dart engine protocol unavailable")
-                        )
-                    }
-                },
-            )
             try {
+                channel!!.invokeMethod(
+                    "execute",
+                    mapOf(
+                        "protocolVersion" to 1,
+                        "taskId" to taskId,
+                        "operation" to operation,
+                        "sourceJson" to sourceJson,
+                        "input" to input,
+                    ),
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            response.complete(result)
+                        }
+
+                        override fun error(code: String, message: String?, details: Any?) {
+                            response.completeExceptionally(
+                                IllegalStateException("$code: ${message.orEmpty()}")
+                            )
+                        }
+
+                        override fun notImplemented() {
+                            response.completeExceptionally(
+                                IllegalStateException("Dart engine protocol unavailable")
+                            )
+                        }
+                    },
+                )
                 val raw = withTimeout(120_000) { response.await() }
                 require(raw is List<*>) { "Invalid engine result: expected list" }
                 raw.map { row ->
@@ -205,9 +205,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             } finally {
                 // Cancellation also reaches Dart; completion is idempotent there.
                 withContext(NonCancellable + Dispatchers.Main.immediate) {
-                    channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
-                    responses.remove(taskId)
-                    mutableTasks.value = mutableTasks.value - taskId
+                    try {
+                        channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
+                    } finally {
+                        responses.remove(taskId)
+                        mutableTasks.value = mutableTasks.value - taskId
+                    }
                 }
             }
         }
@@ -217,6 +220,17 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         withContext(NonCancellable + Dispatchers.Main.immediate) {
             if (closed) return@withContext
             closed = true
+            ready.completeExceptionally(
+                IllegalStateException("Flutter source repository is closed")
+            )
+            // Callers own execute coroutines; cancelling our browser scope cannot wake them.
+            val pending = responses.values.toList()
+            responses.clear()
+            pending.forEach {
+                it.completeExceptionally(
+                    IllegalStateException("Flutter source repository is closed")
+                )
+            }
             browserJobs.values.forEach { it.cancel() }
             browserJobs.clear()
             try {
