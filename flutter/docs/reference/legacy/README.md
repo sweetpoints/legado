@@ -4,11 +4,11 @@
 
 ## 导入
 
-`LegacySourceImporter.import(input)` 要求 `bookSourceUrl` 为绝对 HTTP(S) URL。原始输入通过 JSON 深拷贝保留在 `LegacyImport.original` 和候选的 `metadata.legacyOriginal` 中。
+`LegacySourceImporter.import(input)` 要求 `bookSourceUrl` 为非空String，原样保存为source.id，不trim或通过Uri归一化。HTTP(S) ID仍用作正常baseUrl；非HTTP(S) ID按下述锚点契约处理。原始输入通过 JSON 深拷贝保留在 `LegacyImport.original` 和候选的 `metadata.legacyOriginal` 中。
 
 | 旧字段 | 新字段 |
 |---|---|
-| `bookSourceUrl` | `id`、`baseUrl` |
+| `bookSourceUrl` | 原样 `id`；HTTP(S) ID提供正常 `baseUrl`，非HTTP(S)需静态请求锚点 |
 | `bookSourceName` | `name`，缺失时使用 URL 主机名 |
 | `ruleSearch`、`searchUrl`、`bookList` | `stages.search` 的字段、URL、列表规则 |
 | `ruleExplore`、`exploreUrl`、`bookList` | `stages.explore`；URL固定为 `{{exploreUrl}}`，取调用方已选择的发现入口 |
@@ -57,3 +57,11 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 旧发现菜单只保存在 metadata.legacyOriginal，导入器不将整个菜单当请求URL。stages.explore 固定GET、无body和阶段headers，使用全局静态headers，URL为 `{{exploreUrl}}`。调用方提供 input.exploreUrl，即用户选中的具体URL；现代书源入口仍可使用 input.url。CLI execute/compare 旧发现阶段也必须通过 --variables 提供 exploreUrl。
 
 菜单脚本、逗号请求选项和复杂模板均需人工迁移；逗号菜单选项产生 legacy.explore_options，不会套用到所有选中URL。@js:/<js>等脚本标记按大小写不敏感检测。选中入口自身的动态请求参数也必须显式迁移。
+
+## 书源ID与请求基址
+
+非HTTP(S)书源ID不等于无效旧源。导入器仅在searchUrl能提供确定的静态绝对HTTP(S)地址时，用其origin作为新版结构baseUrl锚点：可取逗号请求选项之前的URL，query中的已知模板允许；JS、host/path模板、userinfo、fragment或空白不能提供此锚点。候选增加 legacy.base_url_requires_review，并设置 metadata.legacyBaseUrlUnavailable=true，因此仍为manualRequired，不宣称已恢复旧源完整基址语义。无法确定锚点时报清晰的Cannot determine base FormatException；该失败不是书源ID无效的证明。
+
+此标记下，所有规则阶段URL在模板替换后的最终值必须显式包含HTTP(S) scheme和host；相对路径及 `//host` 在发请求之前报 legacy_base_url_required，不借search origin猜测旧请求host。绝对URL可带fragment。正常HTTP来源及现代书源行为不变；此检查针对规则阶段请求，不扩展为脚本分支的全调用分析。提取链接和nextPage仍按实际response URL解析。
+
+默认source_host对manual issue阻断；只在flag为true且所有issue均精确为code=legacy.base_url_requires_review、path=bookSourceUrl时，允许受阶段绝对URL guard保护的执行。候选仍为manualRequired，其他issue继续阻断，详见[宿主例外](../v1/android.md)。

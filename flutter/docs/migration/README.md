@@ -103,8 +103,8 @@ STAGE 为 search/explore/info/toc/content。旧发现阶段通过 --variables �
 
 ## 私有书源集合离线审计快照
 
-本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。仅做离线结构导入与迁移审计：生成518个候选，其中10个unverified（全部enabled且文本）、508个manualRequired；实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
+本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。第二轮仅做离线结构导入与迁移审计，生成526个候选，其中10个unverified（全部enabled且文本）、516个manualRequired；28个未生成候选。实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
 
-36个非HTTP(S)书源ID输入未生成候选，其中enabled35、文本33、enabled且文本32。这36个ID均非空且互不重复，其中12个searchUrl为绝对HTTP地址。旧BookSource主键是书源ID，旧NetworkUtils.getAbsoluteURL也支持从绝对请求地址解析；因此非HTTP(S)的bookSourceUrl不等于无效旧源。当前导入器将书源ID同时当作必须为HTTP(S)的baseUrl，是明确待支持的模型/基址推导缺口；本次审计没有证明这些源可实际执行，也未据此否定其有效性。
+相比第一轮新增8个候选，全部enabled且文本，原书源ID精确保留，legacyBaseUrlUnavailable与legacy均为true；原有518个候选的状态未变化。第二轮issue总数7664。剩余28个未生成候选的静态分类为19个JS、4个非标准query模板、2个表达式空白、2个无search、1个无法确定锚点；这些分类不证明旧源无效。静态绝对search origin锚点仍需manual审查，详情见[旧版ID与基址契约](../reference/legacy/README.md)。
 
 这里只记录安全汇总；私有原书源及逐源数据不进入Git提交，审计summary保存在ignored的私有临时目录。

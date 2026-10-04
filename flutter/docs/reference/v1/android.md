@@ -10,7 +10,7 @@ Android 构建通过 `-PflutterSourceEngine=true` 引用 Flutter AAR。先按 `f
 
 书源注释标记：
 
-- `@engine:dart`：选择 Dart 旧格式导入链路；有需要人工处理的 issue 时明确失败。
+- `@engine:dart`：选择 Dart 旧格式导入链路；有需要人工处理的 issue 时明确失败，受保护基址例外见下文。
 - `@source:v1 <single-line JSON>`：提供新版书源配置；JSON 必须为单行。
 
 选中 Dart 链路后失败会报告错误，不静默回到 Kotlin/Rhino。未标记的现有书源仍走既有链路，这不是已完成全量切换。
@@ -67,3 +67,7 @@ TOC 的 isVip/isPay/isVolume 原生Boolean直接保留。旧源的字符串按�
 旧来源判定包括没有v1配置的 @engine:dart、v1 metadata.legacy=true，以及 metadata.legacyOriginal 为JSON对象的候选。search/explore/info 的旧来源结果在映射、过滤或写入前，沿用 BookHelp.formatBookName/formatBookAuthor 的旧regex与trim；数字wordCount按 StringUtils.wordCountFormat 处理，kind中已提取的换行改为逗号。现代来源不执行这些格式化；详情空字符串保持既有不覆盖行为。详情重命名权限：存在legacyOriginal时读取其ruleBookInfo.canReName是否非空，否则读取原BookSource规则是否非空；纯现代来源遵循调用方canReName。
 
 Android发现输入同时提供url（原值）、exploreUrl和page。旧来源的exploreUrl只预展开 `{{page}}`；现代来源保持原值。旧选中URL在发送前拒绝 @js:/@webjs:/javascript:/<js> 脚本、逗号请求选项、角括号页码选择及剩余 `{{}}` 模板，明确报告 requires migration 错误；不会把请求选项作为URL发送。导入的旧发现阶段使用 `{{exploreUrl}}`，现代入口仍可使用url。
+
+## 受保护基址候选执行
+
+source_host 对导入issue仅允许精确例外：metadata.legacyBaseUrlUnavailable必须为true，且每个issue的code均为 legacy.base_url_requires_review、path均为 bookSourceUrl。此时允许进入引擎，由规则阶段的绝对HTTP(S) URL检查保护请求。任意其他issue、不同path或缺少flag仍阻断执行；例外不把候选status改成unverified或verified，也不允许从锚点猜测相对host。

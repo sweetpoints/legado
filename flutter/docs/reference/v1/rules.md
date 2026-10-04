@@ -68,3 +68,5 @@ stage 配置 `nextPage` 时，每页提取结束后在整份响应正文上执�
 stage method 默认 GET，允许有效 HTTP token；实际请求转成大写。body 为字符串模板，使用同样的 {{name}} 上下文占位符，但插入原始字符串，不进行 URL component 编码或 JS 执行。缺少输入报 missing_input；JSON、表单等 body 编码格式由作者明确构造。全局/阶段静态 headers 不执行变量或脚本。新引擎不自动推断 Content-Type，表单/JSON 请求应显式设置。
 
 charset 可指定该阶段原始请求体字节编码和响应解码；它不改变 URL 查询变量的UTF-8编码，也不是旧 AnalyzeUrl 的表单/查询charset语义。未指定时使用默认请求编码与响应检测。分页请求沿用该阶段 method、body、headers 和 charset，不自动改写成网站特有翻页表单。
+
+兼容导入候选若标记 metadata.legacyBaseUrlUnavailable=true，规则阶段在模板替换后要求URL显式含HTTP(S) scheme与host；relative及 `//host` 报 legacy_base_url_required，避免用结构锚点猜测请求host。提取链接和nextPage照常相对于实际响应URL解析，绝对请求URL允许fragment。此限制不改变普通现代书源规则。

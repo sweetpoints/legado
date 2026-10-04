@@ -43,26 +43,26 @@
       ],
       "androidRelease": "local unsigned APK and AAR; minifyAppReleaseWithR8 completed; packaged V8 size and SHA-256 match manifest",
       "logs": [
-        "tmp/flutter-source-check-selected-explore.log",
-        "tmp/flutter-android-test-selected-explore.log",
-        "tmp/flutter-android-release-selected-explore.log"
+        "tmp/flutter-source-check-source-identity-final.log",
+        "tmp/flutter-android-test-source-identity-final.log",
+        "tmp/flutter-android-release-source-identity.log"
       ],
       "fullHistoricalSourceAcceptance": false,
       "signedDistributionAcceptance": false,
       "ciAcceptance": false,
-      "acceptanceRound": "selected explore and Android book formatting acceptance",
+      "acceptanceRound": "source identity and guarded base URL acceptance",
       "workspaceStaticAnalyses": 8,
       "workspacePackageTests": [
-        35,
         38,
+        41,
         12,
         21,
         21,
-        83,
+        85,
         1,
-        6
+        8
       ],
-      "androidInstrumentationCases": 10,
+      "androidInstrumentationCases": 11,
       "currentRoundReleaseR8": "passed locally",
       "debugFlutterAssetConsistency": "10 Flutter assets in AAR and APK have matching SHA-256",
       "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
@@ -70,7 +70,7 @@
         "libapp.so": {
           "bytes": 3277704,
           "sha256MatchesBetweenAarAndApk": true,
-          "sha256": "f43043ce8911cfd383bb72bf819baddab9e3ce24155730067def30c315ccf761"
+          "sha256": "f9b6ed5e8ca365d2d7e99d499c8fae8f3ed31c3e2a87e23a8159cde3375e8250"
         },
         "libsource_v8.so": {
           "bytes": 26306760,
@@ -141,7 +141,14 @@
     ],
     "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
     "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5",
-    "cssProjection": "last top-level unescaped @; quoted/bracketed/function/escaped @ retained"
+    "cssProjection": "last top-level unescaped @; quoted/bracketed/function/escaped @ retained",
+    "legacyMissingBaseGuard": {
+      "flag": "metadata.legacyBaseUrlUnavailable=true",
+      "ruleStageUrl": "expanded URL must contain explicit HTTP(S) scheme and host; fragments allowed",
+      "relativeOrSchemeRelativeError": "legacy_base_url_required",
+      "derivedLinksAndNextPage": "resolved against actual response URL",
+      "scriptBranchChanged": false
+    }
   },
   "legacy": {
     "status": "partial",
@@ -225,7 +232,22 @@
       "explore menu scripts/options",
       "contentBatch",
       "callBackJs"
-    ]
+    ],
+    "sourceIdentityAndBase": {
+      "id": "nonempty string preserved verbatim without trim or URI normalization",
+      "httpId": "normal HTTP(S) base URL",
+      "nonHttpIdAnchor": "deterministic static absolute HTTP(S) searchUrl origin only; candidate still manualRequired",
+      "issue": "legacy.base_url_requires_review",
+      "metadataFlag": "legacyBaseUrlUnavailable=true",
+      "noAnchor": "FormatException; not evidence of invalid source ID",
+      "anchorRejected": [
+        "script",
+        "host/path templates",
+        "userinfo",
+        "fragment",
+        "whitespace"
+      ]
+    }
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -267,28 +289,39 @@
     },
     "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule",
     "privateCorpusOfflineAuditSnapshot": {
+      "round": 2,
       "inputSources": 554,
-      "candidates": 518,
-      "unverified": 10,
-      "manualRequired": 508,
-      "noCandidateNonHttpBaseUrl": 36,
-      "actuallyExecuted": 0,
-      "verified": 0,
-      "enabledBreakdownAvailable": true,
-      "privateOriginalsCommitted": false,
-      "fullHistoricalSourceAcceptance": false,
       "enabledSources": 546,
       "disabledSources": 8,
       "textSources": 473,
       "nonTextSources": 81,
       "enabledTextSources": 466,
+      "candidates": 526,
+      "unverified": 10,
       "unverifiedAllEnabledAndText": true,
-      "noCandidateEnabled": 35,
-      "noCandidateText": 33,
-      "noCandidateEnabledText": 32,
-      "noCandidateIdsNonemptyAndDistinct": true,
-      "noCandidateAbsoluteHttpSearchUrl": 12,
-      "noCandidateMeaning": "Importer currently conflates source ID with HTTP base URL; non-HTTP source IDs are a pending compatibility gap, not evidence of invalid legacy sources"
+      "manualRequired": 516,
+      "noCandidate": 28,
+      "actuallyExecuted": 0,
+      "verified": 0,
+      "issueCount": 7664,
+      "newCandidates": 8,
+      "newCandidatesAllEnabledAndText": true,
+      "newCandidateIdPreservedExactly": true,
+      "newCandidateFlags": {
+        "legacy": true,
+        "legacyBaseUrlUnavailable": true
+      },
+      "existing518CandidateStatusesUnchanged": true,
+      "noCandidateStaticCategories": {
+        "javascript": 19,
+        "nonstandardQueryTemplate": 4,
+        "expressionWhitespace": 2,
+        "noSearch": 2,
+        "noAnchor": 1
+      },
+      "categoriesProveLegacyInvalid": false,
+      "privateOriginalsCommitted": false,
+      "fullHistoricalSourceAcceptance": false
     }
   },
   "androidBridge": {
@@ -320,6 +353,13 @@
     "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index",
     "legacyBookFormatting": "search/explore/info format name/author, numeric wordCount, kind newlines; legacyOriginal provenance counts independently of runtime mode; modern values retained",
     "legacyInfoRename": "legacyOriginal.ruleBookInfo.canReName nonempty, else BookSource rule nonempty; modern caller canReName",
-    "exploreInput": "url original plus exploreUrl and page; legacy pre-expands page only and rejects scripts/options/page-choice/remaining templates before sending"
+    "exploreInput": "url original plus exploreUrl and page; legacy pre-expands page only and rejects scripts/options/page-choice/remaining templates before sending",
+    "manualIssueExecutionException": {
+      "requiredFlag": "legacyBaseUrlUnavailable=true",
+      "everyIssueCode": "legacy.base_url_requires_review",
+      "everyIssuePath": "bookSourceUrl",
+      "otherwise": "blocked",
+      "verificationStatusChanged": false
+    }
   }
 }
