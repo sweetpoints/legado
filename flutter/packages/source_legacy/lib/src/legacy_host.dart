@@ -84,13 +84,16 @@ const legacyScriptPrelude = r"""
   }
   function element(value) {
     if (typeof value !== 'string') return value;
-    const query = (method, rule) => __sourceHostSync('parse.' + method, ['@legacy:' + rule, value, false, globalThis.baseUrl]);
+    const rootTag = /^<([A-Za-z][A-Za-z0-9:_-]*)/.exec(value);
+    if (!rootTag) throw new Error('legacy.invalid_element_serialization');
+    const rootRule = 'tag.' + rootTag[1] + '.0';
+    const query = (method, rule) => __sourceHostSync('parse.' + method, ['@legacy:' + rootRule + rule, value, false, globalThis.baseUrl]);
     const out = {
       text: () => query('getString', '@text'),
       attr: name => query('getString', '@' + String(name)),
       outerHtml: () => value, toString: () => value, toJSON: () => value,
-      select: selector => elementList(query('getElements', String(selector))),
-      selectFirst: selector => elementList(query('getElements', String(selector))).first(),
+      select: selector => elementList(query('getElements', '@' + String(selector))),
+      selectFirst: selector => elementList(query('getElements', '@' + String(selector))).first(),
       html: () => {throw new Error('legacy.unsupported_element_api: html');}
     };
     return out;
@@ -244,7 +247,18 @@ class LegacyScriptHost implements ScriptHost {
         if (arguments.length > 2 && arguments[2] is! bool) {
           throw ArgumentError('isUrl must be boolean');
         }
-        final normalized = rule.startsWith('@') || rule.startsWith(r'$')
+        final normalized = rule.toLowerCase().startsWith('@css:')
+            ? '@legacy:${rule.substring(5)}'
+            : [
+                '@text',
+                '@ownText',
+                '@textNodes',
+                '@html',
+                '@all',
+                '@children',
+              ].contains(rule)
+            ? '@legacy:$rule'
+            : rule.startsWith('@') || rule.startsWith(r'$')
             ? rule
             : '@legacy:$rule';
         return delegate.call('parse.$name', [
@@ -347,7 +361,12 @@ class LegacyScriptHost implements ScriptHost {
     if (timeout != null && (timeout is! int || timeout <= 0)) {
       throw ArgumentError('Legacy timeout must be positive milliseconds');
     }
+    final inheritHeaders = kind == 'str' && headers == null;
     final requestHeaders = _headers(headers);
+    if (kind == 'jsoup' &&
+        !requestHeaders.keys.any((k) => k.toLowerCase() == 'user-agent')) {
+      requestHeaders['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+    }
     if (kind == 'jsoup' &&
         method == 'POST' &&
         !requestHeaders.keys.any((k) => k.toLowerCase() == 'content-type')) {
@@ -359,7 +378,8 @@ class LegacyScriptHost implements ScriptHost {
       {
         'url': url,
         'method': method,
-        'headers': requestHeaders,
+        'inheritHeaders': inheritHeaders,
+        if (!inheritHeaders) 'headers': requestHeaders,
         'followRedirects': followRedirects,
         'body': ?body,
         'timeoutMs': ?timeout,

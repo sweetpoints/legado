@@ -89,6 +89,28 @@ void main() {
       '@legacy:article@html',
     );
   });
+  test('static source headers import and dynamic ones stay manual', () {
+    for (final header in [
+      '{"X-Token":"token"}',
+      <String, Object?>{'X-Token': 'token'},
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'header': header,
+      });
+      expect(imported.source.headers, {'X-Token': 'token'});
+      expect(imported.requiresManualWork, false);
+    }
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'header': '@js:java.get("token")',
+    });
+    expect(imported.requiresManualWork, true);
+    expect(
+      imported.issues.map((e) => e.code),
+      contains('legacy.dynamic_header'),
+    );
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

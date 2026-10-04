@@ -193,7 +193,6 @@ class LegacySourceImporter {
     for (final key in [
       'mainJs',
       'jsLib',
-      'header',
       'loginUrl',
       'loginUi',
       'loginCheckJs',
@@ -208,6 +207,29 @@ class LegacySourceImporter {
             key,
             'legacy.capability_requires_review',
             'Preserved in original; this capability is not converted automatically.',
+          ),
+        );
+      }
+    }
+    final requestHeaders = <String, String>{};
+    if (input['header'] != null && input['header'] != '') {
+      try {
+        final raw = input['header'] is String
+            ? jsonDecode(input['header'] as String)
+            : input['header'];
+        if (raw is! Map ||
+            raw.entries.any((e) => e.key is! String || e.value is! String)) {
+          throw const FormatException(
+            'Static headers must be a string-to-string object',
+          );
+        }
+        requestHeaders.addAll(Map<String, String>.from(raw));
+      } on FormatException {
+        issues.add(
+          const LegacyIssue(
+            'header',
+            'legacy.dynamic_header',
+            'Dynamic or invalid headers require migration.',
           ),
         );
       }
@@ -238,6 +260,7 @@ class LegacySourceImporter {
         name: input['bookSourceName']?.toString() ?? base.host,
         baseUrl: base,
         stages: stages,
+        headers: requestHeaders,
         metadata: {
           'legacy': true,
           'legacyOriginal': original,

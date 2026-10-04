@@ -123,7 +123,11 @@ void main() {
       expect(delegate.calls.last, {
         'url': 'https://books.test',
         'method': 'GET',
-        'headers': {'X': 'v'},
+        'headers': {
+          'X': 'v',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        },
+        'inheritHeaders': false,
         'followRedirects': false,
         'timeoutMs': 1234,
       });
@@ -137,6 +141,31 @@ void main() {
       expect(delegate.calls.last['followRedirects'], false);
       await host.call('java.head', ['https://books.test', null]);
       expect(delegate.calls.last['method'], 'HEAD');
+    },
+  );
+  test(
+    'HTTP defaults preserve caller overrides and source inheritance',
+    () async {
+      await host.call('java.ajax', ['https://books.test']);
+      expect(delegate.calls.last['inheritHeaders'], true);
+      expect(delegate.calls.last.containsKey('headers'), false);
+      await host.call('java.connect', ['https://books.test', '{}']);
+      expect(delegate.calls.last['inheritHeaders'], false);
+      expect(delegate.calls.last['headers'], isEmpty);
+      await host.call('java.post', ['https://books.test', 'a=b', {}]);
+      expect(
+        (delegate.calls.last['headers'] as Map)['Content-Type'],
+        'application/x-www-form-urlencoded; charset=UTF-8',
+      );
+      await host.call('java.post', [
+        'https://books.test',
+        '{}',
+        {'content-type': 'application/json', 'user-agent': 'custom'},
+      ]);
+      expect(delegate.calls.last['headers'], {
+        'content-type': 'application/json',
+        'user-agent': 'custom',
+      });
     },
   );
   test('Jsoup error status throws, connect and ajax expose body', () async {
