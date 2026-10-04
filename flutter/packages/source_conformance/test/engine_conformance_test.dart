@@ -248,7 +248,7 @@ void main() {
     final options = jsonEncode({
       'method': 'post',
       'headers': {'X-Extra': true, 'X-Replace': 'new'},
-      'body': {'key': '{{key}}'},
+      'body': jsonEncode({'key': '{{key}}'}),
     });
     final original = <String, Object?>{
       'bookSourceUrl': server.baseUrl.toString(),
