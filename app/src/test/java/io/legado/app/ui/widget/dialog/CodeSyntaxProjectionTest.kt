@@ -126,6 +126,26 @@ class CodeSyntaxProjectionTest {
         }
     }
 
+    @Test
+    fun longPairTokenRunsKeepTheirOriginalPhaseAcrossEveryViewportStart() = runTest {
+        for (symbol in listOf('|', '&', '%', '@')) {
+            for (length in listOf(100, 101, 102, 103)) {
+                for (prefix in listOf("", "😀 prefix ")) {
+                    for (suffix in listOf(":", "::", "js:", "@js:")) {
+                        val input = prefix + symbol.toString().repeat(length) + suffix
+                        val full = projectCodeSyntax(input, colors)
+                        for (start in input.indices) {
+                            for (width in listOf(1, 2, 3, 17)) {
+                                assertViewportMatches(full,
+                                    start until (start + width).coerceAtMost(input.length))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun assertViewportMatches(full: AnnotatedString, viewport: IntRange) {
         val projected = projectCodeSyntax(full.text, colors, viewport)
         assertEquals(full.text, projected.text)
