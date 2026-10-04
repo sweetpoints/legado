@@ -10,7 +10,9 @@
 
 Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为 JDK 21 路径，在本目录运行 `bash tool/build-android.sh`。脚本构建 ARM64 Debug AAR 和启用新引擎的应用、仪器测试 APK；不会修改全局 Flutter JDK 设置。
 
-对现有 ARM64 设备或模拟器设置 `ANDROID_SERIAL`，运行 `bash tool/test-android.sh` 可重建并执行专门的 Flutter 引擎仪器测试。脚本使用独立的 `.fluttertest` 应用 ID 后缀，避免覆盖模拟器上已有的 Debug 应用。测试覆盖 Android 实际 V8、异步搜索/目录/正文、WebBook 路由及无限脚本取消后恢复。
+运行 `bash tool/build-android.sh --release` 构建 Release AAR 与启用新引擎的 Release 应用，包含现有 R8 缩减流程。签名使用项目既有配置，构建命令不发布产物。
+
+对现有 ARM64 设备或模拟器设置 `ANDROID_SERIAL`，运行 `bash tool/test-android.sh` 可重建并执行专门的 Flutter 引擎仪器测试。脚本使用独立的 `.fluttertest` 应用 ID 后缀，避免覆盖模拟器上已有的 Debug 应用。测试覆盖 Android 实际 V8、异步搜索/目录/正文、WebBook 路由、无限脚本取消后恢复，以及引擎关闭重建后的会话恢复和书源隔离。
 
 在现有书源编辑器的注释中加入独立一行 `@engine:dart`，选择旧版兼容入口；使用 `@source:v1 ` 后接单行新版 JSON，选择新版入口。未选择的书源仍使用原引擎。选中 Dart 的书源失败时不会静默回退。构建未启用 `-PflutterSourceEngine=true` 时，选择 Dart 会明确报告缺少后端。
 
@@ -33,4 +35,4 @@ Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为
 
 当前不是全部历史书源的等价替代。复杂旧脚本、Java 类互操作、未实现的宿主重载与 JSoup 专有规则会报告人工处理。分页、请求限速和部分编码已实现；浏览器、运行时与平台边界以 Reference 和实际测试为准。固定样本通过不代表所有联网书源或所有设备通过。
 
-V8 原生产物固定版本并校验 SHA-256，自动下载至忽略目录，不提交二进制缓存。当前构建适配 macOS ARM64 和 Android ARM/ARM64/x64；其他平台没有宣称实现。
+V8 原生产物固定版本并校验 SHA-256，自动下载至忽略目录，不提交二进制缓存。原生 hook 具有 macOS ARM64 和 Android ARM/ARM64/x64 的构建分支；当前宿主构建脚本、APK 和设备验证仅覆盖 Android ARM64，启用引擎时 APK 也限制为 ARM64。其他平台和 ABI 未完成端到端验证。

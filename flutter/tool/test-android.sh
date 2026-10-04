@@ -20,7 +20,7 @@ task_test_started="$(date +%s)"
     --console=plain --max-workers=2
 
 # Some connected-test installation failures return Gradle exit code zero.
-# Confirm that both actual instrumented cases ran successfully.
+# Confirm that all three actual instrumented cases ran successfully.
 SOURCE_ENGINE_TEST_STARTED="$task_test_started" python3 - <<'PY'
 from pathlib import Path
 import os
@@ -33,7 +33,7 @@ for report in directory.glob('TEST-*.xml'):
         continue
     cases.extend(case for case in ET.parse(report).iter('testcase')
                  if case.get('classname') == 'io.legado.app.model.FlutterSourceEngineTest')
-if len(cases) < 2 or any(case.find(tag) is not None
+if len(cases) < 3 or any(case.find(tag) is not None
                          for case in cases for tag in ('failure', 'error', 'skipped')):
     raise SystemExit('Flutter source engine instrumentation did not pass all cases.')
 print(f'Flutter source engine instrumentation: {len(cases)} cases passed.')

@@ -376,7 +376,11 @@ android {
         )
         extensions.extraProperties.set("archivesBaseName", "${appName}_$appVersion")
 
-        if (armOnly) {
+        // The source_host AAR built by flutter/tool currently packages ARM64.
+        // Keep the enabled APK from advertising ABIs without Flutter/V8.
+        if (flutterSourceEngine) {
+            ndk { abiFilters.add("arm64-v8a") }
+        } else if (armOnly) {
             ndk {
                 abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
             }
