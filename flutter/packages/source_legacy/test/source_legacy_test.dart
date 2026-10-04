@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:test/test.dart';
 import 'package:source_engine/source_engine.dart';
 import 'package:source_legacy/source_legacy.dart';
@@ -166,6 +168,58 @@ void main() {
       expect(imported.source.stages['search']!.charset, isNull);
     }
   });
+  test('URL option header placeholders require manual migration', () {
+    for (final header in [
+      {'X-Search': '{{key}}'},
+      {'X-{{key}}': 'value'},
+      jsonEncode({'X-Search': '{{page}}'}),
+    ]) {
+      final input = <String, Object?>{
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,${jsonEncode({'headers': header})}',
+        'ruleSearch': {'bookList': 'class.book'},
+      };
+      final imported = LegacySourceImporter().import(input);
+      expect(imported.requiresManualWork, true, reason: header.toString());
+      expect(
+        imported.issues.any((e) => e.message.startsWith('Header placeholders')),
+        true,
+      );
+      expect(imported.source.stages['search']!.headers, isEmpty);
+      expect(imported.original, input);
+    }
+  });
+  test(
+    'dynamic method and inferred body format never count as literal requests',
+    () {
+      for (final options in [
+        {'method': '{{key}}'},
+        {'method': 'POST', 'body': '{{key}}'},
+      ]) {
+        final imported = LegacySourceImporter().import({
+          'bookSourceUrl': 'https://books.test',
+          'searchUrl': '/search,${jsonEncode(options)}',
+          'ruleSearch': {'bookList': 'class.book'},
+        });
+        expect(imported.requiresManualWork, true, reason: options.toString());
+        expect(
+          imported.issues.any((e) => e.code == 'legacy.request_options'),
+          true,
+        );
+      }
+      final explicitType = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl':
+            '/search,${jsonEncode({
+              'method': 'POST',
+              'body': '{{key}}',
+              'headers': {'Content-Type': 'text/plain'},
+            })}',
+        'ruleSearch': {'bookList': 'class.book'},
+      });
+      expect(explicitType.requiresManualWork, false);
+    },
+  );
   test('commas in a plain URL are not misclassified as options', () {
     final imported = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

@@ -321,6 +321,11 @@ _LegacyRequest _legacyRequest(
     if (options['method'] is! String) {
       issue('Request method must be a literal string.');
     } else {
+      if ((options['method'] as String).contains('{{')) {
+        issue(
+          'Method placeholders require interpolation before method selection.',
+        );
+      }
       method = switch ((options['method'] as String).toUpperCase()) {
         'POST' => 'POST',
         'HEAD' => 'HEAD',
@@ -340,9 +345,17 @@ _LegacyRequest _legacyRequest(
           )) {
         throw const FormatException('Expected flat header map');
       }
-      headers.addAll(
-        raw.map((k, v) => MapEntry(k.toString(), v?.toString() ?? 'null')),
-      );
+      for (final entry in raw.entries) {
+        final name = entry.key.toString();
+        final headerValue = entry.value?.toString() ?? 'null';
+        if (name.contains('{{') || headerValue.contains('{{')) {
+          issue(
+            'Header placeholders require interpolation before request construction.',
+          );
+          continue;
+        }
+        headers[name] = headerValue;
+      }
     } on FormatException {
       issue('Request headers must be a literal flat object or JSON string.');
     }
@@ -393,6 +406,11 @@ _LegacyRequest _legacyRequest(
         (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
         (trimmed.startsWith('<') && trimmed.endsWith('>'));
     if (explicitType == null || explicitType.isEmpty) {
+      if (trimmed.startsWith('{{')) {
+        issue(
+          'Body placeholders can change inferred Content-Type after substitution.',
+        );
+      }
       if (jsonOrXml) {
         headers['Content-Type'] = 'application/json; charset=UTF-8';
       } else {
