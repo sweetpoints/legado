@@ -70,7 +70,7 @@ jobs:
       VERSIONL: ${{ needs.prepare.outputs.versionL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
@@ -149,7 +149,7 @@ jobs:
           find ${{ github.workspace }}/app/build/outputs/mapping -name "missing_rules.txt" -exec mv {} ${{ github.workspace }}/mapping/missing_rules.txt \; || true
 
       - name: Upload Missing Rules File
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: legado.${{ env.product }}.${{ env.type }}.mapping.missing_rules
           if-no-files-found: ignore
@@ -201,14 +201,14 @@ jobs:
           done
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: legado.${{ env.product }}.${{ env.type }}
           if-no-files-found: error
           path: ${{ github.workspace }}/apk/*.apk
 
       - name: Upload Mapping Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: legado.${{ env.product }}.${{ env.type }}.mapping
           if-no-files-found: ignore
@@ -222,11 +222,11 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: apk/
       - working-directory: apk/
@@ -253,7 +253,7 @@ jobs:
           git push origin "refs/tags/$VERSION" --force
 
       - name: Publish Release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1.21.0
         with:
           name: legado_app_${{ env.VERSION }}
           tag: ${{ env.VERSION }}
@@ -272,8 +272,8 @@ jobs:
     env:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: apk/
       - working-directory: apk/
@@ -288,7 +288,7 @@ jobs:
             fi
           done
       - name: Deploy apk to server
-        uses: easingthemes/ssh-deploy@main
+        uses: easingthemes/ssh-deploy@v6.0.1
         with:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           ARGS: "-avzr"
@@ -303,9 +303,9 @@ jobs:
     if: ${{ github.event_name != 'pull_request' && needs.prepare.outputs.telegram == 'yes' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: apk/
 
@@ -328,7 +328,7 @@ jobs:
           du -h *
 
       - name: Post to Telegram Channel
-        uses: xireiki/channel-post@v2
+        uses: xireiki/channel-post@v2.0.4
         with:
           chat_id: ${{ secrets.CHANNEL_ID }}
           bot_token: ${{ secrets.BOT_TOKEN }}

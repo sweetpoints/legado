@@ -425,7 +425,7 @@ class ReadBookActivity :
         viewModel.pendingSourceReimport.observe(this) { showPendingSourceReimport() }
         viewModel.resourceRefreshing.observe(this) { loading ->
             if (readView.pageFactory.isRefreshingResources != loading) {
-                if (loading) readView.updateScrollReadPosition()
+                if (loading) readView.captureScrollPositionForResourceRefresh()
                 readView.pageFactory.isRefreshingResources = loading
                 upContent()
             }

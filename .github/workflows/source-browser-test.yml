@@ -152,7 +152,7 @@ jobs:
     # Build/setup and the complete device suite exceeded 60 minutes in the previous run.
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -175,7 +175,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Verify source browser, discovery and content editor on Android 16
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 36
           target: google_apis
@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: source-browser-test-results
           path: |

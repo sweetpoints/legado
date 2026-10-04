@@ -26,7 +26,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Parse triage configuration
         run: >-
           ruby -e "require 'yaml'; ARGV.each { |file| YAML.load_file(file); puts \"validated #{file}\" }"
@@ -62,7 +62,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/labeler@v7
+      - uses: actions/labeler@v7.0.0
         with:
           configuration-path: .github/pr-labeler.yml
           repo-token: ${{ github.token }}
@@ -75,7 +75,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Label existing open issues and pull requests
         env:
           GH_TOKEN: ${{ github.token }}

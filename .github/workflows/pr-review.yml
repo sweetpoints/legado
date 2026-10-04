@@ -22,7 +22,7 @@ jobs:
       final_message: ${{ steps.codex.outputs.final-message }}
     steps:
       - name: Checkout pull request
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 0
@@ -30,7 +30,7 @@ jobs:
 
       - name: Review changes with Codex
         id: codex
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@v1.12
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -50,7 +50,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Publish review comment
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         env:
           REVIEW_BODY: ${{ needs.review.outputs.final_message }}
         with:

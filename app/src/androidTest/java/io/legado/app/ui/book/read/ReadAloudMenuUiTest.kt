@@ -63,6 +63,8 @@ import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.read.config.ReadAloudConfigDialog
 import io.legado.app.ui.book.read.config.ReadAloudControlsDialog
 import io.legado.app.ui.book.read.page.ReadView
+import io.legado.app.ui.book.read.page.ContentTextView
+import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.column.TextBaseColumn
 import io.legado.app.utils.defaultSharedPreferences
@@ -333,6 +335,25 @@ class ReadAloudMenuUiTest {
                 startedService.contentList.isNotEmpty()
         }
         return startedService
+    }
+
+    private fun awaitReaderGeometry() {
+        // ChapterProvider schedules real height changes before posting a new layout request.
+        // Compose idle alone does not cover this delayed work and its IO layout consumer.
+        val pendingSize = ChapterProvider::class.java.getDeclaredField("upViewSizeRunnable")
+            .apply { isAccessible = true }
+        await("reader geometry and its actual layout job finish") { activity ->
+            val view = activity.findViewById<ReadView>(R.id.read_view)
+            val content = view.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+            val jobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs")
+                .apply { isAccessible = true }.get(ReadBook) as Map<*, *>
+            val job = jobs[ReadBook.durChapterIndex] as? io.legado.app.help.coroutine.Coroutine<*>
+            pendingSize.get(ChapterProvider) == null &&
+                content.width > 0 && content.height > 0 &&
+                content.width == ChapterProvider.viewWidth && content.height == ChapterProvider.viewHeight &&
+                ReadBook.curTextChapter?.isCompleted == true &&
+                view.curPage.textPage.textChapter === ReadBook.curTextChapter && job?.isCompleted == true
+        }
     }
 
     private fun verifyLongPressStops(paused: Boolean, movable: Boolean, width: Int) {
@@ -767,6 +788,7 @@ class ReadAloudMenuUiTest {
     @Test
     fun completedLayoutCannotOverwriteANewerExplicitSpeechRequest() {
         val service = startReadAloudService(paused = false)
+        awaitReaderGeometry()
         val recorder = RecordingSpeech(context)
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -792,7 +814,12 @@ class ReadAloudMenuUiTest {
                     ReadBook.curTextChapter!!.pageSize > 2
             }
             var requestedPosition = 0
+            var heldLayoutJob: io.legado.app.help.coroutine.Coroutine<*>? = null
             scenario!!.onActivity { activity ->
+                val jobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs")
+                    .apply { isAccessible = true }.get(ReadBook) as Map<*, *>
+                heldLayoutJob = checkNotNull(jobs[ReadBook.durChapterIndex] as?
+                    io.legado.app.help.coroutine.Coroutine<*>)
                 service.clearTTS()
                 TTSReadAloudService::class.java.getDeclaredField("textToSpeech")
                     .apply { isAccessible = true }.set(service, recorder)
@@ -818,11 +845,9 @@ class ReadAloudMenuUiTest {
             }
             release.countDown()
             await("held layout completion finishes after the explicit speech request") {
-                val jobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs")
-                    .apply { isAccessible = true }.get(ReadBook) as Map<*, *>
-                layoutFinished.get() &&
-                    (jobs[ReadBook.durChapterIndex] as? io.legado.app.help.coroutine.Coroutine<*>)
-                        ?.isCompleted == true
+                assertFalse("The held layout must execute its continuation rather than be cancelled",
+                    checkNotNull(heldLayoutJob).isCancelled)
+                layoutFinished.get() && checkNotNull(heldLayoutJob).isCompleted
             }
             assertEquals("Layout completion preserves the newer request", requestGeneration,
                 ReadAloud.playbackRequestGeneration)
@@ -864,7 +889,11 @@ class ReadAloudMenuUiTest {
             await("changed chapter content replaces the prepared speech queue " +
                 "(requestBefore=$beforeChangedGeneration, requestAfter=${ReadAloud.playbackRequestGeneration}, " +
                 "preparedEquivalent=${BaseReadAloudService.hasPreparedSpeechContent(changedLayout)})") {
-                service.textChapter === ReadBook.curTextChapter &&
+                // A later geometry layout may replace the visible TextChapter after the changed
+                // text has prepared its new queue. Compare the exact prepared book/chapter/text.
+                ReadBook.curTextChapter?.let { BaseReadAloudService.hasPreparedSpeechContent(it) } == true &&
+                    service.textChapter?.chapter?.bookUrl == fixture.bookUrl &&
+                    service.textChapter?.chapter?.index == ReadBook.durChapterIndex &&
                     service.contentList.any { it.contains(changedParagraph) } &&
                     speechSession(service) != session && recorder.calls.size > queuedCalls.size &&
                     recorder.calls.last().last &&
@@ -929,6 +958,7 @@ class ReadAloudMenuUiTest {
                     .putString(PreferKey.readAloudStart, mode)
                     .putBoolean(PreferKey.readAloudByPage, splitByPage)
                     .commit()
+                awaitReaderGeometry()
                 recorder.calls.clear()
                 var expected = 0
                 var requested = 0
@@ -971,14 +1001,19 @@ class ReadAloudMenuUiTest {
                 previousId = calls.first().id
                 assertEquals(expected, calls.first().position)
                 assertEquals(
-                    "Prepared page matches the current reader: expectedPosition=$expected, " +
+                    "Prepared page matches the queued layout: expectedPosition=$expected, " +
                         "requested=$requested, sameChapter=${service.textChapter === ReadBook.curTextChapter}, " +
                         "readerComplete=${ReadBook.curTextChapter?.isCompleted}, " +
                         "readerPages=${ReadBook.curTextChapter?.pages?.map { it.chapterPosition }}, " +
                         "servicePages=${service.textChapter?.pages?.map { it.chapterPosition }}",
-                    ReadBook.curTextChapter!!.getPageIndexByCharIndex(expected),
+                    checkNotNull(service.textChapter).getPageIndexByCharIndex(expected),
                     service.pageIndex,
                 )
+                awaitReaderGeometry()
+                scenario!!.onActivity {
+                    assertTrue("The visible layout retains the exact prepared speech content",
+                        BaseReadAloudService.hasPreparedSpeechContent(checkNotNull(ReadBook.curTextChapter)))
+                }
                 assertEquals(TextToSpeech.QUEUE_FLUSH, calls.first().mode)
                 assertTrue(calls.drop(1).all { it.mode == TextToSpeech.QUEUE_ADD })
                 val expectedQueued =

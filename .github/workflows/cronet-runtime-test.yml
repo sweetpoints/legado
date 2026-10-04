@@ -45,7 +45,7 @@ jobs:
       matrix:
         api: [26, 29, 31, 36]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: Setup Android build
@@ -67,7 +67,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Verify selected native Cronet in release
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
@@ -76,7 +76,7 @@ jobs:
           script: bash .github/scripts/run-cronet-runtime.sh
       - name: Upload test results and release mapping
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: cronet-runtime-api-${{ matrix.api }}
           path: |

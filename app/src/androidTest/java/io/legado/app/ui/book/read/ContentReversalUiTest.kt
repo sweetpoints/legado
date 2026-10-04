@@ -365,7 +365,11 @@ class ContentReversalUiTest {
                         layout,
                         ReadBook.curTextChapter,
                     )
-                    assertEquals(savedPosition, ReadBook.durChapterPos)
+                    assertEquals(
+                        "Loading preserves the scroll character captured after menu layout settled",
+                        savedPosition,
+                        ReadBook.durChapterPos,
+                    )
                     val frame = CountDownLatch(1)
                     scenario!!.onActivity {
                         val reader = it.findViewById<ReadView>(R.id.read_view)
@@ -923,6 +927,18 @@ class ContentReversalUiTest {
         scenario!!.onActivity { visible = it.readMenu.isVisible }
         if (!visible) onView(withId(R.id.read_view)).perform(click())
         await("reader menu shown") { it.readMenu.isVisible }
+        // Showing system bars can reflow the native canvas after isVisible has already changed.
+        // Finish that bind before a caller snapshots the scroll position for a refresh command.
+        awaitDraw()
+        await("reader menu canvas and chapter layout settled") {
+            val reader = it.findViewById<ReadView>(R.id.read_view)
+            val page = reader.curPage.textPage
+            it.readMenu.isVisible && reader.curPage.isCanvasReady &&
+                (page.isMsgPage ||
+                    ReadBook.curTextChapter?.let { chapter ->
+                        chapter.isCompleted && page.textChapter === chapter
+                    } == true)
+        }
     }
 
     private fun closeReaderMenu() {
@@ -1004,6 +1020,7 @@ class ContentReversalUiTest {
     private fun await(description: String, condition: (ReadBookActivity) -> Boolean) {
         try {
             contentCompose.waitUntil(timeoutMillis = 15_000) {
+                contentCompose.mainClock.advanceTimeByFrame()
                 var ready = false
                 scenario!!.onActivity { ready = condition(it) }
                 ready
