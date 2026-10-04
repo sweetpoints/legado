@@ -1,5 +1,6 @@
 package io.legado.app.model.webBook
 
+import com.google.gson.JsonObject
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
@@ -25,6 +26,7 @@ import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.model.jsSource.JsSourceBook
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
+import io.legado.app.utils.isTrue
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -37,6 +39,23 @@ import splitties.init.appCtx
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
+
+    private fun usesLegacyChapterFields(source: BookSource): Boolean {
+        val definition =
+            source.bookSourceComment
+                .orEmpty()
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("@source:v1 ") }
+                ?.removePrefix("@source:v1 ") ?: return true
+        val metadata = GSON.fromJson(definition, JsonObject::class.java).getAsJsonObject("metadata")
+        if (metadata?.get("legacyOriginal")?.isJsonObject == true) return true
+        val legacy = metadata?.get("legacy")
+        return legacy != null &&
+            legacy.isJsonPrimitive &&
+            legacy.asJsonPrimitive.isBoolean &&
+            legacy.asBoolean
+    }
 
     /** 搜索 */
     fun searchBook(
@@ -390,6 +409,7 @@ object WebBook {
                     require(!runPerJs || bookSource.ruleToc?.preUpdateJs.isNullOrBlank()) {
                         "Dart engine does not support legacy preUpdateJs; migrate the source first"
                     }
+                    val legacy = usesLegacyChapterFields(bookSource)
                     val chapters =
                         DartSourceEngine.execute(
                                 bookSource,
@@ -397,12 +417,30 @@ object WebBook {
                                 DartSourceEngine.jsonObject(book),
                             )
                             .mapIndexed { index, row ->
-                                GSON.fromJson(GSON.toJson(row), BookChapter::class.java).apply {
-                                    url = (row["chapterUrl"] as? String) ?: url
-                                    bookUrl = book.bookUrl
-                                    baseUrl = book.tocUrl
-                                    this.index = index
+                                val normalized = row.toMutableMap()
+                                for (field in listOf("isVip", "isPay", "isVolume")) {
+                                    val value = row[field]
+                                    if (legacy && value is String) {
+                                        normalized[field] = value.isTrue()
+                                    } else if (value == "true" || value == "false") {
+                                        normalized[field] = value == "true"
+                                    } else {
+                                        require(value == null || value is Boolean) {
+                                            "Dart TOC $field must be a Boolean or true/false string"
+                                        }
+                                    }
                                 }
+                                if (legacy && row["updateTime"] is String) {
+                                    normalized["tag"] = row["updateTime"]
+                                }
+                                GSON.fromJson(GSON.toJson(normalized), BookChapter::class.java)
+                                    .apply {
+                                        url = (row["chapterUrl"] as? String) ?: url
+                                        if (isVolume && url.isBlank()) url = title + index
+                                        bookUrl = book.bookUrl
+                                        baseUrl = book.tocUrl
+                                        this.index = index
+                                    }
                             }
                     if (chapters.isEmpty()) {
                         throw TocEmptyException(appCtx.getString(R.string.chapter_list_empty))
@@ -530,6 +568,10 @@ object WebBook {
                 return it
             }
         }
+        if (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title)) {
+            Debug.log(bookSource.bookSourceUrl, "⇒一级目录正文不解析规则")
+            return ""
+        }
         if (DartSourceEngine.selected(bookSource)) {
             val input =
                 DartSourceEngine.jsonObject(book) +
@@ -583,10 +625,6 @@ object WebBook {
                 if (!saved) throw NoStackTraceException("正文缓存已更新,请重试")
             }
             return content
-        }
-        if (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title)) {
-            Debug.log(bookSource.bookSourceUrl, "⇒一级目录正文不解析规则")
-            return ""
         }
         val contentRule = bookSource.getContentRule()
         if (contentRule.content.isNullOrEmpty()) {

@@ -247,6 +247,219 @@ class FlutterSourceEngineTest {
     }
 
     @Test
+    fun legacyTocFlagsKeepLegacyTruthinessAndModernFlagsRequireBoolean() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        fun selected(definition: String) =
+            BookSource(bookSourceUrl = "https://example.org/test").apply {
+                bookSourceComment = "@source:v1 $definition"
+            }
+        fun book() =
+            Book(bookUrl = "https://example.org/book").apply { tocUrl = "https://example.org/toc" }
+        val flags =
+            source(
+                "function getChapters(){return [{title:'Chapter',url:'https://example.org/chapter',isVip:'VIP',isPay:'已购买',isVolume:'卷名',updateTime:'Yesterday'}]}"
+            )
+        val legacyJson =
+            Gson()
+                .fromJson(flags, com.google.gson.JsonObject::class.java)
+                .apply {
+                    add("metadata", Gson().toJsonTree(mapOf("legacy" to true)))
+                }
+                .toString()
+        val legacy =
+            withTimeout(60_000) {
+                WebBook.getChapterListAwait(selected(legacyJson), book()).getOrThrow().single()
+            }
+        assertTrue(legacy.isVip)
+        assertTrue(legacy.isPay)
+        assertTrue(legacy.isVolume)
+        assertEquals("Yesterday", legacy.tag)
+        val modernStrings = WebBook.getChapterListAwait(selected(flags), book())
+        assertTrue(modernStrings.isFailure)
+        assertTrue(modernStrings.exceptionOrNull()?.message.orEmpty().contains("must be a Boolean"))
+        val modern =
+            WebBook.getChapterListAwait(
+                    selected(
+                        source(
+                            "function getChapters(){return [{title:'Chapter',url:'https://example.org/chapter',isVip:true,isPay:false,isVolume:false,tag:'Modern tag'}]}"
+                        )
+                    ),
+                    book(),
+                )
+                .getOrThrow()
+                .single()
+        assertTrue(modern.isVip)
+        assertTrue(!modern.isPay)
+        assertTrue(!modern.isVolume)
+        assertEquals("Modern tag", modern.tag)
+
+        // Exercise the original @engine:dart importer path against a local HTML fixture.
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val serving =
+                async(Dispatchers.IO) {
+                    repeat(3) {
+                        server.accept().use { socket ->
+                            socket.soTimeout = 10_000
+                            val reader = socket.getInputStream().bufferedReader()
+                            while (!reader.readLine().isNullOrEmpty()) {}
+                            val body =
+                                "<div class='row'><a href=''>Chapter</a><span class='vip'>VIP</span><span class='pay'>已购买</span><span class='volume'>卷名</span><span class='time'>Yesterday</span><span class='yes'>true</span><span class='no'>false</span></div>"
+                                    .toByteArray(Charsets.UTF_8)
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray()
+                                )
+                                write(body)
+                                flush()
+                            }
+                        }
+                    }
+                }
+            val original =
+                Gson()
+                    .fromJson(
+                        Gson()
+                            .toJson(
+                                mapOf(
+                                    "bookSourceUrl" to origin,
+                                    "bookSourceName" to "Local legacy",
+                                    "bookSourceComment" to "@engine:dart",
+                                    "enabledCookieJar" to true,
+                                    "ruleToc" to
+                                        mapOf(
+                                            "chapterList" to ".row",
+                                            "chapterName" to "a@text",
+                                            "chapterUrl" to "a@href",
+                                            "isVip" to ".vip@text",
+                                            "isPay" to ".pay@text",
+                                            "isVolume" to ".volume@text",
+                                            "updateTime" to ".time@text",
+                                        ),
+                                )
+                            ),
+                        BookSource::class.java,
+                    )
+            val originalBook = Book(bookUrl = "$origin/book").apply { tocUrl = "$origin/toc" }
+            val chapter =
+                withTimeout(60_000) {
+                    WebBook.getChapterListAwait(original, originalBook).getOrThrow().single()
+                }
+            assertTrue(chapter.isVip && chapter.isPay && chapter.isVolume)
+            assertEquals("Yesterday", chapter.tag)
+            assertEquals("Chapter0", chapter.url)
+            assertEquals(
+                "",
+                WebBook.getContentAwait(original, originalBook, chapter, needSave = false),
+            )
+            val stages =
+                mapOf(
+                    "toc" to
+                        mapOf(
+                            "url" to "{{tocUrl}}",
+                            "list" to "@legacy:.row",
+                            "fields" to
+                                mapOf(
+                                    "title" to "@legacy:a@text",
+                                    "url" to "@legacy:a@href",
+                                    "isVip" to "@legacy:.vip@text",
+                                    "isPay" to "@legacy:.pay@text",
+                                    "isVolume" to "@legacy:.volume@text",
+                                    "updateTime" to "@legacy:.time@text",
+                                ),
+                        )
+                )
+            // Final migrated candidates run modern mode but retain legacyOriginal DTO provenance.
+            val candidate =
+                Gson()
+                    .toJson(
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "id" to "$origin/migrated",
+                            "name" to "Migrated",
+                            "baseUrl" to origin,
+                            "stages" to stages,
+                            "metadata" to
+                                mapOf(
+                                    "legacy" to false,
+                                    "legacyOriginal" to Gson().toJsonTree(original),
+                                ),
+                        )
+                    )
+            val migrated =
+                withTimeout(60_000) {
+                    WebBook.getChapterListAwait(selected(candidate), originalBook)
+                        .getOrThrow()
+                        .single()
+                }
+            assertTrue(migrated.isVip && migrated.isPay && migrated.isVolume)
+            assertEquals("Yesterday", migrated.tag)
+            val modernStage =
+                Gson()
+                    .toJson(
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "id" to "$origin/modern",
+                            "name" to "Modern stages",
+                            "baseUrl" to origin,
+                            "stages" to
+                                mapOf(
+                                    "toc" to
+                                        mapOf(
+                                            "url" to "{{tocUrl}}",
+                                            "list" to "@css:.row",
+                                            "fields" to
+                                                mapOf(
+                                                    "title" to "@css:a@text",
+                                                    "url" to "@css:a@href",
+                                                    "isVip" to "@css:.yes@text",
+                                                    "isPay" to "@css:.no@text",
+                                                    "isVolume" to "@css:.no@text",
+                                                ),
+                                        )
+                                ),
+                        )
+                    )
+            val stageChapter =
+                withTimeout(60_000) {
+                    WebBook.getChapterListAwait(selected(modernStage), originalBook)
+                        .getOrThrow()
+                        .single()
+                }
+            assertTrue(stageChapter.isVip)
+            assertTrue(!stageChapter.isPay && !stageChapter.isVolume)
+            serving.await()
+        }
+    }
+
+    @Test
+    fun volumeHeadingSkipsDartContentExecution() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        val selected =
+            BookSource(bookSourceUrl = "https://example.org/test").apply {
+                bookSourceComment =
+                    "@source:v1 ${source("function getChapters(){return [{title:'第一卷',url:'',isVolume:true},{title:'第一卷',url:'',isVolume:true}]} function getContent(){throw new Error('Volume content must not execute')}")}"
+            }
+        val book =
+            Book(bookUrl = "https://example.org/book").apply { tocUrl = "https://example.org/toc" }
+        val headings =
+            withTimeout(60_000) { WebBook.getChapterListAwait(selected, book).getOrThrow() }
+        assertEquals(listOf("第一卷0", "第一卷1"), headings.map { it.url })
+        for (heading in headings) {
+            assertEquals("", WebBook.getContentAwait(selected, book, heading, needSave = false))
+        }
+        val heading = headings.first()
+        val normal = heading.copy(url = "https://example.org/chapter", isVolume = false)
+        val failure = runCatching {
+            WebBook.getContentAwait(selected, book, normal, needSave = false)
+        }
+        assertTrue(
+            failure.exceptionOrNull()?.message.orEmpty().contains("Volume content must not execute")
+        )
+    }
+
+    @Test
     fun sessionVariablesSurviveEngineShutdownAndStaySourceIsolated() = runBlocking {
         val unique = java.util.UUID.randomUUID().toString()
         val definition =

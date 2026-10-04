@@ -39,6 +39,8 @@ required = {
     'emptyDartTocFailsWithoutChangingBookMetadata',
     'synchronousSendFailureCleansTaskAndCloseWakesPendingRequest',
     'closeDuringStartupWakesReadyWaiter',
+    'legacyTocFlagsKeepLegacyTruthinessAndModernFlagsRequireBoolean',
+    'volumeHeadingSkipsDartContentExecution',
     'sessionVariablesSurviveEngineShutdownAndStaySourceIsolated',
 }
 if not required.issubset({case.get('name') for case in cases}) or any(case.find(tag) is not None
