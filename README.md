@@ -46,23 +46,3 @@ Legado 是免费的 Android 开源阅读器，支持自定义书源、本地书�
 ## 许可证
 
 项目采用 [GNU GPL v3](LICENSE)。
-
-## 致谢
-
-> * org.jsoup:jsoup
-> * cn.wanghaomiao:JsoupXpath
-> * com.jayway.jsonpath:json-path
-> * com.github.gedoor:rhino-android
-> * com.squareup.okhttp3:okhttp
-> * com.github.bumptech.glide:glide
-> * org.nanohttpd:nanohttpd
-> * org.nanohttpd:nanohttpd-websocket
-> * cn.bingoogolapple:bga-qrcode-zxing
-> * com.jaredrummler:colorpicker
-> * org.apache.commons:commons-text
-> * io.noties.markwon:core
-> * io.noties.markwon:image-glide
-> * com.hankcs:hanlp
-> * com.positiondev.epublib:epublib-core
-> * com.github.Moriafly:LyricViewX
-> * io.github.rosemoe:editor
