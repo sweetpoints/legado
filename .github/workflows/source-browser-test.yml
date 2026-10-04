@@ -147,7 +147,8 @@ concurrency:
 jobs:
   dialog:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Build/setup and the complete device suite exceeded 60 minutes in the previous run.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:

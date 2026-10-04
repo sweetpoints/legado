@@ -50,13 +50,13 @@ class SourceLoginFormRepositoryTest {
     @Test
     fun clearRemovesLoginInfoThenHeaderAndCookieViaSourceContractOnIo() = runTest {
         val operations = mutableListOf<String>()
-        val caller = Thread.currentThread().id
+        val caller = Thread.currentThread().threadId()
         var worker = caller
         val delegate = BookSource(bookSourceUrl = "https://example.com", bookSourceName = "Source")
         val source =
             object : BaseSource by delegate {
                 override fun removeLoginInfo() {
-                    worker = Thread.currentThread().id
+                    worker = Thread.currentThread().threadId()
                     operations += "info"
                 }
 

@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.data.association.AssociationHostKind
 import io.legado.app.data.association.AssociationLaunchRepository
@@ -73,8 +74,10 @@ abstract class AssociationComposeActivity :
         savedState: SavedStateHandle
     ): AssociationImportViewModel
 
-    internal val importModel: AssociationImportViewModel
-        get() = ViewModelProvider(this)[importModelClass]
+    // Keep the adopted owner after ON_DESTROY clears the ViewModelStore.
+    internal val importModel: AssociationImportViewModel by lazy {
+        ViewModelProvider(this)[importModelClass]
+    }
 
     private val dependencies by lazy { AssociationDependencies(application) }
     private var configuredDirectory by mutableStateOf<String?>(null)
@@ -106,6 +109,9 @@ abstract class AssociationComposeActivity :
                     if (accepted && result.uri != null) {
                         withContext(Dispatchers.IO) {
                             AppConfig.defaultBookTreeUri = result.uri.toString()
+                        }
+                        if (!isFinishing && !isDestroyed) {
+                            configuredDirectory = result.uri.toString()
                         }
                     }
                     if (!isFinishing && !isDestroyed) importModel.reconcileNativeResults()
@@ -199,7 +205,16 @@ abstract class AssociationComposeActivity :
                             !session.choosingDirectory &&
                             !configuredDirectory.isNullOrBlank()
                     ) {
-                        model.confirmOperation("local-import", configuredDirectory)
+                        model.awaitCommands()
+                        val latest = model.state.value
+                        if (
+                            model.acceptsCallback(current.ticket, session.generation) &&
+                                !latest.busy && !latest.nativeResultPending &&
+                                latest.session?.phase == AssociationPhase.Directory &&
+                                latest.session.importAfterDirectory
+                        ) {
+                            model.confirmOperation("local-import", configuredDirectory)
+                        }
                     }
                 }
             }
@@ -232,6 +247,7 @@ abstract class AssociationComposeActivity :
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) { AppConfig.defaultBookTreeUri = directory }
                     configuredDirectory = directory
+                    importModel.awaitCommands()
                     if (importModel.state.value.session?.importAfterDirectory == true) {
                         importModel.confirmOperation("local-import", directory)
                     } else importModel.cancelDirectory()
@@ -376,7 +392,10 @@ abstract class AssociationComposeActivity :
     override fun onDestroy() {
         if (isFinishing && !isChangingConfigurations && privateOwnerAccepted) {
             val model = importModel
-            cleanupScope.launch { runCatching { model.closeOwnedSession() } }
+            cleanupScope.launch {
+                runCatching { model.closeOwnedSession() }
+                    .onFailure { AppLog.put("导入会话清理失败", it) }
+            }
         }
         super.onDestroy()
     }

@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.ClipData
@@ -30,7 +31,6 @@ import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
@@ -42,7 +42,6 @@ import androidx.test.runner.lifecycle.Stage
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.R
 import io.legado.app.base.BaseComposeDialogFragment
-import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.association.AssociationPhase
@@ -176,7 +175,7 @@ class SharedFileImportTest {
         directory.deleteRecursively()
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun sharedBookListConfirmsThenUsesEnabledSourceSearchAndPersistsTheMatchedBook() {
         val name = "Shared book $id"
         val author = "Shared author"
@@ -242,7 +241,9 @@ class SharedFileImportTest {
                     model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
                 }
                 clickDialogText(R.string.ok)
-                await { model.state.value.session?.phase == AssociationPhase.Finished }
+                await(diagnostics = { importDiagnostic(model) }) {
+                model.state.value.session?.phase == AssociationPhase.Finished
+            }
                 val book = checkNotNull(appDb.bookDao.getBook(name, author))
                 books.add(book)
                 assertEquals("${source.bookSourceUrl}/book/$id", book.bookUrl)
@@ -266,10 +267,18 @@ class SharedFileImportTest {
                 )
                 launchShare(file, "application/json").use { scenario ->
                     awaitDialog(scenario)
+                    lateinit var model: FileAssociationViewModel
+                    scenario.onActivity {
+                        model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
+                    }
                     clickDialogText(R.string.ok)
-                    await {
+                    await(diagnostics = {
+                        "${importDiagnostic(model)}; book=${appDb.bookDao.has(name, author)}; " +
+                            "requests=${requests.get()}"
+                    }) {
                         appDb.bookDao.has(name, author) &&
-                            AppLog.logs.any { it.second.contains(missing) }
+                            model.state.value.session?.phase == AssociationPhase.Failed &&
+                            model.state.value.session?.error?.contains(missing) == true
                     }
                     assertFalse(appDb.bookDao.has(missing, author))
                     assertTrue(requests.get() >= 2)
@@ -283,7 +292,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun rawAndTypedHighlightFilesUseTheHighlightPreviewWhileReplacementFilesKeepTheirRoute() {
         for (typed in listOf(false, true)) {
             val rule =
@@ -353,7 +362,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun actualBackupZipConfirmsBeforeRestoringBooksSourcesRulesAndSettings() = runBlocking {
         val source = BookSource("https://shared-backup-$id.invalid", "Backup source")
         val book =
@@ -420,7 +429,9 @@ class SharedFileImportTest {
                 model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
             }
             clickDialogText(R.string.ok)
-            await { model.state.value.session?.phase == AssociationPhase.Finished }
+            await(diagnostics = { importDiagnostic(model) }) {
+                model.state.value.session?.phase == AssociationPhase.Finished
+            }
             assertEquals("restored value", prefs.getString(marker, null))
             assertEquals(7, appDb.bookDao.getBook(book.bookUrl)!!.durChapterIndex)
             assertEquals(
@@ -434,7 +445,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun sharedTxtEpubPdfAndBookZipCopyDurablyAndOpenTheRealReader() {
         val txt =
             File(directory, "shared-txt-$id.txt").apply {
@@ -513,7 +524,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun firstSharedBookRetainsItsSelectedBatchAcrossRecreationAndTheFolderResult() {
         prefs.edit().remove(PreferKey.defaultBookTreeUri).commit()
         val file =
@@ -564,9 +575,7 @@ class SharedFileImportTest {
                 }
                 awaitLocalPreview(scenario)
                 confirmLocalPreview(scenario)
-                compose
-                    .onNodeWithText(context.getString(R.string.shared_local_books_storage))
-                    .assertIsDisplayed()
+                awaitStoragePrompt()
                 screenshot("share-local-folder-after-confirmation")
                 clickDialogText(R.string.select_folder)
                 val copied = File(directory, "books/${file.name}")
@@ -587,7 +596,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun saveFolderMenusUpdateTheSharedSettingWithoutMovingExistingBooks() {
         AppConfig.importBookPath = directory.path
         val oldFile =
@@ -602,6 +611,10 @@ class SharedFileImportTest {
                 override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
                     if (intent.component?.className != HandleFileActivity::class.java.name)
                         return null
+                    // Local import can first request its scan folder during initialization.
+                    // Cancel that separate picker; this test exercises the save destination.
+                    if (intent.getIntExtra("mode", -1) == HandleFileContract.DIR)
+                        return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
                     assertEquals(HandleFileContract.DIR_SYS, intent.getIntExtra("mode", -1))
                     requests.incrementAndGet()
                     return Instrumentation.ActivityResult(
@@ -625,7 +638,7 @@ class SharedFileImportTest {
                             .check(matches(isDisplayed()))
                         // Declining the existing scan permission must still leave the save-folder
                         // menu usable.
-                        pressBack()
+                        pressSystemBack()
                     }
                     compose
                         .onNodeWithContentDescription(context.getString(R.string.menu))
@@ -665,7 +678,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun baseDialogKeepsItsTagForQueuedDuplicateRequestsAndRecreation() {
         val file = File(directory, "dialog-tag-$id.txt").apply { writeText("DIALOG TEST") }
         launchShare(file, "text/plain").use { scenario ->
@@ -701,7 +714,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun archivePreviewsEverySupportedTypeAndOnlyImportsTheSelection() {
         val pdfFile = File(directory, "batch-$id.pdf")
         val pdf = PdfDocument()
@@ -734,12 +747,15 @@ class SharedFileImportTest {
         lateinit var omittedCover: File
         lateinit var coverBytes: ByteArray
         lateinit var acceptedCover: File
+        lateinit var privateSession: File
         launchShare(archive, "application/zip").use { scenario ->
             awaitLocalPreview(scenario)
             lateinit var model: FileAssociationViewModel
             scenario.onActivity {
                 model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
             }
+            privateSession =
+                File(context.filesDir, "association-import-sessions/${model.state.value.ticket}")
             val items = model.localBookBatch.value!!
             assertEquals(5, items.size)
             assertEquals(
@@ -752,6 +768,17 @@ class SharedFileImportTest {
             previewCover =
                 File(checkNotNull(items.single { it.file.name == pdfFile.name }.preview!!.coverUrl))
             omittedCover = File(checkNotNull(items[omitted].preview!!.coverUrl))
+            val pdfPreview = items.single { it.file.name == pdfFile.name }
+            assertEquals(
+                LocalBook.getCoverPath(Book(bookUrl = pdfPreview.file.toString())),
+                previewCover.path,
+            )
+            assertTrue(
+                "Staged PDF must remain inside its private session: ${pdfPreview.file}",
+                File(pdfPreview.file.toString()).canonicalPath.startsWith(
+                    privateSession.canonicalPath + File.separator
+                ),
+            )
             assertTrue(previewCover.length() > 0)
             assertTrue(omittedCover.length() > 0)
             coverBytes = previewCover.readBytes()
@@ -777,7 +804,9 @@ class SharedFileImportTest {
             screenshot("share-local-archive-selection")
             val selected = items.filter { it.file.uri in model.selectedLocalBooks }
             confirmLocalPreview(scenario)
-            await { model.state.value.session?.phase == AssociationPhase.Finished }
+            await(diagnostics = { importDiagnostic(model) }) {
+                model.state.value.session?.phase == AssociationPhase.Finished
+            }
             assertEquals(previousBook, ReadBook.book?.bookUrl)
             selected.forEach { item ->
                 val book = appDb.bookDao.getBook(File(directory, "books/${item.file.name}").path)!!
@@ -800,7 +829,12 @@ class SharedFileImportTest {
             assertArrayEquals(original, archive.readBytes())
             assertEquals(File(directory, "books").path, AppConfig.defaultBookTreeUri)
         }
-        await { !previewCover.exists() && !omittedCover.exists() }
+        await(diagnostics = {
+            "previewCover=${previewCover.exists()}; omittedCover=${omittedCover.exists()}; " +
+                "privateSession=${privateSession.exists()}"
+        }) {
+            !previewCover.exists() && !omittedCover.exists()
+        }
         assertArrayEquals(coverBytes, acceptedCover.readBytes())
         lateinit var cancelledCover: File
         launchShare(pdfFile, "application/pdf").use { scenario ->
@@ -823,7 +857,7 @@ class SharedFileImportTest {
         assertArrayEquals(original, archive.readBytes())
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun multipleSharesKeepAllThreeIdentityConflictsAndOriginalFiles() {
         AppConfig.bookImportFileName = "name='Shared identity $id';author='Shared author';"
         val existingFile = File(directory, "books/one.txt").apply { writeText("EXISTING BOOK") }
@@ -859,7 +893,7 @@ class SharedFileImportTest {
             }
         )
         intent.component = ComponentName(context, FileAssociationActivity::class.java)
-        ActivityScenario.launch<FileAssociationActivity>(intent).use { scenario ->
+        launchAssociation(intent).use { scenario ->
             awaitLocalPreview(scenario)
             lateinit var model: FileAssociationViewModel
             scenario.onActivity {
@@ -871,7 +905,9 @@ class SharedFileImportTest {
             preview.forEach { assertFalse(appDb.bookDao.has(it.name, it.author)) }
             screenshot("share-local-multiple-conflicts")
             confirmLocalPreview(scenario)
-            await { model.state.value.session?.phase == AssociationPhase.Finished }
+            await(diagnostics = { importDiagnostic(model) }) {
+                model.state.value.session?.phase == AssociationPhase.Finished
+            }
             preview.forEachIndexed { index, item ->
                 val copy = appDb.bookDao.getBook(item.name, item.author)!!
                 books.add(copy)
@@ -890,7 +926,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun archiveRejectsBooksMixedWithRecognizedRulesBeforeWritingEitherType() {
         val rule =
             HighlightRule(name = "Mixed archive $id", pattern = id, style = "{\"bold\":true}")
@@ -925,7 +961,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun archiveCombinesSameCategoryJsonIntoItsExistingSelectionPreview() {
         val imported =
             (1..3).map { index ->
@@ -970,7 +1006,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun unsupportedArchiveReportsTheFormatAndEndsInsteadOfLoadingForever() {
         val archive = File(directory, "no-books-$id.zip")
         writeArchive(
@@ -996,7 +1032,7 @@ class SharedFileImportTest {
         }
     }
 
-    @Test(timeout = 120_000)
+    @Test
     fun cancelledPathReturnsToPreviewAndExplicitDefaultIsSharedWithOpenWith() {
         val privateDirectory = File(context.filesDir, "books")
         val monitor =
@@ -1027,16 +1063,12 @@ class SharedFileImportTest {
                                     .setComponent(
                                         ComponentName(context, FileAssociationActivity::class.java)
                                     )
-                            ActivityScenario.launch<FileAssociationActivity>(intent)
+                            launchAssociation(intent)
                         } else launchShare(file, "text/plain")
                     scenario.use {
                         if (!open) confirmLocalPreview(scenario)
                         if (round == 0) {
-                            compose
-                                .onNodeWithText(
-                                    context.getString(R.string.shared_local_books_storage)
-                                )
-                                .assertIsDisplayed()
+                            awaitStoragePrompt()
                             if (open)
                                 scenario.onActivity {
                                     assertNull(
@@ -1045,7 +1077,7 @@ class SharedFileImportTest {
                                         )
                                     )
                                 }
-                            if (choice == "dismiss") pressBack()
+                            if (choice == "dismiss") pressSystemBack()
                             else clickDialogText(R.string.select_folder)
                             awaitLocalPreview(scenario)
                             scenario.onActivity {
@@ -1060,15 +1092,20 @@ class SharedFileImportTest {
                             assertNull(AppConfig.defaultBookTreeUri)
                             scenario.recreate()
                             confirmLocalPreview(scenario)
-                            compose
-                                .onNodeWithText(
-                                    context.getString(R.string.shared_local_books_storage)
-                                )
-                                .assertIsDisplayed()
+                            awaitStoragePrompt()
                             screenshot("share-local-explicit-path-$firstOpen-$choice")
                             clickDialogText(R.string.shared_local_books_private)
                         }
-                        await { copy.isFile && appDb.bookDao.has(copy.path) }
+                        lateinit var model: FileAssociationViewModel
+                        scenario.onActivity {
+                        model = ViewModelProvider(it)[FileAssociationViewModel::class.java]
+                    }
+                        await(diagnostics = {
+                            "${importDiagnostic(model)}; copy=${copy.isFile}; " +
+                                "open=$open; round=$round; choice=$choice"
+                        }) {
+                            copy.isFile && appDb.bookDao.has(copy.path)
+                        }
                         val book = appDb.bookDao.getBook(copy.path)!!.also(books::add)
                         assertEquals(
                             Uri.fromFile(privateDirectory).toString(),
@@ -1092,6 +1129,21 @@ class SharedFileImportTest {
         } finally {
             instrumentation.removeMonitor(monitor)
         }
+    }
+
+    private fun pressSystemBack() {
+        assertTrue(
+            instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+        )
+    }
+
+    private fun awaitStoragePrompt() {
+        val message = context.getString(R.string.shared_local_books_storage)
+        compose.waitUntil(timeoutMillis = 20000) {
+            compose.onAllNodesWithText(message)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        compose.onNodeWithText(message).assertIsDisplayed()
     }
 
     private fun clickDialogText(resource: Int) {
@@ -1211,8 +1263,11 @@ class SharedFileImportTest {
             }
         )
         intent.component = ComponentName(context, FileAssociationActivity::class.java)
-        return ActivityScenario.launch(intent)
+        return launchAssociation(intent)
     }
+
+    private fun launchAssociation(intent: Intent) =
+        compose.launchAssociation<FileAssociationActivity>(intent)
 
     private fun awaitReader(book: Book) {
         await {
@@ -1255,8 +1310,7 @@ class SharedFileImportTest {
                     activity.supportFragmentManager.fragments
                         .filterIsInstance<DialogFragment>()
                         .firstOrNull {
-                            it.dialog?.isShowing == true &&
-                                it.dialog?.window?.decorView?.hasWindowFocus() == true
+                            it.dialog?.isShowing == true && it.view?.isShown == true
                         }
                 val contentReady =
                     when (val current = dialog) {
@@ -1310,7 +1364,15 @@ class SharedFileImportTest {
         compose.waitForIdle()
     }
 
-    private fun await(condition: () -> Boolean) {
+    private fun importDiagnostic(model: FileAssociationViewModel): String {
+        val state = model.state.value
+        val session = state.session
+        return "phase=${session?.phase}; busy=${state.busy}; native=${state.nativeResultPending}; " +
+            "selection=${session?.selectedIds?.size}; operation=${session?.operation?.kind}; " +
+            "error=${state.restoreError ?: session?.error}"
+    }
+
+    private fun await(diagnostics: () -> String = { "" }, condition: () -> Boolean) {
         try {
             compose.waitUntil(timeoutMillis = 20000) {
                 condition()
@@ -1319,7 +1381,10 @@ class SharedFileImportTest {
         } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
             // Preserve the original state diagnostics and failure assertion below.
         }
-        assertTrue("Shared import did not reach the expected database/reader state", condition())
+        assertTrue(
+            "Shared import did not reach the expected database/reader state: ${diagnostics()}",
+            condition(),
+        )
         compose.waitForIdle()
     }
 

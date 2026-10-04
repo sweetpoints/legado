@@ -38,7 +38,7 @@ class AudioSkipCreditsPrivateSessionTest {
                 override suspend fun load() = draft
 
                 override suspend fun write(
-                    value: AudioSkipCreditsDraft,
+                    draft: AudioSkipCreditsDraft,
                     revision: Long,
                     globalsChanged: Boolean,
                     saveBook: Boolean,

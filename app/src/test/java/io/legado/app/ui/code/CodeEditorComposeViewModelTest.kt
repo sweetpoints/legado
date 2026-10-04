@@ -371,7 +371,7 @@ class CodeEditorComposeViewModelTest {
             }
             var returns = 0
             val oldClaim = async {
-                model.deliverReturn(current.returnReceipt!!.id, { true }, { returns++ })
+                model.deliverReturn(current.returnReceipt.id, { true }, { returns++ })
             }
             runCurrent()
             entered.await()

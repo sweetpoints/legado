@@ -192,3 +192,11 @@ cn.hutool.core.util.**{*;}
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
+
+# R8 9.4.24 inlines this synchronized accessor into a merged Compose callback.
+# On API 26 the generated iget inside the monitor lacks a catch-all and ART rejects
+# the entire callback class during focus initialization (VerifyError at startup).
+# Keep only this method out of optimization; unused code may still shrink and rename.
+-keepclassmembers,allowshrinking,allowobfuscation class io.legado.app.ui.rss.source.debug.RssSourceDebugViewModel {
+    java.lang.String html(boolean);
+}

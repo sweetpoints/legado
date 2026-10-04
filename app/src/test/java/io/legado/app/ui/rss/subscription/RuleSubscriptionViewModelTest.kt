@@ -580,7 +580,7 @@ class RuleSubscriptionViewModelTest {
             saveGate?.await()
             var current = records[ticket]?.takeIf { it.pendingSave != null } ?: draft
             val editor = current.editor!!
-            if (current.pendingSave != null) rules.recoverSave(current.pendingSave!!)
+            if (current.pendingSave != null) rules.recoverSave(current.pendingSave)
             else
                 rules.saveJournaled(editor.input(), editor.newId) { plan ->
                     current = current.copy(pendingSave = plan, revision = current.revision + 1)

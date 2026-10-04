@@ -18,6 +18,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AssociationSessionControllerTest {
     private val input = AssociationInput(AssociationHostKind.Online, AssociationInputKind.View)
     private val receipt = AssociationNativeReceipt("native", 0, AssociationNativeKind.ImportDialog)

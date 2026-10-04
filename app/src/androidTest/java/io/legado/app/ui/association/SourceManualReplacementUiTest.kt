@@ -684,7 +684,7 @@ class SourceManualReplacementUiTest {
                 clipData = ClipData.newRawUri(file.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-        ActivityScenario.launch<FileAssociationActivity>(intent).use { scenario ->
+        compose.launchAssociation<FileAssociationActivity>(intent).use { scenario ->
             val host = Host(scenario, rss)
             host.findParent()
             host.ready()

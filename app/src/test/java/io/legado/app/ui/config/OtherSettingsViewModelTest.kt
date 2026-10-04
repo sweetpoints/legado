@@ -32,7 +32,7 @@ class OtherSettingsViewModelTest {
         var deferBoolean = false
         var loadedOverride: OtherSettingsSnapshot? = null
 
-        override fun changes(): Flow<Unit> = state.map { Unit }
+        override fun changes(): Flow<Unit> = state.map { }
 
         override suspend fun initializeProcessText() {}
 

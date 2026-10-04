@@ -401,7 +401,7 @@ class BrowserViewModelTest {
                 gate.complete(Unit)
                 val image = vm.state.first { it.receipt != null }
                 assertEquals(BrowserReceiptKind.ImageSaved, vm.prepareReceipt(image.receipt!!).kind)
-                vm.consumeReceipt(image.receipt!!)
+                vm.consumeReceipt(image.receipt)
                 val verified = vm.state.first { it.receipt != null }
                 assertEquals(
                     BrowserReceiptKind.Verified,
@@ -450,7 +450,7 @@ class BrowserViewModelTest {
                     BrowserVerification("verified", "resolved"),
                     vm.prepareReceipt(pending.receipt!!).verification,
                 )
-                assertTrue(vm.consumeReceipt(pending.receipt!!))
+                assertTrue(vm.consumeReceipt(pending.receipt))
                 assertTrue(vm.state.value.finished)
             } finally {
                 owner.clear()
@@ -488,7 +488,7 @@ class BrowserViewModelTest {
                 )
                 assertEquals(0, repo.refetched)
                 assertEquals(listOf("image:folder"), repo.actions)
-                vm.consumeReceipt(pending.receipt!!)
+                vm.consumeReceipt(pending.receipt)
                 val verified = vm.state.first { it.receipt != null }
                 assertEquals(
                     BrowserReceiptKind.Verified,

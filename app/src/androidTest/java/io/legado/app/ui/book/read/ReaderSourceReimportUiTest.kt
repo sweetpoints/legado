@@ -6,6 +6,7 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -570,7 +571,12 @@ class ReaderSourceReimportUiTest {
         awaitImporter()
     }
 
-    private fun awaitImporter() =
+    private fun awaitImporter() {
+        // Semantics queries synchronize on the test thread, before inspecting the VM on main.
+        compose.waitUntil(timeoutMillis = 20000) {
+            compose.onAllNodesWithTag("book-import-confirm")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
         await("one current-source import candidate") {
             scenarioDialog =
                 it.supportFragmentManager.fragments
@@ -580,6 +586,7 @@ class ReaderSourceReimportUiTest {
             val vm = ViewModelProvider(dialog)[BookImportViewModel::class.java]
             vm.state.value.items.size == 1 && vm.state.value.interactive && dialog.view != null
         }
+    }
 
     private fun openPreview() {
         compose.onNodeWithTag("book-import-code-0").performScrollTo().performClick()

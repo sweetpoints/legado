@@ -70,6 +70,7 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.CacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.association.BookImportViewModel
+import io.legado.app.ui.association.launchAssociation
 import io.legado.app.ui.association.FileAssociationActivity
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
@@ -689,7 +690,7 @@ class CodeSelectionUiTest {
                     }
                 var editorActivity: CodeEditActivity? = null
                 try {
-                    ActivityScenario.launch<FileAssociationActivity>(intent).use { host ->
+                    compose.launchAssociation<FileAssociationActivity>(intent).use { host ->
                         var parent: DialogFragment? = null
                         await {
                             host.onActivity { activity ->

@@ -43,24 +43,24 @@ class BgTextSettingsViewModelTest {
             value = GSON.fromJsonObject<BgTextSettingsSnapshot>(checkpoint).getOrThrow()
         }
 
-        override fun set(setting: BgTextSetting, text: String): BgTextUpdate {
-            writes += setting to text
-            value =
+        override fun set(setting: BgTextSetting, value: String): BgTextUpdate {
+            writes += setting to value
+            this.value =
                 when (setting) {
-                    BgTextSetting.Name -> value.copy(name = text)
-                    BgTextSetting.DarkStatus -> value.copy(darkStatus = text.toBoolean())
-                    BgTextSetting.Alpha -> value.copy(alpha = text.toInt())
-                    BgTextSetting.UnderlineMode -> value.copy(underlineMode = text.toInt())
-                    BgTextSetting.UnderlineWidth -> value.copy(underlineWidth = text.toInt())
-                    BgTextSetting.UnderlineDistance -> value.copy(underlineDistance = text.toInt())
-                    BgTextSetting.UnderlineBody -> value.copy(underlineBody = text.toBoolean())
-                    BgTextSetting.UnderlineTitle -> value.copy(underlineTitle = text.toBoolean())
-                    BgTextSetting.ReviewColor -> value.copy(reviewColor = text.toInt())
-                    BgTextSetting.ReviewScale -> value.copy(reviewScale = text.toInt())
-                    BgTextSetting.ReviewSvg -> value.copy(reviewSvg = text)
+                    BgTextSetting.Name -> this.value.copy(name = value)
+                    BgTextSetting.DarkStatus -> this.value.copy(darkStatus = value.toBoolean())
+                    BgTextSetting.Alpha -> this.value.copy(alpha = value.toInt())
+                    BgTextSetting.UnderlineMode -> this.value.copy(underlineMode = value.toInt())
+                    BgTextSetting.UnderlineWidth -> this.value.copy(underlineWidth = value.toInt())
+                    BgTextSetting.UnderlineDistance -> this.value.copy(underlineDistance = value.toInt())
+                    BgTextSetting.UnderlineBody -> this.value.copy(underlineBody = value.toBoolean())
+                    BgTextSetting.UnderlineTitle -> this.value.copy(underlineTitle = value.toBoolean())
+                    BgTextSetting.ReviewColor -> this.value.copy(reviewColor = value.toInt())
+                    BgTextSetting.ReviewScale -> this.value.copy(reviewScale = value.toInt())
+                    BgTextSetting.ReviewSvg -> this.value.copy(reviewSvg = value)
                     BgTextSetting.AssetBackground,
-                    BgTextSetting.FileBackground -> value.copy(configuration = text)
-                    else -> value
+                    BgTextSetting.FileBackground -> this.value.copy(configuration = value)
+                    else -> this.value
                 }
             return bgTextUpdate(setting)
         }

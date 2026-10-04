@@ -48,22 +48,22 @@ class ReaderMenuConfigContractTest {
             )
         model.edit(ReaderMenuEditAction.Toggle("reimportSource", false))
         assertFalse("reimportSource" in persisted!!.primary)
-        assertEquals(listOf("reimportSource"), persisted!!.more)
+        assertEquals(listOf("reimportSource"), persisted.more)
         model.edit(ReaderMenuEditAction.StartReorder("bookmark"))
         model.edit(ReaderMenuEditAction.Move("bookmark", "highlightRule"))
         model.edit(ReaderMenuEditAction.FinishGesture(true))
-        assertEquals(listOf("highlightRule", "bookmark"), persisted!!.primary.take(2))
+        assertEquals(listOf("highlightRule", "bookmark"), persisted.primary.take(2))
         model.edit(ReaderMenuEditAction.StartSelection("highlightRule"))
         model.edit(ReaderMenuEditAction.SelectionTo("bookmark"))
         model.edit(ReaderMenuEditAction.FinishGesture(true))
-        assertEquals(listOf("highlightRule", "bookmark", "reimportSource"), persisted!!.more)
+        assertEquals(listOf("highlightRule", "bookmark", "reimportSource"), persisted.more)
         assertEquals(
             ReaderMenuConfig.ALL_KEYS.toSet(),
-            (persisted!!.primary + persisted!!.more).toSet(),
+            (persisted.primary + persisted.more).toSet(),
         )
         model.edit(ReaderMenuEditAction.SetAll(false))
-        assertTrue(persisted!!.primary.isEmpty())
-        assertEquals(ReaderMenuConfig.ALL_KEYS.size, persisted!!.more.size)
+        assertTrue(persisted.primary.isEmpty())
+        assertEquals(ReaderMenuConfig.ALL_KEYS.size, persisted.more.size)
         model.edit(ReaderMenuEditAction.Reset)
         assertEquals(ReaderMenuConfig.default(), persisted)
     }
