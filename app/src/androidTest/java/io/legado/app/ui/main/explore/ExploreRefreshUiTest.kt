@@ -241,8 +241,9 @@ class ExploreRefreshUiTest {
         screenshot("explore-input-before-keyboard")
         input.performClick().performTextReplacement("reader")
         await("actual keyboard visible") {
-            ViewCompat.getRootWindowInsets(it.window.decorView)
-                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            val insets = ViewCompat.getRootWindowInsets(it.window.decorView)
+            insets?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
+                insets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0
         }
         screenshot("explore-input-with-keyboard")
         input.assertIsDisplayed().assertIsFocused().assertTextContains("reader")
@@ -383,7 +384,7 @@ class ExploreRefreshUiTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario!!.onActivity {
             it.window.decorView.postOnAnimation {
