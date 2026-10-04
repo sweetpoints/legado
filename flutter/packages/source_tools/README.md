@@ -42,3 +42,9 @@ scripts or requests. `unverified`, `manualRequired`, and `noExecution` describe
 analysis only; neither audit nor migration establishes compatibility. Both
 commands return exit code 3 to require review. Preserve the original export to
 reproduce the exact input hash.
+
+CLI engine assembly provides the versioned `encoding.*` and `crypto.*` utility
+host for modern sources and migrated candidates. Legacy sources additionally
+receive the `java.*` host adapter. Modern sources never receive that adapter or
+its JavaScript prelude. Browser and interactive platform capabilities remain
+unavailable in the CLI and fail with an explicit error.

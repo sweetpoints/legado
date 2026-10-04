@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:source_engine/source_engine.dart';
 
 import 'src/audit.dart';
+export 'src/executor.dart' show createCliEngine;
 
 /// JSON-only CLI responses and stable process exit codes.
 class CliResult {
