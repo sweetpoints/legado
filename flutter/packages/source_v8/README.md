@@ -86,6 +86,19 @@ deployment target. A successful hook therefore does not verify the app's minimum
 OS setting. The hook also does not reject standalone Dart's default target of 12
 when executing locally: the supported runtime requirement remains macOS 13+.
 
+For a macOS app signed with Hardened Runtime, the app's release entitlements
+must include `com.apple.security.cs.allow-jit = true`: this V8 build uses
+`MAP_JIT` for generated code, even when Flutter itself uses AOT compilation.
+The example includes this entitlement in Debug/Profile and Release.
+[Apple's JIT entitlement documentation](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.allow-jit)
+and [Apple silicon JIT guidance](https://developer.apple.com/documentation/apple-silicon/porting-just-in-time-compilers-to-apple-silicon)
+explain the requirement when Hardened Runtime is enabled. The example does not
+add unsigned executable memory or disable library validation. Its current V8
+write protection uses `pthread_jit_write_protect_np()`, so do not add
+`com.apple.security.cs.jit-write-allowlist`, which Apple documents as incompatible
+with that API. This configuration change is separate from signed release
+acceptance and notarization.
+
 Intl and Temporal are disabled by the GN configuration; external
 startup data is disabled, so the snapshot is embedded. Other targets do not
 become supported merely because Flutter's generated example contains platform
