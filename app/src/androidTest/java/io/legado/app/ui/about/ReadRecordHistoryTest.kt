@@ -957,13 +957,19 @@ class ReadRecordHistoryTest {
 
     private fun awaitColor(tag: String, color: Int) {
         reveal(tag)
-        compose.waitUntil(10_000) {
+        var observed: Int? = null
+        try { compose.waitUntil(10_000) {
             compose.mainClock.advanceTimeByFrame()
             runCatching {
                     val image = compose.onNodeWithTag(tag, true).captureToImage().toPixelMap()
-                    image[image.width / 2, image.height / 2].toArgb() == color
+                    // The middle summary cover is partly covered by the top book cover.
+                    val divisor = if (tag == "history-summary-cover-1") 4 else 2
+                    observed = image[image.width / divisor, image.height / divisor].toArgb()
+                    observed == color
                 }
                 .getOrDefault(false)
+        } } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("Cover $tag expected=$color actual=$observed", error)
         }
     }
 
@@ -982,18 +988,16 @@ class ReadRecordHistoryTest {
             listOf("title", "author", "chapter", "time", "date").map {
                 compose
                     .onNodeWithTag("history-$it-${key(name,author)}", true)
-                    .fetchSemanticsNode()
-                    .boundsInRoot
+                    .getUnclippedBoundsInRoot()
             }
         fields.zipWithNext().forEach { (a, b) ->
-            assertTrue("Author/chapter/time fields do not overlap", a.bottom <= b.top)
+            assertTrue("Author/chapter/time fields do not overlap: $a then $b; all=$fields", a.bottom <= b.top)
         }
-        assertTrue(fields.all { it.width > 0 && it.height > 0 })
+        assertTrue(fields.all { it.right > it.left && it.bottom > it.top })
         val cover =
             compose
                 .onNodeWithTag("history-cover-${key(name,author)}", true)
-                .fetchSemanticsNode()
-                .boundsInRoot
+                .getUnclippedBoundsInRoot()
         assertTrue(cover.right <= fields.first().left)
         fun font(field: String): Float {
             val layouts = mutableListOf<TextLayoutResult>()
@@ -1004,6 +1008,10 @@ class ReadRecordHistoryTest {
         }
         assertTrue(font("title") > font("author"))
         assertTrue(font("time") > font("date"))
+        listOf("title", "author", "chapter", "time", "date").forEach { field ->
+            val tag = "history-$field-${key(name, author)}"
+            compose.onNodeWithTag(tag, true).performScrollTo().assertIsDisplayed()
+        }
     }
 
     private fun shell(command: String) {
