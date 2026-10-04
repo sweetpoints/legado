@@ -147,7 +147,7 @@ def build(source, depot, env, target, jobs, pins):
     out.mkdir(parents=True, exist_ok=True)
     args = gn_arguments(target)
     (out / 'args.gn').write_text(args)
-    run([depot / 'gn', 'gen', out, '--fail-on-unused-args'], source, env)
+    run([depot / 'gn', 'gen', out, '--root-target=//source_v8:source_v8', '--fail-on-unused-args'], source, env)
     run([depot / 'autoninja', '-C', out, '-j', jobs, 'source_v8:source_v8'], source, env)
     suffix = '.dylib' if target == 'macos-arm64' else '.so'
     built = out / ('libsource_v8' + suffix)

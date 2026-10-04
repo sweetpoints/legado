@@ -91,6 +91,8 @@ class BuildContractTests(unittest.TestCase):
                 path = bridge / name; path.write_text(name)
                 files[name] = path
             def mocked_run(args, cwd, env=None, capture=False):
+                if 'gen' in args:
+                    self.assertIn('--root-target=//source_v8:source_v8', args)
                 if not capture:
                     return None
                 if 'revinfo' in args:
