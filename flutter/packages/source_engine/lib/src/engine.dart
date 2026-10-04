@@ -101,6 +101,19 @@ class SourceEngine {
             : Uri.encodeComponent(value.toString());
       },
     );
+    if (source.metadata['legacyBaseUrlUnavailable'] == true) {
+      final explicit = Uri.tryParse(url);
+      // Uri.isAbsolute excludes URLs containing fragments; an HTTP request
+      // target is usable when it has an explicit HTTP(S) scheme and host.
+      if (explicit == null ||
+          !['http', 'https'].contains(explicit.scheme) ||
+          explicit.host.isEmpty) {
+        throw const EngineException(
+          'legacy_base_url_required',
+          'Legacy source ID has no HTTP base; the stage must provide an absolute HTTP(S) URL',
+        );
+      }
+    }
     final body = stage.body?.replaceAllMapped(
       RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
       (m) {
