@@ -147,6 +147,22 @@
             "type": "string",
             "pattern": "^[^\\r\\n]*$"
           }
+        },
+        "bodyEncoding": {
+          "type": "string",
+          "enum": [
+            "raw",
+            "legacyFormUtf8"
+          ],
+          "default": "raw"
+        },
+        "bodyTemplateMode": {
+          "type": "string",
+          "enum": [
+            "raw",
+            "legacyJsonString"
+          ],
+          "default": "raw"
         }
       },
       "additionalProperties": true

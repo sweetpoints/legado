@@ -115,8 +115,8 @@ loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
 46,032,368 bytes (43.90 MiB), and has SHA-256
 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
 The source_v8 package's 21 tests passed; the workspace's eight static analyses
-were clean and all 227 tests passed (38/41/12/21/21/85/1/8). This evidence is in
-`tmp/flutter-source-check-source-identity-final.log` relative to the repository root. The
+were clean and all 280 tests passed (43/48/12/21/21/126/1/8). This evidence is in
+`tmp/flutter-source-check-legacy-requests-final.log` relative to the repository root. The
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
@@ -131,18 +131,18 @@ The official source-built Android ARM64 library also linked successfully.
 Debug AAR and APK contain the same 26,306,760-byte library (25.09 MiB), SHA-256
 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`,
 matching the manifest. ELF inspection confirmed ARM64, 16 KiB PT_LOAD alignment
-and only c/dl/log/m system-library dependencies. The eleven engine instrumentation
+and only c/dl/log/m system-library dependencies. The twelve engine instrumentation
 cases passed in this acceptance round on the Android API 36 emulator; evidence is in
-`tmp/flutter-android-test-source-identity-final.log`. These are eleven test cases, not eleven
+`tmp/flutter-android-test-legacy-requests-final.log`. These are twelve test cases, not twelve
 different device configurations.
 
-The current source-identity round passed its local Android Release/R8
-build. `tmp/flutter-android-release-source-identity.log` records BUILD
-SUCCESSFUL in 2m13s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
+The current legacy-request round passed its local Android Release/R8
+build. `tmp/flutter-android-release-legacy-requests.log` records BUILD
+SUCCESSFUL in 4m52s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
 Flutter assets and Release AAR/APK's seven Flutter assets each had matching
 SHA-256 values. The Release artifacts contain identical 3,277,704-byte
 libapp.so files (SHA-256
-`f9b6ed5e8ca365d2d7e99d499c8fae8f3ed31c3e2a87e23a8159cde3375e8250`)
+`255afbd8929b3a708a98ca8c4f78d4eed435719a2dfd455b310c79ca4446d37e`)
 and manifest-matching 26,306,760-byte libsource_v8.so files with
 the V8 SHA-256 above. These unsigned APKs are local build results, not a
 published release or CI acceptance. Fixed-case checks do not establish all
@@ -155,3 +155,7 @@ this package to execute the native-assets hook before tests. Bare `dart test`
 does not build the hook's native assets. Tests exercise actual V8 async/sync host
 calls, script errors, watchdog, cancellation, lifecycle and serialization.
 Android compilation and on-device acceptance remain separate checks.
+
+Four legacy JVM golden tests passed across sixteen fixed inputs, recorded in
+`tmp/flutter-legacy-form-jvm-golden.log`. This is fixed-input legacy form evidence,
+not an entire-source or complete JVM-engine equivalence claim.

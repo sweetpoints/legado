@@ -17,7 +17,7 @@
 | `headers` | 字符串映射 | 默认空对象；静态全局请求头 |
 | `script` | 字符串或 null | 非 null 时以完整 JS 入口执行，优先于 `stages` |
 
-每个 stage 包含：`url`（字符串，默认空）、`list`（可空的规则字符串）、`fields`（字段名到规则字符串的映射，默认空）。另有 `nextPage`（可空规则字符串）和 `maxPages`（整数，默认20，读取配置时要求1..1000）。另有 method（默认GET）、body（可空字符串）、headers（可空静态字符串映射）、charset（可空字符集覆盖）。URL 为空不表示该阶段可执行。
+每个 stage 包含：`url`（字符串，默认空）、`list`（可空的规则字符串）、`fields`（字段名到规则字符串的映射，默认空）。另有 `nextPage`（可空规则字符串）和 `maxPages`（整数，默认20，读取配置时要求1..1000）。另有 method（默认GET）、body（可空字符串）、bodyEncoding（raw默认或legacyFormUtf8）、bodyTemplateMode（raw默认或legacyJsonString）、headers（可空静态字符串映射）、charset（可空字符集覆盖）。URL 为空不表示该阶段可执行。
 
 Schema 定义作者应提交的严格字段类型。当前 Dart 读取器会把 `fields` 中部分非字符串值转成字符串，并忽略部分未知字段；这种宽容读取不应作为新书源作者的格式保证。顶层未知字段不会由 `toJson` 自动保留；需要保存的扩展信息放入 `metadata`。
 
@@ -67,7 +67,8 @@ URL 上下文占位符包括 `{{key}}`、`{{page}}`、`{{bookUrl}}`、`{{tocUrl}
 | `timeout` | 网络请求超时 |
 | `unsupported_operation` | 操作名不在五种阶段之中 |
 | `missing_stage` | 规则模式中缺少所请求的阶段 |
-| `missing_input` | URL 占位符缺少输入值 |
+| `missing_input` | URL或body占位符缺少或null输入值 |
+| `legacy_body_template_requires_migration` | 旧表单模板输入不满足可保持语义的类型或字符限制 |
 | `http_error` | 规则阶段的响应状态码 >=400 |
 | `invalid_arguments` | parse 宿主调用缺少规则或内容 |
 | `unsupported_rule` | parse 宿主不支持嵌套脚本规则 |

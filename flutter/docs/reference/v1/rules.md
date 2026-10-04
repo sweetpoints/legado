@@ -70,3 +70,9 @@ stage method 默认 GET，允许有效 HTTP token；实际请求转成大写。b
 charset 可指定该阶段原始请求体字节编码和响应解码；它不改变 URL 查询变量的UTF-8编码，也不是旧 AnalyzeUrl 的表单/查询charset语义。未指定时使用默认请求编码与响应检测。分页请求沿用该阶段 method、body、headers 和 charset，不自动改写成网站特有翻页表单。
 
 兼容导入候选若标记 metadata.legacyBaseUrlUnavailable=true，规则阶段在模板替换后要求URL显式含HTTP(S) scheme与host；relative及 `//host` 报 legacy_base_url_required，避免用结构锚点猜测请求host。提取链接和nextPage照常相对于实际响应URL解析，绝对请求URL允许fragment。此限制不改变普通现代书源规则。
+
+bodyEncoding默认raw，另支持legacyFormUtf8；未知模式报invalid_source。raw保持模板替换后的字符串。legacyFormUtf8在模板替换后对整份表单逐component编码，按 & 和首个 = 拆分；完整符合字母数字/`*._-`/有效 `%HH` 的component原样保留，其他component整体按Java UTF-8 URLEncoder编码（空格变+，原+变%2B，混合component中的%变%25；孤立UTF-16 surrogate按Java替换为?后编码）。旧while循环规则丢弃前导空 & 段，输出已有内容后的中间与尾空段保留。此模式不改变URL/query编码，也不自动设置Content-Type；公开Dart辅助函数为 encodeLegacyFormUtf8Body。
+
+bodyTemplateMode默认raw，另支持legacyJsonString，未知模式报invalid_source。mode为legacyJsonString或encoding为legacyFormUtf8时，模板输入仅接受string、bool或JS安全整数（±9007199254740991）；double（即使有限）、越界整数、集合等类型，以及含双引号、反斜杠、U+0000..U+001F或DEL的值，在请求前报legacy_body_template_requires_migration，避免改变旧JSON请求选项解析行为。null仍报missing_input。
+
+legacyJsonString用于保持旧JSON请求选项中字符串body的模板语义：即使bodyEncoding=raw也执行上述输入保护，但不额外进行表单编码。所有旧POST选项的字符串body含 `{{}}` 时均由导入器标记此模式，包括JSON/XML和显式Content-Type；纯现代raw默认模式保持既有模板行为。

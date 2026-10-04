@@ -43,26 +43,27 @@
       ],
       "androidRelease": "local unsigned APK and AAR; minifyAppReleaseWithR8 completed; packaged V8 size and SHA-256 match manifest",
       "logs": [
-        "tmp/flutter-source-check-source-identity-final.log",
-        "tmp/flutter-android-test-source-identity-final.log",
-        "tmp/flutter-android-release-source-identity.log"
+        "tmp/flutter-source-check-legacy-requests-final.log",
+        "tmp/flutter-android-test-legacy-requests-final.log",
+        "tmp/flutter-legacy-form-jvm-golden.log",
+        "tmp/flutter-android-release-legacy-requests.log"
       ],
       "fullHistoricalSourceAcceptance": false,
       "signedDistributionAcceptance": false,
       "ciAcceptance": false,
-      "acceptanceRound": "source identity and guarded base URL acceptance",
+      "acceptanceRound": "legacy form requests and static explore menus acceptance",
       "workspaceStaticAnalyses": 8,
       "workspacePackageTests": [
-        38,
-        41,
+        43,
+        48,
         12,
         21,
         21,
-        85,
+        126,
         1,
         8
       ],
-      "androidInstrumentationCases": 11,
+      "androidInstrumentationCases": 12,
       "currentRoundReleaseR8": "passed locally",
       "debugFlutterAssetConsistency": "10 Flutter assets in AAR and APK have matching SHA-256",
       "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
@@ -70,13 +71,18 @@
         "libapp.so": {
           "bytes": 3277704,
           "sha256MatchesBetweenAarAndApk": true,
-          "sha256": "f9b6ed5e8ca365d2d7e99d499c8fae8f3ed31c3e2a87e23a8159cde3375e8250"
+          "sha256": "255afbd8929b3a708a98ca8c4f78d4eed435719a2dfd455b310c79ca4446d37e"
         },
         "libsource_v8.so": {
           "bytes": 26306760,
           "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593",
           "sha256MatchesManifestAndPackagedArtifacts": true
         }
+      },
+      "legacyJvmGolden": {
+        "tests": 4,
+        "fixedInputs": 16,
+        "fullJvmEngineCompared": false
       }
     },
     "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot"
@@ -137,7 +143,9 @@
       "method",
       "body string template",
       "static headers replacement",
-      "charset"
+      "charset",
+      "bodyEncoding raw or legacyFormUtf8",
+      "bodyTemplateMode raw or legacyJsonString"
     ],
     "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
     "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5",
@@ -148,7 +156,9 @@
       "relativeOrSchemeRelativeError": "legacy_base_url_required",
       "derivedLinksAndNextPage": "resolved against actual response URL",
       "scriptBranchChanged": false
-    }
+    },
+    "legacyFormTemplateInputs": "string, bool, JS-safe int only; quote/backslash/control/DEL/double/unsafe int rejected; null missing_input",
+    "legacyBodyTemplateGuard": "when bodyEncoding legacyFormUtf8 or bodyTemplateMode legacyJsonString; strings, bools and JS-safe ints only; unsafe chars/types rejected before network"
   },
   "legacy": {
     "status": "partial",
@@ -203,20 +213,23 @@
       "convertedFields": [
         "method",
         "body for POST",
-        "static headers overlaid on source headers"
+        "static headers overlaid on source headers",
+        "bodyEncoding=legacyFormUtf8 for implicit UTF8 raw form",
+        "bodyTemplateMode=legacyJsonString for templated legacy POST string body"
       ],
       "methodMapping": "POST/HEAD retained; other string maps GET",
       "manual": [
         "nonempty charset",
         "dynamic JavaScript",
         "unknown options",
-        "templated form body",
         "non-UTF8 Content-Type",
         "noncanonical Content-Type case",
         "unknown placeholder",
         "method placeholders",
         "header placeholders",
-        "body placeholders changing inferred Content-Type"
+        "body placeholders changing inferred Content-Type",
+        "templated form without fixed ASCII parameter name=prefix or unsafe/ambiguous inferred body type",
+        "templated object or array body: different outer JSON substitution layer"
       ],
       "stageCharsetFromLegacy": false
     },
@@ -247,7 +260,8 @@
         "fragment",
         "whitespace"
       ]
-    }
+    },
+    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; per-item options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review"
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -289,7 +303,7 @@
     },
     "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule",
     "privateCorpusOfflineAuditSnapshot": {
-      "round": 2,
+      "round": "3-final",
       "inputSources": 554,
       "enabledSources": 546,
       "disabledSources": 8,
@@ -297,21 +311,21 @@
       "nonTextSources": 81,
       "enabledTextSources": 466,
       "candidates": 526,
-      "unverified": 10,
-      "unverifiedAllEnabledAndText": true,
-      "manualRequired": 516,
+      "unverified": 13,
+      "manualRequired": 513,
       "noCandidate": 28,
+      "manualToUnverifiedSinceRound2": 3,
       "actuallyExecuted": 0,
       "verified": 0,
-      "issueCount": 7664,
-      "newCandidates": 8,
-      "newCandidatesAllEnabledAndText": true,
-      "newCandidateIdPreservedExactly": true,
-      "newCandidateFlags": {
-        "legacy": true,
-        "legacyBaseUrlUnavailable": true
-      },
-      "existing518CandidateStatusesUnchanged": true,
+      "issueCount": 10081,
+      "issueCountMeaning": "Includes newly reviewable per-menu-item issues; aggregate growth alone is not compatibility regression",
+      "menuSources": 274,
+      "menuItems": 12361,
+      "jsonMenuSources": 150,
+      "jsonMenuItems": 9243,
+      "stylesPreserved": 9228,
+      "legacyFormEncodingSources": 52,
+      "legacyJsonStringTemplateSources": 89,
       "noCandidateStaticCategories": {
         "javascript": 19,
         "nonstandardQueryTemplate": 4,

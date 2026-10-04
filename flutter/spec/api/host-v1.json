@@ -313,5 +313,26 @@
       "Authorization",
       "Cookie"
     ]
+  },
+  "stageBodyEncoding": {
+    "default": "raw",
+    "allowed": [
+      "raw",
+      "legacyFormUtf8"
+    ],
+    "legacyFormUtf8": "expand known placeholders before Java UTF8 per-component form encoding; input guard when this encoding or bodyTemplateMode legacyJsonString; only strings, booleans and JS-safe integers; unsafe chars/types fail before request",
+    "invalidMode": "invalid_source",
+    "unsafeTemplateInput": "legacy_body_template_requires_migration",
+    "nullInput": "missing_input",
+    "dartHelper": "encodeLegacyFormUtf8Body"
+  },
+  "stageBodyTemplateMode": {
+    "default": "raw",
+    "allowed": [
+      "raw",
+      "legacyJsonString"
+    ],
+    "legacyJsonString": "legacy JSON options string-body template input guard even with bodyEncoding raw; no implicit form encoding",
+    "invalidMode": "invalid_source"
   }
 }

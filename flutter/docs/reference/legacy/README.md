@@ -32,7 +32,7 @@
 | body | 字符串原样，其他非null JSON值序列化；只在POST阶段保留 |
 | charset | 任意非空值均需人工迁移；不写入新版 stage.charset |
 
-POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body按旧行为设置 application/json; charset=UTF-8；其他body设置表单Content-Type，固定字面量按UTF-8表单编码。完全符合安全字符/有效百分号转义的片段保留，不符合时编码；分隔 & 和首个 = 保留。templated form需要替换后编码，明确产生 legacy.request_options，不自动宣称转换等价。
+POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body按旧行为设置 application/json; charset=UTF-8；其他body设置原 application/x-www-form-urlencoded。无charset覆盖时，固定表单不预编码，保留原body并设置bodyEncoding=legacyFormUtf8，在替换输入后编码。模板表单要求以固定非空ASCII参数名和等号开头（`^[A-Za-z0-9*._-]+=`）且只含已知输入占位符；纯 `{{key}}`、替换后可能改变body类型、非空非blank但编码为空的表单（如全&）仍需人工处理。运行时模板值限制见[阶段请求体](../v1/rules.md)。
 
 旧 charset控制查询/表单百分号编码，与新版原始body字节/响应覆盖不同，因此即使UTF-8也保持人工审查。method/headers 中的模板、替换后可能改变默认 Content-Type 推断的 body、非UTF-8 Content-Type、不同大小写的content-type键、动态JS、未知选项（包括webview/retry/type）、非法JSON/headers和未知模板表达式均产生 legacy.request_options。所有旧URL（包括没有请求选项的URL）均只接受已知模板名 key/page/bookUrl/tocUrl/chapterUrl/baseUrl/exploreUrl；复杂表达式、未闭合模板及 `<1,2,3>` 等页码选择语法需人工迁移。候选执行仍要求输入提供对应值。
 
@@ -54,7 +54,7 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 
 ## 发现入口输入
 
-旧发现菜单只保存在 metadata.legacyOriginal，导入器不将整个菜单当请求URL。stages.explore 固定GET、无body和阶段headers，使用全局静态headers，URL为 `{{exploreUrl}}`。调用方提供 input.exploreUrl，即用户选中的具体URL；现代书源入口仍可使用 input.url。CLI execute/compare 旧发现阶段也必须通过 --variables 提供 exploreUrl。
+原发现菜单保存在metadata.legacyOriginal；静态JSON数组 `[{"title":"入口","url":"https://example.invalid/"}]` 或 `title::URL` 行（换行/&&分隔）另解析为metadata.legacyExploreItems，条目统一为title/url字符串及可选style字段；style可为null或JSON对象，保持深拷贝、嵌套内容及显式null键。style只提供presentation数据，不执行或参与URL规则检查。未知type/action等键、primitive/list类型style仍产生legacy.explore_menu_requires_review。普通单URL保留空title入口。每个URL独立检查，标题不按脚本标记误判；动态菜单、非法形状及每项请求options仍需人工处理，不把整个菜单当URL/options。stages.explore仍固定GET、无body和阶段headers，使用全局静态headers，URL为 `{{exploreUrl}}`。调用方提供input.exploreUrl，即用户选中的具体URL；现代入口仍可使用input.url。CLI execute/compare旧发现阶段也必须通过--variables提供exploreUrl。
 
 菜单脚本、逗号请求选项和复杂模板均需人工迁移；逗号菜单选项产生 legacy.explore_options，不会套用到所有选中URL。@js:/<js>等脚本标记按大小写不敏感检测。选中入口自身的动态请求参数也必须显式迁移。
 
@@ -65,3 +65,7 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 此标记下，所有规则阶段URL在模板替换后的最终值必须显式包含HTTP(S) scheme和host；相对路径及 `//host` 在发请求之前报 legacy_base_url_required，不借search origin猜测旧请求host。绝对URL可带fragment。正常HTTP来源及现代书源行为不变；此检查针对规则阶段请求，不扩展为脚本分支的全调用分析。提取链接和nextPage仍按实际response URL解析。
 
 默认source_host对manual issue阻断；只在flag为true且所有issue均精确为code=legacy.base_url_requires_review、path=bookSourceUrl时，允许受阶段绝对URL guard保护的执行。候选仍为manualRequired，其他issue继续阻断，详见[宿主例外](../v1/android.md)。
+
+旧POST请求选项的字符串body含模板时，无论表单、JSON、XML或显式Content-Type，均设置bodyTemplateMode=legacyJsonString，替换前按新版规则的保护条件拒绝会改变旧JSON字符串解析的输入。body为object/array且含模板时，因外层JSON替换层不同产生legacy.request_options，需人工迁移；固定object/array仍支持序列化，固定无模板body保持raw模式。
+
+普通HTTP IPv6发现URL可以保留；title::URL行若包含额外 `::`（例如带IPv6的分类URL），metadata保留完整URL，但产生legacy.explore_menu_requires_review并保持manualRequired，因为旧split全部 `::` 的结果可能截断，不宣称自动等价。
