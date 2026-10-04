@@ -1,0 +1,11 @@
+{"html":"<section class='root'><div class='book'><p class='title'>  Alpha\n <b>Beta</b><br> Gamma </p><a href='/one'>one</a><a href='/one'>duplicate</a><a href=' '>empty</a></div><div class='book'><p class='title'>Delta</p><a href='/two'>two</a></div><div class='book'><p class='title'>Third</p></div><div class='book'><p class='title'>Fourth</p></div></section>","cases":{
+"@legacy:class.book@tag.p@text":["Alpha Beta Gamma","Delta","Third","Fourth"]
+,"@legacy:class.book.0@tag.p@ownText":["Alpha Gamma"]
+,"@legacy:class.book.0@tag.p@textNodes":["Alpha\nGamma"]
+,"@legacy:tag.a@href":["/one","/two"]
+,"@legacy:class.book[-1,0,2]@tag.p@text":["Fourth","Alpha Beta Gamma","Third"]
+,"@legacy:class.book[0:2]@tag.p@text":["Alpha Beta Gamma","Delta","Third"]
+,"@legacy:class.book[-1:0:2]@tag.p@text":["Fourth","Delta"]
+,"@legacy:class.book!0:2@tag.p@text":["Delta","Fourth"]
+,"@legacy:class.book[!0,-1]@tag.p@text":["Delta","Third"]
+}}

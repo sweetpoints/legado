@@ -24,7 +24,25 @@ class FixtureServer {
     requests.add(request.uri.path);
     final response = request.response;
     try {
-      if (request.uri.path == '/slow') {
+      if (request.uri.path == '/echo') {
+        response.headers.contentType = ContentType.json;
+        response.headers.set('x-fixture', 'present');
+        response.write(
+          jsonEncode({
+            'method': request.method,
+            'body': await utf8.decoder.bind(request).join(),
+            'header': request.headers.value('x-request'),
+          }),
+        );
+      } else if (request.uri.path == '/redirect') {
+        response.statusCode = HttpStatus.found;
+        response.headers.set(HttpHeaders.locationHeader, '/value');
+        response.write('redirect response');
+      } else if (request.uri.path == '/missing') {
+        response.statusCode = HttpStatus.notFound;
+        response.headers.set('x-fixture', 'missing');
+        response.write('not found');
+      } else if (request.uri.path == '/slow') {
         await Future<void>.delayed(const Duration(milliseconds: 350));
         response.write('late result');
       } else if (request.uri.path == '/value') {

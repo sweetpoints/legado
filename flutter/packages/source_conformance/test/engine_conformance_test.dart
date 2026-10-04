@@ -164,4 +164,25 @@ void main() {
     expect(report.requiresManualWork, isTrue);
     expect(report.issues, isNotEmpty);
   });
+  test(
+    'legacy chained list selects elements before evaluating row fields',
+    () async {
+      final definition = SourceDefinition(
+        id: 'legacy-chain',
+        name: '旧列表链',
+        baseUrl: server.baseUrl,
+        stages: const {
+          'search': SourceStage(
+            url: '/search',
+            list: '@legacy:class.book@tag.a',
+            fields: {'name': '@legacy:text', 'bookUrl': '@legacy:href'},
+          ),
+        },
+      );
+      final result = await engine.execute(definition, 'search');
+      expect(result, [
+        {'name': '测试书籍', 'bookUrl': server.baseUrl.resolve('/book').toString()},
+      ]);
+    },
+  );
 }
