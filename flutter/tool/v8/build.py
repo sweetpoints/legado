@@ -31,7 +31,8 @@ def read_pins():
 def run(args, cwd, env=None, capture=False):
     print('+ ' + ' '.join(str(arg) for arg in args), flush=True)
     return subprocess.run([str(arg) for arg in args], cwd=cwd, env=env,
-                          check=True, text=True, stdout=subprocess.PIPE if capture else None).stdout
+                          check=True, text=True, stdout=subprocess.PIPE if capture else None,
+                          stderr=subprocess.STDOUT if capture else None).stdout
 
 
 def sha(path):
@@ -107,7 +108,7 @@ def gn_arguments(target):
     if target == 'android-arm64':
         args.update(target_os='android', android_ndk_api_level=26)
     else:
-        args.update(target_os='mac', mac_deployment_target='13.0')
+        args.update(target_os='mac', mac_deployment_target='13.0', use_lld=False)
     return '\n'.join(f'{key} = {json.dumps(value)}' for key, value in sorted(args.items())) + '\n'
 
 
@@ -191,6 +192,10 @@ def build(source, depot, env, target, jobs, pins):
         clang = source / 'third_party/llvm-build/Release+Asserts/bin/clang++'
         toolchain = {'clang': run([clang, '--version'], source, env, capture=True).strip(),
                      'gn': run([depot / 'gn', '--version'], source, env, capture=True).strip()}
+        if target == 'macos-arm64':
+            toolchain['appleLinker'] = run(['xcrun', 'ld', '-v'], source, env, capture=True).strip()
+            toolchain['xcode'] = run(['xcodebuild', '-version'], source, env, capture=True).strip()
+            toolchain['macSdk'] = run(['xcrun', '--sdk', 'macosx', '--show-sdk-version'], source, env, capture=True).strip()
         entry = {'binary': str(Path(target) / binary.name), 'sha256': sha(binary), 'size': binary.stat().st_size,
                  'host': {'os': platform.system(), 'cpu': platform.machine()},
                  'gnArgs': args, 'gnArgsSha256': sha(destination / 'args.gn'),

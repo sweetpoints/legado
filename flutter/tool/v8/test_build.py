@@ -59,7 +59,10 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn('v8_monolithic_for_shared_library = true', args)
         self.assertIn('v8_use_external_startup_data = false', args)
         self.assertIn('android_ndk_api_level = 26', args)
-        self.assertIn('mac_deployment_target = "13.0"', builder.gn_arguments('macos-arm64'))
+        mac_args = builder.gn_arguments('macos-arm64')
+        self.assertIn('mac_deployment_target = "13.0"', mac_args)
+        self.assertIn('use_lld = false', mac_args)
+        self.assertNotIn('use_lld', args)
 
     def test_version_zero_patch_and_license_notice_copy(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -128,6 +131,10 @@ class BuildContractTests(unittest.TestCase):
                 artifact = package / '.cache/self-built' / pins['v8']['revision']
                 manifest = __import__('json').loads((artifact / 'manifest.json').read_text())
                 self.assertEqual(set(manifest['targets']), {'android-arm64', 'macos-arm64'})
+                self.assertIn('appleLinker', manifest['targets']['macos-arm64']['toolchain'])
+                self.assertIn('xcode', manifest['targets']['macos-arm64']['toolchain'])
+                self.assertIn('macSdk', manifest['targets']['macos-arm64']['toolchain'])
+                self.assertNotIn('appleLinker', manifest['targets']['android-arm64']['toolchain'])
                 self.assertIn('licenses/third_party/LinuxOnly/NOTICE', {entry['path'] for entry in manifest['licenses']})
                 self.assertEqual((artifact / 'licenses/third_party/LinuxOnly/NOTICE').read_text(), 'Linux dependency notice')
                 for target in manifest['targets'].values():
