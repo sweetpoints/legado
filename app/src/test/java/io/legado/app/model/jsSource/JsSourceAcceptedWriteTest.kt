@@ -67,7 +67,8 @@ class JsSourceAcceptedWriteTest {
         val release = CompletableDeferred<Unit>()
         var completed = false
         val operation =
-            async(Dispatchers.IO) {
+            // Begin through release.await() before the caller can cancel and release it.
+            async(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
                 JsSourceUpsert.acceptedWrite(onAccepted = null) {
                     entered.complete(Unit)
                     release.await()
