@@ -43,7 +43,7 @@ jobs:
       product: ${{ matrix.product }}
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -99,14 +99,14 @@ jobs:
           fi
           
       - name: Upload App To Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: legado_${{ env.product }}
           path: ${{ github.workspace }}/apk/*.apk
 
       - name: Release
         if: ${{ env.product == 'app' }}
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.3
         with:
           name: legado_app_${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}

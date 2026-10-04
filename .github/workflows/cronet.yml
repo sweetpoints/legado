@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ vars.ENABLE_CRONET_UPDATES == 'true' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Check Cronet Updates
         run: |
@@ -23,12 +23,12 @@ jobs:
 
       - name: Set up JDK 21
         if: ${{ env.cronet == 'ok' }}
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v6.0.1
         with:
           distribution: 'temurin'
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - uses: gradle/actions/setup-gradle@v6.4.0
         if: ${{ env.cronet == 'ok' }}
 
       - name: Download and verify Cronet bundle
@@ -43,7 +43,7 @@ jobs:
 
       - name: Create Pull Request
         if: ${{ env.cronet == 'ok' }}
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@v8.1.1
         with:
           token: ${{ secrets.TOKEN_MGZ }}
           title: ${{ env.PR_TITLE }}

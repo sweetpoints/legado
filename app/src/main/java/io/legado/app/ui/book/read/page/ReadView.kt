@@ -1187,6 +1187,16 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         return curPage.getReadPosition()
     }
 
+    fun captureScrollPositionForResourceRefresh() {
+        // An explicit refresh snapshots the frame the user is now viewing. It supersedes
+        // an earlier menu/configuration reflow, whose first-frame anchor may be outdated.
+        pendingScrollLayoutAnchor = null
+        appliedScrollLayoutAnchor = null
+        scrollModeTransitionSource = null
+        updateScrollReadPosition()
+        ReadBook.preserveCurrentPositionForRefresh()
+    }
+
     fun updateScrollReadPosition(preserveText: Boolean = false) {
         // The configured mode may already have changed; capture the page still on screen.
         if (ReadBook.msg != null || !ReadBook.isLayoutAvailable) return
