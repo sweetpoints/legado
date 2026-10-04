@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:source_engine/source_engine.dart';
 import 'package:test/test.dart';
 
@@ -116,6 +118,90 @@ void main() {
       }
     },
   );
+  test('source headers inherit for stages and JS, explicit headers replace', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      req.response.write(
+        '${req.headers.value('x-global') ?? '-'}:${req.headers.value('x-explicit') ?? '-'}',
+      );
+      await req.response.close();
+    });
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+    final stageEngine = SourceEngine(runtime: HostProbe((_) async => []));
+    final scriptEngine = SourceEngine(
+      runtime: HostProbe((host) async {
+        expect(await host.call('net.get', ['/']), 'yes:-');
+        expect(
+          (await host.call('net.request', [
+            {'url': '/'},
+          ]) as Map)['body'],
+          'yes:-',
+        );
+        expect(
+          (await host.call('net.request', [
+            {'url': '/', 'inheritHeaders': false},
+          ]) as Map)['body'],
+          '-:-',
+        );
+        expect(
+          (await host.call('net.request', [
+            {
+              'url': '/',
+              'headers': {'x-explicit': 'only'},
+            },
+          ]) as Map)['body'],
+          '-:only',
+        );
+        return [
+          {'verified': true},
+        ];
+      }),
+    );
+    try {
+      final stage = SourceDefinition(
+        id: 'headers',
+        name: 'Headers',
+        baseUrl: base,
+        headers: {'x-global': 'yes'},
+        stages: {
+          'content': SourceStage(url: '/', fields: {'content': '@regex:(.+)'}),
+        },
+      );
+      expect(await stageEngine.execute(stage, 'content'), [
+        {'content': 'yes:-'},
+      ]);
+      expect(
+        await scriptEngine.execute(
+          SourceDefinition(
+            id: 'headers',
+            name: 'Headers',
+            baseUrl: base,
+            headers: {'x-global': 'yes'},
+            script: 'probe',
+          ),
+          'info',
+        ),
+        [
+          {'verified': true},
+        ],
+      );
+    } finally {
+      await stageEngine.close();
+      await scriptEngine.close();
+      await server.close(force: true);
+    }
+  });
+  test('headers reject CRLF and invalid names', () {
+    expect(
+      () => SourceDefinition(
+        id: 'bad',
+        name: 'Bad',
+        baseUrl: Uri.parse('https://example.org'),
+        headers: {'x-test': 'one\r\ntwo'},
+      ),
+      throwsA(isA<EngineException>()),
+    );
+  });
   test('parse nested JS rejected without runtime reentry', () async {
     final engine = SourceEngine(
       runtime: HostProbe(

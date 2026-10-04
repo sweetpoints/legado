@@ -85,6 +85,7 @@ class SourceDefinition {
     this.stages = const {},
     this.metadata = const {},
     this.script,
+    this.headers = const {},
   }) {
     if (schemaVersion != 1) {
       throw EngineException(
@@ -103,6 +104,13 @@ class SourceDefinition {
         'invalid_source',
         'baseUrl must be an absolute HTTP(S) URL',
       );
+    }
+    for (final entry in headers.entries) {
+      if (!RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").hasMatch(entry.key) ||
+          entry.value.contains('\r') ||
+          entry.value.contains('\n')) {
+        throw const EngineException('invalid_source', 'Invalid request header');
+      }
     }
     for (final option in ['maxConcurrentRequests', 'requestIntervalMs']) {
       final value = metadata[option];
@@ -136,6 +144,7 @@ class SourceDefinition {
   final Map<String, SourceStage> stages;
   final Map<String, Object?> metadata;
   final String? script;
+  final Map<String, String> headers;
   factory SourceDefinition.fromJson(Map<String, Object?> json) =>
       SourceDefinition(
         id: json['id'] as String? ?? '',
@@ -150,6 +159,7 @@ class SourceDefinition {
         ),
         metadata: Map<String, Object?>.from(json['metadata'] as Map? ?? {}),
         script: json['script'] as String?,
+        headers: Map<String, String>.from(json['headers'] as Map? ?? {}),
       );
   Map<String, Object?> toJson() => {
     'schemaVersion': schemaVersion,
@@ -159,5 +169,6 @@ class SourceDefinition {
     'stages': stages.map((k, v) => MapEntry(k, v.toJson())),
     'metadata': metadata,
     if (script != null) 'script': script,
+    'headers': headers,
   };
 }

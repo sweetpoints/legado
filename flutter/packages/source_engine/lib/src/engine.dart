@@ -53,6 +53,7 @@ class SourceEngine {
       cancellation,
       platform,
       runtime,
+      source.headers,
     );
     final host = hostAdapter?.call(baseHost) ?? baseHost;
     final context = ScriptContext(
@@ -116,18 +117,33 @@ class SourceEngine {
       }
       final response = await network.request(
         current,
+        headers: source.headers,
         cancellation: cancellation,
       );
       if (response.status >= 400) {
         throw EngineException('http_error', 'HTTP ${response.status}');
       }
 
+      final pageHost = _EngineHost(
+        network,
+        response.url,
+        vars,
+        cancellation,
+        platform,
+        runtime,
+        source.headers,
+      );
+      final pageContext = ScriptContext(
+        variables: {...context.variables, 'baseUrl': response.url.toString()},
+        host: hostAdapter?.call(pageHost) ?? pageHost,
+        timeout: context.timeout,
+      );
       final rows = stage.list == null
           ? [response.body]
           : await rules.evaluate(
               stage.list!,
               response.body,
-              context,
+              pageContext,
               cancellation: cancellation,
               elements: true,
             );
@@ -139,7 +155,7 @@ class SourceEngine {
           final values = await rules.evaluate(
             entry.value,
             row,
-            context,
+            pageContext,
             cancellation: cancellation,
           );
           var value = values.map(RuleEvaluator.text).join('\n');
@@ -155,7 +171,7 @@ class SourceEngine {
       final links = await rules.evaluate(
         stage.nextPage!,
         response.body,
-        context,
+        pageContext,
         cancellation: cancellation,
       );
       final next = links
@@ -244,6 +260,7 @@ class _EngineHost implements ScriptHost {
     this.cancellation,
     this.platform,
     this.runtime,
+    this.defaultHeaders,
   );
   final NetworkClient network;
   final Uri baseUrl;
@@ -251,6 +268,7 @@ class _EngineHost implements ScriptHost {
   final CancellationToken? cancellation;
   final ScriptHost? platform;
   final ScriptRuntime runtime;
+  final Map<String, String> defaultHeaders;
   @override
   Future<Object?> call(String method, List<Object?> arguments) async {
     cancellation?.throwIfCancelled();
@@ -258,13 +276,16 @@ class _EngineHost implements ScriptHost {
       case 'net.get':
         return (await network.request(
           baseUrl.resolve(arguments[0].toString()),
+          headers: defaultHeaders,
           cancellation: cancellation,
         )).body;
       case 'net.request':
         final options = Map<String, Object?>.from(arguments[0] as Map);
-        final headers = (options['headers'] as Map? ?? {}).map(
-          (k, v) => MapEntry(k.toString(), v.toString()),
-        );
+        final headers = options.containsKey('headers')
+            ? Map<String, String>.from(options['headers'] as Map? ?? {})
+            : (options['inheritHeaders'] == false
+                  ? <String, String>{}
+                  : defaultHeaders);
         final response = await network.request(
           baseUrl.resolve(options['url'].toString()),
           method: options['method'] as String? ?? 'GET',
