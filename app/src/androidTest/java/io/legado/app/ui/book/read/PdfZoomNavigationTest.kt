@@ -155,9 +155,9 @@ class PdfZoomNavigationTest {
                 "Native PDF rendering must replace the enlarged screen-resolution preview",
                 preview!!.sameAs(detail),
             )
-            saveBitmap(preview!!, "pdf-zoom-scaled-preview")
+            saveBitmap(preview, "pdf-zoom-scaled-preview")
             saveBitmap(detail, "pdf-zoom-native-detail")
-            preview!!.recycle()
+            preview.recycle()
             detail.recycle()
         }
         val scale = zoomScale()

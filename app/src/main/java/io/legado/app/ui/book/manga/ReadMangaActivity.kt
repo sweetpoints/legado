@@ -62,6 +62,7 @@ class ReadMangaActivity :
     ChangeBookSourceDialog.CallBack,
     MangaColorFilterDialog.Callback,
     MangaEpaperDialog.Callback {
+    override val handlesWindowInsets: Boolean = true
     internal val viewModel by
         viewModels<MangaReaderComposeViewModel> {
             viewModelFactory {

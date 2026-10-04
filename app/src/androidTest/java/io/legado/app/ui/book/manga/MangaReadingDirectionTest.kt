@@ -3,6 +3,7 @@ package io.legado.app.ui.book.manga
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.Instrumentation
+import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
@@ -155,7 +156,7 @@ class MangaReadingDirectionTest {
 
     @After
     fun tearDown() {
-        scenario?.close()
+        scenario?.closeAfterComposeExit(compose)
         scenario = null
         // Drain queued progress saves before removing this test's book.
         ReadManga.executor.submit {}.get(30, TimeUnit.SECONDS)
@@ -332,7 +333,7 @@ class MangaReadingDirectionTest {
         scenario!!.recreate()
         awaitPage(1, 2)
         assertLayout(horizontal = true, rightToLeft = true)
-        scenario!!.close()
+        scenario!!.closeAfterComposeExit(compose)
         scenario = null
         waitUntil("persisted chapter and page") {
             appDb.bookDao.getBook(book.bookUrl)?.let {
@@ -450,7 +451,7 @@ class MangaReadingDirectionTest {
             assertTrue(AppConfig.mangaRightToLeft)
             launchReader()
             assertLayout(horizontal = true, rightToLeft = true)
-            scenario!!.close()
+            scenario!!.closeAfterComposeExit(compose)
             scenario = null
             writePreferenceSnapshot(context, directory.path, "config") {
                 preferences.all
@@ -485,6 +486,7 @@ class MangaReadingDirectionTest {
                 compose.onNodeWithTag("manga-previous-chapter").fetchSemanticsNode().boundsInRoot
             val next = compose.onNodeWithTag("manga-next-chapter").fetchSemanticsNode().boundsInRoot
             assertTrue(if (rightToLeft) next.left < previous.left else previous.left < next.left)
+            assertTrue("Chapter controls must leave a usable progress slider", compose.onNodeWithTag("manga-progress").fetchSemanticsNode().boundsInRoot.width >= 48f)
             seekAtEdge(left = true)
             scenario!!.onActivity { it.viewModel.setMenu(false) }
             awaitPage(1, if (rightToLeft) 3 else 0)
@@ -582,7 +584,7 @@ class MangaReadingDirectionTest {
         launchReader()
         val afterAutoPage = advanceAutomatically(R.string.enable_auto_page_scroll)
         assertLayout(horizontal = true, rightToLeft = true)
-        scenario!!.close()
+        scenario!!.closeAfterComposeExit(compose)
         scenario = null
         ReadManga.executor.submit {}.get(30, TimeUnit.SECONDS)
 
@@ -617,10 +619,15 @@ class MangaReadingDirectionTest {
     private fun advanceAutomatically(menuId: Int): Pair<Int, Int> {
         val start = currentPage()
         var advanced: Pair<Int, Int>? = null
+        val viewport = compose.onNodeWithTag("manga-viewport").fetchSemanticsNode().boundsInRoot
+        val origin = IntArray(2)
+        scenario!!.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val pixelX = origin[0] + viewport.center.x.toInt()
+        val pixelY = origin[1] + viewport.center.y.toInt()
         scenario!!.onActivity { setAutomaticMenu(it, menuId, true) }
         try {
             // Continuous scrolling never becomes idle; stop from the same main-thread observation.
-            waitUntil("automatic menu $menuId advances to a loaded image") {
+            waitUntil("automatic menu $menuId advances to a loaded image", captureOnFailure = false) {
                 var activity: ReadMangaActivity? = null
                 scenario!!.onActivity { activity = it }
                 val host = checkNotNull(activity)
@@ -628,7 +635,7 @@ class MangaReadingDirectionTest {
                 if (
                     page != null &&
                         page.chapterIndex * 4 + page.pageIndex > start.first * 4 + start.second &&
-                        imageLoaded(host, page)
+                        screenshotPixelMatches(page, pixelX, pixelY)
                 ) {
                     advanced = page.chapterIndex to page.pageIndex
                     scenario!!.onActivity { setAutomaticMenu(it, menuId, false) }
@@ -639,6 +646,20 @@ class MangaReadingDirectionTest {
             scenario?.onActivity { setAutomaticMenu(it, menuId, false) }
         }
         return checkNotNull(advanced).also { (chapter, page) -> awaitPage(chapter, page) }
+    }
+
+    private fun screenshotPixelMatches(page: MangaReaderItem.Page, x: Int, y: Int): Boolean {
+        // Continuous scrolling cannot become Compose-idle. Read actual display pixels directly.
+        val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return false
+        return try {
+            val actual = bitmap.getPixel(x, y)
+            val expected = pageColor(page.chapterIndex, page.pageIndex)
+            abs(Color.red(actual) - Color.red(expected)) <= 4 &&
+                abs(Color.green(actual) - Color.green(expected)) <= 4 &&
+                abs(Color.blue(actual) - Color.blue(expected)) <= 4
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun setAutomaticMenu(activity: ReadMangaActivity, id: Int, enabled: Boolean) {
@@ -779,8 +800,17 @@ class MangaReadingDirectionTest {
     }
 
     private fun seekAtEdge(left: Boolean) {
+        val bounds = compose.onNodeWithTag("manga-progress").fetchSemanticsNode().boundsInRoot
+        scenario!!.onActivity {
+            lastInput = "seek left=$left bounds=$bounds before=${it.viewModel.state.value.chapterIndex}/${it.viewModel.state.value.pageIndex}"
+        }
         compose.onNodeWithTag("manga-progress").performTouchInput {
-            click(Offset(if (left) 1f else width - 1f, height / 2f))
+            // Slider semantics extend into the thumb's hit area beside chapter buttons.
+            // Tap inside its track, retaining real touch dispatch and first/last-page assertions.
+            click(Offset(width * if (left) .1f else .9f, height / 2f))
+        }
+        scenario!!.onActivity {
+            lastInput += "; after=${it.viewModel.state.value.chapterIndex}/${it.viewModel.state.value.pageIndex}; command=${it.viewModel.state.value.scrollCommand}"
         }
     }
 
@@ -886,9 +916,10 @@ class MangaReadingDirectionTest {
         }
     }
 
-    private fun waitUntil(message: String, condition: () -> Boolean) {
+    private fun waitUntil(message: String, captureOnFailure: Boolean = true, condition: () -> Boolean) {
         try {
             compose.waitUntil(timeoutMillis = 30_000) {
+                compose.mainClock.advanceTimeByFrame()
                 condition()
             }
             return
@@ -897,7 +928,7 @@ class MangaReadingDirectionTest {
         }
         var state = "activity closed"
         if (scenario != null) {
-            screenshot("manga-direction-failure-${testName.methodName}")
+            if (captureOnFailure) screenshot("manga-direction-failure-${testName.methodName}")
             scenario!!.onActivity { activity ->
                 state =
                     "focus=${activity.hasWindowFocus()}, state=${activity.viewModel.state.value}"

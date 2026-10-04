@@ -137,6 +137,7 @@ import kotlinx.coroutines.withContext
 /** 主界面 */
 @Suppress("PrivatePropertyName")
 class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshelfHost {
+    override val handlesWindowInsets: Boolean = true
 
     val viewModel by viewModels<MainViewModel>()
     private var exitTime: Long = 0

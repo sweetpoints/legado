@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -253,7 +254,10 @@ private fun CodeEditorNativeSurface(
                 engine = created
                 controller.engine = created
                 controller.owner = owner
-                created.view
+                created.view.also { view ->
+                    // Compose attaches the native editor after the factory returns.
+                    view.doOnLayout { if (active()) created.focus() }
+                }
             },
             update = {
                 engine?.setInputEnabled(inputEnabled)

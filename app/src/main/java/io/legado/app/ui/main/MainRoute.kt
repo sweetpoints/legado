@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -30,6 +32,8 @@ fun MainRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val updatingBooks by viewModel.onUpBooksLiveData.observeAsState(0)
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val sizePx = with(LocalDensity.current) { 30.dp.roundToPx() }
     val transparentNavigation = remember(context) { context.transparentNavBar }
     val icons by
@@ -75,7 +79,12 @@ fun MainRoute(
         statusBarColor = Color(ThemeStore.statusBarColor(context, AppConfig.isTransparentStatusBar)),
         onDestinationClick = { destination ->
             if (destination == state.selectedDestination) onDestinationReselected(destination)
-            else viewModel.selectDestination(destination)
+            else {
+                // A focused field on the old pager page can bring that page back into view.
+                focusManager.clearFocus(force = true)
+                keyboard?.hide()
+                viewModel.selectDestination(destination)
+            }
         },
     ) {
         content(state)

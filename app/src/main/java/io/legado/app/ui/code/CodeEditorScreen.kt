@@ -2,6 +2,11 @@ package io.legado.app.ui.code
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -153,7 +158,11 @@ internal fun CodeEditorScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            Row(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .testTag("code-toolbar")
+            ) {
                 TextButton(onClick = onExit, enabled = !state.busy) { Text("‹") }
                 Text(
                     session?.title ?: stringResource(R.string.edit_code),
@@ -428,7 +437,7 @@ internal fun CodeEditorScreen(
                 TextButton(onClick = onKeepEditing) { Text(stringResource(R.string.yes)) }
             },
             dismissButton = {
-                TextButton(onClick = onDiscard) { Text(stringResource(R.string.no)) }
+                TextButton(onClick = onDiscard, modifier = Modifier.testTag("code-discard-confirm")) { Text(stringResource(R.string.no)) }
             },
         )
     }

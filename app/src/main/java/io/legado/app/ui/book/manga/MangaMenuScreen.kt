@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -35,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -175,12 +178,12 @@ internal fun MangaMenuScreen(
                         else LayoutDirection.Ltr
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
+                        IconButton(
                             onClick = { onChapter(-1) },
                             enabled = state.chapterIndex > 0,
                             modifier = Modifier.testTag("manga-previous-chapter"),
                         ) {
-                            Text(stringResource(R.string.previous_chapter))
+                            Icon(painterResource(if (settings.horizontal && settings.rightToLeft) R.drawable.ic_skip_next else R.drawable.ic_skip_previous), stringResource(R.string.previous_chapter))
                         }
                         Slider(
                             value =
@@ -193,12 +196,12 @@ internal fun MangaMenuScreen(
                             valueRange = 0f..(state.imageCount - 1).coerceAtLeast(1).toFloat(),
                             steps = (state.imageCount - 2).coerceAtLeast(0),
                         )
-                        TextButton(
+                        IconButton(
                             onClick = { onChapter(1) },
                             modifier = Modifier.testTag("manga-next-chapter"),
                             enabled = state.chapterIndex + 1 < state.chapterCount,
                         ) {
-                            Text(stringResource(R.string.next_chapter))
+                            Icon(painterResource(if (settings.horizontal && settings.rightToLeft) R.drawable.ic_skip_previous else R.drawable.ic_skip_next), stringResource(R.string.next_chapter))
                         }
                     }
                 }

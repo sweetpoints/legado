@@ -1689,11 +1689,13 @@ class ReadBookActivity :
         success: (() -> Unit)?,
     ) {
         lifecycleScope.launch {
+            // Wait for the visible page's gesture before replacing its touch targets.
+            if (relativePosition == 0) while (readView.isTouching) delay(16)
             val shouldResetPageOffset =
                 resetPageOffset &&
                     (readPositionVersion == null ||
                         isReadPositionVersionCurrent(readPositionVersion))
-            readView.cancelTouchGestures()
+            if (relativePosition == 0) readView.cancelTouchGestures()
             readView.upContent(relativePosition, shouldResetPageOffset)
             scheduleAloudFollowCheck()
             observeBookmarks()
@@ -1722,11 +1724,13 @@ class ReadBookActivity :
         success: (() -> Unit)?,
     ) =
         withContext(Main.immediate) {
+            // Wait for the visible page's gesture before replacing its touch targets.
+            if (relativePosition == 0) while (readView.isTouching) delay(16)
             val shouldResetPageOffset =
                 resetPageOffset &&
                     (readPositionVersion == null ||
                         isReadPositionVersionCurrent(readPositionVersion))
-            readView.cancelTouchGestures()
+            if (relativePosition == 0) readView.cancelTouchGestures()
             readView.upContent(relativePosition, shouldResetPageOffset)
             scheduleAloudFollowCheck()
             observeBookmarks()

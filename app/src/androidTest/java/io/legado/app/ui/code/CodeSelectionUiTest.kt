@@ -5,6 +5,7 @@ import android.app.Instrumentation
 import android.app.SearchManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -18,6 +19,7 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.webkit.WebView
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -118,21 +120,12 @@ class CodeSelectionUiTest {
                 .filterIsInstance<CodeEditActivity>()
                 .filterNot { it.isFinishing }
                 .forEach { activity ->
-                    // A failed edit assertion must not leave a discard dialog blocking later tests.
-                    activity
-                        .findViewById<CodeEditor>(R.id.editText)
-                        .takeIf { it?.isShown == true }
-                        ?.setText(
-                            ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
-                                .state
-                                .value
-                                .session
-                                ?.initialText
-                                .orEmpty()
-                        )
+                    // Test cleanup explicitly discards unsaved native or WebView drafts.
+                    activity.findViewById<CodeEditor>(R.id.editText)?.let { actions(it).dismiss() }
+                    ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java].discard()
                 }
         }
-        scenario?.close()
+        scenario?.closeAfterComposeExit(compose)
         CacheManager.deleteMemory(cacheKey)
     }
 
@@ -607,6 +600,7 @@ class CodeSelectionUiTest {
                 withEditor { it.setText(expected) }
                 awaitEditor { it.text.toString() == expected }
                 compose.onNodeWithTag("code-save").performClick()
+                await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
                 val result = scenario!!.result
                 assertEquals(Activity.RESULT_OK, result.resultCode)
                 val data = checkNotNull(result.resultData)
@@ -624,7 +618,7 @@ class CodeSelectionUiTest {
                 }
             } finally {
                 CodeTextTransfer.delete(context, returnedFile)
-                scenario?.close()
+                scenario?.closeAfterComposeExit(compose)
                 scenario = null
             }
         }
@@ -766,31 +760,46 @@ class CodeSelectionUiTest {
                                     preview!!.model.sourcePreview)
                             )
                         }
-                        compose.onNodeWithTag("code-fullscreen").performClick()
-                        var inputPath: String? = null
-                        await {
-                            var ready = false
-                            instrumentation.runOnMainSync {
-                                editorActivity =
-                                    ActivityLifecycleMonitorRegistry.getInstance()
-                                        .getActivitiesInStage(Stage.RESUMED)
-                                        .filterIsInstance<CodeEditActivity>()
-                                        .firstOrNull()
-                                val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
-                                ready =
-                                    editor != null &&
-                                        editor.text.toString() == original &&
-                                        editor.isShown &&
-                                        editor.isEditable
-                                if (ready) {
-                                    inputPath = editorActivity!!.intent.getStringExtra("textFile")
-                                    assertFalse(editorActivity!!.intent.hasExtra("text"))
-                                    assertFalse(
-                                        editorActivity!!.intent.getBooleanExtra("readOnly", false)
-                                    )
+                        val editorLaunch = AtomicReference<Intent?>()
+                        val launchMonitor = object : Instrumentation.ActivityMonitor() {
+                            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                                if (intent.component?.className == CodeEditActivity::class.java.name) {
+                                    editorLaunch.set(Intent(intent))
                                 }
+                                return null
                             }
-                            ready
+                        }
+                        var inputPath: String? = null
+                        instrumentation.addMonitor(launchMonitor)
+                        try {
+                            compose.onNodeWithTag("code-fullscreen").performClick()
+                            await {
+                                var ready = false
+                                instrumentation.runOnMainSync {
+                                    editorActivity =
+                                        ActivityLifecycleMonitorRegistry.getInstance()
+                                            .getActivitiesInStage(Stage.RESUMED)
+                                            .filterIsInstance<CodeEditActivity>()
+                                            .firstOrNull()
+                                    val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                    ready =
+                                        editor != null &&
+                                            editor.text.toString() == original &&
+                                            editor.isShown &&
+                                            editor.isEditable
+                                    if (ready) {
+                                        inputPath = editorLaunch.get()?.getStringExtra("textFile")
+                                        assertFalse(editorActivity!!.intent.hasExtra("textFile"))
+                                        assertFalse(editorActivity!!.intent.hasExtra("text"))
+                                        assertFalse(
+                                            editorActivity!!.intent.getBooleanExtra("readOnly", false)
+                                        )
+                                    }
+                                }
+                                ready
+                            }
+                        } finally {
+                            instrumentation.removeMonitor(launchMonitor)
                         }
                         assertNotNull("Long previews must use the actual transfer file", inputPath)
                         assertEquals(original, CodeTextTransfer.read(context, inputPath!!))
@@ -905,7 +914,7 @@ class CodeSelectionUiTest {
                                 .replace(insertion, insertion, "discarded")
                             editorActivity!!.finish()
                         }
-                        onView(withText(R.string.no)).inRoot(isDialog()).perform(click())
+                        compose.onNodeWithTag("code-discard-confirm").performClick()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -1115,6 +1124,7 @@ class CodeSelectionUiTest {
             awaitEditor { it.isShown && it.text.toString() == code }
             withEditor { assertFalse(it.isEditable) }
             scenario!!.onActivity { it.finish() }
+            await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
             assertEquals(Activity.RESULT_CANCELED, scenario!!.result.resultCode)
             assertEquals(code, CodeTextTransfer.read(context, path))
         } finally {
@@ -1142,7 +1152,9 @@ class CodeSelectionUiTest {
                         .state
                         .value
                         .session
-                        ?.text == code
+                        ?.text == code &&
+                        ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                            .state.value.editorReady
             }
             ready
         }
@@ -1196,9 +1208,17 @@ class CodeSelectionUiTest {
             } == true
         }
         compose.onNodeWithTag("code-save").performClick()
+        await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
-        assertEquals(edited, scenario!!.result.resultData.getStringExtra("text"))
-        assertEquals(cursor, scenario!!.result.resultData.getIntExtra("cursorPosition", -1))
+        val resultData = checkNotNull(scenario!!.result.resultData)
+        val returnedFile = checkNotNull(resultData.getStringExtra("textFile"))
+        try {
+            assertFalse(resultData.hasExtra("text"))
+            assertEquals(edited, CodeTextTransfer.read(context, returnedFile))
+            assertEquals(cursor, resultData.getIntExtra("cursorPosition", -1))
+        } finally {
+            CodeTextTransfer.delete(context, returnedFile)
+        }
     }
 
     @Test
@@ -1265,14 +1285,20 @@ class CodeSelectionUiTest {
     @Test
     fun composePreviewReportsActualAccessibilityPayloadDuringRepeatedDeletion() {
         launchEditor()
+        val accessibility = io.legado.app.ci.AccessibilityServiceSession(instrumentation)
         var expected = "{\"jsLib\":\"" + "var value = '中文'; ".repeat(4_500) + "\"}"
         val dialog = CodeDialog(expected, disableEdit = false)
         val report = StringBuilder("characters=${expected.length}\n")
         val artifacts = checkNotNull(context.getExternalFilesDir("ui-regression"))
-        scenario!!.onActivity {
-            dialog.show(it.supportFragmentManager, "compose-accessibility-cost")
-        }
         try {
+            await {
+                context.getSystemService(AccessibilityManager::class.java)
+                    .getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                    .any { android.content.ComponentName.unflattenFromString(it.id) == accessibility.component }
+            }
+            scenario!!.onActivity {
+                dialog.show(it.supportFragmentManager, "compose-accessibility-cost")
+            }
             await {
                 var ready = false
                 instrumentation.runOnMainSync { ready = dialog.model.state.value.loaded }
@@ -1295,11 +1321,32 @@ class CodeSelectionUiTest {
                 compose
                     .onNodeWithTag("code-body")
                     .performTextInputSelection(androidx.compose.ui.text.TextRange(cursor))
+                compose.onNodeWithTag("code-body").assertIsFocused()
+                var selectionDescription = ""
+                await(message = { "Preview selection did not reach $cursor: $selectionDescription" }) {
+                    var selected = false
+                    instrumentation.runOnMainSync {
+                        val current = dialog.model.state.value
+                        selectionDescription = "selection=${current.selectionStart}/${current.selectionEnd}; length=${current.displayed.length}; windowFocus=${dialog.requireDialog().window?.decorView?.hasWindowFocus()}"
+                        selected = dialog.model.state.value.selectionStart == cursor &&
+                            dialog.model.state.value.selectionEnd == cursor &&
+                            dialog.requireDialog().window?.decorView?.hasWindowFocus() == true
+                    }
+                    selected
+                }
                 val started = SystemClock.uptimeMillis()
                 val event =
-                    instrumentation.uiAutomation.executeAndWaitForEvent(
+                    accessibility.automation.executeAndWaitForEvent(
                         {
                             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
+                            await {
+                                var changed = false
+                                instrumentation.runOnMainSync {
+                                    changed = dialog.currentOriginalCode() == before.removeRange(cursor - 1, cursor)
+                                }
+                                changed
+                            }
+                            compose.waitForIdle()
                         },
                         { received ->
                             received.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
@@ -1340,6 +1387,7 @@ class CodeSelectionUiTest {
                 }
             }
         } finally {
+            accessibility.close()
             File(artifacts, "compose-preview-accessibility.txt").writeText(report.toString())
             instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
         }
@@ -1472,6 +1520,14 @@ class CodeSelectionUiTest {
             else ActivityScenario.launch(intent)
         awaitEditor { it.isShown && it.width > 0 && it.text.toString() == source && it.hasFocus() }
         closeSoftKeyboard()
+        val actionBounds = Rect()
+        composeScreenBounds("code-search-toggle", actionBounds)
+        scenario!!.onActivity { activity ->
+            val safeTop = checkNotNull(ViewCompat.getRootWindowInsets(activity.window.decorView))
+                .getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top
+            assertTrue("Editor toolbar overlaps the system status bar", actionBounds.top >= safeTop)
+            assertTrue("Editor toolbar adds excess top spacing", actionBounds.top <= safeTop + activity.resources.displayMetrics.density * 8)
+        }
     }
 
     private fun selectFunction(native: Boolean = false) {
@@ -1678,12 +1734,18 @@ class CodeSelectionUiTest {
         scenario!!.onActivity { action(it.findViewById(R.id.editText)) }
     }
 
-    private fun awaitEditor(condition: (CodeEditor) -> Boolean) = await {
-        var ready = false
-        scenario!!.onActivity { activity ->
-            activity.findViewById<CodeEditor>(R.id.editText)?.let { ready = condition(it) }
+    private fun awaitEditor(condition: (CodeEditor) -> Boolean) {
+        var diagnostic = "native editor missing"
+        await(message = { "Code editor did not reach the expected state: $diagnostic" }) {
+            var ready = false
+            scenario!!.onActivity { activity ->
+                activity.findViewById<CodeEditor>(R.id.editText)?.let {
+                    diagnostic = "shown=${it.isShown}, size=${it.width}x${it.height}, focus=${it.hasFocus()}, windowFocus=${it.hasWindowFocus()}, editable=${it.isEditable}, length=${it.text.length}"
+                    ready = condition(it)
+                }
+            }
+            ready
         }
-        ready
     }
 
     private fun nativeWebViews(view: View): List<WebView> =
@@ -1724,7 +1786,10 @@ class CodeSelectionUiTest {
         condition: () -> Boolean,
     ) {
         try {
-            compose.waitUntil(timeoutMillis = 15_000, condition = condition)
+            compose.waitUntil(timeoutMillis = 15_000) {
+                compose.mainClock.advanceTimeByFrame()
+                condition()
+            }
         } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
             assertTrue(message(), condition())
         }

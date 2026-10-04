@@ -205,10 +205,7 @@ class SourceManualReplacementUiTest {
                         code,
                         waitForIdleAfterClick = false,
                     )
-                    assertTrue(
-                        "The real source-rule query must be held",
-                        entered.await(15, java.util.concurrent.TimeUnit.SECONDS),
-                    )
+                    await("The real source-rule query must be held") { entered.count == 0L }
                     val model = main { if (rss) host.feed else host.book }
                     assertTrue(
                         "The query must still be held: rss=$rss manual=$manual recreate=$recreate",
@@ -593,7 +590,7 @@ class SourceManualReplacementUiTest {
             host.names("Seed+0", "Seed+1")
             withBlockedSourceRules(fail = true) { entered, release ->
                 host.menu(R.id.menu_replace_source, waitForIdleAfterClick = false)
-                assertTrue(entered.await(15, java.util.concurrent.TimeUnit.SECONDS))
+                await("The real source-rule query must be held") { entered.count == 0L }
                 release.countDown()
                 host.ready()
                 host.names("Seed+0", "Seed+1")
@@ -831,7 +828,11 @@ class SourceManualReplacementUiTest {
                 compose.onNodeWithTag("code-menu").performClick()
                 val item = compose.onNodeWithTag("code-action-Manual").assertIsDisplayed()
                 if (enabled) item.assertIsEnabled() else item.assertIsNotEnabled()
-                androidx.test.espresso.Espresso.pressBack()
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(timeoutMillis = 10_000) {
+                    compose.onAllNodesWithTag("code-action-Manual")
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+                }
                 return
             }
             if (rss && dialog === parent) {
@@ -839,7 +840,11 @@ class SourceManualReplacementUiTest {
                 val manual = compose.onNodeWithTag("rss-import-menu-Manual").assertIsDisplayed()
                 if (enabled) manual.assertIsEnabled() else manual.assertIsNotEnabled()
                 compose.onNodeWithTag("rss-import-menu-Automatic").assertIsDisplayed()
-                androidx.test.espresso.Espresso.pressBack()
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(timeoutMillis = 10_000) {
+                    compose.onAllNodesWithTag("rss-import-menu-Manual")
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+                }
                 main { assertEquals(!enabled, feed.state.value.automatic) }
                 return
             }
@@ -848,7 +853,11 @@ class SourceManualReplacementUiTest {
                 val manual = compose.onNodeWithTag("book-import-menu-Manual").assertIsDisplayed()
                 if (enabled) manual.assertIsEnabled() else manual.assertIsNotEnabled()
                 compose.onNodeWithTag("book-import-menu-Automatic").assertIsDisplayed()
-                androidx.test.espresso.Espresso.pressBack()
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(timeoutMillis = 10_000) {
+                    compose.onAllNodesWithTag("book-import-menu-Manual")
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+                }
                 main { assertEquals(!enabled, book.state.value.automatic) }
                 return
             }
@@ -909,12 +918,14 @@ class SourceManualReplacementUiTest {
     }
 
     private fun await(message: String, condition: () -> Boolean) {
-        val end = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < end) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                compose.mainClock.advanceTimeByFrame()
+                condition()
+            }
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            assertTrue(message, condition())
         }
-        assertTrue(message, condition())
     }
 
     private fun screenshot(name: String, window: android.view.Window? = null) {

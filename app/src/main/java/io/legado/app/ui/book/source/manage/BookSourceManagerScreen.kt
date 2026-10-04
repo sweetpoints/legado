@@ -46,6 +46,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.entities.BookSourceCheckState
@@ -374,7 +375,7 @@ private fun SourceManagerItem(
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(row.displayName)
+            Text(row.displayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
                 stringResource(R.string.source_bookshelf_count, state.counts[row.url] ?: 0),
                 style = MaterialTheme.typography.bodySmall,

@@ -158,21 +158,21 @@ class SourceNavigationUiTest {
                 verificationResultKey = neighborKey,
                 html = "neighbor-private-html",
             )
-            neighborFile = awaitPreparedFile(directory, before + preparedFile!!.name, neighborKey)
+            neighborFile = awaitPreparedFile(directory, before + preparedFile.name, neighborKey)
             assertNotNull("Browser request was not prepared before the handoff", preparedFile)
             assertNotNull("Neighbor request was not prepared before the handoff", neighborFile)
 
             SourceVerificationHelp.cancelVerificationAttempt(key)
             releaseMain.countDown()
             val cleanupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-            while (preparedFile!!.exists() && System.nanoTime() < cleanupDeadline) Thread.sleep(10)
-            assertFalse("Canceled request file should be abandoned", preparedFile!!.exists())
+            while (preparedFile.exists() && System.nanoTime() < cleanupDeadline) Thread.sleep(10)
+            assertFalse("Canceled request file should be abandoned", preparedFile.exists())
             val handoffDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
             while (starts.isEmpty() && System.nanoTime() < handoffDeadline) Thread.sleep(10)
             assertEquals("The active neighboring request must still launch", 1, starts.size)
             val neighborTicket =
                 requireNotNull(starts.single().getStringExtra(BrowserNavigation.PREPARED_TICKET))
-            assertEquals(neighborFile!!.nameWithoutExtension, neighborTicket)
+            assertEquals(neighborFile.nameWithoutExtension, neighborTicket)
             assertEquals(
                 neighborKey,
                 runBlocking(kotlinx.coroutines.Dispatchers.IO) {

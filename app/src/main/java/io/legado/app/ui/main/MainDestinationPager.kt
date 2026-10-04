@@ -1,5 +1,6 @@
 package io.legado.app.ui.main
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -13,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -47,8 +49,12 @@ internal fun MainDestinationPager(
     ) { page ->
         val destination = destinations[page]
         key(destination) {
-            DestinationLifecycle(destination == state.selectedDestination) {
-                content(destination, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().focusProperties {
+                canFocus = destination == state.selectedDestination
+            }) {
+                DestinationLifecycle(destination == state.selectedDestination) {
+                    content(destination, Modifier.fillMaxSize())
+                }
             }
         }
     }

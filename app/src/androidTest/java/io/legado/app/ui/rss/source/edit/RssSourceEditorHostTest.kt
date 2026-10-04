@@ -248,7 +248,7 @@ class RssSourceEditorHostTest {
                 instrumentation.runOnMainSync {
                     val native =
                         editor.findViewById<io.github.rosemoe.sora.widget.CodeEditor>(R.id.editText)
-                    ready = native?.text?.toString() == "initial body" && native?.isEditable == true
+                    ready = native?.text?.toString() == "initial body" && native.isEditable
                 }
                 ready
             }

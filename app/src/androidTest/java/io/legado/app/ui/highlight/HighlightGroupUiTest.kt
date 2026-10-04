@@ -130,31 +130,38 @@ class HighlightGroupUiTest {
                 }
             }
             compose.onNodeWithTag("highlight-rule-style").performScrollTo().performClick()
+            compose.waitUntil(timeoutMillis = 10_000) {
+                compose.onAllNodesWithTag("highlight-style-font-size")
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            }
             instrumentation.runOnMainSync {
-                val sheet =
-                    WindowInspector.getGlobalWindowViews()
-                        .single { it.hasWindowFocus() }
-                        .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                val sheet = WindowInspector.getGlobalWindowViews()
+                    .mapNotNull { it.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) }
+                    .single()
                 com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet).state =
                     com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
             }
-            await {
+            compose.waitUntil(timeoutMillis = 10_000) {
+                compose.mainClock.advanceTimeByFrame()
                 var expanded = false
                 instrumentation.runOnMainSync {
-                    val sheet =
-                        WindowInspector.getGlobalWindowViews()
-                            .single { it.hasWindowFocus() }
-                            .findViewById<View>(
-                                com.google.android.material.R.id.design_bottom_sheet
-                            )
-                    expanded =
-                        com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet)
-                            .state ==
-                            com.google.android.material.bottomsheet.BottomSheetBehavior
-                                .STATE_EXPANDED
+                    val sheet = WindowInspector.getGlobalWindowViews()
+                        .mapNotNull { it.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) }
+                        .singleOrNull()
+                    expanded = sheet != null &&
+                        com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet).state ==
+                        com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
                 }
                 expanded
             }
+            compose.onNodeWithTag("highlight-style-font-size").performScrollTo()
+            compose.waitUntil(timeoutMillis = 10_000) {
+                compose.mainClock.advanceTimeByFrame()
+                runCatching {
+                    compose.onNodeWithTag("highlight-style-font-size").assertIsDisplayed()
+                }.isSuccess
+            }
+            compose.onNodeWithTag("highlight-style-font-size").assertIsDisplayed()
         }
         fun edit(tag: String, value: Int?) {
             compose.onNodeWithTag(tag).performScrollTo().performClick()
@@ -363,7 +370,7 @@ class HighlightGroupUiTest {
                 exported.rules!!.map { it!!.uuid }.toSet(),
             )
             assertEquals(5, exported.rules.size)
-            onView(withText(R.string.export_success)).check(doesNotExist())
+            compose.onNodeWithText(context.getString(R.string.export_success)).assertDoesNotExist()
         } finally {
             instrumentation.removeMonitor(monitor)
         }
@@ -418,7 +425,7 @@ class HighlightGroupUiTest {
             compose.onNodeWithTag("highlight-management-select-${expected.uuid}").performClick()
             compose.onNodeWithTag("highlight-management-selection-menu").performClick()
             compose.onNodeWithTag("highlight-management-export").performClick()
-            onView(withText(R.string.upload_url)).inRoot(isDialog()).perform(click())
+            compose.onNodeWithText(context.getString(R.string.upload_url)).performClick()
             compose.waitUntil(15_000) {
                 compose
                     .onAllNodesWithTag("highlight-management-export-result")
@@ -443,8 +450,10 @@ class HighlightGroupUiTest {
                 bitmap.recycle()
             }
             compose.onNodeWithTag("highlight-management-export-copy").performClick()
-            scenario!!.onActivity {
-                assertEquals(url, clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+            await {
+                var copied = false
+                scenario!!.onActivity { copied = clipboard.primaryClip?.getItemAt(0)?.text?.toString() == url }
+                copied
             }
         } finally {
             if (previousRule == null) DirectLinkUpload.delConfig()
@@ -553,6 +562,7 @@ class HighlightGroupUiTest {
     private fun await(condition: () -> Boolean) {
         try {
             compose.waitUntil(timeoutMillis = 15_000) {
+                compose.mainClock.advanceTimeByFrame()
                 condition()
             }
             return
