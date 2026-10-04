@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -234,45 +235,81 @@ class ExploreRefreshUiTest {
 
     @Test
     fun discoveryInputRemainsVisibleAboveTheActualKeyboard() {
-        val input = compose.onNodeWithTag("explore-home-control:38")
-        input.performScrollTo()
-        val originalHeight =
-            compose.onNodeWithTag("explore-home-list").fetchSemanticsNode().boundsInRoot.height
-        screenshot("explore-input-before-keyboard")
-        input.performClick().performTextReplacement("reader")
-        await("actual keyboard visible") {
-            val insets = ViewCompat.getRootWindowInsets(it.window.decorView)
-            insets?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
-                insets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0
-        }
-        screenshot("explore-input-with-keyboard")
-        input.assertIsDisplayed().assertIsFocused().assertTextContains("reader")
-        val inputBottom = input.fetchSemanticsNode().boundsInWindow.bottom
+        val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
         scenario!!.onActivity { activity ->
-            val decor = activity.window.decorView
-            val keyboard =
-                checkNotNull(ViewCompat.getRootWindowInsets(decor))
-                    .getInsets(WindowInsetsCompat.Type.ime())
-                    .bottom
-            assertTrue("IME must have a measurable height", keyboard > 0)
-            assertTrue(
-                "Input bottom $inputBottom is hidden behind keyboard",
-                inputBottom <= decor.height - keyboard,
+            ViewCompat.setWindowInsetsAnimationCallback(activity.window.decorView,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                            runningImeAnimations.add(animation)
+                    }
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                    ): WindowInsetsCompat {
+                        runningImeAnimations.addAll(runningAnimations.filter {
+                            it.typeMask and WindowInsetsCompat.Type.ime() != 0
+                        })
+                        return insets
+                    }
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        runningImeAnimations.remove(animation)
+                    }
+                })
+        }
+        fun awaitHidden(description: String) {
+            await(description) { activity ->
+                val insets = ViewCompat.getRootWindowInsets(activity.window.decorView)
+                insets?.isVisible(WindowInsetsCompat.Type.ime()) == false &&
+                    insets.getInsets(WindowInsetsCompat.Type.ime()).bottom == 0 &&
+                    runningImeAnimations.isEmpty()
+            }
+            compose.waitForIdle()
+        }
+        try {
+            val input = compose.onNodeWithTag("explore-home-control:38")
+            input.performScrollTo()
+            // A preceding focused window can leave the keyboard visible before this test clicks.
+            // Measure the baseline only after actual hidden insets and the animation's onEnd.
+            closeSoftKeyboard()
+            awaitHidden("initial keyboard hidden and animation settled")
+            val originalHeight =
+                compose.onNodeWithTag("explore-home-list").fetchSemanticsNode().boundsInRoot.height
+            screenshot("explore-input-before-keyboard")
+            input.performClick().performTextReplacement("reader")
+            await("actual keyboard visible") {
+                val insets = ViewCompat.getRootWindowInsets(it.window.decorView)
+                insets?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
+                    insets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0
+            }
+            screenshot("explore-input-with-keyboard")
+            input.assertIsDisplayed().assertIsFocused().assertTextContains("reader")
+            val inputBottom = input.fetchSemanticsNode().boundsInWindow.bottom
+            scenario!!.onActivity { activity ->
+                val decor = activity.window.decorView
+                val keyboard =
+                    checkNotNull(ViewCompat.getRootWindowInsets(decor))
+                        .getInsets(WindowInsetsCompat.Type.ime())
+                        .bottom
+                assertTrue("IME must have a measurable height", keyboard > 0)
+                assertTrue(
+                    "Input bottom $inputBottom is hidden behind keyboard",
+                    inputBottom <= decor.height - keyboard,
+                )
+            }
+            closeSoftKeyboard()
+            awaitHidden("keyboard dismissed and animation settled")
+            screenshot("explore-input-keyboard-dismissed")
+            assertEquals(
+                "Viewport recovers after hiding IME",
+                originalHeight,
+                compose.onNodeWithTag("explore-home-list").fetchSemanticsNode().boundsInRoot.height,
+                1f,
             )
+            input.assertTextContains("reader")
+        } finally {
+            scenario!!.onActivity { ViewCompat.setWindowInsetsAnimationCallback(it.window.decorView, null) }
         }
-        closeSoftKeyboard()
-        await("keyboard dismissed") {
-            ViewCompat.getRootWindowInsets(it.window.decorView)
-                ?.isVisible(WindowInsetsCompat.Type.ime()) == false
-        }
-        screenshot("explore-input-keyboard-dismissed")
-        assertEquals(
-            "Viewport recovers after hiding IME",
-            originalHeight,
-            compose.onNodeWithTag("explore-home-list").fetchSemanticsNode().boundsInRoot.height,
-            1f,
-        )
-        input.assertTextContains("reader")
     }
 
     private fun positionControls() {
