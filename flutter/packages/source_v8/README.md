@@ -116,7 +116,7 @@ loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
 The source_v8 package's 21 tests passed; the workspace's eight static analyses
 were clean and all 139 tests passed (19/27/7/21/10/48/1/6). This evidence is in
-`tmp/flutter-source-check-stable-v8.log` relative to the repository root. The
+`tmp/flutter-source-check-stable-final.log` relative to the repository root. The
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
@@ -127,10 +127,18 @@ codesign inspection confirmed the allow-jit entitlement. This is a local
 build/run/signature configuration check. Notarization and Hardened Runtime
 distribution acceptance have not been completed.
 
-The earlier 136-test result, three Android device tests and Release/R8 result
-belong to the V8 14.3 baseline. The new macOS result does not verify the new
-Android library, APK, device behavior or Release/R8. Android source compilation
-is ongoing; no new Android acceptance result is claimed here.
+The official source-built Android ARM64 library also linked successfully.
+Debug AAR and APK contain the same 26,306,760-byte library (25.09 MiB), SHA-256
+`0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`,
+matching the manifest. ELF inspection confirmed ARM64, 16 KiB PT_LOAD alignment
+and only c/dl/log/m system-library dependencies. The three engine instrumentation
+cases passed on the Android API 36 emulator; evidence is in
+`tmp/flutter-android-test-stable-v8.log`. These are three test cases, not three
+different device configurations.
+
+The earlier 136-test and Release/R8 results belong to the V8 14.3 baseline.
+New Android Debug packaging and device execution are verified independently;
+the new Android Release/R8 build is still in progress and is not claimed passed.
 
 After producing the correct local artifact, run `dart run test:test test` from
 this package to execute the native-assets hook before tests. Bare `dart test`

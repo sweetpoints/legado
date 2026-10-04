@@ -32,8 +32,10 @@ V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运�
 这些链接描述 V8 机制；本项目的实际接口与支持状态见新版 Reference 和包测试。
 
 
-官方源码自编译 macOS ARM64 已完成链接并实际加载 V8 15.4.80.24。最终库包含10个 sv8 导出，大小46,032,368字节（43.90 MiB），SHA-256为 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`。V8包21项测试通过；全工作区8项静态检查无问题，139项测试通过，日志为仓库根目录 `tmp/flutter-source-check-stable-v8.log`。manifest的初始validation字段仍表示构建阶段，执行验证证据单独记录。
+官方源码自编译 macOS ARM64 已完成链接并实际加载 V8 15.4.80.24。最终库包含10个 sv8 导出，大小46,032,368字节（43.90 MiB），SHA-256为 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`。V8包21项测试通过；全工作区8项静态检查无问题，139项测试通过，日志为仓库根目录 `tmp/flutter-source-check-stable-final.log`。manifest的初始validation字段仍表示构建阶段，执行验证证据单独记录。
 
 官方 Flutter FFI example 的 Debug、Release 构建及界面执行也已通过，界面显示实际 V8 15.4.80.24 计算结果42。Release主可执行文件和source_v8 framework经file检查均仅ARM64，local codesign检查确认allow-jit。这里只确认本地构建、运行和签名配置；尚未完成notarization或Hardened Runtime分发验收。
 
-旧136项测试、三项Android设备测试及Release/R8结果属于14.3基线。新版macOS结果不能证明新版Android库、APK、设备和Release/R8通过；Android官方源码编译仍在进行，尚不声明新版Android验收通过。
+官方源码Android ARM64库也完成链接，Debug AAR与APK中库均为26,306,760字节（25.09 MiB），SHA-256为 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`，与manifest一致。ELF检查确认ARM64、PT_LOAD 16 KiB对齐和仅c/dl/log/m系统依赖。API36模拟器的3项引擎仪器测试通过，日志为 `tmp/flutter-android-test-stable-v8.log`；这里是3个测试case，不是3种设备配置。
+
+旧136项测试及Release/R8结果属于14.3基线。新版Android Debug构建和上述设备测试已独立验证；新版Android Release/R8仍在构建，尚不声明通过。
