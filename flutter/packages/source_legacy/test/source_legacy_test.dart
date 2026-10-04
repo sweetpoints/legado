@@ -4,7 +4,15 @@ import 'package:source_legacy/source_legacy.dart';
 
 class _Host implements ScriptHost {
   @override
-  Future<Object?> call(String method, List<Object?> arguments) async => method;
+  Future<Object?> call(String method, List<Object?> arguments) async =>
+      method == 'net.request'
+      ? {
+          'url': (arguments[0] as Map)['url'],
+          'status': 200,
+          'headers': <String, String>{},
+          'body': 'ok',
+        }
+      : method;
 }
 
 void main() {
@@ -16,14 +24,17 @@ void main() {
       'ruleSearch': {'bookList': '.book', 'name': '.title@text'},
     };
     final result = LegacySourceImporter().import(input);
-    expect(result.source.stages['search']!.list, '@css:.book');
-    expect(result.source.stages['search']!.fields['name'], '@css:.title@text');
+    expect(result.source.stages['search']!.list, '@legacy:.book');
+    expect(
+      result.source.stages['search']!.fields['name'],
+      '@legacy:.title@text',
+    );
     expect(result.original, input);
     expect(result.source.metadata['compatibility'], 'unverified');
     input['bookSourceName'] = 'changed';
     expect(result.original['bookSourceName'], 'Test');
   });
-  test('JSoup shorthand never silently becomes supported CSS', () {
+  test('JSoup shorthand uses explicit legacy dialect', () {
     for (final rule in [
       'class.book@tag.a@text',
       'tag.div.0@text',
@@ -35,8 +46,11 @@ void main() {
         'bookSourceUrl': 'https://books.test',
         'ruleContent': {'content': rule},
       });
-      expect(result.requiresManualWork, true, reason: rule);
-      expect(result.issues.map((e) => e.code), contains('legacy.jsoup_dsl'));
+      expect(
+        result.source.stages['content']!.fields['content'],
+        '@legacy:$rule',
+      );
+      expect(result.source.metadata['compatibility'], 'unverified');
     }
   });
   test('unknown features require review', () {
@@ -61,9 +75,9 @@ void main() {
         'nextTocUrl': 'a.next@href',
       },
     });
-    expect(result.source.stages['toc']!.fields['title'], '@css:a@text');
-    expect(result.source.stages['toc']!.fields['url'], '@css:a@href');
-    expect(result.source.stages['toc']!.nextPage, '@css:a.next@href');
+    expect(result.source.stages['toc']!.fields['title'], '@legacy:a@text');
+    expect(result.source.stages['toc']!.fields['url'], '@legacy:a@href');
+    expect(result.source.stages['toc']!.nextPage, '@legacy:a.next@href');
   });
   test('simple sync legacy scripts remain explicitly unverified', () {
     final result = LegacySourceImporter().import({
@@ -85,14 +99,15 @@ void main() {
     expect(await host.call('java.base64Decode', [encoded]), '中文');
     expect(await host.call('java.put', ['a', 'b']), 'b');
     expect(await host.call('java.get', ['a']), 'b');
-    expect(await host.call('java.ajax', ['https://books.test']), 'net.get');
+    expect(await host.call('java.ajax', ['https://books.test']), 'ok');
     expect(
       await host.call('java.md5Encode', ['abc']),
       '900150983cd24fb0d6963f7d28e17f72',
     );
-    await expectLater(
-      host.call('java.get', ['url', {}]),
-      throwsUnsupportedError,
+    expect(
+      (await host.call('java.get', ['https://books.test', {}])
+          as Map)['status'],
+      200,
     );
     await expectLater(host.call('java.unknown', []), throwsUnsupportedError);
     await expectLater(
