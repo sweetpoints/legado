@@ -535,13 +535,20 @@ class FlutterSourceEngineTest {
             assertEquals(listOf("/b?page=2", "/search", "/book"), requests)
             for (unsupported in
                 listOf(
-                    "$origin/b,{\"method\":\"POST\"}",
                     "$origin/b/{{java.get('x')}}",
-                    "$origin/b/<1,2>",
+                    "$origin/b,${Gson().toJson(mapOf("webJs" to "document.title"))}",
+                    "@js:java.ajax('$origin/b')",
                 )) {
-                val rejected = runCatching { WebBook.exploreBookAwait(selected, unsupported) }
+                val rejected =
+                    withTimeout(60_000) {
+                        runCatching { WebBook.exploreBookAwait(selected, unsupported) }
+                    }
                 assertTrue(
-                    rejected.exceptionOrNull()?.message.orEmpty().contains("requires migration")
+                    rejected
+                        .exceptionOrNull()
+                        ?.message
+                        .orEmpty()
+                        .contains("legacy_request_requires_migration")
                 )
             }
         }
@@ -878,6 +885,160 @@ class FlutterSourceEngineTest {
             assertEquals("POST /modern HTTP/1.1", requests[1].first)
             assertEquals("application/x-www-form-urlencoded", requests[1].second)
             assertEquals(rawBody, requests[1].third)
+        }
+    }
+
+    @Test
+    fun legacyExploreOptionsAndFinitePaginationUseSelectedRequest() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val requests = mutableListOf<Map<String, String>>()
+            val serving =
+                async(Dispatchers.IO) {
+                    repeat(3) {
+                        server.accept().use { socket ->
+                            socket.soTimeout = 10_000
+                            // This fixture's request body is ASCII p=1, so character counts equal
+                            // byte counts.
+                            val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
+                            val request = reader.readLine()
+                            val headers = mutableMapOf<String, String>()
+                            while (true) {
+                                val line = reader.readLine()
+                                if (line.isNullOrEmpty()) break
+                                headers[line.substringBefore(':').lowercase()] =
+                                    line.substringAfter(':').trim()
+                            }
+                            fun readCharacters(size: Int): String {
+                                val chars = CharArray(size)
+                                var offset = 0
+                                while (offset < size) {
+                                    val count = reader.read(chars, offset, size - offset)
+                                    check(count > 0)
+                                    offset += count
+                                }
+                                return String(chars)
+                            }
+                            val body =
+                                if (
+                                    headers["transfer-encoding"]
+                                        .orEmpty()
+                                        .contains("chunked", ignoreCase = true)
+                                ) {
+                                    buildString {
+                                        while (true) {
+                                            val size =
+                                                reader
+                                                    .readLine()
+                                                    .substringBefore(';')
+                                                    .trim()
+                                                    .toInt(16)
+                                            if (size == 0) {
+                                                while (!reader.readLine().isNullOrEmpty()) {}
+                                                break
+                                            }
+                                            append(readCharacters(size))
+                                            check(reader.readLine().isEmpty())
+                                        }
+                                    }
+                                } else readCharacters(headers["content-length"]?.toInt() ?: 0)
+                            requests.add(headers + mapOf("request" to request, "body" to body))
+                            val response =
+                                "<div class='row'><a href='/book'>Title</a><span class='author'>Author</span></div>"
+                                    .toByteArray(Charsets.UTF_8)
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${response.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray()
+                                )
+                                write(response)
+                                flush()
+                            }
+                        }
+                    }
+                }
+            val categoryA = "$origin/<first,other>"
+            val categoryB =
+                "$origin/<first,other>,${Gson().toJson(mapOf("method" to "POST", "body" to "p={{page - 1}}", "headers" to mapOf("X-Shared" to "selected", "X-Category" to "B")))}"
+            val fields =
+                mapOf(
+                    "bookList" to ".row",
+                    "name" to "a@text",
+                    "author" to ".author@text",
+                    "bookUrl" to "a@href",
+                )
+            val selected =
+                Gson()
+                    .fromJson(
+                        Gson()
+                            .toJson(
+                                mapOf(
+                                    "bookSourceUrl" to origin,
+                                    "bookSourceName" to "Finite pages",
+                                    "bookSourceComment" to "@engine:dart",
+                                    "enabledCookieJar" to true,
+                                    "header" to
+                                        Gson()
+                                            .toJson(
+                                                mapOf(
+                                                    "X-Default" to "source",
+                                                    "X-Shared" to "default",
+                                                )
+                                            ),
+                                    "exploreUrl" to "A::$categoryA\nB::$categoryB",
+                                    "ruleExplore" to fields,
+                                    "searchUrl" to "$origin/search?page={{page + 1}}",
+                                    "ruleSearch" to fields,
+                                )
+                            ),
+                        BookSource::class.java,
+                    )
+            assertEquals(
+                "Title",
+                withTimeout(60_000) {
+                    WebBook.exploreBookAwait(selected, categoryA, 1).single().name
+                },
+            )
+            assertEquals(
+                "Title",
+                withTimeout(60_000) {
+                    WebBook.exploreBookAwait(selected, categoryB, 2).single().name
+                },
+            )
+            assertEquals(
+                "Title",
+                withTimeout(60_000) { WebBook.searchBookAwait(selected, "Title", 2).single().name },
+            )
+            serving.await()
+            assertEquals(
+                listOf(
+                    "GET /first HTTP/1.1",
+                    "POST /other HTTP/1.1",
+                    "GET /search?page=3 HTTP/1.1",
+                ),
+                requests.map { it["request"] },
+            )
+            assertEquals("", requests[0]["body"])
+            assertEquals("default", requests[0]["x-shared"])
+            assertEquals("source", requests[1]["x-default"])
+            assertEquals("selected", requests[1]["x-shared"])
+            assertEquals("B", requests[1]["x-category"])
+            assertEquals("p=1", requests[1]["body"])
+            assertEquals("application/x-www-form-urlencoded", requests[1]["content-type"])
+            val rejected =
+                withTimeout(60_000) {
+                    runCatching {
+                        WebBook.exploreBookAwait(selected, "$origin/{{java.get('page')}}", 2)
+                    }
+                }
+            assertTrue(
+                rejected
+                    .exceptionOrNull()
+                    ?.message
+                    .orEmpty()
+                    .contains("legacy_request_requires_migration")
+            )
         }
     }
 

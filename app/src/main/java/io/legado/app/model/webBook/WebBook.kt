@@ -219,22 +219,11 @@ object WebBook {
         page: Int? = 1,
     ): ArrayList<SearchBook> {
         if (DartSourceEngine.selected(bookSource)) {
-            val exploreUrl =
-                if (usesLegacyDartFields(bookSource)) {
-                    val expanded = url.replace("{{page}}", (page ?: 1).toString())
-                    require(
-                        !Regex("(?i)@(?:web)?js:|<js>|javascript:|,\\s*\\{|[<>]|\\{\\{|\\}\\}")
-                            .containsMatchIn(expanded)
-                    ) {
-                        "Legacy explore URL requires migration: scripts, request options and complex templates are unsupported"
-                    }
-                    expanded
-                } else url
             return ArrayList(
                 DartSourceEngine.execute(
                         bookSource,
                         "explore",
-                        mapOf("url" to url, "exploreUrl" to exploreUrl, "page" to (page ?: 1)),
+                        mapOf("url" to url, "exploreUrl" to url, "page" to (page ?: 1)),
                     )
                     .map {
                         GSON.fromJson(
