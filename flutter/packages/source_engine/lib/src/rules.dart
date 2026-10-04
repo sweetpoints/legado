@@ -130,11 +130,13 @@ class RuleEvaluator {
           .toList();
     } else {
       var css = lower.startsWith('@css:') ? selector.substring(5) : selector;
-      final at = css.lastIndexOf('@');
+      // A projection delimiter must be outside quotes/brackets/functions and
+      // unescaped. Reuse the rule scanner so CSS literals stay untouched.
+      final cssParts = _split(css, '@');
       var output = 'node';
-      if (at >= 0) {
-        output = css.substring(at + 1);
-        css = css.substring(0, at);
+      if (cssParts.length > 1) {
+        output = cssParts.last;
+        css = cssParts.take(cssParts.length - 1).join('@');
       }
       final root = input is Element
           ? input
