@@ -40,6 +40,12 @@ internal suspend fun projectCodeSyntax(
     while (scanStart > 0 && text[scanStart - 1].isJsonKeyCharacter()) scanStart--
     while (scanEnd < text.length && text[scanEnd].isJsonKeyCharacter()) scanEnd++
     scanStart = (scanStart - 1).coerceAtLeast(0)
+    // Nonoverlapping pair tokens (||, &&, %%, @@) inherit their phase from the
+    // beginning of a repeated-symbol run, which can be arbitrarily far away.
+    if (scanStart < text.length && text[scanStart] in "|&%@") {
+        val symbol = text[scanStart]
+        while (scanStart > 0 && text[scanStart - 1] == symbol) scanStart--
+    }
     scanEnd = (scanEnd + 2).coerceAtMost(text.length)
     val jobContext = coroutineContext
     jobContext.ensureActive()
