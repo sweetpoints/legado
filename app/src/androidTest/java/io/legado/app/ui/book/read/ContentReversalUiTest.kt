@@ -318,6 +318,9 @@ class ContentReversalUiTest {
                 return page.isMsgPage && page.text == context.getString(R.string.data_loading)
             }
             fun expectResourceFailure(action: () -> Unit) {
+                // Opening the menu restores system bars and can relayout the chapter.
+                // Snapshot the actual chapter immediately before the refresh command.
+                showReaderMenu()
                 contentCompose.waitForIdle()
                 var layout = ReadBook.curTextChapter
                 val scroll = ReadBook.pageAnim() == PageAnim.scrollPageAnim
@@ -489,10 +492,18 @@ class ContentReversalUiTest {
                             .value == false &&
                         !it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage
                 }
-                assertSame(
-                    "A failed refresh must retain the rendered chapter",
-                    layout,
-                    ReadBook.curTextChapter,
+                // Recreation and system-bar changes legitimately rebuild TextChapter layout
+                // objects. Verify the recovered visible text and chapter, plus exact caches below.
+                val recovered = checkNotNull(ReadBook.curTextChapter)
+                assertEquals(
+                    "Failure restores the same chapter",
+                    layout!!.chapter.url,
+                    recovered.chapter.url,
+                )
+                assertEquals(
+                    "Failure restores exact rendered content",
+                    layout.getContent(),
+                    recovered.getContent(),
                 )
                 assertEquals(savedPosition, ReadBook.durChapterPos)
                 if (scroll)

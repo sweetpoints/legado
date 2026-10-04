@@ -101,15 +101,26 @@ def main():
                 {"Discovery", "发现"}, {"Bookshelf", "书架"},
             ]
             for index, descriptions in enumerate(destinations):
-                candidates = [node for node in nodes()
-                              if node.attrib.get("content-desc") in descriptions]
-                assert len(candidates) == 1, f"Navigation tab missing or blocked: {descriptions}"
-                tap(candidates[0])
-                time.sleep(2)
-                tree = nodes()
-                assert any(node.attrib.get("selected") == "true" and
+                # First-run IME dismissal and focus restoration can move the bottom bar.
+                # Use current, stable bounds and require the selected accessibility state.
+                deadline = time.monotonic() + 20
+                previous_bounds = None
+                while time.monotonic() < deadline:
+                    tree = nodes()
+                    if any(node.attrib.get("selected") == "true" and
                            any(child.attrib.get("content-desc") in descriptions
-                               for child in node.iter("node")) for node in tree), descriptions
+                               for child in node.iter("node")) for node in tree):
+                        break
+                    candidates = [node for node in tree
+                                  if node.attrib.get("content-desc") in descriptions]
+                    assert len(candidates) == 1, f"Navigation tab missing or blocked: {descriptions}"
+                    bounds = candidates[0].attrib["bounds"]
+                    if bounds == previous_bounds:
+                        tap(candidates[0])
+                    previous_bounds = bounds
+                    time.sleep(0.5)
+                else:
+                    raise AssertionError(f"Navigation tab did not become selected: {descriptions}")
                 (folder / f"tab-{index}.png").write_bytes(adb("exec-out", "screencap", "-p").stdout)
             time.sleep(5)
             assert shell("pidof", args.package) == pid, "App process changed during navigation"

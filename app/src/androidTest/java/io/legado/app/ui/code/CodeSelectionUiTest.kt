@@ -864,7 +864,7 @@ class CodeSelectionUiTest {
                             "The input transfer file must be removed after return",
                             File(inputPath!!).exists(),
                         )
-                        instrumentation.waitForIdleSync()
+                        compose.waitForIdle()
                         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
                             try {
                                 File(
@@ -1331,7 +1331,11 @@ class CodeSelectionUiTest {
                         assertEquals(cursor - 1, dialog.model.state.value.selectionEnd)
                     }
                 } finally {
-                    event.recycle()
+                    if (android.os.Build.VERSION.SDK_INT < 33) {
+                        // Accessibility event pooling exists only before Android 13.
+                        @Suppress("DEPRECATION")
+                        event.recycle()
+                    }
                 }
             }
         } finally {
@@ -1439,7 +1443,7 @@ class CodeSelectionUiTest {
                 } finally {
                     closeSoftKeyboard()
                     instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
-                    instrumentation.waitForIdleSync()
+                    compose.waitForIdle()
                 }
             }
         } finally {
@@ -1506,6 +1510,8 @@ class CodeSelectionUiTest {
                         point
                     },
                     Press.FINGER,
+                    0,
+                    0,
                 )
             )
     }
@@ -1716,17 +1722,15 @@ class CodeSelectionUiTest {
         message: () -> String = { "Code editor did not reach the expected state" },
         condition: () -> Boolean,
     ) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000, condition = condition)
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            assertTrue(message(), condition())
         }
-        val ready = condition()
-        assertTrue(message(), ready)
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         // FloatingActionMode briefly hides the toolbar while the selection geometry moves.
         instrumentation.uiAutomation.waitForIdle(500, 5_000)
         val committed = CountDownLatch(1)
