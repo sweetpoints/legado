@@ -64,7 +64,7 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 ## 内容提取与元素 facade
 
-`java.getString(rule)`、`getStringList(rule)` 默认使用当前 result；可指定内容及 isUrl。`getString(rule,boolean)` 的旧 unescape 重载明确不支持。`getElement(rule)`、`getElements(rule)` 当前仅支持单规则参数，由同步桥注入当前 result 和 baseUrl。裸规则和旧 @CSS/@text 等入口转换为 @legacy，其他模式保持其前缀。
+`java.getString(rule)`、`getStringList(rule)` 默认使用当前 result；可指定内容及 isUrl。`getString(rule,unescape:boolean)` 使用当前 result 并控制HTML4反解。getString 默认单次反解HTML4实体，getStringList不反解。isUrl=true 的标量先反解再解析URL；非空规则提取到空值时回退到当前 baseUrl，空规则仍返回空字符串。现代 parse 默认语义保持不变；HTML4实体细节见[工具API](../v1/utilities.md)。`getElement(rule)`、`getElements(rule)` 当前仅支持单规则参数，由同步桥注入当前 result 和 baseUrl。裸规则和旧 @CSS/@text 等入口转换为 @legacy，其他模式保持其前缀。
 
 空规则的旧约定：getString 返回空字符串、getStringList 返回 null、getElement 返回 null、getElements 返回空数组，与新版 getStringList 空数组不同。
 

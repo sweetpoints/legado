@@ -81,7 +81,8 @@
     "getString": [
       "rule",
       "rule, content",
-      "rule, content, isUrl"
+      "rule, content, isUrl",
+      "rule, unescape boolean (current result)"
     ],
     "getStringList": [
       "rule",
@@ -197,5 +198,11 @@
     "htmlMethod": false,
     "identityPreserved": false,
     "fullJsoupObject": false
+  },
+  "extractionTextSemantics": {
+    "getString": "default HTML4 single-pass unescape; boolean overload disables when false",
+    "getStringList": "no unescape",
+    "scalarUrl": "unescape before URL resolution; empty extracted text falls back to base URL",
+    "emptyRule": "getString empty string; getStringList null"
   }
 }

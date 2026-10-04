@@ -55,3 +55,9 @@ source_host 按 source id 与 legacy/modern 模式分开缓存引擎、保存会
 默认 PlatformSessionStore 在按 source id SHA-256 分隔的私有 preferences 中，以保留键 `__engine.session.v1.legacy` 或 `__engine.session.v1.modern` 保存 `{formatVersion:1,origin,engine,runtime?}`。engine 包含新版变量与 HTTP Cookie；runtime 在支持时保存旧 java.get/put 变量。恢复只接受相同 baseUrl origin 的 v1 会话；恢复失败报 `session_restore_failed`，提交失败报 `session_write_failed`，不会静默当作没有会话。
 
 执行结束的 finally 会尝试提交状态，包括失败或取消后已产生的会话变化；它不是业务事务回滚。脚本存储 API 禁止访问 `__engine.session.` 保留键空间。当前保存由 Android preferences 适配完成，不是旧 Room 或旧 Rhino 全局状态自动迁移。
+
+## 章节字段契约
+
+TOC 的 isVip/isPay/isVolume 原生Boolean直接保留。旧源的字符串按既有 String.isTrue() 判断：空白或精确 `null` 为false，trim后忽略大小写的 false/no/not/0/0.0 为false，其余为true。v1配置含 metadata.legacyOriginal JSON对象时也保留这套旧字段语义，即使迁移候选 metadata.legacy=false；该判断与运行时宿主模式独立。没有旧来源标记的现代配置只接受Boolean或精确小写 `"true"`/`"false"` 字符串，其他非null值拒绝。旧来源的 updateTime 字符串映射为章节 tag。
+
+卷章节 isVolume=true 且 url 为空白时，TOC mapper 合成 title+index 作为URL；该规则也支持现代卷。正文在已有缓存读取之后、引擎路由之前，遇到 isVolume 且 url 以 title 开头时返回空字符串，不执行正文规则。

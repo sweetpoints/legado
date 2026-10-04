@@ -14,6 +14,7 @@
 | `source.encoding.hexDecode` | hex | UTF-8 字符串 |
 | `source.encoding.hexDecodeBytes` | hex | signed 字节数组 |
 | `source.encoding.formEncode` | text、可选 charset | Java 表单编码，空格为+ |
+| `source.encoding.unescapeHtml4` | text（必须为字符串） | HTML4 实体单次解码字符串 |
 | `source.encoding.formDecode` | text、可选 charset | 表单解码，+为空格；非法百分号序列抛错 |
 | `source.crypto.md5` | text | 小写32位MD5 |
 | `source.crypto.md5Short` | text | MD5字符8..23 |
@@ -25,3 +26,5 @@ charset 默认 UTF-8；支持的字符集、Android flags 与摘要算法见[编
 核心 `source.encoding.base64Encode(text)` 和 `base64Decode(text)` 保留单参数基础形式。多参数调用需要适配器支持；没有适配器时明确报 unsupported_host_api，不隐式忽略多余参数。推荐迁移后的书源使用上表明确重载名字。
 
 测试依据：`packages/source_legacy/test/legacy_host_test.dart`；实际 V8 Promise 桥另由运行时与宿主集成测试覆盖。
+
+`unescapeHtml4` 使用与 Commons Text 1.13.1 对应的252个HTML4命名实体表，实体必须带分号；不包含HTML5额外实体或 apos，未知实体保持原文。只解码一遍，例如 `&amp;lt;` 变为 `&lt;`。数字实体保留C1码点；超过0x10ffff的码点抛错，整数溢出的实体保持原文。此扩展不改变现代 parse.getString/getStringList 的默认语义。

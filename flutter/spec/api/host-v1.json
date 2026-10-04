@@ -290,8 +290,28 @@
       "crypto.md5": "text -> string",
       "crypto.md5Short": "text -> string",
       "crypto.digestHex": "text, algorithm -> string",
-      "crypto.digestBase64": "text, algorithm -> string"
+      "crypto.digestBase64": "text, algorithm -> string",
+      "encoding.unescapeHtml4": "text string -> string; single-pass semicolon-required HTML4 252 entities; not HTML5"
     },
     "allReturns": "Promise"
+  },
+  "httpRedirects": {
+    "rewriteToGet": "POST on 301/302; any method on303",
+    "removeHeadersCaseInsensitive": [
+      "Content-Length",
+      "Transfer-Encoding",
+      "Content-Type",
+      "Content-Encoding",
+      "Content-Language",
+      "Content-Location"
+    ],
+    "preserveBodyAndHeadersOn": [
+      307,
+      308
+    ],
+    "crossOriginRemoveHeaders": [
+      "Authorization",
+      "Cookie"
+    ]
   }
 }

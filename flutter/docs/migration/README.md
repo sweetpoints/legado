@@ -39,9 +39,9 @@
 | java.encodeURI | encoding.formEncode |
 | java.get(key) | ((await source.variables.get(key)) ?? "") |
 | java.put(key,value) | await source.variables.put(key,value) |
-| java.getString / getStringList | 字面量规则转换为 source.parse 对应方法，捕获 result/baseUrl |
+| java.getString / getStringList | 字面量规则转换为 source.parse 对应方法，捕获 result/baseUrl；非空规则的getString结果再await source.encoding.unescapeHtml4 |
 
-规则提取转换只接受可解析字面量、无嵌套脚本的规则；默认内容 result、URL 标志 false 和当前 baseUrl 显式传入。空规则保持旧 getString 空字符串/getStringList null。动态规则报 migration.dynamic_rule；HTTP get/connect/post/head 和 Java DOM 方法不自动迁移，只在兼容模式中使用。
+规则提取转换只接受可解析字面量、无嵌套脚本的规则；默认内容 result、URL 标志 false 和当前 baseUrl 显式传入。空规则保持旧 getString 空字符串/getStringList null。兼容运行时支持 getString(rule,unescape:boolean)，迁移器仍只自动转换单个字面量规则参数，不自动转换该Boolean重载。动态规则报 migration.dynamic_rule；HTTP get/connect/post/head 和 Java DOM 方法不自动迁移，只在兼容模式中使用。
 
 单参数 ajax 也必须是字面量 URL 字符串；动态参数、别名和提取结果需人工处理，报 migration.ambiguous_overload。直接数组或 Array 构造形式报 migration.ajax_array_requires_review，避免把旧“取首个数组元素”的语义直接传给新版 net.get。
 
@@ -97,6 +97,6 @@ dart run packages/source_tools/bin/source_tools.dart compare LEGACY_FILE CANDIDA
 
 STAGE 为 search/explore/info/toc/content。旧输入经 LegacySourceImporter 在 Flutter legacy 模式执行；候选按 metadata 选择 modern 或 legacy 模式，报告明确给出双方 executionMode。两侧使用独立引擎与输入，只比较本次结果：映射键顺序不影响比较，列表顺序、值与类型严格比较。使用实时网络时，内容变化、时间、随机值与 Cookie 状态可能导致差异。
 
-报告 reportVersion 为 1，baseline 为 flutterLegacyCompatibility、network 为 live，caseEquivalent 只表示本阶段、此输入的结果等价；sourceVerified、verified、jvmCompared 固定为 false。它不验证原 Kotlin/Rhino JVM 引擎、整本书流程或全部历史书源。报告记录输入和变量 SHA-256、双方执行模式、结果摘要 SHA-256、列表数量或 errorCode，不写原始结果、异常 message 或 URL。
+报告 reportVersion 为 1，baseline 为 flutterLegacyCompatibility、network 为 live、comparisonScope 为 stageResult、stateCompared 为 false；不比较变量、Cookie或持久化状态，caseEquivalent 只表示本阶段、此输入的结果等价；sourceVerified、verified、jvmCompared 固定为 false。它不验证原 Kotlin/Rhino JVM 引擎、整本书流程或全部历史书源。报告记录输入和变量 SHA-256、双方执行模式、结果摘要 SHA-256、列表数量或 errorCode，不写原始结果、异常 message 或 URL。
 
 退出码：0 为本 case 等价，4 为两侧成功但结果不同，1 为执行失败，2 为无效输入，64 为命令用法错误，73 为报告文件已存在，74 为文件读写失败。已有报告不会覆盖。命令的其他用法见 [source_tools README](../../packages/source_tools/README.md)。

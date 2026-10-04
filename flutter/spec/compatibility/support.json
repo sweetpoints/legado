@@ -30,12 +30,6 @@
     "temporal": false,
     "externalStartupData": false,
     "provenanceManifest": "source_v8/.cache/self-built/<V8 revision>/manifest.json",
-    "historicalValidation": {
-      "v8Version": "14.3.92",
-      "tests": 136,
-      "releaseR8": true,
-      "androidInstrumentationCases": 3
-    },
     "verifiedSnapshot": {
       "date": "2026-10-04",
       "v8Version": "15.4.80.24",
@@ -47,31 +41,44 @@
         "Debug build and UI",
         "Release build and UI; local code signing only"
       ],
-      "androidRelease": "earlier stable-V8 integration round: local unsigned APK and AAR; R8 completed; packaged V8 hash matches manifest",
+      "androidRelease": "local unsigned APK and AAR; minifyAppReleaseWithR8 completed; packaged V8 size and SHA-256 match manifest",
       "logs": [
-        "tmp/flutter-source-check-migration-acceptance.log",
-        "tmp/flutter-android-test-migration-acceptance.log",
-        "tmp/flutter-android-release-migration-acceptance.log"
+        "tmp/flutter-source-check-extraction-compatibility.log",
+        "tmp/flutter-android-test-extraction-compatibility.log",
+        "tmp/flutter-android-release-extraction-compatibility.log"
       ],
       "fullHistoricalSourceAcceptance": false,
       "signedDistributionAcceptance": false,
       "ciAcceptance": false,
-      "acceptanceRound": "migration and Android bridge acceptance",
+      "acceptanceRound": "extraction compatibility and Android chapter acceptance",
       "workspaceStaticAnalyses": 8,
       "workspacePackageTests": [
-        19,
         29,
+        34,
         12,
         21,
-        20,
-        49,
+        21,
+        78,
         1,
         6
       ],
-      "androidInstrumentationCases": 6,
-      "currentRoundReleaseR8": "passed locally; minifyAppReleaseWithR8 executed; unsigned APK and AAR packaged V8 size and SHA-256 match manifest",
-      "earlierStableReleaseLog": "tmp/flutter-android-release-stable-v8.log"
-    }
+      "androidInstrumentationCases": 8,
+      "currentRoundReleaseR8": "passed locally",
+      "debugFlutterAssetConsistency": "10 Flutter assets in AAR and APK have matching SHA-256",
+      "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
+      "releaseNativeConsistency": {
+        "libapp.so": {
+          "bytes": 3277704,
+          "sha256MatchesBetweenAarAndApk": true
+        },
+        "libsource_v8.so": {
+          "bytes": 26306760,
+          "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593",
+          "sha256MatchesManifestAndPackagedArtifacts": true
+        }
+      }
+    },
+    "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot"
   },
   "engine": {
     "operations": [
@@ -130,7 +137,9 @@
       "body string template",
       "static headers replacement",
       "charset"
-    ]
+    ],
+    "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
+    "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5"
   },
   "legacy": {
     "status": "partial",
@@ -202,7 +211,8 @@
       ],
       "stageCharsetFromLegacy": false
     },
-    "importLiteralExtractionScripts": "getString/getStringList with one literal rule only; nested scripts, compound rules, templates, variables, extra arguments and element APIs require review"
+    "importLiteralExtractionScripts": "getString/getStringList with one literal rule only; nested scripts, compound rules, templates, variables, extra arguments and element APIs require review",
+    "extractionText": "getString default HTML4 unescape with boolean override;getStringList no unescape;scalar URL empty text falls back base"
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -238,8 +248,11 @@
       "executionModesReported": true,
       "jvmCompared": false,
       "sourceVerified": false,
-      "network": "live"
-    }
+      "network": "live",
+      "comparisonScope": "stageResult",
+      "stateCompared": false
+    },
+    "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule"
   },
   "androidBridge": {
     "protocolVersion": 1,
@@ -266,6 +279,7 @@
     },
     "emptyToc": "TocEmptyException; book metadata unchanged",
     "successfulTocMetadata": "existing updateBookTocInfo",
-    "closePending": "pending responses and ready waits fail with IllegalStateException; no added channel error code"
+    "closePending": "pending responses and ready waits fail with IllegalStateException; no added channel error code",
+    "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index"
   }
 }

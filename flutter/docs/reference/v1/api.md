@@ -12,7 +12,7 @@
 | `source.encoding.base64Encode(text)` | 文本 | UTF-8 Base64 |
 | `source.encoding.base64Decode(text)` | Base64 文本 | UTF-8 字符串 |
 
-`net.request` 的 options：`url` 为请求地址；`method` 默认 `GET`；`headers` 未指定时继承书源 headers；`body` 为可空字符串；`timeoutMs` 默认 `30000`；`charset` 可覆盖请求体编码和响应解码；`followRedirects` 默认 true，设为 false 返回第一份重定向响应。完整脚本中相对地址相对于书源 `baseUrl` 解析；规则阶段脚本与宿主调用相对于当前最终响应 URL 解析。响应 `url` 为最终 URL，`status` 为整数 HTTP 状态，`headers` 为合并的字符串映射，`body` 为解码正文；`message` 为 HTTP reason phrase，`bytes` 为原始0..255字节数组，`multiHeaders` 保留多值头数组，`cookies` 为本响应 Set-Cookie 字符串数组。
+`net.request` 的 options：`url` 为请求地址；`method` 默认 `GET`；`headers` 未指定时继承书源 headers；`body` 为可空字符串；`timeoutMs` 默认 `30000`；`charset` 可覆盖请求体编码和响应解码；`followRedirects` 默认 true，设为 false 返回第一份重定向响应。跟随重定向时，POST 收到301/302，或请求收到303，改用GET并清空请求体；按大小写不敏感方式移除 Content-Length、Transfer-Encoding、Content-Type、Content-Encoding、Content-Language、Content-Location，保留其他业务头（跨origin仍移除Authorization/Cookie）。307/308保持方法、请求体和实体头。完整脚本中相对地址相对于书源 `baseUrl` 解析；规则阶段脚本与宿主调用相对于当前最终响应 URL 解析。响应 `url` 为最终 URL，`status` 为整数 HTTP 状态，`headers` 为合并的字符串映射，`body` 为解码正文；`message` 为 HTTP reason phrase，`bytes` 为原始0..255字节数组，`multiHeaders` 保留多值头数组，`cookies` 为本响应 Set-Cookie 字符串数组。
 
 HTTP 状态码不会使上述宿主方法自动抛错；脚本自行检查状态。规则 stage 的请求则在状态码 >=400 时产生 `http_error`。
 
