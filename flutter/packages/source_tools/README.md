@@ -25,3 +25,20 @@ run source-specific conformance checks before enabling a candidate. Execution
 accepts the versioned schema. A candidate marked `metadata.legacy: true` enables
 the documented `java.*` compatibility prelude. Unsupported legacy features are
 reported by migration rather than silently executed with different behavior.
+
+Legacy exports containing JSON arrays are accepted by `audit` and `migrate`:
+
+```sh
+dart run packages/source_tools/bin/source_tools.dart audit exported-sources.json --report audit.json
+dart run packages/source_tools/bin/source_tools.dart migrate exported-sources.json --output migration-batch
+```
+
+Batch migration requires a new output directory. Every array position has an
+indexed report, including invalid entries; a candidate is written only when
+import succeeds. `audit.json` records SHA-256 of the exact input bytes, source
+count, status counts, per-capability issue counts, and indexed metadata. The
+stdout summary contains no original source bodies or URLs. Audit executes no
+scripts or requests. `unverified`, `manualRequired`, and `noExecution` describe
+analysis only; neither audit nor migration establishes compatibility. Both
+commands return exit code 3 to require review. Preserve the original export to
+reproduce the exact input hash.

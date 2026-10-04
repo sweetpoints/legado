@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:source_engine/source_engine.dart';
 
+import 'src/audit.dart';
+
 /// JSON-only CLI responses and stable process exit codes.
 class CliResult {
   const CliResult(this.exitCode, this.json);
@@ -28,7 +30,7 @@ class SourceCli {
     try {
       if (arguments.isEmpty || arguments.first == '--help') {
         return CliResult(arguments.isEmpty ? 64 : 0, {
-          'usage': 'source_tools validate FILE | migrate FILE --output FILE [--report FILE] | execute FILE STAGE [--variables JSON]',
+          'usage': 'source_tools validate FILE | audit FILE [--report FILE] | migrate FILE --output FILE_OR_DIRECTORY [--report FILE] | execute FILE STAGE [--variables JSON]',
           'stages': ['search', 'explore', 'info', 'toc', 'content'],
           'exitCodes': {
             '0': 'success',
@@ -42,7 +44,7 @@ class SourceCli {
         });
       }
       final command = arguments.first;
-      if (!['validate', 'migrate', 'execute'].contains(command) ||
+      if (!['validate', 'audit', 'migrate', 'execute'].contains(command) ||
           arguments.length < 2) {
         throw const _Usage('Unknown command or missing source path');
       }
@@ -60,6 +62,8 @@ class SourceCli {
       }
       final allowed = command == 'migrate'
           ? {'--output', '--report'}
+          : command == 'audit'
+          ? {'--report'}
           : command == 'execute'
           ? {'--variables'}
           : <String>{};
@@ -75,25 +79,61 @@ class SourceCli {
       if (command == 'migrate' && !options.containsKey('--output')) {
         throw const _Usage('Migration requires --output');
       }
-      final json = _object(jsonDecode(await File(path).readAsString()));
+      final bytes = await File(path).readAsBytes();
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (command == 'audit') {
+        final audit = await SourceAudit.inspect(bytes, migrate);
+        if (options['--report'] case final reportPath?) {
+          final report = File(reportPath);
+          await _checkDestination(File(path), report);
+          await _writeExclusive(report, audit.summary);
+        }
+        return CliResult(3, {
+          'ok': false,
+          'command': command,
+          ...audit.summary,
+        });
+      }
+      if (command == 'migrate' && decoded is List) {
+        return await _migrateBatch(File(path), bytes, options);
+      }
+      final json = _object(decoded);
       if (command == 'migrate') {
         final output = File(options['--output']!);
         final report = File(
           options['--report'] ?? '${output.path}.report.json',
         );
         await _checkDestinations(File(path), output, report);
-        final result = await migrate(json);
+        final migrated = await migrate(json);
+        final result = {
+          ...migrated,
+          'status': migrated['status'] == 'manualRequired'
+              ? 'manualRequired'
+              : 'unverified',
+          'verified': false,
+          'executed': false,
+        };
         final candidate = result['candidate'];
         // A report-only outcome must never be advertised as an executable source.
         if (candidate == null) {
-          await _writeExclusive(report, result);
+          await _writeExclusive(report, {
+            ...result,
+            'verified': false,
+            'executed': false,
+          });
         } else {
           await _writeExclusive(output, candidate);
-          await _writeExclusive(report, {...result}..remove('candidate'));
+          await _writeExclusive(
+            report,
+            {...result, 'verified': false, 'executed': false}
+              ..remove('candidate'),
+          );
         }
-        final status = result['status'];
-        return CliResult(status == 'ready' ? 0 : 3, {
-          'ok': status == 'ready',
+        final status = result['status'] == 'manualRequired'
+            ? 'manualRequired'
+            : 'unverified';
+        return CliResult(3, {
+          'ok': false,
           'command': command,
           'original': path,
           if (candidate != null) 'candidate': output.path,
@@ -138,6 +178,73 @@ class SourceCli {
       return _failure(2, 'invalid_source', 'Source fields have invalid types');
     } catch (error) {
       return _failure(1, 'execution_failed', error.toString());
+    }
+  }
+
+  Future<CliResult> _migrateBatch(
+    File input,
+    List<int> bytes,
+    Map<String, String> options,
+  ) async {
+    final directory = Directory(options['--output']!);
+    final report = File(options['--report'] ?? '${directory.path}/audit.json');
+    if (directory.absolute.uri.normalizePath() ==
+        input.absolute.uri.normalizePath()) {
+      throw const _Usage('Original and output directory must differ');
+    }
+    if (await FileSystemEntity.type(directory.path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      throw _OutputExists(directory.path);
+    }
+    await _checkDestination(input, report);
+    final audit = await SourceAudit.inspect(bytes, migrate);
+    final reportUri = report.absolute.uri.normalizePath();
+    for (final entry in audit.entries) {
+      final prefix = entry['index'].toString().padLeft(5, '0');
+      for (final suffix in ['candidate.json', 'report.json']) {
+        if (File('${directory.path}/$prefix.$suffix').absolute.uri
+                .normalizePath() ==
+            reportUri) {
+          throw const _Usage(
+            'Batch summary must not collide with entry outputs',
+          );
+        }
+      }
+    }
+    // Every file is created exclusively; existing files are never overwritten.
+    await directory.parent.create(recursive: true);
+    await directory.create();
+    for (final entry in audit.entries) {
+      final prefix = entry['index'].toString().padLeft(5, '0');
+      if (entry['candidate'] case final candidate?) {
+        await _writeExclusive(
+          File('${directory.path}/$prefix.candidate.json'),
+          candidate,
+        );
+      }
+      await _writeExclusive(
+        File('${directory.path}/$prefix.report.json'),
+        {...entry}..remove('candidate'),
+      );
+    }
+    await _writeExclusive(report, audit.summary);
+    return CliResult(3, {
+      'ok': false,
+      'command': 'migrate',
+      'output': directory.path,
+      'report': report.path,
+      ...audit.summary,
+    });
+  }
+
+  static Future<void> _checkDestination(File input, File destination) async {
+    if (input.absolute.uri.normalizePath() ==
+        destination.absolute.uri.normalizePath()) {
+      throw const _Usage('Original and report paths must differ');
+    }
+    if (await FileSystemEntity.type(destination.path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      throw _OutputExists(destination.path);
     }
   }
 
