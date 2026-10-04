@@ -2,6 +2,7 @@
 # share Chromium's compiler, public header features, and C++ runtime.
 # Only the stable sv8 C ABI is visible to Dart or the surrounding application.
 template("source_v8_library") {
+  not_needed(invoker, "*")
   shared_library(target_name) {
     output_name = "source_v8"
     sources = [ "//source_v8/source_v8.cpp" ]
@@ -16,10 +17,16 @@ template("source_v8_library") {
         "-Wl,-z,max-page-size=16384",
       ]
       inputs = [ "//source_v8/android_exports.map" ]
-      libs = [ "log", "dl", "m", "atomic" ]
+      libs = [
+        "log",
+        "dl",
+        "m",
+        "atomic",
+      ]
     } else if (is_mac) {
       ldflags = [ "-Wl,-undefined,error" ]
-      foreach(symbol, [
+      foreach(symbol,
+              [
                 "sv8_create",
                 "sv8_start",
                 "sv8_poll",
