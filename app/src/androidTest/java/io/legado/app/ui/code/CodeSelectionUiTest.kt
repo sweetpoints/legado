@@ -1045,10 +1045,18 @@ class CodeSelectionUiTest {
                         if (rss && !replacements) {
                             // Saving updates the candidate before the child dialog's removal
                             // transaction finishes. Wait for the parent to own input again.
-                            await(message = { "Saved preview was not removed before reopening" }) {
+                            var parentReadyState = "No parent state sample"
+                            await(message = { "Saved preview was not ready to reopen: $parentReadyState" }) {
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready =
+                                    val parentState = ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value
+                                    parentReadyState = "loading=${parentState.loading} busy=${parentState.busy} " +
+                                        "pending=${parentState.pendingRefresh} effects=${parentState.effects.size} " +
+                                        "oldAdded=${preview!!.isAdded} parentResumed=${parent!!.isResumed} " +
+                                        "windowFocused=${parent!!.dialog?.window?.decorView?.hasWindowFocus()}"
+                                    // Drain the previous save's SyncCode before registering the new preview.
+                                    ready = !parentState.loading && !parentState.busy &&
+                                        !parentState.pendingRefresh && parentState.effects.isEmpty() &&
                                         !preview!!.isAdded &&
                                             parent!!.childFragmentManager.fragments.none {
                                                 it === preview
@@ -1065,7 +1073,7 @@ class CodeSelectionUiTest {
                             instrumentation.runOnMainSync {
                                 readOnlyPreview.show(
                                     parent!!.childFragmentManager,
-                                    "readonly-editor-entry",
+                                    CodeDialog::class.simpleName,
                                 )
                             }
                             fun savePreviewFailure() {
@@ -1113,8 +1121,14 @@ class CodeSelectionUiTest {
                                         ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
                                     val textReady = body?.config?.getOrNull(SemanticsProperties.EditableText)?.text == derived
                                     val enabled = fullscreen != null && !fullscreen.config.contains(SemanticsProperties.Disabled)
+                                    val previewState = readOnlyPreview.model.state.value
+                                    val parentState = ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value
                                     previewGeometry = "textReady=$textReady enabled=$enabled bounds=$bounds " +
-                                        "origin=${origin.toList()} center=($x,$y) visible=$visible display=$display insets=$insets"
+                                        "origin=${origin.toList()} center=($x,$y) visible=$visible display=$display insets=$insets " +
+                                        "loaded=${previewState.loaded} editorPending=${previewState.editorPending} " +
+                                        "refreshPending=${previewState.refreshPending} " +
+                                        "parentLoading=${parentState.loading} parentBusy=${parentState.busy} " +
+                                        "parentPending=${parentState.pendingRefresh} parentEffects=${parentState.effects.size}"
                                     ready = decor?.hasWindowFocus() == true &&
                                         readOnlyPreview.model.state.value.loaded && readOnlyPreview.isResumed &&
                                         !readOnlyPreview.parentFragmentManager.isStateSaved &&

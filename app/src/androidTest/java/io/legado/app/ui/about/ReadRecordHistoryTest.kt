@@ -2,12 +2,19 @@ package io.legado.app.ui.about
 
 import android.app.Activity
 import android.app.Instrumentation
+import android.app.UiAutomation
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.SystemClock
+import android.os.Build
+import android.hardware.display.DisplayManager
+import android.provider.Settings
+import android.view.Display
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
@@ -897,23 +904,110 @@ class ReadRecordHistoryTest {
 
     @Test
     fun enhancedLayoutFitsNarrowScreenAndLargerText() {
-        shell("wm size 720x1280")
-        shell("wm density 360")
-        shell("settings put system font_scale 1.3")
+        val originalSize = shell("wm size")
+        val originalDensity = shell("wm density")
+        fun overrideValue(value: String, name: String): String? =
+            Regex("(?m)^Override $name: ([0-9x]+)\\s*$").find(value)?.groupValues?.get(1)
+        val sizeOverride = overrideValue(originalSize, "size")
+        val densityOverride = overrideValue(originalDensity, "density")
+        val physicalSize = checkNotNull(
+            Regex("Physical size: ([0-9]+x[0-9]+)").find(originalSize)?.groupValues?.get(1)
+        )
+        val physicalDimensions = physicalSize.split('x').map(String::toInt)
+        val baseSize = sizeOverride ?: physicalSize
+        val baseDimensions = baseSize.split('x').map(String::toInt)
+        val restoredDensity = (densityOverride ?: checkNotNull(
+            Regex("Physical density: ([0-9]+)").find(originalDensity)?.groupValues?.get(1)
+        )).toInt()
+        val display = checkNotNull(context.getSystemService(DisplayManager::class.java)
+            .getDisplay(Display.DEFAULT_DISPLAY))
+        val originalRotation = display.rotation
+        val restoredWidth = baseDimensions[if (originalRotation % 2 == 0) 0 else 1]
+        val restoredHeight = baseDimensions[if (originalRotation % 2 == 0) 1 else 0]
+        val originalFont = Settings.System.getFloat(context.contentResolver, Settings.System.FONT_SCALE, 1f)
+        val originallyAutoRotating = Settings.System.getInt(
+            context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0,
+        ) != 0
+        fun awaitWindow(width: Int, height: Int, rotation: Int, density: Int, font: Float) {
+            var actual = "activity unavailable"
+            try {
+                compose.waitUntil(10_000) {
+                    var matched = false
+                    scenario?.onActivity {
+                        val configuration = it.resources.configuration
+                        val decor = it.window.decorView
+                        val metrics = it.resources.displayMetrics
+                        val visible = android.graphics.Rect()
+                        decor.getWindowVisibleDisplayFrame(visible)
+                        actual = "decor=${decor.width}x${decor.height}, rotation=${decor.display.rotation}, " +
+                            "orientation=${configuration.orientation}, density=${configuration.densityDpi}, " +
+                            "font=${configuration.fontScale}, metrics=${metrics.widthPixels}x${metrics.heightPixels}, " +
+                            "visibleFrame=$visible"
+                        matched = decor.width == width && decor.height == height &&
+                            decor.display.rotation == rotation && configuration.densityDpi == density &&
+                            configuration.fontScale == font &&
+                            configuration.orientation == if (height > width)
+                                Configuration.ORIENTATION_PORTRAIT else Configuration.ORIENTATION_LANDSCAPE
+                    }
+                    matched
+                }
+            } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+                throw AssertionError(
+                    "Expected window=${width}x$height, rotation=$rotation, density=$density, font=$font; actual $actual",
+                    failure,
+                )
+            }
+        }
         try {
+            assertTrue(instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_FREEZE_0))
+            shell("wm size 720x1280")
+            shell("wm density 360")
+            shell("settings put system font_scale 1.3")
+            // Android 8 clamps each forced dimension to twice its initial physical dimension.
+            val width =
+                if (Build.VERSION.SDK_INT == 26) minOf(720, physicalDimensions[0] * 2) else 720
+            val height =
+                if (Build.VERSION.SDK_INT == 26) minOf(1280, physicalDimensions[1] * 2) else 1280
+            assertEquals(
+                "Forced size must match the platform's exact bounds",
+                "${width}x$height",
+                overrideValue(shell("wm size"), "size"),
+            )
             AppConfig.readRecordSimpleLayout = false
             launch()
+            awaitWindow(width, height, UiAutomation.ROTATION_FREEZE_0, 360, 1.3f)
             await { it.snapshot.rows.size == 3 }
             assertRecordLayout(book.name, book.author)
             reveal("history-summary")
             compose.onNodeWithTag("history-summary").assertIsDisplayed()
-            screenshot("reading-history-narrow-large-text")
+            screenshot("reading-history-narrow-large-text", composeContent = true)
         } finally {
-            scenario?.close()
-            scenario = null
-            shell("settings put system font_scale 1.0")
-            shell("wm density reset")
-            shell("wm size reset")
+            try {
+                try {
+                    shell("settings put system font_scale $originalFont")
+                } finally {
+                    try {
+                        shell("wm density ${densityOverride ?: "reset"}")
+                    } finally {
+                        try {
+                            shell("wm size ${sizeOverride ?: "reset"}")
+                        } finally {
+                            assertTrue(instrumentation.uiAutomation.setRotation(originalRotation))
+                        }
+                    }
+                }
+                if (scenario != null) awaitWindow(
+                    restoredWidth, restoredHeight, originalRotation, restoredDensity, originalFont,
+                )
+            } finally {
+                try {
+                    if (originallyAutoRotating)
+                        assertTrue(instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_UNFREEZE))
+                } finally {
+                    scenario?.close()
+                    scenario = null
+                }
+            }
         }
     }
 
@@ -1039,17 +1133,25 @@ class ReadRecordHistoryTest {
         }
     }
 
-    private fun shell(command: String) {
-        instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+    private fun shell(command: String): String {
+        val output = instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes().toString(Charsets.UTF_8) }
         }
         instrumentation.waitForIdleSync()
+        return output
     }
 
-    private fun screenshot(name: String) {
+    private fun screenshot(name: String, composeContent: Boolean = false) {
         instrumentation.waitForIdleSync()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        // The narrow-layout artifact captures the Compose content, excluding system bars.
+        // Other artifacts retain the whole display, including confirmation dialog windows.
+        val bitmap = if (composeContent) {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+        } else {
+            checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        }
         try {
+            assertTrue("Screenshot must contain pixels", bitmap.width > 0 && bitmap.height > 0)
             val dir = File(context.getExternalFilesDir("ui-regression"), "").apply { mkdirs() }
             File(dir, "$name.png").outputStream().use {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
