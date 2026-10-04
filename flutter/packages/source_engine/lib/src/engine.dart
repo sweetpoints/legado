@@ -7,6 +7,13 @@ import 'contracts.dart';
 import 'network.dart';
 import 'rules.dart';
 import 'form_encoding.dart';
+import 'page_templates.dart';
+
+typedef SourceRequestAdapter = SourceStage Function(
+  SourceDefinition source,
+  SourceStage stage,
+  Map<String, Object?> input,
+);
 
 class SourceEngine {
   SourceEngine({
@@ -14,10 +21,12 @@ class SourceEngine {
     NetworkClient? network,
     this.platform,
     this.hostAdapter,
+    this.requestAdapter,
   }) : _providedNetwork = network;
   final ScriptRuntime runtime;
   final ScriptHost? platform;
   final ScriptHost Function(ScriptHost)? hostAdapter;
+  final SourceRequestAdapter? requestAdapter;
   final NetworkClient? _providedNetwork;
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
@@ -85,16 +94,43 @@ class SourceEngine {
       }
       return _records(result);
     }
-    final stage = source.stages[operation];
-    if (stage == null) {
+    var selectedStage = source.stages[operation];
+    if (selectedStage == null) {
       throw EngineException('missing_stage', 'Source has no $operation stage');
     }
-    final url = stage.url.replaceAllMapped(
+    if (selectedStage.legacyRequestInput != null) {
+      final adapter = requestAdapter;
+      if (adapter == null) {
+        throw const EngineException(
+          'legacy_request_adapter_required',
+          'Legacy request input requires a compatibility request adapter',
+        );
+      }
+      selectedStage = adapter(source, selectedStage, input);
+      if (selectedStage.legacyRequestInput != null) {
+        throw const EngineException(
+          'legacy_request_adapter_required',
+          'Compatibility request adapter must resolve legacyRequestInput',
+        );
+      }
+    }
+    final stage = selectedStage;
+    final urlTemplate = stage.legacyPageTemplates
+        ? expandLegacyPageTemplate(stage.url, input, urlChoices: true)
+        : stage.url;
+    final url = urlTemplate.replaceAllMapped(
       RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
       (m) {
         final value = input[m[1]];
         if (value == null) {
           throw EngineException('missing_input', 'Missing ${m[1]}');
+        }
+        if (stage.legacyPageTemplates &&
+            RegExp(r'[<>]').hasMatch(value.toString())) {
+          throw const EngineException(
+            'legacy_page_requires_migration',
+            'Legacy URL input must not introduce page choice syntax',
+          );
         }
         // URL-valued inputs are full URLs; other values are encoded components.
         return m[1]!.endsWith('Url')
@@ -115,7 +151,10 @@ class SourceEngine {
         );
       }
     }
-    final substitutedBody = stage.body?.replaceAllMapped(
+    final bodyTemplate = stage.body != null && stage.legacyPageTemplates
+        ? expandLegacyPageTemplate(stage.body!, input)
+        : stage.body;
+    final substitutedBody = bodyTemplate?.replaceAllMapped(
       RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
       (m) {
         final value = input[m[1]];
@@ -132,7 +171,7 @@ class SourceEngine {
               'Legacy body placeholders require strings, booleans or JS-safe integers',
             );
           }
-          if (RegExp(r'["\\\x00-\x1f\x7f]').hasMatch(value.toString())) {
+          if (RegExp(r'["\\<>\x00-\x1f\x7f]').hasMatch(value.toString())) {
             throw const EngineException(
               'legacy_body_template_requires_migration',
               'Legacy body placeholder would change the old JSON request options',

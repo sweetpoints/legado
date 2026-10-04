@@ -55,6 +55,8 @@ class SourceStage {
     this.method = 'GET',
     this.bodyEncoding = 'raw',
     this.bodyTemplateMode = 'raw',
+    this.legacyPageTemplates = false,
+    this.legacyRequestInput,
     this.body,
     this.headers,
     this.charset,
@@ -63,6 +65,8 @@ class SourceStage {
   final String method;
   final String bodyEncoding;
   final String bodyTemplateMode;
+  final bool legacyPageTemplates;
+  final String? legacyRequestInput;
   final String? body;
   final Map<String, String>? headers;
   final String? charset;
@@ -78,6 +82,8 @@ class SourceStage {
     method: json['method'] as String? ?? 'GET',
     bodyEncoding: json['bodyEncoding'] as String? ?? 'raw',
     bodyTemplateMode: json['bodyTemplateMode'] as String? ?? 'raw',
+    legacyPageTemplates: _pageTemplatesFlag(json),
+    legacyRequestInput: json['legacyRequestInput'] as String?,
     body: json['body'] as String?,
     headers: json['headers'] == null
         ? null
@@ -96,10 +102,22 @@ class SourceStage {
     'method': method,
     'bodyEncoding': bodyEncoding,
     'bodyTemplateMode': bodyTemplateMode,
+    'legacyPageTemplates': legacyPageTemplates,
+    if (legacyRequestInput != null) 'legacyRequestInput': legacyRequestInput,
     if (body != null) 'body': body,
     if (headers != null) 'headers': headers,
     if (charset != null) 'charset': charset,
   };
+}
+
+bool _pageTemplatesFlag(Map<String, Object?> json) {
+  if (!json.containsKey('legacyPageTemplates')) return false;
+  final value = json['legacyPageTemplates'];
+  if (value is bool) return value;
+  throw const EngineException(
+    'invalid_source',
+    'legacyPageTemplates must be a boolean',
+  );
 }
 
 class SourceDefinition {
@@ -150,6 +168,13 @@ class SourceDefinition {
       }
     }
     for (final stage in stages.values) {
+      if (stage.legacyRequestInput != null &&
+          stage.legacyRequestInput != 'exploreUrl') {
+        throw const EngineException(
+          'invalid_source',
+          'Unsupported legacyRequestInput',
+        );
+      }
       if (!['raw', 'legacyJsonString'].contains(stage.bodyTemplateMode)) {
         throw const EngineException(
           'invalid_source',
