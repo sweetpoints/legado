@@ -205,6 +205,11 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
                                                       const char *script,
                                                       const char *variables,
                                                       const char *prelude) {
+  // Cancellation can arrive before the worker enters V8. Do not consume its
+  // termination exception while setting up a context or trying syntax
+  // fallbacks.
+  if (r->expired)
+    return;
   auto *i = r->isolate;
   Locker locker(i);
   Isolate::Scope is(i);
@@ -212,17 +217,33 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
   auto c = r->context.Get(i);
   Context::Scope cs(c);
   TryCatch tc(i);
+  auto stopped = [&] { return r->expired || tc.HasTerminated(); };
+  if (stopped())
+    return;
   Local<Value> vars;
-  if (JSON::Parse(c, str(i, variables)).ToLocal(&vars) && vars->IsObject()) {
+  if (!JSON::Parse(c, str(i, variables)).ToLocal(&vars)) {
+    r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+    return;
+  }
+  if (vars->IsObject()) {
     auto o = vars.As<Object>();
-    auto keys = o->GetOwnPropertyNames(c).ToLocalChecked();
+    Local<Array> keys;
+    if (!o->GetOwnPropertyNames(c).ToLocal(&keys)) {
+      r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+      return;
+    }
     for (uint32_t n = 0; n < keys->Length(); n++) {
-      auto key = keys->Get(c, n).ToLocalChecked();
-      c->Global()
-          ->Set(c, key, o->Get(c, key).ToLocalChecked())
-          .FromMaybe(false);
+      Local<Value> key, value;
+      if (stopped() || !keys->Get(c, n).ToLocal(&key) ||
+          !o->Get(c, key).ToLocal(&value) ||
+          !c->Global()->Set(c, key, value).FromMaybe(false)) {
+        r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+        return;
+      }
     }
   }
+  if (stopped())
+    return;
   std::string bootstrap =
       "globalThis.source = new Proxy(function(){}, {get:(_, "
       "k)=>k==='call'?__sourceHost:__sourceProxy(String(k))}); function "
@@ -232,15 +253,23 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
   Local<Script> b;
   Local<Value> unused;
   if (!Script::Compile(c, str(i, bootstrap + prelude)).ToLocal(&b) ||
-      !b->Run(c).ToLocal(&unused)) {
-    r->error = utf(i, tc.Exception());
+      stopped() || !b->Run(c).ToLocal(&unused)) {
+    r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
     return;
   }
+  if (stopped())
+    return;
   std::string code =
       "(async()=>{ return await (" + std::string(script) + "\n); })()";
   Local<Script> s;
   Local<Value> result;
   if (!Script::Compile(c, str(i, code)).ToLocal(&s)) {
+    // Only ordinary syntax errors may trigger the statement-body fallback.
+    // Resetting a caught termination would allow cancelled code to run again.
+    if (stopped() || !tc.CanContinue()) {
+      r->error = "execution_timeout";
+      return;
+    }
     tc.Reset();
     code = "(async()=>{ " + std::string(script) + "\n })()";
     if (!Script::Compile(c, str(i, code)).ToLocal(&s)) {
@@ -248,7 +277,7 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
       return;
     }
   }
-  if (!s->Run(c).ToLocal(&result)) {
+  if (stopped() || !s->Run(c).ToLocal(&result)) {
     r->error = r->expired ? "execution_timeout" : utf(i, tc.Exception());
     return;
   }

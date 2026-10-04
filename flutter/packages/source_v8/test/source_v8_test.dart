@@ -123,8 +123,17 @@ void main() {
         ScriptContext(host: Host()),
         cancellation: token,
       );
-      Timer(const Duration(milliseconds: 1), token.cancel);
-      await expectLater(pending, throwsA(isA<EngineException>()));
+      if (n.isEven) {
+        token.cancel();
+      } else {
+        Timer(const Duration(milliseconds: 1), token.cancel);
+      }
+      await expectLater(
+        pending,
+        throwsA(
+          isA<EngineException>().having((e) => e.code, 'code', 'cancelled'),
+        ),
+      );
     }
   });
   test('protocol ignores inherited toJSON', () async {
