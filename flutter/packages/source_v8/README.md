@@ -27,7 +27,9 @@ Binary archives are SHA-256 verified byte-for-byte. Gitiles source archives
 are verified by a canonical SHA-256 over sorted file paths and complete contents
 because Gitiles writes request timestamps into tar metadata. Pins are in
 `hook/build.dart`. Archives/extracted files are cached in ignored `.cache/`;
-no binaries are committed. The release includes its V8 headers/build arguments.
+no binaries are committed. Cache publication uses a cross-process file lock and
+atomic directory rename, so parallel ABI builds cannot observe partially
+extracted headers or libraries. The release includes its V8 headers/build arguments.
 These are third-party builds, not binaries published by the V8 project itself.
 Android also builds the exact V8 DEPS libc++/libc++abi sources and LLVM libc headers,
 with Chromium ABI2/relative vtables. A version script keeps their symbols local;
@@ -36,7 +38,12 @@ Pinned archives, licenses and attribution are listed in THIRD_PARTY_NOTICES.md.
 V8 is BSD licensed; distributors must include its license and applicable third-party notices.
 
 Supported build targets: macOS arm64 and Android arm, arm64, x64. Other targets
-fail explicitly. Android needs Flutter's Android NDK toolchain. The pinned build
+fail explicitly. The current Android integration targets API 26 or newer.
+The V8 archive was built with a newer NDK API, but this bridge links strictly
+against Flutter's configured API stubs; the inspected ARM64 output identifies
+API 24 and has no newer strong system imports. Its optional weak memfd_create
+import comes from the NDK CPU-feature resolver and is null-checked before use.
+Android needs Flutter's Android NDK toolchain. The pinned build
 has internationalization disabled; `Intl` is not part of this runtime contract.
 The configurable 64 MiB old-generation limit is not a process memory hard cap:
 V8 out-of-memory can be fatal. This is not an untrusted-code security sandbox.

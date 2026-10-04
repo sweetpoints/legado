@@ -63,13 +63,32 @@ Future<Directory> artifact(
   String? digest,
 }) async {
   final expected = digest ?? _hashes[name]!;
+  await cache.create(recursive: true);
+  // Build hooks for multiple ABIs run in separate processes. Serialize shared
+  // cache publication so compilers never read files being extracted elsewhere.
+  final lock = await File('${cache.path}/$name.lock')
+      .open(mode: FileMode.append);
+  try {
+    await lock.lock(FileLock.blockingExclusive);
+    return await _lockedArtifact(cache, name, url: url, expected: expected);
+  } finally {
+    await lock.close();
+  }
+}
+
+Future<Directory> _lockedArtifact(
+  Directory cache,
+  String name, {
+  String? url,
+  required String expected,
+}) async {
   final directory = Directory('${cache.path}/$name.extracted');
   final marker = File('${directory.path}/.verified');
   if (await marker.exists() && await marker.readAsString() == expected) {
     return directory;
   }
-  await cache.create(recursive: true);
   final client = HttpClient()..autoUncompress = false;
+  Directory? staging;
   try {
     final request = await client.getUrl(
       Uri.parse(
@@ -86,21 +105,29 @@ Future<Directory> artifact(
       bytes.addAll(chunk);
     }
     final isZip = name.endsWith('.zip');
+    // ZIP bytes have deterministic pins. Authenticate before decompression.
+    if (isZip && sha256.convert(bytes).toString() != expected) {
+      throw StateError('V8 artifact checksum mismatch: $name');
+    }
     final archive = isZip
         ? ZipDecoder().decodeBytes(bytes)
         : TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
-    final actual = isZip
-        ? sha256.convert(bytes).toString()
-        : await sourceTreeDigest(archive);
-    if (actual != expected) {
-      throw StateError('V8 artifact checksum mismatch: $name ($actual)');
+    if (!isZip && await sourceTreeDigest(archive) != expected) {
+      throw StateError('V8 artifact checksum mismatch: $name');
     }
-    await directory.create(recursive: true);
-    await extractArchiveToDisk(archive, directory.path);
-    await marker.writeAsString(expected);
+    staging = await cache.createTemp('$name.staging-');
+    await extractArchiveToDisk(archive, staging.path);
+    await File('${staging.path}/.verified')
+        .writeAsString(expected, flush: true);
+    if (await directory.exists()) await directory.delete(recursive: true);
+    await staging.rename(directory.path);
+    staging = null;
     return directory;
   } finally {
     client.close();
+    if (staging != null && await staging.exists()) {
+      await staging.delete(recursive: true);
+    }
   }
 }
 
