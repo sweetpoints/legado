@@ -1,5 +1,8 @@
 package io.legado.app.ui.widget.dialog
 
+import android.os.SystemClock
+import android.util.Log
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
@@ -20,8 +23,10 @@ import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
+import io.legado.app.BuildConfig
 import io.legado.app.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -42,6 +47,8 @@ internal fun CodeDialogScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val performance = remember { if (BuildConfig.DEBUG) CodePreviewPerformance() else null }
+    val compositionStart = performance?.start()
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     val previousLabel = stringResource(R.string.help_search_prev)
@@ -65,28 +72,57 @@ internal fun CodeDialogScreen(
     // Android's immutable SpannableString scans every span when drawing each text run.
     // Keep the document and UTF-16 offsets intact, but style the viewport plus one screen
     // of overscan so scrolling never brings an unstyled line into view.
-    val syntaxRange by remember(state.displayed, state.selectionStart, state.selectionEnd) {
-        derivedStateOf {
+    var projection by remember {
+        mutableStateOf(CodeViewportSyntax(AnnotatedString(state.displayed), IntRange.EMPTY, null))
+    }
+    LaunchedEffect(state.displayed, colors, state.selectionStart, state.selectionEnd) {
+        snapshotFlow {
             val result = layout
             if (result == null || result.layoutInput.text.text != state.displayed || viewportHeight == 0) {
-                (state.selectionStart - 2048).coerceAtLeast(0) until
-                    (state.selectionEnd + 2048).coerceAtMost(state.displayed.length)
+                val start = minOf(state.selectionStart, state.selectionEnd).coerceIn(0, state.displayed.length)
+                val end = maxOf(state.selectionStart, state.selectionEnd).coerceIn(start, state.displayed.length)
+                CodeSyntaxViewport(start until end,
+                    (start - 2048).coerceAtLeast(0) until (end + 2048).coerceAtMost(state.displayed.length))
             } else {
-                val first = result.getLineForVerticalPosition((scroll.value - viewportHeight).coerceAtLeast(0).toFloat())
-                val last = result.getLineForVerticalPosition((scroll.value + viewportHeight * 2).toFloat())
-                result.getLineStart(first) until result.getLineEnd(last)
+                fun range(top: Int, bottom: Int): IntRange {
+                    val first = result.getLineForVerticalPosition(top.coerceAtLeast(0).toFloat())
+                    val last = result.getLineForVerticalPosition(bottom.toFloat())
+                    return result.getLineStart(first) until result.getLineEnd(last)
+                }
+                CodeSyntaxViewport(
+                    range(scroll.value, scroll.value + viewportHeight),
+                    range(scroll.value - viewportHeight, scroll.value + viewportHeight * 2),
+                )
             }
+        }.collectLatest { viewport ->
+            val current = projection
+            // The existing screen of overscan already styles these visible lines. Moving inside
+            // it must not publish another AnnotatedString and lay out the whole document again.
+            if (current.text.text == state.displayed && current.colors == colors &&
+                current.range.first <= viewport.visible.first &&
+                current.range.last >= viewport.visible.last
+            ) return@collectLatest
+            val projectionStart = performance?.start()
+            performance?.record("syntax-start", state.displayed.length, "range=${viewport.overscan}")
+            var computeMs = 0L
+            val projected = withContext(Dispatchers.Default) {
+                val computeStart = performance?.start()
+                projectCodeSyntax(state.displayed, colors, viewport.overscan).also {
+                    if (computeStart != null) computeMs = checkNotNull(performance).start() - computeStart
+                }
+            }
+            performance?.record("syntax-ready", projected.length,
+                "range=${viewport.overscan} spans=${projected.spanStyles.size} computeMs=$computeMs", projectionStart)
+            projection = CodeViewportSyntax(projected, viewport.overscan, colors)
         }
     }
-    val syntax by
-        produceState(AnnotatedString(state.displayed), state.displayed, colors, syntaxRange) {
-            this.value =
-                withContext(Dispatchers.Default) { projectCodeSyntax(state.displayed, colors, syntaxRange) }
-        }
+    val syntax = projection.text
+    val syntaxRange = projection.range
     val matchBackground = MaterialTheme.colorScheme.secondary.copy(alpha = .28f)
     val transformation =
         remember(syntax, state.matches, matchBackground, syntaxRange) {
             VisualTransformation { text ->
+                val transformStart = performance?.start()
                 val annotated = buildAnnotatedString {
                     append(if (syntax.text == text.text) syntax else AnnotatedString(text.text))
                     state.matches.forEach { range ->
@@ -100,6 +136,8 @@ internal fun CodeDialogScreen(
                             )
                     }
                 }
+                performance?.record("transform", text.length,
+                    "syntaxCurrent=${syntax.text == text.text} spans=${annotated.spanStyles.size}", transformStart)
                 TransformedText(annotated, OffsetMapping.Identity)
             }
         }
@@ -112,6 +150,11 @@ internal fun CodeDialogScreen(
                     )
                 scroll.animateScrollTo(rectangle.top.toInt().coerceIn(0, scroll.maxValue))
             }
+    }
+    SideEffect {
+        performance?.record("compose", state.displayed.length,
+            "selection=${state.selectionStart}..${state.selectionEnd} viewport=$viewportHeight",
+            compositionStart)
     }
     Surface(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().imePadding()) {
@@ -259,10 +302,15 @@ internal fun CodeDialogScreen(
                     BasicTextField(
                         value,
                         {
+                            val textChanged = it.text != state.displayed
+                            if (textChanged) performance?.input(it.text.length)
+                            val callbackStart = performance?.start()
                             composing = it
                             if (it.text == state.displayed)
                                 onSelection(it.selection.start, it.selection.end)
                             else onText(it.text, it.selection.start, it.selection.end)
+                            performance?.record(if (textChanged) "input-model" else "selection-model",
+                                it.text.length, "selection=${it.selection}", callbackStart)
                         },
                         Modifier.fillMaxWidth().padding(12.dp).testTag("code-body"),
                         enabled = state.loaded,
@@ -279,16 +327,68 @@ internal fun CodeDialogScreen(
                             ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.secondary),
                         visualTransformation = transformation,
-                        onTextLayout = { layout = it },
+                        onTextLayout = {
+                            performance?.layout(it)
+                            layout = it
+                        },
                     )
                 }
-                CodePositionBar(
-                    if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f,
-                    scroll.maxValue > 0,
-                ) { progress ->
+                CodeDialogPositionBar(scroll) { progress ->
                     scope.launch { scroll.scrollTo((progress * scroll.maxValue).toInt()) }
                 }
             }
         }
+    }
+}
+
+private data class CodeSyntaxViewport(val visible: IntRange, val overscan: IntRange)
+
+private data class CodeViewportSyntax(
+    val text: AnnotatedString,
+    val range: IntRange,
+    val colors: CodeSyntaxColors?,
+)
+
+@Composable
+private fun CodeDialogPositionBar(scroll: ScrollState, onProgress: (Float) -> Unit) {
+    CodePositionBar(
+        if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f,
+        scroll.maxValue > 0,
+        onProgress,
+    )
+}
+
+/** Debug-only metadata; never records code, and bounds logging for each long-document edit. */
+private class CodePreviewPerformance {
+    private val session = System.identityHashCode(this).toString(16)
+    private var edit = 0
+    private var editStart = 0L
+    private var layouts = 0
+    private var samples = 0
+
+    fun start(): Long = SystemClock.uptimeMillis()
+
+    fun input(length: Int) {
+        edit++
+        editStart = start()
+        layouts = 0
+        samples = 0
+        record("input", length, "")
+    }
+
+    fun layout(result: TextLayoutResult) {
+        layouts++
+        record("layout", result.layoutInput.text.length,
+            "count=$layouts lines=${result.lineCount} spans=${result.layoutInput.text.spanStyles.size} " +
+                "size=${result.size}")
+    }
+
+    fun record(phase: String, length: Int, details: String, started: Long? = null) {
+        if (length < 100_000 || samples >= 120) return
+        samples++
+        val now = start()
+        Log.d("CodePreviewPerf", "session=$session edit=$edit phase=$phase chars=$length " +
+            "editMs=${if (editStart == 0L) -1 else now - editStart} " +
+            "phaseMs=${started?.let { now - it } ?: -1} $details")
     }
 }

@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.MutableContextWrapper
 import android.os.Build
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import io.legado.app.BuildConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.rss.read.VisibleWebView
 import io.legado.app.utils.setDarkeningAllowed
@@ -40,9 +42,18 @@ object WebViewPool {
     }
     private var cleanupJob: Job? = null
 
+    private fun traceLease(stage: String, lease: PooledWebView) {
+        if (BuildConfig.DEBUG) {
+            Log.d("WebViewPoolLease", "stage=$stage lease=${System.identityHashCode(lease)} " +
+                "view=${System.identityHashCode(lease.realWebView)} generation=${lease.recycleGeneration} " +
+                "inUse=${lease.isInUse} idleCount=${idlePool.size} activeCount=${inUsePool.size}")
+        }
+    }
+
     // 获取一个WebView
     @Synchronized
     fun acquire(context: Context): PooledWebView {
+        val reused = idlePool.isNotEmpty()
         val pooledWebView = if (idlePool.isNotEmpty()) {
             idlePool.pop() // 复用闲置实例
         } else {
@@ -60,12 +71,14 @@ object WebViewPool {
             isInUse = true
         }
         inUsePool[pooledWebView.id] = pooledWebView
+        traceLease(if (reused) "acquire-reused" else "acquire-new", pooledWebView)
         return pooledWebView
     }
 
     // 释放WebView回池
     @Synchronized
     fun release(pooledWebView: PooledWebView) {
+        traceLease("release-requested", pooledWebView)
         if (inUsePool.remove(pooledWebView.id) == null) return
         val recycleGeneration = ++pooledWebView.recycleGeneration
         val recycleUrl = "$BLANK_HTML?legado-recycle=$recycleGeneration"
@@ -106,6 +119,7 @@ object WebViewPool {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     if (url != recycleUrl) return
                     synchronized(this@WebViewPool) {
+                        traceLease("recycle-page-finished", pooledWebView)
                         if (!pooledWebView.isInUse || pooledWebView.id in inUsePool) return
                         view?.let { webview ->
                             webview.settings.apply {
@@ -122,10 +136,12 @@ object WebViewPool {
                         pooledWebView.isInUse = false
                         pooledWebView.lastUseTime = System.currentTimeMillis()
                         idlePool.push(pooledWebView)
+                        traceLease("recycle-idle", pooledWebView)
                     }
                 }
             }
             loadUrl(recycleUrl)
+            traceLease("recycle-load-submitted", pooledWebView)
         }
     }
 

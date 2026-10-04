@@ -1,6 +1,7 @@
 package io.legado.app.help.http
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Build
 import android.os.Handler
@@ -10,9 +11,11 @@ import android.util.AndroidRuntimeException
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -72,6 +75,7 @@ class BackstageWebView(
     private val mHandler = Handler(Looper.getMainLooper())
     private var callback: Callback? = null
     private var pooledWebView: PooledWebView? = null
+    private var requestWebViewClient: WebViewClient? = null
     private val requestStartedAt = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
 
     private fun traceStage(stage: String) {
@@ -88,6 +92,16 @@ class BackstageWebView(
             block.invokeOnCancellation {
                 traceStage("cancelled")
                 runOnUI {
+                    if (BuildConfig.DEBUG) {
+                        pooledWebView?.let { lease ->
+                            val view = lease.realWebView
+                            traceStage("cancel-state lease=${System.identityHashCode(lease)} " +
+                                "generation=${lease.recycleGeneration} inUse=${lease.isInUse} " +
+                                "clientMatches=${view.webViewClient === requestWebViewClient} " +
+                                "attached=${view.isAttachedToWindow} visibility=${view.visibility} " +
+                                "progress=${view.progress} jsEnabled=${view.settings.javaScriptEnabled}")
+                        }
+                    }
                     destroy()
                 }
             }
@@ -170,6 +184,8 @@ class BackstageWebView(
         val pooledWebView = WebViewPool.acquire(appCtx)
         this.pooledWebView = pooledWebView
         val webView = pooledWebView.realWebView
+        if (BuildConfig.DEBUG) traceStage("lease-acquired lease=${System.identityHashCode(pooledWebView)} " +
+            "view=${System.identityHashCode(webView)} generation=${pooledWebView.recycleGeneration}")
         webView.onResume() //缓存库拿的需要激活
         val settings = webView.settings
         settings.blockNetworkImage = true
@@ -177,6 +193,11 @@ class BackstageWebView(
         settings.cacheMode = if(cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
         tag?.takeIf { it.isNotBlank() }?.let { sourceTag ->
             webView.webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (newProgress == 100) traceStage("progress-complete")
+                    super.onProgressChanged(view, newProgress)
+                }
+
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
                     val messageLevel = consoleMessage.messageLevel().name
                     val message = consoleMessage.message()
@@ -190,6 +211,7 @@ class BackstageWebView(
         } else {
             webView.webViewClient = SnifferWebClient()
         }
+        if (BuildConfig.DEBUG) requestWebViewClient = webView.webViewClient
         return webView
     }
 
@@ -221,6 +243,22 @@ class BackstageWebView(
 
         private var runnable: EvalJsRunnable? = null
         private var isRedirect = false
+
+        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            traceStage("page-started")
+            super.onPageStarted(view, url, favicon)
+        }
+
+        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+            if (BuildConfig.DEBUG)
+                traceStage("load-error mainFrame=${request?.isForMainFrame} code=${error?.errorCode}")
+            super.onReceivedError(view, request, error)
+        }
+
+        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+            if (BuildConfig.DEBUG) traceStage("renderer-gone crashed=${detail?.didCrash()}")
+            return super.onRenderProcessGone(view, detail)
+        }
 
         override fun shouldOverrideUrlLoading(
             view: WebView,
