@@ -52,16 +52,16 @@ object WebViewPool {
 
     // 获取一个WebView
     @Synchronized
-    fun acquire(context: Context): PooledWebView {
-        val reused = idlePool.isNotEmpty()
-        val pooledWebView = if (idlePool.isNotEmpty()) {
+    fun acquire(context: Context, recyclable: Boolean = true): PooledWebView {
+        val reused = recyclable && idlePool.isNotEmpty()
+        val pooledWebView = if (reused) {
             idlePool.pop() // 复用闲置实例
         } else {
             if (needInitialize) {
                 needInitialize = false
                 startCleanupTimer()
             }
-            createNewWebView() // 创建新实例
+            createNewWebView(recyclable) // 创建新实例
         }
         pooledWebView.upContext(context).apply {
             realWebView.settings.apply {
@@ -80,6 +80,19 @@ object WebViewPool {
     fun release(pooledWebView: PooledWebView) {
         traceLease("release-requested", pooledWebView)
         if (inUsePool.remove(pooledWebView.id) == null) return
+        if (!pooledWebView.recyclable) {
+            // 专用后台租约失效后只销毁，不加载回收页或进入交互池。
+            pooledWebView.isInUse = false
+            val view = pooledWebView.realWebView
+            try {
+                (view.parent as? ViewGroup)?.removeView(view)
+                view.stopLoading()
+            } finally {
+                traceLease("destroy-dedicated", pooledWebView)
+                view.destroy()
+            }
+            return
+        }
         val recycleGeneration = ++pooledWebView.recycleGeneration
         val recycleUrl = "$BLANK_HTML?legado-recycle=$recycleGeneration"
         // 重置WebView状态
@@ -110,7 +123,8 @@ object WebViewPool {
             clearAnimation() //清除动画
             pooledWebView.upContext(appCtx)
             if (idlePool.size >= CACHED_WEB_VIEW_MAX_NUM - inUsePool.size) {
-                // 池子已满，直接销毁
+                // 池满时租约失效并直接销毁。
+                pooledWebView.isInUse = false
                 pooledWebView.realWebView.destroy()
                 return
             }
@@ -145,10 +159,10 @@ object WebViewPool {
         }
     }
 
-    private fun createNewWebView(): PooledWebView {
+    private fun createNewWebView(recyclable: Boolean): PooledWebView {
         val webView = VisibleWebView(MutableContextWrapper(appCtx))
         preInitWebView(webView)
-        return PooledWebView(webView, generateId())
+        return PooledWebView(webView, generateId(), recyclable)
     }
 
     private fun generateId(): String {

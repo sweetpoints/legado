@@ -6,6 +6,9 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -21,11 +24,15 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.repository.AppBrowserNavigationStore
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.http.BackstageWebView
+import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.book.source.manage.BookSourceActivity
+import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.utils.defaultSharedPreferences
@@ -35,6 +42,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.Assert.*
@@ -45,6 +55,98 @@ import org.junit.runner.RunWith
 class SourceNavigationUiTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+
+    @Test
+    fun backgroundRequestsDoNotBorrowOrReturnAnInteractiveWebViewAndCancellationReleasesTheirLease() = runBlocking {
+        val loaded = CountDownLatch(1)
+        val recycled = CountDownLatch(1)
+        var interactive: PooledWebView? = null
+        var background: PooledWebView? = null
+        val entered = CountDownLatch(1)
+        val unblock = CountDownLatch(1)
+        val server = object : NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response {
+                entered.countDown()
+                unblock.await(5, TimeUnit.SECONDS)
+                return newFixedLengthResponse("<p>Cancellation fixture</p>")
+            }
+        }
+        ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
+            try {
+                scenario.onActivity { activity ->
+                    val lease = WebViewPool.acquire(activity)
+                    interactive = lease
+                    (activity.findViewById<ViewGroup>(android.R.id.content)).addView(lease.realWebView)
+                    lease.realWebView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            loaded.countDown()
+                        }
+                    }
+                    lease.realWebView.loadDataWithBaseURL("https://interactive.invalid/", "<button>UI fixture</button>",
+                        "text/html", "utf-8", null)
+                }
+                assertTrue("The attached interactive page really loads", loaded.await(5, TimeUnit.SECONDS))
+                instrumentation.runOnMainSync {
+                    val lease = checkNotNull(interactive)
+                    assertTrue(lease.realWebView.isAttachedToWindow)
+                    WebViewPool.release(lease)
+                    // Observe the original pool recycle completion rather than guessing its delay.
+                    val recycleClient = lease.realWebView.webViewClient
+                    lease.realWebView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            recycleClient.onPageFinished(view, url)
+                            if (!lease.isInUse) recycled.countDown()
+                        }
+                    }
+                }
+                assertTrue("The interactive instance returns to the pool", recycled.await(5, TimeUnit.SECONDS))
+                instrumentation.runOnMainSync {
+                    background = WebViewPool.acquire(context, recyclable = false)
+                    assertNotSame(interactive, background)
+                    assertNotSame(checkNotNull(interactive).realWebView, checkNotNull(background).realWebView)
+                    WebViewPool.release(checkNotNull(background))
+                    assertFalse("The dedicated lease is invalid after disposal", checkNotNull(background).isInUse)
+                    val nextUi = WebViewPool.acquire(context)
+                    assertSame("Background disposal retains the existing UI instance", interactive, nextUi)
+                    assertNotSame(background, nextUi)
+                    WebViewPool.release(nextUi)
+                }
+                assertEquals("owned-background", BackstageWebView(
+                    url = "https://background.invalid/", html = "<p>Background fixture</p>",
+                    javaScript = "'owned-background'",
+                ).getStrResponse().body)
+                server.start()
+                val request = BackstageWebView(url = "http://127.0.0.1:${server.listeningPort}/cancel")
+                val pending = launch(Dispatchers.IO) { request.getStrResponse() }
+                try {
+                    assertTrue("Cancellation occurs during an actual submitted request", entered.await(5, TimeUnit.SECONDS))
+                    val leaseSlot = BackstageWebView::class.java.getDeclaredField("pooledWebView")
+                        .apply { isAccessible = true }
+                    var cancellationLease: PooledWebView? = null
+                    instrumentation.runOnMainSync {
+                        cancellationLease = leaseSlot.get(request) as? PooledWebView
+                        assertNotNull(cancellationLease)
+                        assertNotSame(interactive, cancellationLease)
+                    }
+                    pending.cancelAndJoin()
+                    assertTrue(pending.isCancelled)
+                    // No calls on a destroyed WebView: validate the request's ownership slot only.
+                    assertNull("Cancellation finishes Main-thread disposal before returning", leaseSlot.get(request))
+                    assertFalse("Cancellation invalidates its dedicated lease", checkNotNull(cancellationLease).isInUse)
+                } finally {
+                    unblock.countDown()
+                    pending.cancelAndJoin()
+                }
+            } finally {
+                unblock.countDown()
+                server.stop()
+                instrumentation.runOnMainSync {
+                    interactive?.takeIf { it.isInUse }?.let(WebViewPool::release)
+                    background?.takeIf { it.isInUse }?.let(WebViewPool::release)
+                }
+            }
+        }
+    }
 
     @Test
     fun verificationBrowserHandoffCarriesOnlyTicketAndKeepsTheRegisteredAttemptPayload() {

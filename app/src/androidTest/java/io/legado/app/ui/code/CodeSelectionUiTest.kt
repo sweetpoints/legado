@@ -20,6 +20,11 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.webkit.WebView
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -64,6 +69,7 @@ import io.github.rosemoe.sora.event.HandleStateChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow
 import io.legado.app.R
+import io.legado.app.testutil.saveSemantics
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
@@ -1056,20 +1062,62 @@ class CodeSelectionUiTest {
                                     "readonly-editor-entry",
                                 )
                             }
-                            await {
+                            fun savePreviewFailure() {
+                                runCatching { compose.saveSemantics(context, "code-readonly-preview-failure") }
+                                runCatching {
+                                    instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                                        try {
+                                            val file = File(context.getExternalFilesDir(null), "ui-regression/code-readonly-preview-failure.png")
+                                            file.parentFile!!.mkdirs()
+                                            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                                        } finally { bitmap.recycle() }
+                                    }
+                                }
+                            }
+                            var previewGeometry = "readonly Compose nodes not yet available"
+                            await(message = {
+                                savePreviewFailure()
+                                "Read-only preview UI not ready: $previewGeometry"
+                            }) {
+                                val body = compose.onAllNodesWithTag("code-body").fetchSemanticsNodes().singleOrNull()
+                                val fullscreen = compose.onAllNodesWithTag("code-fullscreen").fetchSemanticsNodes().singleOrNull()
                                 var ready = false
                                 instrumentation.runOnMainSync {
-                                    ready =
-                                        readOnlyPreview.dialog
-                                            ?.window
-                                            ?.decorView
-                                            ?.hasWindowFocus() == true &&
-                                            readOnlyPreview.model.state.value.loaded &&
-                                            readOnlyPreview.isResumed &&
-                                            !readOnlyPreview.parentFragmentManager.isStateSaved
+                                    val decor = readOnlyPreview.dialog?.window?.decorView
+                                    val root = readOnlyPreview.view?.let { view ->
+                                        nativeViews(view).firstOrNull {
+                                            it.javaClass.name == "androidx.compose.ui.platform.AndroidComposeView"
+                                        }
+                                    }
+                                    val origin = IntArray(2)
+                                    root?.getLocationOnScreen(origin)
+                                    val visible = Rect()
+                                    val display = Rect()
+                                    val rootVisible = root?.getGlobalVisibleRect(visible) == true
+                                    if (rootVisible) {
+                                        val windowOrigin = IntArray(2)
+                                        root.rootView.getLocationOnScreen(windowOrigin)
+                                        visible.offset(windowOrigin[0], windowOrigin[1])
+                                    }
+                                    decor?.getWindowVisibleDisplayFrame(display)
+                                    val bounds = fullscreen?.boundsInRoot
+                                    val x = bounds?.center?.x?.plus(origin[0])?.toInt() ?: -1
+                                    val y = bounds?.center?.y?.plus(origin[1])?.toInt() ?: -1
+                                    val insets = decor?.let { ViewCompat.getRootWindowInsets(it) }
+                                        ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                                    val textReady = body?.config?.getOrNull(SemanticsProperties.EditableText)?.text == derived
+                                    val enabled = fullscreen != null && !fullscreen.config.contains(SemanticsProperties.Disabled)
+                                    previewGeometry = "textReady=$textReady enabled=$enabled bounds=$bounds " +
+                                        "origin=${origin.toList()} center=($x,$y) visible=$visible display=$display insets=$insets"
+                                    ready = decor?.hasWindowFocus() == true &&
+                                        readOnlyPreview.model.state.value.loaded && readOnlyPreview.isResumed &&
+                                        !readOnlyPreview.parentFragmentManager.isStateSaved &&
+                                        textReady && enabled && rootVisible && visible.contains(x, y) && display.contains(x, y)
                                 }
                                 ready
                             }
+                            compose.onNodeWithTag("code-body").assertTextEquals(derived)
+                            compose.onNodeWithTag("code-fullscreen").assertIsEnabled().assertIsDisplayed()
                             instrumentation.runOnMainSync {
                                 assertTrue(readOnlyPreview.model.state.value.showingAlternate)
                                 assertFalse(
@@ -1079,6 +1127,7 @@ class CodeSelectionUiTest {
                             }
                             compose.onNodeWithTag("code-fullscreen").performClick()
                             await(message = {
+                                savePreviewFailure()
                                 var diagnostic = ""
                                 instrumentation.runOnMainSync {
                                     val value = readOnlyPreview.model.state.value
@@ -1106,7 +1155,7 @@ class CodeSelectionUiTest {
                                             "readOnly=${value.editorReadOnly}," +
                                             "effects=${value.effects.map { it.action }}," +
                                             "hasError=${value.error != null}," +
-                                            "expectedLength=${derived.length}; $activities"
+                                            "expectedLength=${derived.length}; clickGeometry=$previewGeometry; $activities"
                                 }
                                 diagnostic
                             }) {

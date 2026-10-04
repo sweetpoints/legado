@@ -33,11 +33,23 @@ internal suspend fun projectCodeSyntax(
             operationPattern to colors.operation,
             jsPattern to colors.javascript,
         )
+    // Fixed rule tokens fit in this context; JSON's ASCII key pattern is the only
+    // unbounded token. Include its entire run and adjacent quote/colon when clipping it.
+    var scanStart = (visibleStart - 16).coerceAtLeast(0)
+    var scanEnd = (visibleEnd + 16).coerceAtMost(text.length)
+    while (scanStart > 0 && text[scanStart - 1].isJsonKeyCharacter()) scanStart--
+    while (scanEnd < text.length && text[scanEnd].isJsonKeyCharacter()) scanEnd++
+    scanStart = (scanStart - 1).coerceAtLeast(0)
+    scanEnd = (scanEnd + 2).coerceAtMost(text.length)
     val jobContext = coroutineContext
+    jobContext.ensureActive()
     return buildAnnotatedString {
         append(text)
         rules.forEach { (pattern, color) ->
             val matcher = pattern.matcher(text)
+                .region(scanStart, scanEnd)
+                // Word boundaries must see the original text beyond the scanning region.
+                .useTransparentBounds(true)
             var count = 0
             while (matcher.find()) {
                 if (++count % 64 == 0) jobContext.ensureActive()
@@ -49,3 +61,6 @@ internal suspend fun projectCodeSyntax(
         }
     }
 }
+
+private fun Char.isJsonKeyCharacter(): Boolean =
+    this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9'
