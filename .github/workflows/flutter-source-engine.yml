@@ -39,6 +39,7 @@ jobs:
         with:
           name: official-v8-android-arm64
           path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
 

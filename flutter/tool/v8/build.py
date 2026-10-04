@@ -43,9 +43,9 @@ def bridge_files():
         'tool/v8/source_v8.gni': HERE / 'source_v8.gni'}
 
 
-def bridge_digest():
+def bridge_digest(files=None):
     digest = hashlib.sha256()
-    for label, path in sorted(bridge_files().items()):
+    for label, path in sorted((bridge_files() if files is None else files).items()):
         name = label.encode('utf-8')
         data = path.read_bytes()
         digest.update(struct.pack('>Q', len(name)))
@@ -108,29 +108,40 @@ def source_version(source):
     return '.'.join(parts[:-1] if parts[-1] == '0' else parts)
 
 
-def package_licenses(source, destination):
-    entries = []
+def package_licenses(source, destination, existing=()):
+    entries = {entry['path']: entry for entry in existing}
+    copies = []
     roots = [source / name for name in ('LICENSE', 'AUTHORS')]
     for pattern in ('LICENSE*', 'COPYING*', 'NOTICE*', 'AUTHORS*'):
         roots.extend((source / 'third_party').rglob(pattern))
     for path in sorted(set(roots)):
         if not path.is_file() or '.git' in path.parts:
             continue
-        relative = path.relative_to(source)
-        output = destination / 'licenses' / relative
+        relative = Path('licenses') / path.relative_to(source)
+        label = str(relative)
+        digest = sha(path)
+        if label in entries and entries[label]['sha256'] != digest:
+            raise ValueError(f'License provenance conflict at {label}')
+        entries[label] = {'path': label, 'sha256': digest}
+        copies.append((path, destination / relative))
+    # Preflight all conflicts before replacing any indexed license file.
+    for path, output in copies:
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, output)
-        entries.append({'path': str(Path('licenses') / relative), 'sha256': sha(output)})
-    return entries
+    return [entries[label] for label in sorted(entries)]
 
 
 def build(source, depot, env, target, jobs, pins):
     if source_version(source) != pins['v8']['version']:
         raise ValueError('Official source version differs from pins')
+    compiled_bridge_digest = bridge_digest()
     overlay = source / 'source_v8'
     overlay.mkdir(exist_ok=True)
     for label, path in bridge_files().items():
         shutil.copyfile(path, overlay / path.name)
+    copied_files = {label: overlay / path.name for label, path in bridge_files().items()}
+    if bridge_digest(copied_files) != compiled_bridge_digest:
+        raise ValueError('Bridge source changed while copying build overlay')
     (overlay / 'BUILD.gn').write_text('import("//source_v8/source_v8.gni")\nsource_v8_library("source_v8") {}\n')
     out = source / 'out/source_v8'
     out.mkdir(parents=True, exist_ok=True)
@@ -146,12 +157,16 @@ def build(source, depot, env, target, jobs, pins):
     artifact.mkdir(parents=True, exist_ok=True)
     with (artifact / '.publish.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if bridge_digest() != compiled_bridge_digest or bridge_digest(copied_files) != compiled_bridge_digest:
+            raise ValueError('Bridge source or compiled overlay changed during build; refusing publication')
         manifest_path = artifact / 'manifest.json'
         previous = None
         if manifest_path.exists():
             previous = json.loads(manifest_path.read_text())
-            if previous['v8'] != pins['v8'] or previous['bridge'] != {'abi': 1, 'sourceSha256': bridge_digest()}:
+            if (previous['v8'] != pins['v8'] or previous['depotTools'] != pins['depotTools']
+                    or previous['bridge'] != {'abi': 1, 'sourceSha256': compiled_bridge_digest}):
                 raise ValueError('Existing artifact manifest provenance differs; use clean artifact directory')
+        licenses = package_licenses(source, artifact, previous.get('licenses', []) if previous else [])
         destination = artifact / target
         destination.mkdir(parents=True, exist_ok=True)
         binary = destination / built.name
@@ -177,11 +192,11 @@ def build(source, depot, env, target, jobs, pins):
         else:
             entry['minApi'] = 26
         manifest = {'schemaVersion': 1, 'v8': pins['v8'], 'depotTools': pins['depotTools'],
-                    'bridge': {'abi': 1, 'sourceSha256': bridge_digest()}, 'targets': {}}
+                    'bridge': {'abi': 1, 'sourceSha256': compiled_bridge_digest}, 'targets': {}}
         if previous is not None:
             manifest['targets'] = previous['targets']
         manifest['targets'][target] = entry
-        manifest['licenses'] = package_licenses(source, artifact)
+        manifest['licenses'] = licenses
         temporary_manifest = manifest_path.with_name('manifest.json.publishing')
         temporary_manifest.write_text(json.dumps(manifest, indent=2) + '\n')
         os.replace(temporary_manifest, manifest_path)

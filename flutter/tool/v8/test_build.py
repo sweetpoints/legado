@@ -59,6 +59,20 @@ class BuildContractTests(unittest.TestCase):
             for entry in entries:
                 self.assertEqual(builder.sha(output / entry['path']), entry['sha256'])
 
+    def test_license_conflicts_reject_before_replacing_any_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source'; source.mkdir()
+            (source / 'third_party').mkdir()
+            destination = Path(directory) / 'artifact'
+            (source / 'LICENSE').write_text('original license')
+            entries = builder.package_licenses(source, destination)
+            (source / 'LICENSE').write_text('different license')
+            (source / 'AUTHORS').write_text('new authors')
+            with self.assertRaisesRegex(ValueError, 'License provenance conflict'):
+                builder.package_licenses(source, destination, entries)
+            self.assertEqual((destination / 'licenses/LICENSE').read_text(), 'original license')
+            self.assertFalse((destination / 'licenses/AUTHORS').exists())
+
     def test_manifest_records_binaries_and_refuses_provenance_collision(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -87,11 +101,17 @@ class BuildContractTests(unittest.TestCase):
             pins = builder.read_pins()
             package = root / 'package'
             with patch.object(builder, 'PACKAGE', package), patch.object(builder, 'bridge_files', return_value=files), patch.object(builder, 'run', side_effect=mocked_run):
+                linux_notice = source / 'third_party/LinuxOnly/NOTICE'
+                linux_notice.parent.mkdir()
+                linux_notice.write_text('Linux dependency notice')
                 builder.build(source, root / 'depot', {}, 'android-arm64', 1, pins)
+                linux_notice.unlink()
                 builder.build(source, root / 'depot', {}, 'macos-arm64', 1, pins)
                 artifact = package / '.cache/self-built' / pins['v8']['revision']
                 manifest = __import__('json').loads((artifact / 'manifest.json').read_text())
                 self.assertEqual(set(manifest['targets']), {'android-arm64', 'macos-arm64'})
+                self.assertIn('licenses/third_party/LinuxOnly/NOTICE', {entry['path'] for entry in manifest['licenses']})
+                self.assertEqual((artifact / 'licenses/third_party/LinuxOnly/NOTICE').read_text(), 'Linux dependency notice')
                 for target in manifest['targets'].values():
                     self.assertEqual(builder.sha(artifact / target['binary']), target['sha256'])
                     self.assertFalse(target['validation']['runtimeTested'])
@@ -102,6 +122,22 @@ class BuildContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'provenance differs'):
                     builder.build(source, root / 'depot', {}, 'macos-arm64', 1, pins)
                 self.assertEqual((artifact / 'macos-arm64/libsource_v8.dylib').read_bytes(), old)
+                files['source_v8.cpp'].write_text('source_v8.cpp')
+                changed_tools = {**pins, 'depotTools': {**pins['depotTools'], 'revision': 'a' * 40}}
+                with self.assertRaisesRegex(ValueError, 'provenance differs'):
+                    builder.build(source, root / 'depot', {}, 'macos-arm64', 1, changed_tools)
+                self.assertEqual((artifact / 'macos-arm64/libsource_v8.dylib').read_bytes(), old)
+                for mutate_overlay in [False, True]:
+                    files['source_v8.cpp'].write_text('source_v8.cpp')
+                    def mutation_run(args, cwd, env=None, capture=False):
+                        if 'autoninja' in str(args[0]):
+                            changed = source / 'source_v8/source_v8.cpp' if mutate_overlay else files['source_v8.cpp']
+                            changed.write_text('edited while compiler was running')
+                        return mocked_run(args, cwd, env, capture)
+                    with patch.object(builder, 'run', side_effect=mutation_run):
+                        with self.assertRaisesRegex(ValueError, 'changed during build'):
+                            builder.build(source, root / 'depot', {}, 'macos-arm64', 1, pins)
+                    self.assertEqual((artifact / 'macos-arm64/libsource_v8.dylib').read_bytes(), old)
 
 
 if __name__ == '__main__':
