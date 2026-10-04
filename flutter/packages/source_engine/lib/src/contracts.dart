@@ -53,12 +53,14 @@ class SourceStage {
     this.nextPage,
     this.maxPages = 20,
     this.method = 'GET',
+    this.bodyEncoding = 'raw',
     this.body,
     this.headers,
     this.charset,
   });
   final String url;
   final String method;
+  final String bodyEncoding;
   final String? body;
   final Map<String, String>? headers;
   final String? charset;
@@ -72,6 +74,7 @@ class SourceStage {
     nextPage: json['nextPage'] as String?,
     maxPages: json['maxPages'] as int? ?? 20,
     method: json['method'] as String? ?? 'GET',
+    bodyEncoding: json['bodyEncoding'] as String? ?? 'raw',
     body: json['body'] as String?,
     headers: json['headers'] == null
         ? null
@@ -88,6 +91,7 @@ class SourceStage {
     if (nextPage != null) 'nextPage': nextPage,
     'maxPages': maxPages,
     'method': method,
+    'bodyEncoding': bodyEncoding,
     if (body != null) 'body': body,
     if (headers != null) 'headers': headers,
     if (charset != null) 'charset': charset,
@@ -142,6 +146,12 @@ class SourceDefinition {
       }
     }
     for (final stage in stages.values) {
+      if (!['raw', 'legacyFormUtf8'].contains(stage.bodyEncoding)) {
+        throw const EngineException(
+          'invalid_source',
+          'Unsupported bodyEncoding',
+        );
+      }
       if (!RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").hasMatch(stage.method)) {
         throw const EngineException('invalid_source', 'Invalid HTTP method');
       }

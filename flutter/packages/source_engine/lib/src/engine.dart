@@ -6,6 +6,7 @@ import 'package:html/dom.dart' show Element;
 import 'contracts.dart';
 import 'network.dart';
 import 'rules.dart';
+import 'form_encoding.dart';
 
 class SourceEngine {
   SourceEngine({
@@ -114,16 +115,36 @@ class SourceEngine {
         );
       }
     }
-    final body = stage.body?.replaceAllMapped(
+    final substitutedBody = stage.body?.replaceAllMapped(
       RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
       (m) {
         final value = input[m[1]];
         if (value == null) {
           throw EngineException('missing_input', 'Missing ${m[1]}');
         }
+        if (stage.bodyEncoding == 'legacyFormUtf8') {
+          if (value is! String && value is! bool && value is! int ||
+              value is int &&
+                  (value < -9007199254740991 || value > 9007199254740991)) {
+            throw const EngineException(
+              'legacy_body_template_requires_migration',
+              'Legacy form placeholders require strings, booleans or JS-safe integers',
+            );
+          }
+          if (RegExp(r'["\\\x00-\x1f\x7f]').hasMatch(value.toString())) {
+            throw const EngineException(
+              'legacy_body_template_requires_migration',
+              'Legacy form placeholder would change the old JSON request options',
+            );
+          }
+        }
         return value.toString();
       },
     );
+    final body =
+        substitutedBody != null && stage.bodyEncoding == 'legacyFormUtf8'
+        ? encodeLegacyFormUtf8Body(substitutedBody)
+        : substitutedBody;
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
     }
