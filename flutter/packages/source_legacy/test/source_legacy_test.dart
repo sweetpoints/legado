@@ -119,14 +119,14 @@ void main() {
       final input = <String, Object?>{
         'bookSourceUrl': 'https://books.test',
         'header': {'X-Auth': 'base', 'X-Replace': 'old'},
-        'searchUrl': '/search,{"method":"post","headers":{"X-Extra":true,"X-Replace":"new"},"body":{"key":"{{key}}"}}',
+        'searchUrl': '/search,{"method":"post","headers":{"X-Extra":true,"X-Replace":"new"},"body":{"key":"fixed"}}',
         'ruleSearch': {'bookList': 'class.book'},
       };
       final imported = LegacySourceImporter().import(input);
       final stage = imported.source.stages['search']!;
       expect(stage.url, '/search');
       expect(stage.method, 'POST');
-      expect(stage.body, '{"key":"{{key}}"}');
+      expect(stage.body, '{"key":"fixed"}');
       expect(stage.headers, {
         'X-Auth': 'base',
         'X-Replace': 'new',
@@ -137,7 +137,7 @@ void main() {
       expect(imported.original, input);
     },
   );
-  test('fixed form encodes literals and preserves valid encoded parts', () {
+  test('fixed form keeps literals for encoding at execution', () {
     final imported = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',
       'searchUrl': '/search,{"method":"POST","body":"key=中文&space=a b&plus=a+b&encoded=%E4%B8%AD"}',
@@ -145,7 +145,7 @@ void main() {
     });
     expect(
       imported.source.stages['search']!.body,
-      'key=%E4%B8%AD%E6%96%87&space=a+b&plus=a%2Bb&encoded=%E4%B8%AD',
+      'key=中文&space=a b&plus=a+b&encoded=%E4%B8%AD',
     );
     expect(imported.requiresManualWork, false);
   });
@@ -156,7 +156,6 @@ void main() {
       '{"retry":1}',
       '{"bodyJs":"result"}',
       '{"headers":{"X":{"nested":true}}}',
-      '{"method":"POST","body":"key={{key}}"}',
       '{broken}',
     ]) {
       final imported = LegacySourceImporter().import({
@@ -421,6 +420,151 @@ void main() {
       );
     },
   );
+  test('fixed shape templated form stays raw until legacy UTF8 encoding', () {
+    for (final body in [
+      'q={{key}}&page={{page}}',
+      'key=中文&space=a b',
+      '',
+      '&&a=1',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,${jsonEncode({'method': 'POST', 'body': body})}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      final stage = imported.source.stages['search']!;
+      expect(imported.requiresManualWork, false, reason: body);
+      expect(stage.body, body);
+      expect(stage.bodyEncoding, 'legacyFormUtf8');
+      expect(
+        stage.headers!['Content-Type'],
+        'application/x-www-form-urlencoded',
+      );
+    }
+    for (final body in ['{{key}}', '&&', 'prefix{{key}}', 'q={{unknown}}']) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,${jsonEncode({'method': 'POST', 'body': body})}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, true, reason: body);
+    }
+  });
+  test(
+    'static JSON and line explore menus validate URLs independently of titles',
+    () {
+      final items = [
+        {'title': '@JS:display, {text}', 'url': '/a'},
+        {'title': 'B', 'url': '/b?page={{page}}'},
+      ];
+      for (final menu in [jsonEncode(items), 'A::/a\nB::/b?page={{page}}']) {
+        final imported = LegacySourceImporter().import({
+          'bookSourceUrl': 'https://books.test',
+          'exploreUrl': menu,
+          'ruleExplore': {'bookList': 'tag.a'},
+        });
+        expect(imported.requiresManualWork, false, reason: menu);
+        final recorded = imported.source.metadata['legacyExploreItems'] as List;
+        expect(recorded.map((e) => (e as Map)['url']), [
+          '/a',
+          '/b?page={{page}}',
+        ]);
+        expect(imported.source.stages['explore']!.url, '{{exploreUrl}}');
+        expect(imported.original['exploreUrl'], menu);
+      }
+    },
+  );
+  test('malformed menus and per-category requests remain manual', () {
+    for (final menu in [
+      '[{broken}]',
+      '[{"title":"A","url":3}]',
+      jsonEncode([
+        {'title': 'A', 'url': '/a,{"method":"POST"}'},
+      ]),
+      'A::/a,{"method":"POST"}',
+      'A::@JS:"/a"',
+      'A::/a?q={{key.trim()}}',
+      'A::',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': menu,
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, true, reason: menu);
+      expect(imported.source.stages['explore']!.method, 'GET');
+      expect(imported.source.stages['explore']!.body, null);
+    }
+  });
+  test('IPv6 URLs are not confused with explore title delimiters', () {
+    for (final menu in ['https://[::1]/path', '分类::http://[::1]/path']) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': menu,
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      expect(
+        imported.requiresManualWork,
+        !menu.startsWith('https:'),
+        reason: menu,
+      );
+      if (!menu.startsWith('https:')) {
+        expect(
+          imported.issues.map((e) => e.code),
+          contains('legacy.explore_menu_requires_review'),
+        );
+      }
+      final items = imported.source.metadata['legacyExploreItems'] as List;
+      expect(
+        items.single,
+        menu.startsWith('https:')
+            ? {'title': '', 'url': 'https://[::1]/path'}
+            : {'title': '分类', 'url': 'http://[::1]/path'},
+      );
+      expect(imported.original['exploreUrl'], menu);
+    }
+  });
+  test('legacy string body templates retain outer JSON provenance for all content types', () {
+    for (final options in [
+      {'method': 'POST', 'body': 'q={{key}}'},
+      {'method': 'POST', 'body': '{"q":"{{key}}"}'},
+      {'method': 'POST', 'body': '<q>{{key}}</q>'},
+      {
+        'method': 'POST',
+        'body': '{{key}}',
+        'headers': {'Content-Type': 'text/plain'},
+      },
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,${jsonEncode(options)}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, false, reason: '$options');
+      expect(
+        imported.source.stages['search']!.bodyTemplateMode,
+        'legacyJsonString',
+      );
+    }
+    for (final body in [
+      {'q': '{{key}}'},
+      ['{{key}}'],
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,${jsonEncode({'method': 'POST', 'body': body})}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, true);
+      expect(imported.source.stages['search']!.bodyTemplateMode, 'raw');
+    }
+    final fixed = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl': '/search,{"method":"POST","body":"q=fixed"}',
+      'ruleSearch': {'bookList': 'tag.a'},
+    });
+    expect(fixed.source.stages['search']!.bodyTemplateMode, 'raw');
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

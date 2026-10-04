@@ -3,7 +3,6 @@ library;
 
 import 'dart:convert';
 
-import 'src/legacy_host.dart';
 export 'src/legacy_host.dart';
 
 import 'package:source_engine/source_engine.dart';
@@ -87,6 +86,7 @@ class LegacySourceImporter {
       }
     }
     final stages = <String, SourceStage>{};
+    final exploreItems = <Map<String, String>>[];
     final mapping = {
       'search': ('ruleSearch', 'searchUrl', 'bookList'),
       'explore': ('ruleExplore', 'exploreUrl', 'bookList'),
@@ -222,22 +222,15 @@ class LegacySourceImporter {
           ),
         );
       }
-      final request = _legacyRequest(
-        url,
-        urlKey ?? entry.key,
-        requestHeaders,
-        issues,
-      );
-      if (entry.key == 'explore' && RegExp(r',\s*(?=\{)').hasMatch(url)) {
-        issues.add(
-          const LegacyIssue(
-            'exploreUrl',
-            'legacy.explore_options',
-            'Explore menu request options must be applied to each selected URL explicitly.',
-          ),
+      final selectedExplore = entry.key == 'explore';
+      final request = selectedExplore
+          ? _LegacyRequest('')
+          : _legacyRequest(url, urlKey ?? entry.key, requestHeaders, issues);
+      if (selectedExplore) {
+        exploreItems.addAll(
+          _legacyExploreMenu(input['exploreUrl'], requestHeaders, issues),
         );
       }
-      final selectedExplore = entry.key == 'explore';
       url = selectedExplore ? '{{exploreUrl}}' : request.url;
       stages[entry.key] = SourceStage(
         url: url,
@@ -246,6 +239,8 @@ class LegacySourceImporter {
         nextPage: nextPage,
         method: selectedExplore ? 'GET' : request.method,
         body: selectedExplore ? null : request.body,
+        bodyEncoding: selectedExplore ? 'raw' : request.bodyEncoding,
+        bodyTemplateMode: selectedExplore ? 'raw' : request.bodyTemplateMode,
         headers: selectedExplore ? null : request.headers,
       );
     }
@@ -301,6 +296,7 @@ class LegacySourceImporter {
           'legacy': true,
           if (legacyBaseUrlUnavailable) 'legacyBaseUrlUnavailable': true,
           'legacyOriginal': original,
+          if (exploreItems.isNotEmpty) 'legacyExploreItems': exploreItems,
           'compatibility': issues.isEmpty ? 'unverified' : 'manualRequired',
         },
       ),
@@ -341,11 +337,114 @@ Uri? _searchRequestAnchor(Object? value) {
   );
 }
 
+List<Map<String, String>> _legacyExploreMenu(
+  Object? menu,
+  Map<String, String> defaults,
+  List<LegacyIssue> issues,
+) {
+  void malformed() => issues.add(
+    const LegacyIssue(
+      'exploreUrl',
+      'legacy.explore_menu_requires_review',
+      'Explore menu must be a static title/url array or title::URL lines.',
+    ),
+  );
+  if (menu == null || menu == '') return [];
+  final items = <Map<String, String>>[];
+  Object? decoded = menu;
+  if (menu is String && menu.trim().startsWith('[')) {
+    try {
+      decoded = jsonDecode(menu);
+    } on FormatException {
+      malformed();
+      return [];
+    }
+  }
+  if (decoded is List) {
+    for (final item in decoded) {
+      if (item is! Map ||
+          item['title'] is! String ||
+          item['url'] is! String ||
+          item.keys.any((k) => k != 'title' && k != 'url')) {
+        malformed();
+        continue;
+      }
+      items.add({
+        'title': item['title'] as String,
+        'url': item['url'] as String,
+      });
+    }
+  } else if (menu is String) {
+    if (RegExp(r'^\s*(?:@js:|<js>)', caseSensitive: false).hasMatch(menu)) {
+      malformed();
+      return [];
+    }
+    if (menu.contains('::') &&
+        !RegExp(r'^https?://', caseSensitive: false).hasMatch(menu)) {
+      for (final line in menu.split(RegExp(r'(?:&&|\n)+'))) {
+        if (line.isEmpty) continue;
+        final separator = line.indexOf('::');
+        if (separator <= 0 || separator + 2 == line.length) {
+          malformed();
+          continue;
+        }
+        if (line.indexOf('::', separator + 2) >= 0) {
+          malformed();
+        }
+        items.add({
+          'title': line.substring(0, separator),
+          'url': line.substring(separator + 2),
+        });
+      }
+    } else {
+      // Preserve the previously supported plain default URL contract.
+      items.add({'title': '', 'url': menu});
+    }
+  } else {
+    malformed();
+    return [];
+  }
+  for (var i = 0; i < items.length; i++) {
+    final url = items[i]['url']!;
+    _legacyRequest(url, 'exploreUrl[$i].url', defaults, issues);
+    if (RegExp(r',\s*(?=\{)').hasMatch(url)) {
+      issues.add(
+        LegacyIssue(
+          'exploreUrl[$i].url',
+          'legacy.explore_options',
+          'Per-category request options require explicit execution support.',
+        ),
+      );
+    }
+    final rawUrl = url.split(RegExp(r',\s*(?=\{)')).first;
+    final parsedUrl = Uri.tryParse(
+      rawUrl.replaceAll(RegExp(r'\{\{[^}]*\}\}'), 'input'),
+    );
+    if (url.isEmpty ||
+        parsedUrl == null ||
+        parsedUrl.userInfo.isNotEmpty ||
+        (parsedUrl.hasScheme &&
+            !['http', 'https'].contains(parsedUrl.scheme))) {
+      malformed();
+    }
+  }
+  return items;
+}
+
 class _LegacyRequest {
-  _LegacyRequest(this.url, {this.method = 'GET', this.body, this.headers});
+  _LegacyRequest(
+    this.url, {
+    this.method = 'GET',
+    this.body,
+    this.headers,
+    this.bodyEncoding = 'raw',
+    this.bodyTemplateMode = 'raw',
+  });
   final String url;
   final String method;
   final String? body;
+  final String bodyEncoding;
+  final String bodyTemplateMode;
   final Map<String, String>? headers;
 }
 
@@ -436,7 +535,18 @@ _LegacyRequest _legacyRequest(
   if (body != null && (body.contains('@js:') || body.contains('<js>'))) {
     issue('Script body requires migration.');
   }
+  var bodyEncoding = 'raw';
+  var bodyTemplateMode = 'raw';
   if (method == 'POST') {
+    if (body?.contains('{{') ?? false) {
+      if (options['body'] is String) {
+        bodyTemplateMode = 'legacyJsonString';
+      } else {
+        issue(
+          'Templates in object or array bodies require review of the outer JSON substitution layer.',
+        );
+      }
+    }
     if (headers.keys.any(
       (k) => k.toLowerCase() == 'content-type' && k != 'Content-Type',
     )) {
@@ -468,12 +578,21 @@ _LegacyRequest _legacyRequest(
       if (jsonOrXml) {
         headers['Content-Type'] = 'application/json; charset=UTF-8';
       } else {
-        headers['Content-Type'] =
-            'application/x-www-form-urlencoded; charset=UTF-8';
-        if (body?.contains('{{') ?? false) {
-          issue('Templated form body needs encoding after substitution.');
-        } else {
-          body = _fixedForm(body ?? '');
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        final templated = body?.contains('{{') ?? false;
+        if (templated && !RegExp(r'^[A-Za-z0-9*._-]+=').hasMatch(body!)) {
+          issue(
+            'Templated form bodies require a fixed non-empty parameter name.',
+          );
+        } else if (!templated &&
+            (body?.isNotEmpty ?? false) &&
+            body!.trim().isNotEmpty &&
+            encodeLegacyFormUtf8Body(body).isEmpty) {
+          issue(
+            'Empty encoded form with a nonblank body uses a different legacy request branch.',
+          );
+        } else if (options['charset'] == null || options['charset'] == '') {
+          bodyEncoding = 'legacyFormUtf8';
         }
       }
     }
@@ -482,6 +601,8 @@ _LegacyRequest _legacyRequest(
     url,
     method: method,
     body: method == 'POST' ? body : null,
+    bodyEncoding: bodyEncoding,
+    bodyTemplateMode: bodyTemplateMode,
     headers: headers,
   );
 }
@@ -509,20 +630,6 @@ void _validateLegacyTemplates(String value, void Function(String) issue) {
     issue('Legacy page-choice syntax requires explicit migration.');
   }
 }
-
-String _fixedForm(String input) => input
-    .split('&')
-    .map((part) {
-      final split = part.indexOf('=');
-      String encode(String text) =>
-          RegExp(r'^(?:[A-Za-z0-9*._-]|%[0-9A-Fa-f]{2})*$').hasMatch(text)
-          ? text
-          : legacyFormEncode(text);
-      return split < 0
-          ? encode(part)
-          : '${encode(part.substring(0, split))}=${encode(part.substring(split + 1))}';
-    })
-    .join('&');
 
 bool _simpleExtractionScript(String script) {
   final match = RegExp(
