@@ -1,0 +1,100 @@
+{
+  "specVersion": 1,
+  "meaning": "Implementation capability inventory, not proof of device acceptance or complete Legado compatibility",
+  "runtime": {
+    "engine": "V8",
+    "artifactRelease": "v14.3.92-15",
+    "provider": "haroel/v8-build",
+    "hookTargets": [
+      "macos-arm64",
+      "android-arm",
+      "android-arm64",
+      "android-x64"
+    ],
+    "unsupportedTargets": [
+      "ios",
+      "linux",
+      "windows"
+    ],
+    "asyncHost": true,
+    "legacySyncBridge": true,
+    "contextLifetime": "per-evaluation",
+    "defaultOldGenerationLimitMb": 64,
+    "intl": false
+  },
+  "engine": {
+    "operations": [
+      "search",
+      "explore",
+      "info",
+      "toc",
+      "content"
+    ],
+    "extractors": [
+      "css",
+      "jsonpath",
+      "xpath",
+      "regex",
+      "javascript"
+    ],
+    "automaticNextPage": true,
+    "rateLimit": true,
+    "cookiePersistence": false,
+    "webViewCookieSynchronization": "browser.open result imported into HTTP jar; no continuous bidirectional synchronization",
+    "paginationContract": "Explicit nextPage rule; maxPages default20, allowed1..1000; cycle/limit errors",
+    "networkScheduling": {
+      "maxConcurrentRequests": {
+        "default": 4,
+        "minimum": 1
+      },
+      "requestIntervalMs": {
+        "default": 0,
+        "minimum": 0
+      },
+      "queueCancellation": true,
+      "redirects": "part of original request"
+    },
+    "browserCookieImport": {
+      "setCookieArray": "Preserves supplied attributes; validates domain",
+      "cookieHeader": "host-only, response directory path, HTTPS secure; original attributes unavailable"
+    }
+  },
+  "legacy": {
+    "status": "partial",
+    "syncApis": [
+      "java.ajax(one plain URL)",
+      "java.base64Encode(one UTF8 string)",
+      "java.base64Decode(one UTF8 string)",
+      "java.md5Encode(one UTF8 string)",
+      "java.get(one variable key)",
+      "java.put(key, string value)"
+    ],
+    "unsupportedApis": [
+      "java.getRequest",
+      "java.post",
+      "java.connect",
+      "arbitrary Java classes",
+      "unlisted overloads"
+    ],
+    "importStatuses": [
+      "unverified",
+      "manualRequired"
+    ]
+  },
+  "migration": {
+    "verifiedAutomatically": false,
+    "originalPreserved": true,
+    "javascript": "restricted straight-line direct calls",
+    "stageFieldScripts": true,
+    "scriptLibraries": false,
+    "urlScripts": false,
+    "stageListScripts": true,
+    "stageNextPageScripts": true
+  },
+  "androidBridge": {
+    "protocolVersion": 1,
+    "channel": "legado/source_engine",
+    "incrementalResults": false,
+    "silentFallback": false
+  }
+}

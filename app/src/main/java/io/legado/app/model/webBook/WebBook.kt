@@ -21,6 +21,8 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.model.jsSource.JsSourceBook
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.utils.GSON
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -56,6 +58,25 @@ object WebBook {
         shouldBreak: ((size: Int) -> Boolean)? = null,
     ): ArrayList<SearchBook> =
         withContext(SuppressSourceNavigation) {
+            if (DartSourceEngine.selected(bookSource)) {
+                val rows =
+                    DartSourceEngine.execute(
+                        bookSource,
+                        "search",
+                        mapOf("key" to key, "page" to (page ?: 1)),
+                    )
+                return@withContext ArrayList(
+                    rows
+                        .map { row ->
+                            GSON.fromJson(GSON.toJson(row), SearchBook::class.java).apply {
+                                origin = bookSource.bookSourceUrl
+                                originName = bookSource.bookSourceName
+                                type = bookSource.getBookType()
+                            }
+                        }
+                        .filter { filter?.invoke(it.name, it.author, it.kind) != false }
+                )
+            }
             if (bookSource.isJsSource()) {
                 return@withContext JsSourceBook.searchAwait(bookSource, key, page, filter)
             }
@@ -134,6 +155,22 @@ object WebBook {
         url: String,
         page: Int? = 1,
     ): ArrayList<SearchBook> {
+        if (DartSourceEngine.selected(bookSource)) {
+            return ArrayList(
+                DartSourceEngine.execute(
+                        bookSource,
+                        "explore",
+                        mapOf("url" to url, "page" to (page ?: 1)),
+                    )
+                    .map {
+                        GSON.fromJson(GSON.toJson(it), SearchBook::class.java).apply {
+                            origin = bookSource.bookSourceUrl
+                            originName = bookSource.bookSourceName
+                            type = bookSource.getBookType()
+                        }
+                    }
+            )
+        }
         if (bookSource.isJsSource()) {
             return JsSourceBook.exploreAwait(bookSource, url, page)
         }
@@ -207,6 +244,22 @@ object WebBook {
         book: Book,
         canReName: Boolean = true,
     ): Book {
+        if (DartSourceEngine.selected(bookSource)) {
+            val fields =
+                DartSourceEngine.execute(bookSource, "info", DartSourceEngine.jsonObject(book))
+                    .single()
+            if (canReName) {
+                (fields["name"] as? String)?.let { book.name = it }
+                (fields["author"] as? String)?.let { book.author = it }
+            }
+            (fields["tocUrl"] as? String)?.let { book.tocUrl = it }
+            (fields["coverUrl"] as? String)?.let { book.coverUrl = it }
+            (fields["intro"] as? String)?.let { book.intro = it }
+            (fields["kind"] as? String)?.let { book.kind = it }
+            (fields["wordCount"] as? String)?.let { book.wordCount = it }
+            (fields["latestChapterTitle"] as? String)?.let { book.latestChapterTitle = it }
+            return book
+        }
         if (bookSource.isJsSource()) {
             return JsSourceBook.getBookInfoAwait(bookSource, book, canReName)
         }
@@ -311,6 +364,24 @@ object WebBook {
         runPerJs: Boolean = false,
         isFromBookInfo: Boolean = false,
     ): Result<List<BookChapter>> {
+        if (DartSourceEngine.selected(bookSource)) {
+            return kotlin
+                .runCatching {
+                    require(!runPerJs || bookSource.ruleToc?.preUpdateJs.isNullOrBlank()) {
+                        "Dart engine does not support legacy preUpdateJs; migrate the source first"
+                    }
+                    DartSourceEngine.execute(bookSource, "toc", DartSourceEngine.jsonObject(book))
+                        .mapIndexed { index, row ->
+                            GSON.fromJson(GSON.toJson(row), BookChapter::class.java).apply {
+                                url = (row["chapterUrl"] as? String) ?: url
+                                bookUrl = book.bookUrl
+                                baseUrl = book.tocUrl
+                                this.index = index
+                            }
+                        }
+                }
+                .onFailure { currentCoroutineContext().ensureActive() }
+        }
         if (bookSource.isJsSource()) {
             return JsSourceBook.getChapterListAwait(bookSource, book)
         }
@@ -425,6 +496,35 @@ object WebBook {
             BookHelp.getContent(book, bookChapter, saveToken)?.let {
                 return it
             }
+        }
+        if (DartSourceEngine.selected(bookSource)) {
+            val input =
+                DartSourceEngine.jsonObject(book) +
+                    mapOf(
+                        "chapterUrl" to bookChapter.getAbsoluteURL(),
+                        "chapterTitle" to bookChapter.title,
+                        "nextChapterUrl" to nextChapterUrl,
+                    )
+            val row = DartSourceEngine.execute(bookSource, "content", input).single()
+            val content =
+                row["content"] as? String
+                    ?: throw IllegalStateException("Dart content stage did not return content")
+            if (saveToken != null) {
+                val saved =
+                    BookHelp.saveContent(
+                        bookSource,
+                        book,
+                        bookChapter,
+                        content,
+                        saveToken,
+                        saveChapterMetadata = true,
+                    )
+                BookHelp.getContent(book, bookChapter, saveToken)?.let {
+                    return it
+                }
+                if (!saved) throw NoStackTraceException("正文缓存已更新,请重试")
+            }
+            return content
         }
         if (bookSource.isJsSource()) {
             val content =
@@ -556,6 +656,8 @@ object WebBook {
         book: Book,
         chapters: List<BookChapter>,
     ): List<BookChapter> {
+        if (DartSourceEngine.selected(bookSource))
+            return chapters // caller's single-chapter fallback
         if (bookSource.isJsSource()) {
             return JsSourceBook.getContentBatchAwait(bookSource, book, chapters)
         }

@@ -54,6 +54,18 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        if (providers.gradleProperty("flutterSourceEngine").orNull == "true") {
+            maven {
+                url =
+                    uri(
+                        providers
+                            .gradleProperty("flutterSourceRepository")
+                            .orElse("$rootDir/flutter/modules/source_host/build/host/outputs/repo")
+                            .get()
+                    )
+            }
+            maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        }
 
         //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
         //maven("https://maven-central-asia.storage-download.googleapis.com/maven2/")

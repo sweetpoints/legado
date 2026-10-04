@@ -1,0 +1,45 @@
+name: Flutter source engine
+
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-source-engine.yml'
+      - 'app/src/flutterSource/**'
+      - 'app/src/main/java/io/legado/app/model/webBook/**'
+      - 'app/src/main/java/io/legado/app/model/sourceEngine/**'
+      - 'app/src/androidTest/java/io/legado/app/model/FlutterSourceEngineTest.kt'
+      - 'app/proguard-rules.pro'
+      - 'app/build.gradle.kts'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - name: Verify Dart, native V8, and bridge contracts
+        run: bash flutter/tool/check.sh
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Compile Flutter AAR and Android integration
+        run: bash flutter/tool/build-android.sh

@@ -1,0 +1,19 @@
+name: source_conformance
+description: Cross-package conformance tests using the real V8 runtime.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dependencies:
+  source_engine:
+    path: ../source_engine
+  source_v8:
+    path: ../source_v8
+  source_legacy:
+    path: ../source_legacy
+  source_migration:
+    path: ../source_migration
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

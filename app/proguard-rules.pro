@@ -200,3 +200,8 @@ cn.hutool.core.util.**{*;}
 -keepclassmembers,allowshrinking,allowobfuscation class io.legado.app.ui.rss.source.debug.RssSourceDebugViewModel {
     java.lang.String html(boolean);
 }
+
+# Optional Flutter backend is loaded by name to keep default builds independent.
+-keep class io.legado.app.model.sourceEngine.FlutterSourceRepository {
+    public <init>(android.content.Context);
+}

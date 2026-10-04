@@ -1,0 +1,152 @@
+{
+  "specVersion": 1,
+  "namespace": "source",
+  "dispatchPrefix": "",
+  "promiseBased": true,
+  "methods": [
+    {
+      "name": "net.get",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "net.request",
+      "arguments": [
+        {
+          "name": "options",
+          "type": "RequestOptions"
+        }
+      ],
+      "returns": "Promise<NetworkResponse>"
+    },
+    {
+      "name": "variables.get",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<JsonValue|null>"
+    },
+    {
+      "name": "variables.put",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "JsonValue"
+        }
+      ],
+      "returns": "Promise<JsonValue>"
+    },
+    {
+      "name": "encoding.base64Encode",
+      "arguments": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "encoding.base64Decode",
+      "arguments": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    }
+  ],
+  "types": {
+    "RequestOptions": {
+      "url": "string",
+      "method": "string = GET",
+      "headers": "Record<string,string> = {}",
+      "body": "string?",
+      "timeoutMs": "integer = 30000"
+    },
+    "NetworkResponse": {
+      "url": "string",
+      "status": "integer",
+      "headers": "Record<string,string>",
+      "body": "string"
+    },
+    "JsonValue": "null | boolean | number | string | JsonValue[] | Record<string,JsonValue>"
+  },
+  "scriptEntries": {
+    "search": "search",
+    "explore": "explore",
+    "info": "getBookInfo",
+    "toc": "getChapters",
+    "content": "getContent"
+  },
+  "platformMethods": [
+    {
+      "name": "storage.read",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string|null>",
+      "requires": "SourcePlatform"
+    },
+    {
+      "name": "storage.write",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string|null"
+        }
+      ],
+      "returns": "Promise<null>",
+      "requires": "SourcePlatform"
+    },
+    {
+      "name": "browser.open",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "type": "string?"
+        }
+      ],
+      "returns": "Promise<{url:string,body:string,cookie?:string,cookies?:string[]}|null>",
+      "requires": "Android Activity browser adapter",
+      "taskBinding": "source_host injects current task ID",
+      "cookieImport": "Set-Cookie values preferred; Cookie-header fallback scoped to host/response directory/HTTPS"
+    }
+  ],
+  "sourceMetadata": {
+    "maxConcurrentRequests": {
+      "type": "integer",
+      "default": 4,
+      "minimum": 1
+    },
+    "requestIntervalMs": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0
+    }
+  }
+}

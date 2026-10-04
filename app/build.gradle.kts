@@ -67,6 +67,16 @@ try {
     // Keep source archives buildable when Git is unavailable.
 }
 
+val flutterSourceEngine = providers.gradleProperty("flutterSourceEngine").orNull == "true"
+
+// The isolated instrumentation application has no Firebase client registration.
+if (
+    flutterSourceEngine &&
+        providers.gradleProperty("flutterSourceTestSuffix").orNull == ".fluttertest"
+) {
+    tasks.matching { it.name == "processAppDebugGoogleServices" }.configureEach { enabled = false }
+}
+
 val armOnly = (project.findProperty("armOnly") as String?)?.toBoolean() ?: false
 
 // ---------------------------------------------------------------------------
@@ -348,6 +358,7 @@ android {
         versionCode = versionCodeValue
         versionName = appVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "FLUTTER_SOURCE_ENGINE", flutterSourceEngine.toString())
         // Keep app translations while dropping unused transitive dependency locales.
         resourceConfigurations.addAll(
             listOf(
@@ -385,6 +396,9 @@ android {
                 )
             }
         }
+    }
+    if (flutterSourceEngine) {
+        sourceSets.getByName("main").kotlin.directories.add("src/flutterSource/java")
     }
     buildFeatures {
         buildConfig = true
@@ -427,7 +441,10 @@ android {
             }
             manifestPlaceholders["app_name"] = "@string/app_name"
 
-            applicationIdSuffix = ".debug"
+            applicationIdSuffix =
+                if (flutterSourceEngine)
+                    providers.gradleProperty("flutterSourceTestSuffix").orElse(".debug").get()
+                else ".debug"
             versionNameSuffix = "debug"
             isMinifyEnabled = false
             proguardFiles(
@@ -504,6 +521,10 @@ android {
 }
 
 dependencies {
+    if (flutterSourceEngine) {
+        debugImplementation("io.legado.source.source_host:flutter_debug:1.0")
+        releaseImplementation("io.legado.source.source_host:flutter_release:1.0")
+    }
     coreLibraryDesugaring(libs.desugar)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

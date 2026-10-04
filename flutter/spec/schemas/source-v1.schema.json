@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:legado:source:v1",
+  "title": "SourceDefinition v1",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "baseUrl"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "default": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://[^/?#]+"
+    },
+    "stages": {
+      "type": "object",
+      "default": {},
+      "properties": {
+        "search": {
+          "$ref": "#/$defs/stage"
+        },
+        "explore": {
+          "$ref": "#/$defs/stage"
+        },
+        "info": {
+          "$ref": "#/$defs/stage"
+        },
+        "toc": {
+          "$ref": "#/$defs/stage"
+        },
+        "content": {
+          "$ref": "#/$defs/stage"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "default": {},
+      "properties": {
+        "maxConcurrentRequests": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4
+        },
+        "requestIntervalMs": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "script": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "default": ""
+        },
+        "list": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fields": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "nextPage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "maxPages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 20
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

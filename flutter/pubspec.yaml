@@ -1,0 +1,13 @@
+name: legado_source_workspace
+publish_to: none
+environment:
+  sdk: ^3.13.5
+workspace:
+  - packages/source_engine
+  - packages/source_v8
+  - packages/source_legacy
+  - packages/source_migration
+  - packages/source_platform
+  - packages/source_tools
+  - packages/source_conformance
+  - modules/source_host

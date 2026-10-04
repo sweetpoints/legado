@@ -1,0 +1,163 @@
+import 'dart:async';
+
+class EngineException implements Exception {
+  const EngineException(this.code, this.message);
+  final String code;
+  final String message;
+  @override
+  String toString() => '$code: $message';
+}
+
+class CancellationToken {
+  final Completer<void> _cancelled = Completer<void>();
+  bool get isCancelled => _cancelled.isCompleted;
+  Future<void> get whenCancelled => _cancelled.future;
+  void cancel() {
+    if (!isCancelled) _cancelled.complete();
+  }
+
+  void throwIfCancelled() {
+    if (isCancelled) throw const EngineException('cancelled', 'Task cancelled');
+  }
+}
+
+abstract interface class ScriptHost {
+  Future<Object?> call(String method, List<Object?> arguments);
+}
+
+class ScriptContext {
+  const ScriptContext({
+    this.variables = const {},
+    required this.host,
+    this.timeout = const Duration(seconds: 30),
+  });
+  final Map<String, Object?> variables;
+  final ScriptHost host;
+  final Duration timeout;
+}
+
+abstract interface class ScriptRuntime {
+  Future<Object?> evaluate(
+    String code,
+    ScriptContext context, {
+    CancellationToken? cancellation,
+  });
+  Future<void> close();
+}
+
+class SourceStage {
+  const SourceStage({
+    required this.url,
+    this.list,
+    this.fields = const {},
+    this.nextPage,
+    this.maxPages = 20,
+  });
+  final String url;
+  final String? list;
+  final String? nextPage;
+  final int maxPages;
+  final Map<String, String> fields;
+  factory SourceStage.fromJson(Map<String, Object?> json) => SourceStage(
+    url: json['url'] as String? ?? '',
+    list: json['list'] as String?,
+    nextPage: json['nextPage'] as String?,
+    maxPages: json['maxPages'] as int? ?? 20,
+    fields: (json['fields'] as Map? ?? {}).map(
+      (k, v) => MapEntry(k.toString(), v.toString()),
+    ),
+  );
+  Map<String, Object?> toJson() => {
+    'url': url,
+    if (list != null) 'list': list,
+    'fields': fields,
+    if (nextPage != null) 'nextPage': nextPage,
+    'maxPages': maxPages,
+  };
+}
+
+class SourceDefinition {
+  SourceDefinition({
+    required this.id,
+    required this.name,
+    required this.baseUrl,
+    this.schemaVersion = 1,
+    this.stages = const {},
+    this.metadata = const {},
+    this.script,
+  }) {
+    if (schemaVersion != 1) {
+      throw EngineException(
+        'unsupported_version',
+        'Unsupported source schema $schemaVersion',
+      );
+    }
+    if (id.isEmpty || name.isEmpty) {
+      throw const EngineException(
+        'invalid_source',
+        'id and name must be nonempty',
+      );
+    }
+    if (!['http', 'https'].contains(baseUrl.scheme) || baseUrl.host.isEmpty) {
+      throw const EngineException(
+        'invalid_source',
+        'baseUrl must be an absolute HTTP(S) URL',
+      );
+    }
+    for (final option in ['maxConcurrentRequests', 'requestIntervalMs']) {
+      final value = metadata[option];
+      if (value != null &&
+          (value is! int ||
+              value < (option == 'maxConcurrentRequests' ? 1 : 0))) {
+        throw EngineException(
+          'invalid_source',
+          '$option must be a valid nonnegative integer (concurrency >= 1)',
+        );
+      }
+    }
+    for (final stage in stages.values) {
+      if (stage.maxPages < 1 || stage.maxPages > 1000) {
+        throw const EngineException(
+          'invalid_source',
+          'maxPages must be 1..1000',
+        );
+      }
+    }
+    for (final key in stages.keys) {
+      if (!['search', 'explore', 'info', 'toc', 'content'].contains(key)) {
+        throw EngineException('invalid_source', 'Unknown stage $key');
+      }
+    }
+  }
+  final String id;
+  final String name;
+  final Uri baseUrl;
+  final int schemaVersion;
+  final Map<String, SourceStage> stages;
+  final Map<String, Object?> metadata;
+  final String? script;
+  factory SourceDefinition.fromJson(Map<String, Object?> json) =>
+      SourceDefinition(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        baseUrl: Uri.parse(json['baseUrl'] as String? ?? ''),
+        schemaVersion: json['schemaVersion'] as int? ?? 1,
+        stages: (json['stages'] as Map? ?? {}).map(
+          (k, v) => MapEntry(
+            k.toString(),
+            SourceStage.fromJson(Map<String, Object?>.from(v as Map)),
+          ),
+        ),
+        metadata: Map<String, Object?>.from(json['metadata'] as Map? ?? {}),
+        script: json['script'] as String?,
+      );
+  Map<String, Object?> toJson() => {
+    'schemaVersion': schemaVersion,
+    'id': id,
+    'name': name,
+    'baseUrl': baseUrl.toString(),
+    'stages': stages.map((k, v) => MapEntry(k, v.toJson())),
+    'metadata': metadata,
+    if (script != null) 'script': script,
+  };
+}

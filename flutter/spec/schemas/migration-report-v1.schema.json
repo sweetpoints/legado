@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:legado:migration-report:v1",
+  "title": "MigrationCandidate report v1",
+  "type": "object",
+  "required": ["reportVersion", "status", "original", "candidate", "issues", "verified"],
+  "properties": {
+    "reportVersion": {"const": 1},
+    "status": {"enum": ["unverified", "manualRequired"]},
+    "original": {"type": "object"},
+    "candidate": {"$ref": "source-v1.schema.json"},
+    "verified": {"const": false},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "code", "message"],
+        "properties": {"path": {"type": "string"}, "code": {"type": "string"}, "message": {"type": "string"}},
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
