@@ -265,8 +265,18 @@ class BookSourceCheckUiTest {
     }
 
     private fun toggleStatus() {
-        scenario!!.onActivity { it.managerModel.showStatus() }
-        instrumentation.waitForIdleSync()
+        var expected = false
+        scenario!!.onActivity {
+            expected = !it.managerModel.state.value.showStatus
+            it.managerModel.showStatus()
+        }
+        // The model changes on Main before the serialized preference write finishes on IO.
+        // Main-thread idleness cannot establish that the setting is ready for backup.
+        waitUntil {
+            var applied = false
+            scenario!!.onActivity { applied = it.managerModel.state.value.showStatus == expected }
+            applied && AppConfig.showSourceCheckStatus == expected
+        }
     }
 
     private fun assertStatusVisibility(shown: Boolean) = waitUntil {
