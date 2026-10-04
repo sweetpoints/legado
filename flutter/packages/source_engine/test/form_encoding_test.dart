@@ -51,6 +51,7 @@ void main() {
         method: 'POST',
         body: 'q={{key}}',
         bodyEncoding: 'legacyFormUtf8',
+        bodyTemplateMode: 'legacyJsonString',
       ),
     );
     expect(
@@ -65,6 +66,70 @@ void main() {
       ),
     );
   });
+  test(
+    'legacyJsonString raw encoding rejects unsafe interpolation before HTTP',
+    () async {
+      final network = RecordingNetwork();
+      final engine = SourceEngine(runtime: NoScripts(), network: network);
+      final config = source(
+        SourceStage(
+          url: '/post',
+          method: 'POST',
+          body: '{"q":"{{key}}"}',
+          bodyTemplateMode: 'legacyJsonString',
+        ),
+      );
+      try {
+        expect(
+          SourceDefinition.fromJson(config.toJson()).toJson(),
+          config.toJson(),
+        );
+        expect(SourceStage.fromJson({'url': '/'}).bodyTemplateMode, 'raw');
+        expect(
+          () => source(SourceStage(url: '/post', bodyTemplateMode: 'wrong')),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'invalid_source',
+            ),
+          ),
+        );
+        for (final value in [
+          'a"b',
+          r'a\b',
+          'a\nb',
+          2.0,
+          9007199254740992,
+          {'q': 'v'},
+        ]) {
+          await expectLater(
+            engine.execute(config, 'content', input: {'key': value}),
+            throwsA(
+              isA<EngineException>().having(
+                (e) => e.code,
+                'code',
+                'legacy_body_template_requires_migration',
+              ),
+            ),
+          );
+        }
+        expect(network.calls, isEmpty);
+        await engine.execute(config, 'content', input: {'key': 'safe'});
+        expect(network.calls, hasLength(1));
+        await engine.execute(
+          source(
+            SourceStage(url: '/post', method: 'POST', body: '{"q":"{{key}}"}'),
+          ),
+          'content',
+          input: {'key': 'a"b'},
+        );
+        expect(network.calls, hasLength(2));
+      } finally {
+        await engine.close();
+      }
+    },
+  );
   test(
     'template substitution precedes form encoding on actual HTTP wire',
     () async {

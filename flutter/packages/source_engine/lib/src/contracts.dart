@@ -54,6 +54,7 @@ class SourceStage {
     this.maxPages = 20,
     this.method = 'GET',
     this.bodyEncoding = 'raw',
+    this.bodyTemplateMode = 'raw',
     this.body,
     this.headers,
     this.charset,
@@ -61,6 +62,7 @@ class SourceStage {
   final String url;
   final String method;
   final String bodyEncoding;
+  final String bodyTemplateMode;
   final String? body;
   final Map<String, String>? headers;
   final String? charset;
@@ -75,6 +77,7 @@ class SourceStage {
     maxPages: json['maxPages'] as int? ?? 20,
     method: json['method'] as String? ?? 'GET',
     bodyEncoding: json['bodyEncoding'] as String? ?? 'raw',
+    bodyTemplateMode: json['bodyTemplateMode'] as String? ?? 'raw',
     body: json['body'] as String?,
     headers: json['headers'] == null
         ? null
@@ -92,6 +95,7 @@ class SourceStage {
     'maxPages': maxPages,
     'method': method,
     'bodyEncoding': bodyEncoding,
+    'bodyTemplateMode': bodyTemplateMode,
     if (body != null) 'body': body,
     if (headers != null) 'headers': headers,
     if (charset != null) 'charset': charset,
@@ -146,6 +150,12 @@ class SourceDefinition {
       }
     }
     for (final stage in stages.values) {
+      if (!['raw', 'legacyJsonString'].contains(stage.bodyTemplateMode)) {
+        throw const EngineException(
+          'invalid_source',
+          'Unsupported bodyTemplateMode',
+        );
+      }
       if (!['raw', 'legacyFormUtf8'].contains(stage.bodyEncoding)) {
         throw const EngineException(
           'invalid_source',
