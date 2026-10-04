@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -27,6 +30,7 @@ import io.legado.app.ui.navigation.MainDestination
 import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -93,6 +97,38 @@ class MainScreenTest {
             compose.onNodeWithContentDescription(context.getString(title)).performClick().assertIsSelected()
             compose.runOnIdle { assertEquals(destination, clicked) }
         }
+    }
+
+    @Test
+    fun offscreenPagerInputCannotStealTheSelectedTab() {
+        val state = mutableStateOf(MainUiState())
+        val inputFocus = FocusRequester()
+        val select: (MainDestination) -> Unit = { destination ->
+            state.value = state.value.copy(selectedDestination = destination)
+        }
+        compose.setContent {
+            LegadoComposeTheme {
+                MainScreen(state.value, 0, emptyMap(), false, select) {
+                    MainDestinationPager(state.value, select) { destination, _ ->
+                        if (destination == MainDestination.Explore) {
+                            OutlinedTextField("", {}, Modifier.focusRequester(inputFocus))
+                        }
+                    }
+                }
+            }
+        }
+        compose.runOnIdle {
+            assertFalse("An offscreen input must not acquire focus", inputFocus.requestFocus())
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.discovery)).performClick()
+        compose.runOnIdle { assertTrue(inputFocus.requestFocus()) }
+        compose.onNodeWithContentDescription(context.getString(R.string.my)).performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(MainDestination.My, state.value.selectedDestination)
+            assertFalse("The previous page must no longer acquire focus", inputFocus.requestFocus())
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.my)).assertIsSelected()
     }
 
     @Test

@@ -55,10 +55,10 @@ class RssSourceActivityComposeTest {
                     .onNodeWithTag("rss-source-dialog-field")
                     .assertTextEquals("https://draft.invalid/import.json")
                 assertEquals(8, model!!.state.value.draftStart)
-                assertEquals(13, model!!.state.value.draftEnd)
+                assertEquals(13, model.state.value.draftEnd)
                 scenario.onActivity { it.managementModel.cancelDialog() }
                 compose.onNodeWithTag("rss-source-count").assertTextEquals("1/1")
-                assertNull(model!!.state.value.pending)
+                assertNull(model.state.value.pending)
                 runBlocking(Dispatchers.IO) {
                     assertEquals(
                         GSON.toJson(source),

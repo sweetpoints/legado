@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ci.lazyItem
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -218,9 +219,7 @@ class HighlightTriggerUiTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.highlightActionTrigger}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.highlightActionTrigger}")
             .performClick()
         compose
             .onNodeWithTag("more-reader-option-${PreferKey.highlightActionTrigger}-doubleTap")

@@ -391,7 +391,7 @@ class CoverTitleAdaptiveUiTest {
                             .getActivitiesInStage(Stage.RESUMED)
                             .filterIsInstance<ConfigActivity>()
                             .single()
-                    before!!.recreate()
+                    before.recreate()
                 }
                 val deadline = SystemClock.uptimeMillis() + 5000
                 var restored: ConfigActivity? = null
@@ -461,7 +461,7 @@ class CoverTitleAdaptiveUiTest {
                         else bitmap.getPixels()
                 bitmap.recycle()
             }
-            if (pixels != null) return pixels!!
+            if (pixels != null) return pixels
             SystemClock.sleep(50)
         }
         error("requested cover settings did not render")
@@ -621,7 +621,7 @@ class CoverTitleAdaptiveUiTest {
                 pixels = bitmap.getPixels()
                 bitmap.recycle()
             }
-            if (pixels?.any { it != 0 } == true) return pixels!!
+            if (pixels?.any { it != 0 } == true) return pixels
             Thread.sleep(100)
         }
         error("cover did not render")

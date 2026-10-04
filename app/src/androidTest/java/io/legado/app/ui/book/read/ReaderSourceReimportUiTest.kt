@@ -3,6 +3,8 @@ package io.legado.app.ui.book.read
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -603,7 +605,50 @@ class ReaderSourceReimportUiTest {
         }
     }
 
+    @Test
+    fun chapterRefreshDoesNotConsumeReaderMenuTap() {
+        for (relativePosition in listOf(1, 0, -1)) {
+            awaitDraw()
+            val point = main { activity ->
+                val reader = activity.findViewById<ReadView>(R.id.read_view)
+                val location = IntArray(2)
+                reader.getLocationOnScreen(location)
+                (location[0] + reader.width / 2f) to (location[1] + reader.height / 2f)
+            }
+            val downTime = SystemClock.uptimeMillis()
+            fun send(action: Int) {
+                val event = MotionEvent.obtain(
+                    downTime, SystemClock.uptimeMillis(), action, point.first, point.second, 0,
+                )
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+            }
+            send(MotionEvent.ACTION_DOWN)
+            try {
+                main {
+                    assertTrue("The real reader must receive ACTION_DOWN", it.findViewById<ReadView>(R.id.read_view).isTouching)
+                    it.upContent(relativePosition = relativePosition, resetPageOffset = false)
+                }
+                instrumentation.waitForIdleSync()
+                main {
+                    assertTrue("A chapter refresh must retain the visible page gesture", it.findViewById<ReadView>(R.id.read_view).isTouching)
+                }
+            } finally {
+                send(MotionEvent.ACTION_UP)
+            }
+            await("reader menu after chapter refresh $relativePosition") { it.readMenu.isVisible }
+            // Reader back intentionally exits the activity; reset only the menu between gestures.
+            main { it.readMenu.runMenuOut(anim = false) }
+            await("reader menu dismissed") { !it.readMenu.isVisible }
+        }
+    }
+
     private fun showMenu() {
+        awaitReader(ReadBook.durChapterIndex)
+        await("reader window focused and page animation finished") {
+            it.window.decorView.hasWindowFocus() &&
+                it.findViewById<ReadView>(R.id.read_view).pageDelegate?.isRunning == false
+        }
         awaitDraw()
         if (!main { it.readMenu.isVisible }) {
             onView(withId(R.id.read_view)).perform(click())
@@ -649,7 +694,7 @@ class ReaderSourceReimportUiTest {
         }
         val readerState = main { activity ->
             val reader = activity.findViewById<ReadView>(R.id.read_view)
-            "menu=${activity.readMenu.isVisible}, selected=${reader.isTextSelected}, abort=${reader.isAbortAnim}, size=${reader.width}x${reader.height}, center=${AppConfig.clickActionMC}"
+            "menu=${activity.readMenu.isVisible}, selected=${reader.isTextSelected}, abort=${reader.isAbortAnim}, animation=${reader.pageDelegate?.isRunning}, focused=${activity.window.decorView.hasWindowFocus()}, size=${reader.width}x${reader.height}, center=${AppConfig.clickActionMC}"
         }
         screenshot("reader-reimport-timeout")
         throw AssertionError(

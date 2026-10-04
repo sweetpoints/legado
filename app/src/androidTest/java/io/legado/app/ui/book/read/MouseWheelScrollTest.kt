@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ci.lazyItem
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
@@ -221,9 +222,7 @@ class MouseWheelScrollTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
         compose
             .onNodeWithTag("more-reader-slider-${PreferKey.mouseWheelScrollSpeed}")
             .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(200f)) }
@@ -238,13 +237,9 @@ class MouseWheelScrollTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.mouseWheelScrollSpeed}")
         assertEquals(200, AppConfig.mouseWheelScrollSpeed)
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.mouseWheelPage}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.mouseWheelPage}")
             .performClick()
         awaitReader { !AppConfig.mouseWheelPage }
         compose
@@ -288,9 +283,7 @@ class MouseWheelScrollTest {
                 .isNotEmpty()
         }
 
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.pageTouchSlop}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.pageTouchSlop}")
             .performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("number-input").fetchSemanticsNodes().isNotEmpty()
@@ -326,9 +319,7 @@ class MouseWheelScrollTest {
             receivedConfigurationEvents.isEmpty(),
         )
 
-        compose
-            .onNodeWithTag("more-reader-setting-${PreferKey.pageTouchSlop}")
-            .performScrollTo()
+        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.pageTouchSlop}")
             .performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("number-input").fetchSemanticsNodes().isNotEmpty()

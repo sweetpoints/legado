@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import io.legado.app.ci.lazyItem
 import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
@@ -582,7 +583,7 @@ class SourceImportFilterUiTest {
                 assertEquals(query, if (rss) feed.state.value.query else book.state.value.query)
             }
             expected.forEach { index ->
-                compose.onNodeWithTag("$prefix-row-$index").performScrollTo().assertIsDisplayed()
+                compose.lazyItem("$prefix-list", "$prefix-row-$index").assertIsDisplayed()
             }
         }
 
@@ -596,7 +597,7 @@ class SourceImportFilterUiTest {
                 )
             }
             visibleKeys().forEach { key ->
-                val checkbox = compose.onNodeWithTag("$prefix-check-$key").performScrollTo()
+                val checkbox = compose.lazyItem("$prefix-list", "$prefix-check-$key")
                 if (expected[key.toInt()]) checkbox.assertIsOn() else checkbox.assertIsOff()
             }
         }
@@ -645,16 +646,12 @@ class SourceImportFilterUiTest {
                         )[position]
                         .key
                 }
-                compose
-                    .onNodeWithTag("rss-import-${if (openCode) "code" else "check"}-$key")
-                    .performScrollTo()
+                compose.lazyItem("rss-import-list", "rss-import-${if (openCode) "code" else "check"}-$key")
                     .performClick()
                 return
             }
             val key = main { visibleBookImportItems(book.state.value, bookLabels())[position].key }
-            compose
-                .onNodeWithTag("book-import-${if (openCode) "code" else "check"}-$key")
-                .performScrollTo()
+            compose.lazyItem("book-import-list", "book-import-${if (openCode) "code" else "check"}-$key")
                 .performClick()
         }
 
@@ -755,7 +752,12 @@ class SourceImportFilterUiTest {
                     .fetchSemanticsNode()
                     .boundsInRoot
             assertTrue(comment.bottom <= remember.top)
-            androidx.test.espresso.Espresso.pressBack()
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(timeoutMillis = 5_000) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.onAllNodes(androidx.compose.ui.test.hasTestTag("$prefix-menu-RememberGroup"))
+                    .fetchSemanticsNodes().isEmpty()
+            }
         }
 
         fun inspectGroupDialog(expected: String?, add: Boolean) {
@@ -812,6 +814,7 @@ class SourceImportFilterUiTest {
     private fun await(message: String, condition: () -> Boolean) {
         try {
             compose.waitUntil(timeoutMillis = 15_000) {
+                compose.mainClock.advanceTimeByFrame()
                 condition()
             }
             return

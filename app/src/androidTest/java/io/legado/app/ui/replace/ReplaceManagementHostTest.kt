@@ -50,9 +50,9 @@ class ReplaceManagementHostTest {
             scenario.onActivity { model = it.managementModel }
             compose.waitUntil(timeoutMillis = 10000) { model!!.state.value.loaded }
             assertEquals(query, model!!.state.value.query)
-            assertEquals(8, model!!.state.value.queryEnd)
-            assertEquals("Exact group", model!!.state.value.draft)
-            assertEquals(ReplaceManagementDialog.AddGroup, model!!.state.value.dialog)
+            assertEquals(8, model.state.value.queryEnd)
+            assertEquals("Exact group", model.state.value.draft)
+            assertEquals(ReplaceManagementDialog.AddGroup, model.state.value.dialog)
             compose.onNodeWithTag("replace-rule-dialog-field").assertExists()
         }
     }

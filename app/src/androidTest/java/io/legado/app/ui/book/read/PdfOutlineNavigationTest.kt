@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
@@ -210,7 +211,7 @@ class PdfOutlineNavigationTest {
             }
             screenshot("pdf-manga-page-13")
             assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(book.name, book.author))
-            mangaScenario.close()
+            mangaScenario.closeAfterComposeExit(compose)
             manga = null
             PdfFile.clear(book.bookUrl)
             PDDocument().use { document ->
@@ -240,7 +241,7 @@ class PdfOutlineNavigationTest {
             }
             throw error
         } finally {
-            manga?.close()
+            manga?.closeAfterComposeExit(compose)
             reader?.close()
             PdfFile.clear(book.bookUrl)
             appDb.bookmarkDao.delete(bookmark)

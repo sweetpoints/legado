@@ -1,7 +1,7 @@
 package io.legado.app.ui.book.changesource
 
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource

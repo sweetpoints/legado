@@ -72,6 +72,9 @@ class App : Application() {
 
     private lateinit var oldConfig: Configuration
 
+    internal lateinit var initialization: Coroutine<Unit>
+        private set
+
     override fun onCreate() {
         super.onCreate()
         CrashHandler(this)
@@ -88,7 +91,7 @@ class App : Application() {
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
         initRhino()
-        Coroutine.async {
+        initialization = Coroutine.async {
             LogUtils.init(this@App)
             LogUtils.d("App", "onCreate")
             LogUtils.logDeviceInfo()

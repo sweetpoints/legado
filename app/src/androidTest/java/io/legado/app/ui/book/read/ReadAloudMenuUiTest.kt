@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ci.lazyItem
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -569,9 +570,9 @@ class ReadAloudMenuUiTest {
         scenario!!.onActivity {
             ReadAloudConfigDialog().showNow(it.supportFragmentManager, "aloud-start-config")
         }
-        compose.onNodeWithTag("read-aloud-start").performScrollTo().assertExists()
-        compose.onNodeWithTag("read-aloud-controls").performScrollTo().assertExists()
-        compose.onNodeWithTag("read-aloud-start").performScrollTo().performClick()
+        compose.lazyItem("read-aloud-settings-list", "read-aloud-start").assertExists()
+        compose.lazyItem("read-aloud-settings-list", "read-aloud-controls").assertExists()
+        compose.lazyItem("read-aloud-settings-list", "read-aloud-start").performClick()
         compose.onNodeWithTag("read-aloud-start-sentence").assertIsSelected()
         screenshot("aloud-start-options-default-sentence")
         compose.onNodeWithTag("read-aloud-start-page").performClick()
@@ -608,9 +609,7 @@ class ReadAloudMenuUiTest {
             scenario!!.onActivity {
                 ReadAloudConfigDialog().showNow(it.supportFragmentManager, "aloud-start-restored")
             }
-            compose
-                .onNodeWithTag("read-aloud-start")
-                .performScrollTo()
+            compose.lazyItem("read-aloud-settings-list", "read-aloud-start")
                 .assertTextContains(context.getString(R.string.read_aloud_start_page))
                 .performClick()
             compose.onNodeWithTag("read-aloud-start-page").assertIsSelected()

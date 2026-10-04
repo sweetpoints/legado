@@ -903,6 +903,7 @@ class ReadRecordHistoryTest {
             launch()
             await { it.snapshot.rows.size == 3 }
             assertRecordLayout(book.name, book.author)
+            reveal("history-summary")
             compose.onNodeWithTag("history-summary").assertIsDisplayed()
             screenshot("reading-history-narrow-large-text")
         } finally {
@@ -922,6 +923,7 @@ class ReadRecordHistoryTest {
 
     private fun await(predicate: (ReadingHistoryState) -> Boolean) {
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             var ready = false
             scenario!!.onActivity {
                 ready = !it.viewModel.state.value.loading && predicate(it.viewModel.state.value)
@@ -933,20 +935,30 @@ class ReadRecordHistoryTest {
 
     private fun preference(field: ReadingHistoryPreference) {
         compose.onNodeWithTag("history-menu").performClick()
-        compose.onNodeWithTag("history-pref-${field.name}").performClick()
+        compose.onNodeWithTag("history-pref-${field.name}").performScrollTo().performClick()
         compose.waitForIdle()
     }
 
     private fun remove(name: String, author: String) {
+        reveal("history-delete-${key(name,author)}")
         compose.onNodeWithTag("history-delete-${key(name,author)}", true).performClick()
     }
 
     private fun text(field: String, name: String, author: String, value: String) {
+        reveal("history-$field-${key(name,author)}")
         compose.onNodeWithTag("history-$field-${key(name,author)}", true).assertTextEquals(value)
     }
 
+    private fun reveal(tag: String) {
+        if (runCatching { compose.onNodeWithTag(tag, true).assertIsDisplayed() }.isFailure) {
+            compose.onNodeWithTag("history-list", true).performScrollToNode(hasTestTag(tag))
+        }
+    }
+
     private fun awaitColor(tag: String, color: Int) {
+        reveal(tag)
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             runCatching {
                     val image = compose.onNodeWithTag(tag, true).captureToImage().toPixelMap()
                     image[image.width / 2, image.height / 2].toArgb() == color
@@ -965,6 +977,7 @@ class ReadRecordHistoryTest {
     }
 
     private fun assertRecordLayout(name: String, author: String) {
+        compose.onNodeWithTag("history-list").performScrollToNode(hasTestTag("history-row-${key(name,author)}"))
         val fields =
             listOf("title", "author", "chapter", "time", "date").map {
                 compose

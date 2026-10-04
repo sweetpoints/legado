@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.ViewConfiguration
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
@@ -11,7 +13,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
@@ -66,6 +70,11 @@ class SourceDragOrderUiTest {
         verifyBookComposeDrag(removeTarget = true)
 
     private fun verifyBookComposeDrag(descending: Boolean = false, removeTarget: Boolean = false) {
+        // Startup normalizes duplicate order values. Wait before inserting deliberate duplicate
+        // fixtures so the test isolates held-drag persistence rather than racing housekeeping.
+        waitUntil("application initialization completed") {
+            (context.applicationContext as io.legado.app.App).initialization.isCompleted
+        }
         val group = "Compose book drag ${UUID.randomUUID()}"
         val oldRows = appDb.bookSourceDao.allPart
         val help = LocalConfig.all["bookSourceHelpVersion"]
@@ -103,9 +112,24 @@ class SourceDragOrderUiTest {
                     scenario.onActivity { loaded = !it.managerModel.state.value.loading }
                     loaded
                 }
-                if (descending) {
-                    compose.onNodeWithText(context.getString(R.string.menu)).performClick()
-                    compose.onNodeWithTag("source-manager-action:descending").performClick()
+                val backBounds = compose.onNodeWithText(context.getString(R.string.back))
+                    .fetchSemanticsNode().boundsInRoot
+                scenario.onActivity { activity ->
+                    val safeTop = checkNotNull(ViewCompat.getRootWindowInsets(activity.window.decorView))
+                        .getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top
+                    assertTrue("Book-source toolbar overlaps the status bar", backBounds.top >= safeTop)
+                    assertTrue("Book-source toolbar adds excess top spacing", backBounds.top <= safeTop + activity.resources.displayMetrics.density * 8)
+                }
+                var needsDirectionChange = false
+                scenario.onActivity { needsDirectionChange = it.managerModel.state.value.ascending == descending }
+                if (needsDirectionChange) {
+                    compose.onNode(hasText(context.getString(R.string.menu)) and isEnabled()).performClick()
+                    compose.onNodeWithTag("source-manager-action:descending").performScrollTo().performClick()
+                    waitUntil("book sort direction applied") {
+                        var applied = false
+                        scenario.onActivity { applied = it.managerModel.state.value.ascending == !descending }
+                        applied
+                    }
                 }
                 filter(Kind.BOOK, fixtures.first().bookSourceName)
                 awaitItems(Kind.BOOK, scenario, listOf(fixtures.first().bookSourceUrl))
@@ -692,7 +716,10 @@ class SourceDragOrderUiTest {
 
     private fun waitUntil(description: String, condition: () -> Boolean) {
         try {
-            compose.waitUntil(timeoutMillis = 15_000, condition = condition)
+            compose.waitUntil(timeoutMillis = 15_000) {
+                compose.mainClock.advanceTimeByFrame()
+                condition()
+            }
         } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
             error("Timed out waiting for $description")
         }
