@@ -35,12 +35,32 @@ class LegacySourceImporter {
       jsonDecode(jsonEncode(input)) as Map,
     );
     final issues = <LegacyIssue>[];
-    final base = Uri.tryParse(input['bookSourceUrl']?.toString() ?? '');
-    if (base == null ||
-        !['http', 'https'].contains(base.scheme) ||
-        base.host.isEmpty) {
+    final id = input['bookSourceUrl'];
+    if (id is! String || id.isEmpty) {
       throw const FormatException(
-        'bookSourceUrl must be an absolute HTTP(S) URL',
+        'bookSourceUrl must be a non-empty source identifier',
+      );
+    }
+    final idUri = Uri.tryParse(id);
+    final legacyBaseUrlUnavailable =
+        idUri == null ||
+        !['http', 'https'].contains(idUri.scheme) ||
+        idUri.host.isEmpty;
+    final base = legacyBaseUrlUnavailable
+        ? _searchRequestAnchor(input['searchUrl'])
+        : idUri;
+    if (base == null) {
+      throw const FormatException(
+        'Cannot determine an HTTP(S) request base for this source identifier; a static absolute searchUrl is required',
+      );
+    }
+    if (legacyBaseUrlUnavailable) {
+      issues.add(
+        const LegacyIssue(
+          'bookSourceUrl',
+          'legacy.base_url_requires_review',
+          'Source identity is not a request base URL; absolute stage URLs require review.',
+        ),
       );
     }
     final requestHeaders = <String, String>{};
@@ -272,13 +292,14 @@ class LegacySourceImporter {
     return LegacyImport(
       original,
       SourceDefinition(
-        id: base.toString(),
+        id: id,
         name: input['bookSourceName']?.toString() ?? base.host,
         baseUrl: base,
         stages: stages,
         headers: requestHeaders,
         metadata: {
           'legacy': true,
+          if (legacyBaseUrlUnavailable) 'legacyBaseUrlUnavailable': true,
           'legacyOriginal': original,
           'compatibility': issues.isEmpty ? 'unverified' : 'manualRequired',
         },
@@ -286,6 +307,38 @@ class LegacySourceImporter {
       List.unmodifiable(issues),
     );
   }
+}
+
+// A source key may be a local label. Use only a proven transport origin as an
+// anchor; callers must not infer relative stage URLs from this search origin.
+Uri? _searchRequestAnchor(Object? value) {
+  if (value is! String || value.isEmpty) return null;
+  final split = RegExp(r'\s*,\s*(?=\{)').firstMatch(value);
+  final url = split == null ? value : value.substring(0, split.start);
+  if (RegExp(r'@js:|<js>|<[^<>]*>|\s', caseSensitive: false).hasMatch(url)) {
+    return null;
+  }
+  final queryAt = url.indexOf('?');
+  final path = queryAt < 0 ? url : url.substring(0, queryAt);
+  if (path.contains('{{') || path.contains('}}')) return null;
+  final knownTemplates = RegExp(
+    r'\{\{(key|page|bookUrl|tocUrl|chapterUrl|baseUrl|exploreUrl)\}\}',
+  );
+  final staticUrl = url.replaceAll(knownTemplates, 'placeholder');
+  if (staticUrl.contains('{{') || staticUrl.contains('}}')) return null;
+  final parsed = Uri.tryParse(staticUrl);
+  if (parsed == null ||
+      !['http', 'https'].contains(parsed.scheme) ||
+      parsed.host.isEmpty ||
+      parsed.userInfo.isNotEmpty ||
+      parsed.hasFragment) {
+    return null;
+  }
+  return Uri(
+    scheme: parsed.scheme,
+    host: parsed.host,
+    port: parsed.hasPort ? parsed.port : null,
+  );
 }
 
 class _LegacyRequest {

@@ -352,6 +352,75 @@ void main() {
       expect(imported.original, input);
     }
   });
+  test(
+    'source identity preserves original spelling independently of URL base',
+    () {
+      for (final id in [
+        'HTTPS://Books.Test:443/path',
+        'https://books.test/%7e',
+      ]) {
+        final imported = LegacySourceImporter().import({'bookSourceUrl': id});
+        expect(imported.source.id, id);
+        expect(imported.requiresManualWork, false);
+        expect(
+          imported.source.metadata.containsKey('legacyBaseUrlUnavailable'),
+          false,
+        );
+      }
+    },
+  );
+  test('non-URL source IDs preserve identity with a reviewed static request anchor', () {
+    for (final id in ['local-source-A', ' local-source-A ', 'local-source-B']) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': id,
+        'searchUrl': 'https://books.test:8443/search?q={{key}}&page={{page}},{"method":"GET"}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.source.id, id);
+      expect(imported.source.baseUrl.toString(), 'https://books.test:8443');
+      expect(imported.source.metadata['legacyBaseUrlUnavailable'], true);
+      expect(imported.requiresManualWork, true);
+      expect(
+        imported.issues.map((e) => e.code),
+        contains('legacy.base_url_requires_review'),
+      );
+      expect(imported.original['bookSourceUrl'], id);
+    }
+  });
+  test(
+    'uncertain search hosts and missing anchors reject without mislabeling IDs',
+    () {
+      for (final url in [
+        null,
+        '/search',
+        '@JS:"https://books.test/search"',
+        'https://{{key}}.test/search',
+        'https://books.test/{{key}}',
+        'https://user:pass@books.test/search',
+        'https://books.test/search?q={{key.trim()}}',
+        'https://books.test/search#fragment',
+      ]) {
+        expect(
+          () => LegacySourceImporter().import({
+            'bookSourceUrl': 'local-id',
+            'searchUrl': url,
+          }),
+          throwsA(
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              contains('Cannot determine'),
+            ),
+          ),
+          reason: '$url',
+        );
+      }
+      expect(
+        () => LegacySourceImporter().import({'bookSourceUrl': ''}),
+        throwsFormatException,
+      );
+    },
+  );
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',
