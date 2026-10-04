@@ -10,16 +10,33 @@ import 'package:enough_convert/gbk.dart';
 typedef CharsetDecoder = String Function(List<int> bytes, String charset);
 
 class NetworkResponse {
-  const NetworkResponse(this.url, this.status, this.headers, this.body);
+  const NetworkResponse(
+    this.url,
+    this.status,
+    this.headers,
+    this.body, {
+    this.message = '',
+    this.bytes = const [],
+    this.multiHeaders = const {},
+    this.cookies = const [],
+  });
   final Uri url;
   final int status;
   final Map<String, String> headers;
   final String body;
+  final String message;
+  final List<int> bytes;
+  final Map<String, List<String>> multiHeaders;
+  final List<String> cookies;
   Map<String, Object?> toJson() => {
     'url': url.toString(),
     'status': status,
     'headers': headers,
     'body': body,
+    'message': message,
+    'bytes': bytes,
+    'multiHeaders': multiHeaders,
+    'cookies': cookies,
   };
 }
 
@@ -38,6 +55,61 @@ class NetworkClient {
   int _active = 0;
   final Queue<Completer<void>> _waiters = Queue();
   DateTime _nextRequest = DateTime.fromMillisecondsSinceEpoch(0);
+
+  List<Map<String, Object?>> exportCookies() => _cookies
+      .where((c) => !c.expired)
+      .map(
+        (c) => {
+          'name': c.cookie.name,
+          'value': c.cookie.value,
+          'domain': c.domain,
+          'path': c.path,
+          'hostOnly': c.hostOnly,
+          'secure': c.cookie.secure,
+          'httpOnly': c.cookie.httpOnly,
+          'maxAge': c.cookie.maxAge,
+          'expires': c.cookie.expires?.toUtc().toIso8601String(),
+          'created': c.created.toUtc().toIso8601String(),
+        },
+      )
+      .toList();
+  void restoreCookies(List<Map<String, Object?>> records) {
+    final restored = <_StoredCookie>[];
+    for (final record in records) {
+      final domain = record['domain'] as String;
+      final path = record['path'] as String;
+      if (domain.isEmpty || !path.startsWith('/')) {
+        throw const EngineException('invalid_session', 'Invalid cookie scope');
+      }
+      final cookie = Cookie(record['name'] as String, record['value'] as String)
+        ..secure = record['secure'] as bool? ?? false
+        ..httpOnly = record['httpOnly'] as bool? ?? false
+        ..maxAge = record['maxAge'] as int?;
+      if (record['expires'] != null) {
+        cookie.expires = DateTime.parse(record['expires'] as String);
+      }
+      restored.add(
+        _StoredCookie(
+          cookie,
+          domain,
+          path,
+          record['hostOnly'] as bool? ?? true,
+          DateTime.parse(record['created'] as String),
+        ),
+      );
+    }
+    _cookies
+      ..clear()
+      ..addAll(restored.where((c) => !c.expired));
+  }
+
+  String cookieHeader(Uri uri) {
+    _cookies.removeWhere((c) => c.expired);
+    return _cookies
+        .where((c) => c.matches(uri))
+        .map((c) => '${c.cookie.name}=${c.cookie.value}')
+        .join('; ');
+  }
 
   /// Import cookies with their supplied domain/path/security attributes.
   /// Invalid unrelated domains are ignored. This is also used by adapters.
@@ -122,6 +194,7 @@ class NetworkClient {
     Duration timeout = const Duration(seconds: 30),
     CancellationToken? cancellation,
     int maxRedirects = 5,
+    bool followRedirects = true,
   }) async {
     await _acquire(cancellation);
     try {
@@ -144,6 +217,7 @@ class NetworkClient {
         timeout: timeout,
         cancellation: cancellation,
         maxRedirects: maxRedirects,
+        followRedirects: followRedirects,
       );
     } finally {
       _release();
@@ -158,6 +232,7 @@ class NetworkClient {
     Duration timeout = const Duration(seconds: 30),
     CancellationToken? cancellation,
     int maxRedirects = 5,
+    bool followRedirects = true,
   }) async {
     cancellation?.throwIfCancelled();
     HttpClientRequest? active;
@@ -200,7 +275,8 @@ class NetworkClient {
         if (payload != null) req.add(utf8.encode(payload));
         final response = await req.close();
         importCookies(current, response.cookies);
-        if ([301, 302, 303, 307, 308].contains(response.statusCode) &&
+        if (followRedirects &&
+            [301, 302, 303, 307, 308].contains(response.statusCode) &&
             response.headers.value('location') != null) {
           await response.drain<void>();
           if (count == maxRedirects) {
@@ -225,8 +301,19 @@ class NetworkClient {
           (a, b) => a..addAll(b),
         );
         cancellation?.throwIfCancelled();
-        final charset =
-            response.headers.contentType?.charset?.toLowerCase() ?? 'utf-8';
+        final headerCharset = response.headers.contentType?.charset
+            ?.toLowerCase();
+        final prefix = latin1.decode(bytes.take(4096).toList());
+        final meta = RegExp(
+          r'''<meta\s[^>]*charset\s*=\s*["']?([^\s"'/>;]+)''',
+          caseSensitive: false,
+        ).firstMatch(prefix)?[1]?.toLowerCase();
+        final bom =
+            bytes.length >= 3 &&
+            bytes[0] == 0xef &&
+            bytes[1] == 0xbb &&
+            bytes[2] == 0xbf;
+        final charset = headerCharset ?? (bom ? 'utf-8' : meta) ?? 'utf-8';
         final encoding = ['gbk', 'gb2312', 'cp936'].contains(charset)
             ? gbk
             : Encoding.getByName(charset);
@@ -242,7 +329,15 @@ class NetworkClient {
           current,
           response.statusCode,
           resultHeaders,
-          encoding?.decode(bytes) ?? charsetDecoder!(bytes, charset),
+          encoding?.decode(bom ? bytes.sublist(3) : bytes) ??
+              charsetDecoder!(bytes, charset),
+          message: response.reasonPhrase,
+          bytes: bytes,
+          multiHeaders: {
+            for (final name in resultHeaders.keys)
+              name: response.headers[name] ?? [],
+          },
+          cookies: response.cookies.map((c) => c.toString()).toList(),
         );
       }
       throw const EngineException('redirect_limit', 'Too many redirects');
@@ -271,8 +366,13 @@ class NetworkClient {
 }
 
 class _StoredCookie {
-  _StoredCookie(this.cookie, this.domain, this.path, this.hostOnly)
-    : created = DateTime.now();
+  _StoredCookie(
+    this.cookie,
+    this.domain,
+    this.path,
+    this.hostOnly, [
+    DateTime? created,
+  ]) : created = created ?? DateTime.now();
   final Cookie cookie;
   final String domain;
   final String path;

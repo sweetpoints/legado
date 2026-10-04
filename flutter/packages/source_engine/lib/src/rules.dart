@@ -6,6 +6,7 @@ import 'package:json_path/json_path.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
 
 import 'contracts.dart';
+import 'legacy_html.dart';
 
 /// New-version rule execution. Legacy syntax is translated by source_legacy.
 class RuleEvaluator {
@@ -16,6 +17,7 @@ class RuleEvaluator {
     Object? input,
     ScriptContext context, {
     CancellationToken? cancellation,
+    bool elements = false,
   }) async {
     cancellation?.throwIfCancelled();
     // JS is an opaque expression: its operators are never rule separators.
@@ -31,14 +33,20 @@ class RuleEvaluator {
       );
       return result is List ? List<Object?>.from(result) : [?result];
     }
+    final legacy = rule.toLowerCase().startsWith('@legacy:');
+    String childRule(String part) =>
+        legacy && !part.toLowerCase().startsWith('@legacy:')
+        ? '@legacy:$part'
+        : part;
     final fallback = _split(rule, '||');
     if (fallback.length > 1) {
       for (final part in fallback) {
         final found = await evaluate(
-          part,
+          childRule(part),
           input,
           context,
           cancellation: cancellation,
+          elements: elements,
         );
         if (found.any((x) => x != null && x.toString().isNotEmpty)) {
           return found;
@@ -51,10 +59,38 @@ class RuleEvaluator {
       final values = <Object?>[];
       for (final part in concat) {
         values.addAll(
-          await evaluate(part, input, context, cancellation: cancellation),
+          await evaluate(
+            childRule(part),
+            input,
+            context,
+            cancellation: cancellation,
+            elements: elements,
+          ),
         );
       }
       return values;
+    }
+    if (legacy) {
+      final interleave = _split(rule, '%%');
+      if (interleave.length > 1) {
+        final batches = <List<Object?>>[];
+        for (final part in interleave) {
+          final batch = await evaluate(
+            childRule(part),
+            input,
+            context,
+            cancellation: cancellation,
+            elements: elements,
+          );
+          if (batch.isNotEmpty) batches.add(batch);
+        }
+        return [
+          if (batches.isNotEmpty)
+            for (var i = 0; i < batches.first.length; i++)
+              for (final batch in batches)
+                if (i < batch.length) batch[i],
+        ];
+      }
     }
     final replacements = _split(rule, '##');
     final selector = replacements.first.trim();
@@ -66,7 +102,13 @@ class RuleEvaluator {
     }
     List<Object?> values;
     final lower = selector.toLowerCase();
-    if (lower.startsWith('@json:') || selector.startsWith(r'$')) {
+    if (lower.startsWith('@legacy:')) {
+      values = LegacyHtmlRule.evaluate(
+        selector.substring(8),
+        input,
+        elements: elements,
+      );
+    } else if (lower.startsWith('@json:') || selector.startsWith(r'$')) {
       final data = input is String ? jsonDecode(input) : input;
       values = JsonPath(
         lower.startsWith('@json:') ? selector.substring(6) : selector,

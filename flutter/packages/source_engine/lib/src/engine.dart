@@ -18,6 +18,7 @@ class SourceEngine {
   final NetworkClient? _providedNetwork;
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
+  final Map<String, List<Map<String, Object?>>> _pendingCookies = {};
   Future<List<Map<String, Object?>>> execute(
     SourceDefinition source,
     String operation, {
@@ -40,6 +41,8 @@ class SourceEngine {
             ),
           ),
         );
+    final pendingCookies = _pendingCookies.remove(source.id);
+    if (pendingCookies != null) network.restoreCookies(pendingCookies);
     final vars = _variables.putIfAbsent(source.id, () => {});
     final baseHost = _EngineHost(
       network,
@@ -123,6 +126,7 @@ class SourceEngine {
               response.body,
               context,
               cancellation: cancellation,
+              elements: true,
             );
 
       for (final row in rows) {
@@ -189,6 +193,37 @@ class SourceEngine {
     }).toList();
   }
 
+  Map<String, Object?> exportSession(String sourceId) => {
+    'variables': Map<String, Object?>.from(_variables[sourceId] ?? {}),
+    'cookies':
+        (_providedNetwork ?? _sessions[sourceId])?.exportCookies() ??
+        _pendingCookies[sourceId] ??
+        [],
+  };
+  void importSession(String sourceId, Map<String, Object?> session) {
+    final variables = Map<String, Object?>.from(
+      session['variables'] as Map? ?? {},
+    );
+    // Ensure storage boundaries remain JSON serializable.
+    jsonEncode(variables);
+    final records = (session['cookies'] as List? ?? [])
+        .map((e) => Map<String, Object?>.from(e as Map))
+        .toList();
+    final network = _providedNetwork ?? _sessions[sourceId];
+    if (network == null) {
+      final validator = NetworkClient();
+      try {
+        validator.restoreCookies(records);
+        _pendingCookies[sourceId] = validator.exportCookies();
+      } finally {
+        validator.close();
+      }
+    } else {
+      network.restoreCookies(records);
+    }
+    _variables[sourceId] = variables;
+  }
+
   Future<void> close() async {
     for (final session in _sessions.values) {
       session.close();
@@ -234,6 +269,7 @@ class _EngineHost implements ScriptHost {
             milliseconds: options['timeoutMs'] as int? ?? 30000,
           ),
           cancellation: cancellation,
+          followRedirects: options['followRedirects'] as bool? ?? true,
         );
         return response.toJson();
       case 'browser.open':
@@ -265,6 +301,8 @@ class _EngineHost implements ScriptHost {
           }
         }
         return result;
+      case 'cookies.get':
+        return network.cookieHeader(baseUrl.resolve(arguments[0].toString()));
       case 'variables.get':
         return variables[arguments[0].toString()];
       case 'variables.put':
