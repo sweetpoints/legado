@@ -176,8 +176,8 @@ class BookDetailSessionRepositoryTest {
             assertNotNull(repository().read(id)!!.pendingNetwork!!.plan)
             val restored = repository().recover(id)!!
             assertEquals("cached info", restored.data!!.book.materializeBook().infoHtml)
-            assertEquals("cached toc", restored.data!!.book.materializeBook().tocHtml)
-            assertEquals("Chapter", restored.data!!.chapters.single().title)
+            assertEquals("cached toc", restored.data.book.materializeBook().tocHtml)
+            assertEquals("Chapter", restored.data.chapters.single().title)
             assertFalse(restored.running)
             assertNull(restored.pendingNetwork)
             assertEquals(1, restored.effects.count { it.kind == BookDetailNativeKind.ReaderSync })

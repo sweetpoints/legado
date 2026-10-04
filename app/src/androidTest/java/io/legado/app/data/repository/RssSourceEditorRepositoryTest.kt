@@ -286,7 +286,9 @@ class RssSourceEditorRepositoryTest {
             assertEquals("renamed", restored.originalKey)
             assertEquals(RssSourceEditorSaveAction.Debug, restored.delivery!!.action)
             assertEquals(7, restored.customOrder)
-            assertEquals(restored.delivery!!.token, repo().readDraft(session)!!.delivery!!.token)
+            val persisted = checkNotNull(repo().readDraft(session))
+            val persistedDelivery = checkNotNull(persisted.delivery)
+            assertEquals(restored.delivery.token, persistedDelivery.token)
             repository.writeDraft(
                 session,
                 restored.copy(delivery = null, revision = restored.revision + 1),

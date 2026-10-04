@@ -150,9 +150,9 @@ class AppBrowserSessionStoreTest {
                     val page = store.prepare(request)
                     assertTrue(page.localHtml)
                     assertTrue(page.html!!.contains("完整内容"))
-                    assertTrue(page.html!!.contains("<HEAD><script>"))
+                    assertTrue(page.html.contains("<HEAD><script>"))
                     assertEquals(
-                        BrowserVerification(page.html!!, page.baseUrl),
+                        BrowserVerification(page.html, page.baseUrl),
                         store.refetch(page),
                     )
                     assertEquals(

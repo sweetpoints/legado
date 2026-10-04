@@ -1291,24 +1291,26 @@ object ReadBook : CoroutineScope by MainScope() {
         syncReadAloudFollow: Boolean = false,
         restartReadAloudFromVisiblePage: Boolean = false,
         updateReadAloud: Boolean = true,
+        expectedReadAloudRequestGeneration: Long? = null,
     ) {
         callBack?.pageChanged()
         curTextChapter?.let {
             if (updateReadAloud && BaseReadAloudService.isRun && it.isCompleted) {
-                if (!syncReadAloudFollow) {
-                    if (!restartReadAloudFromVisiblePage) {
+                ReadAloud.withCurrentPlaybackRequest(expectedReadAloudRequestGeneration) {
+                    if (expectedReadAloudRequestGeneration != null &&
+                        BaseReadAloudService.hasPreparedSpeechContent(it)) {
+                        // Geometry and visual return rebuild the page, not the live speech queue.
+                    } else if (!syncReadAloudFollow && !restartReadAloudFromVisiblePage) {
                         ReadAloud.detachReadAloudFollow()
-                        return@let
-                    }
-                }
-                if (restartReadAloudFromVisiblePage) {
-                    readAloud(!BaseReadAloudService.pause)
-                } else {
-                    val scrollPageAnim = pageAnim() == 3
-                    if (scrollPageAnim && pageChanged) {
-                        ReadAloud.pause(appCtx)
+                    } else if (restartReadAloudFromVisiblePage) {
+                        readAloud(!BaseReadAloudService.pause, expectedRequestGeneration = expectedReadAloudRequestGeneration)
                     } else {
-                        readAloud(!BaseReadAloudService.pause)
+                        val scrollPageAnim = pageAnim() == 3
+                        if (scrollPageAnim && pageChanged) {
+                            ReadAloud.pause(appCtx)
+                        } else {
+                            readAloud(!BaseReadAloudService.pause, expectedRequestGeneration = expectedReadAloudRequestGeneration)
+                        }
                     }
                 }
             }
@@ -1322,6 +1324,7 @@ object ReadBook : CoroutineScope by MainScope() {
         play: Boolean = true,
         startPos: Int = 0,
         rewindToSentenceStart: Boolean = false,
+        expectedRequestGeneration: Long? = null,
     ) {
         book ?: return
         val textChapter = curTextChapter ?: return
@@ -1331,6 +1334,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 play,
                 startPos = startPos,
                 rewindToSentenceStart = rewindToSentenceStart,
+                expectedRequestGeneration = expectedRequestGeneration,
             )
         }
     }
@@ -1673,6 +1677,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         // Restoring visual follow during layout must not create a new speech session.
         val updateReadAloud = BaseReadAloudService.shouldSyncSpeechNavigation()
+        val readAloudRequestGeneration = ReadAloud.playbackRequestGeneration
         val shouldResetPageOffset =
             resetPageOffset && shouldApplyReadPositionReset(readPositionVersion)
         chapterLoadingJobs[chapter.index]?.cancel()
@@ -1747,6 +1752,7 @@ object ReadBook : CoroutineScope by MainScope() {
                                     syncReadAloudFollow =
                                         BaseReadAloudService.shouldSyncSpeechNavigation(),
                                     updateReadAloud = updateReadAloud,
+                                    expectedReadAloudRequestGeneration = readAloudRequestGeneration,
                                 )
                                 callBack?.contentLoadFinish()
                             }
@@ -1830,6 +1836,7 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         // Restoring visual follow during layout must not create a new speech session.
         val updateReadAloud = BaseReadAloudService.shouldSyncSpeechNavigation()
+        val readAloudRequestGeneration = ReadAloud.playbackRequestGeneration
         val shouldResetPageOffset =
             resetPageOffset && shouldApplyReadPositionReset(readPositionVersion)
         kotlin
@@ -1893,6 +1900,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         curPageChanged(
                             syncReadAloudFollow = BaseReadAloudService.shouldSyncSpeechNavigation(),
                             updateReadAloud = updateReadAloud,
+                            expectedReadAloudRequestGeneration = readAloudRequestGeneration,
                         )
                         callBack?.contentLoadFinish()
                     }

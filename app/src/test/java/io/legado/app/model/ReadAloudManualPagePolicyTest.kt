@@ -96,7 +96,10 @@ class ReadAloudManualPagePolicyTest {
                 it.contains("restartReadAloudFromVisiblePage = restartReadAloud")
             } >= 3
         )
-        assertTrue(readBook.contains("readAloud(!BaseReadAloudService.pause)"))
+        assertTrue(
+            Regex("""readAloud\(\s*!BaseReadAloudService\.pause\s*[,)]""")
+                .containsMatchIn(readBook)
+        )
     }
 
     private fun readProjectFile(pathInApp: String): String {

@@ -108,6 +108,8 @@ on:
       - 'app/src/androidTest/java/io/legado/app/ui/book/source/**'
       - 'app/src/main/java/io/legado/app/model/localBook/PdfOutline.kt'
       - 'app/src/main/java/io/legado/app/model/ReadBook.kt'
+      - 'app/src/main/java/io/legado/app/model/ReadAloud.kt'
+      - 'app/src/main/java/io/legado/app/service/*ReadAloudService.kt'
       - 'app/src/main/java/io/legado/app/ui/book/toc/**'
       - 'app/src/main/java/io/legado/app/ui/book/read/**'
       - 'app/src/main/java/io/legado/app/ui/book/manga/**'

@@ -60,7 +60,7 @@ class RssCategoryRepositoryTest {
         assertEquals(listOf(0, 1), first.tabs.map { it.index })
         first.source!!.articleStyle = 99
         assertEquals(4, repository.load(RssCategoryRequest(source.sourceUrl)).source!!.articleStyle)
-        assertEquals("Article rule", first.source!!.ruleArticles)
+        assertEquals("Article rule", first.source.ruleArticles)
     }
 
     @Test

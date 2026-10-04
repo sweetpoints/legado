@@ -4,10 +4,11 @@ import android.widget.FrameLayout
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -208,9 +209,13 @@ class BrowserComposeTest {
 
     @Test
     fun systemAndKeyboardInsetsLeaveBrowserCoreAboveBottomAndToolbarBelowTop() {
+        var density = 0f
         compose.setContent {
+            val currentDensity = LocalDensity.current.density
+            SideEffect { density = currentDensity }
             LegadoComposeTheme {
-                Box(Modifier.requiredSize(320.dp, 500.dp)) {
+                // Respect the actual host window instead of forcing a fixture beyond its bounds.
+                Box(Modifier.size(320.dp, 500.dp).testTag("browser-insets-fixture")) {
                     BrowserScreen(
                         state(),
                         actions(),
@@ -220,17 +225,20 @@ class BrowserComposeTest {
                 }
             }
         }
+        val fixture =
+            compose.onNodeWithTag("browser-insets-fixture").fetchSemanticsNode().boundsInRoot
         val page = compose.onNodeWithTag("browser-page").fetchSemanticsNode().boundsInRoot
-        val back = compose.onNodeWithTag("browser-back").fetchSemanticsNode().boundsInRoot
-        val core = compose.onNodeWithTag("browser-web-core").fetchSemanticsNode().boundsInRoot
-        val density =
-            InstrumentationRegistry.getInstrumentation()
-                .targetContext
-                .resources
-                .displayMetrics
-                .density
-        assertTrue(back.top >= page.top + 24 * density - 1)
-        assertTrue(core.bottom <= page.bottom - 180 * density + 1)
+        val back = compose.onNodeWithTag("browser-back")
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val core = compose.onNodeWithTag("browser-web-core")
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        // browser-page is inside windowInsetsPadding, so the outer fixture is the
+        // system/keyboard boundary. Comparing against page would count its insets twice.
+        val geometry = "fixture=$fixture page=$page back=$back core=$core density=$density"
+        assertTrue("Toolbar overlaps the top inset: $geometry",
+            back.top >= fixture.top + 24 * density - 1)
+        assertTrue("Browser core overlaps the bottom inset: $geometry",
+            core.bottom <= fixture.bottom - 180 * density + 1)
     }
 
     @Test
@@ -293,20 +301,32 @@ class BrowserComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { repo.cookieReads > 0 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            repo.cookieReads > 0
+        }
         compose.runOnIdle {
             owner.registry.currentState = Lifecycle.State.CREATED
             gate.complete(Unit)
             vm.verify()
         }
-        compose.waitUntil(5000) { vm.state.value.capture != null }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            vm.state.value.capture != null
+        }
         assertEquals(0, installs)
         assertEquals(0, captures)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { installs == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            installs == 1
+        }
         assertEquals(0, captures)
         compose.runOnIdle { document = true }
-        compose.waitUntil(5000) { captures == 1 && finishes == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            captures == 1 && finishes == 1
+        }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
         compose.waitForIdle()
@@ -365,12 +385,21 @@ class BrowserComposeTest {
                     }
                 }
         }
-        compose.waitUntil(5000) { !vm.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !vm.state.value.loading
+        }
         compose.runOnIdle { vm.verify() }
-        compose.waitUntil(5000) { vm.state.value.receipt != null }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            vm.state.value.receipt != null
+        }
         assertEquals(0, delivered)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { delivered == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            delivered == 1
+        }
         compose.runOnIdle { visible = false }
         compose.runOnIdle { visible = true }
         compose.waitForIdle()
@@ -417,13 +446,17 @@ class BrowserComposeTest {
             }
         }
         compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("browser-error").fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(0, installed)
         compose.onNodeWithTag("browser-confirm").assertIsNotEnabled()
         compose.runOnIdle { repo.cookieFailure = false }
         compose.onNodeWithTag("browser-retry").performClick()
-        compose.waitUntil(5000) { installed == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            installed == 1
+        }
         assertEquals(2, repo.cookieReads)
         compose.onNodeWithTag("browser-error").assertDoesNotExist()
         assertEquals("<html>full page</html>", repo.value.page!!.html)

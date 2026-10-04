@@ -3,7 +3,7 @@ package io.legado.app.ui.config
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -304,11 +304,17 @@ class ThemeSettingsComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !vm.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !vm.state.value.loading
+        }
         compose.runOnIdle { vm.destination(ThemeSettingsDestination.ImageNight) }
         assertEquals(0, launches)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { launches == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            launches == 1
+        }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
         compose.waitForIdle()
@@ -342,12 +348,21 @@ class ThemeSettingsComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !vm.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !vm.state.value.loading
+        }
         compose.runOnIdle { vm.background(false, "https://example.com/image") }
-        compose.waitUntil(5000) { vm.state.value.downloaded }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            vm.state.value.downloaded
+        }
         assertEquals(0, messages)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { messages == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            messages == 1
+        }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
         compose.waitForIdle()

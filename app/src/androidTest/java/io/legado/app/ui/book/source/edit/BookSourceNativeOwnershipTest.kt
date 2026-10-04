@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.contract.ActivityResultContract
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.core.app.ActivityOptionsCompat
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
@@ -60,6 +60,7 @@ class BookSourceNativeOwnershipTest {
             store.put(UUID.randomUUID().toString(), created)
         }
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             created.state.value.document != null && !created.state.value.busy
         }
         return created
@@ -68,6 +69,7 @@ class BookSourceNativeOwnershipTest {
     private fun prepareQr(): String {
         compose.runOnIdle { model.requestAction(BookSourceNativeAction.QR) }
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             model.state.value.document?.nativeRequest?.action == BookSourceNativeAction.QR
         }
         return model.state.value.document!!.nativeRequest!!.id
@@ -89,6 +91,7 @@ class BookSourceNativeOwnershipTest {
         val oldCode = registry.lastRequestCode
         compose.runOnIdle { model.importText(GSON.toJson(BookSource("paste", "paste"))) }
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             model.state.value.document?.form?.field(0, "bookSourceUrl")?.value == "paste"
         }
         compose.runOnIdle { oldLauncher.unregister() }
@@ -154,6 +157,7 @@ class BookSourceNativeOwnershipTest {
             }
         }
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             restored.state.value.document?.form?.field(0, "bookSourceUrl")?.value == "restored"
         }
         compose.runOnIdle { assertEquals(null, restored.state.value.document!!.nativeRequest) }

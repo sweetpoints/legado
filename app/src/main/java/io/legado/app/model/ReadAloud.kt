@@ -21,6 +21,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
+import java.util.concurrent.atomic.AtomicLong
 
 internal fun resolveReadAloudEngineName(
     ttsEngine: String?,
@@ -37,6 +38,14 @@ internal fun resolveReadAloudEngineName(
 }
 
 object ReadAloud {
+    private val playbackRequests = AtomicLong()
+    internal val playbackRequestGeneration: Long
+        get() = playbackRequests.get()
+
+    @Synchronized
+    internal fun withCurrentPlaybackRequest(expectedGeneration: Long?, block: () -> Unit) {
+        if (expectedGeneration == null || expectedGeneration == playbackRequests.get()) block()
+    }
     var httpTTS: HttpTTS? = null
     val ttsEngine get() = ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
     private var aloudClass: Class<*> = getReadAloudClass()
@@ -78,13 +87,17 @@ object ReadAloud {
         aloudClass = getReadAloudClass()
     }
 
+    @Synchronized
     fun play(
         context: Context,
         play: Boolean = true,
         pageIndex: Int = ReadBook.durPageIndex,
         startPos: Int = 0,
-        rewindToSentenceStart: Boolean = false
+        rewindToSentenceStart: Boolean = false,
+        expectedRequestGeneration: Long? = null,
     ) {
+        if (expectedRequestGeneration != null && expectedRequestGeneration != playbackRequests.get()) return
+        playbackRequests.incrementAndGet()
         if (!BaseReadAloudService.isRun) {
             restoreReadAloudFollow()
         }
@@ -104,11 +117,13 @@ object ReadAloud {
         }
     }
 
+    @Synchronized
     fun playByEventBus(
         play: Boolean = true,
         pageIndex: Int = ReadBook.durPageIndex,
         startPos: Int = 0
     ) {
+        playbackRequests.incrementAndGet()
         val bundle = Bundle().apply {
             putBoolean("play", play)
             putInt("pageIndex", pageIndex)
@@ -117,56 +132,70 @@ object ReadAloud {
         postEvent(EventBus.READ_ALOUD_PLAY, bundle)
     }
 
+    @Synchronized
     fun pause(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.pause
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun resume(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.resume
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun stop(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.stop
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun prevParagraph(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.prevParagraph
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun nextParagraph(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.nextParagraph
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun prevChapter(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.prev
             context.startForegroundServiceCompat(intent)
         }
     }
 
+    @Synchronized
     fun nextChapter(context: Context) {
         if (BaseReadAloudService.isRun) {
+            playbackRequests.incrementAndGet()
             val intent = Intent(context, aloudClass)
             intent.action = IntentAction.next
             context.startForegroundServiceCompat(intent)

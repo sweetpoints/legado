@@ -20,6 +20,7 @@ import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import java.util.concurrent.atomic.AtomicLong
@@ -30,13 +31,15 @@ internal fun pendingSpeechPageMoves(currentPageIndex: Int, targetPageIndex: Int)
 /**
  * 本地朗读
  */
-class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener {
+class TTSReadAloudService : BaseReadAloudService() {
 
     private var textToSpeech: TextToSpeech? = null
     private var ttsInitFinish = false
+    private var playPendingInitialization = false
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
     private val playbackSessionId = AtomicLong()
+    private val initializationGeneration = AtomicLong()
     private val callbackHandler by lazy { buildMainHandler() }
     private val TAG = "TTSReadAloudService"
 
@@ -57,19 +60,29 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     @Synchronized
     private fun initTts() {
         ttsInitFinish = false
+        val generation = initializationGeneration.incrementAndGet()
+        val listener = TextToSpeech.OnInitListener { status ->
+            // Engine callbacks may arrive after shutdown or replacement. Post outside the
+            // framework's initialization lock, then accept only this engine generation.
+            callbackHandler.post { handleTtsInitialization(generation, status) }
+        }
         val engine = GSON.fromJsonObject<SelectItem<String>>(ReadAloud.ttsEngine).getOrNull()?.value
         LogUtils.d(TAG, "initTts engine:$engine")
         textToSpeech = if (engine.isNullOrBlank()) {
-            TextToSpeech(this, this)
+            TextToSpeech(this, listener)
         } else {
-            TextToSpeech(this, this, engine)
+            TextToSpeech(this, listener, engine)
         }
         upSpeechRate()
     }
 
     @Synchronized
     fun clearTTS() {
+        initializationGeneration.incrementAndGet()
         playbackSessionId.incrementAndGet()
+        playPendingInitialization = false
+        speakJob?.cancel()
+        speakJob = null
         textToSpeech?.runCatching {
             stop()
             shutdown()
@@ -78,12 +91,20 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         ttsInitFinish = false
     }
 
-    override fun onInit(status: Int) {
+    @Synchronized
+    private fun handleTtsInitialization(generation: Long, status: Int) {
+        if (generation != initializationGeneration.get() || ttsInitFinish) return
         if (status == TextToSpeech.SUCCESS) {
             textToSpeech?.let {
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
-                play()
+                if (isReadAloudPreparing) {
+                    // The preparation commit owns the requested cursor and play/pause intent.
+                    playPendingInitialization = false
+                    return
+                }
+                // Initialization can finish after the user has paused the service.
+                if (BaseReadAloudService.isPlay() || playPendingInitialization) play()
             }
         } else {
             toastOnUi(R.string.tts_init_failed)
@@ -93,7 +114,11 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     @Synchronized
     override fun play() {
         val sessionId = playbackSessionId.incrementAndGet()
-        if (!ttsInitFinish) return
+        if (!ttsInitFinish) {
+            playPendingInitialization = true
+            return
+        }
+        playPendingInitialization = false
         if (!requestFocus()) return
         if (contentList.isEmpty()) {
             AppLog.putDebug("朗读列表为空")
@@ -110,6 +135,8 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         val pageStarts = speechChapter.pages.map { it.chapterPosition }
         val queuedContent = contentList
         speakJob = execute {
+            ensureActive()
+            if (!isCurrentPlayback(sessionId)) return@execute
             LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
             LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
             if (textToSpeech == null) throw NoStackTraceException("tts is null")
@@ -137,11 +164,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                         if (isAddedText) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH,
                         i, chunkStart, chunkEnd == textEnd
                     ) ?: return@execute
+                    ensureActive()
                     if (result == TextToSpeech.ERROR) {
                         if (!isAddedText) {
-                            AppLog.put("tts出错 尝试重新初始化")
-                            clearTTS()
-                            initTts()
+                            synchronized(this@TTSReadAloudService) {
+                                if (!isCurrentPlayback(sessionId)) return@execute
+                                AppLog.put("tts出错 尝试重新初始化")
+                                clearTTS()
+                                initTts()
+                            }
                             return@execute
                         }
                         AppLog.put("tts朗读出错:$chunk")
@@ -158,12 +189,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 if (stoppedSessionId == playbackSessionId.get()) nextChapter(auto = true)
             }
         }.onError {
-            AppLog.put("tts朗读出错\n${it.localizedMessage}", it, true)
+            if (it !is CancellationException && isCurrentPlayback(sessionId)) {
+                AppLog.put("tts朗读出错\n${it.localizedMessage}", it, true)
+            }
         }
     }
 
     @Synchronized
     override fun playStop() {
+        playPendingInitialization = false
         playbackSessionId.incrementAndGet()
         speakJob?.cancel()
         textToSpeech?.runCatching {
@@ -189,7 +223,9 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     /**
      * 暂停朗读
      */
+    @Synchronized
     override fun pauseReadAloud(abandonFocus: Boolean) {
+        playPendingInitialization = false
         super.pauseReadAloud(abandonFocus)
         playStop()
     }

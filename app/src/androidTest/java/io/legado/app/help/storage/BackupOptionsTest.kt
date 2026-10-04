@@ -202,6 +202,7 @@ class BackupOptionsTest {
         compose.onNodeWithTag("backup-text").performTextReplacement("backup-options-password")
         compose.onNodeWithTag("backup-form-ok").performClick()
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
         }
         assertEquals("backup-options-password", LocalConfig.password)
@@ -238,6 +239,7 @@ class BackupOptionsTest {
         compose.onNodeWithTag("backup-auto-days").performTextReplacement("7")
         compose.onNodeWithTag("backup-form-ok").performClick()
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
         }
         assertFalse(AppConfig.autoBackupWebDav)
@@ -248,6 +250,7 @@ class BackupOptionsTest {
         compose.onNodeWithTag("backup-auto-enabled").performClick()
         compose.onNodeWithTag("backup-form-ok").performClick()
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-form-ok").fetchSemanticsNodes().isEmpty()
         }
         assertFalse(AppConfig.autoBackup)
@@ -256,6 +259,7 @@ class BackupOptionsTest {
         compose.onNodeWithTag("backup-auto-webdav").performClick()
         compose.onNodeWithTag("backup-form-cancel").performClick()
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-form-cancel").fetchSemanticsNodes().isEmpty()
         }
         assertFalse(AppConfig.autoBackup)
@@ -510,9 +514,11 @@ class BackupOptionsTest {
     private fun clickPreference(key: String) {
         val actual = if (key == PreferKey.backupPath) "backupUri" else key
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-settings-list").fetchSemanticsNodes().isNotEmpty()
         }
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("backup-task-stop").fetchSemanticsNodes().isEmpty()
         }
         compose

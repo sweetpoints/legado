@@ -207,9 +207,9 @@ class BookDetailStorageRepositoryTest {
         assertTrue(read("book")!!.getSplitLongChapter())
         val parsed = io.legado.app.utils.GSON.fromJson(plan!!.beforeJson, Book::class.java)
         assertTrue(parsed.getSplitLongChapter())
-        val target = io.legado.app.utils.GSON.fromJson(plan!!.targetJson, Book::class.java)
+        val target = io.legado.app.utils.GSON.fromJson(plan.targetJson, Book::class.java)
         assertFalse(target.getSplitLongChapter())
-        val restored = repo().recover(plan!!)
+        val restored = repo().recover(plan)
         assertFalse(restored.splitLongChapter)
         assertFalse(read("book")!!.getSplitLongChapter())
     }
@@ -319,7 +319,7 @@ class BookDetailStorageRepositoryTest {
                 database.bookChapterDao.insert(chapter.copy(variable = "new chapter variable"))
             }
             assertTrue(
-                runCatching { repo().recover(plan!!) }.exceptionOrNull() is BookDetailConflict
+                runCatching { repo().recover(plan) }.exceptionOrNull() is BookDetailConflict
             )
             assertEquals(
                 "new chapter variable",
@@ -329,7 +329,7 @@ class BookDetailStorageRepositoryTest {
             )
             insert(read("book")!!.copy(durChapterPos = 999))
             assertTrue(
-                runCatching { repo().recover(plan!!) }.exceptionOrNull() is BookDetailConflict
+                runCatching { repo().recover(plan) }.exceptionOrNull() is BookDetailConflict
             )
             assertEquals(999, read("book")!!.durChapterPos)
         }

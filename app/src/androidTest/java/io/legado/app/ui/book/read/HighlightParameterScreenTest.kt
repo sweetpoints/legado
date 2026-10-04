@@ -43,8 +43,8 @@ class HighlightParameterScreenTest {
         compose.onNodeWithTag("highlight-parameter-confirm").performClick()
         compose.runOnIdle {
             assertEquals(4.5f, result!!.radius)
-            assertEquals(-1.5f, result!!.dx)
-            assertEquals(123, result!!.color)
+            assertEquals(-1.5f, result.dx)
+            assertEquals(123, result.color)
         }
     }
 

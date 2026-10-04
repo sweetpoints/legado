@@ -3,7 +3,7 @@ package io.legado.app.ui.code
 import android.content.Context
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.core.app.ApplicationProvider
 import io.github.rosemoe.sora.text.Cursor
@@ -44,7 +44,10 @@ class CodeEditorEngineTest {
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        compose.waitUntil(10_000) { status.ready }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            status.ready
+        }
         compose.runOnIdle {
             val sora = engine as SoraCodeEditorEngine
             assertTrue(sora.view.editorLanguage is RuntimeObjectCompletionLanguage)
@@ -75,17 +78,26 @@ class CodeEditorEngineTest {
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        compose.waitUntil(10_000) { status.ready }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            status.ready
+        }
         compose.runOnIdle {
             (engine as SoraCodeEditorEngine).search(
                 CodeEditorSearch(visible = true, query = "(alpha)")
             )
         }
-        compose.waitUntil(10_000) { status.searchResult.substringAfter('/') == "2" }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            status.searchResult.substringAfter('/') == "2"
+        }
         compose.runOnIdle {
             (engine as SoraCodeEditorEngine).replaceAll("$1!")
         }
-        compose.waitUntil(10_000) { !status.replacing }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            !status.replacing
+        }
         compose.runOnIdle {
             engine.snapshot { assertEquals("alpha! beta alpha!", it.text) }
             engine.undo()
@@ -132,12 +144,19 @@ class CodeEditorEngineTest {
                 CodeEditorSearch(visible = true, query = "(alpha)")
             )
         }
-        compose.waitUntil(10_000) { status.searchResult.substringAfter('/') == "1" }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            status.searchResult.substringAfter('/') == "1"
+        }
         compose.runOnIdle { (engine as SoraCodeEditorEngine).replaceAll("$1!") }
-        compose.waitUntil(10_000) { started.get() }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            started.get()
+        }
         compose.runOnIdle { currentOwner.set(false) }
         gate.complete(Unit)
         compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
             finished.get() && !(engine as SoraCodeEditorEngine).isReplacing
         }
         compose.runOnIdle {
@@ -159,7 +178,10 @@ class CodeEditorEngineTest {
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        compose.waitUntil(15_000) { status.ready }
+        compose.waitUntil(15_000) {
+            compose.mainClock.advanceTimeByFrame()
+            status.ready
+        }
         var snapshots = 0
         compose.runOnIdle {
             engine.snapshot { snapshots++ }
@@ -169,7 +191,10 @@ class CodeEditorEngineTest {
         compose.runOnIdle {
             (engine as SafeCodeEditorEngine).view.evaluateJavascript("1") { barrier = true }
         }
-        compose.waitUntil(10_000) { barrier }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            barrier
+        }
         assertEquals(0, snapshots)
         compose.runOnIdle {
             engine.snapshot {
@@ -178,7 +203,10 @@ class CodeEditorEngineTest {
                 snapshots++
             }
         }
-        compose.waitUntil(10_000) { snapshots == 1 }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            snapshots == 1
+        }
         compose.runOnIdle {
             assertFalse(engine.view.isSaveEnabled)
             engine.restoreEditing()

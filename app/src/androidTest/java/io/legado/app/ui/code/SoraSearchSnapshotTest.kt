@@ -2,7 +2,7 @@ package io.legado.app.ui.code
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.util.regex.RegexBackrefGrammar
@@ -53,7 +53,10 @@ class SoraSearchSnapshotTest {
                 ),
             )
         }
-        compose.waitUntil(10_000) { publications > 0 }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            publications > 0
+        }
         compose.runOnIdle {
             val snapshot = LegadoCodeSearchSnapshot.capture(editor)!!
             assertEquals(raw, snapshot.source)
@@ -88,12 +91,18 @@ class SoraSearchSnapshotTest {
         compose.runOnIdle {
             editor.searcher.search("alpha", SearchOptions(SearchOptions.TYPE_NORMAL, true))
         }
-        compose.waitUntil(10_000) { publications > 0 }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            publications > 0
+        }
         compose.runOnIdle {
             editor.searcher.search("beta", SearchOptions(SearchOptions.TYPE_NORMAL, true))
             assertNull(LegadoCodeSearchSnapshot.capture(editor))
         }
-        compose.waitUntil(10_000) { publications > 1 }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            publications > 1
+        }
         compose.runOnIdle {
             assertEquals("beta", LegadoCodeSearchSnapshot.capture(editor)!!.pattern)
             assertEquals(1, LegadoCodeSearchSnapshot.capture(editor)!!.regions.size)

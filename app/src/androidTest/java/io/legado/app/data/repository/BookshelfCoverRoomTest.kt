@@ -127,8 +127,8 @@ class BookshelfCoverRoomTest {
                     assertNull(database.bookDao.getBook("cover")!!.persistedCoverUrl)
                     val path = actual.download(book, valid.absolutePath)
                     installed = File(path)
-                    assertTrue(installed!!.isFile)
-                    assertArrayEquals(valid.readBytes(), installed!!.readBytes())
+                    assertTrue(installed.isFile)
+                    assertArrayEquals(valid.readBytes(), installed.readBytes())
                     assertTrue(actual.installIfUnchanged(book, path))
                     assertEquals(path, database.bookDao.getBook("cover")!!.persistedCoverUrl)
                 }

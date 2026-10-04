@@ -18,7 +18,13 @@ internal data class CodeSyntaxColors(
 )
 
 /** Pure UTF-16 projection preserves every offset used by editing, search and Activity results. */
-internal suspend fun projectCodeSyntax(text: String, colors: CodeSyntaxColors): AnnotatedString {
+internal suspend fun projectCodeSyntax(
+    text: String,
+    colors: CodeSyntaxColors,
+    visibleRange: IntRange = text.indices,
+): AnnotatedString {
+    val visibleStart = visibleRange.first.coerceIn(0, text.length)
+    val visibleEnd = (visibleRange.last + 1).coerceIn(visibleStart, text.length)
     val rules: List<Pair<Pattern, Color>> =
         listOf(
             legadoPattern to colors.legado,
@@ -35,7 +41,10 @@ internal suspend fun projectCodeSyntax(text: String, colors: CodeSyntaxColors): 
             var count = 0
             while (matcher.find()) {
                 if (++count % 64 == 0) jobContext.ensureActive()
-                addStyle(SpanStyle(color = color), matcher.start(), matcher.end())
+                if (matcher.start() >= visibleEnd) break
+                val start = maxOf(matcher.start(), visibleStart)
+                val end = minOf(matcher.end(), visibleEnd)
+                if (start < end) addStyle(SpanStyle(color = color), start, end)
             }
         }
     }

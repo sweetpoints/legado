@@ -14,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
@@ -54,6 +55,15 @@ fun Context.showBookDownloadDialog(book: Book) {
 
 /** 阅读界面 */
 abstract class BaseReadBookActivity : BaseComposeActivity(imageBg = false) {
+    // The native page chrome and floating controls share coordinates in the full window.
+    // PageView reserves the visible system bars and applies the configured cutout padding.
+    override val handlesWindowInsets: Boolean = true
+
+    override fun setupSystemBar() {
+        super.setupSystemBar()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
+
     protected val viewModel by viewModels<ReadBookViewModel>()
     abstract val readMenu: ReaderMenuController
     abstract val searchMenu: ReaderSearchControls
@@ -217,6 +227,8 @@ abstract class BaseReadBookActivity : BaseComposeActivity(imageBg = false) {
             flag = flag or View.SYSTEM_UI_FLAG_FULLSCREEN
         }
         window.decorView.systemUiVisibility = flag
+        // On API 26-29 the legacy flags above otherwise replace the edge-to-edge layout flags.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     override fun upNavigationBarColor() {

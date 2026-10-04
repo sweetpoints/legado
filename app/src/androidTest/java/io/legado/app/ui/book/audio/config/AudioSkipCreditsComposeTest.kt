@@ -1,11 +1,18 @@
 package io.legado.app.ui.book.audio.config
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import io.legado.app.data.repository.AudioSkipCreditsDraft
 import io.legado.app.ui.theme.LegadoComposeTheme
+import io.legado.app.testutil.saveSemantics
+import android.graphics.Bitmap
+import java.io.File
 import org.junit.*
 import org.junit.Assert.*
 
@@ -73,14 +80,41 @@ class AudioSkipCreditsComposeTest {
         assertTrue(values.isEmpty())
         restoration.emulateSavedInstanceStateRestore()
         assertTrue(values.isEmpty())
-        compose.onNodeWithTag("audio-skip-opening-slider").performTouchInput {
-            down(centerRight)
-            moveTo(center)
+        val slider = compose.onNodeWithTag("audio-skip-opening-slider")
+            .performScrollTo().assertIsDisplayed().assertIsEnabled()
+        try {
+            // Slider's accessibility bounds expand past its visual track. Begin inside the
+            // actual control instead of centerRight, which can be outside its pointer region.
+            slider.performTouchInput {
+                down(Offset(width * .8f, center.y))
+                moveTo(Offset(width * .6f, center.y), delayMillis = 32)
+                moveTo(Offset(width * .4f, center.y), delayMillis = 32)
+            }
+            compose.waitForIdle()
+            val displayed = compose.onNodeWithTag("audio-skip-opening-value")
+                .fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)
+                ?.singleOrNull()?.text?.toIntOrNull()
+            assertTrue("The real slider changed during tracking: $displayed", displayed != null && displayed in 1..179)
+            assertTrue(values.isEmpty())
+            slider.performTouchInput { up() }
+            compose.waitForIdle()
+            assertEquals(1, values.size)
+            assertEquals(displayed, values.single())
+            assertTrue(values.single() in 1..179)
+        } catch (error: AssertionError) {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val context = instrumentation.targetContext
+            compose.saveSemantics(context, "audio-skip-tracking-failure")
+            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                try {
+                    File(context.getExternalFilesDir("ui-regression"), "audio-skip-tracking-failure.png")
+                        .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+            throw error
         }
-        assertTrue(values.isEmpty())
-        compose.onNodeWithTag("audio-skip-opening-slider").performTouchInput { up() }
-        assertEquals(1, values.size)
-        assertTrue(values.single() in 1..179)
     }
 
     @Test

@@ -91,7 +91,7 @@ class AutoTaskEditorUiTest {
         compose.onNodeWithTag("task-editor-fullscreen").performClick()
         compose.waitUntil { launched != null }
         assertEquals(AutoTaskEditorField.LoginUrl, launched!!.field)
-        assertEquals(4, launched!!.cursor)
+        assertEquals(4, launched.cursor)
         compose.runOnIdle { model.editorReturned(true, "returned\nurl", null, 7) }
         compose.waitUntil { !model.state.value.editorPending }
         compose.onNodeWithTag("task-editor-LoginUrl").assertTextEquals("returned\nurl")
