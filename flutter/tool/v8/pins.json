@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee",
+    "version": "15.4.80.24"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  }
+}

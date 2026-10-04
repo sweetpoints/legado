@@ -16,11 +16,11 @@
 
 默认 `heapLimitMb=64` 设置 V8 old-generation 约束，不是整个进程硬内存上限。脚本超时由 watchdog 终止执行，取消也调用 V8 TerminateExecution；宿主自身的任务取消还需按其接口处理。超时报 `script_timeout`，其他脚本异常为 `script_error`。close 拒绝后续执行并取消活动执行。
 
-脚本先按表达式放入 async 包装，编译失败再按函数体尝试，因而支持表达式以及带 return 的异步函数体。每次执行的 JS 全局状态不保留，跨任务共享变量使用宿主变量 API。固定 V8 产物关闭 Intl，因此不提供 Intl API；书源不能假设系统国际化行为自动可用。
+脚本先按表达式放入 async 包装，编译失败再按函数体尝试，因而支持表达式以及带 return 的异步函数体。每次执行的 JS 全局状态不保留，跨任务共享变量使用宿主变量 API。当前自编译配置关闭 Intl 和 Temporal，因此不提供相应 API；书源不能假设系统国际化行为自动可用。
 
 ## 原生依赖
 
-运行时需要与目标 CPU、操作系统匹配的 V8 库。原生构建通过官方 `package_ffi` 模板的构建 hook 接入。当前固定第三方构建产物 `haroel/v8-build` 的 `v14.3.92-15`，下载后验证配置中的 SHA-256；当前 hook 支持 macOS arm64、Android arm/arm64/x64，其他平台明确失败。iOS、Linux、Windows 未提供此构建。Dart 分析或单元测试通过，不能单独证明 Android 包已包含可加载的 V8，或真机的书源流程已经通过。
+运行时需要与目标 CPU、操作系统匹配的 V8 库。原生构建通过官方 `package_ffi` 模板的构建 hook 接入。当前固定官方 V8 tag15.4.80.24（源码 commite422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee），采用官方源码与固定 depot_tools 8a5434051036b32412a2ecb10c213a72e3f3ccb9 的自产构建，不默认下载第三方预编译引擎。构建脚本与引擎/桥接共享GN和C++运行时，生成本地manifest；hook按manifest选择并校验本地最终C ABI库。当前源码构建目标为macOS arm64（13.0）和Android arm64（API26），其他平台/ABI不提供此构建。构建命令、manifest与覆盖路径见[source_v8 README](../../../packages/source_v8/README.md)。Dart 分析或单元测试通过，不能单独证明 Android 包已包含可加载的 V8，或真机的书源流程已经通过。
 
 V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运行时不可用时应报告错误，不得暗中转到 Rhino、JSC 或其他引擎并继续声称正在使用 V8。
 
@@ -30,3 +30,6 @@ V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运�
 - [V8 Isolate API](https://v8.github.io/api/head/classv8_1_1Isolate.html)：Isolate、微任务与执行终止接口。
 
 这些链接描述 V8 机制；本项目的实际接口与支持状态见新版 Reference 和包测试。
+
+
+原先136项测试、三项Android设备测试及Release/R8结果属于旧14.3基线，不能证明新15.4官方源码产物通过。源码同步、编译、运行时测试、书源一致性测试、APK构建与设备验收各自单独记录；没有新产物验证结果前不宣称已验证。

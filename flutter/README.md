@@ -35,4 +35,6 @@ Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为
 
 当前不是全部历史书源的等价替代。复杂旧脚本、Java 类互操作、未实现的宿主重载与 JSoup 专有规则会报告人工处理。分页、请求限速和部分编码已实现；浏览器、运行时与平台边界以 Reference 和实际测试为准。固定样本通过不代表所有联网书源或所有设备通过。
 
-V8 原生产物固定版本并校验 SHA-256，自动下载至忽略目录，不提交二进制缓存。原生 hook 具有 macOS ARM64 和 Android ARM/ARM64/x64 的构建分支；当前宿主构建脚本、APK 和设备验证仅覆盖 Android ARM64，启用引擎时 APK 也限制为 ARM64。其他平台和 ABI 未完成端到端验证。
+V8默认从官方源码自编译：当前固定稳定版tag15.4.80.24、commite422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
+
+当前自编译目标为macOS ARM64与Android ARM64；当前宿主构建脚本和启用引擎APK限制为Android ARM64。旧版14.3的136项测试、三项设备测试和Release/R8结果仅为历史基线，不是当前15.4源码产物的验证结论；新版本的编译、测试、打包及设备状态分别确认。

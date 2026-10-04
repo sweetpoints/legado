@@ -21,3 +21,5 @@ package-lock.json
 # Python 工具（tools/）
 __pycache__/
 *.pyc
+# Official V8 checkout and build caches
+/.cache/

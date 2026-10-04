@@ -61,7 +61,7 @@ static MaybeLocal<Value> arguments(Isolate *i, Local<Context> c,
   }
   auto input = value.As<Array>();
   auto copy = Array::New(i, input->Length());
-  if (!copy->SetPrototypeV2(c, Null(i)).FromMaybe(false))
+  if (!copy->SetPrototype(c, Null(i)).FromMaybe(false))
     return {};
   for (uint32_t n = 0; n < input->Length(); n++) {
     Local<Value> entry;
@@ -85,7 +85,7 @@ static void host(const FunctionCallbackInfo<Value> &args) {
   if (!arguments(i, c, args[1]).ToLocal(&argument_list))
     return;
   auto o = Object::New(i);
-  o->SetPrototypeV2(c, Null(i)).FromMaybe(false);
+  o->SetPrototype(c, Null(i)).FromMaybe(false);
   o->CreateDataProperty(c, str(i, "id"), Integer::New(i, id)).FromMaybe(false);
   o->CreateDataProperty(c, str(i, "method"), args[0]).FromMaybe(false);
   o->CreateDataProperty(c, str(i, "args"), argument_list).FromMaybe(false);
@@ -106,7 +106,7 @@ static void host_sync(const FunctionCallbackInfo<Value> &args) {
     return;
   int id = ++r->next;
   auto o = Object::New(i);
-  o->SetPrototypeV2(c, Null(i)).FromMaybe(false);
+  o->SetPrototype(c, Null(i)).FromMaybe(false);
   if (!o->CreateDataProperty(c, str(i, "id"), Integer::New(i, id))
            .FromMaybe(false) ||
       !o->CreateDataProperty(c, str(i, "method"), args[0]).FromMaybe(false) ||
@@ -297,7 +297,7 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
   i->PerformMicrotaskCheckpoint();
   if (!r->error.empty()) {
     auto o = Object::New(i);
-    o->SetPrototypeV2(c, Null(i)).FromMaybe(false);
+    o->SetPrototype(c, Null(i)).FromMaybe(false);
     o->CreateDataProperty(c, str(i, "status"), str(i, "error"))
         .FromMaybe(false);
     o->CreateDataProperty(c, str(i, "error"), str(i, r->error))
@@ -311,7 +311,7 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
   auto p = r->result.Get(i);
   if (p->State() != Promise::kPending) {
     auto o = Object::New(i);
-    o->SetPrototypeV2(c, Null(i)).FromMaybe(false);
+    o->SetPrototype(c, Null(i)).FromMaybe(false);
     bool ok = p->State() == Promise::kFulfilled;
     o->CreateDataProperty(c, str(i, "status"), str(i, ok ? "done" : "error"))
         .FromMaybe(false);

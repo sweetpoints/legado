@@ -18,7 +18,7 @@ void main() {
   setUp(() => runtime = V8Runtime());
   tearDown(() => runtime.close());
   test('actual pinned V8 executes JavaScript', () async {
-    expect(runtime.version, startsWith('14.3.92'));
+    expect(runtime.version, equals('15.4.80.24'));
     expect(await runtime.evaluate('6*7', ScriptContext(host: Host())), 42);
   });
   test('awaits asynchronous host promise', () async {

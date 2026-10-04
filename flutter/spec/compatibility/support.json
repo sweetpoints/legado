@@ -3,15 +3,14 @@
   "meaning": "Implementation capability inventory, not proof of device acceptance or complete Legado compatibility",
   "runtime": {
     "engine": "V8",
-    "artifactRelease": "v14.3.92-15",
-    "provider": "haroel/v8-build",
+    "provider": "official source self-build",
     "hookTargets": [
       "macos-arm64",
-      "android-arm",
-      "android-arm64",
-      "android-x64"
+      "android-arm64"
     ],
     "unsupportedTargets": [
+      "android-arm",
+      "android-x64",
       "ios",
       "linux",
       "windows"
@@ -20,7 +19,24 @@
     "legacySyncBridge": true,
     "contextLifetime": "per-evaluation",
     "defaultOldGenerationLimitMb": 64,
-    "intl": false
+    "intl": false,
+    "v8Version": "15.4.80.24",
+    "v8Revision": "e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee",
+    "v8Repository": "https://chromium.googlesource.com/v8/v8.git",
+    "depotToolsRevision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9",
+    "depotToolsRepository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "releaseLine": "selected stable V8 version",
+    "precompiledDownloadDefault": false,
+    "temporal": false,
+    "externalStartupData": false,
+    "provenanceManifest": "source_v8/.cache/self-built/<V8 revision>/manifest.json",
+    "currentSourceBuildValidation": "not established by earlier14.3 tests",
+    "historicalValidation": {
+      "v8Version": "14.3.92",
+      "tests": 136,
+      "androidDeviceConfigurations": 3,
+      "releaseR8": true
+    }
   },
   "engine": {
     "operations": [
