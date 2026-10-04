@@ -115,11 +115,14 @@ class RuleEvaluator {
       ).read(data).map((x) => x.value).toList();
     } else if (lower.startsWith('@xpath:')) {
       final root = HtmlXPath.html(_serialize(input).toString());
-      values = root
-          .query(selector.substring(7))
-          .nodes
-          .map((x) => x.text)
-          .toList();
+      final selected = root.query(selector.substring(7));
+      values = selected.attrs.isNotEmpty
+          ? selected.attrs.where((a) => a != null).toList()
+          : selected.nodes
+                .map<Object?>(
+                  (x) => elements && x.node is Element ? x.node : x.text,
+                )
+                .toList();
     } else if (lower.startsWith('@regex:')) {
       values = RegExp(selector.substring(7), multiLine: true)
           .allMatches(_serialize(input).toString())

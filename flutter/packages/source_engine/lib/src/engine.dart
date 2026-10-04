@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Cookie;
 
+import 'package:html/dom.dart' show Element;
+
 import 'contracts.dart';
 import 'network.dart';
 import 'rules.dart';
@@ -50,6 +52,7 @@ class SourceEngine {
       vars,
       cancellation,
       platform,
+      runtime,
     );
     final host = hostAdapter?.call(baseHost) ?? baseHost;
     final context = ScriptContext(
@@ -240,12 +243,14 @@ class _EngineHost implements ScriptHost {
     this.variables,
     this.cancellation,
     this.platform,
+    this.runtime,
   );
   final NetworkClient network;
   final Uri baseUrl;
   final Map<String, Object?> variables;
   final CancellationToken? cancellation;
   final ScriptHost? platform;
+  final ScriptRuntime runtime;
   @override
   Future<Object?> call(String method, List<Object?> arguments) async {
     cancellation?.throwIfCancelled();
@@ -301,6 +306,60 @@ class _EngineHost implements ScriptHost {
           }
         }
         return result;
+      case 'parse.getString':
+      case 'parse.getStringList':
+      case 'parse.getElement':
+      case 'parse.getElements':
+        if (arguments.length < 2) {
+          throw const EngineException(
+            'invalid_arguments',
+            'parse calls require rule and content',
+          );
+        }
+        final rule = arguments[0]?.toString() ?? '';
+        if (rule.toLowerCase().contains('@js:') || rule.contains('<js>')) {
+          throw const EngineException(
+            'unsupported_rule',
+            'Nested JS rules are not supported in parse host calls',
+          );
+        }
+        final elementMode =
+            method == 'parse.getElement' || method == 'parse.getElements';
+        final values = rule.isEmpty
+            ? <Object?>[]
+            : await RuleEvaluator(runtime).evaluate(
+                rule,
+                arguments[1],
+                ScriptContext(host: this),
+                cancellation: cancellation,
+                elements: elementMode,
+              );
+        if (elementMode) {
+          final serialized = values
+              .map((v) => v is Element ? v.outerHtml : v)
+              .toList();
+          return method == 'parse.getElement'
+              ? serialized.firstOrNull
+              : serialized;
+        }
+        var strings = values.map(RuleEvaluator.text).toList();
+        if (arguments.length > 2 && arguments[2] == true) {
+          final relativeBase = arguments.length > 3 && arguments[3] != null
+              ? Uri.parse(arguments[3].toString())
+              : baseUrl;
+          if (!relativeBase.isAbsolute) {
+            throw const EngineException(
+              'invalid_url',
+              'parse base URL must be absolute',
+            );
+          }
+          strings = strings
+              .where((v) => v.trim().isNotEmpty)
+              .map((v) => relativeBase.resolve(v).toString())
+              .toSet()
+              .toList();
+        }
+        return method == 'parse.getString' ? strings.join('\n') : strings;
       case 'cookies.get':
         return network.cookieHeader(baseUrl.resolve(arguments[0].toString()));
       case 'variables.get':
@@ -309,8 +368,22 @@ class _EngineHost implements ScriptHost {
         variables[arguments[0].toString()] = arguments[1];
         return arguments[1];
       case 'encoding.base64Encode':
+        if (arguments.length > 1) {
+          if (platform != null) return platform!.call(method, arguments);
+          throw const EngineException(
+            'unsupported_host_api',
+            'Extended base64 requires utility adapter',
+          );
+        }
         return base64.encode(utf8.encode(arguments[0].toString()));
       case 'encoding.base64Decode':
+        if (arguments.length > 1) {
+          if (platform != null) return platform!.call(method, arguments);
+          throw const EngineException(
+            'unsupported_host_api',
+            'Extended base64 requires utility adapter',
+          );
+        }
         return utf8.decode(base64.decode(arguments[0].toString()));
       default:
         if (platform != null) return platform!.call(method, arguments);
