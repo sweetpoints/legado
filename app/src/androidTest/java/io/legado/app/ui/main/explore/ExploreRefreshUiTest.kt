@@ -379,6 +379,10 @@ class ExploreRefreshUiTest {
                 "sources=${state.sources.size}/${sources.size}, groupPresent=${group in state.groups}, " +
                 "loaded=${state.sessionLoaded}, loading=${state.loading}, busy=${state.busy}, " +
                 "destination=${it.viewModel.uiState.value.selectedDestination}"
+            val insets = ViewCompat.getRootWindowInsets(it.window.decorView)
+            diagnostics += ", imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}, " +
+                "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}, " +
+                "decorHeight=${it.window.decorView.height}, softInputMode=${it.window.attributes.softInputMode}"
         }
         throw AssertionError("Timed out waiting for $description: $diagnostics")
     }

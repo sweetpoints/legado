@@ -6,6 +6,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import androidx.annotation.MenuRes
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.appcompat.view.menu.SubMenuBuilder
@@ -16,6 +19,10 @@ import io.legado.app.constant.Theme
 import io.legado.app.lib.theme.getToolbarTextColor
 import io.legado.app.lib.theme.primaryTextColor
 import java.lang.reflect.Method
+
+/** Inflate a support command model without showing a native popup. */
+fun Context.inflateMenuModel(@MenuRes resource: Int): Menu =
+    PopupMenu(this, View(this)).apply { inflate(resource) }.menu
 
 @SuppressLint("RestrictedApi")
 @Suppress("UsePropertyAccessSyntax")

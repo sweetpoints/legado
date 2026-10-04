@@ -35,8 +35,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-android
-      - name: Run unit tests
-        run: ./gradlew :app:testAppReleaseUnitTest --build-cache --no-daemon --max-workers=2 --stacktrace
+      - name: Run unit tests and full release Lint
+        run: ./gradlew :app:testAppReleaseUnitTest :app:lintAppRelease --continue --build-cache --no-daemon --max-workers=2 --stacktrace
       - name: Upload unit-test reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -45,6 +45,7 @@ jobs:
           path: |
             **/build/reports/tests/
             **/build/test-results/
+            app/build/reports/lint-results-appRelease.*
           if-no-files-found: warn
 
   build:

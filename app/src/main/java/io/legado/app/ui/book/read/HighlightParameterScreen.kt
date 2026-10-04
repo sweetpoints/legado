@@ -13,7 +13,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import java.util.Locale
+import androidx.compose.ui.platform.LocalConfiguration
 import kotlin.math.roundToInt
 
 internal fun halfStepProgress(value: Float, min: Float, max: Float): Int =
@@ -37,6 +37,7 @@ internal fun HighlightParameterScreen(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     Surface(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text(
@@ -52,7 +53,7 @@ internal fun HighlightParameterScreen(
                     Text(
                         "$label: " +
                             String.format(
-                                Locale.getDefault(),
+                                locale,
                                 if (parameter.signed) "%+.1f" else "%.1f",
                                 (parameter.progress - parameter.offset) / 2f,
                             ),

@@ -19,6 +19,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
@@ -32,13 +35,16 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
     override val viewModelStore = ViewModelStore()
     private val repository = PreferencePageKeySettingsRepository(context)
     private var savedState = SavedStateHandle()
-    private var viewModel = PageKeyViewModel(repository, savedState)
+    private fun createViewModel(): PageKeyViewModel =
+        ViewModelProvider.create(viewModelStore, viewModelFactory {
+            initializer { PageKeyViewModel(repository, savedState) }
+        })["page-key", PageKeyViewModel::class.java]
+    private var viewModel = createViewModel()
     private var registered = true
     private val handledKeys = mutableSetOf<Int>()
 
     init {
         requestWindowFeature(Window.FEATURE_NO_TITLE)
-        viewModelStore.put("page-key", viewModel)
     }
 
     override fun onStart() {
@@ -49,8 +55,7 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
             viewModelStore.clear()
         }
         if (!registered) {
-            viewModel = PageKeyViewModel(repository, savedState)
-            viewModelStore.put("page-key", viewModel)
+            viewModel = createViewModel()
             registered = true
         }
         val model = viewModel
@@ -111,8 +116,7 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
                     "pageKey.focus" to savedInstanceState.getString("pageKey.focus"),
                 )
             )
-        viewModel = PageKeyViewModel(repository, savedState)
-        viewModelStore.put("page-key", viewModel)
+        viewModel = createViewModel()
         registered = true
         super.onRestoreInstanceState(savedInstanceState)
     }

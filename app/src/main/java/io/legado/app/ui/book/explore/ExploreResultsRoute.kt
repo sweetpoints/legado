@@ -8,7 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,7 +35,7 @@ fun ExploreResultsRoute(
     val currentNative by rememberUpdatedState(native)
     val currentNotice by rememberUpdatedState(notice)
     val list = rememberLazyListState()
-    val context = LocalContext.current
+    val resources by rememberUpdatedState(LocalResources.current)
     LaunchedEffect(model, lifecycle) {
         if (lifecycle == Lifecycle.State.RESUMED) model.resume()
     }
@@ -139,15 +139,15 @@ fun ExploreResultsRoute(
         val message =
             when {
                 checkpoint.addedCount != null ->
-                    context.getString(
+                    resources.getString(
                         R.string.add_loaded_books_to_bookshelf_result,
                         checkpoint.addedCount,
                         checkpoint.skippedCount ?: 0,
                     )
                 checkpoint.notice == ExploreResultsNotice.AlreadyAdding ->
-                    context.getString(R.string.add_loaded_books_to_bookshelf_in_progress)
+                    resources.getString(R.string.add_loaded_books_to_bookshelf_in_progress)
                 checkpoint.notice == ExploreResultsNotice.EmptyResults ->
-                    context.getString(R.string.no_loaded_books_to_add)
+                    resources.getString(R.string.no_loaded_books_to_add)
                 else -> checkpoint.message
             }
         if (
