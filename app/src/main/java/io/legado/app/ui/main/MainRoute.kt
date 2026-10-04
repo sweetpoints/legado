@@ -6,12 +6,15 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.help.BottomBarSkinManager
+import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.navigation.MainDestination
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +72,7 @@ fun MainRoute(
         updatingBooks = updatingBooks,
         skinIcons = icons,
         transparentNavigation = transparentNavigation,
+        statusBarColor = Color(ThemeStore.statusBarColor(context, AppConfig.isTransparentStatusBar)),
         onDestinationClick = { destination ->
             if (destination == state.selectedDestination) onDestinationReselected(destination)
             else viewModel.selectDestination(destination)
