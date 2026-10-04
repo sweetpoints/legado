@@ -693,6 +693,153 @@ class FlutterSourceEngineTest {
     }
 
     @Test
+    fun legacyPostTemplatesEncodeFormAndRejectUnsafeInputsBeforeHttp() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val requests = mutableListOf<Triple<String, String, String>>()
+            val serving =
+                async(Dispatchers.IO) {
+                    repeat(2) {
+                        server.accept().use { socket ->
+                            socket.soTimeout = 10_000
+                            val input = socket.getInputStream()
+                            val headerBytes = java.io.ByteArrayOutputStream()
+                            var window = 0
+                            while (true) {
+                                val byte = input.read()
+                                check(byte >= 0) { "HTTP request headers ended early" }
+                                headerBytes.write(byte)
+                                window = (window shl 8) or byte
+                                if (window == 0x0d0a0d0a) break
+                            }
+                            val lines = headerBytes.toString("US-ASCII").split("\r\n")
+                            val headers =
+                                lines
+                                    .drop(1)
+                                    .filter { it.contains(':') }
+                                    .associate {
+                                        it.substringBefore(':').lowercase() to
+                                            it.substringAfter(':').trim()
+                                    }
+                            val body = ByteArray(headers.getValue("content-length").toInt())
+                            var offset = 0
+                            while (offset < body.size) {
+                                val count = input.read(body, offset, body.size - offset)
+                                check(count > 0) { "HTTP body ended early" }
+                                offset += count
+                            }
+                            requests.add(
+                                Triple(
+                                    lines.first(),
+                                    headers["content-type"].orEmpty(),
+                                    body.toString(Charsets.UTF_8),
+                                )
+                            )
+                            val response =
+                                "<div class='row'><a href='/book'>Title</a><span class='author'>Author</span></div>"
+                                    .toByteArray(Charsets.UTF_8)
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${response.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray()
+                                )
+                                write(response)
+                                flush()
+                            }
+                        }
+                    }
+                }
+            val fields =
+                mapOf("name" to "a@text", "author" to ".author@text", "bookUrl" to "a@href")
+            val options =
+                Gson().toJson(mapOf("method" to "POST", "body" to "q={{key}}&page={{page}}"))
+            val legacy =
+                Gson()
+                    .fromJson(
+                        Gson()
+                            .toJson(
+                                mapOf(
+                                    "bookSourceUrl" to origin,
+                                    "bookSourceName" to "Legacy POST",
+                                    "bookSourceComment" to "@engine:dart",
+                                    "enabledCookieJar" to true,
+                                    "searchUrl" to "$origin/legacy,$options",
+                                    "ruleSearch" to (fields + mapOf("bookList" to ".row")),
+                                )
+                            ),
+                        BookSource::class.java,
+                    )
+            val key = "中文 空格+%"
+            val result =
+                withTimeout(60_000) {
+                    WebBook.searchBookAwait(
+                        legacy,
+                        key,
+                        3,
+                        filter = { name, author, _ -> name == "Title" && author == "Author" },
+                    )
+                }
+            assertEquals(1, result.size)
+            for (unsafe in listOf("quote\"", "slash\\", "line\ncontrol")) {
+                val failure =
+                    withTimeout(60_000) { runCatching { WebBook.searchBookAwait(legacy, unsafe) } }
+                assertTrue(failure.isFailure)
+                assertTrue(
+                    failure
+                        .exceptionOrNull()
+                        ?.message
+                        .orEmpty()
+                        .contains("legacy_body_template_requires_migration")
+                )
+            }
+            val rawBody = "q=$key&page=3"
+            val definition =
+                Gson()
+                    .toJson(
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "id" to "$origin/modern-post",
+                            "name" to "Modern raw POST",
+                            "baseUrl" to origin,
+                            "stages" to
+                                mapOf(
+                                    "search" to
+                                        mapOf(
+                                            "url" to "$origin/modern",
+                                            "method" to "POST",
+                                            "body" to rawBody,
+                                            "headers" to
+                                                mapOf(
+                                                    "Content-Type" to
+                                                        "application/x-www-form-urlencoded"
+                                                ),
+                                            "list" to "@css:.row",
+                                            "fields" to fields.mapValues { "@css:${it.value}" },
+                                        )
+                                ),
+                        )
+                    )
+            val modern =
+                BookSource(bookSourceUrl = "$origin/modern-post").apply {
+                    bookSourceComment = "@source:v1 $definition"
+                }
+            assertEquals(
+                "Title",
+                withTimeout(60_000) { WebBook.searchBookAwait(modern, "ignored").single().name },
+            )
+            serving.await()
+            assertEquals(2, requests.size)
+            assertEquals("POST /legacy HTTP/1.1", requests[0].first)
+            assertEquals("application/x-www-form-urlencoded", requests[0].second)
+            assertEquals("q=${java.net.URLEncoder.encode(key, "UTF-8")}&page=3", requests[0].third)
+            assertEquals("POST /modern HTTP/1.1", requests[1].first)
+            assertEquals("application/x-www-form-urlencoded", requests[1].second)
+            assertEquals(rawBody, requests[1].third)
+        }
+    }
+
+    @Test
     fun sessionVariablesSurviveEngineShutdownAndStaySourceIsolated() = runBlocking {
         val unique = java.util.UUID.randomUUID().toString()
         val definition =
