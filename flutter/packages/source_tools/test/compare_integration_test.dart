@@ -111,6 +111,8 @@ void main() {
       ]);
       expect(result.exitCode, 0);
       expect(result.json['caseEquivalent'], true);
+      expect(result.json['comparisonScope'], 'stageResult');
+      expect(result.json['stateCompared'], false);
       expect(result.json['sourceVerified'], false);
       expect(result.json['verified'], false);
       expect(result.json['jvmCompared'], false);
@@ -125,6 +127,44 @@ void main() {
       expect(jsonDecode(report.readAsStringSync()), result.json);
       expect(report.readAsStringSync(), isNot(contains('异步结果')));
       expect(server.requests, ['/value', '/value']);
+    },
+  );
+  test(
+    'same stage output with different variable writes is only stage evidence',
+    () async {
+      final old = original();
+      old['ruleSearch'] = {
+        'name': '@js:java.put("token","old"); return "same";',
+      };
+      final imported = LegacySourceImporter().import(old).source;
+      final candidate = SourceDefinition(
+        id: imported.id,
+        name: imported.name,
+        baseUrl: imported.baseUrl,
+        script: 'async function search(){await source.variables.put("token","new"); return {name:"same"};}',
+        metadata: const {'legacy': false},
+      );
+      final input = File('${directory.path}/state-legacy.json')
+        ..writeAsStringSync(jsonEncode(old));
+      final output = File('${directory.path}/state-modern.json')
+        ..writeAsStringSync(jsonEncode(candidate.toJson()));
+      final cli = SourceCli(
+        importLegacy: (value) async =>
+            LegacySourceImporter().import(value).source,
+        migrate: (value) async => SourceMigrator().migrate(value).toJson(),
+        execute: execute,
+      );
+      final result = await cli.run([
+        'compare',
+        input.path,
+        output.path,
+        'search',
+      ]);
+      expect(result.exitCode, 0);
+      expect(result.json['caseEquivalent'], true);
+      expect(result.json['comparisonScope'], 'stageResult');
+      expect(result.json['stateCompared'], false);
+      expect(result.json['sourceVerified'], false);
     },
   );
 }

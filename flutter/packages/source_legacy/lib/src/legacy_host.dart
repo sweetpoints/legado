@@ -5,6 +5,8 @@ import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
 import 'package:source_engine/source_engine.dart';
 
+import 'html4.dart';
+
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
   'ajax',
@@ -114,14 +116,14 @@ const legacyScriptPrelude = r"""
     get(_target, name) {
       return (...args) => {
         if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
-          if (String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean') {
-            throw new Error('legacy.unsupported_overload: getString unescape');
-          }
+          const unescape = String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean' ? args[1] : true;
+          if (String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean') args = [args[0]];
           if (['getElement','getElements'].includes(String(name)) && args.length !== 1) {
             throw new Error('legacy.unsupported_overload: ' + String(name));
           }
           const content = args.length > 1 && args[1] != null ? args[1] : globalThis.result;
           args = [args[0], content, args.length > 2 ? args[2] : false, globalThis.baseUrl];
+          if (String(name) === 'getString') args.push(unescape);
         }
         const value = __sourceHostSync('java.' + String(name), args);
         if (String(name) === 'getElement') return element(value);
@@ -229,7 +231,7 @@ class LegacyScriptHost implements ScriptHost {
       case 'getStringList':
       case 'getElement':
       case 'getElements':
-        arity(2, 4);
+        arity(2, name == 'getString' ? 5 : 4);
         final rule = arguments[0];
         if (rule == null || rule == '') {
           return switch (name) {
@@ -261,12 +263,45 @@ class LegacyScriptHost implements ScriptHost {
             : rule.startsWith('@') || rule.startsWith(r'$')
             ? rule
             : '@legacy:$rule';
-        return delegate.call('parse.$name', [
+        if (arguments.length > 4 && arguments[4] is! bool) {
+          throw ArgumentError('unescape must be boolean');
+        }
+        final parsed = await delegate.call('parse.$name', [
           normalized,
           arguments[1],
-          arguments.length > 2 ? arguments[2] : false,
+          name == 'getString'
+              ? false
+              : (arguments.length > 2 ? arguments[2] : false),
           arguments.length > 3 ? arguments[3] : null,
         ]);
+        if (name != 'getString') return parsed;
+        var text = parsed?.toString() ?? '';
+        if (arguments.length < 5 || arguments[4] == true) {
+          text = unescapeHtml4(text);
+        }
+        if (arguments.length > 2 && arguments[2] == true) {
+          final base = arguments.length > 3 ? arguments[3] : null;
+          if (base == null) {
+            if (text.trim().isEmpty) return '';
+            // Reuse the delegate's URL context with the already-decoded value.
+            return delegate.call('parse.getString', [
+              r'$.value',
+              {'value': text},
+              true,
+              null,
+            ]);
+          }
+          final uri = Uri.parse(base.toString());
+          if (!uri.isAbsolute) {
+            throw const EngineException(
+              'invalid_url',
+              'parse base URL must be absolute',
+            );
+          }
+          if (text.trim().isEmpty) return base.toString();
+          return uri.resolve(text).toString();
+        }
+        return text;
       case 'get':
         if (arguments.length == 1) return variables[str(0)] ?? '';
         arity(2, 3);
@@ -598,6 +633,12 @@ class SourceUtilityHost implements ScriptHost {
   Future<Object?> call(String method, List<Object?> arguments) {
     final mapped = methods[method];
     if (mapped != null) return _utilities.call('java.$mapped', arguments);
+    if (method == 'encoding.unescapeHtml4') {
+      if (arguments.length != 1 || arguments[0] is! String) {
+        throw ArgumentError('unescapeHtml4 requires one string');
+      }
+      return Future.value(unescapeHtml4(arguments.single as String));
+    }
     if (method == 'encoding.formDecode') {
       if (arguments.isEmpty ||
           arguments.length > 2 ||

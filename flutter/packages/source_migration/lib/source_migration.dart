@@ -365,9 +365,12 @@ class SourceMigrator {
             : decoded.startsWith('@') || decoded.startsWith(r'$')
             ? decoded
             : '@legacy:$decoded';
-        final value = decoded.isEmpty
+        var value = decoded.isEmpty
             ? (name == 'getString' ? jsonEncode('') : 'null')
             : '(await source.$method(${jsonEncode(rule)},result,false,baseUrl))';
+        if (name == 'getString' && decoded.isNotEmpty) {
+          value = '(await source.encoding.unescapeHtml4($value))';
+        }
         edits.add(_Edit(tokens[i].start, tokens[end].end, value));
         seen.add(i);
         continue;

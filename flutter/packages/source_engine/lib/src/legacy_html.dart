@@ -46,7 +46,7 @@ class LegacyHtmlRule {
         'textNodes' =>
           node.nodes
               .whereType<Text>()
-              .map((t) => t.data.trim())
+              .map((t) => _normalTextNode(t.data))
               .where((s) => s.isNotEmpty)
               .join('\n'),
         _ => node.attributes[output] ?? '',
@@ -213,37 +213,159 @@ class LegacyHtmlRule {
     'td',
     'ul',
   };
-  static String _normalize(String text) =>
-      text.replaceAll(RegExp(r'[\s\u00a0]+'), ' ').trim();
-  static String _ownText(Element e) => _normalize(
-    e.nodes
-        .map(
-          (n) => n is Text
-              ? n.data
-              : n is Element && n.localName == 'br'
-              ? ' '
-              : '',
-        )
-        .join(),
-  );
+  // Jsoup 1.23.2 Element.preserveWhitespace examines the parent and five
+  // ancestors. Preservation belongs to each text node, not the whole document.
+  static const _preserving = {
+    'pre',
+    'plaintext',
+    'title',
+    'textarea',
+    'script',
+  };
+  static const _textBoundaries = {
+    'button',
+    'input',
+    'select',
+    'textarea',
+    'option',
+    'output',
+    'progress',
+    'meter',
+    'img',
+    'picture',
+    'audio',
+    'video',
+    'canvas',
+    'object',
+    'embed',
+    'iframe',
+  };
+  static bool _preserve(Node? node) {
+    for (
+      var level = 0;
+      level < 6 && node is Element;
+      level++, node = node.parentNode
+    ) {
+      if (_preserving.contains(node.localName)) return true;
+    }
+    return false;
+  }
+
+  static String _javaTrim(String value) => value
+      .replaceFirst(RegExp(r'^[\x00-\x20]+'), '')
+      .replaceFirst(RegExp(r'[\x00-\x20]+$'), '');
+  static bool _lastSpace(_TextAccumulator buffer) => buffer.lastSpace;
+  static void _appendNormalized(_TextAccumulator buffer, String value) {
+    var lastWhite = false;
+    var reachedNonWhite = false;
+    final stripLeading = _lastSpace(buffer);
+    for (final rune in value.runes) {
+      if ([32, 9, 10, 12, 13, 160].contains(rune)) {
+        if ((stripLeading && !reachedNonWhite) || lastWhite) continue;
+        buffer.write(' ');
+        lastWhite = true;
+      } else if (rune != 8203 && rune != 173) {
+        buffer.writeCharCode(rune);
+        lastWhite = false;
+        reachedNonWhite = true;
+      }
+    }
+  }
+
+  static String _normalTextNode(String value) {
+    final buffer = _TextAccumulator();
+    _appendNormalized(buffer, value);
+    return _javaTrim(buffer.toString());
+  }
+
+  static void _appendText(_TextAccumulator buffer, Text node) {
+    if (_preserve(node.parentNode)) {
+      buffer.write(node.data);
+    } else {
+      _appendNormalized(buffer, node.data);
+    }
+  }
+
+  static String _ownText(Element e) {
+    final buffer = _TextAccumulator();
+    for (final child in e.nodes) {
+      if (child is Text) {
+        _appendText(buffer, child);
+      } else if (child is Element &&
+          child.localName == 'br' &&
+          !_lastSpace(buffer)) {
+        buffer.write(' ');
+      }
+    }
+    return _javaTrim(buffer.toString());
+  }
+
   static String _text(Element e) {
-    final buffer = StringBuffer();
+    final buffer = _TextAccumulator();
+    bool hasText(Element element) => element.nodes.any(
+      (node) => node is Text
+          ? node.data.trim().isNotEmpty
+          : node is Element && hasText(node),
+    );
     void visit(Node node) {
       if (node is Text) {
-        buffer.write(node.data);
-      } else if (node is Element) {
-        if (node.localName == 'script' || node.localName == 'style') return;
-        if (_blocks.contains(node.localName) || node.localName == 'br') {
-          buffer.write(' ');
-        }
-        for (final child in node.nodes) {
-          visit(child);
-        }
-        if (_blocks.contains(node.localName)) buffer.write(' ');
+        _appendText(buffer, node);
+        return;
+      }
+      if (node is! Element ||
+          node.localName == 'script' ||
+          node.localName == 'style') {
+        return;
+      }
+      final boundary = _textBoundaries.contains(node.localName);
+      if (buffer.isNotEmpty &&
+          (_blocks.contains(node.localName) ||
+              node.localName == 'br' ||
+              (boundary && node.nodes.isNotEmpty && hasText(node))) &&
+          !_lastSpace(buffer)) {
+        buffer.write(' ');
+      }
+      for (final child in node.nodes) {
+        visit(child);
+      }
+      final siblings = node.parentNode?.nodes;
+      final index = siblings?.indexOf(node) ?? -1;
+      final next = siblings != null && index >= 0 && index + 1 < siblings.length
+          ? siblings[index + 1]
+          : null;
+      final trailing =
+          boundary ||
+          _blocks.contains(node.localName) ||
+          node.children.any((c) => _blocks.contains(c.localName));
+      if (trailing &&
+          (next is Text ||
+              next is Element && !_blocks.contains(next.localName)) &&
+          !_lastSpace(buffer)) {
+        buffer.write(' ');
       }
     }
 
     visit(e);
-    return _normalize(buffer.toString());
+    return _javaTrim(buffer.toString());
   }
+}
+
+/// Tracks the last character without repeatedly materializing a long chapter.
+class _TextAccumulator {
+  final _buffer = StringBuffer();
+  bool lastSpace = false;
+  bool get isNotEmpty => _buffer.isNotEmpty;
+  void write(String value) {
+    if (value.isEmpty) return;
+    _buffer.write(value);
+    lastSpace = value.endsWith(' ');
+  }
+
+  void writeCharCode(int code) {
+    _buffer.writeCharCode(code);
+    lastSpace = code == 32;
+  }
+
+  @override
+  String toString() => _buffer.toString();
 }

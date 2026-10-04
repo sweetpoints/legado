@@ -63,6 +63,9 @@ class FixtureServer {
       } else if (request.uri.path == '/slow') {
         await Future<void>.delayed(const Duration(milliseconds: 350));
         response.write('late result');
+      } else if (request.uri.path == '/entities') {
+        response.headers.contentType = ContentType.json;
+        response.write(jsonEncode({'value': '&copy; &#128; &apos; &amp;'}));
       } else if (request.uri.path == '/value') {
         response.headers.contentType = ContentType.json;
         response.write(jsonEncode({'value': '异步结果'}));

@@ -67,7 +67,7 @@ void main() {
         migrator
             .migrateScript('return java.getString("class.title@text");')
             .candidate,
-        'return (await source.parse.getString("@legacy:class.title@text",result,false,baseUrl));',
+        'return (await source.encoding.unescapeHtml4((await source.parse.getString("@legacy:class.title@text",result,false,baseUrl))));',
       );
       expect(
         migrator.migrateScript('return java.getStringList("");').candidate,
