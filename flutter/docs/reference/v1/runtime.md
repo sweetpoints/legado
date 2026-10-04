@@ -38,4 +38,4 @@ V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运�
 
 官方源码Android ARM64库也完成链接，Debug AAR与APK中库均为26,306,760字节（25.09 MiB），SHA-256为 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`，与manifest一致。ELF检查确认ARM64、PT_LOAD 16 KiB对齐和仅c/dl/log/m系统依赖。API36模拟器的3项引擎仪器测试通过，日志为 `tmp/flutter-android-test-stable-v8.log`；这里是3个测试case，不是3种设备配置。
 
-旧136项测试及Release/R8结果属于14.3基线。新版Android Debug构建和上述设备测试已独立验证；新版Android Release/R8仍在构建，尚不声明通过。
+旧136项测试及Release/R8结果属于14.3基线。新版Android Debug构建和上述设备测试已独立验证；新版Android本地Release/R8也已通过，日志 `tmp/flutter-android-release-stable-v8.log` 明确BUILD SUCCESSFUL in3m45s且R8实际执行。Release AAR与未签名APK内ARM64库均为26,306,760字节，SHA-256与上述manifest一致。这是本地构建结果，不表示发布或CI验收，也不证明所有历史书源兼容或完整Flutter UI迁移完成。

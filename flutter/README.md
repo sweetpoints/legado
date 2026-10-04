@@ -45,4 +45,4 @@ V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码co
 
 新版官方源码Android ARM64库也完成链接；Debug AAR/APK内库与manifest一致，为26,306,760字节（25.09 MiB）、SHA-256 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`。API36模拟器3项引擎仪器测试全部通过，日志位于仓库根目录 `tmp/flutter-android-test-stable-v8.log`；不是3种设备配置。
 
-旧14.3的136项测试及Release/R8结果仅为历史基线。新版Android Debug打包和上述设备测试已验证，Release/R8仍在构建，结果单独确认。
+旧14.3的136项测试及Release/R8结果仅为历史基线。新版Android Debug打包和上述设备测试已验证，新版本地Release/R8也已通过，日志为仓库根目录 `tmp/flutter-android-release-stable-v8.log`（BUILD SUCCESSFUL in3m45s，R8实际执行）；Release AAR与未签名APK内ARM64库大小和SHA-256严格一致于上述manifest。未签名APK不表示已发布或CI验收；这些结果不证明所有历史书源兼容或完整Flutter UI迁移完成。

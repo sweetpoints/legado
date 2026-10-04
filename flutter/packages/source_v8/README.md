@@ -138,7 +138,13 @@ different device configurations.
 
 The earlier 136-test and Release/R8 results belong to the V8 14.3 baseline.
 New Android Debug packaging and device execution are verified independently;
-the new Android Release/R8 build is still in progress and is not claimed passed.
+the new local Android Release/R8 build has also passed. Its Release AAR and
+unsigned APK contain the manifest-matching 26,306,760-byte ARM64 library with the
+same SHA-256 above; R8 executed in
+`tmp/flutter-android-release-stable-v8.log` (BUILD SUCCESSFUL in 3m45s).
+The unsigned APK is a local build result, not a published release or CI
+acceptance. These checks do not establish all historical-source compatibility
+or a complete Flutter UI migration.
 
 After producing the correct local artifact, run `dart run test:test test` from
 this package to execute the native-assets hook before tests. Bare `dart test`
