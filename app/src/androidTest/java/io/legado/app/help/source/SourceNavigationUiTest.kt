@@ -82,6 +82,9 @@ class SourceNavigationUiTest {
                             loaded.countDown()
                         }
                     }
+                    // Pool recycling pauses the instance; attachment does not resume it.
+                    // Match interactive callers before loading an acquired UI lease.
+                    lease.realWebView.onResume()
                     lease.realWebView.loadDataWithBaseURL("https://interactive.invalid/", "<button>UI fixture</button>",
                         "text/html", "utf-8", null)
                 }

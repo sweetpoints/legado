@@ -40,6 +40,7 @@ import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.core.view.isVisible
@@ -1594,6 +1595,8 @@ class CodeSelectionUiTest {
             for ((label, code) in listOf("actual" to actual, "without-icon" to withoutIcon)) {
                 val dialog = CodeDialog(code, disableEdit = false)
                 var expected = code
+                var keyboardRoot: View? = null
+                val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
                 val opened = SystemClock.uptimeMillis()
                 scenario!!.onActivity {
                     dialog.show(it.supportFragmentManager, "reported-rss-$label")
@@ -1611,6 +1614,23 @@ class CodeSelectionUiTest {
                     report.append(
                         "$label; characters=${code.length}; openMs=${SystemClock.uptimeMillis() - opened}\n"
                     )
+                    instrumentation.runOnMainSync {
+                        keyboardRoot = checkNotNull(dialog.dialog?.window?.decorView)
+                        ViewCompat.setWindowInsetsAnimationCallback(checkNotNull(keyboardRoot),
+                            object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                                override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                                    if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                                        runningImeAnimations.add(animation)
+                                }
+                                override fun onProgress(
+                                    insets: WindowInsetsCompat,
+                                    runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                                ): WindowInsetsCompat = insets
+                                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                                    runningImeAnimations.remove(animation)
+                                }
+                            })
+                    }
                     val focusStarted = SystemClock.uptimeMillis()
                     compose.onNodeWithTag("code-body").performClick()
                     await {
@@ -1664,8 +1684,42 @@ class CodeSelectionUiTest {
                         }
                     }
                 } finally {
-                    closeSoftKeyboard()
-                    instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
+                    try {
+                        closeSoftKeyboard()
+                        // Visibility can become false before onEnd. Keep the old dialog window
+                        // alive until its real hide animation ends, before changing the IME target.
+                        var cleanupState = "No cleanup sample"
+                        if (keyboardRoot != null) await(
+                            message = { "Previous $label IME did not finish hiding: $cleanupState" }
+                        ) {
+                            var hiddenAndSettled = false
+                            instrumentation.runOnMainSync {
+                                val root = checkNotNull(keyboardRoot)
+                                val visible = ViewCompat.getRootWindowInsets(root)
+                                    ?.isVisible(WindowInsetsCompat.Type.ime())
+                                cleanupState = "attached=${root.isAttachedToWindow} focused=${root.hasWindowFocus()} " +
+                                    "imeVisible=$visible runningImeAnimations=${runningImeAnimations.size}"
+                                hiddenAndSettled = visible == false && runningImeAnimations.isEmpty()
+                            }
+                            hiddenAndSettled
+                        }
+                    } finally {
+                        instrumentation.runOnMainSync {
+                            keyboardRoot?.let { ViewCompat.setWindowInsetsAnimationCallback(it, null) }
+                            dialog.dismissAllowingStateLoss()
+                        }
+                    }
+                    var restoredState = "No focus sample"
+                    await(message = { "Previous $label dialog target did not release: $restoredState" }) {
+                        var restored = false
+                        scenario!!.onActivity { activity ->
+                            val hostFocused = activity.window.decorView.hasWindowFocus()
+                            restoredState = "dialogAdded=${dialog.isAdded} viewReleased=${dialog.view == null} " +
+                                "hostFocused=$hostFocused"
+                            restored = !dialog.isAdded && dialog.view == null && hostFocused
+                        }
+                        restored
+                    }
                     compose.waitForIdle()
                 }
             }
