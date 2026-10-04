@@ -605,14 +605,14 @@ class ReaderSourceReimportUiTest {
     }
 
     private fun awaitDraw() {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario.onActivity {
             val decor = it.window.decorView
             decor.postOnAnimation { decor.postOnAnimation { rendered.countDown() } }
         }
         assertTrue(rendered.await(5, TimeUnit.SECONDS))
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun openOverflow() {
@@ -632,13 +632,21 @@ class ReaderSourceReimportUiTest {
         }
 
     private fun await(description: String, condition: (ReadBookActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15000
-        do {
-            if (main(condition)) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                main(condition)
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Keep the reader diagnostics below if the expected state never arrives.
+        }
+        val readerState = main { activity ->
+            val reader = activity.findViewById<ReadView>(R.id.read_view)
+            "menu=${activity.readMenu.isVisible}, selected=${reader.isTextSelected}, abort=${reader.isAbortAnim}, size=${reader.width}x${reader.height}, center=${AppConfig.clickActionMC}"
+        }
+        screenshot("reader-reimport-timeout")
         throw AssertionError(
-            "Timed out: $description; source=${ReadBook.bookSource?.ruleContent}, chapter=${ReadBook.durChapterIndex}"
+            "Timed out: $description; $readerState; source=${ReadBook.bookSource?.ruleContent}, chapter=${ReadBook.durChapterIndex}"
         )
     }
 
@@ -650,7 +658,7 @@ class ReaderSourceReimportUiTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             val directory =

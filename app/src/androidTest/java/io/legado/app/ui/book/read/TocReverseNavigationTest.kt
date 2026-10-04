@@ -46,7 +46,7 @@ class TocReverseNavigationTest {
                     reverse()
                     val expected = if (reversed) fixture.titles.reversed() else fixture.titles
                     await { rows()?.map { it.title } == expected }
-                    instrumentation.waitForIdleSync()
+                    compose.waitForIdle()
                     screenshot("toc-flat-reversed-$reversed")
                     assertEquals(
                         "Displayed titles must match the new row identities without reopening",
@@ -232,7 +232,7 @@ class TocReverseNavigationTest {
                         }
                         readerResumed && ReadBook.curTextChapter?.isCompleted == true
                     }
-                    instrumentation.waitForIdleSync()
+                    compose.waitForIdle()
                     screenshot("toc-reverse-return-to-reader")
                     File(context.getExternalFilesDir("ui-regression"), "toc-reader-position.txt")
                         .writeText(
@@ -410,7 +410,7 @@ class TocReverseNavigationTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         SystemClock.sleep(150)
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
@@ -423,10 +423,13 @@ class TocReverseNavigationTest {
     }
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 30000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue("TOC or reader did not reach expected state", condition())
     }

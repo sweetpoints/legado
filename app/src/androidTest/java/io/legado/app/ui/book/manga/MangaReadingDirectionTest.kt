@@ -213,7 +213,7 @@ class MangaReadingDirectionTest {
             assertEquals(setOf(BrowserNavigation.PREPARED_TICKET), intent.extras!!.keySet())
             ticket = requireNotNull(intent.getStringExtra(BrowserNavigation.PREPARED_TICKET))
             val request =
-                runBlocking(Dispatchers.IO) { AppBrowserNavigationStore(context).read(ticket!!) }
+                runBlocking(Dispatchers.IO) { AppBrowserNavigationStore(context).read(ticket) }
             assertEquals(fullUrl, request.url)
             assertEquals("Chapter 2", request.title)
             assertEquals(source.bookSourceUrl, request.sourceOrigin)
@@ -887,10 +887,13 @@ class MangaReadingDirectionTest {
     }
 
     private fun waitUntil(message: String, condition: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 30_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(100)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         var state = "activity closed"
         if (scenario != null) {
@@ -908,7 +911,7 @@ class MangaReadingDirectionTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {

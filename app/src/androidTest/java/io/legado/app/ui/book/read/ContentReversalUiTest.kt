@@ -318,6 +318,7 @@ class ContentReversalUiTest {
                 return page.isMsgPage && page.text == context.getString(R.string.data_loading)
             }
             fun expectResourceFailure(action: () -> Unit) {
+                contentCompose.waitForIdle()
                 var layout = ReadBook.curTextChapter
                 val scroll = ReadBook.pageAnim() == PageAnim.scrollPageAnim
                 val savedChapter = ReadBook.durChapterIndex
@@ -562,7 +563,6 @@ class ContentReversalUiTest {
             obsoleteRead =
                 CoroutineScope(Dispatchers.IO).async {
                     ReadBook.loadContentAwait(3)
-                    Unit
                 }
             assertTrue(
                 "An obsolete real reader request must be pending",
@@ -577,7 +577,7 @@ class ContentReversalUiTest {
             assertEquals(position, ReadBook.durChapterPos)
             val refreshedLayout = ReadBook.curTextChapter
             releaseObsolete.countDown()
-            runBlocking { withTimeout(5000) { obsoleteRead!!.await() } }
+            runBlocking { withTimeout(5000) { obsoleteRead.await() } }
             awaitDraw()
             assertSame(
                 "The completed old response must not replace or cancel the fresh layout",
@@ -991,19 +991,31 @@ class ContentReversalUiTest {
         }
 
     private fun await(description: String, condition: (ReadBookActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            contentCompose.waitUntil(timeoutMillis = 15_000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Keep the reader diagnostics below if the expected state never arrives.
+        }
         val chapter = ReadBook.curTextChapter
         var pageState = "unavailable"
         scenario!!.onActivity {
+            val reader = it.findViewById<ReadView>(R.id.read_view)
+            val canvas = reader.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+            val bounds = runCatching {
+                reader.curPage.javaClass.getDeclaredMethod("getContentBounds")
+                    .apply { isAccessible = true }.invoke(reader.curPage)
+            }.getOrNull()
             pageState =
                 "messagePage=${it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage}, " +
-                    "readerMenu=${it.readMenu.isVisible}, bottomDialog=${it.bottomDialog}"
+                    "readerMenu=${it.readMenu.isVisible}, bottomDialog=${it.bottomDialog}, " +
+                    "canvasReady=${reader.curPage.isCanvasReady}, attached=${reader.isAttachedToWindow}/${canvas.isAttachedToWindow}, " +
+                    "laidOut=${canvas.isLaidOut}, layoutRequested=${canvas.isLayoutRequested}, " +
+                    "canvas=${canvas.width}x${canvas.height} top=${canvas.top}, bounds=$bounds"
         }
         throw AssertionError(
             "Timed out waiting for $description; chapter=${ReadBook.durChapterIndex}, " +
@@ -1034,14 +1046,14 @@ class ContentReversalUiTest {
     }
 
     private fun awaitDraw() {
-        instrumentation.waitForIdleSync()
+        contentCompose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario!!.onActivity {
             val decor = it.window.decorView
             decor.postOnAnimation { decor.postOnAnimation { rendered.countDown() } }
         }
         assertTrue(rendered.await(5, TimeUnit.SECONDS))
-        instrumentation.waitForIdleSync()
+        contentCompose.waitForIdle()
     }
 
     private fun screenshot(name: String) {

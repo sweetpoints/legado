@@ -409,10 +409,10 @@ class EpubHierarchyNavigationTest {
         }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         compose.waitForIdle()
         SystemClock.sleep(100)
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
@@ -424,10 +424,13 @@ class EpubHierarchyNavigationTest {
     }
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue("EPUB directory or reader did not reach the expected state", condition())
     }

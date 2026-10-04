@@ -269,7 +269,7 @@ class HighlightGroupUiTest {
     @Test
     fun filterRenameMoveAndDeleteUseRealDialogsAndPreserveOtherRules() {
         compose.onNodeWithTag("highlight-management-menu").performClick()
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val menuBitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "highlight-more-menu.png")
@@ -362,7 +362,7 @@ class HighlightGroupUiTest {
                 fixtures.map { it.uuid }.toSet(),
                 exported.rules!!.map { it!!.uuid }.toSet(),
             )
-            assertEquals(5, exported.rules!!.size)
+            assertEquals(5, exported.rules.size)
             onView(withText(R.string.export_success)).check(doesNotExist())
         } finally {
             instrumentation.removeMonitor(monitor)
@@ -551,16 +551,19 @@ class HighlightGroupUiTest {
             .firstOrNull()
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue("Highlight groups did not reach the expected state", condition())
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val frame = CountDownLatch(1)
         lateinit var window: Window
         lateinit var bitmap: Bitmap
