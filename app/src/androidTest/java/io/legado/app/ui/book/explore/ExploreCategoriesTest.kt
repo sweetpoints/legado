@@ -294,12 +294,42 @@ class ExploreCategoriesTest {
     @Test
     fun scrollingBackToFirstBookRestoresPageOneWithoutPreviousRequest() {
         scenario!!.onActivity { it.resultsModel.next() }
-        awaitActivity { it.resultsModel.state.value.checkpoint?.displayedPage == 2 }
+        awaitActivity {
+            val state = it.resultsModel.state.value
+            state.checkpoint?.displayedPage == 2 &&
+                state.scrollRequest == 0L &&
+                !state.loadingPrevious &&
+                !state.loadingNext
+        }
         compose.onNodeWithTag("explore-results-list").performScrollToIndex(6)
+        awaitActivity { it.resultsModel.state.value.checkpoint?.scrollIndex == 5 }
         repeat(8) {
             compose.onNodeWithTag("explore-results-list").performTouchInput { swipeDown() }
             compose.waitForIdle()
         }
+        awaitActivity { it.resultsModel.state.value.checkpoint?.displayedPage == 1 }
+        scenario!!.onActivity { activity ->
+            assertEquals(1, activity.resultsModel.state.value.checkpoint!!.firstPage)
+            assertEquals(40, activity.resultsModel.state.value.rows.size)
+            assertEquals(3, activity.resultsModel.state.value.checkpoint!!.nextPage)
+        }
+    }
+
+    @Test
+    fun semanticScrollBackToFirstBookRestoresPageOneWithoutPreviousRequest() {
+        scenario!!.onActivity { it.resultsModel.next() }
+        awaitActivity {
+            val state = it.resultsModel.state.value
+            state.checkpoint?.displayedPage == 2 &&
+                state.scrollRequest == 0L &&
+                !state.loadingPrevious &&
+                !state.loadingNext
+        }
+        compose.onNodeWithTag("explore-results-list").performScrollToIndex(6)
+        // The stable header occupies index 0. Observe the committed fifth row before
+        // returning to the first book, so initialization cannot overwrite this movement.
+        awaitActivity { it.resultsModel.state.value.checkpoint?.scrollIndex == 5 }
+        compose.onNodeWithTag("explore-results-list").performScrollToIndex(1)
         awaitActivity { it.resultsModel.state.value.checkpoint?.displayedPage == 1 }
         scenario!!.onActivity { activity ->
             assertEquals(1, activity.resultsModel.state.value.checkpoint!!.firstPage)

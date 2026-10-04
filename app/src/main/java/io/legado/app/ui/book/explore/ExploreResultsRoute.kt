@@ -72,9 +72,13 @@ fun ExploreResultsRoute(
                 model.scroll(current.rows.getOrNull(rowIndex)?.key, rowIndex, offset)
                 val upward =
                     index < previousIndex || index == previousIndex && offset < previousOffset
-                val topIndex = if ((current.checkpoint?.firstPage ?: 1) <= 1) 1 else 0
+                val firstPageLoaded = (current.checkpoint?.firstPage ?: 1) <= 1
+                val topIndex = if (firstPageLoaded) 1 else 0
                 if (
-                    scrolling &&
+                    // snapshotFlow can observe the final position after scrolling has stopped.
+                    // Restoring the first-page label is local; fetching a previous page still
+                    // requires an active scroll gesture.
+                    (firstPageLoaded || scrolling) &&
                         upward &&
                         index <= topIndex &&
                         offset == 0 &&
