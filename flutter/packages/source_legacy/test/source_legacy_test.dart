@@ -263,6 +263,95 @@ void main() {
       expect(imported.requiresManualWork, true, reason: script);
     }
   });
+  test(
+    'plain URL paths still validate expressions and case-insensitive JS',
+    () {
+      for (final url in [
+        '/search?p={{page + 1}}',
+        '/search?q={{key.trim()}}',
+        '/search?p={{page',
+        '/search?p=<1,2,3>',
+        '@JS:"https://books.test/search"',
+        '<JS>"/search"</JS>',
+      ]) {
+        final imported = LegacySourceImporter().import({
+          'bookSourceUrl': 'https://books.test',
+          'searchUrl': url,
+          'ruleSearch': {'bookList': 'tag.a'},
+        });
+        expect(imported.requiresManualWork, true, reason: url);
+        expect(
+          imported.issues.map((e) => e.code),
+          contains('legacy.request_options'),
+        );
+      }
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search?q={{key}}&page={{page}}',
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, false);
+    },
+  );
+  test('explore uses selected URL and keeps menu only in original', () {
+    final input = <String, Object?>{
+      'bookSourceUrl': 'https://books.test',
+      'exploreUrl': '/category/a',
+      'ruleExplore': {'bookList': 'tag.a', 'name': '@text'},
+    };
+    final imported = LegacySourceImporter().import(input);
+    final stage = imported.source.stages['explore']!;
+    expect(stage.url, '{{exploreUrl}}');
+    expect(stage.method, 'GET');
+    expect(stage.body, null);
+    expect(stage.headers, null);
+    expect(imported.requiresManualWork, false);
+    expect(imported.original['exploreUrl'], '/category/a');
+    expect(imported.source.metadata['legacyOriginal'], input);
+  });
+  test('explore dynamic menus and request options remain manual without leaking options', () {
+    for (final menu in [
+      '@JS:"/category/a"',
+      '/category/{{page + 1}}',
+      '/category/a,{"method":"POST","body":"x=1","headers":{"X-Category":"a"}}',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': menu,
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      final stage = imported.source.stages['explore']!;
+      expect(imported.requiresManualWork, true, reason: menu);
+      expect(stage.url, '{{exploreUrl}}');
+      expect(stage.method, 'GET');
+      expect(stage.body, null);
+      expect(stage.headers, null);
+    }
+  });
+  test('content batch and callback hooks retain manual legacy metadata', () {
+    for (final hook in ['contentBatch', 'callBackJs']) {
+      final input = <String, Object?>{
+        'bookSourceUrl': 'https://books.test',
+        'ruleContent': {
+          'content': 'tag.p@text',
+          hook: 'java.cacheContent("chapter", "text")',
+        },
+      };
+      final imported = LegacySourceImporter().import(input);
+      expect(imported.requiresManualWork, true, reason: hook);
+      expect(
+        imported.issues.any(
+          (e) =>
+              e.path == 'ruleContent.$hook' &&
+              e.code == 'legacy.pipeline_requires_review',
+        ),
+        true,
+      );
+      expect(imported.source.metadata['legacy'], true);
+      expect(imported.source.metadata['compatibility'], 'manualRequired');
+      expect(imported.original, input);
+    }
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

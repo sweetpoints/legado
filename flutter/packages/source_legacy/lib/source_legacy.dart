@@ -112,6 +112,8 @@ class LegacySourceImporter {
           'imageStyle',
           'imageDecode',
           'payAction',
+          'contentBatch',
+          'callBackJs',
         ].contains(rule.key)) {
           issues.add(
             LegacyIssue(
@@ -191,7 +193,7 @@ class LegacySourceImporter {
               _ => '{{chapterUrl}}',
             }
           : input[urlKey]?.toString() ?? '';
-      if (url.isEmpty) {
+      if (url.isEmpty && entry.key != 'explore') {
         issues.add(
           LegacyIssue(
             urlKey ?? entry.key,
@@ -206,15 +208,25 @@ class LegacySourceImporter {
         requestHeaders,
         issues,
       );
-      url = request.url;
+      if (entry.key == 'explore' && RegExp(r',\s*(?=\{)').hasMatch(url)) {
+        issues.add(
+          const LegacyIssue(
+            'exploreUrl',
+            'legacy.explore_options',
+            'Explore menu request options must be applied to each selected URL explicitly.',
+          ),
+        );
+      }
+      final selectedExplore = entry.key == 'explore';
+      url = selectedExplore ? '{{exploreUrl}}' : request.url;
       stages[entry.key] = SourceStage(
         url: url,
         list: list,
         fields: fields,
         nextPage: nextPage,
-        method: request.method,
-        body: request.body,
-        headers: request.headers,
+        method: selectedExplore ? 'GET' : request.method,
+        body: selectedExplore ? null : request.body,
+        headers: selectedExplore ? null : request.headers,
       );
     }
     for (final key in [
@@ -292,7 +304,8 @@ _LegacyRequest _legacyRequest(
 ) {
   void issue(String message) =>
       issues.add(LegacyIssue(path, 'legacy.request_options', message));
-  if (value.contains('@js:') || value.contains('<js>')) {
+  _validateLegacyTemplates(value, issue);
+  if (RegExp(r'@js:|<js>', caseSensitive: false).hasMatch(value)) {
     issue('Script-generated requests require migration.');
     return _LegacyRequest(value);
   }
@@ -370,20 +383,6 @@ _LegacyRequest _legacyRequest(
   if (body != null && (body.contains('@js:') || body.contains('<js>'))) {
     issue('Script body requires migration.');
   }
-  for (final template in RegExp(
-    r'\{\{(.*?)\}\}',
-  ).allMatches('$url ${body ?? ''}')) {
-    if (![
-      'key',
-      'page',
-      'bookUrl',
-      'tocUrl',
-      'chapterUrl',
-      'baseUrl',
-    ].contains(template[1])) {
-      issue('Only known input placeholders can be converted.');
-    }
-  }
   if (method == 'POST') {
     if (headers.keys.any(
       (k) => k.toLowerCase() == 'content-type' && k != 'Content-Type',
@@ -432,6 +431,30 @@ _LegacyRequest _legacyRequest(
     body: method == 'POST' ? body : null,
     headers: headers,
   );
+}
+
+void _validateLegacyTemplates(String value, void Function(String) issue) {
+  final templates = RegExp(r'\{\{([\s\S]*?)\}\}');
+  for (final template in templates.allMatches(value)) {
+    if (![
+      'key',
+      'page',
+      'bookUrl',
+      'tocUrl',
+      'chapterUrl',
+      'baseUrl',
+      'exploreUrl',
+    ].contains(template[1])) {
+      issue('Only known input placeholders can be converted.');
+    }
+  }
+  final remainder = value.replaceAll(templates, '');
+  if (remainder.contains('{{')) {
+    issue('Unbalanced input placeholders require review.');
+  }
+  if (RegExp(r'<[^<>]*,[^<>]*>').hasMatch(value)) {
+    issue('Legacy page-choice syntax requires explicit migration.');
+  }
 }
 
 String _fixedForm(String input) => input
