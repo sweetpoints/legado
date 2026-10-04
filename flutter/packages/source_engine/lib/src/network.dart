@@ -191,6 +191,7 @@ class NetworkClient {
     String method = 'GET',
     Map<String, String> headers = const {},
     String? body,
+    String? charset,
     Duration timeout = const Duration(seconds: 30),
     CancellationToken? cancellation,
     int maxRedirects = 5,
@@ -214,6 +215,7 @@ class NetworkClient {
         method: method,
         headers: headers,
         body: body,
+        charset: charset,
         timeout: timeout,
         cancellation: cancellation,
         maxRedirects: maxRedirects,
@@ -229,6 +231,7 @@ class NetworkClient {
     String method = 'GET',
     Map<String, String> headers = const {},
     String? body,
+    String? charset,
     Duration timeout = const Duration(seconds: 30),
     CancellationToken? cancellation,
     int maxRedirects = 5,
@@ -272,7 +275,20 @@ class NetworkClient {
         req.cookies.addAll(
           _cookies.where((c) => c.matches(current)).map((c) => c.cookie),
         );
-        if (payload != null) req.add(utf8.encode(payload));
+        if (payload != null) {
+          final name = charset?.toLowerCase() ?? 'utf-8';
+          final encoder = ['gbk', 'gb2312', 'cp936'].contains(name)
+              ? gbk
+              : Encoding.getByName(name);
+          if (encoder == null) {
+            req.abort();
+            throw EngineException(
+              'unsupported_charset',
+              'Unsupported request charset $name',
+            );
+          }
+          req.add(encoder.encode(payload));
+        }
         final response = await req.close();
         importCookies(current, response.cookies);
         if (followRedirects &&
@@ -313,14 +329,18 @@ class NetworkClient {
             bytes[0] == 0xef &&
             bytes[1] == 0xbb &&
             bytes[2] == 0xbf;
-        final charset = headerCharset ?? (bom ? 'utf-8' : meta) ?? 'utf-8';
-        final encoding = ['gbk', 'gb2312', 'cp936'].contains(charset)
+        final effectiveCharset =
+            charset?.toLowerCase() ??
+            headerCharset ??
+            (bom ? 'utf-8' : meta) ??
+            'utf-8';
+        final encoding = ['gbk', 'gb2312', 'cp936'].contains(effectiveCharset)
             ? gbk
-            : Encoding.getByName(charset);
+            : Encoding.getByName(effectiveCharset);
         if (encoding == null && charsetDecoder == null) {
           throw EngineException(
             'unsupported_charset',
-            'Unsupported charset $charset',
+            'Unsupported charset $effectiveCharset',
           );
         }
         final resultHeaders = <String, String>{};
@@ -329,8 +349,12 @@ class NetworkClient {
           current,
           response.statusCode,
           resultHeaders,
-          encoding?.decode(bom ? bytes.sublist(3) : bytes) ??
-              charsetDecoder!(bytes, charset),
+          encoding?.decode(
+                bom && ['utf-8', 'utf8'].contains(effectiveCharset)
+                    ? bytes.sublist(3)
+                    : bytes,
+              ) ??
+              charsetDecoder!(bytes, effectiveCharset),
           message: response.reasonPhrase,
           bytes: bytes,
           multiHeaders: {

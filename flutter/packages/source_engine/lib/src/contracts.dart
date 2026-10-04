@@ -52,8 +52,16 @@ class SourceStage {
     this.fields = const {},
     this.nextPage,
     this.maxPages = 20,
+    this.method = 'GET',
+    this.body,
+    this.headers,
+    this.charset,
   });
   final String url;
+  final String method;
+  final String? body;
+  final Map<String, String>? headers;
+  final String? charset;
   final String? list;
   final String? nextPage;
   final int maxPages;
@@ -63,6 +71,12 @@ class SourceStage {
     list: json['list'] as String?,
     nextPage: json['nextPage'] as String?,
     maxPages: json['maxPages'] as int? ?? 20,
+    method: json['method'] as String? ?? 'GET',
+    body: json['body'] as String?,
+    headers: json['headers'] == null
+        ? null
+        : Map<String, String>.from(json['headers'] as Map),
+    charset: json['charset'] as String?,
     fields: (json['fields'] as Map? ?? {}).map(
       (k, v) => MapEntry(k.toString(), v.toString()),
     ),
@@ -73,6 +87,10 @@ class SourceStage {
     'fields': fields,
     if (nextPage != null) 'nextPage': nextPage,
     'maxPages': maxPages,
+    'method': method,
+    if (body != null) 'body': body,
+    if (headers != null) 'headers': headers,
+    if (charset != null) 'charset': charset,
   };
 }
 
@@ -124,6 +142,16 @@ class SourceDefinition {
       }
     }
     for (final stage in stages.values) {
+      if (!RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").hasMatch(stage.method)) {
+        throw const EngineException('invalid_source', 'Invalid HTTP method');
+      }
+      for (final entry in (stage.headers ?? {}).entries) {
+        if (!RegExp(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").hasMatch(entry.key) ||
+            entry.value.contains('\r') ||
+            entry.value.contains('\n')) {
+          throw const EngineException('invalid_source', 'Invalid stage header');
+        }
+      }
       if (stage.maxPages < 1 || stage.maxPages > 1000) {
         throw const EngineException(
           'invalid_source',

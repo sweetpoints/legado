@@ -101,6 +101,16 @@ class SourceEngine {
             : Uri.encodeComponent(value.toString());
       },
     );
+    final body = stage.body?.replaceAllMapped(
+      RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
+      (m) {
+        final value = input[m[1]];
+        if (value == null) {
+          throw EngineException('missing_input', 'Missing ${m[1]}');
+        }
+        return value.toString();
+      },
+    );
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
     }
@@ -117,7 +127,10 @@ class SourceEngine {
       }
       final response = await network.request(
         current,
-        headers: source.headers,
+        headers: stage.headers ?? source.headers,
+        method: stage.method,
+        body: body,
+        charset: stage.charset,
         cancellation: cancellation,
       );
       if (response.status >= 400) {
@@ -291,6 +304,7 @@ class _EngineHost implements ScriptHost {
           method: options['method'] as String? ?? 'GET',
           headers: headers,
           body: options['body'] as String?,
+          charset: options['charset'] as String?,
           timeout: Duration(
             milliseconds: options['timeoutMs'] as int? ?? 30000,
           ),
