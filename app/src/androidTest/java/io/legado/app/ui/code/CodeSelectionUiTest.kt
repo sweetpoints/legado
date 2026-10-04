@@ -23,6 +23,11 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertTextEquals
@@ -1375,6 +1380,77 @@ class CodeSelectionUiTest {
             )
             compose.onNodeWithTag("code-body").performTextReplacement("prefix target")
             compose.onNodeWithTag("code-body").assertTextEquals("prefix target")
+        } finally {
+            instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
+        }
+    }
+
+    @Test
+    fun composePreviewRestoresSyntaxAndSearchAfterLongDocumentCaretMotion() {
+        launchEditor()
+        val code = "var value = true;\n".repeat(4000) + "return target;"
+        val dialog = CodeDialog(code, disableEdit = false)
+        scenario!!.onActivity { dialog.show(it.supportFragmentManager, "compose-caret-syntax") }
+        try {
+            await {
+                var loaded = false
+                instrumentation.runOnMainSync { loaded = dialog.model.state.value.loaded }
+                loaded
+            }
+            compose.onNodeWithTag("code-body").performClick()
+            await {
+                var visible = false
+                instrumentation.runOnMainSync {
+                    visible = ViewCompat.getRootWindowInsets(dialog.requireView())
+                        ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }
+                visible
+            }
+            val insertion = code.length - 1
+            compose.onNodeWithTag("code-body")
+                .performTextInputSelection(androidx.compose.ui.text.TextRange(insertion))
+            compose.onNodeWithTag("code-body").performTextInput("中")
+            compose.waitForIdle()
+            val expected = code.substring(0, insertion) + "中" + code.substring(insertion)
+            val keyword = code.lastIndexOf("return")
+            fun actualLayout(): TextLayoutResult {
+                val results = mutableListOf<TextLayoutResult>()
+                compose.onNodeWithTag("code-body")
+                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { read ->
+                        assertTrue("The real text field must expose its rendered layout", read(results))
+                    }
+                return results.single()
+            }
+            val styled = actualLayout().layoutInput.text
+            assertEquals(expected, styled.text)
+            assertTrue("The final caret viewport must contain actual keyword coloring",
+                styled.spanStyles.any {
+                    it.start <= keyword && it.end >= keyword + 6 &&
+                        it.item.color != androidx.compose.ui.graphics.Color.Unspecified
+                })
+            instrumentation.runOnMainSync {
+                assertEquals(expected, dialog.currentOriginalCode())
+                assertEquals(insertion + 1, dialog.model.state.value.selectionEnd)
+            }
+            compose.onNode(
+                hasTestTag("code-search-toggle") and hasAnySibling(hasTestTag("code-close"))
+            ).performClick()
+            compose.onNodeWithTag("code-query").performTextReplacement("return")
+            await {
+                var matched = false
+                instrumentation.runOnMainSync {
+                    matched = dialog.model.state.value.matches == listOf(keyword until keyword + 6)
+                }
+                matched
+            }
+            compose.waitForIdle()
+            val searched = actualLayout().layoutInput.text
+            assertEquals(expected, searched.text)
+            assertTrue("Search coloring must survive the settled viewport projection",
+                searched.spanStyles.any {
+                    it.start <= keyword && it.end >= keyword + 6 &&
+                        it.item.background != androidx.compose.ui.graphics.Color.Unspecified
+                })
         } finally {
             instrumentation.runOnMainSync { dialog.dismissAllowingStateLoss() }
         }

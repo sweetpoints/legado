@@ -44,6 +44,7 @@ import io.legado.app.ui.book.read.ManualReplaceRulesDialog
 import io.legado.app.ui.book.read.ManualReplacementViewModel
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.widget.dialog.CodeDialog
+import io.legado.app.ui.widget.dialog.CodeDialogAction
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
@@ -494,6 +495,16 @@ class SourceManualReplacementUiTest {
                 text.replace(index, index + "Edited".length, "Editor")
             }
             compose.onNodeWithTag("code-save").performClick()
+            // The editor result updates its draft before the RESUMED route delivers EditorSaved.
+            // Wait for that callback and the parent's refresh to finish before inspecting candidates.
+            await("Native editor result delivered and candidate refresh completed") {
+                main {
+                    val state = code.model.state.value
+                    state.original.contains("Editor Seed0") && !state.busy &&
+                        state.effects.none { it.action == CodeDialogAction.EditorSaved } &&
+                        (if (rss) host.feed.state.value.interactive else host.book.state.value.interactive)
+                }
+            }
             host.ready(code)
             host.names("Editor Seed+0", "Seed+1")
             main { assertTrue(code.currentOriginalCode().contains("Editor Seed0")) }
