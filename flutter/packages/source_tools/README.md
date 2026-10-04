@@ -14,8 +14,9 @@ dart run packages/source_tools/bin/source_tools.dart execute source.json content
 
 Execution uses the embedded V8 runtime and the real network client. Only run
 sources you trust. JSON responses are printed to stdout; errors use the same JSON
-format. `--help` lists exit codes. Native V8 build/download output may be emitted
-by Dart before the executable starts.
+format. `--help` lists exit codes. Dart may emit native asset hook output before
+the executable starts; the hook requires the verified local source-built V8
+artifact and does not download a fallback binary.
 
 Migration preserves the original file and writes a separate candidate plus
 `candidate.json.report.json` (or `--report PATH`). Existing destinations are
