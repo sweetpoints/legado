@@ -68,3 +68,8 @@ reports are never replaced.
 and `verified` remain false; `jvmCompared` is false because the original JVM engine
 is not run. Network calls are live and can produce different responses; time,
 randomness, cookies, and service-side changes can also affect comparison.
+
+`comparisonScope: "stageResult"` and `stateCompared: false` explicitly limit
+comparison to the returned stage result. Stored variables, cookies, and platform
+side effects are not compared. Equal results can accompany different state
+changes, so the command cannot automatically accept a complete reading workflow.

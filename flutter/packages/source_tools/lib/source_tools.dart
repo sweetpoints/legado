@@ -286,6 +286,8 @@ class SourceCli {
         'sourceVerified': false,
         'verified': false,
         'baseline': 'flutterLegacyCompatibility',
+        'comparisonScope': 'stageResult',
+        'stateCompared': false,
         'jvmCompared': false,
         'network': 'live',
         'stage': stage,
@@ -331,6 +333,8 @@ class SourceCli {
         'verified': false,
         'jvmCompared': false,
         'error': {'code': error},
+        'comparisonScope': 'stageResult',
+        'stateCompared': false,
       });
 
   static String _canonicalJson(Object? value) {

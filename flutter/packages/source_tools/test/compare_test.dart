@@ -67,6 +67,8 @@ void main() {
         expect(result.json[key], false);
       }
       expect(result.json['baseline'], 'flutterLegacyCompatibility');
+      expect(result.json['comparisonScope'], 'stageResult');
+      expect(result.json['stateCompared'], false);
       expect((result.json['legacy'] as Map)['executionMode'], 'legacy');
       expect((result.json['candidate'] as Map)['executionMode'], 'modern');
       expect(jsonEncode(result.json), isNot(contains('private')));
@@ -103,6 +105,8 @@ void main() {
       }).run(args());
       expect(calls, 2);
       expect(result.exitCode, 1);
+      expect(result.json['comparisonScope'], 'stageResult');
+      expect(result.json['stateCompared'], false);
       expect(
         (result.json['legacy'] as Map)['errorCode'],
         'unsupported_host_api',
@@ -120,6 +124,8 @@ void main() {
       return [];
     }).run(args());
     expect(result.exitCode, 1);
+    expect(result.json['comparisonScope'], 'stageResult');
+    expect(result.json['stateCompared'], false);
     expect((result.json['candidate'] as Map)['status'], 'success');
   });
   test('legacy candidate allowed and identified', () async {
