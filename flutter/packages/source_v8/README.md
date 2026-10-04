@@ -120,6 +120,13 @@ were clean and all 139 tests passed (19/27/7/21/10/48/1/6). This evidence is in
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
+The official Flutter FFI example also built in Debug and Release and displayed
+`V8 15.4.80.24: 42` through actual runtime evaluation. `file` confirmed that the
+Release main executable and bundled source_v8 framework were ARM64 only; local
+codesign inspection confirmed the allow-jit entitlement. This is a local
+build/run/signature configuration check. Notarization and Hardened Runtime
+distribution acceptance have not been completed.
+
 The earlier 136-test result, three Android device tests and Release/R8 result
 belong to the V8 14.3 baseline. The new macOS result does not verify the new
 Android library, APK, device behavior or Release/R8. Android source compilation

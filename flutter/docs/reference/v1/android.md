@@ -4,7 +4,9 @@
 
 ## 启用
 
-Android 构建通过 `-PflutterSourceEngine=true` 引用 Flutter AAR。先按 `flutter/modules/source_host` 和宿主构建说明生成 AAR；不启用时保留既有 Android 构建路径。当前启用 Flutter 的宿主 APK 限定 ARM64 ABI，避免其他 Android JNI 库使 APK 宣告 V8/AAR 尚未打包的架构。V8 hook 支持多种目标不等于本阶段 APK 全部支持；未启用 Flutter 的既有构建不受此过滤影响。
+Android 构建通过 `-PflutterSourceEngine=true` 引用 Flutter AAR。先按 `flutter/modules/source_host` 和宿主构建说明生成 AAR；不启用时保留既有 Android 构建路径。当前启用 Flutter 的宿主 APK 限定 ARM64 ABI，避免其他 Android JNI 库使 APK 宣告 V8/AAR 尚未打包的架构。V8当前自编译Android目标也仅ARM64；未启用 Flutter 的既有构建不受此过滤影响。
+
+构建AAR应从flutter工作区使用`bash tool/build-android.sh`（或`--release`）。wrapper为AAR子进程配置专用Gradle home/init.d，以公开DSL将官方source_host module的默认minSdk24提升为26；不编辑生成的.android，根app不使用该专用home。只复用公共cache/wrapper，不复制用户配置、init脚本或凭据。直接flutter build aar未配置module26时会触发V8 API26门槛错误。此配置检查不是新版Android native编译或设备验证证明。
 
 书源注释标记：
 

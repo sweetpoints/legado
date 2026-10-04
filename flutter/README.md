@@ -10,6 +10,8 @@
 
 Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为 JDK 21 路径，在本目录运行 `bash tool/build-android.sh`。脚本构建 ARM64 Debug AAR 和启用新引擎的应用、仪器测试 APK；不会修改全局 Flutter JDK 设置。
 
+请使用此wrapper构建AAR：Flutter 3.47官方module模板默认minSdk为24，新V8要求26。wrapper只对AAR子进程使用工作区专用`.gradle-source-host/init.d`，通过公开Gradle beforeProject/androidComponents.finalizeDsl配置source_host为26，保持生成的`.android`文件不变。仅复用公共Gradle缓存与wrapper，不复制用户properties、init脚本或凭据；根Android应用仍使用原Gradle home。直接flutter build aar未应用该配置时会在API26检查失败。
+
 运行 `bash tool/build-android.sh --release` 构建 Release AAR 与启用新引擎的 Release 应用，包含现有 R8 缩减流程。签名使用项目既有配置，构建命令不发布产物。
 
 对现有 ARM64 设备或模拟器设置 `ANDROID_SERIAL`，运行 `bash tool/test-android.sh` 可重建并执行专门的 Flutter 引擎仪器测试。脚本使用独立的 `.fluttertest` 应用 ID 后缀，避免覆盖模拟器上已有的 Debug 应用。测试覆盖 Android 实际 V8、异步搜索/目录/正文、WebBook 路由、无限脚本取消后恢复，以及引擎关闭重建后的会话恢复和书源隔离。
@@ -35,8 +37,10 @@ Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为
 
 当前不是全部历史书源的等价替代。复杂旧脚本、Java 类互操作、未实现的宿主重载与 JSoup 专有规则会报告人工处理。分页、请求限速和部分编码已实现；浏览器、运行时与平台边界以 Reference 和实际测试为准。固定样本通过不代表所有联网书源或所有设备通过。
 
-V8默认从官方源码自编译：当前固定稳定版tag15.4.80.24、commite422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
+V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码commit e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
 
 当前自编译目标为macOS ARM64与Android ARM64；当前宿主构建脚本和启用引擎APK限制为Android ARM64。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，并通过V8本包21项测试及全工作区139项测试、8项静态检查。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-stable-v8.log`。
+
+官方 Flutter FFI example 的macOS Debug/Release也构建并运行成功，显示实际V8 15.4.80.24结果42。Release主可执行文件及V8 framework仅ARM64；local codesign有allow-jit。尚未完成notarization或Hardened Runtime分发验收。
 
 旧14.3的136项测试、三项Android设备测试和Release/R8结果仅为历史基线，不证明当前15.4的Android产物通过。新版Android源码编译仍在进行，APK、设备和Release状态需分别验证。

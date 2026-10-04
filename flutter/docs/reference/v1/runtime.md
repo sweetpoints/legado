@@ -20,7 +20,7 @@
 
 ## 原生依赖
 
-运行时需要与目标 CPU、操作系统匹配的 V8 库。原生构建通过官方 `package_ffi` 模板的构建 hook 接入。当前固定官方 V8 tag15.4.80.24（源码 commite422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee），采用官方源码与固定 depot_tools 8a5434051036b32412a2ecb10c213a72e3f3ccb9 的自产构建，不默认下载第三方预编译引擎。构建脚本与引擎/桥接共享GN和C++运行时，生成本地manifest；hook按manifest选择并校验本地最终C ABI库。当前源码构建目标为macOS arm64（13.0）和Android arm64（API26），其他平台/ABI不提供此构建。构建命令、manifest与覆盖路径见[source_v8 README](../../../packages/source_v8/README.md)。Dart 分析或单元测试通过，不能单独证明 Android 包已包含可加载的 V8，或真机的书源流程已经通过。
+运行时需要与目标 CPU、操作系统匹配的 V8 库。原生构建通过官方 `package_ffi` 模板的构建 hook 接入。当前固定官方 V8 稳定版本15.4.80.24（源码 commite422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee），采用官方源码与固定 depot_tools 8a5434051036b32412a2ecb10c213a72e3f3ccb9 的自产构建，不默认下载第三方预编译引擎。构建脚本与引擎/桥接共享GN和C++运行时，生成本地manifest；hook按manifest选择并校验本地最终C ABI库。当前源码构建目标为macOS arm64（13.0）和Android arm64（API26），其他平台/ABI不提供此构建。构建命令、manifest与覆盖路径见[source_v8 README](../../../packages/source_v8/README.md)。Dart 分析或单元测试通过，不能单独证明 Android 包已包含可加载的 V8，或真机的书源流程已经通过。
 
 V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运行时不可用时应报告错误，不得暗中转到 Rhino、JSC 或其他引擎并继续声称正在使用 V8。
 
@@ -33,5 +33,7 @@ V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运�
 
 
 官方源码自编译 macOS ARM64 已完成链接并实际加载 V8 15.4.80.24。最终库包含10个 sv8 导出，大小46,032,368字节（43.90 MiB），SHA-256为 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`。V8包21项测试通过；全工作区8项静态检查无问题，139项测试通过，日志为仓库根目录 `tmp/flutter-source-check-stable-v8.log`。manifest的初始validation字段仍表示构建阶段，执行验证证据单独记录。
+
+官方 Flutter FFI example 的 Debug、Release 构建及界面执行也已通过，界面显示实际 V8 15.4.80.24 计算结果42。Release主可执行文件和source_v8 framework经file检查均仅ARM64，local codesign检查确认allow-jit。这里只确认本地构建、运行和签名配置；尚未完成notarization或Hardened Runtime分发验收。
 
 旧136项测试、三项Android设备测试及Release/R8结果属于14.3基线。新版macOS结果不能证明新版Android库、APK、设备和Release/R8通过；Android官方源码编译仍在进行，尚不声明新版Android验收通过。
