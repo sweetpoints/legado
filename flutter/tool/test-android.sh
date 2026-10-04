@@ -44,6 +44,7 @@ required = {
     'sessionVariablesSurviveEngineShutdownAndStaySourceIsolated',
     'legacyExploreUsesSelectedCategoryAndNormalizesBookFields',
     'modernBookFieldsRemainUnchangedAndMigratedFieldsUseLegacyFormatting',
+    'nonUrlLegacySourceIdsSearchAbsoluteEndpointAndKeepSessionsIsolated',
 }
 if not required.issubset({case.get('name') for case in cases}) or any(case.find(tag) is not None
                          for case in cases for tag in ('failure', 'error', 'skipped')):

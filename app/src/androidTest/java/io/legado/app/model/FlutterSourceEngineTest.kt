@@ -617,6 +617,82 @@ class FlutterSourceEngineTest {
     }
 
     @Test
+    fun nonUrlLegacySourceIdsSearchAbsoluteEndpointAndKeepSessionsIsolated() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        val unique = java.util.UUID.randomUUID().toString()
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val paths = mutableListOf<String>()
+            val cookies = mutableListOf<String>()
+            val serving =
+                async(Dispatchers.IO) {
+                    repeat(3) { index ->
+                        server.accept().use { socket ->
+                            socket.soTimeout = 10_000
+                            val reader = socket.getInputStream().bufferedReader()
+                            paths.add(reader.readLine().split(' ')[1])
+                            var cookie = ""
+                            while (true) {
+                                val header = reader.readLine()
+                                if (header.isNullOrEmpty()) break
+                                if (header.startsWith("Cookie:", ignoreCase = true))
+                                    cookie = header.substringAfter(':').trim()
+                            }
+                            cookies.add(cookie)
+                            val owner = if (index == 1) "B" else "A"
+                            val body =
+                                "<div class='row'><a href='book'>Title $owner</a><span class='author'>Author</span></div>"
+                                    .toByteArray(Charsets.UTF_8)
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nSet-Cookie: owner=$owner; Path=/; HttpOnly\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray()
+                                )
+                                write(body)
+                                flush()
+                            }
+                        }
+                    }
+                }
+            fun selected(id: String) =
+                Gson()
+                    .fromJson(
+                        Gson()
+                            .toJson(
+                                mapOf(
+                                    "bookSourceUrl" to id,
+                                    "bookSourceName" to id,
+                                    "bookSourceComment" to "@engine:dart",
+                                    "enabledCookieJar" to true,
+                                    "searchUrl" to "$origin/catalog/search",
+                                    "ruleSearch" to
+                                        mapOf(
+                                            "bookList" to ".row",
+                                            "name" to "a@text",
+                                            "author" to ".author@text",
+                                            "bookUrl" to "a@href",
+                                        ),
+                                )
+                            ),
+                        BookSource::class.java,
+                    )
+            val first = selected("Local archive $unique A")
+            val second = selected("Local archive $unique B")
+            for ((source, title) in
+                listOf(first to "Title A", second to "Title B", first to "Title A")) {
+                val result =
+                    withTimeout(60_000) { WebBook.searchBookAwait(source, "Title").single() }
+                assertEquals(title, result.name)
+                assertEquals("$origin/catalog/book", result.bookUrl)
+                assertEquals(source.bookSourceUrl, result.origin)
+            }
+            serving.await()
+            assertEquals(listOf("/catalog/search", "/catalog/search", "/catalog/search"), paths)
+            assertEquals(listOf("", "", "owner=A"), cookies)
+        }
+    }
+
+    @Test
     fun sessionVariablesSurviveEngineShutdownAndStaySourceIsolated() = runBlocking {
         val unique = java.util.UUID.randomUUID().toString()
         val definition =
