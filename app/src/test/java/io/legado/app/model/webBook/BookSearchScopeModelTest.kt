@@ -16,8 +16,7 @@ class BookSearchScopeModelTest {
                 bookSourceUrl = "https://example.invalid/source",
                 bookSourceName = "Example: name",
             )
-        val scope = io.legado.app.ui.book.search.SearchScope(source)
-        assertTrue(scope is SearchScope)
+        val scope: SearchScope = io.legado.app.ui.book.search.SearchScope(source)
         assertEquals("Example name::https://example.invalid/source", scope.toString())
         assertEquals(listOf("Example name"), scope.displayNames)
         assertTrue(scope.isSource())

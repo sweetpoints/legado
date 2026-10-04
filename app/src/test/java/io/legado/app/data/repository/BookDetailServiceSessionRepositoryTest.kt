@@ -123,7 +123,7 @@ class BookDetailServiceSessionRepositoryTest {
                     request(BookDetailServiceKind.Upload).copy(token = "upload", readAfter = true),
                 )
             assertEquals(BookDetailPromptKind.OverwriteUpload, conflict.prompt!!.kind)
-            assertTrue(conflict.prompt!!.readAfter)
+            assertTrue(conflict.prompt.readAfter)
             assertEquals(listOf("exists", "upload:false"), services.events)
             assertTrue(conflict.effects.isEmpty())
         }
@@ -191,9 +191,9 @@ class BookDetailServiceSessionRepositoryTest {
                     .copy(file = BookDetailWebFile("file", "book.zip"), readAfter = true)
             val many = repo.execute("ticket", sessions.record, intent)
             assertEquals(BookDetailPromptKind.ArchiveEntries, many.prompt!!.kind)
-            assertEquals(services.entries, many.prompt!!.values)
-            assertEquals("archive-uri", many.prompt!!.value)
-            assertTrue(many.prompt!!.readAfter)
+            assertEquals(services.entries, many.prompt.values)
+            assertEquals("archive-uri", many.prompt.value)
+            assertTrue(many.prompt.readAfter)
             assertEquals(listOf("download", "entries"), services.events)
             services.events.clear()
             services.entries = listOf("one.txt")

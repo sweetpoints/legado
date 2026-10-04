@@ -542,7 +542,7 @@ class BookMetadataEditorViewModelTest {
                 } ?: draft
             if (current.completion != null || current.finished) return current
             val book =
-                if (current.pendingSave != null) books.recover(current.pendingSave!!)
+                if (current.pendingSave != null) books.recover(current.pendingSave)
                 else
                     books.save(current.input!!) { plan ->
                         current = current.copy(pendingSave = plan, revision = current.revision + 1)

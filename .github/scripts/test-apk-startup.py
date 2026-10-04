@@ -27,6 +27,8 @@ def main():
         return adb("shell", *command).stdout.decode().strip()
 
     def nodes():
+        crash = adb("logcat", "-d", "-b", "crash", check=False).stdout.decode(errors="replace")
+        assert f"Process: {args.package}," not in crash, "APK crashed during startup; see logcat.txt"
         shell("uiautomator", "dump", "/sdcard/legado-startup.xml")
         return list(ET.fromstring(shell("cat", "/sdcard/legado-startup.xml")).iter("node"))
 
@@ -96,6 +98,9 @@ def main():
                 time.sleep(2)
             else:
                 raise AssertionError("First-run dialogs did not reveal the main navigation")
+            (folder / "before-navigation.xml").write_text(shell("cat", "/sdcard/legado-startup.xml"))
+            (folder / "before-navigation.png").write_bytes(adb("exec-out", "screencap", "-p").stdout)
+            (folder / "before-navigation-windows.txt").write_text(shell("dumpsys", "window", "windows"))
             destinations = [
                 {"Me", "我的"}, {"RSS feeds", "订阅"},
                 {"Discovery", "发现"}, {"Bookshelf", "书架"},
@@ -132,6 +137,7 @@ def main():
             log = adb("logcat", "-d").stdout.decode(errors="replace")
             (folder / "logcat.txt").write_text(log)
             (folder / "activities.txt").write_text(shell("dumpsys", "activity", "activities"))
+            (folder / "windows.txt").write_text(shell("dumpsys", "window", "windows"))
             (folder / "screen.png").write_bytes(adb("exec-out", "screencap", "-p").stdout)
             adb("pull", f"/sdcard/Android/data/{args.package}/cache/crash",
                 str(folder / "crash"), check=False)

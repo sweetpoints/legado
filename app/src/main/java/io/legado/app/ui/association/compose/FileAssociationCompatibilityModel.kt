@@ -14,6 +14,7 @@ import io.legado.app.ui.book.import.local.ImportBook
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -52,11 +53,19 @@ internal constructor(
     )
 
     private var selectionProof: Deferred<Boolean>? = null
+    private var selectionRequest: Triple<String?, Long?, Set<String>>? = null
 
     val localBookBatch: LiveData<List<ImportBook>?> =
         state
-            .mapLatest { current ->
-                val previews = current.session?.previews.orEmpty()
+            .map { current ->
+                Triple(
+                    current.ticket,
+                    current.session?.generation,
+                    current.session?.previews.orEmpty(),
+                )
+            }
+            .distinctUntilChanged()
+            .mapLatest { (ticket, generation, previews) ->
                 if (previews.isEmpty()) null
                 else
                     try {
@@ -73,8 +82,8 @@ internal constructor(
                     } catch (failure: Throwable) {
                         currentCoroutineContext().ensureActive()
                         reportProjectionFailure(
-                            current.ticket,
-                            current.session?.generation,
+                            ticket,
+                            generation,
                             failure,
                         )
                         null
@@ -140,15 +149,18 @@ internal constructor(
 
     fun updateLocalSelection(uris: Collection<Uri>) {
         val selected = uris.map(Uri::toString).toSet()
-        selectionProof =
-            updateSelectionWithProof(
-                state.value.session
-                    ?.previews
-                    .orEmpty()
-                    .filter { it.fileUri in selected }
-                    .map { it.id }
-                    .toSet()
-            )
+        val owner = state.value
+        val ids = owner.session?.previews.orEmpty()
+            .filter { it.fileUri in selected }.map { it.id }.toSet()
+        val request = Triple(owner.ticket, owner.session?.generation, ids)
+        // A selection effect and its confirm effect can arrive before the same durable write ends.
+        if (selectionRequest == request && selectionProof?.isActive == true) return
+        selectionRequest = request
+        selectionProof = viewModelScope.async {
+            awaitCommands()
+            if (!acceptsCallback(owner.ticket, owner.session?.generation)) false
+            else updateSelectionWithProof(ids).await()
+        }
     }
 
     fun confirmLocalBooks() {

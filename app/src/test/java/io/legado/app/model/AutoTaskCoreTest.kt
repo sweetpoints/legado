@@ -68,7 +68,7 @@ class AutoTaskCoreTest {
         val notify = action?.get("notify") as Map<*, *>
         assertEquals(true, notify["enable"])
         assertEquals(1, (notify["minCount"] as Number).toInt())
-        val cache = action?.get("cache") as Map<*, *>
+        val cache = action.get("cache") as Map<*, *>
         assertEquals(false, cache["enable"])
     }
 

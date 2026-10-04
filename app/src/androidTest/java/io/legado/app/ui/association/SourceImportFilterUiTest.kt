@@ -168,7 +168,7 @@ class SourceImportFilterUiTest {
                     Intent(context, OnLineImportActivity::class.java)
                         .setAction(Intent.ACTION_VIEW)
                         .setData(uri)
-                ActivityScenario.launch<OnLineImportActivity>(intent).use { scenario ->
+                compose.launchAssociation<OnLineImportActivity>(intent).use { scenario ->
                     val host = ImportHost(scenario, rss)
                     host.findParent()
                     host.awaitReady()
@@ -481,7 +481,7 @@ class SourceImportFilterUiTest {
                 clipData = ClipData.newRawUri(file.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-        ActivityScenario.launch<FileAssociationActivity>(intent).use { scenario ->
+        compose.launchAssociation<FileAssociationActivity>(intent).use { scenario ->
             val host = ImportHost(scenario, rss)
             host.findParent()
             host.awaitReady()

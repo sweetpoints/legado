@@ -694,9 +694,9 @@ class AssociationImportViewModelTest {
                 val state = model.state.value
                 assertEquals(AssociationPhase.MixedTypes, state.session!!.phase)
                 assertFalse(state.busy)
-                assertTrue(state.session!!.previews.isEmpty())
-                assertTrue(state.session!!.effects.isEmpty())
-                assertEquals(null, state.session!!.error)
+                assertTrue(state.session.previews.isEmpty())
+                assertTrue(state.session.effects.isEmpty())
+                assertEquals(null, state.session.error)
                 assertEquals(input, sessions.current!!.input)
             } finally {
                 clear(model)

@@ -114,12 +114,11 @@ internal fun clearAssociationStagingResources(directory: File) {
             require(file.canonicalPath.startsWith(prefix)) {
                 "Staged file escaped its import session"
             }
-            val document = FileDoc.fromFile(file)
-            LocalBook.withParserCacheInvalidated(document.uri, document.name) {}
-            // The generated cover key is the private staged URI, never the permanent destination.
-            val preview = Book(bookUrl = document.toString())
-            val cover = File(LocalBook.getCoverPath(preview))
-            if (cover.exists()) check(cover.delete()) { "Staged cover cleanup failed" }
+            // Archive extraction returns canonical paths (/data/data), while direct shares
+            // retain Context.filesDir paths (/data/user/0). Both can key private parser covers.
+            listOf(file, file.canonicalFile).distinctBy(File::getAbsolutePath).forEach {
+                clearAssociationPreviewResources(it)
+            }
         }
 }
 

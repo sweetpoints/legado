@@ -131,7 +131,7 @@ class ThemeListViewModelTest {
                 try {
                     runCurrent()
                     assertEquals(event, restored.state.value.event)
-                    assertEquals(1200000, restored.sharePayload(event.receipt!!).length)
+                    assertEquals(1200000, restored.sharePayload(event.receipt).length)
                     restored.consume(event)
                     val next = newModel(repo, copy(restoredSaved))
                     val last = owned(next)
