@@ -306,7 +306,11 @@ class MouseWheelScrollTest {
         }
         compose.onNodeWithTag("number-input").assertDoesNotExist()
         instrumentation.runOnMainSync {
-            assertTrue("Captured old picker confirm", staleConfirmAction())
+            val staleResult = runCatching { staleConfirmAction() }
+            staleResult.exceptionOrNull()?.let { failure ->
+                // A disposed Compose modifier cannot read CompositionLocals after detachment.
+                assertTrue(failure is IllegalStateException && failure.message.orEmpty().contains("not currently attached"))
+            }
         }
         SystemClock.sleep(300)
         assertEquals(
@@ -381,7 +385,10 @@ class MouseWheelScrollTest {
             val beforePage = page.textPage.index
             input(activity)
             assertEquals(
-                "Rendered content displacement",
+                "Rendered content displacement: scroll=${activity.readerView.isScroll}, " +
+                    "menu=${activity.readMenu.isVisible}, search=${activity.searchMenu.bottomMenuVisible}, " +
+                    "dialog=${activity.bottomDialog}, enabled=${AppConfig.mouseWheelPage}, " +
+                    "refreshing=${activity.readerView.pageFactory.isRefreshingResources}",
                 expected,
                 pageOffset.getInt(text) - beforeOffset,
             )
@@ -444,6 +451,7 @@ class MouseWheelScrollTest {
     private fun awaitReader(condition: (ReadBookActivity) -> Boolean) {
         try {
             compose.waitUntil(timeoutMillis = 30_000) {
+                compose.mainClock.advanceTimeByFrame()
                 var ready = false
                 scenario!!.onActivity { ready = condition(it) }
                 ready

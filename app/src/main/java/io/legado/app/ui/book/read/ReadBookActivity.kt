@@ -1127,8 +1127,11 @@ class ReadBookActivity :
     }
 
     /** 鼠标滚轮和手表旋钮事件 */
-    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_SCROLL) {
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        // Compose can consume wheel events before the Activity fallback is reached.
+        if (event.action == MotionEvent.ACTION_SCROLL &&
+            !menuLayoutIsVisible && AppConfig.mouseWheelPage
+        ) {
             val axisValue =
                 when {
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -1138,17 +1141,17 @@ class ReadBookActivity :
                     event.source and InputDevice.SOURCE_CLASS_POINTER != 0 ->
                         event.getAxisValue(MotionEvent.AXIS_VSCROLL)
 
-                    else -> return super.onGenericMotionEvent(event)
+                    else -> return super.dispatchGenericMotionEvent(event)
                 }
             if (!axisValue.isFinite() || axisValue == 0f) {
-                return super.onGenericMotionEvent(event)
+                return super.dispatchGenericMotionEvent(event)
             }
-            LogUtils.d("onGenericMotionEvent", "axisValue = $axisValue")
+            LogUtils.d("dispatchGenericMotionEvent", "axisValue = $axisValue")
             val direction = if (axisValue < 0f) PageDirection.NEXT else PageDirection.PREV
             mouseWheelPage(direction, axisValue)
             return true
         }
-        return super.onGenericMotionEvent(event)
+        return super.dispatchGenericMotionEvent(event)
     }
 
     /** 按键事件 */
