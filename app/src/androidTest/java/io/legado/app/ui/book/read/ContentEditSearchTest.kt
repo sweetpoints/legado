@@ -52,7 +52,9 @@ class ContentEditSearchTest {
 
     private fun menu(tag: String) {
         compose.onNodeWithTag("content-menu").performClick()
-        compose.onNodeWithTag(tag).performClick()
+        compose.onNodeWithTag(tag).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick) {
+            it()
+        }
     }
 
     private fun search(query: String) {
@@ -68,23 +70,22 @@ class ContentEditSearchTest {
         val repo = Fake("甲<img src=\"图\">乙丙")
         val saved = SavedStateHandle()
         var model by mutableStateOf(create(repo, saved))
+        var copied: String? = null
         compose.setContent {
-            LegadoComposeTheme { ContentEditorRoute(model, { context.sendToClip(it) }, {}, {}) }
+            LegadoComposeTheme {
+                ContentEditorRoute(model, { copied = it; context.sendToClip(it) }, {}, {})
+            }
         }
         compose.waitUntil { model.state.value.hasDraft }
         menu("content-plain")
         compose.onNodeWithTag("content-body").assertTextEquals("甲乙丙").performTextReplacement("甲替换丙")
         compose.runOnIdle { assertEquals("甲<img src=\"图\">替换丙", model.state.value.raw) }
         menu("content-copy")
-        compose.runOnIdle {
-            assertEquals(
-                "Editor title\n甲替换丙",
+        compose.runOnIdle { assertEquals("Editor title\n甲替换丙", copied) }
+        compose.waitUntil {
+            copied == "Editor title\n甲替换丙" &&
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                    .primaryClip!!
-                    .getItemAt(0)
-                    .text
-                    .toString(),
-            )
+                    .primaryClip?.getItemAt(0)?.text?.toString() == copied
         }
         compose.waitUntil { repo.drafts[model.draftId]?.text == model.state.value.raw }
         compose.runOnIdle { model = create(repo, snapshot(saved)) }
@@ -217,7 +218,10 @@ class ContentEditSearchTest {
             model = create(repo, snapshot(saved))
         }
         compose.waitUntil { model.state.value.hasDraft && model.state.value.matches.size == 201 }
-        compose.onNodeWithTag("content-query").assertTextEquals("needle")
+        compose.onNodeWithTag("content-query").assert(
+            SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+                androidx.compose.ui.text.AnnotatedString("needle"))
+        )
         compose.runOnIdle {
             assertEquals(y, model.state.value.scrollY)
             assertFalse(model.state.value.hasChanges)

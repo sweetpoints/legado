@@ -321,7 +321,7 @@ fun RssSourceEditorScreen(
                         Modifier.weight(1f),
                     )
                 }
-                ScrollableTabRow(state.tab, edgePadding = 0.dp) {
+                PrimaryScrollableTabRow(state.tab, edgePadding = 0.dp) {
                     listOf(
                             stringResource(R.string.source_tab_base),
                             stringResource(R.string.source_tab_start),

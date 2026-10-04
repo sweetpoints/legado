@@ -86,7 +86,7 @@ internal fun visibleRssImportItems(
             labels.disabled -> !source.enabled
             labels.login -> !source.loginUrl.isNullOrBlank()
             labels.noGroup ->
-                source.sourceGroup.isNullOrBlank() || source.sourceGroup?.trim() == "未分组"
+                source.sourceGroup.isNullOrBlank() || source.sourceGroup.trim() == "未分组"
             else ->
                 matchesSourceImportSearch(
                     state.query,

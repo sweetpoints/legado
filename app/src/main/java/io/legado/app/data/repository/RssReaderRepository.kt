@@ -143,7 +143,7 @@ class AppRssReaderRepository(
                         !current.description.isNullOrBlank() ->
                             html(current, current.description!!, source)
                         !source?.ruleContent.isNullOrBlank() ->
-                            rule(current, source!!.ruleContent!!)
+                            rule(current, source.ruleContent!!)
                         else -> url(current.link, current.origin)
                     }
                 } else
@@ -161,7 +161,7 @@ class AppRssReaderRepository(
                                     it.sourceUrl,
                                 )
                             }
-                        source?.ruleContent.isNullOrBlank() || source?.singleUrl == true ->
+                        source?.ruleContent.isNullOrBlank() || source.singleUrl == true ->
                             url(request.openUrl, origin)
                         request.openUrl != null -> {
                             val current =
@@ -172,7 +172,7 @@ class AppRssReaderRepository(
                                         title = title,
                                         link = request.openUrl,
                                     )
-                            rule(current, source!!.ruleContent!!)
+                            rule(current, source.ruleContent!!)
                         }
                         else -> null
                     }

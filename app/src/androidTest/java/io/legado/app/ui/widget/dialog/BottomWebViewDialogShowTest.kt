@@ -659,7 +659,8 @@ class BottomWebViewDialogShowTest {
             awaitCondition { browser.dialog?.isShowing != true })
         scenario!!.onActivity { activity ->
             browser = newDialog(config = """{"heightPercentage":0.5,
-                "dismissOnTouchOutside":false,"isHideable":true}""")
+                "dismissOnTouchOutside":false,"isHideable":true,
+                "isDraggableOnNestedScroll":true}""")
             browser.show(activity.supportFragmentManager, "outside-off-swipe")
         }
         awaitGeometry { it.height > 0 && it.top > 0 && it.state == BottomSheetBehavior.STATE_EXPANDED }

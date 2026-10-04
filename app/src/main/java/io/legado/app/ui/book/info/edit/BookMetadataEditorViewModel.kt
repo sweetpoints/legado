@@ -197,7 +197,7 @@ class BookMetadataEditorViewModel(
                         checkNotNull(input)
                             .copy(
                                 typeIndex = index,
-                                changed = input!!.changed + BookMetadataField.Type,
+                                changed = input.changed + BookMetadataField.Type,
                             )
                 )
             }

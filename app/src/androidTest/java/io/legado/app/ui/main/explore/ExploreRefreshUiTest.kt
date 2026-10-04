@@ -2,11 +2,14 @@ package io.legado.app.ui.main.explore
 
 import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.os.SystemClock
 import android.view.ViewTreeObserver
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.filter
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -200,7 +203,8 @@ class ExploreRefreshUiTest {
                 "Category mode",
                 "Rendered + $mode",
             ) {
-                compose.onNodeWithTag("explore-home-control:37").performClick()
+                compose.onNodeWithTag("explore-home-control:37")
+                    .onChildren().filter(hasClickAction()).onFirst().performClick()
                 compose.onNodeWithText(mode).performClick()
             }
         }
@@ -217,7 +221,8 @@ class ExploreRefreshUiTest {
                 "Category mode",
                 "Rendered + $mode",
             ) {
-                compose.onNodeWithTag("explore-home-control:37").performClick()
+                compose.onNodeWithTag("explore-home-control:37")
+                    .onChildren().filter(hasClickAction()).onFirst().performClick()
                 compose.onNodeWithText(mode).performClick()
             }
             assertTrue(
@@ -270,7 +275,9 @@ class ExploreRefreshUiTest {
     }
 
     private fun positionControls() {
-        compose.onNodeWithTag("explore-home-control:36").performScrollTo().assertIsDisplayed()
+        // Keep both the toggle and the following select fully inside the viewport.
+        compose.onNodeWithTag("explore-home-control:37").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("explore-home-control:36").assertIsDisplayed()
         scenario!!.onActivity { activity ->
             preDraw =
                 ViewTreeObserver.OnPreDrawListener {
@@ -310,6 +317,13 @@ class ExploreRefreshUiTest {
                 }
             }
             compose.waitForIdle()
+            if (controlId == 36) {
+                compose.waitUntil(timeoutMillis = 15_000) {
+                    runCatching {
+                        compose.onNodeWithText(afterText).assertIsDisplayed()
+                    }.isSuccess
+                }
+            }
             compose.onNodeWithTag(tag).assertIsDisplayed()
             if (controlId == 36) compose.onNodeWithText(afterText).assertIsDisplayed()
             val afterBounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
@@ -347,14 +361,25 @@ class ExploreRefreshUiTest {
         get() = exploreHomeModel
 
     private fun await(description: String, condition: (MainActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
-        throw AssertionError("Timed out waiting for $description")
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Capture a compact fixture state without dumping source or session contents.
+        }
+        var diagnostics = ""
+        scenario!!.onActivity {
+            val state = it.explore.state.value
+            diagnostics = "ready=${it.hostMigration.value.ready}, queryMatches=${state.query == "group:$group"}, " +
+                "sources=${state.sources.size}/${sources.size}, groupPresent=${group in state.groups}, " +
+                "loaded=${state.sessionLoaded}, loading=${state.loading}, busy=${state.busy}, " +
+                "destination=${it.viewModel.uiState.value.selectedDestination}"
+        }
+        throw AssertionError("Timed out waiting for $description: $diagnostics")
     }
 
     private fun screenshot(name: String) {

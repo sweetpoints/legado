@@ -19,8 +19,8 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
 import java.io.File
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import io.legado.app.utils.launchCleanup
 
 class BottomBarSkinActivity : BaseComposeActivity() {
     internal val model by
@@ -92,7 +92,7 @@ class BottomBarSkinActivity : BaseComposeActivity() {
 
     override fun onDestroy() {
         if (isFinishing && !isChangingConfigurations)
-            lifecycleScope.launch(NonCancellable) { runCatching { model.releasePending() } }
+            lifecycleScope.launchCleanup { runCatching { model.releasePending() } }
         super.onDestroy()
     }
 }

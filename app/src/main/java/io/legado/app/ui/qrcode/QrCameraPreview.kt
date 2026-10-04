@@ -42,7 +42,7 @@ internal fun QrCameraPreview(enabled: Boolean, onResult: (String?) -> Unit) {
                     camera.setOnScanResultCallback(
                         CameraScan.OnScanResultCallback { scanned ->
                             camera.setAnalyzeImage(false)
-                            result(scanned.result?.text)
+                            result(scanned.result.text)
                         }
                     )
                     // Adapt the library's ambient-light signal without mounting its legacy

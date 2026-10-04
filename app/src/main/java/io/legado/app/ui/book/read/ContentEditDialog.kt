@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.utils.resizeForIme
+
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.ViewGroup
@@ -63,7 +65,7 @@ class ContentEditDialog : BaseComposeDialogFragment() {
     override fun onStart() {
         super.onStart()
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
         // Native Dialog cancellation happens after dismissal. Intercept back to await auto-save.
         isCancelable = false
         dialog?.setOnKeyListener { _, key, event ->

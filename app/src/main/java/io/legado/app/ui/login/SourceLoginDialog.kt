@@ -1,5 +1,7 @@
 package io.legado.app.ui.login
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.DialogInterface
 import android.content.Intent
 import android.os.Bundle
@@ -56,7 +58,7 @@ class SourceLoginDialog : BaseComposeDialogFragment(), SourceLoginJsExtensions.C
         super.onStart()
         dialog?.window?.run {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

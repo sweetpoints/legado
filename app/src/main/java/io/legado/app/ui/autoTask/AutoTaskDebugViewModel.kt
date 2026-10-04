@@ -157,7 +157,7 @@ class AutoTaskDebugViewModel(
                     return@launch
                 }
                 owner = lease
-                val result = lease!!.run()
+                val result = lease.run()
                 currentCoroutineContext().ensureActive()
                 change(token) { it.copy(output = appendDebugOutput(it.output, result.log)) }
             } catch (cancel: CancellationException) {

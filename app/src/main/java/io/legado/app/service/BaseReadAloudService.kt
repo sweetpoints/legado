@@ -22,8 +22,7 @@ import android.telephony.TelephonyManager
 import androidx.annotation.CallSuper
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media.AudioFocusRequestCompat
-import androidx.media.AudioManagerCompat
+import android.media.AudioFocusRequest
 import io.legado.app.R
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
@@ -189,8 +188,8 @@ abstract class BaseReadAloudService : BaseService(),
                 setReferenceCounted(false)
             }
     }
-    private val mFocusRequest: AudioFocusRequestCompat by lazy {
-        MediaHelp.buildAudioFocusRequestCompat(this)
+    private val mFocusRequest: AudioFocusRequest by lazy {
+        MediaHelp.buildAudioFocusRequest(this)
     }
     private val mediaSessionCompat by lazy {
         MediaSessionCompat(this, "readAloud")
@@ -594,7 +593,7 @@ abstract class BaseReadAloudService : BaseService(),
      * 放弃音频焦点
      */
     private fun abandonFocus() {
-        AudioManagerCompat.abandonAudioFocusRequest(audioManager, mFocusRequest)
+        audioManager.abandonAudioFocusRequest(mFocusRequest)
     }
 
     /**

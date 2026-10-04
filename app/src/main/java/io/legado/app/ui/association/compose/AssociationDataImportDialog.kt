@@ -57,7 +57,7 @@ open class AssociationDataImportDialog() : BaseComposeDialogFragment() {
         val legacy = legacyRequest
         val sourceMatches =
             legacy == null ||
-                (legacy.first == session?.importType && legacy.second == session?.importSource)
+                (legacy.first == session?.importType && legacy.second == session.importSource)
         var filename by remember(state.ticket, session?.importSource) { mutableStateOf("") }
         LaunchedEffect(state.ticket, session?.importSource) {
             session?.importSource?.let { source ->

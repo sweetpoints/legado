@@ -114,7 +114,7 @@ class FileBookMetadataEditorSessionRepository(
                 if (current.completion != null || current.finished) return@withLock current
                 val input = current.input ?: error("Book has not loaded")
                 val saved =
-                    if (current.pendingSave != null) books.recover(current.pendingSave!!)
+                    if (current.pendingSave != null) books.recover(current.pendingSave)
                     else
                         books.save(input) { plan ->
                             current =

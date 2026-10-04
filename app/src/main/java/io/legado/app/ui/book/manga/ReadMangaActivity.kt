@@ -52,7 +52,9 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.toggleSystemBar
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Compose owns reader controls; this Host only performs window and native platform effects. */
 class ReadMangaActivity :
@@ -212,8 +214,10 @@ class ReadMangaActivity :
                     val context = applicationContext
                     // Failed launch still owns this child ticket; late cleanup does not touch
                     // others.
-                    lifecycleScope.launch(NonCancellable) {
-                        BookInfoNavigation.abandon(context, ticket)
+                    lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        withContext(NonCancellable) {
+                            BookInfoNavigation.abandon(context, ticket)
+                        }
                     }
                     throw error
                 }

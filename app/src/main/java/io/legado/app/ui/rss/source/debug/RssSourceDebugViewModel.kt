@@ -225,7 +225,7 @@ class RssSourceDebugViewModel(
                     return@launch
                 }
                 owner = lease
-                lease!!.run(value)
+                lease.run(value)
                 currentCoroutineContext().ensureActive()
             } catch (cancel: CancellationException) {
                 throw cancel

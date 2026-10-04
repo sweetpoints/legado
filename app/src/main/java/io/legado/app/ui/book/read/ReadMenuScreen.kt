@@ -365,7 +365,7 @@ internal fun ReadChapterBrowserPrompt(dismiss: () -> Unit, choose: (Boolean) -> 
         },
         dismissButton = {
             androidx.compose.material3.TextButton({ choose(false) }) {
-                Text(stringResource(android.R.string.no))
+                Text(stringResource(android.R.string.cancel))
             }
         },
     )

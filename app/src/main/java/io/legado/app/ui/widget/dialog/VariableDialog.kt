@@ -1,5 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
+import io.legado.app.utils.resizeForIme
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.ViewGroup
@@ -43,7 +45,7 @@ class VariableDialog() : BaseComposeDialogFragment() {
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.apply {
             setBackgroundDrawableResource(R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

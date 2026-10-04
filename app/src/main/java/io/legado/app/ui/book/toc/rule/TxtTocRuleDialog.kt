@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.toc.rule
 
+import io.legado.app.utils.resizeForIme
+
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.compose.runtime.*
@@ -59,7 +61,7 @@ class TxtTocRuleDialog() : BaseComposeDialogFragment(), TxtTocRuleEditDialog.Cal
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, 0.8f)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
     }
 
     @Composable

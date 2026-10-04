@@ -38,7 +38,7 @@ class DirectLinkUploadConfig : BaseComposeDialogFragment() {
             { isAdded && !parentFragmentManager.isStateSaved },
             ::dismiss,
             { isCancelable = it },
-            { requireContext().getClipText()?.toString() },
+            { requireContext().getClipText() },
             { requireContext().sendToClip(it) },
         )
     }

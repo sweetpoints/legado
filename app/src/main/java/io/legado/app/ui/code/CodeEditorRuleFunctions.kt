@@ -8,7 +8,7 @@ internal suspend fun formatRuleExpression(
 ): String? {
     val matcher = AppPattern.EXP_PATTERN.matcher(text.trim())
     if (!matcher.matches()) return null
-    val body = matcher.group(1).trim()
+    val body = matcher.group(1)?.trim() ?: return null
     val formattedBody = if (body.isEmpty()) body else formatter(body) ?: body
     return "{{$formattedBody}}"
 }

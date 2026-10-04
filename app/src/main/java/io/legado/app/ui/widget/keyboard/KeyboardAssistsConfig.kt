@@ -13,8 +13,8 @@ import io.legado.app.data.repository.RoomKeyboardAssistSettingsRepository
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.setLayout
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import io.legado.app.utils.launchCleanup
 
 class KeyboardAssistsConfig : BaseComposeDialogFragment(), CodeDialog.Callback {
     internal val model by
@@ -73,7 +73,7 @@ class KeyboardAssistsConfig : BaseComposeDialogFragment(), CodeDialog.Callback {
     }
 
     override fun onStop() {
-        lifecycleScope.launch(NonCancellable) { runCatching { model.flushDraft() } }
+        lifecycleScope.launchCleanup { runCatching { model.flushDraft() } }
         super.onStop()
     }
 }

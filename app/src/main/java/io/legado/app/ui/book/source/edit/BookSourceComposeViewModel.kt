@@ -335,7 +335,6 @@ internal class BookSourceComposeViewModel(
                     BookSourceSaveAction.DEBUG -> BookSourceNativeAction.DEBUG
                     BookSourceSaveAction.LOGIN -> BookSourceNativeAction.LOGIN
                     BookSourceSaveAction.SEARCH -> BookSourceNativeAction.SEARCH
-                    else -> error("Unexpected save action")
                 }
             checkpoint(
                 current.copy(
@@ -484,8 +483,8 @@ internal class BookSourceComposeViewModel(
             val current = draft ?: return@operation
             if (
                 current.nativeRequest?.id == id &&
-                    current.nativeRequest?.action == action &&
-                    current.nativeRequest?.delivered == true
+                    current.nativeRequest.action == action &&
+                    current.nativeRequest.delivered == true
             ) {
                 resultCheckpoint(current.copy(nativeRequest = null))
             }
@@ -499,7 +498,7 @@ internal class BookSourceComposeViewModel(
             if (request.id != id || request.action != action || !request.delivered) return@operation
             val key = request.key
             val field = key?.let { current.form.field(request.tab, it) }
-            if (text == null || field == null || key == null) {
+            if (text == null || field == null) {
                 resultCheckpoint(current.copy(nativeRequest = null))
                 return@operation
             }
@@ -669,8 +668,8 @@ internal class BookSourceComposeViewModel(
             val current = draft ?: return@operation
             if (
                 current.nativeRequest?.id != id ||
-                    current.nativeRequest?.action != BookSourceNativeAction.JS ||
-                    current.nativeRequest?.delivered != true
+                    current.nativeRequest.action != BookSourceNativeAction.JS ||
+                    current.nativeRequest.delivered != true
             )
                 return@operation
             close(current.copy(savedUrl = if (ok) origin else current.savedUrl))

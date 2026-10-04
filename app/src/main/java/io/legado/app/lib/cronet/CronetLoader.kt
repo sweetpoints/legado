@@ -11,7 +11,6 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.Cronet
 import io.legado.app.utils.DebugLog
 import io.legado.app.utils.printOnDebug
-import org.chromium.net.CronetEngine
 import org.json.JSONObject
 import splitties.init.appCtx
 import java.io.File
@@ -56,7 +55,7 @@ internal class CronetDownloadState {
 
 @Suppress("ConstPropertyName")
 @Keep
-object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterface {
+object CronetLoader : Cronet.LoaderInterface {
     //https://storage.googleapis.com/chromium-cronet/android/92.0.4515.159/Release/cronet/libs/arm64-v8a/libcronet.92.0.4515.159.so
 
     private const val soVersion = BuildConfig.Cronet_Version
@@ -153,7 +152,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
     }
 
     @SuppressLint("UnsafeDynamicallyLoadedCode")
-    override fun loadLibrary(libName: String) {
+    fun loadLibrary(libName: String) {
         DebugLog.d(javaClass.simpleName, "libName:$libName")
         val start = System.currentTimeMillis()
         @Suppress("SameParameterValue")

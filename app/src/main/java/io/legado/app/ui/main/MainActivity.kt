@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.postDelayed
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentFactory
 import androidx.fragment.app.commit
@@ -229,7 +230,7 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
                     ?: return@registerForActivityResult
             activityExportRequestId = null
             val path = transfer.launchedExportPath
-            if (requestId != null && path != null) transfer.exportReturned(path, requestId)
+            if (path != null) transfer.exportReturned(path, requestId)
             result.uri?.let { uri ->
                 showDialogFragment(
                     BookshelfInputDialog.create(
@@ -259,6 +260,12 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
                 MainDestinationHost(this@MainActivity, destination)
             }
         }
+    }
+
+    override fun setupSystemBar() {
+        super.setupSystemBar()
+        // MainScreen consumes current insets. The window must not fit them a second time.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {

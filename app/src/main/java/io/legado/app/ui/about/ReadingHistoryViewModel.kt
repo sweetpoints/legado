@@ -1,5 +1,7 @@
 package io.legado.app.ui.about
 
+import io.legado.app.utils.launchCleanup
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -340,7 +342,7 @@ class ReadingHistoryViewModel(
         stopped = true
         loadJob?.cancel()
         actionJob?.cancel()
-        if (ticket != null) viewModelScope.launch(NonCancellable) { runCatching { persist(draft) } }
+        if (ticket != null) viewModelScope.launchCleanup { runCatching { persist(draft) } }
     }
 
     override fun onCleared() {

@@ -74,13 +74,22 @@ def main():
             # Exercise the first-run dialogs rather than leaving initialization suspended
             # behind the privacy prompt. Text is read from the actual accessibility tree.
             dialogs_deadline = time.monotonic() + 90
+            password_back_sent = False
             while time.monotonic() < dialogs_deadline:
                 tree = nodes()
                 if any(node.attrib.get("content-desc") in {"Me", "我的"} for node in tree):
                     break
                 buttons = [node for node in tree if node.attrib.get("text", "").upper()
                            in {"AGREE", "同意", "CANCEL", "取消"}]
-                if buttons:
+                password_dialog = any(node.attrib.get("text") in
+                                      {"Setting the local password", "设置本地密码"}
+                                      for node in tree)
+                if password_dialog and not password_back_sent:
+                    # Small API 26 screens can put Cancel behind the first-run keyboard.
+                    # Dismiss the IME, then find the button again in the next UI snapshot.
+                    shell("input", "keyevent", "KEYCODE_BACK")
+                    password_back_sent = True
+                elif buttons:
                     tap(buttons[0])
                 elif any(node.attrib.get("text") in {"Help", "帮助"} for node in tree):
                     shell("input", "keyevent", "KEYCODE_BACK")  # Close first-run help.
@@ -107,6 +116,8 @@ def main():
             results.append({"phase": phase, "pid": pid, "mainActivityStableSeconds": 10,
                             "navigationTabs": 4})
         finally:
+            snapshot = adb("shell", "cat", "/sdcard/legado-startup.xml", check=False)
+            (folder / "ui.xml").write_bytes(snapshot.stdout)
             log = adb("logcat", "-d").stdout.decode(errors="replace")
             (folder / "logcat.txt").write_text(log)
             (folder / "activities.txt").write_text(shell("dumpsys", "activity", "activities"))

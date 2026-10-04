@@ -236,8 +236,8 @@ class FileBookDetailSessionRepository(
                 val result =
                     if (current.pendingMutation != null) {
                         BookDetailStorageResult(
-                            storage.recover(current.pendingMutation!!.plan),
-                            current.pendingMutation!!.inBookshelf,
+                            storage.recover(current.pendingMutation.plan),
+                            current.pendingMutation.inBookshelf,
                         )
                     } else
                         storage.mutate(data.book, data.inBookshelf, data.chapters, active.change) {

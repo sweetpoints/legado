@@ -2,6 +2,11 @@ package io.legado.app.ui.main
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsSelected
@@ -38,7 +43,13 @@ class MainScreenTest {
             view = LocalView.current
             LegadoComposeTheme {
                 MainScreen(MainUiState(), 0, emptyMap(), false, {}) {
-                    Box(Modifier.fillMaxSize().testTag("main-content"))
+                    Box(
+                        Modifier.fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                            ))
+                            .testTag("main-content")
+                    )
                 }
             }
         }
@@ -50,11 +61,15 @@ class MainScreenTest {
             (activityContext as ComponentActivity).enableEdgeToEdge()
         }
         compose.waitForIdle()
-        val top = view.rootWindowInsets
-            .getInsets(android.view.WindowInsets.Type.statusBars()).top
+        val safe = view.rootWindowInsets.getInsets(
+            android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout()
+        )
+        val top = safe.top
         assertTrue("The fixture must expose a real status bar inset", top > 0)
         val bounds = compose.onNodeWithTag("main-content").fetchSemanticsNode().boundsInRoot
-        assertTrue("Content starts at ${bounds.top}, status bar ends at $top", bounds.top >= top)
+        assertEquals("Content must consume the current safe top inset exactly once", top.toFloat(), bounds.top, 1f)
+        assertEquals("Respect the current left safe inset", safe.left.toFloat(), bounds.left, 1f)
+        assertEquals("Respect the current right safe inset", (view.width - safe.right).toFloat(), bounds.right, 1f)
     }
 
     @Test

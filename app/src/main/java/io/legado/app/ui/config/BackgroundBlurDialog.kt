@@ -6,7 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.core.os.bundleOf
+import android.os.Bundle
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -51,7 +51,7 @@ class BackgroundBlurDialog : BaseComposeDialogFragment() {
                             if (applied)
                                 parentFragmentManager.setFragmentResult(
                                     RESULT,
-                                    bundleOf(NIGHT to model.night),
+                                    Bundle().apply { putBoolean(NIGHT, model.night) },
                                 )
                         }
                         dismiss()
@@ -75,6 +75,6 @@ class BackgroundBlurDialog : BaseComposeDialogFragment() {
         const val NIGHT = "background-blur-night"
 
         fun newInstance(night: Boolean) =
-            BackgroundBlurDialog().apply { arguments = bundleOf(NIGHT to night) }
+            BackgroundBlurDialog().apply { arguments = Bundle().apply { putBoolean(NIGHT, night) } }
     }
 }

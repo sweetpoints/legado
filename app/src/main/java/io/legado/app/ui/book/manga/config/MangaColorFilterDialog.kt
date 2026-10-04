@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.manga.config
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.DialogInterface
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -33,7 +35,7 @@ class MangaColorFilterDialog : BaseComposeDialogFragment() {
     override fun onStart() {
         super.onStart()
         dialog?.window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 

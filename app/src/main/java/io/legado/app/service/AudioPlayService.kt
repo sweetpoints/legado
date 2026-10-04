@@ -13,14 +13,14 @@ import android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
-import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
-import androidx.media.AudioFocusRequestCompat
+import android.media.AudioFocusRequest
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -106,12 +106,12 @@ class AudioPlayService : BaseService(),
         var url: String = ""
             private set
 
-        private const val MEDIA_SESSION_ACTIONS = (PlaybackStateCompat.ACTION_PLAY
-                or PlaybackStateCompat.ACTION_PAUSE
-                or PlaybackStateCompat.ACTION_PLAY_PAUSE
-                or PlaybackStateCompat.ACTION_SEEK_TO
-                or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                or PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+        private const val MEDIA_SESSION_ACTIONS = (PlaybackState.ACTION_PLAY
+                or PlaybackState.ACTION_PAUSE
+                or PlaybackState.ACTION_PLAY_PAUSE
+                or PlaybackState.ACTION_SEEK_TO
+                or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                or PlaybackState.ACTION_SKIP_TO_NEXT)
 
         private const val APP_ACTION_STOP = "Stop"
         private const val APP_ACTION_TIMER = "Timer"
@@ -139,14 +139,14 @@ class AudioPlayService : BaseService(),
             setReferenceCounted(false)
         }
     }
-    private val mFocusRequest: AudioFocusRequestCompat by lazy {
-        MediaHelp.buildAudioFocusRequestCompat(this)
+    private val mFocusRequest: AudioFocusRequest by lazy {
+        MediaHelp.buildAudioFocusRequest(this)
     }
     private val exoPlayer: ExoPlayer by lazy {
         ExoPlayerHelper.createHttpExoPlayer(this)
     }
-    private val mediaSessionCompat by lazy {
-        MediaSessionCompat(this, "readAloud")
+    private val mediaSession by lazy {
+        MediaSession(this, "readAloud")
     }
     private var broadcastReceiver: BroadcastReceiver? = null
     private var needResumeOnAudioFocusGain = false
@@ -173,7 +173,7 @@ class AudioPlayService : BaseService(),
         AudioPlay.registerService(this)
         initMediaSession()
         initBroadcastReceiver()
-        upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
+        upMediaSessionPlaybackState(PlaybackState.STATE_PLAYING)
         doDs()
         execute {
             val book = AudioPlay.book
@@ -217,7 +217,7 @@ class AudioPlayService : BaseService(),
                     if (playSpeed != 1f) {
                         upSpeed(playSpeed)
                     }
-                    upMediaSessionPlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+                    upMediaSessionPlaybackState(PlaybackState.STATE_BUFFERING)
                     play(generation = generation)
                 }
 
@@ -227,7 +227,7 @@ class AudioPlayService : BaseService(),
                     exoPlayer.stop()
                     upPlayProgressJob?.cancel()
                     AudioPlay.status = Status.STOP
-                    upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                    upMediaSessionPlaybackState(PlaybackState.STATE_STOPPED)
                     postEvent(EventBus.AUDIO_STATE, Status.STOP)
                     pause = true
                     upAudioPlayNotification()
@@ -275,9 +275,9 @@ class AudioPlayService : BaseService(),
         playerListener?.let(exoPlayer::removeListener)
         playerListener = null
         exoPlayer.release()
-        mediaSessionCompat.release()
+        mediaSession.release()
         unregisterReceiver(broadcastReceiver)
-        upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
+        upMediaSessionPlaybackState(PlaybackState.STATE_STOPPED)
         AudioPlay.status = Status.STOP
         postEvent(EventBus.AUDIO_STATE, Status.STOP)
         AudioPlay.unregisterService()
@@ -384,7 +384,7 @@ class AudioPlayService : BaseService(),
             position = exoPlayer.currentPosition.toInt()
             AudioPlay.playPositionChanged(position)
             if (exoPlayer.isPlaying) exoPlayer.pause()
-            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            upMediaSessionPlaybackState(PlaybackState.STATE_PAUSED)
             AudioPlay.status = Status.PAUSE
             postEvent(EventBus.AUDIO_STATE, Status.PAUSE)
             upAudioPlayNotification()
@@ -557,14 +557,14 @@ class AudioPlayService : BaseService(),
     }
 
     private fun upMediaMetadata() {
-        val metadata = MediaMetadataCompat.Builder()
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
-            .putText(MediaMetadataCompat.METADATA_KEY_TITLE, AudioPlay.durChapter?.title ?: "null")
-            .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, AudioPlay.book?.name ?: "null")
-            .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, AudioPlay.book?.author ?: "null")
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, exoPlayer.duration)
+        val metadata = MediaMetadata.Builder()
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, cover)
+            .putText(MediaMetadata.METADATA_KEY_TITLE, AudioPlay.durChapter?.title ?: "null")
+            .putText(MediaMetadata.METADATA_KEY_ARTIST, AudioPlay.book?.name ?: "null")
+            .putText(MediaMetadata.METADATA_KEY_ALBUM, AudioPlay.book?.author ?: "null")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, exoPlayer.duration)
             .build()
-        mediaSessionCompat.setMetadata(metadata)
+        mediaSession.setMetadata(metadata)
     }
 
     private fun resetAudioSkipState(generation: Long) {
@@ -732,7 +732,7 @@ class AudioPlayService : BaseService(),
                     postEvent(EventBus.AUDIO_BUFFER_PROGRESS, exoPlayer.bufferedPosition.toInt())
                     postEvent(EventBus.AUDIO_PROGRESS, AudioPlay.durChapterPos)
                     postEvent(EventBus.AUDIO_SIZE, exoPlayer.duration.toInt())
-                    upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    upMediaSessionPlaybackState(PlaybackState.STATE_PLAYING)
                     //更新歌词
                     AudioPlay.callback?.upLyricP(durP.toInt())
                     chapterCompleted = tryAutoSkipOutro(durP, generation)
@@ -747,8 +747,8 @@ class AudioPlayService : BaseService(),
      * 更新媒体状态
      */
     private fun upMediaSessionPlaybackState(state: Int) {
-        mediaSessionCompat.setPlaybackState(
-            PlaybackStateCompat.Builder()
+        mediaSession.setPlaybackState(
+            PlaybackState.Builder()
                 .setActions(MEDIA_SESSION_ACTIONS)
                 .setState(state, exoPlayer.currentPosition, 1f)
                 .setBufferedPosition(exoPlayer.bufferedPosition)
@@ -771,11 +771,7 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint("UnspecifiedImmutableFlag")
     private fun initMediaSession() {
-        mediaSessionCompat.setFlags(
-            MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-        )
-        mediaSessionCompat.setCallback(object : MediaSessionCompat.Callback() {
+        mediaSession.setCallback(object : MediaSession.Callback() {
             override fun onSeekTo(pos: Long) {
                 position = pos.toInt()
                 AudioPlay.playPositionChanged(position)
@@ -790,8 +786,7 @@ class AudioPlayService : BaseService(),
 
             override fun onPause() = pause()
 
-            override fun onCustomAction(action: String?, extras: Bundle?) {
-                action ?: return
+            override fun onCustomAction(action: String, extras: Bundle?) {
 
                 when (action) {
                     APP_ACTION_STOP -> stopSelf()
@@ -810,10 +805,8 @@ class AudioPlayService : BaseService(),
             }
 
         })
-        mediaSessionCompat.setMediaButtonReceiver(
-            broadcastPendingIntent<MediaButtonReceiver>(Intent.ACTION_MEDIA_BUTTON)
-        )
-        mediaSessionCompat.isActive = true
+        MediaHelp.setMediaButtonReceiver(this, mediaSession)
+        mediaSession.isActive = true
     }
 
     /**
@@ -869,7 +862,7 @@ class AudioPlayService : BaseService(),
         }
     }
 
-    private fun createNotification(): NotificationCompat.Builder {
+    private fun createNotification(): android.app.Notification {
         var nTitle: String = when {
             pause -> getString(R.string.audio_pause)
             chapterToStop > 0 -> getString(R.string.playing_timer_chapter, chapterToStop)
@@ -934,20 +927,15 @@ class AudioPlayService : BaseService(),
             getString(R.string.set_timer),
             servicePendingIntent<AudioPlayService>(IntentAction.addTimer)
         )
-        builder.setStyle(
-            androidx.media.app.NotificationCompat.MediaStyle()
-                .setShowActionsInCompactView(0, 1, 2)
-                .setMediaSession(mediaSessionCompat.sessionToken)
-        )
         builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        return builder
+        return MediaHelp.mediaNotification(this, builder, mediaSession)
     }
 
     private fun upAudioPlayNotification() {
         upNotificationJob = execute {
             try {
                 val notification = createNotification()
-                notificationManager.notify(NotificationId.AudioPlayService, notification.build())
+                notificationManager.notify(NotificationId.AudioPlayService, notification)
             } catch (e: Exception) {
                 AppLog.put("创建音频播放通知出错,${e.localizedMessage}", e, true)
             }
@@ -961,7 +949,7 @@ class AudioPlayService : BaseService(),
         execute {
             try {
                 val notification = createNotification()
-                startForeground(NotificationId.AudioPlayService, notification.build())
+                startForeground(NotificationId.AudioPlayService, notification)
             } catch (e: Exception) {
                 AppLog.put("创建音频播放通知出错,${e.localizedMessage}", e, true)
                 //创建通知出错不结束服务就会崩溃,服务必须绑定通知

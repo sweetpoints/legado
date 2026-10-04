@@ -3,6 +3,10 @@ package io.legado.app.utils
 import io.legado.app.help.coroutine.Coroutine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -10,6 +14,10 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class TimeoutCancellationException(msg: String) : CancellationException(msg)
+
+/** Start cleanup before the owning lifecycle ends, keeping only cleanup non-cancellable. */
+fun CoroutineScope.launchCleanup(block: suspend CoroutineScope.() -> Unit): Job =
+    launch(start = CoroutineStart.UNDISPATCHED) { withContext(NonCancellable, block) }
 
 inline fun <T> runCatchingCancellable(block: () -> T): Result<T> {
     return try {

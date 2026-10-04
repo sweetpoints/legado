@@ -1,5 +1,7 @@
 package io.legado.app.ui.widget.number
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.Context
 import android.view.ViewGroup
 import android.view.Window
@@ -66,7 +68,7 @@ class NumberPickerDialog(private val context: Context, private val isDecimalMode
         dialog.show()
         dialog.window?.apply {
             setBackgroundDrawableResource(R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
         dialog.setLayout(.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }

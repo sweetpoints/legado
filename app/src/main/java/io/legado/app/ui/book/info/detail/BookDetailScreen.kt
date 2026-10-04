@@ -263,7 +263,7 @@ fun BookDetailScreen(
                                 ) {
                                     Text(
                                         stringResource(
-                                            if (data?.inBookshelf == true)
+                                            if (data.inBookshelf == true)
                                                 R.string.remove_from_bookshelf
                                             else R.string.add_to_bookshelf
                                         )
@@ -331,7 +331,7 @@ fun BookDetailScreen(
                                 .verticalScroll(rememberScrollState())
                                 .testTag("book-detail-content")
                         ) {
-                            if (book != null && data != null) {
+                            if (book != null) {
                                 Box(
                                     Modifier.fillMaxWidth().padding(12.dp),
                                     contentAlignment = Alignment.Center,

@@ -112,7 +112,6 @@ internal class DefaultBackupLanRepository(
     override suspend fun close(id: String): Unit =
         withContext(io + NonCancellable) {
             synchronized(sessions) { sessions.remove(id) }?.close()
-            Unit
         }
 
     override suspend fun closeAll(): Unit =
@@ -128,10 +127,9 @@ internal class DefaultBackupLanRepository(
                     value.close()
                 } catch (error: Throwable) {
                     if (first == null) first = error
-                    else if (first !== error) first!!.addSuppressed(error)
+                    else if (first !== error) first.addSuppressed(error)
                 }
             }
             first?.let { throw it }
-            Unit
         }
 }

@@ -1,5 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.DialogInterface
 import android.content.res.Configuration
 import android.os.Bundle
@@ -42,7 +44,7 @@ class BookMemoDialog : BaseComposeDialogFragment() {
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, .5f)
         dialog?.window?.apply {
             setGravity(Gravity.BOTTOM)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

@@ -196,7 +196,7 @@ fun TocHostScreen(
                         },
                     )
                     if (!session.searchOpen)
-                        TabRow(session.tab) {
+                        PrimaryTabRow(session.tab) {
                             listOf(R.string.chapter_list, R.string.bookmark, R.string.highlight_tab)
                                 .forEachIndexed { index, title ->
                                     Tab(

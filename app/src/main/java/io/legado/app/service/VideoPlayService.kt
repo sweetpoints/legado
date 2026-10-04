@@ -15,9 +15,9 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -36,12 +36,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import io.legado.app.R
+import io.legado.app.help.MediaHelp
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
-import io.legado.app.help.MediaHelp
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.gsyVideo.FloatingPlayer
@@ -75,8 +75,8 @@ class VideoPlayService : BaseService() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var params: WindowManager.LayoutParams
-    private val mediaSessionCompat by lazy {
-        MediaSessionCompat(this, "videoPlayService")
+    private val mediaSession by lazy {
+        MediaSession(this, "videoPlayService")
     }
     private val floatingView by lazy {
         FrameLayout(this).apply {
@@ -289,20 +289,15 @@ class VideoPlayService : BaseService() {
 
     @SuppressLint("UnspecifiedImmutableFlag")
     private fun initMediaSession() {
-        mediaSessionCompat.setFlags(
-            MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-        )
-        mediaSessionCompat.setCallback(
-            object : MediaSessionCompat.Callback() {
+        mediaSession.setCallback(
+            object : MediaSession.Callback() {
                 override fun onSeekTo(pos: Long) = playerView.seekTo(pos)
 
                 override fun onPlay() = resume()
 
                 override fun onPause() = pause()
 
-                override fun onCustomAction(action: String?, extras: Bundle?) {
-                    action ?: return
+                override fun onCustomAction(action: String, extras: Bundle?) {
                     when (action) {
                         APP_ACTION_STOP -> stop()
                     }
@@ -319,10 +314,8 @@ class VideoPlayService : BaseService() {
                 }
             }
         )
-        mediaSessionCompat.setMediaButtonReceiver(
-            broadcastPendingIntent<MediaButtonReceiver>(Intent.ACTION_MEDIA_BUTTON)
-        )
-        mediaSessionCompat.isActive = true
+        MediaHelp.setMediaButtonReceiver(this, mediaSession)
+        mediaSession.isActive = true
     }
 
     private fun upVideoPlayNotification() {
@@ -335,7 +328,7 @@ class VideoPlayService : BaseService() {
                     if (mediaNotificationReady) {
                         notificationManager.notify(
                             NotificationId.VideoPlayService,
-                            notification.build(),
+                            notification,
                         )
                     }
                 }
@@ -382,7 +375,7 @@ class VideoPlayService : BaseService() {
             if (!fromCB) {
                 playerView.onVideoPause()
             }
-            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            upMediaSessionPlaybackState(PlaybackState.STATE_PAUSED)
             upVideoPlayNotification()
         } catch (e: Exception) {
             e.printOnDebug()
@@ -410,7 +403,7 @@ class VideoPlayService : BaseService() {
         upPlayProgressJob?.cancel()
         upPlayProgressJob = lifecycleScope.launch {
             while (isActive) {
-                upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                upMediaSessionPlaybackState(PlaybackState.STATE_PLAYING)
                 pause = false
                 delay(500)
             }
@@ -418,8 +411,8 @@ class VideoPlayService : BaseService() {
     }
 
     private fun upMediaSessionPlaybackState(state: Int) {
-        mediaSessionCompat.setPlaybackState(
-            PlaybackStateCompat.Builder()
+        mediaSession.setPlaybackState(
+            PlaybackState.Builder()
                 .setActions(MediaHelp.MEDIA_SESSION_ACTIONS)
                 .setState(state, playerView.getCurrentPositionWhenPlaying(), 1f)
                 .addCustomAction(
@@ -431,7 +424,7 @@ class VideoPlayService : BaseService() {
         )
     }
 
-    private fun createNotification(): NotificationCompat.Builder {
+    private fun createNotification(): android.app.Notification {
         val videoTitle = VideoPlay.videoTitle ?: getString(R.string.video)
         val nTitle = getString(R.string.audio_play_t) + ": $videoTitle"
         val nSubtitle = getString(R.string.audio_play_s)
@@ -473,13 +466,8 @@ class VideoPlayService : BaseService() {
             getString(R.string.stop),
             servicePendingIntent<VideoPlayService>(IntentAction.stop),
         )
-        builder.setStyle(
-            androidx.media.app.NotificationCompat.MediaStyle()
-                .setShowActionsInCompactView(0, 1, 2)
-                .setMediaSession(mediaSessionCompat.sessionToken)
-        )
         builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        return builder
+        return MediaHelp.mediaNotification(this, builder, mediaSession)
     }
 
     @OptIn(UnstableApi::class)
@@ -642,14 +630,14 @@ class VideoPlayService : BaseService() {
 
     private fun upMediaMetadata() {
         val metadata =
-            MediaMetadataCompat.Builder()
-                .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cover)
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, VideoPlay.videoTitle ?: "null")
-                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, VideoPlay.book?.name ?: "视频播放")
-                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, VideoPlay.book?.author ?: "null")
-                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, playerView.getDuration())
+            MediaMetadata.Builder()
+                .putBitmap(MediaMetadata.METADATA_KEY_ART, cover)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, VideoPlay.videoTitle ?: "null")
+                .putText(MediaMetadata.METADATA_KEY_ARTIST, VideoPlay.book?.name ?: "视频播放")
+                .putText(MediaMetadata.METADATA_KEY_ALBUM, VideoPlay.book?.author ?: "null")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, playerView.getDuration())
                 .build()
-        mediaSessionCompat.setMetadata(metadata)
+        mediaSession.setMetadata(metadata)
     }
 
     override fun onDestroy() {
@@ -659,9 +647,9 @@ class VideoPlayService : BaseService() {
             if (::windowManager.isInitialized && floatingView.parent != null) {
                 windowManager.removeView(floatingView)
             }
-            mediaSessionCompat.release()
+            mediaSession.release()
             unregisterReceiver(broadcastReceiver)
-            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
+            upMediaSessionPlaybackState(PlaybackState.STATE_STOPPED)
             upNotificationJob?.invokeOnCompletion {
                 notificationManager.cancel(NotificationId.VideoPlayService)
             }
