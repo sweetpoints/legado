@@ -520,7 +520,7 @@ private fun ReadingHistoryCover(
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     var result by
-        remember(row.cover, fallback, repository) {
+        remember(row.cover, fallback, repository, size) {
             mutableStateOf<ReadingHistoryCoverResult?>(null)
         }
     LaunchedEffect(row.cover, fallback, repository, size) {

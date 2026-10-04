@@ -2,6 +2,9 @@ package io.legado.app.ui.about
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.testutil.saveSemantics
+import java.io.File
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.*
@@ -15,6 +18,10 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.data.image.CoverImage
 import io.legado.app.data.repository.*
 import io.legado.app.ui.theme.LegadoComposeTheme
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 import org.junit.*
 import org.junit.Assert.*
 
@@ -101,27 +108,45 @@ class ReadingHistoryUiTest {
 
     @Test
     fun narrowLargeFontKeepsSummaryAndAllEnhancedFieldsSeparatedAndAccessible() {
-        val row = row()
+        val row = row().copy(lastRead = 1_700_000_000_000L)
+        val state = initial(false).copy(
+            snapshot = ReadingHistorySnapshot(listOf(row), 1, row.readTime, listOf(row)),
+        )
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1.4f)) {
                 LegadoComposeTheme {
                     Box(Modifier.width(280.dp)) {
-                        ReadingHistoryScreen(initial(false), actions(), covers)
+                        ReadingHistoryScreen(state, actions(), covers)
                     }
                 }
             }
         }
         compose.onNodeWithTag("history-summary").assertIsDisplayed()
-        val fields =
-            listOf("title", "author", "chapter", "time", "date").map {
-                compose
-                    .onNodeWithTag("history-$it-${row.key}", true)
-                    .fetchSemanticsNode()
-                    .boundsInRoot
+        // Sample the actual fields after the user can scroll the last field into the viewport.
+        compose.onNodeWithTag("history-date-${row.key}", true).performScrollTo().assertIsDisplayed()
+        val names = listOf("title", "author", "chapter", "time", "date")
+        val fields = names.map {
+            compose.onNodeWithTag("history-$it-${row.key}", true).fetchSemanticsNode().boundsInRoot
+        }
+        try {
+            fields.zipWithNext().forEachIndexed { index, (a, b) ->
+                assertTrue("${names[index]}=$a must precede ${names[index + 1]}=$b; all=${names.zip(fields)}", a.bottom <= b.top)
             }
-        fields.zipWithNext().forEach { (a, b) -> assertTrue(a.bottom <= b.top) }
-        assertTrue(fields.all { it.width > 0 && it.height > 0 })
-        compose.onNodeWithTag("history-delete-${row.key}", true).assertHasClickAction()
+            assertTrue("All enhanced fields have nonempty bounds: ${names.zip(fields)}", fields.all { it.width > 0 && it.height > 0 })
+            compose.onNodeWithTag("history-delete-${row.key}", true).assertHasClickAction()
+        } catch (failure: AssertionError) {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val context = instrumentation.targetContext
+            runCatching { compose.saveSemantics(context, "history-narrow-large-font-failure") }
+            runCatching {
+                val directory = File(context.getExternalFilesDir(null), "ui-regression").apply { mkdirs() }
+                instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                    try { File(directory, "history-narrow-large-font-failure.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+                    finally { bitmap.recycle() }
+                }
+            }
+            throw failure
+        }
     }
 
     @Test
@@ -187,4 +212,74 @@ class ReadingHistoryUiTest {
         compose.onNodeWithTag("history-sort-2").performClick()
         assertEquals(listOf(2), sorts)
     }
+    @Test
+    fun cancelledCoverCleanupCannotClearTheNewSizeResult() {
+        val firstStarted = CompletableDeferred<Unit>()
+        val cleanupEntered = CompletableDeferred<Unit>()
+        val releaseCleanup = CompletableDeferred<Unit>()
+        val cleanupFinished = CompletableDeferred<Unit>()
+        val replacementLoaded = CompletableDeferred<Unit>()
+        val color = Color.rgb(35, 148, 115)
+        val green = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
+        var density by mutableStateOf(1f)
+        val screenState = initial(false).let { it.copy(snapshot = it.snapshot.copy(top = emptyList())) }
+        val controlled = object : ReadingHistoryCoverRepository {
+            override suspend fun load(
+                cover: ReadingHistoryCover,
+                fallback: String?,
+                width: Int,
+                height: Int,
+            ): ReadingHistoryCoverResult {
+                // No summary covers are present; only this row restarts at the new physical size.
+                if (height == 64) {
+                    firstStarted.complete(Unit)
+                    try { awaitCancellation() }
+                    finally {
+                        withContext(NonCancellable) {
+                            cleanupEntered.complete(Unit)
+                            releaseCleanup.await()
+                            cleanupFinished.complete(Unit)
+                        }
+                    }
+                }
+                if (height == 80) replacementLoaded.complete(Unit)
+                return ReadingHistoryCoverResult(CoverImage.Static(green), false)
+            }
+        }
+        fun awaitGate(gate: CompletableDeferred<Unit>) {
+            compose.waitUntil(5_000) {
+                compose.mainClock.advanceTimeByFrame()
+                gate.isCompleted
+            }
+        }
+        fun assertCommittedImage() {
+            val tag = "history-cover-${row().key}"
+            compose.onNodeWithTag(tag, true).performScrollTo().assertIsDisplayed()
+            // This fixture has no summary images. Require this row's actual Image child,
+            // which disappears if an obsolete cleanup resets result to null.
+            compose.onNode(
+                hasContentDescription(row().identity.name) and hasAnyAncestor(hasTestTag(tag)),
+                useUnmergedTree = true,
+            ).assertExists().assertIsDisplayed()
+        }
+        try {
+            compose.setContent {
+                CompositionLocalProvider(LocalDensity provides Density(density)) {
+                    LegadoComposeTheme { ReadingHistoryScreen(screenState, actions(), controlled) }
+                }
+            }
+            awaitGate(firstStarted)
+            compose.runOnIdle { density = 1.25f }
+            awaitGate(cleanupEntered)
+            awaitGate(replacementLoaded)
+            assertCommittedImage()
+            releaseCleanup.complete(Unit)
+            awaitGate(cleanupFinished)
+            // The cancelled load's cleanup must never erase a newer committed image.
+            assertCommittedImage()
+        } finally {
+            releaseCleanup.complete(Unit)
+        }
+    }
+
 }
