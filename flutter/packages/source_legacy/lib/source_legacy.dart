@@ -241,6 +241,12 @@ class LegacySourceImporter {
         body: selectedExplore ? null : request.body,
         bodyEncoding: selectedExplore ? 'raw' : request.bodyEncoding,
         bodyTemplateMode: selectedExplore ? 'raw' : request.bodyTemplateMode,
+        legacyRequestInput: selectedExplore ? 'exploreUrl' : null,
+        legacyPageTemplates: selectedExplore
+            ? exploreItems.any(
+                (item) => _legacyPageTemplatesPresent(item['url'] as String),
+              )
+            : request.legacyPageTemplates,
         headers: selectedExplore ? null : request.headers,
       );
     }
@@ -311,7 +317,7 @@ Uri? _searchRequestAnchor(Object? value) {
   if (value is! String || value.isEmpty) return null;
   final split = RegExp(r'\s*,\s*(?=\{)').firstMatch(value);
   final url = split == null ? value : value.substring(0, split.start);
-  if (RegExp(r'@js:|<js>|<[^<>]*>|\s', caseSensitive: false).hasMatch(url)) {
+  if (RegExp(r'@js:|<js>|<[^<>]*>', caseSensitive: false).hasMatch(url)) {
     return null;
   }
   final queryAt = url.indexOf('?');
@@ -320,8 +326,17 @@ Uri? _searchRequestAnchor(Object? value) {
   final knownTemplates = RegExp(
     r'\{\{(key|page|bookUrl|tocUrl|chapterUrl|baseUrl|exploreUrl)\}\}',
   );
-  final staticUrl = url.replaceAll(knownTemplates, 'placeholder');
-  if (staticUrl.contains('{{') || staticUrl.contains('}}')) return null;
+  final staticUrl = url.replaceAllMapped(
+    RegExp(r'\{\{([\s\S]*?)\}\}'),
+    (m) => knownTemplates.hasMatch(m[0]!) || _legacyPageExpression(m[1]!)
+        ? 'placeholder'
+        : m[0]!,
+  );
+  if (staticUrl.contains('{{') ||
+      staticUrl.contains('}}') ||
+      RegExp(r'\s').hasMatch(staticUrl)) {
+    return null;
+  }
   final parsed = Uri.tryParse(staticUrl);
   if (parsed == null ||
       !['http', 'https'].contains(parsed.scheme) ||
@@ -410,15 +425,6 @@ List<Map<String, Object?>> _legacyExploreMenu(
   for (var i = 0; i < items.length; i++) {
     final url = items[i]['url'] as String;
     _legacyRequest(url, 'exploreUrl[$i].url', defaults, issues);
-    if (RegExp(r',\s*(?=\{)').hasMatch(url)) {
-      issues.add(
-        LegacyIssue(
-          'exploreUrl[$i].url',
-          'legacy.explore_options',
-          'Per-category request options require explicit execution support.',
-        ),
-      );
-    }
     final rawUrl = url.split(RegExp(r',\s*(?=\{)')).first;
     final parsedUrl = Uri.tryParse(
       rawUrl.replaceAll(RegExp(r'\{\{[^}]*\}\}'), 'input'),
@@ -434,6 +440,51 @@ List<Map<String, Object?>> _legacyExploreMenu(
   return items;
 }
 
+/// Materializes a selected legacy category request before stage templating.
+/// Unsupported options fail explicitly; exception text never includes source data.
+SourceStage adaptLegacyRequest(
+  SourceDefinition source,
+  SourceStage stage,
+  Map<String, Object?> input,
+) {
+  final key = stage.legacyRequestInput;
+  if (key == null) return stage;
+  final selected = input[key];
+  if (key != 'exploreUrl' || selected is! String || selected.isEmpty) {
+    throw const EngineException(
+      'legacy_request_requires_migration',
+      'A supported selected legacy request is required',
+    );
+  }
+  final issues = <LegacyIssue>[];
+  final parsed = _legacyRequest(selected, key, source.headers, issues);
+  final uri = Uri.tryParse(
+    parsed.url.replaceAll(RegExp(r'\{\{[^}]*\}\}'), 'input'),
+  );
+  if (issues.isNotEmpty ||
+      uri == null ||
+      uri.userInfo.isNotEmpty ||
+      (uri.hasScheme && !['http', 'https'].contains(uri.scheme))) {
+    throw const EngineException(
+      'legacy_request_requires_migration',
+      'Selected legacy request contains unsupported behavior',
+    );
+  }
+  return SourceStage(
+    url: parsed.url,
+    method: parsed.method,
+    body: parsed.body,
+    headers: parsed.headers,
+    bodyEncoding: parsed.bodyEncoding,
+    bodyTemplateMode: parsed.bodyTemplateMode,
+    legacyPageTemplates: parsed.legacyPageTemplates,
+    list: stage.list,
+    fields: stage.fields,
+    nextPage: stage.nextPage,
+    maxPages: stage.maxPages,
+  );
+}
+
 class _LegacyRequest {
   _LegacyRequest(
     this.url, {
@@ -442,12 +493,14 @@ class _LegacyRequest {
     this.headers,
     this.bodyEncoding = 'raw',
     this.bodyTemplateMode = 'raw',
+    this.legacyPageTemplates = false,
   });
   final String url;
   final String method;
   final String? body;
   final String bodyEncoding;
   final String bodyTemplateMode;
+  final bool legacyPageTemplates;
   final Map<String, String>? headers;
 }
 
@@ -459,14 +512,17 @@ _LegacyRequest _legacyRequest(
 ) {
   void issue(String message) =>
       issues.add(LegacyIssue(path, 'legacy.request_options', message));
-  _validateLegacyTemplates(value, issue);
   if (RegExp(r'@js:|<js>', caseSensitive: false).hasMatch(value)) {
     issue('Script-generated requests require migration.');
     return _LegacyRequest(value);
   }
   final separator = RegExp(r',\s*(?=\{)').firstMatch(value);
-  if (separator == null) return _LegacyRequest(value);
-  final url = value.substring(0, separator.start);
+  final url = separator == null ? value : value.substring(0, separator.start);
+  _validateLegacyTemplates(url, issue, allowChoices: true);
+  var legacyPageTemplates = _legacyPageTemplatesPresent(url);
+  if (separator == null) {
+    return _LegacyRequest(value, legacyPageTemplates: legacyPageTemplates);
+  }
   Map<String, Object?> options;
   try {
     final raw = jsonDecode(value.substring(separator.end));
@@ -535,6 +591,11 @@ _LegacyRequest _legacyRequest(
       : options['body'] is String
       ? options['body'] as String
       : jsonEncode(options['body']);
+  if (body != null) {
+    _validateLegacyTemplates(body, issue);
+    legacyPageTemplates =
+        legacyPageTemplates || _legacyPageTemplatesPresent(body);
+  }
   if (body != null && (body.contains('@js:') || body.contains('<js>'))) {
     issue('Script body requires migration.');
   }
@@ -606,22 +667,42 @@ _LegacyRequest _legacyRequest(
     body: method == 'POST' ? body : null,
     bodyEncoding: bodyEncoding,
     bodyTemplateMode: bodyTemplateMode,
+    legacyPageTemplates: legacyPageTemplates,
     headers: headers,
   );
 }
 
-void _validateLegacyTemplates(String value, void Function(String) issue) {
+bool _legacyPageExpression(String expression) {
+  final match = RegExp(r'^ *page *[+-] *(0|[1-9][0-9]*) *$')
+      .firstMatch(expression);
+  if (match == null) return false;
+  final offset = int.tryParse(match[1]!);
+  return offset != null && offset <= 9007199254740991;
+}
+
+bool _legacyPageTemplatesPresent(String value) =>
+    RegExp(r'\{\{([\s\S]*?)\}\}')
+        .allMatches(value)
+        .any((m) => _legacyPageExpression(m[1]!)) ||
+    RegExp(r'<[^<>]*,[^<>]*>').hasMatch(value);
+
+void _validateLegacyTemplates(
+  String value,
+  void Function(String) issue, {
+  bool allowChoices = false,
+}) {
   final templates = RegExp(r'\{\{([\s\S]*?)\}\}');
   for (final template in templates.allMatches(value)) {
     if (![
-      'key',
-      'page',
-      'bookUrl',
-      'tocUrl',
-      'chapterUrl',
-      'baseUrl',
-      'exploreUrl',
-    ].contains(template[1])) {
+          'key',
+          'page',
+          'bookUrl',
+          'tocUrl',
+          'chapterUrl',
+          'baseUrl',
+          'exploreUrl',
+        ].contains(template[1]) &&
+        !_legacyPageExpression(template[1]!)) {
       issue('Only known input placeholders can be converted.');
     }
   }
@@ -629,8 +710,17 @@ void _validateLegacyTemplates(String value, void Function(String) issue) {
   if (remainder.contains('{{')) {
     issue('Unbalanced input placeholders require review.');
   }
-  if (RegExp(r'<[^<>]*,[^<>]*>').hasMatch(value)) {
-    issue('Legacy page-choice syntax requires explicit migration.');
+  final angles = RegExp(r'<[^<>]*>');
+  for (final angle in angles.allMatches(value)) {
+    if (!allowChoices || !angle[0]!.contains(',') || angle[0]!.contains('{{')) {
+      issue(
+        'Only static URL page choices with comma-separated alternatives are supported.',
+      );
+    }
+  }
+  final withoutAngles = value.replaceAll(angles, '');
+  if (withoutAngles.contains('<') || withoutAngles.contains('>')) {
+    issue('Nested or unbalanced page-choice delimiters require review.');
   }
 }
 

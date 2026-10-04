@@ -266,10 +266,10 @@ void main() {
     'plain URL paths still validate expressions and case-insensitive JS',
     () {
       for (final url in [
-        '/search?p={{page + 1}}',
+        '/search?p={{page * 2}}',
         '/search?q={{key.trim()}}',
         '/search?p={{page',
-        '/search?p=<1,2,3>',
+        '/search?p=<1>',
         '@JS:"https://books.test/search"',
         '<JS>"/search"</JS>',
       ]) {
@@ -311,8 +311,8 @@ void main() {
   test('explore dynamic menus and request options remain manual without leaking options', () {
     for (final menu in [
       '@JS:"/category/a"',
-      '/category/{{page + 1}}',
-      '/category/a,{"method":"POST","body":"x=1","headers":{"X-Category":"a"}}',
+      '/category/{{page * 2}}',
+      '/category/a,{"retry":1}',
     ]) {
       final imported = LegacySourceImporter().import({
         'bookSourceUrl': 'https://books.test',
@@ -396,7 +396,7 @@ void main() {
         'https://{{key}}.test/search',
         'https://books.test/{{key}}',
         'https://user:pass@books.test/search',
-        'https://books.test/search?q={{key.trim()}}',
+        'https://books.test/search?q={{page * 2}}',
         'https://books.test/search#fragment',
       ]) {
         expect(
@@ -479,9 +479,9 @@ void main() {
       '[{broken}]',
       '[{"title":"A","url":3}]',
       jsonEncode([
-        {'title': 'A', 'url': '/a,{"method":"POST"}'},
+        {'title': 'A', 'url': '/a,{"retry":1}'},
       ]),
-      'A::/a,{"method":"POST"}',
+      'A::/a,{"retry":1}',
       'A::@JS:"/a"',
       'A::/a?q={{key.trim()}}',
       'A::',
@@ -528,7 +528,6 @@ void main() {
     for (final options in [
       {'method': 'POST', 'body': 'q={{key}}'},
       {'method': 'POST', 'body': '{"q":"{{key}}"}'},
-      {'method': 'POST', 'body': '<q>{{key}}</q>'},
       {
         'method': 'POST',
         'body': '{{key}}',
@@ -598,7 +597,7 @@ void main() {
         'exploreUrl': jsonEncode([
           {
             'title': 'A',
-            'url': '/a,{"method":"POST"}',
+            'url': '/a,{"retry":1}',
             'style': {'layout_flexGrow': 1},
           },
         ]),
@@ -606,7 +605,7 @@ void main() {
       });
       expect(
         badUrl.issues.map((e) => e.code),
-        contains('legacy.explore_options'),
+        contains('legacy.request_options'),
       );
     },
   );
@@ -631,6 +630,129 @@ void main() {
         contains('legacy.explore_menu_requires_review'),
       );
     }
+  });
+  test('finite page expressions and URL choices import explicitly', () {
+    for (final url in [
+      '/search?p={{page + 1}}',
+      '/search?p={{page-0}}',
+      '/search?p=<a,b,c>',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': url,
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, false, reason: url);
+      expect(imported.source.stages['search']!.legacyPageTemplates, true);
+    }
+    for (final url in [
+      '/search?p={{page+01}}',
+      '/search?p={{page+9007199254740992}}',
+      '/search?p={{page*2}}',
+      '/search?p=<a>',
+      '/search?p=<{{key}},fallback>',
+      '/search?p=<{{page+1}},fallback>',
+      '/search?p=<a,<b,c>>',
+      '/search?p=<a,b',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': url,
+        'ruleSearch': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, true, reason: url);
+    }
+    final body = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl':
+          '/search,${jsonEncode({'method': 'POST', 'body': 'q={{page + 1}}'})}',
+      'ruleSearch': {'bookList': 'tag.a'},
+    });
+    expect(body.requiresManualWork, false);
+    expect(body.source.stages['search']!.legacyPageTemplates, true);
+    expect(body.source.stages['search']!.bodyTemplateMode, 'legacyJsonString');
+    final xml = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl':
+          '/search,${jsonEncode({'method': 'POST', 'body': '<q>{{key}}</q>'})}',
+      'ruleSearch': {'bookList': 'tag.a'},
+    });
+    expect(xml.requiresManualWork, true);
+  });
+  test(
+    'selected category request adapter preserves extraction and finite options',
+    () {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'header': {'X-Base': 'base'},
+        'exploreUrl': jsonEncode([
+          {
+            'title': 'B',
+            'url':
+                '/b,${jsonEncode({
+                  'method': 'POST',
+                  'body': 'q={{page+1}}',
+                  'headers': {'X-Item': 'b'},
+                })}',
+          },
+        ]),
+        'ruleExplore': {
+          'bookList': 'tag.a',
+          'name': '@text',
+          'nextTocUrl': 'tag.a@href',
+        },
+      });
+      expect(imported.requiresManualWork, false);
+      final stage = imported.source.stages['explore']!;
+      expect(stage.legacyRequestInput, 'exploreUrl');
+      final selected =
+          (imported.source.metadata['legacyExploreItems'] as List).single['url']
+              as String;
+      final adapted = adaptLegacyRequest(imported.source, stage, {
+        'exploreUrl': selected,
+      });
+      expect(adapted.url, '/b');
+      expect(adapted.method, 'POST');
+      expect(adapted.body, 'q={{page+1}}');
+      expect(adapted.headers, containsPair('X-Base', 'base'));
+      expect(adapted.headers, containsPair('X-Item', 'b'));
+      expect(adapted.legacyPageTemplates, true);
+      expect(adapted.legacyRequestInput, null);
+      expect(adapted.fields, stage.fields);
+      expect(adapted.list, stage.list);
+      expect(adapted.nextPage, stage.nextPage);
+      expect(
+        () => adaptLegacyRequest(imported.source, stage, {
+          'exploreUrl': '/b,{"retry":1}',
+        }),
+        throwsA(
+          isA<EngineException>().having(
+            (e) => e.code,
+            'code',
+            'legacy_request_requires_migration',
+          ),
+        ),
+      );
+      expect(
+        adaptLegacyRequest(
+          imported.source,
+          const SourceStage(url: '/modern'),
+          {},
+        ).url,
+        '/modern',
+      );
+    },
+  );
+  test('reviewed local source anchor permits query page arithmetic', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'local-id',
+      'searchUrl': 'https://books.test/search?p={{page + 1}}',
+      'ruleSearch': {'bookList': 'tag.a'},
+    });
+    expect(imported.source.id, 'local-id');
+    expect(imported.issues.map((e) => e.code), [
+      'legacy.base_url_requires_review',
+    ]);
   });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
