@@ -253,12 +253,10 @@ class SourceOrderMetadataUpdateTest {
     }
 
     private fun waitUntil(description: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000, condition = condition)
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            error("Timed out waiting for $description")
         }
-        error("Timed out waiting for $description")
     }
 }
