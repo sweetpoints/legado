@@ -176,9 +176,10 @@ internal class MangaReaderComposeViewModel(
                     reloadSettings()
                     controller.state.collect { value ->
                         if (generation == requestedGeneration && value != null) {
+                            // Menu intent belongs to this UI owner after the initial restore.
+                            // A completed older checkpoint must not replace a newer close/open.
                             mutableState.value =
                                 mutableState.value.copy(
-                                    menuVisible = value.menuVisible,
                                     nativeRequests = value.nativeRequests,
                                     pendingCloudProgress = value.pendingCloudProgress,
                                 )
