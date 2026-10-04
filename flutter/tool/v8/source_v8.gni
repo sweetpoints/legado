@@ -25,7 +25,6 @@ template("source_v8_library") {
         "log",
         "dl",
         "m",
-        "atomic",
       ]
     } else if (is_mac) {
       ldflags = [ "-Wl,-undefined,error" ]
