@@ -19,6 +19,22 @@ class BuildContractTests(unittest.TestCase):
         self.assertEqual(pins['v8']['revision'], 'e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee')
         self.assertEqual(len(pins['depotTools']['revision']), 40)
 
+    def test_minimal_official_depot_initialization_avoids_extra_venvs(self):
+        with patch.object(builder, 'run') as execute:
+            depot = Path('/isolated/.cache/depot_tools')
+            env = {'DEPOT_TOOLS_UPDATE': '0'}
+            builder.initialize_depot(depot, env)
+            command, working, passed_env = execute.call_args.args
+            self.assertEqual(command[:2], ['bash', '-c'])
+            self.assertIn('source "$1/bootstrap_python3"; bootstrap_python3', command[2])
+            self.assertIn('source "$1/cipd_bin_setup.sh"; cipd_bin_setup', command[2])
+            self.assertNotIn('ensure_bootstrap', command[2])
+            self.assertNotIn('gsutil', command[2])
+            self.assertNotIn('pylint', command[2])
+            self.assertEqual(command[-1], depot)
+            self.assertEqual(working, depot)
+            self.assertEqual(passed_env['DEPOT_TOOLS_UPDATE'], '0')
+
     def test_android_refuses_mac_and_linux_arm_host(self):
         for host in [('Darwin', 'arm64'), ('Linux', 'aarch64')]:
             with patch.object(builder.platform, 'system', return_value=host[0]), patch.object(builder.platform, 'machine', return_value=host[1]):

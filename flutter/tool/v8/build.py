@@ -62,6 +62,15 @@ def require_host(target):
         raise ValueError(f'{target} requires host {expected}; found {host}. Android must use Linux x86_64 runner.')
 
 
+def initialize_depot(depot, env):
+    # Follow the two official ensure_bootstrap prerequisites, avoiding unrelated
+    # gsutil/pylint environment initialization and preserving this checkout pin.
+    command = ('set -e; export DEPOT_TOOLS_DIR="$1"; '
+               'source "$1/bootstrap_python3"; bootstrap_python3; '
+               'source "$1/cipd_bin_setup.sh"; cipd_bin_setup >/dev/null')
+    run(['bash', '-c', command, '--', depot], depot, env)
+
+
 def bootstrap(cache, target, pins):
     require_host(target)
     cache.mkdir(parents=True, exist_ok=True)
@@ -74,6 +83,7 @@ def bootstrap(cache, target, pins):
     run(['git', 'fetch', '--depth', '1', 'origin', pins['depotTools']['revision']], depot)
     run(['git', 'checkout', '--detach', pins['depotTools']['revision']], depot)
     env = dict(os.environ, PATH=str(depot) + os.pathsep + os.environ['PATH'], DEPOT_TOOLS_UPDATE='0')
+    initialize_depot(depot, env)
     workspace = cache / pins['v8']['revision'] / target
     workspace.mkdir(parents=True, exist_ok=True)
     gclient = 'solutions = ' + repr([{'name': 'v8', 'url': pins['v8']['repository'] + '@' + pins['v8']['revision'], 'deps_file': 'DEPS', 'managed': False, 'custom_deps': {}, 'custom_vars': {}}]) + '\n'
