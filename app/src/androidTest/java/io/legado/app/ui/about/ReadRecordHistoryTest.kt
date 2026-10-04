@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.SystemClock
 import androidx.appcompat.app.AppCompatDelegate
@@ -17,6 +18,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
+import io.legado.app.testutil.saveSemantics
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -969,6 +971,29 @@ class ReadRecordHistoryTest {
                 }
                 .getOrDefault(false)
         } } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            val artifact = "history-cover-failure-$id"
+            runCatching { compose.saveSemantics(context, artifact) }
+            runCatching {
+                val directory = File(context.getExternalFilesDir(null), "ui-regression").apply { mkdirs() }
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(cover.path, options)
+                var request = "fixture row absent"
+                scenario!!.onActivity { activity ->
+                    val state = activity.viewModel.state.value
+                    val fixture = state.snapshot.rows.find { it.key == key(book.name, book.author) }
+                    request = "loading=${state.loading} currentMatchesFixture=${fixture?.cover?.current == cover.path} " +
+                        "currentPresent=${!fixture?.cover?.current.isNullOrBlank()} snapshotPresent=${!fixture?.cover?.snapshot.isNullOrBlank()} " +
+                        "onlyWifi=${fixture?.cover?.onlyWifi} fallbackPresent=${!state.preferences.fallback.isNullOrBlank()}"
+                }
+                File(directory, "$artifact.txt").writeText(
+                    "tag=$tag expected=$color observed=$observed fixtureExists=${cover.isFile} " +
+                        "fixtureBytes=${cover.length()} decoded=${options.outWidth}x${options.outHeight}; $request"
+                )
+                instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                    try { File(directory, "$artifact.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+                    finally { bitmap.recycle() }
+                }
+            }
             throw AssertionError("Cover $tag expected=$color actual=$observed", error)
         }
     }

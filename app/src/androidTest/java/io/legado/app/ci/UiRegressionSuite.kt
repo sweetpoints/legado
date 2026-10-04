@@ -19,6 +19,7 @@ import org.junit.runners.Suite
     io.legado.app.ui.association.SourceImportFilterUiTest::class,
     io.legado.app.ui.association.SourceManualReplacementUiTest::class,
     io.legado.app.ui.about.ReadRecordHistoryTest::class,
+    io.legado.app.ui.about.ReadingHistoryUiTest::class,
     io.legado.app.data.ReadRecordAuthorIdentityTest::class,
     io.legado.app.data.BookSourceCheckStateTest::class,
     io.legado.app.data.BookSourceCheckApiTest::class,
