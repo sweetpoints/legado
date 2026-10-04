@@ -73,18 +73,20 @@ def main():
                 raise AssertionError("MainActivity did not remain resumed for 10 seconds")
             # Exercise the first-run dialogs rather than leaving initialization suspended
             # behind the privacy prompt. Text is read from the actual accessibility tree.
-            for node in nodes():
-                if node.attrib.get("text", "").upper() in {"AGREE", "同意"}:
-                    tap(node)
-                    time.sleep(3)
+            dialogs_deadline = time.monotonic() + 90
+            while time.monotonic() < dialogs_deadline:
+                tree = nodes()
+                if any(node.attrib.get("content-desc") in {"Me", "我的"} for node in tree):
+                    break
+                buttons = [node for node in tree if node.attrib.get("text", "").upper()
+                           in {"AGREE", "同意", "CANCEL", "取消"}]
+                if buttons:
+                    tap(buttons[0])
+                elif any(node.attrib.get("text") in {"Help", "帮助"} for node in tree):
                     shell("input", "keyevent", "KEYCODE_BACK")  # Close first-run help.
-                    time.sleep(2)
-                    break
-            for node in nodes():
-                if node.attrib.get("text", "").upper() in {"CANCEL", "取消"}:
-                    tap(node)  # Skip the optional local backup password on the test device.
-                    time.sleep(2)
-                    break
+                time.sleep(2)
+            else:
+                raise AssertionError("First-run dialogs did not reveal the main navigation")
             destinations = [
                 {"Me", "我的"}, {"RSS feeds", "订阅"},
                 {"Discovery", "发现"}, {"Bookshelf", "书架"},
