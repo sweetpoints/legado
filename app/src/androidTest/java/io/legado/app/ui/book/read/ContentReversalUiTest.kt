@@ -960,8 +960,20 @@ class ContentReversalUiTest {
     }
 
     private fun assertRenderedImages() {
-        scenario!!.onActivity {
-            val chapter = checkNotNull(ReadBook.curTextChapter)
+        // A native size/config update can replace the chapter after awaitReader returns.
+        // Check readiness and consume that exact chapter in the same main-thread callback.
+        await("image chapter layout bound and completed") { activity ->
+            val chapter = ReadBook.curTextChapter ?: return@await false
+            val reader = activity.findViewById<ReadView>(R.id.read_view)
+            val page = reader.curPage.textPage
+            if (ReadBook.book?.bookUrl != book.bookUrl ||
+                ReadBook.durChapterIndex != 0 ||
+                chapter.chapter.url != chapters[0].url ||
+                !chapter.isCompleted || !activity.isInitFinish ||
+                !activity.window.decorView.hasWindowFocus() ||
+                page.textChapter !== chapter || page.isMsgPage ||
+                !reader.curPage.isCanvasReady
+            ) return@await false
             val images =
                 chapter.pages
                     .flatMap { page -> page.lines }
@@ -998,6 +1010,7 @@ class ContentReversalUiTest {
                 "The HTML unit must still produce formatted text",
                 chapter.pages.any { page -> page.lines.any { line -> line.isHtml } },
             )
+            true
         }
     }
 

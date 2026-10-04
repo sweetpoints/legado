@@ -5,7 +5,9 @@ import android.net.http.SslError
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.AndroidRuntimeException
+import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
@@ -14,6 +16,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import io.legado.app.BuildConfig
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
@@ -69,22 +72,35 @@ class BackstageWebView(
     private val mHandler = Handler(Looper.getMainLooper())
     private var callback: Callback? = null
     private var pooledWebView: PooledWebView? = null
+    private val requestStartedAt = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
+
+    private fun traceStage(stage: String) {
+        if (BuildConfig.DEBUG) {
+            // Only control-flow metadata: source URLs, rules, headers and results are private.
+            Log.d("BackstageWebViewStage", "request=${System.identityHashCode(this)} " +
+                "elapsedMs=${SystemClock.elapsedRealtime() - requestStartedAt} stage=$stage")
+        }
+    }
 
     suspend fun getStrResponse(): StrResponse = withTimeout(timeout ?: 60000L) {
+        traceStage("await-response")
         suspendCancellableCoroutine { block ->
             block.invokeOnCancellation {
+                traceStage("cancelled")
                 runOnUI {
                     destroy()
                 }
             }
             callback = object : Callback() {
                 override fun onResult(response: StrResponse) {
+                    traceStage("response-ready")
                     if (!block.isCompleted) {
                         block.resume(response)
                     }
                 }
 
                 override fun onError(error: Throwable) {
+                    traceStage("response-error")
                     if (!block.isCompleted)
                         block.resumeWithException(error)
                 }
@@ -93,6 +109,7 @@ class BackstageWebView(
                 delayTime = 900L
             }
             runOnUI {
+                traceStage("load-main-entered")
                 try {
                     load(block.context)
                 } catch (error: Throwable) {
@@ -111,6 +128,7 @@ class BackstageWebView(
     private fun load(navigationContext: CoroutineContext) {
         val requestConfig = headerMap.toWebViewRequestConfig(AppConfig.userAgent)
         val webView = createWebView(requestConfig)
+        traceStage("webview-acquired")
         try {
             when {
                 !html.isNullOrEmpty() -> {
@@ -130,12 +148,15 @@ class BackstageWebView(
                         CacheManager.put("webview_result", it)
                     }
                     webView.loadDataWithBaseURL(url, html, "text/html", getEncoding(), url)
+                    traceStage("inline-load-submitted")
                 }
 
                 else -> if (requestConfig.additionalHeaders.isEmpty()) {
                     webView.loadUrl(url!!)
+                    traceStage("url-load-submitted")
                 } else {
                     webView.loadUrl(url!!, requestConfig.additionalHeaders)
+                    traceStage("url-load-submitted")
                 }
             }
         } catch (e: Exception) {
@@ -173,6 +194,7 @@ class BackstageWebView(
     }
 
     private fun destroy() {
+        traceStage("release-webview")
         pooledWebView?.let { WebViewPool.release(it) }
         pooledWebView = null
     }
@@ -213,6 +235,7 @@ class BackstageWebView(
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            traceStage("page-finished")
             setCookie(url)
             result?.let {
                 view.evaluateJavascript("window.result = $nameCache.getFromMemory('webview_result')", null)
@@ -245,7 +268,9 @@ class BackstageWebView(
                 "$getInjectionString\n$mJavaScript"
             } else mJavaScript
             override fun run() {
+                traceStage("evaluate-dispatched")
                 mWebView.get()?.evaluateJavascript(jsStr) {
+                    traceStage(if (it.isNotEmpty() && it != "null") "evaluate-value" else "evaluate-empty")
                     if (pooledWebView != null) {
                         handleResult(it)
                     }

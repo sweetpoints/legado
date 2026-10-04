@@ -2,9 +2,13 @@ package io.legado.app.ui.main.my
 
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.view.View
+import android.view.ViewGroup
+import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -13,6 +17,8 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import io.legado.app.R
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.PreferKey
@@ -183,10 +189,38 @@ class MyPageCustomizationTest {
 
     private fun setting(key: String): androidx.compose.ui.test.SemanticsNodeInteraction {
         val prefix = if (moreActivity != null) "my-more" else "my"
+        awaitSettingsOwner(prefix)
         compose
             .onNodeWithTag("$prefix-settings-list")
             .performScrollToNode(hasTestTag("$prefix-setting-$key"))
         return compose.onNodeWithTag("$prefix-setting-$key").assertExists()
+    }
+
+    private fun awaitSettingsOwner(prefix: String) {
+        // finish() and recreate() complete outside Compose's scheduler. Do not query the
+        // disappearing child hierarchy before the real destination regains its window.
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            var ownerReady = false
+            fun inspect(activity: android.app.Activity) {
+                val decor = activity.window.decorView
+                ownerReady = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).any { it === activity } &&
+                    decor.hasWindowFocus() && decor.hasAttachedComposition()
+            }
+            if (prefix == "my-more") {
+                instrumentation.runOnMainSync { moreActivity?.let(::inspect) }
+            } else {
+                scenario!!.onActivity(::inspect)
+            }
+            ownerReady && compose.onAllNodesWithTag("$prefix-settings-list")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).size == 1
+        }
+    }
+
+    private fun View.hasAttachedComposition(): Boolean {
+        if (this is AbstractComposeView && isAttachedToWindow && hasComposition) return true
+        return this is ViewGroup && (0 until childCount).any { getChildAt(it).hasAttachedComposition() }
     }
 
     private fun openPicker() {

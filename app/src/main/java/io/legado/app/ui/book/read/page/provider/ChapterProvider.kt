@@ -721,6 +721,10 @@ object ChapterProvider {
         if (width <= 0 || height <= 0) {
             return
         }
+        // Only the latest size may update layout. Returning to the current size or changing
+        // width must also cancel a previously queued height update.
+        upViewSizeRunnable?.let { handler.removeCallbacks(it) }
+        upViewSizeRunnable = null
         if (width != viewWidth || height != viewHeight) {
             if (width == viewWidth) {
                 upViewSizeRunnable = handler.postDelayed(300) {
@@ -730,9 +734,6 @@ object ChapterProvider {
             } else {
                 notifyViewSizeChange(width, height)
             }
-        } else if (upViewSizeRunnable != null) {
-            handler.removeCallbacks(upViewSizeRunnable!!)
-            upViewSizeRunnable = null
         }
     }
 

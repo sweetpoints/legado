@@ -13,6 +13,7 @@ on:
       - '.github/scripts/source-browser-test.init.gradle'
       - '.github/scripts/run-ui-regression.sh'
       - '.github/scripts/verify-ui-test-coverage.py'
+      - '.github/scripts/sample-ci-resources.py'
       - '.github/scripts/prepare-pdf-zoom-fixture.py'
       - 'app/build.gradle.kts'
       - 'app/src/main/java/io/legado/app/ui/**'
@@ -165,7 +166,8 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest \
             --init-script .github/scripts/source-browser-test.init.gradle \
-            --build-cache --no-daemon --max-workers=2
+            --build-cache --no-daemon --max-workers=2 \
+            -Pkotlin.compiler.execution.strategy=in-process
 
       - name: Enable KVM
         run: |

@@ -131,6 +131,7 @@ class ReadAloudMenuUiTest {
     private var book: Book? = null
     private var textFile: File? = null
     private var lastAloudMismatch = ""
+    private var lastReaderGeometry = ""
     private var serviceStarted = false
     private var speechServer: NanoHTTPD? = null
     private var speechSource: BookSource? = null
@@ -311,6 +312,9 @@ class ReadAloudMenuUiTest {
                 it.readAloudControlsVisible
         }
         val startedService = checkNotNull(service)
+        // Preparation consumes a completed reader chapter; finish pending size-triggered
+        // replacements before deliberately clearing and preparing the fixture queue.
+        awaitReaderGeometry()
         // Settle the initial preparation before tests replace the audio endpoint. An engine
         // that initialized during startup may already have enqueued its first play command.
         var beforePreparation = 0L
@@ -348,7 +352,15 @@ class ReadAloudMenuUiTest {
             val jobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs")
                 .apply { isAccessible = true }.get(ReadBook) as Map<*, *>
             val job = jobs[ReadBook.durChapterIndex] as? io.legado.app.help.coroutine.Coroutine<*>
-            pendingSize.get(ChapterProvider) == null &&
+            val sizePending = pendingSize.get(ChapterProvider) != null
+            lastReaderGeometry = "pendingSize=$sizePending, content=${content.width}x${content.height}, " +
+                "provider=${ChapterProvider.viewWidth}x${ChapterProvider.viewHeight}, " +
+                "boundChapter=${System.identityHashCode(view.curPage.textPage.textChapter)}, " +
+                "currentChapter=${System.identityHashCode(ReadBook.curTextChapter)}, " +
+                "completed=${ReadBook.curTextChapter?.isCompleted}, jobPresent=${job != null}, " +
+                "jobActive=${job?.isActive}, jobCompleted=${job?.isCompleted}, jobCancelled=${job?.isCancelled}, " +
+                "jobKeys=${jobs.keys}"
+            !sizePending &&
                 content.width > 0 && content.height > 0 &&
                 content.width == ChapterProvider.viewWidth && content.height == ChapterProvider.viewHeight &&
                 ReadBook.curTextChapter?.isCompleted == true &&
@@ -742,6 +754,7 @@ class ReadAloudMenuUiTest {
                 !BaseReadAloudService.pause && recorder.calls.isNotEmpty()
             }
             for (playAfterPreparation in listOf(false, true)) {
+                awaitReaderGeometry()
                 var requestedPosition = 0
                 scenario!!.onActivity {
                     service.clearTTS()
@@ -1617,7 +1630,7 @@ class ReadAloudMenuUiTest {
                     "servicePage=${readAloudService()?.pageIndex}, " +
                     "serviceSegments=${readAloudService()?.contentList?.take(4)?.map { segment -> segment.length }}, " +
                     "mode=${AppConfig.readAloudStartAtSentence}, byPage=${readAloudService()?.readAloudByPage}, " +
-                    "spanDiagnostic=$lastAloudMismatch, " +
+                    "spanDiagnostic=$lastAloudMismatch, geometryDiagnostic=$lastReaderGeometry, " +
                     "layoutParagraphs=${ReadBook.curTextChapter?.getParagraphs(false)?.take(4)?.map { p -> "${p.num}:${p.chapterPosition}:${p.length}" }}"
         }
         val label = "aloud-timeout-${SystemClock.uptimeMillis()}"

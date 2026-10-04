@@ -224,24 +224,13 @@ class ReaderWindowInsetsTest {
                     val body = reader.curPage.findViewById<View>(R.id.content_text_view)
                     val bodyPosition = IntArray(2)
                     body.getLocationInWindow(bodyPosition)
-                    val pageRoot = reader.curPage.getChildAt(0)
-                    val readerPosition = IntArray(2).also(reader::getLocationInWindow)
-                    val visibleFrame = Rect().also(decor::getWindowVisibleDisplayFrame)
                     lastGeometry = "sdk=${android.os.Build.VERSION.SDK_INT} hidden=$hidden " +
-                        "configuredHidden=${ReadBookConfig.hideStatusBar} bodyToCutout=${ReadBookConfig.readBodyToLh} " +
-                        "padCutout=${AppConfig.paddingDisplayCutouts} multiWindow=${activity.isInMultiWindow} " +
-                        "menuVisible=${activity.readMenu.isVisible} searchMenuVisible=${activity.searchMenu.bottomMenuVisible} " +
+                        "configuredHidden=${ReadBookConfig.hideStatusBar} multiWindow=${activity.isInMultiWindow} " +
+                        "menus=[${activity.readMenu.isVisible},${activity.searchMenu.bottomMenuVisible}] " +
                         "bottomDialog=${activity.bottomDialog} flags=0x${decor.systemUiVisibility.toString(16)} " +
-                        "windowFlags=0x${activity.window.attributes.flags.toString(16)} " +
                         "statusVisible=${insets.isVisible(WindowInsetsCompat.Type.statusBars())} " +
-                        "status=$bars caption=$caption navigation=$navigation cutout=$cutout " +
-                        "ime=${insets.getInsets(WindowInsetsCompat.Type.ime())} " +
-                        "stableBars=${insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())} " +
-                        "navigationHeight=${insets.navigationBarHeight} hideNavigation=${ReadBookConfig.hideNavigationBar} " +
-                        "decor=${decor.width}x${decor.height} visibleFrame=$visibleFrame " +
-                        "reader=${readerPosition.toList()} ${reader.width}x${reader.height} " +
-                        "pagePadding=[${pageRoot.paddingLeft},${pageRoot.paddingTop},${pageRoot.paddingRight},${pageRoot.paddingBottom}] " +
-                        "contentViewTop=${reader.curPage.contentViewTop} canvasReady=${reader.curPage.isCanvasReady} " +
+                        "status=$bars navigation=$navigation cutout=$cutout " +
+                        "contentViewTop=${reader.curPage.contentViewTop} " +
                         "body=${bodyPosition.toList()} ${body.width}x${body.height} " +
                         "expected=[$expectedLeft,$expectedTop,$expectedRight,$expectedBottom]"
                     settled = insets.isVisible(WindowInsetsCompat.Type.statusBars()) ==
