@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     private val lock = Mutex()
     private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
+    private var closed = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val browserJobs = mutableMapOf<String, Job>()
     private val ready = CompletableDeferred<Unit>()
@@ -39,6 +41,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     private suspend fun ensureStarted() =
         withContext(Dispatchers.Main.immediate) {
             lock.withLock {
+                check(!closed) { "Flutter source repository is closed" }
                 if (engine == null) {
                     val created = FlutterEngine(applicationContext)
                     val bridge =
@@ -205,4 +208,42 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
         }
     }
+
+    override suspend fun close() =
+        withContext(NonCancellable + Dispatchers.Main.immediate) {
+            if (closed) return@withContext
+            closed = true
+            browserJobs.values.forEach { it.cancel() }
+            browserJobs.clear()
+            try {
+                val response = CompletableDeferred<Unit>()
+                channel?.invokeMethod(
+                    "shutdown",
+                    null,
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            response.complete(Unit)
+                        }
+
+                        override fun error(code: String, message: String?, details: Any?) {
+                            response.completeExceptionally(
+                                IllegalStateException("$code: ${message.orEmpty()}")
+                            )
+                        }
+
+                        override fun notImplemented() {
+                            response.complete(Unit)
+                        }
+                    },
+                ) ?: response.complete(Unit)
+                withTimeout(15_000) { response.await() }
+            } finally {
+                channel?.setMethodCallHandler(null)
+                engine?.destroy()
+                channel = null
+                engine = null
+                scope.cancel()
+                mutableTasks.value = emptyMap()
+            }
+        }
 }

@@ -25,6 +25,16 @@ void main() {
         adapter.call('arbitrary.unknown', []),
         throwsA(isA<EngineException>()),
       );
+      await expectLater(
+        adapter.call('storage.write', ['__engine.session.v1.modern', 'bad']),
+        throwsA(
+          isA<EngineException>().having(
+            (error) => error.code,
+            'code',
+            'reserved_storage_key',
+          ),
+        ),
+      );
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);
     },

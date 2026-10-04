@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import io.legado.app.BuildConfig
+import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceEngineBackend
@@ -56,6 +57,9 @@ class FlutterSourceEngineTest {
                     const title = await Promise.resolve(input.key + ' V8');
                     return [{name:title,author:'Author',bookUrl:'https://example.org/book',tocUrl:'https://example.org/toc'}];
                 }
+                async function getBookInfo(input) {
+                    return {name:'',author:'',tocUrl:'',coverUrl:'',intro:'',kind:'',wordCount:'',latestChapterTitle:''};
+                }
                 async function getChapters(input) {
                     return [{title:'Chapter 1',url:'https://example.org/chapter'}];
                 }
@@ -86,6 +90,16 @@ class FlutterSourceEngineTest {
         val result = withTimeout(60_000) { WebBook.searchBookAwait(selected, "Compose") }
         assertEquals("Compose V8", result.single().name)
         assertEquals(selected.bookSourceUrl, result.single().origin)
+        val existing =
+            Book(bookUrl = "https://example.org/book", name = "Existing", author = "Author").apply {
+                intro = "Existing introduction"
+            }
+        WebBook.getBookInfoAwait(selected, existing)
+        assertEquals("Existing", existing.name)
+        assertEquals("Author", existing.author)
+        assertEquals("Existing introduction", existing.intro)
+        assertEquals(existing.bookUrl, existing.tocUrl)
+        bridge.close()
     }
 
     @Test
@@ -108,5 +122,55 @@ class FlutterSourceEngineTest {
                 )
             }
         assertEquals("Recovered", result.single()["name"])
+        bridge.close()
+    }
+
+    @Test
+    fun sessionVariablesSurviveEngineShutdownAndStaySourceIsolated() = runBlocking {
+        val unique = java.util.UUID.randomUUID().toString()
+        val definition =
+            Gson()
+                .toJson(
+                    mapOf(
+                        "schemaVersion" to 1,
+                        "id" to "https://example.org/persistence/$unique",
+                        "name" to "Persistence",
+                        "baseUrl" to "https://example.org/",
+                        "script" to
+                            """
+                            async function search(input) {
+                                if (input.value) await source.variables.put('saved', input.value);
+                                return [{name: (await source.variables.get('saved')) || ''}];
+                            }
+                            """
+                                .trimIndent(),
+                    )
+                )
+        val first = backend()
+        assertEquals(
+            "persisted",
+            withTimeout(60_000) {
+                first.execute("search", definition, mapOf("value" to "persisted")).single()["name"]
+            },
+        )
+        first.close()
+        val second = backend()
+        try {
+            assertEquals(
+                "persisted",
+                withTimeout(60_000) {
+                    second.execute("search", definition, emptyMap()).single()["name"]
+                },
+            )
+            val other = definition.replace("/persistence/$unique", "/persistence/other-$unique")
+            assertEquals(
+                "",
+                withTimeout(60_000) {
+                    second.execute("search", other, emptyMap()).single()["name"]
+                },
+            )
+        } finally {
+            second.close()
+        }
     }
 }

@@ -12,6 +12,8 @@ data class SourceTaskState(val taskId: String, val phase: String, val error: Str
 interface SourceEngineBackend {
     val tasks: StateFlow<Map<String, SourceTaskState>>
 
+    suspend fun close()
+
     suspend fun execute(
         operation: String,
         sourceJson: String,

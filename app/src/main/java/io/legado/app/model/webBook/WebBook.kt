@@ -248,16 +248,33 @@ object WebBook {
             val fields =
                 DartSourceEngine.execute(bookSource, "info", DartSourceEngine.jsonObject(book))
                     .single()
-            if (canReName) {
-                (fields["name"] as? String)?.let { book.name = it }
-                (fields["author"] as? String)?.let { book.author = it }
-            }
-            (fields["tocUrl"] as? String)?.let { book.tocUrl = it }
-            (fields["coverUrl"] as? String)?.let { book.coverUrl = it }
-            (fields["intro"] as? String)?.let { book.intro = it }
-            (fields["kind"] as? String)?.let { book.kind = it }
-            (fields["wordCount"] as? String)?.let { book.wordCount = it }
-            (fields["latestChapterTitle"] as? String)?.let { book.latestChapterTitle = it }
+            val modern =
+                bookSource.bookSourceComment.orEmpty().lineSequence().any {
+                    it.trim().startsWith("@source:v1 ")
+                }
+            val allowRename =
+                canReName && (modern || !bookSource.getBookInfoRule().canReName.isNullOrBlank())
+            (fields["name"] as? String)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let {
+                    if (allowRename || book.name.isEmpty()) book.name = it
+                }
+            (fields["author"] as? String)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let {
+                    if (allowRename || book.author.isEmpty()) book.author = it
+                }
+            (fields["tocUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.tocUrl = it }
+            if (book.tocUrl.isBlank()) book.tocUrl = book.bookUrl
+            (fields["coverUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.coverUrl = it }
+            (fields["intro"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.intro = it }
+            (fields["kind"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.kind = it }
+            (fields["wordCount"] as? String)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { book.wordCount = it }
+            (fields["latestChapterTitle"] as? String)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { book.latestChapterTitle = it }
             return book
         }
         if (bookSource.isJsSource()) {

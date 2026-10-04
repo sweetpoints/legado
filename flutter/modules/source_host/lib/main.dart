@@ -5,6 +5,7 @@ import 'package:source_platform/source_platform.dart';
 import 'package:source_v8/source_v8.dart';
 
 import 'source_host.dart';
+import 'session_store.dart';
 
 @pragma('vm:entry-point')
 Future<void> main() async {
@@ -14,6 +15,7 @@ Future<void> main() async {
       runtime: _SourceRuntime(legacy: source.metadata['legacy'] == true),
       platform: SourcePlatform(sourceId: source.id),
     ),
+    sessionStore: const PlatformSessionStore(),
   );
   await host.attach(
     initialize: () async {
@@ -39,7 +41,7 @@ Future<void> main() async {
   );
 }
 
-class _SourceRuntime implements ScriptRuntime {
+class _SourceRuntime implements ScriptRuntime, SourceRuntimeState {
   _SourceRuntime({required this.legacy})
     : runtime = V8Runtime(prelude: legacy ? legacyScriptPrelude : '');
   final bool legacy;
@@ -64,6 +66,23 @@ class _SourceRuntime implements ScriptRuntime {
     ),
     cancellation: cancellation,
   );
+  @override
+  Map<String, Object?> exportRuntimeState() => {
+    'legacyVariables': Map<String, String>.from(variables),
+  };
+  @override
+  void importRuntimeState(Map<String, Object?> state) {
+    final saved = state['legacyVariables'];
+    if (saved is! Map) return;
+    variables.clear();
+    for (final entry in saved.entries) {
+      if (entry.key is! String || entry.value is! String) {
+        throw const FormatException('Invalid legacy variables');
+      }
+      variables[entry.key as String] = entry.value as String;
+    }
+  }
+
   @override
   Future<void> close() => runtime.close();
 }
