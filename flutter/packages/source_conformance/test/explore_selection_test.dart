@@ -29,8 +29,12 @@ void main() {
     final legacy = SourceEngine(
       runtime: V8Runtime(prelude: legacyScriptPrelude),
       hostAdapter: LegacyScriptHost.new,
+      requestAdapter: adaptLegacyRequest,
     );
-    final modern = SourceEngine(runtime: V8Runtime());
+    final modern = SourceEngine(
+      runtime: V8Runtime(),
+      requestAdapter: adaptLegacyRequest,
+    );
     try {
       final input = <String, Object?>{
         'exploreUrl': server.baseUrl.resolve('/book/123').toString(),

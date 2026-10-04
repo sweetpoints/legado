@@ -244,7 +244,10 @@ class LegacySourceImporter {
         legacyRequestInput: selectedExplore ? 'exploreUrl' : null,
         legacyPageTemplates: selectedExplore
             ? exploreItems.any(
-                (item) => _legacyPageTemplatesPresent(item['url'] as String),
+                (item) => _legacyPageTemplatesPresent(
+                  item['url'] as String,
+                  knownUrlInputs: true,
+                ),
               )
             : request.legacyPageTemplates,
         headers: selectedExplore ? null : request.headers,
@@ -519,7 +522,10 @@ _LegacyRequest _legacyRequest(
   final separator = RegExp(r',\s*(?=\{)').firstMatch(value);
   final url = separator == null ? value : value.substring(0, separator.start);
   _validateLegacyTemplates(url, issue, allowChoices: true);
-  var legacyPageTemplates = _legacyPageTemplatesPresent(url);
+  var legacyPageTemplates = _legacyPageTemplatesPresent(
+    url,
+    knownUrlInputs: true,
+  );
   if (separator == null) {
     return _LegacyRequest(value, legacyPageTemplates: legacyPageTemplates);
   }
@@ -680,7 +686,11 @@ bool _legacyPageExpression(String expression) {
   return offset != null && offset <= 9007199254740991;
 }
 
-bool _legacyPageTemplatesPresent(String value) =>
+bool _legacyPageTemplatesPresent(String value, {bool knownUrlInputs = false}) =>
+    (knownUrlInputs &&
+        RegExp(
+          r'\{\{(key|page|bookUrl|tocUrl|chapterUrl|baseUrl|exploreUrl)\}\}',
+        ).hasMatch(value)) ||
     RegExp(r'\{\{([\s\S]*?)\}\}')
         .allMatches(value)
         .any((m) => _legacyPageExpression(m[1]!)) ||

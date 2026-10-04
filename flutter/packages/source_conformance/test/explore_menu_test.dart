@@ -46,8 +46,12 @@ void main() {
     final old = SourceEngine(
       runtime: V8Runtime(prelude: legacyScriptPrelude),
       hostAdapter: LegacyScriptHost.new,
+      requestAdapter: adaptLegacyRequest,
     );
-    final modern = SourceEngine(runtime: V8Runtime());
+    final modern = SourceEngine(
+      runtime: V8Runtime(),
+      requestAdapter: adaptLegacyRequest,
+    );
     try {
       final variables = <String, Object?>{'exploreUrl': items[1]['url']};
       final baseline = await old.execute(
@@ -73,11 +77,14 @@ void main() {
     }
   });
   test(
-    'category request options and ambiguous line delimiters stay manual',
+    'unsupported category options and ambiguous line delimiters stay manual',
     () {
       for (final menu in [
         jsonEncode([
-          {'title': '分类', 'url': '/book/123,{"method":"POST","body":"x=1"}'},
+          {
+            'title': '分类',
+            'url': '/book/123,{"method":"POST","body":"x=1","unknown":true}',
+          },
         ]),
         '分类::http://[::1]/path',
       ]) {

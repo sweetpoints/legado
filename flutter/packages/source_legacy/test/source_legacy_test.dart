@@ -754,6 +754,27 @@ void main() {
       'legacy.base_url_requires_review',
     ]);
   });
+  test('known legacy URL inputs enable page protection without changing modern stages', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl': '/search?q={{key}}',
+      'ruleSearch': {'bookList': 'tag.a'},
+      'exploreUrl': 'A::/a?q={{key}}',
+      'ruleExplore': {'bookList': 'tag.a'},
+    });
+    expect(imported.requiresManualWork, false);
+    expect(imported.source.stages['search']!.legacyPageTemplates, true);
+    final selected = adaptLegacyRequest(
+      imported.source,
+      imported.source.stages['explore']!,
+      {'exploreUrl': '/a?q={{key}}'},
+    );
+    expect(selected.legacyPageTemplates, true);
+    expect(
+      const SourceStage(url: '/search?q={{key}}').legacyPageTemplates,
+      false,
+    );
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

@@ -80,7 +80,6 @@ void main() {
 
   for (final (label, body, contentType) in [
     ('JSON', '{"q":"{{key}}"}', null),
-    ('XML', '<q>{{key}}</q>', null),
     ('explicit Content-Type', 'q={{key}}', 'text/plain; charset=UTF-8'),
   ]) {
     for (final (valueLabel, value) in [
@@ -165,6 +164,35 @@ void main() {
         expect(rows.single['name'], 'q=$value');
         expect(rows.single['proof'], '42');
         expect(server.requests, ['/echo-options']);
+      },
+    );
+  }
+
+  for (final (label, body) in [
+    ('literal', '<q>fixed</q>'),
+    ('templated', '<q>{{key}}</q>'),
+  ]) {
+    test(
+      'legacy $label XML options stay manual because of whole-options angle scan',
+      () {
+        final input = original(body);
+        final imported = LegacySourceImporter().import(input);
+        final migration = SourceMigrator().migrate(input);
+        expect(imported.requiresManualWork, isTrue);
+        expect(migration.status, 'manualRequired');
+        expect(migration.original, input);
+        final candidate = SourceDefinition.fromJson(migration.candidate);
+        expect(candidate.metadata['legacyOriginal'], input);
+        expect(candidate.metadata['legacy'], isTrue);
+        expect(imported.source.stages['search']!.body, body);
+        expect(candidate.stages['search']!.body, body);
+        expect(
+          imported.issues.any(
+            (issue) => issue.message.contains('page choices'),
+          ),
+          isTrue,
+        );
+        expect(server.requests, isEmpty);
       },
     );
   }
@@ -275,7 +303,6 @@ void main() {
 
   for (final (label, body, expected) in [
     ('JSON', '{"q":"{{key}}"}', '{"q":"中文 +&next=a=b"}'),
-    ('XML', '<q>{{key}}</q>', '<q>中文 +&next=a=b</q>'),
   ]) {
     test('legacy $label body remains raw after migration', () async {
       final rows = await compare(body, '中文 +&next=a=b', encoding: 'raw');
