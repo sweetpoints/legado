@@ -8,6 +8,10 @@ template("source_v8_library") {
     sources = [ "//source_v8/source_v8.cpp" ]
     deps = [ "//:v8_monolith" ]
     configs += [ "//:external_config" ]
+
+    # V8 public headers intentionally do not follow Chromium style rules.
+    # Match the removal performed by the official V8 target templates.
+    configs -= [ "//build/config/clang:find_bad_constructs" ]
     if (is_android) {
       ldflags = [
         "-Wl,--no-undefined",

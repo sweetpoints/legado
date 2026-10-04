@@ -11,6 +11,8 @@
 #include <v8.h>
 #include <vector>
 using namespace v8;
+// The external pointer table validates this tag when Runtime* is retrieved.
+static constexpr ExternalPointerTypeTag kRuntimePointerTag = 1;
 struct Runtime {
   Isolate *isolate;
   ArrayBuffer::Allocator *allocator;
@@ -75,7 +77,8 @@ static MaybeLocal<Value> arguments(Isolate *i, Local<Context> c,
 static void host(const FunctionCallbackInfo<Value> &args) {
   auto *i = args.GetIsolate();
   auto c = i->GetCurrentContext();
-  auto *r = (Runtime *)Local<External>::Cast(args.Data())->Value();
+  auto *r =
+      (Runtime *)Local<External>::Cast(args.Data())->Value(kRuntimePointerTag);
   Local<Promise::Resolver> resolver;
   if (!Promise::Resolver::New(c).ToLocal(&resolver))
     return;
@@ -100,7 +103,8 @@ static void host(const FunctionCallbackInfo<Value> &args) {
 static void host_sync(const FunctionCallbackInfo<Value> &args) {
   auto *i = args.GetIsolate();
   auto c = i->GetCurrentContext();
-  auto *r = (Runtime *)Local<External>::Cast(args.Data())->Value();
+  auto *r =
+      (Runtime *)Local<External>::Cast(args.Data())->Value(kRuntimePointerTag);
   Local<Value> argument_list;
   if (!arguments(i, c, args[1]).ToLocal(&argument_list))
     return;
@@ -181,12 +185,14 @@ __attribute__((visibility("default"))) Runtime *sv8_create(int timeout_ms,
     Context::Scope cs(c);
     c->Global()
         ->Set(c, str(r->isolate, "__sourceHostSync"),
-              Function::New(c, host_sync, External::New(r->isolate, r))
+              Function::New(c, host_sync,
+                            External::New(r->isolate, r, kRuntimePointerTag))
                   .ToLocalChecked())
         .FromMaybe(false);
     c->Global()
         ->Set(c, str(r->isolate, "__sourceHost"),
-              Function::New(c, host, External::New(r->isolate, r))
+              Function::New(c, host,
+                            External::New(r->isolate, r, kRuntimePointerTag))
                   .ToLocalChecked())
         .FromMaybe(false);
   }
