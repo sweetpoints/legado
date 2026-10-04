@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -49,6 +50,26 @@ class ExploreHomeViewModelTest {
         ExploreHomeViewModel(repository, storage, dispatcher).also {
             models += it
             it.viewModelScope.launch { it.observeResumed() }
+        }
+
+    @Test
+    fun acceptedCheckpointDoesNotDiscardAnEditMadeDuringTheWrite() =
+        runTest(dispatcher) {
+            val storage = Storage()
+            val manager = model(Repository(), storage)
+            advanceUntilIdle()
+            manager.expand("a")
+            advanceUntilIdle()
+            manager.value(2, "before")
+            advanceUntilIdle()
+            storage.onWrite = {
+                storage.onWrite = null
+                manager.value(2, "latest")
+            }
+            manager.query("")
+            advanceUntilIdle()
+            assertEquals("latest", manager.state.value.controls.first { it.id == 2 }.value)
+            assertEquals("latest", storage.snapshot.values["a"]?.get("text"))
         }
 
     @Test

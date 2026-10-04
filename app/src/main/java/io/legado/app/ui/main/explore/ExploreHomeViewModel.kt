@@ -220,7 +220,9 @@ internal class ExploreHomeViewModel(
             }
         if (!accepted) invalidateRestoration()
         check(accepted) { "发现会话写入已由新的页面取代，请重新加载" }
-        session = snapshot
+        // Values may change on the main thread while the disk write is suspended.
+        // Accept its durable revision without replacing those newer in-memory edits.
+        session = snapshot.copy(values = session.values)
     }
 
     private fun invalidateRestoration() {
@@ -322,20 +324,17 @@ internal class ExploreHomeViewModel(
         if (state.value.busy || !restored) return
         val url = state.value.expandedUrl ?: return
         if (state.value.controls.none { it.id == controlId }) return
-        edit {
-            it.copy(
-                controls =
-                    it.controls.map { row ->
-                        if (row.id == controlId) row.copy(value = value) else row
-                    }
-            )
+        val controls = state.value.controls.map { row ->
+            if (row.id == controlId) row.copy(value = value) else row
         }
         val values =
-            state.value.controls
+            controls
                 .filter { it.type in setOf("text", "toggle", "select") }
                 .associate { it.title to it.value }
                 .toMap()
         session = session.copy(values = session.values + (url to values))
+        // Publish the values before edit launches an immediate session checkpoint.
+        edit { it.copy(controls = controls) }
         viewModelScope.launch {
             operationMutex.withLock {
                 try {
