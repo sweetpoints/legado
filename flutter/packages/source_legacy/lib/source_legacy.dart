@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import 'src/legacy_host.dart';
 export 'src/legacy_host.dart';
 
 import 'package:source_engine/source_engine.dart';
@@ -41,6 +42,29 @@ class LegacySourceImporter {
       throw const FormatException(
         'bookSourceUrl must be an absolute HTTP(S) URL',
       );
+    }
+    final requestHeaders = <String, String>{};
+    if (input['header'] != null && input['header'] != '') {
+      try {
+        final raw = input['header'] is String
+            ? jsonDecode(input['header'] as String)
+            : input['header'];
+        if (raw is! Map ||
+            raw.entries.any((e) => e.key is! String || e.value is! String)) {
+          throw const FormatException(
+            'Static headers must be a string-to-string object',
+          );
+        }
+        requestHeaders.addAll(Map<String, String>.from(raw));
+      } on FormatException {
+        issues.add(
+          const LegacyIssue(
+            'header',
+            'legacy.dynamic_header',
+            'Dynamic or invalid headers require migration.',
+          ),
+        );
+      }
     }
     final stages = <String, SourceStage>{};
     final mapping = {
@@ -158,7 +182,7 @@ class LegacySourceImporter {
           fields[fieldName] = text;
         }
       }
-      final url = urlKey == null
+      var url = urlKey == null
           ? switch (entry.key) {
               'info' => '{{bookUrl}}',
               'toc' => '{{tocUrl}}',
@@ -174,20 +198,21 @@ class LegacySourceImporter {
           ),
         );
       }
-      if (url.contains(',') || url.contains('@js:')) {
-        issues.add(
-          LegacyIssue(
-            urlKey ?? entry.key,
-            'legacy.request_options',
-            'Legacy URL request options require conversion.',
-          ),
-        );
-      }
+      final request = _legacyRequest(
+        url,
+        urlKey ?? entry.key,
+        requestHeaders,
+        issues,
+      );
+      url = request.url;
       stages[entry.key] = SourceStage(
         url: url,
         list: list,
         fields: fields,
         nextPage: nextPage,
+        method: request.method,
+        body: request.body,
+        headers: request.headers,
       );
     }
     for (final key in [
@@ -207,29 +232,6 @@ class LegacySourceImporter {
             key,
             'legacy.capability_requires_review',
             'Preserved in original; this capability is not converted automatically.',
-          ),
-        );
-      }
-    }
-    final requestHeaders = <String, String>{};
-    if (input['header'] != null && input['header'] != '') {
-      try {
-        final raw = input['header'] is String
-            ? jsonDecode(input['header'] as String)
-            : input['header'];
-        if (raw is! Map ||
-            raw.entries.any((e) => e.key is! String || e.value is! String)) {
-          throw const FormatException(
-            'Static headers must be a string-to-string object',
-          );
-        }
-        requestHeaders.addAll(Map<String, String>.from(raw));
-      } on FormatException {
-        issues.add(
-          const LegacyIssue(
-            'header',
-            'legacy.dynamic_header',
-            'Dynamic or invalid headers require migration.',
           ),
         );
       }
@@ -271,3 +273,157 @@ class LegacySourceImporter {
     );
   }
 }
+
+class _LegacyRequest {
+  _LegacyRequest(this.url, {this.method = 'GET', this.body, this.headers});
+  final String url;
+  final String method;
+  final String? body;
+  final Map<String, String>? headers;
+}
+
+_LegacyRequest _legacyRequest(
+  String value,
+  String path,
+  Map<String, String> defaults,
+  List<LegacyIssue> issues,
+) {
+  void issue(String message) =>
+      issues.add(LegacyIssue(path, 'legacy.request_options', message));
+  if (value.contains('@js:') || value.contains('<js>')) {
+    issue('Script-generated requests require migration.');
+    return _LegacyRequest(value);
+  }
+  final separator = RegExp(r',\s*(?=\{)').firstMatch(value);
+  if (separator == null) return _LegacyRequest(value);
+  final url = value.substring(0, separator.start);
+  Map<String, Object?> options;
+  try {
+    final raw = jsonDecode(value.substring(separator.end));
+    if (raw is! Map) throw const FormatException('Expected options object');
+    options = Map<String, Object?>.from(raw);
+  } on FormatException {
+    issue('Request options must be strict literal JSON.');
+    return _LegacyRequest(url);
+  }
+  for (final key in options.keys) {
+    if (!['method', 'body', 'headers', 'charset'].contains(key)) {
+      issue('Unsupported request option: $key');
+    }
+  }
+  if (options['charset'] != null && options['charset'] != '') {
+    issue(
+      'Legacy charset controls query/form percent encoding; it cannot map to the new response charset.',
+    );
+  }
+  var method = 'GET';
+  if (options['method'] != null) {
+    if (options['method'] is! String) {
+      issue('Request method must be a literal string.');
+    } else {
+      method = switch ((options['method'] as String).toUpperCase()) {
+        'POST' => 'POST',
+        'HEAD' => 'HEAD',
+        _ => 'GET',
+      };
+    }
+  }
+  final headers = Map<String, String>.from(defaults);
+  if (options['headers'] != null) {
+    try {
+      final raw = options['headers'] is String
+          ? jsonDecode(options['headers'] as String)
+          : options['headers'];
+      if (raw is! Map ||
+          raw.entries.any(
+            (e) => e.key is! String || e.value is Map || e.value is List,
+          )) {
+        throw const FormatException('Expected flat header map');
+      }
+      headers.addAll(
+        raw.map((k, v) => MapEntry(k.toString(), v?.toString() ?? 'null')),
+      );
+    } on FormatException {
+      issue('Request headers must be a literal flat object or JSON string.');
+    }
+  }
+  String? body = options['body'] == null
+      ? null
+      : options['body'] is String
+      ? options['body'] as String
+      : jsonEncode(options['body']);
+  if (body != null && (body.contains('@js:') || body.contains('<js>'))) {
+    issue('Script body requires migration.');
+  }
+  for (final template in RegExp(
+    r'\{\{(.*?)\}\}',
+  ).allMatches('$url ${body ?? ''}')) {
+    if (![
+      'key',
+      'page',
+      'bookUrl',
+      'tocUrl',
+      'chapterUrl',
+      'baseUrl',
+    ].contains(template[1])) {
+      issue('Only known input placeholders can be converted.');
+    }
+  }
+  if (method == 'POST') {
+    if (headers.keys.any(
+      (k) => k.toLowerCase() == 'content-type' && k != 'Content-Type',
+    )) {
+      issue(
+        'Legacy Content-Type lookup is case sensitive; normalize explicitly before migration.',
+      );
+    }
+    final explicitType = headers['Content-Type'];
+    if (explicitType != null &&
+        RegExp(
+          r'charset\s*=\s*(?!utf-?8)',
+          caseSensitive: false,
+        ).hasMatch(explicitType)) {
+      issue(
+        'Non-UTF8 body Content-Type requires separate request-encoding migration.',
+      );
+    }
+    final trimmed = body?.trim() ?? '';
+    final jsonOrXml =
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('<') && trimmed.endsWith('>'));
+    if (explicitType == null || explicitType.isEmpty) {
+      if (jsonOrXml) {
+        headers['Content-Type'] = 'application/json; charset=UTF-8';
+      } else {
+        headers['Content-Type'] =
+            'application/x-www-form-urlencoded; charset=UTF-8';
+        if (body?.contains('{{') ?? false) {
+          issue('Templated form body needs encoding after substitution.');
+        } else {
+          body = _fixedForm(body ?? '');
+        }
+      }
+    }
+  }
+  return _LegacyRequest(
+    url,
+    method: method,
+    body: method == 'POST' ? body : null,
+    headers: headers,
+  );
+}
+
+String _fixedForm(String input) => input
+    .split('&')
+    .map((part) {
+      final split = part.indexOf('=');
+      String encode(String text) =>
+          RegExp(r'^(?:[A-Za-z0-9*._-]|%[0-9A-Fa-f]{2})*$').hasMatch(text)
+          ? text
+          : legacyFormEncode(text);
+      return split < 0
+          ? encode(part)
+          : '${encode(part.substring(0, split))}=${encode(part.substring(split + 1))}';
+    })
+    .join('&');

@@ -111,6 +111,70 @@ void main() {
       contains('legacy.dynamic_header'),
     );
   });
+  test(
+    'literal URL options preserve static requests and merge source headers',
+    () {
+      final input = <String, Object?>{
+        'bookSourceUrl': 'https://books.test',
+        'header': {'X-Auth': 'base', 'X-Replace': 'old'},
+        'searchUrl': '/search,{"method":"post","headers":{"X-Extra":true,"X-Replace":"new"},"body":{"key":"{{key}}"}}',
+        'ruleSearch': {'bookList': 'class.book'},
+      };
+      final imported = LegacySourceImporter().import(input);
+      final stage = imported.source.stages['search']!;
+      expect(stage.url, '/search');
+      expect(stage.method, 'POST');
+      expect(stage.body, '{"key":"{{key}}"}');
+      expect(stage.headers, {
+        'X-Auth': 'base',
+        'X-Replace': 'new',
+        'X-Extra': 'true',
+        'Content-Type': 'application/json; charset=UTF-8',
+      });
+      expect(imported.requiresManualWork, false);
+      expect(imported.original, input);
+    },
+  );
+  test('fixed form encodes literals and preserves valid encoded parts', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl': '/search,{"method":"POST","body":"key=中文&space=a b&plus=a+b&encoded=%E4%B8%AD"}',
+      'ruleSearch': {'bookList': 'class.book'},
+    });
+    expect(
+      imported.source.stages['search']!.body,
+      'key=%E4%B8%AD%E6%96%87&space=a+b&plus=a%2Bb&encoded=%E4%B8%AD',
+    );
+    expect(imported.requiresManualWork, false);
+  });
+  test('unsupported URL options stay manual and charset never changes response decoder', () {
+    for (final options in [
+      '{"charset":"GBK"}',
+      '{"webView":true}',
+      '{"retry":1}',
+      '{"bodyJs":"result"}',
+      '{"headers":{"X":{"nested":true}}}',
+      '{"method":"POST","body":"key={{key}}"}',
+      '{broken}',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'searchUrl': '/search,$options',
+        'ruleSearch': {'bookList': 'class.book'},
+      });
+      expect(imported.requiresManualWork, true, reason: options);
+      expect(imported.source.stages['search']!.charset, isNull);
+    }
+  });
+  test('commas in a plain URL are not misclassified as options', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl': '/search?keys=a,b',
+      'ruleSearch': {'bookList': 'class.book'},
+    });
+    expect(imported.requiresManualWork, false);
+    expect(imported.source.stages['search']!.url, '/search?keys=a,b');
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

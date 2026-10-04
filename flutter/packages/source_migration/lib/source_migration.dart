@@ -317,7 +317,18 @@ class SourceMigrator {
           );
           continue;
         }
-        final rule = decoded.startsWith('@') || decoded.startsWith(r'$')
+        final rule = decoded.toLowerCase().startsWith('@css:')
+            ? '@legacy:${decoded.substring(5)}'
+            : [
+                '@text',
+                '@ownText',
+                '@textNodes',
+                '@html',
+                '@all',
+                '@children',
+              ].contains(decoded)
+            ? '@legacy:$decoded'
+            : decoded.startsWith('@') || decoded.startsWith(r'$')
             ? decoded
             : '@legacy:$decoded';
         final value = decoded.isEmpty
