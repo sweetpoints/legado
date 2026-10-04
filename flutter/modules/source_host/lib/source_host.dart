@@ -76,11 +76,22 @@ class SourceHost {
         source = SourceDefinition.fromJson(raw);
       } else {
         final legacy = LegacySourceImporter().import(raw);
-        if (legacy.requiresManualWork) {
+        final blockingIssues = legacy.issues
+            .where(
+              (issue) =>
+                  !(legacy.source.metadata['legacyBaseUrlUnavailable'] ==
+                          true &&
+                      issue.code == 'legacy.base_url_requires_review' &&
+                      issue.path == 'bookSourceUrl'),
+            )
+            .toList();
+        // This one reviewed identity risk is enforced by the engine's absolute
+        // stage URL guard; other unsupported capabilities remain blocking.
+        if (blockingIssues.isNotEmpty) {
           throw PlatformException(
             code: 'legacy_requires_migration',
             message: 'This legacy source requires migration or unsupported capabilities',
-            details: legacy.issues.map((issue) => issue.toJson()).toList(),
+            details: blockingIssues.map((issue) => issue.toJson()).toList(),
           );
         }
         source = legacy.source;
