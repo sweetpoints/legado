@@ -40,9 +40,12 @@ import io.legado.app.help.webView.toWebViewRequestConfig
 import io.legado.app.model.Debug
 import io.legado.app.utils.runOnUI
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -86,52 +89,58 @@ class BackstageWebView(
         }
     }
 
-    suspend fun getStrResponse(): StrResponse = withTimeout(timeout ?: 60000L) {
-        traceStage("await-response")
-        suspendCancellableCoroutine { block ->
-            block.invokeOnCancellation {
-                traceStage("cancelled")
-                runOnUI {
-                    if (BuildConfig.DEBUG) {
-                        pooledWebView?.let { lease ->
-                            val view = lease.realWebView
-                            traceStage("cancel-state lease=${System.identityHashCode(lease)} " +
-                                "generation=${lease.recycleGeneration} inUse=${lease.isInUse} " +
-                                "clientMatches=${view.webViewClient === requestWebViewClient} " +
-                                "attached=${view.isAttachedToWindow} visibility=${view.visibility} " +
-                                "progress=${view.progress} jsEnabled=${view.settings.javaScriptEnabled}")
+    suspend fun getStrResponse(): StrResponse = try {
+        withTimeout(timeout ?: 60000L) {
+            traceStage("await-response")
+            suspendCancellableCoroutine { block ->
+                block.invokeOnCancellation {
+                    traceStage("cancelled")
+                    runOnUI {
+                        if (BuildConfig.DEBUG) {
+                            pooledWebView?.let { lease ->
+                                val view = lease.realWebView
+                                traceStage("cancel-state lease=${System.identityHashCode(lease)} " +
+                                    "generation=${lease.recycleGeneration} inUse=${lease.isInUse} " +
+                                    "clientMatches=${view.webViewClient === requestWebViewClient} " +
+                                    "attached=${view.isAttachedToWindow} visibility=${view.visibility} " +
+                                    "progress=${view.progress} jsEnabled=${view.settings.javaScriptEnabled}")
+                            }
+                        }
+                        destroy()
+                    }
+                }
+                callback = object : Callback() {
+                    override fun onResult(response: StrResponse) {
+                        traceStage("response-ready")
+                        if (!block.isCompleted) {
+                            block.resume(response)
                         }
                     }
-                    destroy()
-                }
-            }
-            callback = object : Callback() {
-                override fun onResult(response: StrResponse) {
-                    traceStage("response-ready")
-                    if (!block.isCompleted) {
-                        block.resume(response)
+
+                    override fun onError(error: Throwable) {
+                        traceStage("response-error")
+                        if (!block.isCompleted)
+                            block.resumeWithException(error)
                     }
                 }
-
-                override fun onError(error: Throwable) {
-                    traceStage("response-error")
-                    if (!block.isCompleted)
-                        block.resumeWithException(error)
+                if (javaScript == null && delayTime == 0L) {
+                    delayTime = 900L
                 }
-            }
-            if (javaScript == null && delayTime == 0L) {
-                delayTime = 900L
-            }
-            runOnUI {
-                traceStage("load-main-entered")
-                try {
-                    load(block.context)
-                } catch (error: Throwable) {
-                    destroy()
-                    block.resumeWithException(error)
+                runOnUI {
+                    if (!block.isActive) return@runOnUI
+                    traceStage("load-main-entered")
+                    try {
+                        load(block.context)
+                    } catch (error: Throwable) {
+                        destroy()
+                        block.resumeWithException(error)
+                    }
                 }
             }
         }
+    } finally {
+        // Await disposal even on timeout/cancellation; WebView destruction belongs to Main.
+        withContext(NonCancellable + Main) { destroy() }
     }
 
     private fun getEncoding(): String {
@@ -181,7 +190,9 @@ class BackstageWebView(
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(requestConfig: WebViewRequestConfig): WebView {
-        val pooledWebView = WebViewPool.acquire(appCtx)
+        // Rule/background loads have no window to restore a former UI WebView's host state.
+        // Give them a fresh, request-owned instance and destroy it on completion/cancellation.
+        val pooledWebView = WebViewPool.acquire(appCtx, recyclable = false)
         this.pooledWebView = pooledWebView
         val webView = pooledWebView.realWebView
         if (BuildConfig.DEBUG) traceStage("lease-acquired lease=${System.identityHashCode(pooledWebView)} " +
@@ -216,9 +227,10 @@ class BackstageWebView(
     }
 
     private fun destroy() {
-        traceStage("release-webview")
-        pooledWebView?.let { WebViewPool.release(it) }
+        val lease = pooledWebView ?: return
         pooledWebView = null
+        traceStage("release-webview")
+        WebViewPool.release(lease)
     }
 
     private fun getJs(): String {

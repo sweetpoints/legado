@@ -6,7 +6,8 @@ import io.legado.app.ui.rss.read.VisibleWebView
 
 class PooledWebView(
     val realWebView: VisibleWebView, // 真正的WebView实例
-    val id: String // 唯一标识
+    val id: String, // 唯一标识
+    val recyclable: Boolean = true,
 ) {
     var isInUse: Boolean = false // 是否正在被使用
     var recycleGeneration: Long = 0

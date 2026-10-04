@@ -123,8 +123,9 @@ internal fun CodeDialogScreen(
         remember(syntax, state.matches, matchBackground, syntaxRange) {
             VisualTransformation { text ->
                 val transformStart = performance?.start()
-                val annotated = buildAnnotatedString {
-                    append(if (syntax.text == text.text) syntax else AnnotatedString(text.text))
+                val source = if (syntax.text == text.text) syntax else text
+                val annotated = if (state.matches.isEmpty()) source else buildAnnotatedString {
+                    append(source)
                     state.matches.forEach { range ->
                         val start = maxOf(range.first, syntaxRange.first)
                         val end = minOf(range.last + 1, syntaxRange.last + 1, length)

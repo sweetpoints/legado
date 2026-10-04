@@ -1,6 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -68,4 +69,76 @@ class CodeSyntaxProjectionTest {
         }
         assertTrue(result.exceptionOrNull() is CancellationException)
     }
+
+    @Test
+    fun everyRuleTokenKeepsFullProjectionColorsAtEachViewportBoundary() = runTest {
+        val tokens = listOf(
+            "||", "&&", "%%", "@js:", "@Json:", "@css:", "@@", "@XPath:", "@webjs:",
+            "\"key\":", "\"", "{", "}", "[", "]", "\\n",
+            ":", "==", ">", "<", "!=", ">=", "<=", "->", "=", "%", "-", "-=", "%=",
+            "+", "+=", "^", "&", "|::", "?", "*",
+            "var", "let", "const", "function", "return", "if", "else", "for", "while", "do",
+            "break", "continue", "switch", "case", "default", "try", "catch", "finally",
+            "throw", "new", "delete", "typeof", "instanceof", "in", "of", "void", "this",
+            "true", "false", "null", "undefined",
+        )
+        val input = "😀 " + tokens.joinToString(" ") + " 中文"
+        val full = projectCodeSyntax(input, colors)
+        for (start in input.indices) {
+            for (width in listOf(1, 2, 7, 17)) {
+                assertViewportMatches(full, start until (start + width).coerceAtMost(input.length))
+            }
+        }
+    }
+
+    @Test
+    fun clippedKeywordsRespectOriginalUnicodeAndIdentifierWordBoundaries() = runTest {
+        val input = "😀 中文var var中文 _var var_ avar var9 \nvar 中文 return\ninstanceof"
+        val full = projectCodeSyntax(input, colors)
+        for (start in input.indices) {
+            assertViewportMatches(full, start until (start + 1).coerceAtMost(input.length))
+            assertViewportMatches(full, start until (start + 9).coerceAtMost(input.length))
+        }
+    }
+
+    @Test
+    fun viewportInsideLongJsonKeyMatchesFullTokenWithoutInventingMalformedKeys() = runTest {
+        val key = "Abc123".repeat(3000)
+        for (suffix in listOf("\": true", "\" true")) {
+            val input = "😀 {\"$key$suffix}"
+            val full = projectCodeSyntax(input, colors)
+            val middle = input.length / 2
+            assertViewportMatches(full, middle until middle + 1)
+            assertViewportMatches(full, middle - 41 until middle + 83)
+            val closingQuote = input.lastIndexOf('"')
+            assertViewportMatches(full, closingQuote - 1 until closingQuote + 2)
+        }
+    }
+
+    @Test
+    fun emptyViewportsPreserveTheDocumentAndNeverPublishColorSpans() = runTest {
+        for (input in listOf("", "😀 @js: var key = {\"key\": true};")) {
+            for (position in listOf(0, input.length / 2, input.length).distinct()) {
+                val projected = projectCodeSyntax(input, colors, position until position)
+                assertEquals(input, projected.text)
+                assertTrue("Empty viewport at $position must have no spans", projected.spanStyles.isEmpty())
+            }
+        }
+    }
+
+    private suspend fun assertViewportMatches(full: AnnotatedString, viewport: IntRange) {
+        val projected = projectCodeSyntax(full.text, colors, viewport)
+        assertEquals(full.text, projected.text)
+        assertTrue(projected.spanStyles.all {
+            it.start >= viewport.first && it.end <= viewport.last + 1 && it.start < it.end
+        })
+        // The full-document rendering is the oracle, including overlapping rule priorities.
+        // Compare the effective ordered styles at every UTF-16 position, not region arithmetic.
+        for (offset in viewport) {
+            val expected = full.spanStyles.filter { offset >= it.start && offset < it.end }.map { it.item }
+            val actual = projected.spanStyles.filter { offset >= it.start && offset < it.end }.map { it.item }
+            assertEquals("Viewport=$viewport UTF-16 offset=$offset", expected, actual)
+        }
+    }
+
 }
