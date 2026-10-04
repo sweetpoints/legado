@@ -26,6 +26,7 @@ import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.model.jsSource.JsSourceBook
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
+import io.legado.app.utils.StringUtils.wordCountFormat
 import io.legado.app.utils.isTrue
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineScope
@@ -40,7 +41,7 @@ import splitties.init.appCtx
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
 
-    private fun usesLegacyChapterFields(source: BookSource): Boolean {
+    private fun usesLegacyDartFields(source: BookSource): Boolean {
         val definition =
             source.bookSourceComment
                 .orEmpty()
@@ -55,6 +56,42 @@ object WebBook {
             legacy.isJsonPrimitive &&
             legacy.asJsonPrimitive.isBoolean &&
             legacy.asBoolean
+    }
+
+    private fun canRenameDartBook(source: BookSource): Boolean {
+        if (!usesLegacyDartFields(source)) return true
+        val definition =
+            source.bookSourceComment
+                .orEmpty()
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("@source:v1 ") }
+                ?.removePrefix("@source:v1 ")
+        if (definition != null) {
+            val original =
+                GSON.fromJson(definition, JsonObject::class.java)
+                    .getAsJsonObject("metadata")
+                    ?.get("legacyOriginal")
+            if (original?.isJsonObject == true) {
+                val permission =
+                    original.asJsonObject.getAsJsonObject("ruleBookInfo")?.get("canReName")
+                return permission?.isJsonPrimitive == true && !permission.asString.isBlank()
+            }
+        }
+        return !source.getBookInfoRule().canReName.isNullOrBlank()
+    }
+
+    private fun normalizeDartBookFields(
+        source: BookSource,
+        row: Map<String, Any?>,
+    ): Map<String, Any?> {
+        if (!usesLegacyDartFields(source)) return row
+        return row.toMutableMap().apply {
+            (row["name"] as? String)?.let { this["name"] = BookHelp.formatBookName(it) }
+            (row["author"] as? String)?.let { this["author"] = BookHelp.formatBookAuthor(it) }
+            (row["wordCount"] as? String)?.let { this["wordCount"] = wordCountFormat(it) }
+            (row["kind"] as? String)?.let { this["kind"] = it.replace("\n", ",") }
+        }
     }
 
     /** 搜索 */
@@ -90,11 +127,15 @@ object WebBook {
                 return@withContext ArrayList(
                     rows
                         .map { row ->
-                            GSON.fromJson(GSON.toJson(row), SearchBook::class.java).apply {
-                                origin = bookSource.bookSourceUrl
-                                originName = bookSource.bookSourceName
-                                type = bookSource.getBookType()
-                            }
+                            GSON.fromJson(
+                                    GSON.toJson(normalizeDartBookFields(bookSource, row)),
+                                    SearchBook::class.java,
+                                )
+                                .apply {
+                                    origin = bookSource.bookSourceUrl
+                                    originName = bookSource.bookSourceName
+                                    type = bookSource.getBookType()
+                                }
                         }
                         .filter { filter?.invoke(it.name, it.author, it.kind) != false }
                 )
@@ -178,18 +219,33 @@ object WebBook {
         page: Int? = 1,
     ): ArrayList<SearchBook> {
         if (DartSourceEngine.selected(bookSource)) {
+            val exploreUrl =
+                if (usesLegacyDartFields(bookSource)) {
+                    val expanded = url.replace("{{page}}", (page ?: 1).toString())
+                    require(
+                        !Regex("(?i)@(?:web)?js:|<js>|javascript:|,\\s*\\{|[<>]|\\{\\{|\\}\\}")
+                            .containsMatchIn(expanded)
+                    ) {
+                        "Legacy explore URL requires migration: scripts, request options and complex templates are unsupported"
+                    }
+                    expanded
+                } else url
             return ArrayList(
                 DartSourceEngine.execute(
                         bookSource,
                         "explore",
-                        mapOf("url" to url, "page" to (page ?: 1)),
+                        mapOf("url" to url, "exploreUrl" to exploreUrl, "page" to (page ?: 1)),
                     )
                     .map {
-                        GSON.fromJson(GSON.toJson(it), SearchBook::class.java).apply {
-                            origin = bookSource.bookSourceUrl
-                            originName = bookSource.bookSourceName
-                            type = bookSource.getBookType()
-                        }
+                        GSON.fromJson(
+                                GSON.toJson(normalizeDartBookFields(bookSource, it)),
+                                SearchBook::class.java,
+                            )
+                            .apply {
+                                origin = bookSource.bookSourceUrl
+                                originName = bookSource.bookSourceName
+                                type = bookSource.getBookType()
+                            }
                     }
             )
         }
@@ -268,14 +324,12 @@ object WebBook {
     ): Book {
         if (DartSourceEngine.selected(bookSource)) {
             val fields =
-                DartSourceEngine.execute(bookSource, "info", DartSourceEngine.jsonObject(book))
-                    .single()
-            val modern =
-                bookSource.bookSourceComment.orEmpty().lineSequence().any {
-                    it.trim().startsWith("@source:v1 ")
-                }
-            val allowRename =
-                canReName && (modern || !bookSource.getBookInfoRule().canReName.isNullOrBlank())
+                normalizeDartBookFields(
+                    bookSource,
+                    DartSourceEngine.execute(bookSource, "info", DartSourceEngine.jsonObject(book))
+                        .single(),
+                )
+            val allowRename = canReName && canRenameDartBook(bookSource)
             (fields["name"] as? String)
                 ?.takeIf { it.isNotEmpty() }
                 ?.let {
@@ -409,7 +463,7 @@ object WebBook {
                     require(!runPerJs || bookSource.ruleToc?.preUpdateJs.isNullOrBlank()) {
                         "Dart engine does not support legacy preUpdateJs; migrate the source first"
                     }
-                    val legacy = usesLegacyChapterFields(bookSource)
+                    val legacy = usesLegacyDartFields(bookSource)
                     val chapters =
                         DartSourceEngine.execute(
                                 bookSource,

@@ -460,6 +460,163 @@ class FlutterSourceEngineTest {
     }
 
     @Test
+    fun legacyExploreUsesSelectedCategoryAndNormalizesBookFields() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val requests = mutableListOf<String>()
+            val serving =
+                async(Dispatchers.IO) {
+                    repeat(3) {
+                        server.accept().use { socket ->
+                            socket.soTimeout = 10_000
+                            val reader = socket.getInputStream().bufferedReader()
+                            requests.add(reader.readLine().split(' ')[1])
+                            while (!reader.readLine().isNullOrEmpty()) {}
+                            val body =
+                                "<div class='row'><a href='/book'>  Title 作者 Author  </a><span class='author'>  作者：Author  </span><span class='words'>123</span><span class='kind'>Fantasy</span><span class='kind'>Adventure</span></div>"
+                                    .toByteArray(Charsets.UTF_8)
+                            socket.getOutputStream().apply {
+                                write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                        .toByteArray()
+                                )
+                                write(body)
+                                flush()
+                            }
+                        }
+                    }
+                }
+            val fields =
+                mapOf(
+                    "name" to "a@text",
+                    "author" to ".author@text",
+                    "wordCount" to ".words@text",
+                    "kind" to ".kind@text",
+                    "bookUrl" to "a@href",
+                )
+            val definition =
+                mapOf(
+                    "bookSourceUrl" to origin,
+                    "bookSourceName" to "Legacy metadata",
+                    "bookSourceComment" to "@engine:dart",
+                    "enabledCookieJar" to true,
+                    "searchUrl" to "$origin/search",
+                    "exploreUrl" to "A::$origin/a\nB::$origin/b?page={{page}}",
+                    "ruleSearch" to (fields + mapOf("bookList" to ".row")),
+                    "ruleExplore" to (fields + mapOf("bookList" to ".row")),
+                    "ruleBookInfo" to (fields - "bookUrl" + mapOf("canReName" to "@text")),
+                )
+            val selected = Gson().fromJson(Gson().toJson(definition), BookSource::class.java)
+            val explored =
+                withTimeout(60_000) {
+                    WebBook.exploreBookAwait(selected, "$origin/b?page={{page}}", 2)
+                }
+            assertEquals("Title", explored.single().name)
+            assertEquals("Author", explored.single().author)
+            assertEquals("123字", explored.single().wordCount)
+            assertEquals("Fantasy,Adventure", explored.single().kind)
+            val searched =
+                withTimeout(60_000) {
+                    WebBook.searchBookAwait(
+                        selected,
+                        "Title",
+                        filter = { name, author, _ -> name == "Title" && author == "Author" },
+                    )
+                }
+            assertEquals(1, searched.size)
+            val book = Book(bookUrl = "$origin/book", name = "Old", author = "Old")
+            withTimeout(60_000) { WebBook.getBookInfoAwait(selected, book, canReName = true) }
+            assertEquals("Title", book.name)
+            assertEquals("Author", book.author)
+            assertEquals("123字", book.wordCount)
+            assertEquals("Fantasy,Adventure", book.kind)
+            serving.await()
+            assertEquals(listOf("/b?page=2", "/search", "/book"), requests)
+            for (unsupported in
+                listOf(
+                    "$origin/b,{\"method\":\"POST\"}",
+                    "$origin/b/{{java.get('x')}}",
+                    "$origin/b/<1,2>",
+                )) {
+                val rejected = runCatching { WebBook.exploreBookAwait(selected, unsupported) }
+                assertTrue(
+                    rejected.exceptionOrNull()?.message.orEmpty().contains("requires migration")
+                )
+            }
+        }
+    }
+
+    @Test
+    fun modernBookFieldsRemainUnchangedAndMigratedFieldsUseLegacyFormatting() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        val definition =
+            source(
+                "function search(){return [{name:'  Title  ',author:'  Author  ',wordCount:'123',kind:'Fantasy\\nAdventure',bookUrl:'https://example.org/book'}]} function getBookInfo(){return {name:'  Title  ',author:'  Author  ',wordCount:'123',kind:'Fantasy\\nAdventure'}}"
+            )
+        fun selected(json: String) =
+            BookSource(bookSourceUrl = "https://example.org/test").apply {
+                bookSourceComment = "@source:v1 $json"
+            }
+        val modern = WebBook.searchBookAwait(selected(definition), "Title").single()
+        assertEquals("  Title  ", modern.name)
+        assertEquals("  Author  ", modern.author)
+        assertEquals("123", modern.wordCount)
+        assertEquals("Fantasy\nAdventure", modern.kind)
+        val book = Book(bookUrl = "https://example.org/book")
+        WebBook.getBookInfoAwait(selected(definition), book)
+        assertEquals("  Title  ", book.name)
+        assertEquals("  Author  ", book.author)
+        val candidate =
+            Gson()
+                .fromJson(definition, com.google.gson.JsonObject::class.java)
+                .apply {
+                    add(
+                        "metadata",
+                        Gson()
+                            .toJsonTree(
+                                mapOf(
+                                    "legacy" to false,
+                                    "legacyOriginal" to
+                                        mapOf(
+                                            "bookSourceUrl" to "https://example.org/test",
+                                            "ruleBookInfo" to mapOf("canReName" to "@text"),
+                                        ),
+                                )
+                            ),
+                    )
+                }
+                .toString()
+        val migrated =
+            WebBook.searchBookAwait(
+                    selected(candidate),
+                    "Title",
+                    filter = { name, author, _ -> name == "Title" && author == "Author" },
+                )
+                .single()
+        assertEquals("123字", migrated.wordCount)
+        assertEquals("Fantasy,Adventure", migrated.kind)
+        WebBook.getBookInfoAwait(selected(candidate), book)
+        assertEquals("Title", book.name)
+        assertEquals("Author", book.author)
+        val noRename =
+            Gson()
+                .fromJson(candidate, com.google.gson.JsonObject::class.java)
+                .apply {
+                    getAsJsonObject("metadata")
+                        .getAsJsonObject("legacyOriginal")
+                        .getAsJsonObject("ruleBookInfo")
+                        .remove("canReName")
+                }
+                .toString()
+        book.name = "Known title"
+        book.author = "Known author"
+        WebBook.getBookInfoAwait(selected(noRename), book)
+        assertEquals("Known title", book.name)
+        assertEquals("Known author", book.author)
+    }
+
+    @Test
     fun sessionVariablesSurviveEngineShutdownAndStaySourceIsolated() = runBlocking {
         val unique = java.util.UUID.randomUUID().toString()
         val definition =
