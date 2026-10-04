@@ -34,6 +34,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     private var closed = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val browserJobs = mutableMapOf<String, Job>()
+    private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
     private val ready = CompletableDeferred<Unit>()
     private val mutableTasks = MutableStateFlow<Map<String, SourceTaskState>>(emptyMap())
     override val tasks: StateFlow<Map<String, SourceTaskState>> = mutableTasks
@@ -160,8 +161,10 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         ensureStarted()
         val taskId = UUID.randomUUID().toString()
         return withContext(Dispatchers.Main.immediate) {
+            check(!closed) { "Flutter source repository is closed" }
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             val response = CompletableDeferred<Any?>()
+            responses[taskId] = response
             channel!!.invokeMethod(
                 "execute",
                 mapOf(
@@ -203,6 +206,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 // Cancellation also reaches Dart; completion is idempotent there.
                 withContext(NonCancellable + Dispatchers.Main.immediate) {
                     channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
+                    responses.remove(taskId)
                     mutableTasks.value = mutableTasks.value - taskId
                 }
             }

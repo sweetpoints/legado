@@ -55,7 +55,7 @@ class FlutterSourceEngineTest {
                 """
                 async function search(input) {
                     const title = await Promise.resolve(input.key + ' V8');
-                    return [{name:title,author:'Author',bookUrl:'https://example.org/book',tocUrl:'https://example.org/toc'}];
+                    return [{name:title,author:'Author',bookUrl:'https://example.org/book',tocUrl:'https://example.org/toc',digest:await source.crypto.md5('abc')}];
                 }
                 async function getBookInfo(input) {
                     return {name:'',author:'',tocUrl:'',coverUrl:'',intro:'',kind:'',wordCount:'',latestChapterTitle:''};
@@ -68,6 +68,19 @@ class FlutterSourceEngineTest {
                     .trimIndent()
             )
         withTimeout(60_000) {
+            assertEquals(
+                "900150983cd24fb0d6963f7d28e17f72",
+                bridge.execute("search", definition, mapOf("key" to "Test")).single()["digest"],
+            )
+            val oldApi = runCatching {
+                bridge.execute(
+                    "search",
+                    source("function search(){return [{name:java.md5Encode('abc')}] }"),
+                    emptyMap(),
+                )
+            }
+            assertTrue("Modern source must reject java.*", oldApi.isFailure)
+            assertTrue(oldApi.exceptionOrNull()?.message.orEmpty().contains("script_error"))
             assertEquals(
                 "Test V8",
                 bridge.execute("search", definition, mapOf("key" to "Test")).single()["name"],

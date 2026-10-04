@@ -11,10 +11,7 @@ import 'session_store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final host = SourceHost(
-    (source) => SourceEngine(
-      runtime: _SourceRuntime(legacy: source.metadata['legacy'] == true),
-      platform: SourcePlatform(sourceId: source.id),
-    ),
+    createSourceEngine,
     sessionStore: const PlatformSessionStore(),
   );
   await host.attach(
@@ -40,6 +37,16 @@ Future<void> main() async {
     },
   );
 }
+
+/// Shared production composition for the module and its integration tests.
+SourceEngine createSourceEngine(
+  SourceDefinition source, {
+  ScriptRuntime? runtime,
+  ScriptHost? platform,
+}) => SourceEngine(
+  runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
+  platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
+);
 
 class _SourceRuntime implements ScriptRuntime, SourceRuntimeState {
   _SourceRuntime({required this.legacy})
