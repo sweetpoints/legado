@@ -17,7 +17,7 @@
 | `issues` | `{path, code, message}` 列表 |
 | `verified` | 当前固定为 `false` |
 
-原始格式字段映射见[旧版 Reference](../reference/legacy/README.md)。当前没有自动新旧引擎对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
+原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成 method/body/headers，旧charset及动态或未知选项仍为manualRequired。当前没有自动新旧引擎对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
 
 ## 脚本转换
 
