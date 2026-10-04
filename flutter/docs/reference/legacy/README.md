@@ -32,9 +32,9 @@
 | body | 字符串原样，其他非null JSON值序列化；只在POST阶段保留 |
 | charset | 任意非空值均需人工迁移；不写入新版 stage.charset |
 
-POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body按旧行为设置 application/json; charset=UTF-8；其他body设置原 application/x-www-form-urlencoded。无charset覆盖时，固定表单不预编码，保留原body并设置bodyEncoding=legacyFormUtf8，在替换输入后编码。模板表单要求以固定非空ASCII参数名和等号开头（`^[A-Za-z0-9*._-]+=`）且只含已知输入占位符；纯 `{{key}}`、替换后可能改变body类型、非空非blank但编码为空的表单（如全&）仍需人工处理。运行时模板值限制见[阶段请求体](../v1/rules.md)。
+POST没有明确非空 Content-Type 时：形似JSON对象或数组的body按旧行为设置 application/json; charset=UTF-8；其他body设置原 application/x-www-form-urlencoded。无charset覆盖时，固定表单不预编码，保留原body并设置bodyEncoding=legacyFormUtf8，在替换输入后编码。模板表单要求以固定非空ASCII参数名和等号开头（`^[A-Za-z0-9*._-]+=`）且只含已知输入占位符；纯 `{{key}}`、替换后可能改变body类型、非空非blank但编码为空的表单（如全&）仍需人工处理。运行时模板值限制见[阶段请求体](../v1/rules.md)。
 
-旧 charset控制查询/表单百分号编码，与新版原始body字节/响应覆盖不同，因此即使UTF-8也保持人工审查。method/headers 中的模板、替换后可能改变默认 Content-Type 推断的 body、非UTF-8 Content-Type、不同大小写的content-type键、动态JS、未知选项（包括webview/retry/type）、非法JSON/headers和未知模板表达式均产生 legacy.request_options。所有旧URL（包括没有请求选项的URL）均只接受已知模板名 key/page/bookUrl/tocUrl/chapterUrl/baseUrl/exploreUrl；复杂表达式、未闭合模板及 `<1,2,3>` 等页码选择语法需人工迁移。候选执行仍要求输入提供对应值。
+旧 charset控制查询/表单百分号编码，与新版原始body字节/响应覆盖不同，因此即使UTF-8也保持人工审查。method/headers 中的模板、替换后可能改变默认 Content-Type 推断的 body、非UTF-8 Content-Type、不同大小写的content-type键、动态JS、未知选项（包括webview/retry/type）、非法JSON/headers和未知模板表达式均产生 legacy.request_options。所有旧URL（包括没有请求选项的URL）均只接受已知模板名 key/page/bookUrl/tocUrl/chapterUrl/baseUrl/exploreUrl；有限page加减canonical整数及URL `<a,b,...>` 由legacyPageTemplates支持，其他复杂表达式和未闭合模板需人工迁移。候选执行仍要求输入提供对应值。
 
 测试依据：packages/source_legacy/test/source_legacy_test.dart 中 literal URL options、fixed form、unsupported URL options 用例。导入器保留原始书源；存在issue的候选仍为manualRequired。
 
@@ -54,9 +54,9 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 
 ## 发现入口输入
 
-原发现菜单保存在metadata.legacyOriginal；静态JSON数组 `[{"title":"入口","url":"https://example.invalid/"}]` 或 `title::URL` 行（换行/&&分隔）另解析为metadata.legacyExploreItems，条目统一为title/url字符串及可选style字段；style可为null或JSON对象，保持深拷贝、嵌套内容及显式null键。style只提供presentation数据，不执行或参与URL规则检查。未知type/action等键、primitive/list类型style仍产生legacy.explore_menu_requires_review。普通单URL保留空title入口。每个URL独立检查，标题不按脚本标记误判；动态菜单、非法形状及每项请求options仍需人工处理，不把整个菜单当URL/options。stages.explore仍固定GET、无body和阶段headers，使用全局静态headers，URL为 `{{exploreUrl}}`。调用方提供input.exploreUrl，即用户选中的具体URL；现代入口仍可使用input.url。CLI execute/compare旧发现阶段也必须通过--variables提供exploreUrl。
+原发现菜单保存在metadata.legacyOriginal；静态JSON数组 `[{"title":"入口","url":"https://example.invalid/"}]` 或 `title::URL` 行（换行/&&分隔）另解析为metadata.legacyExploreItems，条目统一为title/url字符串及可选style字段；style可为null或JSON对象，保持深拷贝、嵌套内容及显式null键。style只提供presentation数据，不执行或参与URL规则检查。未知type/action等键、primitive/list类型style仍产生legacy.explore_menu_requires_review。普通单URL保留空title入口。每个URL独立检查，标题不按脚本标记误判；动态菜单、非法形状及未知或动态每项请求options仍需人工处理，不把整个菜单当URL/options。导入阶段标记legacyRequestInput=exploreUrl，静态菜单URL保留原请求options；运行前adaptLegacyRequest按当前选中URL解析GET/POST/HEAD、literal body/headers及已知模板，阶段请求头覆盖合并全局头。调用方提供input.exploreUrl，即用户选中的具体URL；现代入口仍可使用input.url。CLI execute/compare旧发现阶段也必须通过--variables提供exploreUrl。
 
-菜单脚本、逗号请求选项和复杂模板均需人工迁移；逗号菜单选项产生 legacy.explore_options，不会套用到所有选中URL。@js:/<js>等脚本标记按大小写不敏感检测。选中入口自身的动态请求参数也必须显式迁移。
+菜单脚本、未知options和超出受限语法的复杂模板需人工迁移；支持的每分类字面量options只用于当前选中入口，不会套用到所有入口。@js:/<js>等脚本标记按大小写不敏感检测。选中入口自身的动态请求参数也必须显式迁移。
 
 ## 书源ID与请求基址
 
@@ -66,6 +66,12 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 
 默认source_host对manual issue阻断；只在flag为true且所有issue均精确为code=legacy.base_url_requires_review、path=bookSourceUrl时，允许受阶段绝对URL guard保护的执行。候选仍为manualRequired，其他issue继续阻断，详见[宿主例外](../v1/android.md)。
 
-旧POST请求选项的字符串body含模板时，无论表单、JSON、XML或显式Content-Type，均设置bodyTemplateMode=legacyJsonString，替换前按新版规则的保护条件拒绝会改变旧JSON字符串解析的输入。body为object/array且含模板时，因外层JSON替换层不同产生legacy.request_options，需人工迁移；固定object/array仍支持序列化，固定无模板body保持raw模式。
+旧POST请求选项的字符串body含模板时，无论表单、JSON或显式Content-Type，均设置bodyTemplateMode=legacyJsonString，替换前按新版规则的保护条件拒绝会改变旧JSON字符串解析的输入。body为object/array且含模板时，因外层JSON替换层不同产生legacy.request_options，需人工迁移；固定object/array仍支持序列化，固定无模板body保持raw模式。
 
 普通HTTP IPv6发现URL可以保留；title::URL行若包含额外 `::`（例如带IPv6的分类URL），metadata保留完整URL，但产生legacy.explore_menu_requires_review并保持manualRequired，因为旧split全部 `::` 的结果可能截断，不宣称自动等价。
+
+旧请求options的body含任意 `<` 或 `>` 时需人工迁移，包括XML。旧引擎会先对整份options展开角括号，不能把XML自动兼容成普通raw body；此前XML自动兼容说明已撤回。现代raw XML请求不受此旧来源限制。受限page算术/URL choice及适配器注册契约见[规则Reference](../v1/rules.md)。
+
+URL choice必须为静态分支：其内部任意 `{{...}}`（包括page算术）、嵌套/未闭合角括号需人工处理。算术可独立出现在choice之外。旧URL/body模板动态插入角括号由运行时保护拒绝，不能借此自动模拟旧options全字符串替换顺序。
+
+导入器对包含已知input模板的普通旧URL也设置legacyPageTemplates=true，确保动态角括号输入无法绕过保护；并不因此允许任意JavaScript表达式。静态search锚点的query可包含有限page算术，host/path模板仍不能提供确定锚点。单项 `<>` 也不属于支持的URL choice。

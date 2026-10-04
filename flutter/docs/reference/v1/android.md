@@ -66,7 +66,7 @@ TOC 的 isVip/isPay/isVolume 原生Boolean直接保留。旧源的字符串按�
 
 旧来源判定包括没有v1配置的 @engine:dart、v1 metadata.legacy=true，以及 metadata.legacyOriginal 为JSON对象的候选。search/explore/info 的旧来源结果在映射、过滤或写入前，沿用 BookHelp.formatBookName/formatBookAuthor 的旧regex与trim；数字wordCount按 StringUtils.wordCountFormat 处理，kind中已提取的换行改为逗号。现代来源不执行这些格式化；详情空字符串保持既有不覆盖行为。详情重命名权限：存在legacyOriginal时读取其ruleBookInfo.canReName是否非空，否则读取原BookSource规则是否非空；纯现代来源遵循调用方canReName。
 
-Android发现输入同时提供url（原值）、exploreUrl和page。旧来源的exploreUrl只预展开 `{{page}}`；现代来源保持原值。旧选中URL在发送前拒绝 @js:/@webjs:/javascript:/<js> 脚本、逗号请求选项、角括号页码选择及剩余 `{{}}` 模板，明确报告 requires migration 错误；不会把请求选项作为URL发送。导入的旧发现阶段使用 `{{exploreUrl}}`，现代入口仍可使用url。
+Android发现输入同时提供原始url、exploreUrl和page，不再在Kotlin预展开page或拆解请求options。Dart请求适配器按旧来源的选中exploreUrl处理有限分页模板和每分类字面量options；现代入口仍可使用url。未知options和动态JS在Dart中明确拒绝，不把options作为URL发送。
 
 ## 受保护基址候选执行
 

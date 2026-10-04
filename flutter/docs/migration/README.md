@@ -19,7 +19,7 @@
 
 整体迁移完成后按最终 issues 重算候选 metadata：没有 issue 时 `legacy:false`、`compatibility:"unverified"`，可使用 modern 运行模式；有 issue 时 `legacy:true`、`compatibility:"manualRequired"`，保留兼容模式标记。保留 `legacyOriginal` 不代表候选仍启用旧宿主，且两种状态的 verified 均为 false。
 
-原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成method/body/bodyEncoding/bodyTemplateMode/headers；安全的已知模板表单在替换后编码，静态发现菜单形成legacyExploreItems，旧charset及动态或未知选项仍为manualRequired。可使用下文 compare 对照一个阶段 case，但没有完整旧 JVM 对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
+原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成method/body/bodyEncoding/bodyTemplateMode/headers；安全的已知模板表单在替换后编码，受限page算术/URL choice可标记legacyPageTemplates；静态发现菜单形成legacyExploreItems并由请求适配器解析当前选中入口，旧charset及动态或未知选项仍为manualRequired。可使用下文 compare 对照一个阶段 case，但没有完整旧 JVM 对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
 
 ## 脚本转换
 
@@ -103,8 +103,8 @@ STAGE 为 search/explore/info/toc/content。旧发现阶段通过 --variables �
 
 ## 私有书源集合离线审计快照
 
-本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。最终仅做离线结构导入与迁移审计，生成526个候选，其中13个unverified、513个manualRequired；28个未生成候选。相对第二轮仅3个候选从manualRequired变为unverified；实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
+本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。第五轮离线结构导入与迁移审计生成529个候选，其中13个unverified、516个manualRequired；25个未生成候选。相对第四轮状态及issue数未变；相对第三轮仅3个未生成候选变为manualRequired；网络请求、实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
 
-静态菜单metadata覆盖274个源、12,361个入口，其中JSON菜单150个源、9,243个入口，9,228个style字段保留；52个源使用legacyFormUtf8编码，89个源使用legacyJsonString模板模式。issue总数10,081，包含本轮新增逐菜单入口可审查项，不能直接把issue总数增加称为兼容退化。剩余28个未生成候选的静态分类为19个JS、4个非标准query模板、2个表达式空白、2个无search、1个无法确定锚点；这些分类不证明旧源无效。锚点与旧请求支持仍受明确边界约束，详情见[旧版Reference](../reference/legacy/README.md)。
+静态菜单metadata覆盖277个源、13,162个入口，10,029个style保留；52个源使用legacyFormUtf8，89个源使用legacyJsonString。issue总数8,121，包含逐入口审查项，总数增减不能单独作为行为兼容改善或退化证明。已知URL模板marker修复后，legacyPageTemplates覆盖529个候选、2,173个阶段；这表示保护标记已写入，不等于实际执行或兼容验收。安全汇总已核对ignored的 round5/summary.json。ID锚点与旧请求支持仍受明确边界约束，详情见[旧版Reference](../reference/legacy/README.md)。
 
-这里只记录安全汇总；私有原书源及逐源数据不进入Git提交，最终审计summary保存在ignored的私有临时目录。
+这里只记录安全汇总；私有原书源及逐源数据不进入Git提交，审计summary保存在ignored的私有临时目录。

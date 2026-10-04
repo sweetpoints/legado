@@ -163,6 +163,17 @@
             "legacyJsonString"
           ],
           "default": "raw"
+        },
+        "legacyPageTemplates": {
+          "type": "boolean",
+          "default": false
+        },
+        "legacyRequestInput": {
+          "enum": [
+            null,
+            "exploreUrl"
+          ],
+          "default": null
         }
       },
       "additionalProperties": true

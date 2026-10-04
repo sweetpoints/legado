@@ -334,5 +334,30 @@
     ],
     "legacyJsonString": "legacy JSON options string-body template input guard even with bodyEncoding raw; no implicit form encoding",
     "invalidMode": "invalid_source"
+  },
+  "legacyPageTemplates": {
+    "default": false,
+    "arithmetic": "page +/- canonical decimal integer with ASCII spaces; positive JS-safe page, safe offset/result; result may be zero or negative",
+    "urlChoices": "comma alternatives;page-1 index;overflow page uses last;Java trim",
+    "bodyChoices": false,
+    "error": "legacy_page_requires_migration",
+    "dartHelper": "expandLegacyPageTemplate(String,Map<String,Object?>,{bool urlChoices=false})",
+    "choiceTemplateInput": "any original {{...}} inside choices requires manual migration",
+    "malformedChoices": "nested or incomplete angles rejected",
+    "dynamicAngleInput": "flagged URL placeholder: legacy_page_requires_migration; legacy body provenance: legacy_body_template_requires_migration",
+    "importMarker": "all legacy URLs with known input placeholders, arithmetic or choices; modern default remains false"
+  },
+  "legacyRequestAdapter": {
+    "stageField": "legacyRequestInput: null|exploreUrl",
+    "constructor": "SourceEngine(requestAdapter:...)",
+    "type": "SourceStage Function(SourceDefinition,SourceStage,Map<String,Object?>)",
+    "publicImplementation": "source_legacy.adaptLegacyRequest",
+    "registeredByDefault": [
+      "source_host",
+      "source_tools"
+    ],
+    "runs": "synchronously before stage templating; returned stage must clear legacyRequestInput",
+    "missingOrUnresolved": "legacy_request_adapter_required",
+    "unsupportedSelectedRequest": "legacy_request_requires_migration"
   }
 }

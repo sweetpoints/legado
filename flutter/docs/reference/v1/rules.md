@@ -76,3 +76,13 @@ bodyEncoding默认raw，另支持legacyFormUtf8；未知模式报invalid_source�
 bodyTemplateMode默认raw，另支持legacyJsonString，未知模式报invalid_source。mode为legacyJsonString或encoding为legacyFormUtf8时，模板输入仅接受string、bool或JS安全整数（±9007199254740991）；double（即使有限）、越界整数、集合等类型，以及含双引号、反斜杠、U+0000..U+001F或DEL的值，在请求前报legacy_body_template_requires_migration，避免改变旧JSON请求选项解析行为。null仍报missing_input。
 
 legacyJsonString用于保持旧JSON请求选项中字符串body的模板语义：即使bodyEncoding=raw也执行上述输入保护，但不额外进行表单编码。所有旧POST选项的字符串body含 `{{}}` 时均由导入器标记此模式，包括JSON/XML和显式Content-Type；纯现代raw默认模式保持既有模板行为。
+
+## 受限旧分页模板与请求适配
+
+legacyPageTemplates默认false。开启后先展开有限算术，再展开URL choice，最后替换普通identifier输入；支持 `{{page + 1}}`、`{{page-0}}` 等page加减canonical十进制整数（0或不带前导零的正数字，允许ASCII空格）。使用page时要求正JS安全整数，offset不超过9007199254740991，算术结果允许0/负但必须在±9007199254740991范围内。未知或未闭合表达式、非法page和溢出报legacy_page_requires_migration。URL支持 `<a,b,...>`，按page-1选择，超过入口数取最后一个，每个分支按Java trim处理；body只支持算术，不执行choice。纯现代默认raw模板不引入这些旧语法。公开Dart辅助函数为 expandLegacyPageTemplate(template,input,{urlChoices:false})。
+
+legacyRequestInput仅可为null或exploreUrl。非null时，SourceEngine在阶段模板替换前同步调用requestAdapter；适配器必须返回legacyRequestInput已清除的SourceStage。未注册或未清除报legacy_request_adapter_required。正式类型为 SourceRequestAdapter = SourceStage Function(SourceDefinition source, SourceStage stage, Map<String,Object?> input)。source_legacy的公开adaptLegacyRequest按选中input.exploreUrl解析字面量请求URL/options并保留阶段提取规则、分页规则和maxPages；Host及CLI默认注册，直接组装SourceEngine的调用方需显式注册。未知选项、动态JS或不支持的选中请求报legacy_request_requires_migration，先于网络发送。
+
+自动支持仅为静态choices与choices之外的独立算术；choice内部原文本含任何 `{{...}}`（包括page算术）均需人工迁移。嵌套或未闭合角括号拒绝；开启legacyPageTemplates的URL普通placeholder动态值含 `<`/`>` 报legacy_page_requires_migration。旧body模板provenance的动态输入若含 `<`/`>` 也报legacy_body_template_requires_migration，避免旧整份options替换后再次展开角括号的顺序差异。现代raw不变，不宣称一般动态JS或任意模板执行顺序兼容。
+
+旧URL只要包含任意已知输入占位符，也会标记legacyPageTemplates=true，不限于算术或choice，以保护动态输入中的角括号。现代来源默认false不变。

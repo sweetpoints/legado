@@ -31,7 +31,7 @@
     "externalStartupData": false,
     "provenanceManifest": "source_v8/.cache/self-built/<V8 revision>/manifest.json",
     "verifiedSnapshot": {
-      "date": "2026-10-04",
+      "date": "2026-10-05",
       "v8Version": "15.4.80.24",
       "platforms": [
         "macos-arm64",
@@ -41,37 +41,26 @@
         "Debug build and UI",
         "Release build and UI; local code signing only"
       ],
-      "androidRelease": "local unsigned APK and AAR; minifyAppReleaseWithR8 completed; packaged V8 size and SHA-256 match manifest",
+      "androidRelease": "local unsigned APK and AAR; 7 Flutter assets and native libraries match; V8 SHA-256 matches manifest",
       "logs": [
-        "tmp/flutter-source-check-legacy-requests-final.log",
-        "tmp/flutter-android-test-legacy-requests-final.log",
-        "tmp/flutter-legacy-form-jvm-golden.log",
-        "tmp/flutter-android-release-legacy-requests.log"
+        "tmp/flutter-source-check-page-requests.log",
+        "tmp/flutter-android-test-page-requests-final.log",
+        "tmp/flutter-legacy-page-jvm-golden.log",
+        "tmp/flutter-android-release-page-requests.log"
       ],
       "fullHistoricalSourceAcceptance": false,
       "signedDistributionAcceptance": false,
       "ciAcceptance": false,
-      "acceptanceRound": "legacy form requests and static explore menus acceptance",
-      "workspaceStaticAnalyses": 8,
-      "workspacePackageTests": [
-        43,
-        48,
-        12,
-        21,
-        21,
-        126,
-        1,
-        8
-      ],
-      "androidInstrumentationCases": 12,
-      "currentRoundReleaseR8": "passed locally",
-      "debugFlutterAssetConsistency": "10 Flutter assets in AAR and APK have matching SHA-256",
+      "acceptanceRound": "legacy page templates and selected request adapter acceptance",
+      "androidInstrumentationCases": 13,
+      "currentRoundReleaseR8": "passed locally; minifyAppReleaseWithR8 executed; build 4m1s",
+      "debugFlutterAssetConsistency": "final Debug AAR/APK rechecked: 10 Flutter assets with matching bytes and SHA-256",
       "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
       "releaseNativeConsistency": {
         "libapp.so": {
           "bytes": 3277704,
           "sha256MatchesBetweenAarAndApk": true,
-          "sha256": "255afbd8929b3a708a98ca8c4f78d4eed435719a2dfd455b310c79ca4446d37e"
+          "sha256": "dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91"
         },
         "libsource_v8.so": {
           "bytes": 26306760,
@@ -82,8 +71,34 @@
       "legacyJvmGolden": {
         "tests": 4,
         "fixedInputs": 16,
-        "fullJvmEngineCompared": false
-      }
+        "fullJvmEngineCompared": false,
+        "validationRound": "previous legacy form request acceptance"
+      },
+      "currentRoundWorkspaceCheck": "passed",
+      "legacyJvmPageGolden": {
+        "tests": 7,
+        "fullJvmEngineCompared": false,
+        "validationRound": "current legacy page request acceptance"
+      },
+      "workspacePackageTests": [
+        51,
+        52,
+        12,
+        21,
+        22,
+        159,
+        1,
+        9
+      ],
+      "workspaceStaticAnalyses": 8,
+      "artifactProof": "tmp/flutter-page-requests-artifact-proof.json",
+      "finalAndroidRerun": {
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "macosExampleValidationRound": "earlier local validation, not rerun in this acceptance round"
     },
     "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot"
   },
@@ -145,7 +160,9 @@
       "static headers replacement",
       "charset",
       "bodyEncoding raw or legacyFormUtf8",
-      "bodyTemplateMode raw or legacyJsonString"
+      "bodyTemplateMode raw or legacyJsonString",
+      "legacyPageTemplates boolean defaultfalse",
+      "legacyRequestInput null or exploreUrl"
     ],
     "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
     "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5",
@@ -158,7 +175,10 @@
       "scriptBranchChanged": false
     },
     "legacyFormTemplateInputs": "string, bool, JS-safe int only; quote/backslash/control/DEL/double/unsafe int rejected; null missing_input",
-    "legacyBodyTemplateGuard": "when bodyEncoding legacyFormUtf8 or bodyTemplateMode legacyJsonString; strings, bools and JS-safe ints only; unsafe chars/types rejected before network"
+    "legacyBodyTemplateGuard": "when bodyEncoding legacyFormUtf8 or bodyTemplateMode legacyJsonString; strings, bools and JS-safe ints only; unsafe chars/types rejected before network; dynamic angle brackets rejected for old template provenance",
+    "legacyPageTemplateSubset": "canonical decimal page arithmetic with JS-safe checks; URL choices only; unknown expression legacy_page_requires_migration; static choices only, no placeholders inside choice; nested/incomplete angles rejected; dynamic URL angles error",
+    "legacyRequestAdapter": "synchronous SourceRequestAdapter before templating; Host/CLI register adaptLegacyRequest; direct consumer must register",
+    "legacyPageTemplateImportMarker": "any known input placeholder in legacy URL sets true; modern default false"
   },
   "legacy": {
     "status": "partial",
@@ -237,14 +257,16 @@
     "extractionText": "getString default HTML4 unescape with boolean override;getStringList no unescape;scalar URL empty text falls back base",
     "htmlText": "per-node preserveWhitespace context and Java trim; no global whitespace compression",
     "indexSpaces": "ASCII spaces inside matched numeric suffix only; selector spaces retained",
-    "exploreInput": "input.exploreUrl selected URL; GET, no body or stage headers; original menu retained only in legacyOriginal",
+    "exploreInput": "raw input.exploreUrl selected URL; adaptLegacyRequest parses per-category literal options before templates; metadata URLs retain options",
     "manualFeatures": [
       "complex or unbalanced URL templates",
       "case-insensitive script markers",
-      "old page-choice syntax",
-      "explore menu scripts/options",
       "contentBatch",
-      "callBackJs"
+      "callBackJs",
+      "explore menu scripts or unknown options",
+      "legacy options body containing any angle bracket, including XML",
+      "any original placeholder inside URL choice",
+      "nested or incomplete angle choices"
     ],
     "sourceIdentityAndBase": {
       "id": "nonempty string preserved verbatim without trim or URI normalization",
@@ -261,7 +283,7 @@
         "whitespace"
       ]
     },
-    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; per-item options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review"
+    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; supported literal per-item options parsed by adapter; unknown options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review"
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -303,39 +325,35 @@
     },
     "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule",
     "privateCorpusOfflineAuditSnapshot": {
-      "round": "3-final",
+      "round": 5,
       "inputSources": 554,
       "enabledSources": 546,
       "disabledSources": 8,
       "textSources": 473,
       "nonTextSources": 81,
       "enabledTextSources": 466,
-      "candidates": 526,
+      "candidates": 529,
       "unverified": 13,
-      "manualRequired": 513,
-      "noCandidate": 28,
-      "manualToUnverifiedSinceRound2": 3,
+      "manualRequired": 516,
+      "noCandidate": 25,
+      "newCandidatesManualSinceRound3": 3,
+      "networkRequests": 0,
       "actuallyExecuted": 0,
       "verified": 0,
-      "issueCount": 10081,
-      "issueCountMeaning": "Includes newly reviewable per-menu-item issues; aggregate growth alone is not compatibility regression",
-      "menuSources": 274,
-      "menuItems": 12361,
-      "jsonMenuSources": 150,
-      "jsonMenuItems": 9243,
-      "stylesPreserved": 9228,
+      "issueCount": 8121,
+      "issueCountMeaning": "Per-entry review inventory; count changes alone do not prove behavioral compatibility",
+      "menuSources": 277,
+      "menuItems": 13162,
+      "stylesPreserved": 10029,
       "legacyFormEncodingSources": 52,
       "legacyJsonStringTemplateSources": 89,
-      "noCandidateStaticCategories": {
-        "javascript": 19,
-        "nonstandardQueryTemplate": 4,
-        "expressionWhitespace": 2,
-        "noSearch": 2,
-        "noAnchor": 1
-      },
       "categoriesProveLegacyInvalid": false,
       "privateOriginalsCommitted": false,
-      "fullHistoricalSourceAcceptance": false
+      "fullHistoricalSourceAcceptance": false,
+      "date": "2026-10-05",
+      "legacyPageTemplateSources": 529,
+      "legacyPageTemplateStages": 2173,
+      "summarySnapshot": "private ignored round5/summary.json; original data not committed"
     }
   },
   "androidBridge": {
@@ -367,7 +385,7 @@
     "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index",
     "legacyBookFormatting": "search/explore/info format name/author, numeric wordCount, kind newlines; legacyOriginal provenance counts independently of runtime mode; modern values retained",
     "legacyInfoRename": "legacyOriginal.ruleBookInfo.canReName nonempty, else BookSource rule nonempty; modern caller canReName",
-    "exploreInput": "url original plus exploreUrl and page; legacy pre-expands page only and rejects scripts/options/page-choice/remaining templates before sending",
+    "exploreInput": "raw url/exploreUrl/page sent to Dart; request adapter handles supported selected legacy request templates/options",
     "manualIssueExecutionException": {
       "requiredFlag": "legacyBaseUrlUnavailable=true",
       "everyIssueCode": "legacy.base_url_requires_review",
