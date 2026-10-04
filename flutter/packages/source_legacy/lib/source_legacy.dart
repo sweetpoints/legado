@@ -152,6 +152,8 @@ class LegacySourceImporter {
                   'chapterUrl' => 'url',
                   _ => rule.key.toString(),
                 }
+              : rule.key == 'lastChapter'
+              ? 'latestChapterTitle'
               : rule.key.toString();
           fields[fieldName] = text;
         }
@@ -209,6 +211,16 @@ class LegacySourceImporter {
           ),
         );
       }
+    }
+    if (input.containsKey('enabledCookieJar') &&
+        input['enabledCookieJar'] != true) {
+      issues.add(
+        const LegacyIssue(
+          'enabledCookieJar',
+          'legacy.cookie_policy_requires_review',
+          'Disabled legacy cookie jar must not silently use the new automatic jar.',
+        ),
+      );
     }
     if ((input['bookSourceType'] ?? 0) != 0) {
       issues.add(

@@ -30,7 +30,6 @@ void main() {
       'return java.lang.String(x);',
       'return java.get(url, headers);',
       'return java.ajax(url, 5000);',
-      'return java.base64Encode(value, 2);',
       'return /java.ajax/.test(x);',
       'return `java.ajax(${1})`;',
       'return java.ajax("unclosed);',
@@ -52,9 +51,42 @@ void main() {
       migrator
           .migrateScript('return java.base64Decode(java.ajax(url));')
           .candidate,
-      'return (await source.encoding.base64Decode((await source.net.get(url))));',
+      'return (await source.encoding.base64DecodeWithFlags((await source.net.get(url))));',
     );
   });
+  test(
+    'literal timed ajax and parse migrations preserve explicit contracts',
+    () {
+      expect(
+        migrator
+            .migrateScript('return java.ajax("https://books.test", 1000);')
+            .candidate,
+        'return (await source.net.request({url:"https://books.test",timeoutMs:1000})).body;',
+      );
+      expect(
+        migrator
+            .migrateScript('return java.getString("class.title@text");')
+            .candidate,
+        'return (await source.parse.getString("@legacy:class.title@text",result,false,baseUrl));',
+      );
+      expect(
+        migrator.migrateScript('return java.getStringList("");').candidate,
+        'return null;',
+      );
+      expect(
+        migrator
+            .migrateScript('return java.base64Decode(value, charset);')
+            .candidate,
+        isNull,
+      );
+      expect(
+        migrator
+            .migrateScript('return java.getElement("class.title").text();')
+            .candidate,
+        isNull,
+      );
+    },
+  );
   test('source migration output is unverified and retains original', () {
     final original = <String, Object?>{
       'bookSourceUrl': 'https://books.test',

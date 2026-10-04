@@ -53,6 +53,42 @@ void main() {
       expect(result.source.metadata['compatibility'], 'unverified');
     }
   });
+  test('field aliases and disabled cookie policy are explicit', () {
+    final result = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'searchUrl': '/search',
+      'enabledCookieJar': false,
+      'ruleSearch': {'bookList': 'class.book', 'lastChapter': 'tag.span@text'},
+    });
+    expect(
+      result.source.stages['search']!.fields['latestChapterTitle'],
+      '@legacy:tag.span@text',
+    );
+    expect(
+      result.issues.map((e) => e.code),
+      contains('legacy.cookie_policy_requires_review'),
+    );
+  });
+  test('explicit CSS and leading outputs preserve legacy semantics', () {
+    for (final rule in ['@text', '@ownText', '@html', '@all']) {
+      final result = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'ruleContent': {'content': rule},
+      });
+      expect(
+        result.source.stages['content']!.fields['content'],
+        '@legacy:$rule',
+      );
+    }
+    final result = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'ruleContent': {'content': '@CSS:article@html'},
+    });
+    expect(
+      result.source.stages['content']!.fields['content'],
+      '@legacy:article@html',
+    );
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

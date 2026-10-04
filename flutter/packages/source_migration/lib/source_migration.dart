@@ -68,6 +68,8 @@ class SourceMigrator {
                 'url' => 'chapterUrl',
                 _ => key,
               }
+            : key == 'latestChapterTitle'
+            ? 'lastChapter'
             : key;
         migrateRule(
           fields,
@@ -148,7 +150,20 @@ class SourceMigrator {
     const methods = {
       'ajax': 'net.get',
       'base64Encode': 'encoding.base64Encode',
-      'base64Decode': 'encoding.base64Decode',
+      'base64Decode': 'encoding.base64DecodeWithFlags',
+      'base64DecodeToByteArray': 'encoding.base64DecodeBytes',
+      'strToBytes': 'encoding.strToBytes',
+      'bytesToStr': 'encoding.bytesToStr',
+      'hexDecodeToByteArray': 'encoding.hexDecodeBytes',
+      'hexDecodeToString': 'encoding.hexDecode',
+      'hexEncodeToString': 'encoding.hexEncode',
+      'md5Encode': 'crypto.md5',
+      'md5Encode16': 'crypto.md5Short',
+      'digestHex': 'crypto.digestHex',
+      'digestBase64Str': 'crypto.digestBase64',
+      'encodeURI': 'encoding.formEncode',
+      'getString': 'parse.getString',
+      'getStringList': 'parse.getStringList',
       'get': 'variables.get',
       'put': 'variables.put',
     };
@@ -164,7 +179,7 @@ class SourceMigrator {
         );
         continue;
       }
-      final method = methods[tokens[i + 2].text];
+      var method = methods[tokens[i + 2].text];
       if (method == null) {
         issue(
           'migration.unsupported_api',
@@ -194,12 +209,122 @@ class SourceMigrator {
         if ([')', ']'].contains(tokens[j].text)) argumentDepth--;
         if (tokens[j].text == ',' && argumentDepth == 0) argumentCount++;
       }
-      final expectedCount = tokens[i + 2].text == 'put' ? 2 : 1;
-      if (argumentCount != expectedCount) {
+      final name = tokens[i + 2].text;
+      final twoRequired = [
+        'put',
+        'digestHex',
+        'digestBase64Str',
+      ].contains(name);
+      final optionalTwo = [
+        'base64Encode',
+        'base64Decode',
+        'base64DecodeToByteArray',
+        'strToBytes',
+        'bytesToStr',
+        'encodeURI',
+        'ajax',
+      ].contains(name);
+      final invalidArity = twoRequired
+          ? argumentCount != 2
+          : optionalTwo
+          ? argumentCount < 1 || argumentCount > 2
+          : argumentCount != 1;
+      if (invalidArity) {
         issue(
           'migration.unsupported_overload',
           'Only the documented simple overload of java.${tokens[i + 2].text} can be converted.',
         );
+        continue;
+      }
+      final args = <List<_Token>>[];
+      var splitStart = i + 4;
+      var splitDepth = 0;
+      for (var j = i + 4; j < end; j++) {
+        if (['(', '['].contains(tokens[j].text)) splitDepth++;
+        if ([')', ']'].contains(tokens[j].text)) splitDepth--;
+        if (tokens[j].text == ',' && splitDepth == 0) {
+          args.add(tokens.sublist(splitStart, j));
+          splitStart = j + 1;
+        }
+      }
+      if (splitStart < end) args.add(tokens.sublist(splitStart, end));
+      String rawArg(int n) =>
+          script.substring(args[n].first.start, args[n].last.end);
+      if (name == 'base64Encode' && argumentCount == 2) {
+        method = 'encoding.base64EncodeWithFlags';
+      }
+      if (name == 'base64Decode' && argumentCount == 2) {
+        if (args[1].length == 1 && args[1].single.text == '<string>') {
+          method = 'encoding.base64DecodeWithCharset';
+        } else if (args[1].length == 1 &&
+            int.tryParse(args[1].single.text) != null) {
+          method = 'encoding.base64DecodeWithFlags';
+        } else {
+          issue(
+            'migration.ambiguous_overload',
+            'Dynamic base64Decode charset/flags requires review.',
+          );
+          continue;
+        }
+      }
+      if (name == 'ajax' && argumentCount == 2) {
+        if (args[0].length != 1 ||
+            args[0].single.text != '<string>' ||
+            args[1].length != 1 ||
+            (args[1].single.text != 'null' &&
+                int.tryParse(args[1].single.text) == null)) {
+          issue(
+            'migration.ambiguous_overload',
+            'Timed ajax conversion requires literal URL and integer/null timeout.',
+          );
+          continue;
+        }
+        edits.add(
+          _Edit(
+            tokens[i].start,
+            tokens[end].end,
+            '(await source.net.request({url:${rawArg(0)},timeoutMs:${rawArg(1)}})).body',
+          ),
+        );
+        seen.add(i);
+        continue;
+      }
+      if (name == 'getString' || name == 'getStringList') {
+        if (args.single.length != 1 || args.single.single.text != '<string>') {
+          issue(
+            'migration.dynamic_rule',
+            'Only literal extraction rules can be converted automatically.',
+          );
+          continue;
+        }
+        final raw = rawArg(0);
+        String? decoded;
+        if (raw.startsWith('"')) {
+          try {
+            decoded = jsonDecode(raw) as String;
+          } on FormatException {
+            /* Kept manual when literal decoding fails. */
+          }
+        } else if (!raw.substring(1, raw.length - 1).contains(r'\')) {
+          decoded = raw.substring(1, raw.length - 1);
+        }
+        if (decoded == null ||
+            decoded.contains('@js:') ||
+            decoded.contains('<js>')) {
+          issue(
+            'migration.dynamic_rule',
+            'Escaped or nested script rule requires review.',
+          );
+          continue;
+        }
+        final rule = decoded.startsWith('@') || decoded.startsWith(r'$')
+            ? decoded
+            : '@legacy:$decoded';
+        final value = decoded.isEmpty
+            ? (name == 'getString' ? jsonEncode('') : 'null')
+            : '(await source.$method(${jsonEncode(rule)},result,false,baseUrl))';
+        edits.add(_Edit(tokens[i].start, tokens[end].end, value));
+        seen.add(i);
         continue;
       }
       final alreadyAwaited = i > 0 && tokens[i - 1].text == 'await';

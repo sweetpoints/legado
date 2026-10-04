@@ -4,6 +4,7 @@ import 'package:source_legacy/source_legacy.dart';
 
 class RecordingHost implements ScriptHost {
   final calls = <Map<String, Object?>>[];
+  int status = 302;
   @override
   Future<Object?> call(String method, List<Object?> args) async {
     if (method != 'net.request') throw StateError(method);
@@ -11,7 +12,7 @@ class RecordingHost implements ScriptHost {
     calls.add(request);
     return {
       'url': request['url'],
-      'status': 302,
+      'status': status,
       'headers': {'location': '/next', 'x-test': 'yes'},
       'body': 'body',
     };
@@ -138,6 +139,53 @@ void main() {
       expect(delegate.calls.last['method'], 'HEAD');
     },
   );
+  test('Jsoup error status throws, connect and ajax expose body', () async {
+    delegate.status = 404;
+    await expectLater(
+      host.call('java.get', ['https://books.test', null]),
+      throwsA(
+        isA<EngineException>().having(
+          (e) => e.code,
+          'code',
+          'legacy.http_error',
+        ),
+      ),
+    );
+    expect(
+      (await host.call('java.connect', ['https://books.test'])
+          as Map)['status'],
+      404,
+    );
+    expect(await host.call('java.ajax', ['https://books.test']), 'body');
+  });
+  test('unmappable encodings replace per codepoint', () async {
+    expect(await host.call('java.strToBytes', ['中文', 'ISO-8859-1']), [63, 63]);
+    expect(await host.call('java.strToBytes', ['😀', 'ASCII']), [63]);
+    expect(
+      await host.call('java.bytesToStr', [
+        [-1],
+        'UTF-8',
+      ]),
+      '\uFFFD',
+    );
+  });
+  test('new utility namespace uses matching contracts', () async {
+    final utility = SourceUtilityHost(delegate);
+    expect(await utility.call('crypto.md5Short', ['abc']), '3cd24fb0d6963f7d');
+    expect(await utility.call('encoding.hexDecode', ['e4b8ad']), '中');
+    expect(
+      await utility.call('encoding.base64EncodeWithFlags', ['a', 1]),
+      'YQ\n',
+    );
+    expect(
+      await utility.call('encoding.formDecode', ['%D6%D0+a%2Bb', 'GBK']),
+      '中 a+b',
+    );
+    await expectLater(
+      Future.sync(() => utility.call('encoding.formDecode', ['%XX'])),
+      throwsFormatException,
+    );
+  });
   test(
     'ajax list and timeout connect header string and ordered ajaxAll',
     () async {

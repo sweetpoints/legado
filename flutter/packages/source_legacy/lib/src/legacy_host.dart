@@ -26,6 +26,10 @@ const legacySupportedMethods = {
   'md5Encode16',
   'digestHex',
   'digestBase64Str',
+  'getString',
+  'getStringList',
+  'getElement',
+  'getElements',
   'encodeURI',
 };
 
@@ -36,7 +40,9 @@ const legacyScriptPrelude = r"""
   function response(value) {
     if (Array.isArray(value)) return value.map(response);
     if (!value || typeof value !== 'object' || !value.__legacyResponseKind) return value;
-    const rawHeaders = value.headers || {};
+    const rawHeaders = value.__legacyResponseKind === 'str' && value.multiHeaders
+      ? Object.fromEntries(Object.entries(value.multiHeaders).map(([k,v]) => [k, v.length ? v[v.length - 1] : '']))
+      : value.headers || {};
     function header(name) {
       const key = Object.keys(rawHeaders).find(k => k.toLowerCase() === String(name).toLowerCase());
       return key === undefined ? null : rawHeaders[key];
@@ -76,9 +82,49 @@ const legacyScriptPrelude = r"""
     };
     return out;
   }
+  function element(value) {
+    if (typeof value !== 'string') return value;
+    const query = (method, rule) => __sourceHostSync('parse.' + method, ['@legacy:' + rule, value, false, globalThis.baseUrl]);
+    const out = {
+      text: () => query('getString', '@text'),
+      attr: name => query('getString', '@' + String(name)),
+      outerHtml: () => value, toString: () => value, toJSON: () => value,
+      select: selector => elementList(query('getElements', String(selector))),
+      selectFirst: selector => elementList(query('getElements', String(selector))).first(),
+      html: () => {throw new Error('legacy.unsupported_element_api: html');}
+    };
+    return out;
+  }
+  function elementList(values) {
+    const list = (values || []).map(element);
+    Object.defineProperties(list, {
+      size: {value: () => list.length}, get: {value: index => list[index]},
+      first: {value: () => list[0] || null}, last: {value: () => list[list.length-1] || null},
+      text: {value: () => list.map(e => e.text()).join(' ')},
+      attr: {value: name => list.length ? list[0].attr(name) : ''},
+      select: {value: selector => elementList(list.flatMap(e => __sourceHostSync('parse.getElements', ['@legacy:'+String(selector), e.outerHtml(), false, globalThis.baseUrl])))},
+      html: {value: () => {throw new Error('legacy.unsupported_element_api: html');}}
+    });
+    return list;
+  }
   globalThis.java = new Proxy(Object.create(null), {
     get(_target, name) {
-      return (...args) => response(__sourceHostSync('java.' + String(name), args));
+      return (...args) => {
+        if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
+          if (String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean') {
+            throw new Error('legacy.unsupported_overload: getString unescape');
+          }
+          if (['getElement','getElements'].includes(String(name)) && args.length !== 1) {
+            throw new Error('legacy.unsupported_overload: ' + String(name));
+          }
+          const content = args.length > 1 && args[1] != null ? args[1] : globalThis.result;
+          args = [args[0], content, args.length > 2 ? args[2] : false, globalThis.baseUrl];
+        }
+        const value = __sourceHostSync('java.' + String(name), args);
+        if (String(name) === 'getElement') return element(value);
+        if (String(name) === 'getElements') return elementList(value);
+        return response(value);
+      };
     }
   });
 })();
@@ -176,6 +222,37 @@ class LegacyScriptHost implements ScriptHost {
         } on UnsupportedError {
           return '';
         }
+      case 'getString':
+      case 'getStringList':
+      case 'getElement':
+      case 'getElements':
+        arity(2, 4);
+        final rule = arguments[0];
+        if (rule == null || rule == '') {
+          return switch (name) {
+            'getString' => '',
+            'getStringList' => null,
+            'getElements' => <Object?>[],
+            _ => null,
+          };
+        }
+        if (rule is! String) {
+          throw UnsupportedError(
+            'legacy.unsupported_overload: non-string rule',
+          );
+        }
+        if (arguments.length > 2 && arguments[2] is! bool) {
+          throw ArgumentError('isUrl must be boolean');
+        }
+        final normalized = rule.startsWith('@') || rule.startsWith(r'$')
+            ? rule
+            : '@legacy:$rule';
+        return delegate.call('parse.$name', [
+          normalized,
+          arguments[1],
+          arguments.length > 2 ? arguments[2] : false,
+          arguments.length > 3 ? arguments[3] : null,
+        ]);
       case 'get':
         if (arguments.length == 1) return variables[str(0)] ?? '';
         arity(2, 3);
@@ -270,12 +347,19 @@ class LegacyScriptHost implements ScriptHost {
     if (timeout != null && (timeout is! int || timeout <= 0)) {
       throw ArgumentError('Legacy timeout must be positive milliseconds');
     }
+    final requestHeaders = _headers(headers);
+    if (kind == 'jsoup' &&
+        method == 'POST' &&
+        !requestHeaders.keys.any((k) => k.toLowerCase() == 'content-type')) {
+      requestHeaders['Content-Type'] =
+          'application/x-www-form-urlencoded; charset=UTF-8';
+    }
     final start = DateTime.now();
     final raw = await delegate.call('net.request', [
       {
         'url': url,
         'method': method,
-        'headers': _headers(headers),
+        'headers': requestHeaders,
         'followRedirects': followRedirects,
         'body': ?body,
         'timeoutMs': ?timeout,
@@ -463,6 +547,82 @@ String legacyFormEncode(String value, [String charset = 'UTF-8']) {
     } else {
       out.write('%${b.toRadixString(16).toUpperCase().padLeft(2, '0')}');
     }
+  }
+  return out.toString();
+}
+
+/// New asynchronous utility namespace. Kept beside the compatibility codecs
+/// during migration so both contracts use the same tested implementation.
+/// This adapter never creates a `java` object in the JS environment.
+class SourceUtilityHost implements ScriptHost {
+  SourceUtilityHost(this.delegate) : _utilities = LegacyScriptHost(delegate);
+  final ScriptHost delegate;
+  final LegacyScriptHost _utilities;
+  static const methods = <String, String>{
+    'encoding.base64EncodeWithFlags': 'base64Encode',
+    'encoding.base64DecodeWithCharset': 'base64Decode',
+    'encoding.base64DecodeWithFlags': 'base64Decode',
+    'encoding.base64DecodeBytes': 'base64DecodeToByteArray',
+    'encoding.strToBytes': 'strToBytes',
+    'encoding.bytesToStr': 'bytesToStr',
+    'encoding.hexEncode': 'hexEncodeToString',
+    'encoding.hexDecode': 'hexDecodeToString',
+    'encoding.hexDecodeBytes': 'hexDecodeToByteArray',
+    'encoding.formEncode': 'encodeURI',
+    'crypto.md5': 'md5Encode',
+    'crypto.md5Short': 'md5Encode16',
+    'crypto.digestHex': 'digestHex',
+    'crypto.digestBase64': 'digestBase64Str',
+  };
+  @override
+  Future<Object?> call(String method, List<Object?> arguments) {
+    final mapped = methods[method];
+    if (mapped != null) return _utilities.call('java.$mapped', arguments);
+    if (method == 'encoding.formDecode') {
+      if (arguments.isEmpty ||
+          arguments.length > 2 ||
+          arguments[0] is! String ||
+          (arguments.length == 2 && arguments[1] is! String)) {
+        throw ArgumentError(
+          'formDecode requires a string and optional charset',
+        );
+      }
+      return Future.value(
+        legacyFormDecode(
+          arguments[0] as String,
+          arguments.length == 2 ? arguments[1] as String : 'UTF-8',
+        ),
+      );
+    }
+    return delegate.call(method, arguments);
+  }
+}
+
+/// Matching form decoding for the new API. No old java.decodeURI is claimed.
+String legacyFormDecode(String value, [String charset = 'UTF-8']) {
+  final out = StringBuffer();
+  for (var i = 0; i < value.length;) {
+    if (value[i] == '+') {
+      out.write(' ');
+      i++;
+      continue;
+    }
+    if (value[i] != '%') {
+      out.write(value[i]);
+      i++;
+      continue;
+    }
+    final bytes = <int>[];
+    while (i < value.length && value[i] == '%') {
+      if (i + 2 >= value.length ||
+          !RegExp(r'^[0-9a-fA-F]{2}$')
+              .hasMatch(value.substring(i + 1, i + 3))) {
+        throw const FormatException('Malformed percent escape');
+      }
+      bytes.add(int.parse(value.substring(i + 1, i + 3), radix: 16));
+      i += 3;
+    }
+    out.write(_decode(bytes, charset));
   }
   return out.toString();
 }
