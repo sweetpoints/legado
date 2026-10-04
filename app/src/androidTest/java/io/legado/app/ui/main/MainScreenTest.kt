@@ -23,13 +23,24 @@ class MainScreenTest {
     @Test
     fun selectingATabEmitsItsStableDestination() {
         var clicked: MainDestination? = null
+        val state = mutableStateOf(MainUiState())
         compose.setContent {
             LegadoComposeTheme {
-                MainScreen(MainUiState(), 0, emptyMap(), false, { clicked = it }) { Box {} }
+                MainScreen(state.value, 0, emptyMap(), false, {
+                    clicked = it
+                    state.value = state.value.copy(selectedDestination = it)
+                }) { Box {} }
             }
         }
-        compose.onNodeWithContentDescription(context.getString(R.string.my)).performClick()
-        compose.runOnIdle { assertEquals(MainDestination.My, clicked) }
+        for ((destination, title) in listOf(
+            MainDestination.My to R.string.my,
+            MainDestination.Rss to R.string.rss,
+            MainDestination.Explore to R.string.discovery,
+            MainDestination.Bookshelf to R.string.bookshelf,
+        )) {
+            compose.onNodeWithContentDescription(context.getString(title)).performClick().assertIsSelected()
+            compose.runOnIdle { assertEquals(destination, clicked) }
+        }
     }
 
     @Test

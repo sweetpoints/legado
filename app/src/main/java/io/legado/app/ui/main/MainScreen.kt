@@ -95,7 +95,7 @@ fun MainScreen(
                                 )
                             } else {
                                 Icon(
-                                    painterResource(destination.iconRes),
+                                    painterResource(destination.iconRes(selected)),
                                     contentDescription = title,
                                     tint = if (selected) colors.accent else colors.textSecondary,
                                     modifier = Modifier.size(24.dp),
@@ -120,11 +120,15 @@ private val MainDestination.titleRes: Int
             MainDestination.My -> R.string.my
         }
 
-private val MainDestination.iconRes: Int
-    get() =
+// painterResource cannot inflate XML selectors; Compose supplies the checked state.
+private fun MainDestination.iconRes(selected: Boolean): Int =
         when (this) {
-            MainDestination.Bookshelf -> R.drawable.ic_bottom_books
-            MainDestination.Explore -> R.drawable.ic_bottom_explore
-            MainDestination.Rss -> R.drawable.ic_bottom_rss_feed
-            MainDestination.My -> R.drawable.ic_bottom_person
+            MainDestination.Bookshelf ->
+                if (selected) R.drawable.ic_bottom_books_s else R.drawable.ic_bottom_books_e
+            MainDestination.Explore ->
+                if (selected) R.drawable.ic_bottom_explore_s else R.drawable.ic_bottom_explore_e
+            MainDestination.Rss ->
+                if (selected) R.drawable.ic_bottom_rss_feed_s else R.drawable.ic_bottom_rss_feed_e
+            MainDestination.My ->
+                if (selected) R.drawable.ic_bottom_person_s else R.drawable.ic_bottom_person_e
         }

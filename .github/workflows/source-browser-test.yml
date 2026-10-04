@@ -12,9 +12,11 @@ on:
       - '.github/workflows/source-browser-test.yml'
       - '.github/scripts/source-browser-test.init.gradle'
       - '.github/scripts/run-ui-regression.sh'
+      - '.github/scripts/verify-ui-test-coverage.py'
       - '.github/scripts/prepare-pdf-zoom-fixture.py'
       - 'app/build.gradle.kts'
       - 'app/src/main/java/io/legado/app/ui/**'
+      - 'app/src/main/java/io/legado/app/base/**'
       - 'app/src/androidTest/**'
       - 'modules/book/**'
       - 'gradle.properties'
@@ -145,7 +147,7 @@ concurrency:
 jobs:
   dialog:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:

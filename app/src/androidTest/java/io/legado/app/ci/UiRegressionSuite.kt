@@ -1,0 +1,56 @@
+package io.legado.app.ci
+
+import org.junit.runner.RunWith
+import org.junit.runners.Suite
+
+// One runner argument avoids losing comma-separated class names in AGP's test engine.
+@RunWith(Suite::class)
+@Suite.SuiteClasses(
+    io.legado.app.ui.widget.dialog.BottomWebViewDialogShowTest::class,
+    io.legado.app.ui.book.explore.ExploreCategoriesTest::class,
+    io.legado.app.ui.main.explore.ExploreRefreshUiTest::class,
+    io.legado.app.ui.main.my.MyPageCustomizationTest::class,
+    io.legado.app.ui.book.read.ContentEditSearchTest::class,
+    io.legado.app.ui.book.read.ContentReversalUiTest::class,
+    io.legado.app.ui.book.read.ReaderSourceReimportUiTest::class,
+    io.legado.app.help.book.ContentReversalCacheTest::class,
+    io.legado.app.ui.association.RuleSelectionShareTest::class,
+    io.legado.app.ui.association.SharedFileImportTest::class,
+    io.legado.app.ui.association.SourceImportFilterUiTest::class,
+    io.legado.app.ui.association.SourceManualReplacementUiTest::class,
+    io.legado.app.ui.about.ReadRecordHistoryTest::class,
+    io.legado.app.data.ReadRecordAuthorIdentityTest::class,
+    io.legado.app.data.BookSourceCheckStateTest::class,
+    io.legado.app.data.BookSourceCheckApiTest::class,
+    io.legado.app.ui.book.source.BookSourceCheckUiTest::class,
+    io.legado.app.help.source.SourceNavigationUiTest::class,
+    io.legado.app.model.localBook.PdfOutlineTest::class,
+    io.legado.app.ui.book.read.PdfPagePositionTest::class,
+    io.legado.app.ui.book.read.PdfOutlineNavigationTest::class,
+    io.legado.app.ui.book.read.PdfZoomNavigationTest::class,
+    io.legado.app.model.webBook.SourceContentCompatibilityTest::class,
+    io.legado.app.model.webBook.BatchContentDownloadTest::class,
+    io.legado.app.ui.book.read.MouseWheelScrollTest::class,
+    io.legado.app.ui.book.read.ReadingLayoutTransitionTest::class,
+    io.legado.app.ui.book.read.TitleFontWeightRenderingTest::class,
+    io.legado.app.ui.book.read.HighlightTriggerUiTest::class,
+    io.legado.app.ui.book.read.EpubHierarchyNavigationTest::class,
+    io.legado.app.ui.book.manga.MangaReadingDirectionTest::class,
+    io.legado.app.data.BookMemoTest::class,
+    io.legado.app.ui.widget.dialog.BookMemoDialogTest::class,
+    io.legado.app.data.HighlightRuleGroupTest::class,
+    io.legado.app.ui.highlight.HighlightGroupUiTest::class,
+    io.legado.app.help.storage.BackupRestoreConcurrencyTest::class,
+    io.legado.app.help.storage.BackupOptionsTest::class,
+    io.legado.app.help.storage.CoverTitleAdaptiveBackupRestoreTest::class,
+    io.legado.app.ui.code.CodeSelectionUiTest::class,
+    io.legado.app.ui.book.read.ReadAloudMenuUiTest::class,
+    io.legado.app.ui.book.read.TocReverseNavigationTest::class,
+    io.legado.app.ui.book.read.ReadAloudScaleUiTest::class,
+    io.legado.app.ui.widget.image.CoverTitleAdaptiveUiTest::class,
+    io.legado.app.ui.widget.image.CoverStylePreviewUiTest::class,
+    io.legado.app.ui.book.source.SourceDragOrderUiTest::class,
+    io.legado.app.ui.book.source.SourceOrderMetadataUpdateTest::class,
+    io.legado.app.ui.main.MainScreenTest::class,
+)
+class UiRegressionSuite
