@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 
 internal data class BookshelfTransferOperation(val id: String, val label: String)
 
-class BookshelfViewModel(
+class BookshelfViewModel @JvmOverloads constructor(
     application: Application,
     savedStateHandle: SavedStateHandle,
     resumePendingFileImport: Boolean = true,

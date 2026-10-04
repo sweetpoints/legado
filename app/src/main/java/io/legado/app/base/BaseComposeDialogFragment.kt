@@ -25,7 +25,7 @@ abstract class BaseComposeDialogFragment : BaseDialogFragment(0) {
         ComposeView(requireContext()).apply {
             id = R.id.compose_dialog_content
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent { LegadoComposeTheme { Content() } }
+            setContent { LegadoComposeTheme { this@BaseComposeDialogFragment.Content() } }
         }
 
     final override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {

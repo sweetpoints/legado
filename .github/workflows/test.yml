@@ -266,9 +266,50 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
 
+  startup:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-android
+      - name: Build debug APK
+        run: ./gradlew :app:assembleAppDebug --build-cache --no-daemon --max-workers=2
+      - name: Download the release APK built by this workflow
+        uses: actions/download-artifact@v8
+        with:
+          name: legado.app.release.universal
+          path: app/build/startup-release/
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify debug and release launcher cold starts
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            python3 .github/scripts/test-apk-startup.py app/build/outputs/apk/app/debug/app-app-debug.apk com.legado.app.debug app/build/apk-startup/debug
+            python3 .github/scripts/test-apk-startup.py app/build/startup-release/*.apk com.legado.app.release app/build/apk-startup/release
+      - name: Upload launcher test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-startup-api-${{ matrix.api }}
+          path: app/build/apk-startup/
+
   ci:
     name: CI
-    needs: [prepare, unit-tests, build, web]
+    needs: [prepare, unit-tests, build, web, startup]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -279,8 +320,9 @@ jobs:
           UNIT_TEST_RESULT: ${{ needs.unit-tests.result }}
           APK_BUILD_RESULT: ${{ needs.build.result }}
           WEB_RESULT: ${{ needs.web.result }}
+          STARTUP_RESULT: ${{ needs.startup.result }}
         run: |
-          for result in "$PREPARE_RESULT" "$UNIT_TEST_RESULT" "$APK_BUILD_RESULT" "$WEB_RESULT"; do
+          for result in "$PREPARE_RESULT" "$UNIT_TEST_RESULT" "$APK_BUILD_RESULT" "$WEB_RESULT" "$STARTUP_RESULT"; do
             if [[ "$result" != "success" ]]; then
               echo "CI dependency did not succeed: $result"
               exit 1
