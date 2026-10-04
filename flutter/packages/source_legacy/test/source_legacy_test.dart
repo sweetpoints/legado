@@ -565,6 +565,73 @@ void main() {
     });
     expect(fixed.source.stages['search']!.bodyTemplateMode, 'raw');
   });
+  test(
+    'explore presentation style is preserved without affecting URL validation',
+    () {
+      final style = <String, Object?>{
+        'layout_flexGrow': 1,
+        'nested': {'label': '@JS:display {{notAnInput}}'},
+      };
+      final items = [
+        {'title': 'A', 'url': '/a', 'style': style},
+        {'title': 'B', 'url': '/b', 'style': null},
+      ];
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': items,
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, false);
+      final recorded = imported.source.metadata['legacyExploreItems'] as List;
+      expect(recorded, items);
+      style['layout_flexGrow'] = 9;
+      expect(
+        (recorded.first as Map)['style'],
+        containsPair('layout_flexGrow', 1),
+      );
+      expect(
+        (imported.original['exploreUrl'] as List).first['style'],
+        containsPair('layout_flexGrow', 1),
+      );
+      final badUrl = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': jsonEncode([
+          {
+            'title': 'A',
+            'url': '/a,{"method":"POST"}',
+            'style': {'layout_flexGrow': 1},
+          },
+        ]),
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      expect(
+        badUrl.issues.map((e) => e.code),
+        contains('legacy.explore_options'),
+      );
+    },
+  );
+  test('explore style type and unknown behavior fields remain manual', () {
+    for (final extra in [
+      {'style': 'wide'},
+      {'style': []},
+      {'style': 1},
+      {'type': 'action'},
+      {'action': 'js'},
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'exploreUrl': jsonEncode([
+          {'title': 'A', 'url': '/a', ...extra},
+        ]),
+        'ruleExplore': {'bookList': 'tag.a'},
+      });
+      expect(imported.requiresManualWork, true, reason: '$extra');
+      expect(
+        imported.issues.map((e) => e.code),
+        contains('legacy.explore_menu_requires_review'),
+      );
+    }
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

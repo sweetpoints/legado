@@ -86,7 +86,7 @@ class LegacySourceImporter {
       }
     }
     final stages = <String, SourceStage>{};
-    final exploreItems = <Map<String, String>>[];
+    final exploreItems = <Map<String, Object?>>[];
     final mapping = {
       'search': ('ruleSearch', 'searchUrl', 'bookList'),
       'explore': ('ruleExplore', 'exploreUrl', 'bookList'),
@@ -337,7 +337,7 @@ Uri? _searchRequestAnchor(Object? value) {
   );
 }
 
-List<Map<String, String>> _legacyExploreMenu(
+List<Map<String, Object?>> _legacyExploreMenu(
   Object? menu,
   Map<String, String> defaults,
   List<LegacyIssue> issues,
@@ -350,7 +350,7 @@ List<Map<String, String>> _legacyExploreMenu(
     ),
   );
   if (menu == null || menu == '') return [];
-  final items = <Map<String, String>>[];
+  final items = <Map<String, Object?>>[];
   Object? decoded = menu;
   if (menu is String && menu.trim().startsWith('[')) {
     try {
@@ -365,13 +365,16 @@ List<Map<String, String>> _legacyExploreMenu(
       if (item is! Map ||
           item['title'] is! String ||
           item['url'] is! String ||
-          item.keys.any((k) => k != 'title' && k != 'url')) {
+          item.keys.any((k) => k != 'title' && k != 'url' && k != 'style') ||
+          (item['style'] != null && item['style'] is! Map)) {
         malformed();
         continue;
       }
       items.add({
         'title': item['title'] as String,
         'url': item['url'] as String,
+        if (item.containsKey('style'))
+          'style': jsonDecode(jsonEncode(item['style'])),
       });
     }
   } else if (menu is String) {
@@ -405,7 +408,7 @@ List<Map<String, String>> _legacyExploreMenu(
     return [];
   }
   for (var i = 0; i < items.length; i++) {
-    final url = items[i]['url']!;
+    final url = items[i]['url'] as String;
     _legacyRequest(url, 'exploreUrl[$i].url', defaults, issues);
     if (RegExp(r',\s*(?=\{)').hasMatch(url)) {
       issues.add(
