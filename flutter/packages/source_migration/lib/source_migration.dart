@@ -91,6 +91,14 @@ class SourceMigrator {
         '$oldName.${entry.key == 'toc' ? 'nextTocUrl' : 'nextContentUrl'}',
       );
     }
+    final metadata = Map<String, Object?>.from(
+      candidate['metadata'] as Map? ?? {},
+    );
+    metadata['compatibility'] = issues.isEmpty
+        ? 'unverified'
+        : 'manualRequired';
+    metadata['legacy'] = issues.isNotEmpty;
+    candidate['metadata'] = metadata;
     return MigrationCandidate(
       imported.original,
       Map<String, Object?>.from(jsonDecode(jsonEncode(candidate)) as Map),
@@ -113,6 +121,14 @@ class SourceMigrator {
     } on FormatException catch (e) {
       issue('migration.syntax_requires_review', e.message.toString());
       return ScriptMigration(script, null, issues);
+    }
+    for (var i = 0; i < tokens.length; i++) {
+      if (tokens[i].text == 'source' && (i == 0 || tokens[i - 1].text != '.')) {
+        issue(
+          'migration.host_binding_conflict',
+          'The legacy source identifier conflicts with the new host namespace.',
+        );
+      }
     }
     const forbidden = {
       'function',
@@ -248,6 +264,24 @@ class SourceMigrator {
         }
       }
       if (splitStart < end) args.add(tokens.sublist(splitStart, end));
+      if (name == 'ajax' &&
+          args.isNotEmpty &&
+          (args.first.first.text == '[' || args.first.first.text == 'Array')) {
+        issue(
+          'migration.ajax_array_requires_review',
+          'Legacy ajax selects the first array item; array inputs require explicit migration.',
+        );
+        continue;
+      }
+      if (name == 'ajax' &&
+          argumentCount == 1 &&
+          (args.single.length != 1 || args.single.single.text != '<string>')) {
+        issue(
+          'migration.ambiguous_overload',
+          'Ajax conversion requires a literal URL string; dynamic inputs may be arrays.',
+        );
+        continue;
+      }
       String rawArg(int n) =>
           script.substring(args[n].first.start, args[n].last.end);
       if (name == 'base64Encode' && argumentCount == 2) {

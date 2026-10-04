@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:source_engine/source_engine.dart';
+import 'package:crypto/crypto.dart';
 
 import 'src/audit.dart';
 export 'src/executor.dart' show createCliEngine;
@@ -22,8 +23,13 @@ typedef ExecuteSource = Future<Object?> Function(
   Map<String, Object?> variables,
 );
 
+typedef ImportLegacySource = Future<SourceDefinition> Function(
+  Map<String, Object?> source,
+);
+
 class SourceCli {
-  SourceCli({required this.migrate, required this.execute});
+  SourceCli({required this.migrate, required this.execute, this.importLegacy});
+  final ImportLegacySource? importLegacy;
   final MigrateSource migrate;
   final ExecuteSource execute;
 
@@ -31,19 +37,21 @@ class SourceCli {
     try {
       if (arguments.isEmpty || arguments.first == '--help') {
         return CliResult(arguments.isEmpty ? 64 : 0, {
-          'usage': 'source_tools validate FILE | audit FILE [--report FILE] | migrate FILE --output FILE_OR_DIRECTORY [--report FILE] | execute FILE STAGE [--variables JSON]',
+          'usage': 'source_tools validate FILE | audit FILE [--report FILE] | migrate FILE --output FILE_OR_DIRECTORY [--report FILE] | execute FILE STAGE [--variables JSON] | compare LEGACY_FILE CANDIDATE_FILE STAGE [--variables JSON] [--report FILE]',
           'stages': ['search', 'explore', 'info', 'toc', 'content'],
           'exitCodes': {
             '0': 'success',
             '1': 'execution failed',
             '2': 'invalid source',
             '3': 'migration needs review',
+            '4': 'comparison differs',
             '64': 'usage',
             '73': 'output exists',
             '74': 'file I/O',
           },
         });
       }
+      if (arguments.first == 'compare') return await _compare(arguments);
       final command = arguments.first;
       if (!['validate', 'audit', 'migrate', 'execute'].contains(command) ||
           arguments.length < 2) {
@@ -180,6 +188,162 @@ class SourceCli {
     } catch (error) {
       return _failure(1, 'execution_failed', error.toString());
     }
+  }
+
+  Future<CliResult> _compare(List<String> arguments) async {
+    try {
+      if (arguments.length < 4) {
+        throw const _Usage('Missing comparison arguments');
+      }
+      final stage = arguments[3];
+      if (!['search', 'explore', 'info', 'toc', 'content'].contains(stage)) {
+        throw const _Usage('Unknown comparison stage');
+      }
+      final options = <String, String>{};
+      for (var i = 4; i < arguments.length; i += 2) {
+        final key = arguments[i];
+        if (!{'--variables', '--report'}.contains(key) ||
+            options.containsKey(key) ||
+            i + 1 == arguments.length) {
+          throw const _Usage('Invalid comparison option');
+        }
+        options[key] = arguments[i + 1];
+      }
+      if (importLegacy == null) {
+        return _comparisonFailure(1, 'legacy_import_unavailable');
+      }
+      final legacyFile = File(arguments[1]);
+      final candidateFile = File(arguments[2]);
+      final report = options['--report'] == null
+          ? null
+          : File(options['--report']!);
+      if (report != null) {
+        final reportUri = report.absolute.uri.normalizePath();
+        if ([
+          legacyFile,
+          candidateFile,
+        ].any((file) => file.absolute.uri.normalizePath() == reportUri)) {
+          throw const _Usage('Input and report paths must differ');
+        }
+        await _checkDestination(legacyFile, report);
+        await _checkDestination(candidateFile, report);
+      }
+      final legacyBytes = await legacyFile.readAsBytes();
+      final candidateBytes = await candidateFile.readAsBytes();
+      final variables = _object(jsonDecode(options['--variables'] ?? '{}'));
+      final legacy = await importLegacy!(
+        _object(jsonDecode(utf8.decode(legacyBytes))),
+      );
+      final candidate = SourceDefinition.fromJson(
+        _object(jsonDecode(utf8.decode(candidateBytes))),
+      );
+      Future<({Map<String, Object?> summary, Object? value})> side(
+        SourceDefinition source,
+      ) async {
+        try {
+          // Isolate mutable input values as well as the engines assembled by execute.
+          final input = _object(jsonDecode(jsonEncode(variables)));
+          final value = await execute(source, stage, input);
+          final canonical = _canonicalJson(value);
+          return (
+            summary: <String, Object?>{
+              'status': 'success',
+              'executionMode': source.metadata['legacy'] == true
+                  ? 'legacy'
+                  : 'modern',
+              'resultSha256': sha256.convert(utf8.encode(canonical)).toString(),
+              if (value is List) 'resultCount': value.length,
+            },
+            value: canonical,
+          );
+        } catch (error) {
+          return (
+            summary: <String, Object?>{
+              'status': 'failed',
+              'executionMode': source.metadata['legacy'] == true
+                  ? 'legacy'
+                  : 'modern',
+              'errorCode': error is EngineException
+                  ? error.code
+                  : 'execution_failed',
+            },
+            value: null,
+          );
+        }
+      }
+
+      final baseline = await side(legacy);
+      final migrated = await side(candidate);
+      final success =
+          baseline.summary['status'] == 'success' &&
+          migrated.summary['status'] == 'success';
+      final equivalent = success && baseline.value == migrated.value;
+      final result = <String, Object?>{
+        'reportVersion': 1,
+        'command': 'compare',
+        'ok': equivalent,
+        'caseEquivalent': equivalent,
+        'sourceVerified': false,
+        'verified': false,
+        'baseline': 'flutterLegacyCompatibility',
+        'jvmCompared': false,
+        'network': 'live',
+        'stage': stage,
+        'legacyInputSha256': sha256.convert(legacyBytes).toString(),
+        'candidateInputSha256': sha256.convert(candidateBytes).toString(),
+        'variablesSha256': sha256
+            .convert(utf8.encode(_canonicalJson(variables)))
+            .toString(),
+        'legacy': baseline.summary,
+        'candidate': migrated.summary,
+      };
+      if (report != null) await _writeExclusive(report, result);
+      return CliResult(
+        !success
+            ? 1
+            : equivalent
+            ? 0
+            : 4,
+        result,
+      );
+    } on _Usage {
+      return _comparisonFailure(64, 'usage');
+    } on _OutputExists {
+      return _comparisonFailure(73, 'output_exists');
+    } on FileSystemException {
+      return _comparisonFailure(74, 'file_io');
+    } on FormatException {
+      return _comparisonFailure(2, 'invalid_json');
+    } on TypeError {
+      return _comparisonFailure(2, 'invalid_source');
+    } on EngineException catch (error) {
+      return _comparisonFailure(2, error.code);
+    } catch (_) {
+      return _comparisonFailure(1, 'comparison_failed');
+    }
+  }
+
+  static CliResult _comparisonFailure(int code, String error) =>
+      CliResult(code, {
+        'ok': false,
+        'command': 'compare',
+        'sourceVerified': false,
+        'verified': false,
+        'jvmCompared': false,
+        'error': {'code': error},
+      });
+
+  static String _canonicalJson(Object? value) {
+    Object? canonical(Object? input) {
+      if (input is Map) {
+        final keys = input.keys.cast<String>().toList()..sort();
+        return {for (final key in keys) key: canonical(input[key])};
+      }
+      if (input is List) return input.map(canonical).toList();
+      return input;
+    }
+
+    return jsonEncode(canonical(value));
   }
 
   Future<CliResult> _migrateBatch(

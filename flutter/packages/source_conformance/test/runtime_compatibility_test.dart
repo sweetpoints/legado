@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:source_engine/source_engine.dart';
 import 'package:source_legacy/source_legacy.dart';
+import 'package:source_migration/source_migration.dart';
 import 'package:source_v8/source_v8.dart';
 import 'package:test/test.dart';
 
@@ -308,4 +309,22 @@ void main() {
       expect(result['unsupported'], true);
     },
   );
+  test('legacy ajax array uses first URL and migration refuses changing that meaning', () async {
+    // JsExtensions.ajax(Any, Long?) explicitly uses List.firstOrNull.
+    const script = 'return java.ajax(["/value","/missing"]);';
+    final original = await runtime.evaluate(
+      script,
+      ScriptContext(
+        host: LegacyScriptHost(_NetworkHost(network, server.baseUrl)),
+      ),
+    );
+    expect(jsonDecode(original as String), {'value': '异步结果'});
+    expect(server.requests, ['/value']);
+    final candidate = SourceMigrator().migrateScript(script);
+    expect(candidate.candidate, isNull);
+    expect(
+      candidate.issues.map((i) => i.code),
+      contains('migration.ajax_array_requires_review'),
+    );
+  });
 }

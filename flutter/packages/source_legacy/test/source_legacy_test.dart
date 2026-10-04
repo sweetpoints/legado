@@ -229,6 +229,40 @@ void main() {
     expect(imported.requiresManualWork, false);
     expect(imported.source.stages['search']!.url, '/search?keys=a,b');
   });
+
+  test('direct literal string extraction imports without manual review', () {
+    for (final script in [
+      '@js:java.getString("class.title@text")',
+      "@js:return java.getString('class.title@text');",
+      '@js:return java.getStringList("@CSS:article:nth-child(2)@text");',
+      '@js:java.getStringList("")',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'ruleContent': {'content': script},
+      });
+      expect(imported.requiresManualWork, false, reason: script);
+      expect(imported.source.metadata['legacy'], true);
+      expect(imported.source.metadata['compatibility'], 'unverified');
+      expect(imported.source.stages['content']!.fields['content'], script);
+    }
+  });
+  test('dynamic extraction overloads and element scripts remain manual', () {
+    for (final script in [
+      '@js:return java.getString(rule);',
+      '@js:return java.getString("@text", result);',
+      '@js:return java.getElement("class.title");',
+      '@js:return java.getElements("class.title");',
+      '@js:return java.getString("@js:java.get(1)");',
+      '@js:return java.getString("class.a@text||class.b@text");',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'https://books.test',
+        'ruleContent': {'content': script},
+      });
+      expect(imported.requiresManualWork, true, reason: script);
+    }
+  });
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',

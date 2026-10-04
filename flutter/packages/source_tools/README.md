@@ -49,3 +49,22 @@ host for modern sources and migrated candidates. Legacy sources additionally
 receive the `java.*` host adapter. Modern sources never receive that adapter or
 its JavaScript prelude. Browser and interactive platform capabilities remain
 unavailable in the CLI and fail with an explicit error.
+
+## Compare a migration candidate
+
+```sh
+dart run packages/source_tools/bin/source_tools.dart compare old.json candidate.json content --variables '{"url":"https://example.org/chapter"}' --report comparison.json
+```
+
+This imports the original through the Flutter legacy compatibility layer and
+executes each side in a separate engine. Object key order is ignored; array order
+and value types matter. A candidate still using legacy mode is allowed and
+identified. Exit code `0` means this case produced equivalent results, `4` means
+different results, and `1` means an execution failed. Reports contain input/result
+hashes and stable error codes without result bodies or source content. Existing
+reports are never replaced.
+
+`caseEquivalent` applies only to this stage and these variables. `sourceVerified`
+and `verified` remain false; `jvmCompared` is false because the original JVM engine
+is not run. Network calls are live and can produce different responses; time,
+randomness, cookies, and service-side changes can also affect comparison.

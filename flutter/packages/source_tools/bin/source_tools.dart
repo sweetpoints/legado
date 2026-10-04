@@ -8,6 +8,7 @@ import 'package:source_v8/source_v8.dart';
 
 Future<void> main(List<String> arguments) async {
   final cli = SourceCli(
+    importLegacy: (input) async => LegacySourceImporter().import(input).source,
     migrate: (input) async => SourceMigrator().migrate(input).toJson(),
     execute: (source, stage, variables) async {
       final engine = createCliEngine(

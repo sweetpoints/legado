@@ -149,9 +149,11 @@ class LegacySourceImporter {
             ),
           );
         }
-        final simpleLegacyScript = RegExp(
-          r'^@js:\s*(?:return\s+)?java\.(?:ajax|ajaxAll|connect|get|post|head|put|base64Encode|base64Decode|base64DecodeToByteArray|strToBytes|bytesToStr|hexDecodeToByteArray|hexDecodeToString|hexEncodeToString|md5Encode|md5Encode16|digestHex|digestBase64Str|encodeURI)\([^()]*\)\s*;?\s*$',
-        ).hasMatch(text);
+        final simpleLegacyScript =
+            _simpleExtractionScript(text) ||
+            RegExp(
+              r'^@js:\s*(?:return\s+)?java\.(?:ajax|ajaxAll|connect|get|post|head|put|base64Encode|base64Decode|base64DecodeToByteArray|strToBytes|bytesToStr|hexDecodeToByteArray|hexDecodeToString|hexEncodeToString|md5Encode|md5Encode16|digestHex|digestBase64Str|encodeURI)\([^()]*\)\s*;?\s*$',
+            ).hasMatch(text);
         if (!simpleLegacyScript &&
             RegExp(
               r'@js:|<js>|@webjs:|@put:|@get:|##|&&|\|\||%%|\{\{|^//|^@XPath:',
@@ -445,3 +447,29 @@ String _fixedForm(String input) => input
           : '${encode(part.substring(0, split))}=${encode(part.substring(split + 1))}';
     })
     .join('&');
+
+bool _simpleExtractionScript(String script) {
+  final match = RegExp(
+    r"""^@js:\s*(?:return\s+)?java\.(getString|getStringList)\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)\s*;?\s*$""",
+  ).firstMatch(script);
+  if (match == null) return false;
+  final literal = match[2]!;
+  String rule;
+  if (literal.startsWith('"')) {
+    try {
+      rule = jsonDecode(literal) as String;
+    } on FormatException {
+      return false;
+    }
+  } else {
+    final content = literal.substring(1, literal.length - 1);
+    if (content.contains(r'\')) return false;
+    rule = content;
+  }
+  // Only already-covered extraction syntax; script nesting, replacements,
+  // variables and compound rule semantics remain reviewable separately.
+  return !RegExp(
+    r'@js:|<js>|@webjs:|@put:|@get:|##|&&|\|\||%%|\{\{|^//|^@XPath:',
+    caseSensitive: false,
+  ).hasMatch(rule);
+}
