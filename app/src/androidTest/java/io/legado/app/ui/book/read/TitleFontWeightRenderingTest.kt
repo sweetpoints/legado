@@ -649,7 +649,7 @@ class TitleFontWeightRenderingTest {
                         )
                     fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
                         withTimeout(30_000) {
-                            for (ignored in chapter.layoutChannel) Unit
+                            for (ignored in chapter.layoutChannel) {}
                             while (!chapter.isCompleted) yield()
                         }
                         chapter
@@ -1137,7 +1137,7 @@ class TitleFontWeightRenderingTest {
                         )
                     runBlocking {
                         withTimeout(30_000) {
-                            for (ignored in base.layoutChannel) Unit
+                            for (ignored in base.layoutChannel) {}
                             while (!base.isCompleted) yield()
                         }
                     }
@@ -1169,7 +1169,7 @@ class TitleFontWeightRenderingTest {
                                 result ->
                                 runBlocking {
                                     withTimeout(30_000) {
-                                        for (ignored in result.layoutChannel) Unit
+                                        for (ignored in result.layoutChannel) {}
                                         while (!result.isCompleted) yield()
                                     }
                                 }
@@ -1356,7 +1356,7 @@ class TitleFontWeightRenderingTest {
             }
         fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
             withTimeout(30_000) {
-                for (ignored in chapter.layoutChannel) Unit
+                for (ignored in chapter.layoutChannel) {}
                 while (!chapter.isCompleted) yield()
             }
             chapter
@@ -1600,7 +1600,7 @@ class TitleFontWeightRenderingTest {
         val savedCompression = ReadBookConfig.punctuationCompress.key
         fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
             withTimeout(30_000) {
-                for (ignored in chapter.layoutChannel) Unit
+                for (ignored in chapter.layoutChannel) {}
                 while (!chapter.isCompleted) yield()
             }
             chapter
@@ -1855,7 +1855,7 @@ class TitleFontWeightRenderingTest {
                     )
                 fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
                     withTimeout(30_000) {
-                        for (ignored in chapter.layoutChannel) Unit
+                        for (ignored in chapter.layoutChannel) {}
                         while (!chapter.isCompleted) yield()
                     }
                     chapter
@@ -2151,7 +2151,7 @@ class TitleFontWeightRenderingTest {
                     )
                 fun awaitLayout(chapter: TextChapter): TextChapter = runBlocking {
                     withTimeout(30_000) {
-                        for (ignored in chapter.layoutChannel) Unit
+                        for (ignored in chapter.layoutChannel) {}
                         while (!chapter.isCompleted) yield()
                     }
                     chapter
@@ -2397,8 +2397,11 @@ class TitleFontWeightRenderingTest {
                     Paint().apply {
                         color = Color.BLACK
                         textSize =
-                            page.readerTipTextSizeSp *
-                                context.resources.displayMetrics.scaledDensity
+                            android.util.TypedValue.applyDimension(
+                                android.util.TypedValue.COMPLEX_UNIT_SP,
+                                page.readerTipTextSizeSp.toFloat(),
+                                context.resources.displayMetrics,
+                            )
                         typeface = page.readerTipTypeface
                         isAntiAlias = true
                         isSubpixelText = true
@@ -2437,7 +2440,7 @@ class TitleFontWeightRenderingTest {
                     bitmap.recycle()
                 }
             }
-            instrumentation.waitForIdleSync()
+            compose.waitForIdle()
             val currentPage = hasTestTag("reader-current-page")
             val currentTip = hasTestTag("reader-tip-header-left").and(hasAnyAncestor(currentPage))
             val renderedTip = compose.onNode(currentTip).captureToImage()
@@ -2638,18 +2641,21 @@ class TitleFontWeightRenderingTest {
     }
 
     private fun awaitReader(condition: (ReadBookActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         throw AssertionError("Reader did not reach the expected title font weight state")
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val frames = CountDownLatch(1)
         scenario!!.onActivity { activity ->
             activity.window.decorView.postOnAnimation {

@@ -8,7 +8,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -211,7 +211,7 @@ class HighlightTriggerUiTest {
         scenario!!.onActivity {
             MoreConfigDialog().showNow(it.supportFragmentManager, "highlight-settings")
         }
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         compose.waitUntil(5_000) {
             compose
                 .onAllNodesWithTag("more-reader-settings-list")
@@ -477,13 +477,16 @@ class HighlightTriggerUiTest {
     }
 
     private fun awaitReader(condition: (ReadView) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it.findViewById(R.id.read_view)) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 15000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it.findViewById(R.id.read_view)) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         var state = ""
         scenario!!.onActivity {
             val page = it.findViewById<ReadView>(R.id.read_view).curPage.textPage
@@ -496,7 +499,7 @@ class HighlightTriggerUiTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {

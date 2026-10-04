@@ -142,7 +142,7 @@ class ReadingLayoutTransitionTest {
                     scenario.recreate()
                     awaitReader(scenario, book.bookUrl, true)
                     onView(withId(R.id.read_view)).perform(swipeUp())
-                    instrumentation.waitForIdleSync()
+                    compose.waitForIdle()
                     await {
                         var stopped = false
                         scenario.onActivity {
@@ -274,7 +274,7 @@ class ReadingLayoutTransitionTest {
         }
         // Header/footer mode changes schedule a 300ms size update before the final pagination.
         SystemClock.sleep(500)
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private data class SourcePosition(val paragraph: Int, val offset: Int, val context: String)
@@ -376,10 +376,13 @@ class ReadingLayoutTransitionTest {
     }
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue(
             "The actual reader or style selector did not reach the expected state",

@@ -273,18 +273,21 @@ class BookMemoDialogTest {
         activity.supportFragmentManager.fragments.filterIsInstance<BookMemoDialog>().firstOrNull()
 
     private fun await(condition: (ReadBookActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         throw AssertionError("Book memo did not reach the expected state")
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {

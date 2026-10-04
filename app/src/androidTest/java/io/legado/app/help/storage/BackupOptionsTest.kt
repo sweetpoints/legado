@@ -537,14 +537,20 @@ class BackupOptionsTest {
     }
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (!condition() && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         assertTrue("The real backup did not finish", condition())
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario!!.onActivity {
             val decor = it.window.decorView

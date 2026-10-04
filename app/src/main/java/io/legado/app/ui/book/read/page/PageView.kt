@@ -19,7 +19,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.doOnLayout
+import androidx.core.view.OneShotPreDrawListener
+import androidx.core.view.doOnPreDraw
 import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.BookHighlight
@@ -92,6 +93,7 @@ class PageView(context: Context) : FrameLayout(context) {
     private data class CanvasReadyCallback(val isCurrent: () -> Boolean, val action: () -> Unit)
 
     private val canvasReadyCallbacks = mutableListOf<CanvasReadyCallback>()
+    private var canvasReadyPreDraw: OneShotPreDrawListener? = null
     private var isMainView by mutableStateOf(false)
     var isScroll = false
 
@@ -275,18 +277,30 @@ class PageView(context: Context) : FrameLayout(context) {
     }
 
     private fun awaitCanvasLayout() {
-        if (canvasReadyCallbacks.isEmpty() || contentBounds.width <= 0 || contentBounds.height <= 0)
-            return
-        contentView.doOnLayout {
+        if (
+            canvasReadyCallbacks.isEmpty() ||
+                contentBounds.width <= 0 ||
+                contentBounds.height <= 0 ||
+                canvasReadyPreDraw != null
+        ) return
+        // View.layout clears its layout-request flag after onLayoutChange callbacks.
+        // Check readiness before drawing, when both native and Compose geometry have settled.
+        canvasReadyPreDraw = contentView.doOnPreDraw {
+            canvasReadyPreDraw = null
             if (isCanvasReady) {
                 val callbacks = canvasReadyCallbacks.toList()
                 canvasReadyCallbacks.clear()
                 callbacks.forEach { if (it.isCurrent()) it.action() }
+            } else if (isAttachedToWindow) {
+                awaitCanvasLayout()
             }
         }
+        contentView.postInvalidateOnAnimation()
     }
 
     override fun onDetachedFromWindow() {
+        canvasReadyPreDraw?.removeListener()
+        canvasReadyPreDraw = null
         canvasReadyCallbacks.clear()
         super.onDetachedFromWindow()
     }

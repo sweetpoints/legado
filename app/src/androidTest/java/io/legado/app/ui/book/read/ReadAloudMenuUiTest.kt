@@ -282,7 +282,7 @@ class ReadAloudMenuUiTest {
             service = checkNotNull(readAloudService())
             // Keep the real service lifecycle/commands; voice availability is outside this gesture
             // test.
-            service!!.clearTTS()
+            service.clearTTS()
             if (paused) ReadAloud.pause(activity) else ReadAloud.resume(activity)
             activity.showReadAloudControls()
         }
@@ -709,7 +709,7 @@ class ReadAloudMenuUiTest {
                 previousId?.let { staleId ->
                     listener.onStart(staleId)
                     listener.onRangeStart(staleId, 123, 124, 0)
-                    instrumentation.waitForIdleSync()
+                    compose.waitForIdle()
                     assertEquals(
                         "Old queued callbacks cannot move the new session",
                         expected,
@@ -761,7 +761,7 @@ class ReadAloudMenuUiTest {
                 )
                 val paragraphBefore = service.nowSpeak
                 listener.onDone(calls.first().id)
-                instrumentation.waitForIdleSync()
+                compose.waitForIdle()
                 assertEquals(
                     "Only a final page chunk advances the paragraph",
                     paragraphBefore + if (splitByPage) 1 else 0,
@@ -818,7 +818,7 @@ class ReadAloudMenuUiTest {
                     touch(it.findViewById(R.id.read_view), MotionEvent.ACTION_DOWN, .8f)
                 }
                 listener.onRangeStart(next.id, 3, 4, 0)
-                instrumentation.waitForIdleSync()
+                compose.waitForIdle()
                 assertEquals(next.position + 3, ReadAloud.readAloudChapterStart)
                 scenario!!.onActivity {
                     val view = it.findViewById<ReadView>(R.id.read_view)
@@ -1066,7 +1066,6 @@ class ReadAloudMenuUiTest {
                     awaiting =
                         CoroutineScope(Dispatchers.IO).async {
                             ReadBook.loadContentAwait(1, resetPageOffset = true)
-                            Unit
                         }
                 } else {
                     compose.onNodeWithTag("reader-aloud-back").performClick()
@@ -1100,7 +1099,7 @@ class ReadAloudMenuUiTest {
                             .hasReadAloudSpan &&
                         (!paused || awaitLoad || ReadBook.durChapterPos == expectedPosition)
                 }
-                instrumentation.waitForIdleSync()
+                compose.waitForIdle()
                 assertEquals(
                     "No play/stop or new utterance session on return",
                     session,
@@ -1239,13 +1238,16 @@ class ReadAloudMenuUiTest {
         timeoutMillis: Long = 30000,
         condition: (ReadBookActivity) -> Boolean,
     ) {
-        val deadline = SystemClock.uptimeMillis() + timeoutMillis
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = timeoutMillis) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         var state = ""
         scenario!!.onActivity {
             val view = it.findViewById<ReadView>(R.id.read_view)
@@ -1266,7 +1268,7 @@ class ReadAloudMenuUiTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario!!.onActivity {
             val decor = it.window.decorView

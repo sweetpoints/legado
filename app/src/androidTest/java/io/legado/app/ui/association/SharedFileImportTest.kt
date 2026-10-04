@@ -1140,8 +1140,8 @@ class SharedFileImportTest {
                             !preview.loading &&
                             !preview.busy &&
                             preview.rows.isNotEmpty() &&
-                            fragment?.view?.isShown == true &&
-                            fragment?.dialog?.window?.decorView?.hasWindowFocus() == true
+                            fragment.view?.isShown == true &&
+                            fragment.dialog?.window?.decorView?.hasWindowFocus() == true
                 }
                 ready
             }
@@ -1307,18 +1307,24 @@ class SharedFileImportTest {
                 .filterIsInstance<ReadBookActivity>()
                 .forEach { it.finish() }
         }
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 20000
-        while (!condition() && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 20000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         assertTrue("Shared import did not reach the expected database/reader state", condition())
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         instrumentation.uiAutomation.waitForIdle(100, 5000)
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         File(context.getExternalFilesDir(null), "ui-regression/$name.png").apply {

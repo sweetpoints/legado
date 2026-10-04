@@ -514,7 +514,7 @@ class ReadAloudScaleUiTest {
         compose.onNodeWithTag("reader-aloud-controls").performTouchInput {
             swipe(center, center + Offset(dx, dy), durationMillis = 200)
         }
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun tap(x: Float, y: Float) {
@@ -528,7 +528,7 @@ class ReadAloudScaleUiTest {
                 }
             }
         }
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
     }
 
     private fun playbackFlag(name: String, value: Boolean) {
@@ -540,18 +540,21 @@ class ReadAloudScaleUiTest {
     }
 
     private fun await(description: String, condition: (ReadBookActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 30000
-        do {
-            var ready = false
-            scenario!!.onActivity { ready = condition(it) }
-            if (ready) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 30000) {
+                var ready = false
+                scenario!!.onActivity { ready = condition(it) }
+                ready
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
+        }
         throw AssertionError("Timed out waiting for $description")
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         val rendered = CountDownLatch(1)
         scenario!!.onActivity {
             val decor = it.window.decorView

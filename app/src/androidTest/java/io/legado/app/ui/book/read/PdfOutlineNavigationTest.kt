@@ -276,7 +276,7 @@ class PdfOutlineNavigationTest {
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         SystemClock.sleep(500)
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
@@ -313,10 +313,13 @@ class PdfOutlineNavigationTest {
     }
 
     private fun waitUntil(condition: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 30_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(100)
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue("PDF outline/navigation did not reach the expected state", condition())
     }

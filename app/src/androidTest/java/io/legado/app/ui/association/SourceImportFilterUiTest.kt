@@ -140,7 +140,7 @@ class SourceImportFilterUiTest {
                     server.accept().use { client ->
                         client.soTimeout = 10_000
                         val reader = client.getInputStream().bufferedReader()
-                        while (!reader.readLine().isNullOrEmpty()) Unit
+                        while (!reader.readLine().isNullOrEmpty()) {}
                         client.getOutputStream().apply {
                             write(
                                 ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" +
@@ -810,16 +810,19 @@ class SourceImportFilterUiTest {
     }
 
     private fun await(message: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (condition()) return
-            SystemClock.sleep(50)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                condition()
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Preserve the original state diagnostics and failure assertion below.
         }
         assertTrue(message, condition())
     }
 
     private fun screenshot(name: String) {
-        instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->
             try {
                 File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
