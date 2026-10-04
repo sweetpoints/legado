@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.os.SystemClock
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -186,6 +185,7 @@ class ReadingLayoutTransitionTest {
                         assertTrue("Actual scrolling invalidates a layout anchor", view.getReadPositionVersion() > version)
                         view.curPage.scroll(1)
                     }
+                    capture(scenario, "layout-scroll-before-preset")
                     switchStyle(scenario, 2)
                     awaitReader(scenario, book.bookUrl, true)
                     val sameMode = capture(scenario, "layout-scroll-same-mode")
@@ -285,11 +285,34 @@ class ReadingLayoutTransitionTest {
         url: String,
         scroll: Boolean,
     ) {
+        // Compose idle does not include the provider's delayed resize and its layout job.
+        val pendingSize = ChapterProvider::class.java.getDeclaredField("upViewSizeRunnable")
+            .apply { isAccessible = true }
+        val loadingJobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs")
+            .apply { isAccessible = true }
+        val trace = File(context.getExternalFilesDir("ui-regression"), "layout-geometry.txt")
+        var lastSample = ""
         await {
             var ready = false
             scenario.onActivity {
                 val view = it.findViewById<ReadView>(R.id.read_view)
+                val content = view.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+                val jobs = loadingJobs.get(ReadBook) as Map<*, *>
+                val job = jobs[ReadBook.durChapterIndex] as? io.legado.app.help.coroutine.Coroutine<*>
+                val sample = "scroll=$scroll pending=${pendingSize.get(ChapterProvider) != null} " +
+                    "content=${content.width}x${content.height} provider=${ChapterProvider.viewWidth}x${ChapterProvider.viewHeight} " +
+                    "jobCompleted=${job?.isCompleted} chapterCompleted=${ReadBook.curTextChapter?.isCompleted} " +
+                    "bound=${view.curPage.textPage.textChapter === ReadBook.curTextChapter}"
+                if (sample != lastSample) {
+                    trace.appendText("$sample\n")
+                    lastSample = sample
+                }
                 ready =
+                    pendingSize.get(ChapterProvider) == null &&
+                        content.width > 0 && content.height > 0 &&
+                        content.width == ChapterProvider.viewWidth &&
+                        content.height == ChapterProvider.viewHeight &&
+                        (job == null || job.isCompleted) &&
                     ReadBook.book?.bookUrl == url &&
                         ReadBook.curTextChapter?.chapter?.bookUrl == url &&
                         ReadBook.curTextChapter?.isCompleted == true &&
@@ -301,8 +324,6 @@ class ReadingLayoutTransitionTest {
             }
             ready
         }
-        // Header/footer mode changes schedule a 300ms size update before the final pagination.
-        SystemClock.sleep(500)
         compose.waitForIdle()
     }
 

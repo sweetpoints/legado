@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.os.SystemClock
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,8 +34,6 @@ import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.externalFiles
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -141,6 +141,7 @@ class CoverStylePreviewUiTest {
                 compose.onNodeWithTag("cover-font-row-$key").performClick()
             }
             val after = previews(settings)
+            val afterBounds = previewBounds()
             assertFalse(
                 "real cover pixels update without leaving settings",
                 before[1].contentEquals(after[1]),
@@ -152,6 +153,7 @@ class CoverStylePreviewUiTest {
             screenshot("cover-style-settings-live")
             settings.recreate()
             val recreated = previews(settings)
+            assertEquals("recreated previews use the same physical sampling bounds", afterBounds, previewBounds())
             screenshot("cover-style-settings-recreated")
             after.zip(recreated).forEach { (expected, actual) ->
                 assertArrayEquals(expected, actual)
@@ -247,10 +249,12 @@ class CoverStylePreviewUiTest {
      */
     private fun previews(settings: ActivityScenario<ConfigActivity>): List<IntArray> {
         scroll(settings, "coverPreview")
-        awaitWindowFrames(settings)
+        // Scroll-to-node only ensures visibility and can leave different window origins after
+        // recreation. The nine settings precede this last item; align it with the same scroll action.
+        compose.onNodeWithTag("cover-font-settings-list").performScrollToIndex(styleKeys.size)
+        compose.waitForIdle()
         val repo = GlideCoverRepository.get(context)
         var result: List<IntArray>? = null
-        var previousPixels: List<IntArray>? = null
         val titles = listOf("开源阅读", "开源阅读可以看小说、看漫画、听书")
         val authors = listOf("开源阅读LegadoTeam", "开源阅读")
         waitUntil {
@@ -319,19 +323,15 @@ class CoverStylePreviewUiTest {
                             expected.recycle()
                         }
                     }
-                val pixels = if (ready) frames.map { bitmap ->
+                if (ready)
+                    result = frames.map { bitmap ->
                         IntArray(bitmap.width * bitmap.height).also {
                             bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
                             // First entry is the top-center background sample, outside the rounded
                             // corner and title.
                             it[0] = bitmap.getPixel(bitmap.width / 2, 2)
                         }
-                    } else null
-                // Renderer readiness alone can coincide with the first presented native frame.
-                // Require the full raster to repeat exactly before using it as a recreation baseline.
-                if (pixels != null && previousPixels?.zip(pixels)?.all { (a, b) -> a.contentEquals(b) } == true)
-                    result = pixels
-                previousPixels = pixels
+                    }
                 result != null
             } finally {
                 frames.forEach(Bitmap::recycle)
@@ -340,16 +340,10 @@ class CoverStylePreviewUiTest {
         return checkNotNull(result)
     }
 
-    private fun awaitWindowFrames(settings: ActivityScenario<ConfigActivity>) {
-        compose.waitForIdle()
-        val frames = CountDownLatch(1)
-        settings.onActivity { activity ->
-            val root = activity.window.decorView
-            root.postOnAnimation { root.postOnAnimation { frames.countDown() } }
+    private fun previewBounds(): List<Rect> =
+        listOf("short", "long").map { suffix ->
+            compose.onNodeWithTag("cover-font-preview-$suffix").fetchSemanticsNode().boundsInRoot
         }
-        assertTrue("preview window completes native draw frames", frames.await(5, TimeUnit.SECONDS))
-        compose.waitForIdle()
-    }
 
     private fun waitUntil(predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 5000
