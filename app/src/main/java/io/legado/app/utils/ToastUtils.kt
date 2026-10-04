@@ -122,9 +122,9 @@ private class CustomToastSession(
         @Suppress("DEPRECATION") run { toast.view = presentation.view }
         toast.duration = duration
         toastCallbackRegistration =
-            runToastCallbackOnApi30(Build.VERSION.SDK_INT) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 ToastCallbackApi30.registerHiddenCallback(toast, ::close)
-            }
+            } else null
     }
 
     fun show() {

@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -43,7 +43,6 @@ import io.legado.app.ui.theme.LocalLegadoColors
 import io.legado.app.utils.ColorUtils
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.*
 
 class ReadingHistoryActions(
@@ -435,10 +434,11 @@ private fun ReadingHistoryRow(
     val author =
         if (row.combined) stringResource(R.string.read_record_legacy_authors, row.displayAuthor)
         else row.displayAuthor.ifBlank { stringResource(R.string.read_record_no_author) }
+    val locale = LocalConfiguration.current.locales[0]
     val date =
-        remember(row.lastRead, LocalContext.current.resources.configuration.locales) {
+        remember(row.lastRead, locale) {
             if (row.lastRead > 0)
-                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(row.lastRead))
+                SimpleDateFormat("yyyy-MM-dd", locale).format(Date(row.lastRead))
             else ""
         }
     Row(

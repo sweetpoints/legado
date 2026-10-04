@@ -16,7 +16,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -140,6 +139,7 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.ACache
+import io.legado.app.utils.inflateMenuModel
 import io.legado.app.utils.Debounce
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
@@ -287,9 +287,9 @@ class ReadBookActivity :
         get() = 24.dpToPx().toFloat()
 
     private var menu: Menu? = null
-    @get:SuppressLint("RestrictedApi")
-    private val composeReaderMenu by lazy {
-        MenuBuilder(this).also { menuInflater.inflate(R.menu.book_read, it) }
+    // This public API provides only the command model; the menu is rendered in Compose.
+    private val composeReaderMenu: Menu by lazy {
+        inflateMenuModel(R.menu.book_read)
     }
     private var bookInfoNavigationJob: Job? = null
     private var bookInfoNavigationEpoch = 0L

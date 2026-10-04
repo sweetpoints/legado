@@ -183,6 +183,9 @@ jobs:
           pre-emulator-launch-script: |
             sed -i '/^hw\.mainKeys=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
             echo 'hw.mainKeys=no' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
+            # Real IME geometry tests need the screen keyboard, not a host keyboard.
+            sed -i '/^hw\.keyboard=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            echo 'hw.keyboard=no' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
           script: bash .github/scripts/run-ui-regression.sh
 
       - name: Upload test results

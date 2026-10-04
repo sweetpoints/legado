@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -43,6 +44,7 @@ internal fun ReviewDetailRoute(
     val close by rememberUpdatedState(onClose)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val context = LocalContext.current
+    val resources by rememberUpdatedState(LocalResources.current)
     val list = rememberLazyListState()
     val dimensions = remember(sourceKey) { ReviewImageDimensions() }
     DisposableEffect(audio) { onDispose { audio.release() } }
@@ -97,10 +99,10 @@ internal fun ReviewDetailRoute(
                         viewModel.consumeEffect(effect.id)
                         toast(
                             if (effect.message == "review_rule_missing")
-                                context.getString(R.string.review_rule_missing)
+                                resources.getString(R.string.review_rule_missing)
                             else
                                 effect.message.ifBlank {
-                                    context.getString(R.string.load_over_time)
+                                    resources.getString(R.string.load_over_time)
                                 }
                         )
                     }
@@ -117,7 +119,7 @@ internal fun ReviewDetailRoute(
                                 viewModel.consumeEffect(effect.id)
                                 if (item != null || audio.state.value.url == url)
                                     audio.toggle(url, item)
-                                else toast(context.getString(R.string.review_rule_missing))
+                                else toast(resources.getString(R.string.review_rule_missing))
                             }
                         } catch (error: CancellationException) {
                             throw error
@@ -126,7 +128,7 @@ internal fun ReviewDetailRoute(
                                 viewModel.consumeEffect(effect.id)
                                 toast(
                                     error.localizedMessage
-                                        ?: context.getString(R.string.load_over_time)
+                                        ?: resources.getString(R.string.load_over_time)
                                 )
                             }
                         }

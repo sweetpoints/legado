@@ -1,10 +1,11 @@
 package io.legado.app.ui.code
 
 import android.content.Context
+import android.content.res.Resources
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -14,23 +15,26 @@ import io.legado.app.model.analyzeRule.CurlAnalyzeUrlConverter.ErrorReason
 import kotlinx.coroutines.CancellationException
 
 internal fun curlNoticeText(context: Context, effect: CurlEffect, detail: String): String =
+    curlNoticeText(context.resources, effect, detail)
+
+private fun curlNoticeText(resources: Resources, effect: CurlEffect, detail: String): String =
     when (effect.notice) {
-        CurlNotice.NoOutput -> context.getString(R.string.curl_converter_no_output)
-        CurlNotice.InsertFailed -> context.getString(R.string.curl_converter_insert_failed)
+        CurlNotice.NoOutput -> resources.getString(R.string.curl_converter_no_output)
+        CurlNotice.InsertFailed -> resources.getString(R.string.curl_converter_insert_failed)
         CurlNotice.Conversion ->
             when (effect.reason) {
-                ErrorReason.EMPTY_INPUT -> context.getString(R.string.curl_converter_empty_input)
-                ErrorReason.INVALID_CURL -> context.getString(R.string.curl_converter_invalid_curl)
-                ErrorReason.MISSING_URL -> context.getString(R.string.curl_converter_missing_url)
+                ErrorReason.EMPTY_INPUT -> resources.getString(R.string.curl_converter_empty_input)
+                ErrorReason.INVALID_CURL -> resources.getString(R.string.curl_converter_invalid_curl)
+                ErrorReason.MISSING_URL -> resources.getString(R.string.curl_converter_missing_url)
                 ErrorReason.INVALID_ANALYZE_URL ->
-                    context.getString(R.string.curl_converter_invalid_analyze_url)
+                    resources.getString(R.string.curl_converter_invalid_analyze_url)
                 ErrorReason.UNSUPPORTED_METHOD ->
-                    context.getString(R.string.curl_converter_unsupported_method, detail)
+                    resources.getString(R.string.curl_converter_unsupported_method, detail)
                 ErrorReason.UNSUPPORTED_OPTION ->
-                    context.getString(R.string.curl_converter_unsupported_option, detail)
-                null -> context.getString(R.string.curl_converter_failed)
+                    resources.getString(R.string.curl_converter_unsupported_option, detail)
+                null -> resources.getString(R.string.curl_converter_failed)
             }
-        else -> context.getString(R.string.curl_converter_failed)
+        else -> resources.getString(R.string.curl_converter_failed)
     }
 
 @Composable
@@ -45,7 +49,7 @@ internal fun CurlConversionRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val context = LocalContext.current
+    val resources by rememberUpdatedState(LocalResources.current)
     val ready by rememberUpdatedState(canHandle)
     val copy by rememberUpdatedState(onCopy)
     val insert by rememberUpdatedState(onInsert)
@@ -80,7 +84,7 @@ internal fun CurlConversionRoute(
                     when (effect.action) {
                         CurlAction.Copy ->
                             if (text.isNotEmpty()) copy(text)
-                            else toast(context.getString(R.string.curl_converter_no_output))
+                            else toast(resources.getString(R.string.curl_converter_no_output))
                         CurlAction.Insert ->
                             if (text.isNotEmpty()) {
                                 try {
@@ -91,7 +95,7 @@ internal fun CurlConversionRoute(
                                     viewModel.insertionResult(effect.id, false)
                                 }
                             } else viewModel.insertionResult(effect.id, false)
-                        CurlAction.Toast -> toast(curlNoticeText(context, effect, text))
+                        CurlAction.Toast -> toast(curlNoticeText(resources, effect, text))
                     }
                 } catch (error: CancellationException) {
                     throw error
@@ -100,7 +104,7 @@ internal fun CurlConversionRoute(
                         viewModel.consume(effect)
                         if (effect.action == CurlAction.Insert)
                             viewModel.insertionResult(effect.id, false)
-                        else toast(context.getString(R.string.curl_converter_failed))
+                        else toast(resources.getString(R.string.curl_converter_failed))
                     }
                 }
             }

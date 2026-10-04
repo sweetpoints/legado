@@ -7,6 +7,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -23,6 +24,7 @@ internal fun SourceWebLoginRoute(
     external: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val resources by rememberUpdatedState(LocalResources.current)
     val owner = LocalLifecycleOwner.current
     val lifecycle by owner.lifecycle.currentStateFlow.collectAsState()
     val currentReady by rememberUpdatedState(ready)
@@ -43,15 +45,15 @@ internal fun SourceWebLoginRoute(
     }
     LaunchedEffect(state.checking, active) {
         if (state.checking && active)
-            snackbar.showSnackbar(context.getString(R.string.check_host_cookie))
+            snackbar.showSnackbar(resources.getString(R.string.check_host_cookie))
     }
     LaunchedEffect(state.external, active) {
         val url = state.external ?: return@LaunchedEffect
         if (!active) return@LaunchedEffect
         val action =
             snackbar.showSnackbar(
-                context.getString(R.string.jump_to_another_app),
-                actionLabel = context.getString(R.string.confirm),
+                resources.getString(R.string.jump_to_another_app),
+                actionLabel = resources.getString(R.string.confirm),
                 duration = SnackbarDuration.Long,
             )
         if (

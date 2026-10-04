@@ -1,5 +1,9 @@
 package io.legado.app.model
 
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.Context
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -335,6 +339,9 @@ object AutoTaskProtocol {
         return try {
             val manager = NotificationManagerCompat.from(context)
             if (!manager.areNotificationsEnabled()) return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED) return false
             manager.notify(id, notification)
             true
         } catch (error: RuntimeException) {

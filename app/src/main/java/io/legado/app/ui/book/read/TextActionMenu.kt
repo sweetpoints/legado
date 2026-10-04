@@ -15,6 +15,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -36,9 +39,9 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
     private val store = ViewModelStore()
     private val model =
-        TextActionMenuViewModel(DefaultTextActionRepository(AppTextActionStore(context))).also {
-            store.put("text-action", it)
-        }
+        ViewModelProvider.create(store, viewModelFactory {
+            initializer { TextActionMenuViewModel(DefaultTextActionRepository(AppTextActionStore(context))) }
+        })["text-action", TextActionMenuViewModel::class.java]
     private val composeView =
         ComposeView(context).apply {
             id = View.generateViewId()
