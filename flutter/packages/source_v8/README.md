@@ -78,7 +78,15 @@ its path does not bypass source/version/integrity requirements. A missing or
 mismatched artifact is an explicit build error.
 
 Current source-build targets are macOS ARM64 (deployment target 13.0) and Android
-ARM64 (API 26). Intl and Temporal are disabled by the GN configuration; external
+ARM64 (API 26). Every consuming macOS app must also set its actual Xcode
+`MACOSX_DEPLOYMENT_TARGET` to **13.0 or newer**; the generated example does so for
+all configurations. Flutter 3.47's native-assets tooling currently supplies a
+hardcoded macOS target version of 13 rather than reading the application's Xcode
+deployment target. A successful hook therefore does not verify the app's minimum
+OS setting. The hook also does not reject standalone Dart's default target of 12
+when executing locally: the supported runtime requirement remains macOS 13+.
+
+Intl and Temporal are disabled by the GN configuration; external
 startup data is disabled, so the snapshot is embedded. Other targets do not
 become supported merely because Flutter's generated example contains platform
 folders. The configurable 64 MiB old-generation limit is not a process memory hard
