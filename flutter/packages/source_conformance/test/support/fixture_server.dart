@@ -30,6 +30,18 @@ class FixtureServer {
       } else if (request.uri.path == '/book/123') {
         response.headers.contentType = ContentType.html;
         response.write('<a href="chapter/1">Chapter</a>');
+      } else if (request.uri.path == '/echo-options') {
+        response.headers.contentType = ContentType.json;
+        response.write(
+          jsonEncode({
+            'method': request.method,
+            'body': await utf8.decoder.bind(request).join(),
+            'auth': request.headers.value('x-auth'),
+            'replace': request.headers.value('x-replace'),
+            'extra': request.headers.value('x-extra'),
+            'contentType': request.headers.value('content-type'),
+          }),
+        );
       } else if (request.uri.path == '/echo') {
         response.headers.contentType = ContentType.json;
         response.headers.set('x-fixture', 'present');

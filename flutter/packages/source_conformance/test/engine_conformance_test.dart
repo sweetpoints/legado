@@ -239,4 +239,55 @@ void main() {
       ]);
     },
   );
+  test('legacy literal POST options preserve body and merged headers after migration', () async {
+    await engine.close();
+    engine = SourceEngine(
+      runtime: V8Runtime(prelude: legacyScriptPrelude),
+      hostAdapter: LegacyScriptHost.new,
+    );
+    final options = jsonEncode({
+      'method': 'post',
+      'headers': {'X-Extra': true, 'X-Replace': 'new'},
+      'body': {'key': '{{key}}'},
+    });
+    final original = <String, Object?>{
+      'bookSourceUrl': server.baseUrl.toString(),
+      'bookSourceName': '旧POST书源',
+      'header': jsonEncode({'X-Auth': 'base', 'X-Replace': 'old'}),
+      'searchUrl': '/echo-options,$options',
+      'ruleSearch': {
+        'name': r'$.body',
+        'method': r'$.method',
+        'auth': r'$.auth',
+        'replace': r'$.replace',
+        'extra': r'$.extra',
+        'contentType': r'$.contentType',
+        'proof': '@js:java.base64Encode("proof")',
+      },
+    };
+    final imported = LegacySourceImporter().import(original);
+    final migration = SourceMigrator().migrate(original);
+    expect(imported.issues, isEmpty);
+    expect(migration.issues, isEmpty);
+    final oldFormat = await engine.execute(
+      imported.source,
+      'search',
+      input: {'key': '中文'},
+    );
+    final newFormat = await engine.execute(
+      SourceDefinition.fromJson(migration.candidate),
+      'search',
+      input: {'key': '中文'},
+    );
+    expect(newFormat, oldFormat);
+    final echoed = newFormat.single;
+    expect(echoed['method'], 'POST');
+    expect(jsonDecode(echoed['name'] as String), {'key': '中文'});
+    expect(echoed['auth'], 'base');
+    expect(echoed['replace'], 'new');
+    expect(echoed['extra'], 'true');
+    expect(echoed['contentType'], 'application/json; charset=UTF-8');
+    expect(echoed['proof'], 'cHJvb2Y=');
+    expect(server.requests, ['/echo-options', '/echo-options']);
+  });
 }
