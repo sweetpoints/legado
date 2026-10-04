@@ -11,13 +11,13 @@
 | `bookSourceUrl` | `id`、`baseUrl` |
 | `bookSourceName` | `name`，缺失时使用 URL 主机名 |
 | `ruleSearch`、`searchUrl`、`bookList` | `stages.search` 的字段、URL、列表规则 |
-| `ruleExplore`、`exploreUrl`、`bookList` | `stages.explore` |
+| `ruleExplore`、`exploreUrl`、`bookList` | `stages.explore`；URL固定为 `{{exploreUrl}}`，取调用方已选择的发现入口 |
 | `ruleBookInfo` | `stages.info`，URL 为 `{{bookUrl}}` |
 | `ruleToc`、`chapterList` | `stages.toc`，URL 为 `{{tocUrl}}` |
 | `ruleContent` | `stages.content`，URL 为 `{{chapterUrl}}` |
 | `nextTocUrl`、`nextContentUrl` | 对应 stage 的 `nextPage` |
 
-未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified。提取方法只放行 `@js: [return] java.getString/getStringList(单个字面量规则) [;]`；嵌套脚本、组合规则、模板、变量、额外参数以及 getElement/getElements 仍需人工处理；复杂脚本、组合规则、XPath、变量、不支持的URL请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。`mainJs`、`jsLib`、登录字段、封面解码、并发配置等仅保存原始信息，不自动转换。非文本书源也需要人工处理。
+未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified。提取方法只放行 `@js: [return] java.getString/getStringList(单个字面量规则) [;]`；嵌套脚本、组合规则、模板、变量、额外参数以及 getElement/getElements 仍需人工处理；复杂脚本、组合规则、XPath、变量、不支持的URL请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。contentBatch/callBackJs 产生 legacy.pipeline_requires_review，不静默当作普通提取字段；`mainJs`、`jsLib`、登录字段、封面解码、并发配置等仅保存原始信息，不自动转换。非文本书源也需要人工处理。
 
 静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。读取 enabledCookieJar 且值不是 true 时产生 `legacy.cookie_policy_requires_review`，不会悄悄改成自动 Cookie 策略。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
 
@@ -34,7 +34,7 @@
 
 POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body按旧行为设置 application/json; charset=UTF-8；其他body设置表单Content-Type，固定字面量按UTF-8表单编码。完全符合安全字符/有效百分号转义的片段保留，不符合时编码；分隔 & 和首个 = 保留。templated form需要替换后编码，明确产生 legacy.request_options，不自动宣称转换等价。
 
-旧 charset控制查询/表单百分号编码，与新版原始body字节/响应覆盖不同，因此即使UTF-8也保持人工审查。method/headers 中的模板、替换后可能改变默认 Content-Type 推断的 body、非UTF-8 Content-Type、不同大小写的content-type键、动态JS、未知选项（包括webview/retry/type）、非法JSON/headers和未知模板表达式均产生 legacy.request_options。已知模板名仅 key/page/bookUrl/tocUrl/chapterUrl/baseUrl；候选执行仍要求输入提供对应值。
+旧 charset控制查询/表单百分号编码，与新版原始body字节/响应覆盖不同，因此即使UTF-8也保持人工审查。method/headers 中的模板、替换后可能改变默认 Content-Type 推断的 body、非UTF-8 Content-Type、不同大小写的content-type键、动态JS、未知选项（包括webview/retry/type）、非法JSON/headers和未知模板表达式均产生 legacy.request_options。所有旧URL（包括没有请求选项的URL）均只接受已知模板名 key/page/bookUrl/tocUrl/chapterUrl/baseUrl/exploreUrl；复杂表达式、未闭合模板及 `<1,2,3>` 等页码选择语法需人工迁移。候选执行仍要求输入提供对应值。
 
 测试依据：packages/source_legacy/test/source_legacy_test.dart 中 literal URL options、fixed form、unsupported URL options 用例。导入器保留原始书源；存在issue的候选仍为manualRequired。
 
@@ -51,3 +51,9 @@ POST没有明确非空 Content-Type 时：形似JSON对象、数组或XML的body
 显式 `@legacy:` 使用 [JSoup 提取兼容子集](html.md)。其中 html 是 outer HTML，新版 CSS 的 html 是 inner HTML。支持语法与导入转换必须分别验证，不能因为提取器支持就认为所有旧书源已自动转换。
 
 测试依据：`packages/source_legacy/test`。转换方法及限制见[迁移 Reference](../../migration/README.md)。
+
+## 发现入口输入
+
+旧发现菜单只保存在 metadata.legacyOriginal，导入器不将整个菜单当请求URL。stages.explore 固定GET、无body和阶段headers，使用全局静态headers，URL为 `{{exploreUrl}}`。调用方提供 input.exploreUrl，即用户选中的具体URL；现代书源入口仍可使用 input.url。CLI execute/compare 旧发现阶段也必须通过 --variables 提供 exploreUrl。
+
+菜单脚本、逗号请求选项和复杂模板均需人工迁移；逗号菜单选项产生 legacy.explore_options，不会套用到所有选中URL。@js:/<js>等脚本标记按大小写不敏感检测。选中入口自身的动态请求参数也必须显式迁移。

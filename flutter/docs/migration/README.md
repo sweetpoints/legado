@@ -95,8 +95,16 @@ return body;
 dart run packages/source_tools/bin/source_tools.dart compare LEGACY_FILE CANDIDATE_FILE STAGE --variables '{"key":"示例","page":1}' --report comparison.json
 ```
 
-STAGE 为 search/explore/info/toc/content。旧输入经 LegacySourceImporter 在 Flutter legacy 模式执行；候选按 metadata 选择 modern 或 legacy 模式，报告明确给出双方 executionMode。两侧使用独立引擎与输入，只比较本次结果：映射键顺序不影响比较，列表顺序、值与类型严格比较。使用实时网络时，内容变化、时间、随机值与 Cookie 状态可能导致差异。
+STAGE 为 search/explore/info/toc/content。旧发现阶段通过 --variables 提供用户选择的 exploreUrl；现代发现入口使用url时提供url。旧输入经 LegacySourceImporter 在 Flutter legacy 模式执行；候选按 metadata 选择 modern 或 legacy 模式，报告明确给出双方 executionMode。两侧使用独立引擎与输入，只比较本次结果：映射键顺序不影响比较，列表顺序、值与类型严格比较。使用实时网络时，内容变化、时间、随机值与 Cookie 状态可能导致差异。
 
 报告 reportVersion 为 1，baseline 为 flutterLegacyCompatibility、network 为 live、comparisonScope 为 stageResult、stateCompared 为 false；不比较变量、Cookie或持久化状态，caseEquivalent 只表示本阶段、此输入的结果等价；sourceVerified、verified、jvmCompared 固定为 false。它不验证原 Kotlin/Rhino JVM 引擎、整本书流程或全部历史书源。报告记录输入和变量 SHA-256、双方执行模式、结果摘要 SHA-256、列表数量或 errorCode，不写原始结果、异常 message 或 URL。
 
 退出码：0 为本 case 等价，4 为两侧成功但结果不同，1 为执行失败，2 为无效输入，64 为命令用法错误，73 为报告文件已存在，74 为文件读写失败。已有报告不会覆盖。命令的其他用法见 [source_tools README](../../packages/source_tools/README.md)。
+
+## 私有书源集合离线审计快照
+
+本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。仅做离线结构导入与迁移审计：生成518个候选，其中10个unverified（全部enabled且文本）、508个manualRequired；实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
+
+36个非HTTP(S)书源ID输入未生成候选，其中enabled35、文本33、enabled且文本32。这36个ID均非空且互不重复，其中12个searchUrl为绝对HTTP地址。旧BookSource主键是书源ID，旧NetworkUtils.getAbsoluteURL也支持从绝对请求地址解析；因此非HTTP(S)的bookSourceUrl不等于无效旧源。当前导入器将书源ID同时当作必须为HTTP(S)的baseUrl，是明确待支持的模型/基址推导缺口；本次审计没有证明这些源可实际执行，也未据此否定其有效性。
+
+这里只记录安全汇总；私有原书源及逐源数据不进入Git提交，审计summary保存在ignored的私有临时目录。

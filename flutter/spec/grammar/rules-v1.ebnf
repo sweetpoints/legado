@@ -14,7 +14,9 @@ xpath = "@xpath:", xpath_payload ;
 regex = "@regex:", regex_payload ;
 nested_js = "@js:", js_payload ;
 bare_css = css_selector, [ "@", output_name ] ;
-(* Prefix matching is case-insensitive. output_name is case-sensitive.
+(* CSS projection uses the last top-level unescaped @; @ in quotes,
+   attribute brackets, function parentheses or escaped form is selector text.
+   Prefix matching is case-insensitive. output_name is case-sensitive.
    Empty css_selector selects the current root. Rule parentheses do not add
    grouping syntax; they belong to a selector/payload. Whitespace trim occurs
    on an atom after combination parsing, not before initial JS dispatch. *)

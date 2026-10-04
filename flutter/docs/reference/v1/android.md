@@ -61,3 +61,9 @@ source_host 按 source id 与 legacy/modern 模式分开缓存引擎、保存会
 TOC 的 isVip/isPay/isVolume 原生Boolean直接保留。旧源的字符串按既有 String.isTrue() 判断：空白或精确 `null` 为false，trim后忽略大小写的 false/no/not/0/0.0 为false，其余为true。v1配置含 metadata.legacyOriginal JSON对象时也保留这套旧字段语义，即使迁移候选 metadata.legacy=false；该判断与运行时宿主模式独立。没有旧来源标记的现代配置只接受Boolean或精确小写 `"true"`/`"false"` 字符串，其他非null值拒绝。旧来源的 updateTime 字符串映射为章节 tag。
 
 卷章节 isVolume=true 且 url 为空白时，TOC mapper 合成 title+index 作为URL；该规则也支持现代卷。正文在已有缓存读取之后、引擎路由之前，遇到 isVolume 且 url 以 title 开头时返回空字符串，不执行正文规则。
+
+## 旧来源结果格式化与发现入口
+
+旧来源判定包括没有v1配置的 @engine:dart、v1 metadata.legacy=true，以及 metadata.legacyOriginal 为JSON对象的候选。search/explore/info 的旧来源结果在映射、过滤或写入前，沿用 BookHelp.formatBookName/formatBookAuthor 的旧regex与trim；数字wordCount按 StringUtils.wordCountFormat 处理，kind中已提取的换行改为逗号。现代来源不执行这些格式化；详情空字符串保持既有不覆盖行为。详情重命名权限：存在legacyOriginal时读取其ruleBookInfo.canReName是否非空，否则读取原BookSource规则是否非空；纯现代来源遵循调用方canReName。
+
+Android发现输入同时提供url（原值）、exploreUrl和page。旧来源的exploreUrl只预展开 `{{page}}`；现代来源保持原值。旧选中URL在发送前拒绝 @js:/@webjs:/javascript:/<js> 脚本、逗号请求选项、角括号页码选择及剩余 `{{}}` 模板，明确报告 requires migration 错误；不会把请求选项作为URL发送。导入的旧发现阶段使用 `{{exploreUrl}}`，现代入口仍可使用url。

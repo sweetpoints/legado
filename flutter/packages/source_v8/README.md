@@ -115,8 +115,8 @@ loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
 46,032,368 bytes (43.90 MiB), and has SHA-256
 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
 The source_v8 package's 21 tests passed; the workspace's eight static analyses
-were clean and all 202 tests passed (29/34/12/21/21/78/1/6). This evidence is in
-`tmp/flutter-source-check-extraction-compatibility.log` relative to the repository root. The
+were clean and all 217 tests passed (35/38/12/21/21/83/1/6). This evidence is in
+`tmp/flutter-source-check-selected-explore.log` relative to the repository root. The
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
@@ -131,17 +131,19 @@ The official source-built Android ARM64 library also linked successfully.
 Debug AAR and APK contain the same 26,306,760-byte library (25.09 MiB), SHA-256
 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`,
 matching the manifest. ELF inspection confirmed ARM64, 16 KiB PT_LOAD alignment
-and only c/dl/log/m system-library dependencies. The eight engine instrumentation
+and only c/dl/log/m system-library dependencies. The ten engine instrumentation
 cases passed in this acceptance round on the Android API 36 emulator; evidence is in
-`tmp/flutter-android-test-extraction-compatibility.log`. These are eight test cases, not eight
+`tmp/flutter-android-test-selected-explore.log`. These are ten test cases, not ten
 different device configurations.
 
-The current extraction-compatibility round passed its local Android Release/R8
-build. `tmp/flutter-android-release-extraction-compatibility.log` records BUILD
-SUCCESSFUL in 1m50s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
+The current selected-explore/formatter round passed its local Android Release/R8
+build. `tmp/flutter-android-release-selected-explore.log` records BUILD
+SUCCESSFUL in 1m48s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
 Flutter assets and Release AAR/APK's seven Flutter assets each had matching
 SHA-256 values. The Release artifacts contain identical 3,277,704-byte
-libapp.so files and manifest-matching 26,306,760-byte libsource_v8.so files with
+libapp.so files (SHA-256
+`f43043ce8911cfd383bb72bf819baddab9e3ce24155730067def30c315ccf761`)
+and manifest-matching 26,306,760-byte libsource_v8.so files with
 the V8 SHA-256 above. These unsigned APKs are local build results, not a
 published release or CI acceptance. Fixed-case checks do not establish all
 historical-source compatibility or a complete Flutter UI migration. Older

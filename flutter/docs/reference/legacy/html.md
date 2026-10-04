@@ -19,7 +19,7 @@
 
 ## 索引
 
-支持 `.n`、`!n`，以及 `[n,m]`、`[start:end:step]`、`[!n,m]` 后缀。索引从0开始，负索引从末尾计算；超出范围跳过。`.n:m` 表示多个独立索引，方括号 `start:end` 表示包含两端的范围，不能混淆。
+支持 `.n`、`!n`，以及 `[n,m]`、`[start:end:step]`、`[!n,m]` 后缀。匹配的数字索引后缀允许ASCII空格，如 `tag.p. 0 : 2` 或 `tag.p.0: - 1`；只移除后缀中的ASCII空格，不移除CSS selector本身的空格，也不将tab等其他空白视为索引空格。索引从0开始，负索引从末尾计算；超出范围跳过。`.n:m` 表示多个独立索引，方括号 `start:end` 表示包含两端的范围，不能混淆。
 
 范围允许省略端点、逆序和正步长；零步长报 `invalid_rule`。范围端点按有效索引范围裁剪。负步长按当前历史子集的特殊归一化处理，不作为 Python slice 解释。排除形式保留未选中的元素并保持原顺序。此语法不代表所有旧索引表达式均已覆盖。
 
@@ -27,9 +27,9 @@
 
 | 输出 | 行为 |
 |---|---|
-| `text` | 递归文本；忽略 script/style；块和 br 形成空格，合并空白并 trim |
-| `ownText` | 直接文本节点，br 形成空格，合并空白并 trim |
-| `textNodes` | 每个直接非空文本节点 trim 后，以换行连接 |
+| `text` | 递归文本；忽略 script/style；按文本节点的preserveWhitespace上下文保留或归一化空白，块/br等边界形成分隔，末尾Java trim |
+| `ownText` | 直接文本节点，br形成空格；每个节点按自身preserveWhitespace上下文处理，末尾Java trim |
+| `textNodes` | 每个直接文本节点归一化并Java trim，跳过空值后以换行连接 |
 | `html` | outer HTML，删除后代 script/style，多个节点以换行连接 |
 | `all` | outer HTML，保留 script/style，多个节点以换行连接 |
 | 其他末尾属性名 | 属性值；缺失/空值跳过，相同属性值去重 |
@@ -37,3 +37,5 @@
 `html` 的 outer HTML 与新版 `@css:...@html` 的 inner HTML 不同。text/ownText/textNodes 空输出跳过；`all` 可以返回单个空字符串。CSS 选择器解析器不支持的表达式明确抛错，不静默转成其他规则类型。
 
 HTML 使用 Dart 序列化，不保证 JSoup pretty printing 的字节级一致。固定输入测试位于 `packages/source_engine/test/legacy_html_test.dart`。
+
+text/ownText不会在拼接后进行全局空白压缩。每个文本节点检查父元素及最多五级祖先中的pre/plaintext/title/textarea/script；保留上下文的原始空白，其余节点按JSoup子集归一化空白、移除零宽空格和软连字符。最终Java trim只移除两端U+0000..U+0020，不能与Dart trim混同。递归text仍忽略script/style内容。

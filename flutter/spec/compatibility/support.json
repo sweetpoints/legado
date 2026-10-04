@@ -43,33 +43,34 @@
       ],
       "androidRelease": "local unsigned APK and AAR; minifyAppReleaseWithR8 completed; packaged V8 size and SHA-256 match manifest",
       "logs": [
-        "tmp/flutter-source-check-extraction-compatibility.log",
-        "tmp/flutter-android-test-extraction-compatibility.log",
-        "tmp/flutter-android-release-extraction-compatibility.log"
+        "tmp/flutter-source-check-selected-explore.log",
+        "tmp/flutter-android-test-selected-explore.log",
+        "tmp/flutter-android-release-selected-explore.log"
       ],
       "fullHistoricalSourceAcceptance": false,
       "signedDistributionAcceptance": false,
       "ciAcceptance": false,
-      "acceptanceRound": "extraction compatibility and Android chapter acceptance",
+      "acceptanceRound": "selected explore and Android book formatting acceptance",
       "workspaceStaticAnalyses": 8,
       "workspacePackageTests": [
-        29,
-        34,
+        35,
+        38,
         12,
         21,
         21,
-        78,
+        83,
         1,
         6
       ],
-      "androidInstrumentationCases": 8,
+      "androidInstrumentationCases": 10,
       "currentRoundReleaseR8": "passed locally",
       "debugFlutterAssetConsistency": "10 Flutter assets in AAR and APK have matching SHA-256",
       "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
       "releaseNativeConsistency": {
         "libapp.so": {
           "bytes": 3277704,
-          "sha256MatchesBetweenAarAndApk": true
+          "sha256MatchesBetweenAarAndApk": true,
+          "sha256": "f43043ce8911cfd383bb72bf819baddab9e3ce24155730067def30c315ccf761"
         },
         "libsource_v8.so": {
           "bytes": 26306760,
@@ -139,7 +140,8 @@
       "charset"
     ],
     "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
-    "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5"
+    "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5",
+    "cssProjection": "last top-level unescaped @; quoted/bracketed/function/escaped @ retained"
   },
   "legacy": {
     "status": "partial",
@@ -212,7 +214,18 @@
       "stageCharsetFromLegacy": false
     },
     "importLiteralExtractionScripts": "getString/getStringList with one literal rule only; nested scripts, compound rules, templates, variables, extra arguments and element APIs require review",
-    "extractionText": "getString default HTML4 unescape with boolean override;getStringList no unescape;scalar URL empty text falls back base"
+    "extractionText": "getString default HTML4 unescape with boolean override;getStringList no unescape;scalar URL empty text falls back base",
+    "htmlText": "per-node preserveWhitespace context and Java trim; no global whitespace compression",
+    "indexSpaces": "ASCII spaces inside matched numeric suffix only; selector spaces retained",
+    "exploreInput": "input.exploreUrl selected URL; GET, no body or stage headers; original menu retained only in legacyOriginal",
+    "manualFeatures": [
+      "complex or unbalanced URL templates",
+      "case-insensitive script markers",
+      "old page-choice syntax",
+      "explore menu scripts/options",
+      "contentBatch",
+      "callBackJs"
+    ]
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -252,7 +265,31 @@
       "comparisonScope": "stageResult",
       "stateCompared": false
     },
-    "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule"
+    "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule",
+    "privateCorpusOfflineAuditSnapshot": {
+      "inputSources": 554,
+      "candidates": 518,
+      "unverified": 10,
+      "manualRequired": 508,
+      "noCandidateNonHttpBaseUrl": 36,
+      "actuallyExecuted": 0,
+      "verified": 0,
+      "enabledBreakdownAvailable": true,
+      "privateOriginalsCommitted": false,
+      "fullHistoricalSourceAcceptance": false,
+      "enabledSources": 546,
+      "disabledSources": 8,
+      "textSources": 473,
+      "nonTextSources": 81,
+      "enabledTextSources": 466,
+      "unverifiedAllEnabledAndText": true,
+      "noCandidateEnabled": 35,
+      "noCandidateText": 33,
+      "noCandidateEnabledText": 32,
+      "noCandidateIdsNonemptyAndDistinct": true,
+      "noCandidateAbsoluteHttpSearchUrl": 12,
+      "noCandidateMeaning": "Importer currently conflates source ID with HTTP base URL; non-HTTP source IDs are a pending compatibility gap, not evidence of invalid legacy sources"
+    }
   },
   "androidBridge": {
     "protocolVersion": 1,
@@ -280,6 +317,9 @@
     "emptyToc": "TocEmptyException; book metadata unchanged",
     "successfulTocMetadata": "existing updateBookTocInfo",
     "closePending": "pending responses and ready waits fail with IllegalStateException; no added channel error code",
-    "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index"
+    "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index",
+    "legacyBookFormatting": "search/explore/info format name/author, numeric wordCount, kind newlines; legacyOriginal provenance counts independently of runtime mode; modern values retained",
+    "legacyInfoRename": "legacyOriginal.ruleBookInfo.canReName nonempty, else BookSource rule nonempty; modern caller canReName",
+    "exploreInput": "url original plus exploreUrl and page; legacy pre-expands page only and rejects scripts/options/page-choice/remaining templates before sending"
   }
 }
