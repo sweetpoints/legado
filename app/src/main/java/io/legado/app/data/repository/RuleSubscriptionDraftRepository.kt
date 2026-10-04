@@ -111,7 +111,7 @@ class FileRuleSubscriptionDraftRepository(
                         it.revision > draft.revision || it.pendingSave != null
                     } ?: draft
                 val editor = current.editor ?: return@withLock current
-                if (current.pendingSave != null) rules.recoverSave(current.pendingSave!!)
+                if (current.pendingSave != null) rules.recoverSave(current.pendingSave)
                 else
                     rules.saveJournaled(editor.input(), editor.newId) { plan ->
                         current = current.copy(pendingSave = plan, revision = current.revision + 1)

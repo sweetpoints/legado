@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import io.legado.app.utils.launchCleanup
 import kotlinx.coroutines.withContext
 
 data class BookCacheRow(
@@ -417,7 +418,7 @@ class BookCacheViewModel(
                     saved["cache.folder"] = true
                     saved["cache.folderDelivered"] = false
                     publish { it.copy(folder = BookCacheFolder(ticket, path)) }
-                } else continueExport(ticket, path!!, customAllowed = key != null)
+                } else continueExport(ticket, path, customAllowed = key != null)
                 created = null
             } finally {
                 created?.let { withContext(NonCancellable) { repository.release(it) } }
@@ -785,9 +786,9 @@ class BookCacheViewModel(
         publish { it.copy(closed = true, folder = null, section = null, settings = null) }
         stop()
         if (ticket != null && ticket != dispatchingTicket)
-            viewModelScope.launch(NonCancellable) { runCatching { repository.release(ticket) } }
+            viewModelScope.launchCleanup { runCatching { repository.release(ticket) } }
         if (settingsTicket != null)
-            viewModelScope.launch(NonCancellable) {
+            viewModelScope.launchCleanup {
                 runCatching { repository.release(settingsTicket) }
             }
     }
@@ -854,12 +855,12 @@ class BookCacheViewModel(
         scanJob?.cancel()
         previewJob?.cancel()
         state.value.section?.let { section ->
-            viewModelScope.launch(NonCancellable) {
+            viewModelScope.launchCleanup {
                 runCatching { repository.writeSection(section.ticket, section.draft()) }
             }
         }
         state.value.settings?.let { settings ->
-            viewModelScope.launch(NonCancellable) {
+            viewModelScope.launchCleanup {
                 runCatching { repository.writeSection(settings.ticket, settings.section().draft()) }
             }
         }

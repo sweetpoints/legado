@@ -1,5 +1,7 @@
 package io.legado.app.lib.dialogs
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.Context
 import android.view.ViewGroup
 import android.view.Window
@@ -45,7 +47,7 @@ internal class SourceSharePassphraseComposeDialog(
         super.onStart()
         window?.apply {
             setBackgroundDrawableResource(R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }

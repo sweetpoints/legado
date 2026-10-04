@@ -126,7 +126,6 @@ internal fun sortSourceManagerRows(
                 Comparator { a, b ->
                     (-a.enabled.compareTo(b.enabled)).takeIf { it != 0 } ?: a.name.cnCompare(b.name)
                 }
-            else -> compareBy { it.order }
         }
     // Enabled tie names remain ascending in both directions, matching the original page.
     if (!ascending && sort == BookSourceSort.Enable)

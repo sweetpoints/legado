@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
@@ -61,14 +60,14 @@ internal fun BookshelfHomeScreen(
                         groups.getOrNull(index)?.let { select(it.id) }
                     }
             }
-            ScrollableTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = state.selectedIndex,
                 edgePadding = 0.dp,
                 containerColor = colors.primary,
                 contentColor = colors.onPrimary,
-                indicator = { positions ->
+                indicator = {
                     TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(positions[state.selectedIndex]),
+                        Modifier.tabIndicatorOffset(state.selectedIndex, matchContentSize = false),
                         color = colors.accent,
                     )
                 },

@@ -31,6 +31,7 @@ import androidx.core.graphics.record
 import androidx.core.graphics.withTranslation
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.SoftwareKeyboardControllerCompat
 import androidx.core.view.get
 import androidx.core.view.marginBottom
 import androidx.core.view.updateLayoutParams
@@ -72,7 +73,7 @@ fun View.hideSoftInput() = run {
 
 fun EditText.showSoftInput() = run {
     requestFocus()
-    inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+    SoftwareKeyboardControllerCompat(this).show()
 }
 
 fun View.disableAutoFill() = run {
@@ -492,4 +493,3 @@ fun Spinner.setSelectionSafely(position: Int) {
         setSelection(position.coerceIn(0, count - 1))
     }
 }
-

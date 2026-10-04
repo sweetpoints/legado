@@ -52,15 +52,17 @@ object SSLHelper {
         X509TrustManagerExtensions(unsafeTrustManager)
     }
 
-    val unsafeSSLSocketFactory: SSLSocketFactory by lazy {
+    val unsafeSSLContext: SSLContext by lazy {
         try {
             val sslContext = SSLContext.getInstance("SSL")
             sslContext.init(null, arrayOf(unsafeTrustManager), SecureRandom())
-            sslContext.socketFactory
+            sslContext
         } catch (e: Exception) {
             throw RuntimeException(e)
         }
     }
+
+    val unsafeSSLSocketFactory: SSLSocketFactory by lazy { unsafeSSLContext.socketFactory }
 
     /**
      * 此类是用于主机名验证的基接口。 在握手期间，如果 URL 的主机名和服务器的标识主机名不匹配，

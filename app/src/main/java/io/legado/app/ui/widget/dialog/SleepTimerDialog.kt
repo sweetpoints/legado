@@ -1,5 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
+import io.legado.app.utils.resizeForIme
+
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -43,7 +45,7 @@ class SleepTimerDialog : BaseComposeDialogFragment() {
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
     }
 
     @Composable

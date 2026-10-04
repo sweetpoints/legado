@@ -1,5 +1,7 @@
 package io.legado.app.ui.widget.dialog
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.Context
 import android.view.ViewGroup
 import android.view.Window
@@ -46,7 +48,7 @@ class UrlOptionDialog(context: Context, private val success: (String) -> Unit) :
         setLayout(1f, ViewGroup.LayoutParams.MATCH_PARENT)
         window?.apply {
             setBackgroundDrawableResource(R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 }

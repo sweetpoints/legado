@@ -54,7 +54,6 @@ internal class SourceWebLoginController(
                 if (
                     !released &&
                         capture.check == checkEpoch &&
-                        capture.check != null &&
                         mutable.value.checking
                 )
                     mutable.value = mutable.value.copy(completed = true)
@@ -62,7 +61,7 @@ internal class SourceWebLoginController(
                 throw error
             } catch (error: Exception) {
                 currentCoroutineContext().ensureActive()
-                if (!released && capture.check == checkEpoch && capture.check != null)
+                if (!released && capture.check == checkEpoch)
                     mutable.value = mutable.value.copy(checking = false)
                 AppLog.put("保存Cookie失败\n$error", error)
             }

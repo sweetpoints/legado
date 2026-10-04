@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.Context
 import android.os.Bundle
 import android.view.KeyEvent
@@ -75,7 +77,7 @@ class PageKeyDialog(context: Context) : ComponentDialog(context), ViewModelStore
                 }
             }
         )
-        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        window?.resizeForIme()
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 

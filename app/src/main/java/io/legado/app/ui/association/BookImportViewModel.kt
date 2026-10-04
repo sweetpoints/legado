@@ -90,7 +90,7 @@ internal fun visibleBookImportItems(
             labels.enabledExplore -> source.enabledExplore
             labels.disabledExplore -> !source.enabledExplore
             labels.noGroup ->
-                source.sourceGroup.isNullOrBlank() || source.sourceGroup?.trim() == "未分组"
+                source.sourceGroup.isNullOrBlank() || source.sourceGroup.trim() == "未分组"
             else ->
                 matchesSourceImportSearch(
                     state.query,

@@ -1,5 +1,7 @@
 package io.legado.app.ui.dict.rule
 
+import io.legado.app.utils.resizeForIme
+
 import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.graphics.Color
@@ -62,7 +64,7 @@ class DictRuleEditDialog() : BaseComposeDialogFragment() {
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.apply {
             setBackgroundDrawableResource(R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
         dialog?.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK) {

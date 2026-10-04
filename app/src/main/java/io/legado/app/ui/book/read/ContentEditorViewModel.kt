@@ -10,6 +10,7 @@ import java.util.UUID
 import java.util.regex.PatternSyntaxException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -325,7 +326,8 @@ internal class ContentEditorViewModel(
         }
         val requestedRevision = revision
         update { copy(loading = true, error = null) }
-        loadJob = viewModelScope.launch {
+        // Assign the job before execution: Main.immediate may complete a cache hit inline.
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 val loaded = repository.load(target, reset)
                 if (!state.value.finished) {
@@ -356,6 +358,8 @@ internal class ContentEditorViewModel(
                 }
             }
         }
+        loadJob = job
+        job.start()
     }
 
     fun openTitle() {

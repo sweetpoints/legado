@@ -7,8 +7,10 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.AbstractSavedStateViewModelFactory
-import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.CreationExtras
+import io.legado.app.ui.association.compose.associationCreationExtras
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.base.BaseComposeActivity
@@ -20,23 +22,22 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import io.legado.app.utils.launchCleanup
 
 class ReplaceEditActivity : BaseComposeActivity() {
     val viewModel by
         viewModels<ReplaceEditorViewModel> {
             // Intent may carry the reader's selected text. Do not copy it into SavedState defaults.
-            object : AbstractSavedStateViewModelFactory(this, null) {
+            object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(
-                    key: String,
                     modelClass: Class<T>,
-                    state: SavedStateHandle,
+                    extras: CreationExtras,
                 ): T =
                     ReplaceEditorViewModel(
                         RoomReplaceEditorRepository(applicationContext),
-                        state,
+                        associationCreationExtras(extras).createSavedStateHandle(),
                         ReplaceEditorRequest(
                             intent.getLongExtra("id", -1),
                             intent.getStringExtra("pattern").orEmpty(),
@@ -97,7 +98,7 @@ class ReplaceEditActivity : BaseComposeActivity() {
     }
 
     override fun onStop() {
-        lifecycleScope.launch(NonCancellable) { runCatching { viewModel.flushDraft() } }
+        lifecycleScope.launchCleanup { runCatching { viewModel.flushDraft() } }
         super.onStop()
     }
 

@@ -12,8 +12,8 @@ import io.legado.app.base.BaseComposeActivity
 import io.legado.app.data.repository.AppBottomBarAssignmentRepository
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import io.legado.app.utils.launchCleanup
 
 /** Keeps the import/edit intent contract; staging transactions remain owned by the skin manager. */
 class BottomBarSkinAssignActivity : BaseComposeActivity() {
@@ -44,7 +44,7 @@ class BottomBarSkinAssignActivity : BaseComposeActivity() {
 
     override fun onDestroy() {
         if (isFinishing && !isChangingConfigurations && !model.state.value.finished) {
-            lifecycleScope.launch(NonCancellable) { runCatching { model.releaseIfNeeded() } }
+            lifecycleScope.launchCleanup { runCatching { model.releaseIfNeeded() } }
         }
         super.onDestroy()
     }

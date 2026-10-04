@@ -280,7 +280,7 @@ open class AssociationImportViewModel(
             current.loaded &&
             current.ticket == ticket &&
             current.session?.generation == generation &&
-            current.session?.phase != AssociationPhase.Finished
+            current.session.phase != AssociationPhase.Finished
     }
 
     fun reportProjectionFailure(ticket: String?, generation: Long?, failure: Throwable) {

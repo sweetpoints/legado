@@ -42,6 +42,29 @@ class ContentEditorViewModelTest {
         SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
 
     @Test
+    fun synchronousLoadCanCloseAndRetryAFailedSave() =
+        runTest(dispatcher) {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            val repo = Fake()
+            val model = model(repo)
+            assertTrue(model.state.value.hasDraft)
+            assertFalse(model.state.value.loading)
+            model.edit("changed", 2, 2)
+            repo.saveGate = CompletableDeferred()
+            model.close()
+            assertTrue(model.state.value.saving)
+            repo.saveGate!!.completeExceptionally(IllegalStateException("disk full"))
+            advanceUntilIdle()
+            assertEquals("disk full", model.state.value.error)
+            assertFalse(model.state.value.finished)
+            repo.saveGate = null
+            model.close()
+            advanceUntilIdle()
+            assertTrue(model.state.value.finished)
+            assertEquals("changed", repo.saves.single().second)
+        }
+
+    @Test
     fun loadedDraftDoesNotReplaceReaderTitleAndCopyUsesPresentation() =
         runTest(dispatcher) {
             val repo = Fake()

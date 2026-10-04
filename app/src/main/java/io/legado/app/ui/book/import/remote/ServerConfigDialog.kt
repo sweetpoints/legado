@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.import.remote
 
+import io.legado.app.utils.resizeForIme
+
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -38,7 +40,7 @@ class ServerConfigDialog() : BaseComposeDialogFragment() {
         super.onStart()
         dialog?.window?.run {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

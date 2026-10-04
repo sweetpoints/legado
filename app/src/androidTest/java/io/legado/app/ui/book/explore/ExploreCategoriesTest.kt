@@ -2,7 +2,6 @@ package io.legado.app.ui.book.explore
 
 import android.content.Intent
 import android.graphics.Bitmap
-import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -326,15 +325,25 @@ class ExploreCategoriesTest {
     }
 
     private fun awaitActivity(condition: (ExploreShowActivity) -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 15000
-        do {
-            var satisfied = false
-            scenario!!.onActivity { satisfied = condition(it) }
-            if (satisfied) return
-            SystemClock.sleep(50)
-        } while (SystemClock.uptimeMillis() < deadline)
+        try {
+            compose.waitUntil(timeoutMillis = 15_000) {
+                var satisfied = false
+                scenario!!.onActivity { satisfied = condition(it) }
+                satisfied
+            }
+            return
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Report the paging state instead of the complete book metadata.
+        }
         var state = ""
-        scenario!!.onActivity { state = it.resultsModel.state.value.toString().take(2000) }
+        scenario!!.onActivity {
+            val value = it.resultsModel.state.value
+            val checkpoint = value.checkpoint
+            state = "rows=${value.rows.size}, page=${checkpoint?.displayedPage}, " +
+                "scrollRequest=${value.scrollRequest}, index=${checkpoint?.scrollIndex}, " +
+                "previous=${value.loadingPrevious}, next=${value.loadingNext}, " +
+                "error=${checkpoint?.error}, topError=${checkpoint?.topError}"
+        }
         throw AssertionError("Timed out: $state")
     }
 

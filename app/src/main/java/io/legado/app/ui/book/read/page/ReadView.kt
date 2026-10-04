@@ -907,7 +907,11 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
 
     @RequiresApi(Build.VERSION_CODES.P)
     private class SelectionMagnifierApi28(view: ReadView) {
-        private val magnifier = Magnifier(view)
+        // API 28 has no Builder; keep the legacy constructor only for that release.
+        @Suppress("DEPRECATION")
+        private val magnifier =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Magnifier.Builder(view).build()
+            else Magnifier(view)
 
         fun show(x: Float, y: Float) = magnifier.show(x, y)
 

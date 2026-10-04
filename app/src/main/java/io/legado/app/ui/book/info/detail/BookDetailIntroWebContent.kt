@@ -225,14 +225,14 @@ internal class BookDetailIntroNativeView(
             }
         setOnLongClickListener {
             val hit = hitTestResult
-            val url = hit?.extra.orEmpty()
+            val url = hit.extra.orEmpty()
             val original =
                 document?.rich?.image(url)
                     ?: url.takeIf { document?.mode == BookDetailIntroMode.Web }
             if (
                 original != null &&
-                    (hit?.type == HitTestResult.IMAGE_TYPE ||
-                        hit?.type == HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
+                    (hit.type == HitTestResult.IMAGE_TYPE ||
+                        hit.type == HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
             ) {
                 photo(original)
                 true

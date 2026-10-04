@@ -1,5 +1,7 @@
 package io.legado.app.ui.config
 
+import io.legado.app.utils.launchCleanup
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -220,7 +222,7 @@ class DirectLinkConfigViewModel(
 
     fun release() {
         saved.remove<String>("directLink.session")?.let { id ->
-            viewModelScope.launch(NonCancellable) { runCatching { repository.release(id) } }
+            viewModelScope.launchCleanup { runCatching { repository.release(id) } }
         }
     }
 

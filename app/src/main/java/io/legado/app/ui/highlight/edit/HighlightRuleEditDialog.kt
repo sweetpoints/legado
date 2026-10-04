@@ -1,5 +1,7 @@
 package io.legado.app.ui.highlight.edit
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.ViewGroup
@@ -50,7 +52,7 @@ class HighlightRuleEditDialog : BaseComposeDialogFragment(), HighlightStyleDialo
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
     }
 
     override fun onStop() {

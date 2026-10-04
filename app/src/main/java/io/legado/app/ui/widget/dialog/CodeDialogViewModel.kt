@@ -421,7 +421,7 @@ internal class CodeDialogViewModel(
                         repository.write(
                             session,
                             CodeDialogDraft(
-                                text!!,
+                                text,
                                 if (sourcePreview) null else state.value.alternate,
                                 nextRevision,
                             ),

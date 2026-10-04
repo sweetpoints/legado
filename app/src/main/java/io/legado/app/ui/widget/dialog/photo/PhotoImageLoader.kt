@@ -70,7 +70,7 @@ class GlidePhotoImageLoader(context: Context) : PhotoImageLoader {
                             target =
                                 ImageLoader.load(
                                         context,
-                                        if (local) file!!.absolutePath else request.src,
+                                        if (local) file.absolutePath else request.src,
                                     )
                                     .apply {
                                         if (!local)

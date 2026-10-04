@@ -1,5 +1,7 @@
 package io.legado.app.ui.rss.favorites
 
+import io.legado.app.utils.resizeForIme
+
 import android.content.DialogInterface
 import android.graphics.Color
 import android.os.Bundle
@@ -61,7 +63,7 @@ class RssFavoritesDialog() : BaseComposeDialogFragment() {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.resizeForIme()
     }
 
     override fun onComposeCreated(savedInstanceState: Bundle?) {

@@ -76,7 +76,7 @@ class AnalyzeByJSoup(doc: Any) {
 
         if (sourceRule.elementsRule.isEmpty()) {
 
-            textS.add(element.data() ?: "")
+            textS.add(element.data())
 
         } else {
 

@@ -494,7 +494,7 @@ internal fun BookshelfManagementScreen(
             title = { Text(stringResource(R.string.export_success)) },
             text = {
                 Column {
-                    state.draft?.exportSummary?.takeIf { it.isNotEmpty() }?.let { Text(it) }
+                    state.draft.exportSummary?.takeIf { it.isNotEmpty() }?.let { Text(it) }
                     OutlinedTextField(
                         uri,
                         {},

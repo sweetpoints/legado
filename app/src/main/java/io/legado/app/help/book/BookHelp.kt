@@ -68,6 +68,7 @@ internal sealed interface ChapterSourceMatch {
     data object Missing : ChapterSourceMatch
 }
 
+@ConsistentCopyVisibility
 data class ContentSaveToken
 internal constructor(
     internal val key: ContentSaveKey,

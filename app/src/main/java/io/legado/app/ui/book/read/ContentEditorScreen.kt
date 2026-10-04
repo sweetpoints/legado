@@ -39,7 +39,7 @@ internal data class ContentEditorActions(
     val close: () -> Unit,
     val save: () -> Unit,
     val reset: () -> Unit,
-    val copy: () -> Unit,
+    val copyText: () -> Unit,
     val plain: () -> Unit,
     val searchVisible: (Boolean) -> Unit,
     val query: (String) -> Unit,
@@ -188,7 +188,7 @@ internal fun ContentEditorScreen(
                             text = { Text(stringResource(R.string.copy_all)) },
                             onClick = {
                                 menu = false
-                                actions.copy()
+                                actions.copyText()
                             },
                             enabled = state.hasDraft,
                             modifier = Modifier.testTag("content-copy"),

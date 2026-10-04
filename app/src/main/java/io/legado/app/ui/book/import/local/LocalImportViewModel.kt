@@ -369,7 +369,7 @@ internal class LocalImportViewModel(
                     pending = null,
                     registryNative =
                         claimed
-                            ?.takeIf { pending ->
+                            .takeIf { pending ->
                                 pending.kind == LocalImportNativeKind.Folder ||
                                     pending.kind == LocalImportNativeKind.Storage
                             }

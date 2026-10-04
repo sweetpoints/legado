@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.utils.resizeForIme
+
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -37,7 +39,7 @@ class HighlightNoteDialog() : BaseComposeDialogFragment() {
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

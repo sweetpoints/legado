@@ -40,6 +40,6 @@ class AssociationViewModelFactory(
                 savedState[AssociationImportViewModel.TICKET_KEY] = ticket
             }
         }
-        return modelClass.cast(create(savedState))
+        return requireNotNull(modelClass.cast(create(savedState)))
     }
 }

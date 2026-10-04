@@ -166,11 +166,11 @@ internal class DictionaryHtmlView(
             }
         setOnLongClickListener {
             val hit = hitTestResult
-            val source = document?.image(hit?.extra.orEmpty())
+            val source = document?.image(hit.extra.orEmpty())
             if (
                 source != null &&
-                    (hit?.type == HitTestResult.IMAGE_TYPE ||
-                        hit?.type == HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
+                    (hit.type == HitTestResult.IMAGE_TYPE ||
+                        hit.type == HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
             ) {
                 photo(source)
                 true

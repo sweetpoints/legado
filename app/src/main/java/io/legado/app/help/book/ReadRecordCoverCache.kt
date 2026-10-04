@@ -86,7 +86,6 @@ object ReadRecordCoverCache {
     fun prune() = appDb.runInTransaction {
         val referenced = appDb.readRecordDao.all.mapNotNull { ownedFile(it.coverUrl)?.name }.toSet()
         root.listFiles()?.filter { it.isFile && it.name !in referenced }?.forEach(File::delete)
-        Unit
     }
 
     private fun ownedFile(path: String?): File? {

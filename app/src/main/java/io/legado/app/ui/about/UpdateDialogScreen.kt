@@ -143,13 +143,6 @@ internal fun UpdateDialogScreen(
                             Modifier.testTag("update-error"),
                             color = MaterialTheme.colorScheme.error,
                         )
-                        if (state.request == null && !state.loading)
-                            TextButton(
-                                onClick = retry,
-                                modifier = Modifier.testTag("update-retry"),
-                            ) {
-                                Text(stringResource(R.string.retry))
-                            }
                     }
                     SearchableRichText(state.document, emptyList(), -1, images, link, image, {})
                 }

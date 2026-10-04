@@ -1,5 +1,7 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.utils.resizeForIme
+
 import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.os.Bundle
@@ -63,7 +65,7 @@ class HttpTtsEditDialog() : BaseComposeDialogFragment() {
         super.onStart()
         dialog?.window?.run {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            resizeForIme()
         }
     }
 

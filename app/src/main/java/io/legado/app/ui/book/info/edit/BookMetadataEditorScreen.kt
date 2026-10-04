@@ -112,7 +112,7 @@ fun BookMetadataEditorScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            state.draft?.preview?.let {
+                            state.draft.preview?.let {
                                 cover(
                                     it,
                                     Modifier.size(90.dp, 130.dp).testTag("book-metadata-preview"),
@@ -180,7 +180,7 @@ fun BookMetadataEditorScreen(
                             MetadataCoverButton(
                                 R.string.select_local_image,
                                 "book-metadata-pick-cover",
-                                state.canEdit && state.draft?.pickerOwner == null,
+                                state.canEdit && state.draft.pickerOwner == null,
                                 Modifier.weight(1f),
                             ) {
                                 actions.navigate(BookMetadataAction.PickCover)

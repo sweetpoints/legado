@@ -185,7 +185,6 @@ class BookSourceEditActivity : BaseComposeActivity() {
                     putExtra("key", request.sourceUrl)
                 }
                 BookSourceNativeAction.SEARCH -> putExtra("searchScope", request.text)
-                else -> Unit
             }
         }
     }
