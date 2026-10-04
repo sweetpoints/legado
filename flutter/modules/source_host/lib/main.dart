@@ -52,6 +52,7 @@ SourceEngine createSourceEngine(
   ScriptHost? platform,
 }) => SourceEngine(
   runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
+  requestAdapter: adaptLegacyRequest,
   platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
 );
 

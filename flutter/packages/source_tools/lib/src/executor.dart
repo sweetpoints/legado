@@ -7,6 +7,7 @@ SourceEngine createCliEngine(SourceDefinition source, ScriptRuntime runtime) {
   final legacyVariables = <String, String>{};
   return SourceEngine(
     runtime: runtime,
+    requestAdapter: adaptLegacyRequest,
     platform: SourceUtilityHost(const _UnavailablePlatform()),
     hostAdapter: legacy
         ? (host) => LegacyScriptHost(host, variables: legacyVariables)
