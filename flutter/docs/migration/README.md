@@ -17,7 +17,9 @@
 | `issues` | `{path, code, message}` 列表 |
 | `verified` | 当前固定为 `false` |
 
-原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成 method/body/headers，旧charset及动态或未知选项仍为manualRequired。当前没有自动新旧引擎对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
+整体迁移完成后按最终 issues 重算候选 metadata：没有 issue 时 `legacy:false`、`compatibility:"unverified"`，可使用 modern 运行模式；有 issue 时 `legacy:true`、`compatibility:"manualRequired"`，保留兼容模式标记。保留 `legacyOriginal` 不代表候选仍启用旧宿主，且两种状态的 verified 均为 false。
+
+原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成 method/body/headers，旧charset及动态或未知选项仍为manualRequired。可使用下文 compare 对照一个阶段 case，但没有完整旧 JVM 对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
 
 ## 脚本转换
 
@@ -25,7 +27,7 @@
 
 | 旧直接调用 | 新调用 |
 |---|---|
-| java.ajax(url) | await source.net.get(url) |
+| java.ajax(literalUrl) | await source.net.get(literalUrl) |
 | java.ajax(literalUrl,literalTimeoutOrNull) | await source.net.request({url,timeoutMs}) 后读取 body |
 | java.base64Encode | 单参数基础方法；双参数 encoding.base64EncodeWithFlags |
 | java.base64Decode | encoding.base64DecodeWithFlags；字面量 charset 用 WithCharset |
@@ -40,6 +42,8 @@
 | java.getString / getStringList | 字面量规则转换为 source.parse 对应方法，捕获 result/baseUrl |
 
 规则提取转换只接受可解析字面量、无嵌套脚本的规则；默认内容 result、URL 标志 false 和当前 baseUrl 显式传入。空规则保持旧 getString 空字符串/getStringList null。动态规则报 migration.dynamic_rule；HTTP get/connect/post/head 和 Java DOM 方法不自动迁移，只在兼容模式中使用。
+
+单参数 ajax 也必须是字面量 URL 字符串；动态参数、别名和提取结果需人工处理，报 migration.ambiguous_overload。直接数组或 Array 构造形式报 migration.ajax_array_requires_review，避免把旧“取首个数组元素”的语义直接传给新版 net.get。
 
 base64Decode 第二参数必须是可判断的字面量 charset 或整数 flags；动态重载与非字面量 timed ajax 报 migration.ambiguous_overload。转换仍是受限直线脚本处理，不进行任意调用链异步传播。工具 API 必须由运行宿主注入 SourceUtilityHost，Reference 见[新版工具 API](../reference/v1/utilities.md)。
 
@@ -78,5 +82,21 @@ return body;
 | `migration.ambiguous_overload` | 无法静态确定重载或 timed ajax 参数 |
 | `migration.dynamic_rule` | 非字面量、不可解析或嵌套脚本的提取规则 |
 | `migration.java_binding` | 可能存在别名或遮蔽 |
+| `migration.ajax_array_requires_review` | ajax 数组输入需要显式保持首项语义 |
+| `migration.host_binding_conflict` | 裸 source 标识符与新版宿主命名空间冲突；obj.source、字符串和注释不触发 |
 
 受限扫描并不验证整个脚本语法和行为；没有 issue 的候选也必须交给实际运行时校验并进行行为对照。禁止把 `unverified` 报告当作自动发布依据。
+
+## 单阶段 case 对照
+
+从 Flutter 工作区运行：
+
+```sh
+dart run packages/source_tools/bin/source_tools.dart compare LEGACY_FILE CANDIDATE_FILE STAGE --variables '{"key":"示例","page":1}' --report comparison.json
+```
+
+STAGE 为 search/explore/info/toc/content。旧输入经 LegacySourceImporter 在 Flutter legacy 模式执行；候选按 metadata 选择 modern 或 legacy 模式，报告明确给出双方 executionMode。两侧使用独立引擎与输入，只比较本次结果：映射键顺序不影响比较，列表顺序、值与类型严格比较。使用实时网络时，内容变化、时间、随机值与 Cookie 状态可能导致差异。
+
+报告 reportVersion 为 1，baseline 为 flutterLegacyCompatibility、network 为 live，caseEquivalent 只表示本阶段、此输入的结果等价；sourceVerified、verified、jvmCompared 固定为 false。它不验证原 Kotlin/Rhino JVM 引擎、整本书流程或全部历史书源。报告记录输入和变量 SHA-256、双方执行模式、结果摘要 SHA-256、列表数量或 errorCode，不写原始结果、异常 message 或 URL。
+
+退出码：0 为本 case 等价，4 为两侧成功但结果不同，1 为执行失败，2 为无效输入，64 为命令用法错误，73 为报告文件已存在，74 为文件读写失败。已有报告不会覆盖。命令的其他用法见 [source_tools README](../../packages/source_tools/README.md)。

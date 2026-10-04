@@ -39,10 +39,10 @@ Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为
 
 V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码commit e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
 
-当前自编译目标为macOS ARM64与Android ARM64；当前宿主构建脚本和启用引擎APK限制为Android ARM64。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，并通过V8本包21项测试及全工作区139项测试、8项静态检查。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-stable-final.log`。
+当前自编译目标为macOS ARM64与Android ARM64；当前宿主构建脚本和启用引擎APK限制为Android ARM64。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，并通过V8本包21项测试及全工作区157项测试、8项静态检查。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-migration-acceptance.log`。
 
 官方 Flutter FFI example 的macOS Debug/Release也构建并运行成功，显示实际V8 15.4.80.24结果42。Release主可执行文件及V8 framework仅ARM64；local codesign有allow-jit。尚未完成notarization或Hardened Runtime分发验收。
 
-新版官方源码Android ARM64库也完成链接；Debug AAR/APK内库与manifest一致，为26,306,760字节（25.09 MiB）、SHA-256 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`。API36模拟器3项引擎仪器测试全部通过，日志位于仓库根目录 `tmp/flutter-android-test-stable-v8.log`；不是3种设备配置。
+新版官方源码Android ARM64库也完成链接；Debug AAR/APK内库与manifest一致，为26,306,760字节（25.09 MiB）、SHA-256 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`。本轮API36模拟器6项引擎仪器测试全部通过，日志位于仓库根目录 `tmp/flutter-android-test-migration-acceptance.log`；这是6个case，不是6种设备配置。
 
-旧14.3的136项测试及Release/R8结果仅为历史基线。新版Android Debug打包和上述设备测试已验证，新版本地Release/R8也已通过，日志为仓库根目录 `tmp/flutter-android-release-stable-v8.log`（BUILD SUCCESSFUL in3m45s，R8实际执行）；Release AAR与未签名APK内ARM64库大小和SHA-256严格一致于上述manifest。未签名APK不表示已发布或CI验收；这些结果不证明所有历史书源兼容或完整Flutter UI迁移完成。
+旧14.3的136项测试及Release/R8结果仅为历史基线。新版Android Debug打包和上述设备测试已验证，早先15.4稳定版接入轮次的本地Release/R8已通过，日志为仓库根目录 `tmp/flutter-android-release-stable-v8.log`（BUILD SUCCESSFUL in3m45s，R8实际执行）；Release AAR与未签名APK内ARM64库大小和SHA-256严格一致于上述manifest。本轮迁移/接入修改的本地Release/R8也已通过，日志 `tmp/flutter-android-release-migration-acceptance.log` 明确 BUILD SUCCESSFUL in2m10s 且 minifyAppReleaseWithR8 实际执行；Release AAR 与 APK 内 ARM64 libsource_v8.so 均为26,306,760字节，SHA-256与上述manifest一致。未签名APK不表示已发布或CI验收；这些结果不证明所有历史书源兼容或完整Flutter UI迁移完成。

@@ -32,7 +32,9 @@ execute 异步返回对象列表；operation 为 `search/explore/info/toc/conten
 
 启动自检的脚本限制为 5 秒，整体求值等待最多 10 秒；Kotlin 握手等待最多 30 秒。可捕获的原生资产加载错误通过 `startupError` 返回；原生进程崩溃不能通过通道错误恢复。
 
-接口传输 JSON/标准通道数据；不传 Room 实体、Android Context、V8 对象或 Dart Future。Kotlin 负责将结果转回现有书籍、章节等应用模型。
+接口传输 JSON/标准通道数据；不传 Room 实体、Android Context、V8 对象或 Dart Future。Kotlin 负责将结果转回现有书籍、章节等应用模型。非空目录成功后通过既有 updateBookTocInfo 更新章节数、最新章、当前章、时间与 book type；空目录返回 TocEmptyException（chapter_list_empty 本地化文案），不修改书籍元数据。
+
+Repository 关闭会让尚未完成的业务响应与 ready 等待以 IllegalStateException("Flutter source repository is closed") 结束；同步发送或编码异常也清理任务登记。此关闭行为未新增 MethodChannel 错误码。
 
 ## 平台交互
 
