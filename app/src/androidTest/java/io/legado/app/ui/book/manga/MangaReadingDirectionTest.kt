@@ -2,6 +2,7 @@ package io.legado.app.ui.book.manga
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
+import android.app.Application
 import android.app.Instrumentation
 import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
@@ -28,6 +29,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
 import io.legado.app.R
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
@@ -41,6 +44,12 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.repository.AppBrowserNavigationStore
 import io.legado.app.data.repository.MangaNativeKind
 import io.legado.app.data.repository.MangaNativePhase
+import io.legado.app.data.repository.MangaNativeRequest
+import io.legado.app.data.repository.MangaReaderLaunch
+import io.legado.app.data.repository.MangaReaderSession
+import io.legado.app.data.repository.MangaReaderSessionController
+import io.legado.app.data.repository.MangaReaderSessionRepository
+import io.legado.app.data.repository.FileMangaReaderSessionRepository
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.BackupConfig
@@ -58,6 +67,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -471,6 +481,155 @@ class MangaReadingDirectionTest {
             BackupConfig.ignoreConfig.clear()
             BackupConfig.ignoreConfig.putAll(oldIgnoreConfig)
             directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun oldMenuCheckpointCannotReopenANewerClosedMenuAndSessionFieldsStillRestore() {
+        val id = UUID.randomUUID().toString()
+        val native = MangaNativeRequest(
+            UUID.randomUUID().toString(), MangaNativeKind.Catalog,
+            phase = MangaNativePhase.Claimed,
+        )
+        val cloud = BookProgress(book)
+        val launch = MangaReaderLaunch(bookUrl = book.bookUrl)
+        val disk = FileMangaReaderSessionRepository()
+        runBlocking {
+            disk.write(id, MangaReaderSession(
+                revision = 0, launch = launch, menuVisible = true,
+                chapterIndex = 1, pageIndex = 1,
+                nativeRequests = listOf(native), pendingCloudProgress = cloud,
+            ))
+        }
+        val owners = ViewModelStore()
+        lateinit var model: MangaReaderComposeViewModel
+        lateinit var controller: MangaReaderSessionController
+        class GatedStore(initial: MangaReaderSession) : MangaReaderSessionRepository {
+            @Volatile var value: MangaReaderSession? = initial
+            @Volatile var armed = false
+            val oldEntered = CompletableDeferred<Unit>()
+            val closeEntered = CompletableDeferred<Unit>()
+            val releaseOld = CompletableDeferred<Unit>()
+            val releaseClose = CompletableDeferred<Unit>()
+            val writes = CopyOnWriteArrayList<String>()
+            override suspend fun read(session: String) = value
+            override suspend fun write(session: String, value: MangaReaderSession) {
+                writes += "revision=${value.revision}, menu=${value.menuVisible}, page=${value.pageIndex}"
+                if (armed) {
+                    if (value.menuVisible) {
+                        oldEntered.complete(Unit)
+                        releaseOld.await()
+                    } else {
+                        closeEntered.complete(Unit)
+                        releaseClose.await()
+                    }
+                }
+                this.value = value
+            }
+            override suspend fun release(session: String) { value = null }
+        }
+        var gated: GatedStore? = null
+        fun awaitCheckpoint(message: String, condition: () -> Boolean) {
+            try {
+                waitUntil(message, condition = condition)
+            } catch (failure: AssertionError) {
+                val ui = model.state.value
+                val persisted = runCatching { controller.state.value }.getOrNull()
+                val ownerActive = runCatching {
+                    (MangaReaderComposeViewModel::class.java.getDeclaredField("ownerJob")
+                        .apply { isAccessible = true }.get(model) as? kotlinx.coroutines.Job)?.isActive
+                }.getOrNull()
+                throw AssertionError(
+                    "$message; UI menu=${ui.menuVisible}, phases=${ui.nativeRequests.map { it.phase }}, " +
+                        "cloudPage=${ui.pendingCloudProgress?.durChapterPos}; " +
+                        "loading=${ui.loading}, fixtureBook=${ui.book?.bookUrl == book.bookUrl}, " +
+                        "items=${ui.items.size}, ownerActive=$ownerActive; " +
+                        "controller revision=${persisted?.revision}, menu=${persisted?.menuVisible}, " +
+                        "phases=${persisted?.nativeRequests?.map { it.phase }}, " +
+                        "cloudPage=${persisted?.pendingCloudProgress?.durChapterPos}; writes=${gated?.writes}",
+                    failure,
+                )
+            }
+        }
+        try {
+            instrumentation.runOnMainSync {
+                model = MangaReaderComposeViewModel(
+                    context as Application,
+                    SavedStateHandle(mapOf("manga.reader.session" to id)),
+                )
+                owners.put("reader", model)
+                model.initialize(launch)
+            }
+            awaitCheckpoint("initial session restores its menu and controller-owned fields") {
+                model.state.value.let {
+                    it.settingsLoaded && it.menuVisible && it.nativeRequests == listOf(native) &&
+                        it.pendingCloudProgress == cloud && it.items.isNotEmpty() &&
+                        it.book?.bookUrl == book.bookUrl && it.scrollCommand is MangaScrollCommand.Jump
+                }
+            }
+            instrumentation.runOnMainSync {
+                // This model-only test owns the viewport's initial command acknowledgement.
+                // Complete the real jump contract before menu opening is allowed by the model.
+                model.commandHandled(checkNotNull(model.state.value.scrollCommand).id)
+            }
+            awaitCheckpoint("reader initialization jump completed before menu interaction") {
+                model.state.value.let {
+                    !it.loading && it.scrollCommand == null && it.book?.bookUrl == book.bookUrl
+                }
+            }
+            instrumentation.runOnMainSync {
+                controller = MangaReaderComposeViewModel::class.java.getDeclaredField("session")
+                    .apply { isAccessible = true }.get(model) as MangaReaderSessionController
+                gated = GatedStore(checkNotNull(controller.state.value))
+                // Substitute only checkpoint IO; the actual initialized model and collector remain.
+                MangaReaderSessionController::class.java.getDeclaredField("repository")
+                    .apply { isAccessible = true }.set(controller, gated)
+            }
+            val store = checkNotNull(gated)
+            val updatedCloud = cloud.copy(durChapterPos = 2)
+            runBlocking {
+                controller.complete(native.ticket, cancelled = true)
+                controller.checkpointCloudProgress(updatedCloud)
+            }
+            awaitCheckpoint("native receipts and cloud progress still arrive from the controller") {
+                model.state.value.let {
+                    it.nativeRequests.singleOrNull()?.phase == MangaNativePhase.Cancelled &&
+                        it.pendingCloudProgress == updatedCloud
+                }
+            }
+            instrumentation.runOnMainSync { model.setMenu(false) }
+            awaitCheckpoint("closed menu checkpoint establishes the baseline") {
+                controller.state.value?.menuVisible == false && store.value?.menuVisible == false &&
+                    !model.state.value.menuVisible && store.writes.isNotEmpty()
+            }
+            store.armed = true
+            instrumentation.runOnMainSync { model.setMenu(true) }
+            awaitCheckpoint("old open checkpoint actually enters gated storage") {
+                store.oldEntered.isCompleted
+            }
+            instrumentation.runOnMainSync {
+                model.setMenu(false)
+                assertFalse("The new close intent applies immediately", model.state.value.menuVisible)
+            }
+            store.releaseOld.complete(Unit)
+            // The close write cannot enter until the old true checkpoint has been published.
+            awaitCheckpoint("new close checkpoint enters storage after the old open publication") {
+                store.closeEntered.isCompleted
+            }
+            instrumentation.waitForIdleSync()
+            assertTrue("The old open checkpoint actually reached the controller", controller.state.value!!.menuVisible)
+            assertFalse("An old persisted open menu must not overwrite a newer close intent", model.state.value.menuVisible)
+            assertEquals(updatedCloud, model.state.value.pendingCloudProgress)
+            assertEquals(MangaNativePhase.Cancelled, model.state.value.nativeRequests.single().phase)
+            store.releaseClose.complete(Unit)
+            awaitCheckpoint("the latest closed menu is persisted") {
+                controller.state.value?.menuVisible == false && store.value?.menuVisible == false
+            }
+        } finally {
+            gated?.releaseOld?.complete(Unit)
+            gated?.releaseClose?.complete(Unit)
+            instrumentation.runOnMainSync { owners.clear() }
+            runBlocking { disk.release(id) }
         }
     }
 
