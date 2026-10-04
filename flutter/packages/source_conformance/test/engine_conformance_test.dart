@@ -85,7 +85,7 @@ void main() {
         'search': SourceStage(
           url: '/search',
           fields: {
-            'name': '@js:JSON.parse(await source.net.get(baseUrl + "/value")).value',
+            'name': '@js:JSON.parse(await source.net.get("/value")).value',
           },
         ),
       },
@@ -182,6 +182,60 @@ void main() {
       final result = await engine.execute(definition, 'search');
       expect(result, [
         {'name': '测试书籍', 'bookUrl': server.baseUrl.resolve('/book').toString()},
+      ]);
+    },
+  );
+  test(
+    'redirected stage uses final page URL for legacy parse URL resolution',
+    () async {
+      await engine.close();
+      engine = SourceEngine(
+        runtime: V8Runtime(prelude: legacyScriptPrelude),
+        hostAdapter: LegacyScriptHost.new,
+      );
+      final source = SourceDefinition(
+        id: 'redirect-parse',
+        name: '重定向解析',
+        baseUrl: server.baseUrl,
+        stages: const {
+          'search': SourceStage(
+            url: '/jump',
+            fields: {
+              'chapterUrl': '@js:java.getStringList("tag.a@href",null,true)',
+              'page': '@js:baseUrl',
+            },
+          ),
+        },
+      );
+      final result = await engine.execute(source, 'search');
+      expect(result, [
+        {
+          'chapterUrl': server.baseUrl.resolve('/book/chapter/1').toString(),
+          'page': server.baseUrl.resolve('/book/123').toString(),
+        },
+      ]);
+    },
+  );
+  test(
+    'source headers inherit into JS requests and explicit headers replace them',
+    () async {
+      final definition = SourceDefinition(
+        id: 'headers',
+        name: '请求头',
+        baseUrl: server.baseUrl,
+        headers: const {'X-Request': 'source'},
+        script: r'''
+        async function search(){
+          const first=await source.net.request({url:'/echo'});
+          const second=await source.net.request({url:'/echo',headers:{'X-Request':'explicit'}});
+          const third=await source.net.request({url:'/echo',inheritHeaders:false});
+          return {inherited:JSON.parse(first.body).header,explicit:JSON.parse(second.body).header,
+            removed:JSON.parse(third.body).header};
+        }
+      ''',
+      );
+      expect(await engine.execute(definition, 'search'), [
+        {'inherited': 'source', 'explicit': 'explicit', 'removed': null},
       ]);
     },
   );

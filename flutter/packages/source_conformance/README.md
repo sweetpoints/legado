@@ -23,3 +23,9 @@ Real V8 tests also cover `connect`, HTTP/variable overloads of `get`, `post`, `h
 `test/support/jsoup_golden.json` contains nine fixed extraction expectations generated with JSoup 1.23.2. `JsoupGolden.java` reproduces the selected `AnalyzeByJSoup.getResultLast` operations and explicit index selection from the old implementation. Regenerate with `java -cp <jsoup-1.23.2.jar> test/support/JsoupGolden.java > test/support/jsoup_golden.json` from this package. The test does not require Java or that JAR at runtime.
 
 These cases compare text, own text, text nodes, nonblank deduplicated attributes, inclusive ranges, reverse order, selected indices and exclusions. HTML pretty-print serialization is outside these golden assertions; they are not a complete JVM rule-engine execution oracle.
+
+## Script parsing and utility migration
+
+Actual V8 cases cover `source.parse.*` with explicit CSS, XPath attributes, JSONPath and legacy inputs; scalar/list extraction, URL resolution, explicit HTML/JSON element results, nested-JS rejection and cancellation. Legacy `java.getString/getStringList` tests cover default `result`, explicit content, URL overloads and empty rules.
+
+Utility migration equivalence tests execute the original script through the legacy host and the transformed candidate through `SourceUtilityHost` using separate V8 runtimes. Covered examples include Base64 flags/charset/bytes, nested GBK byte conversion, odd-length hexadecimal decoding, MD5/short MD5, SHA-256 hex/Base64 and GBK form encoding. These are migration regressions for known mappings, not general JavaScript transpiler validation.

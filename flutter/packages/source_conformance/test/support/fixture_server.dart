@@ -24,7 +24,13 @@ class FixtureServer {
     requests.add(request.uri.path);
     final response = request.response;
     try {
-      if (request.uri.path == '/echo') {
+      if (request.uri.path == '/jump') {
+        response.statusCode = HttpStatus.found;
+        response.headers.set(HttpHeaders.locationHeader, '/book/123');
+      } else if (request.uri.path == '/book/123') {
+        response.headers.contentType = ContentType.html;
+        response.write('<a href="chapter/1">Chapter</a>');
+      } else if (request.uri.path == '/echo') {
         response.headers.contentType = ContentType.json;
         response.headers.set('x-fixture', 'present');
         response.write(
