@@ -1239,6 +1239,7 @@ class ReadAloudMenuUiTest {
     ) {
         try {
             compose.waitUntil(timeoutMillis = timeoutMillis) {
+                compose.mainClock.advanceTimeByFrame()
                 var ready = false
                 scenario!!.onActivity { ready = condition(it) }
                 ready

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -489,10 +490,18 @@ class MangaReadingDirectionTest {
             assertTrue("Chapter controls must leave a usable progress slider", compose.onNodeWithTag("manga-progress").fetchSemanticsNode().boundsInRoot.width >= 48f)
             seekAtEdge(left = true)
             scenario!!.onActivity { it.viewModel.setMenu(false) }
+            waitUntil("progress menu is actually removed before checking viewport pixels") {
+                compose.onAllNodesWithTag("manga-progress")
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+            }
             awaitPage(1, if (rightToLeft) 3 else 0)
             scenario!!.onActivity { it.viewModel.setMenu(true) }
             seekAtEdge(left = false)
             scenario!!.onActivity { it.viewModel.setMenu(false) }
+            waitUntil("progress menu is actually removed before checking viewport pixels") {
+                compose.onAllNodesWithTag("manga-progress")
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+            }
             awaitPage(1, if (rightToLeft) 0 else 3)
             scenario!!.onActivity { it.viewModel.setMenu(false) }
         }
