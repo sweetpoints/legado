@@ -308,6 +308,19 @@ class NetworkClient {
               ([301, 302].contains(response.statusCode) && verb == 'POST')) {
             verb = 'GET';
             payload = null;
+            // The redirected request has no representation. Remove framing
+            // headers and Fetch's request-body headers, retaining business
+            // headers. HttpClient rejects an empty body with positive length.
+            forwarded.removeWhere(
+              (name, _) => const {
+                'content-length',
+                'transfer-encoding',
+                'content-type',
+                'content-encoding',
+                'content-language',
+                'content-location',
+              }.contains(name.toLowerCase()),
+            );
           }
           current = next;
           continue;
