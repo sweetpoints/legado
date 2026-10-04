@@ -34,7 +34,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
@@ -732,16 +732,16 @@ class CodeSelectionUiTest {
                             }
                             ready
                         }
-                        if (rss)
-                            compose
-                                .onNodeWithTag("rss-import-code-1")
-                                .performScrollTo()
-                                .performClick()
-                        else
-                            compose
-                                .onNodeWithTag("book-import-code-1")
-                                .performScrollTo()
-                                .performClick()
+                        val importPrefix = if (rss) "rss-import" else "book-import"
+                        val codeTag = "$importPrefix-code-1"
+                        compose
+                            .onNodeWithTag("$importPrefix-list")
+                            .performScrollToNode(hasTestTag(codeTag))
+                        compose
+                            .onNodeWithTag(codeTag)
+                            .assertIsDisplayed()
+                            .assertIsEnabled()
+                            .performClick()
                         var preview: CodeDialog? = null
                         await {
                             var ready = false
