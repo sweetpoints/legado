@@ -24,9 +24,28 @@ case "${1:-debug}" in
         ;;
 esac
 
+# Use Gradle's supported init.d mechanism without changing generated .android
+# files or the user's global initialization scripts/properties.
+source_gradle_home="$workspace_root/.gradle-source-host"
+mkdir -p "$source_gradle_home/init.d"
+# Reuse only public build artifacts. Never copy properties, init scripts or credentials.
+source_default_gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+for source_cache_directory in caches wrapper; do
+    if [[ "$source_default_gradle_home" != "$source_gradle_home" && \
+          -d "$source_default_gradle_home/$source_cache_directory" && \
+          ! -e "$source_gradle_home/$source_cache_directory" && \
+          ! -L "$source_gradle_home/$source_cache_directory" ]]; then
+        ln -s "$source_default_gradle_home/$source_cache_directory" \
+            "$source_gradle_home/$source_cache_directory"
+    fi
+done
+cp "$workspace_root/tool/source-host-min-sdk.gradle" \
+    "$source_gradle_home/init.d/source-host-min-sdk.gradle"
+
 (
     cd "$workspace_root/modules/source_host"
-    GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.home=$task_java_home" \
+    GRADLE_USER_HOME="$source_gradle_home" \
+        GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.home=$task_java_home" \
         flutter build aar "${task_flutter_arguments[@]}" --target-platform android-arm64
 )
 (

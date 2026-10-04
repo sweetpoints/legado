@@ -23,3 +23,6 @@ __pycache__/
 *.pyc
 # Official V8 checkout and build caches
 /.cache/
+
+# Workspace-local Gradle init/caches for Flutter module API 26 builds.
+flutter/.gradle-source-host/
