@@ -35,6 +35,6 @@ _LIBCPP_END_NAMESPACE_STD
 
 #  define _LIBCPP_ASSERTION_HANDLER(message) _LIBCPP_VERBOSE_ABORT("%s", message)
 
-#endif // defined(NDEBUG) && defined(OFFICIAL_BUILD) && !defined(DCHECK_ALWAYS_ON) 
+#endif // defined(NDEBUG) && defined(OFFICIAL_BUILD) && !defined(DCHECK_ALWAYS_ON)
 
 #endif // _LIBCPP___ASSERTION_HANDLER
