@@ -92,17 +92,20 @@ class LegacyHtmlRule {
     String? indices;
     var exclude = false;
     var bracket = false;
-    final bracketMatch = RegExp(r'\[(!?)([-\d,:\s]+)\]$').firstMatch(selector);
+    final bracketMatch = RegExp(r'\[(!?)([-\d,: ]+)\]$').firstMatch(selector);
     if (bracketMatch != null) {
       bracket = true;
       exclude = bracketMatch[1] == '!';
       indices = bracketMatch[2];
       selector = selector.substring(0, bracketMatch.start);
     } else {
-      final match = RegExp(r'([.!])(-?\d+(?::-?\d+)*)$').firstMatch(selector);
+      final match = RegExp(
+        r'([.!])((?: *-? *(?:[0-9] *)+)(?:: *-? *(?:[0-9] *)+)*)$',
+      ).firstMatch(selector);
       if (match != null) {
         exclude = match[1] == '!';
-        indices = match[2];
+        // The original reverse scanner skips ASCII spaces only within indices.
+        indices = match[2]!.replaceAll(' ', '');
         selector = selector.substring(0, match.start);
       }
     }

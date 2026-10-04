@@ -52,6 +52,39 @@ void main() {
       ['/a'],
     );
   });
+  test('legacy dot and exclusion indices skip only ASCII spaces', () async {
+    const paragraphs = '<section><p>zero</p><p>one</p><p>two</p></section>';
+    for (final rule in ['tag.p.0: 2', 'tag.p. 0 : 2', 'tag.p.0: - 1']) {
+      expect(
+        await evaluator.evaluate('@legacy:$rule@text', paragraphs, context),
+        ['zero', 'two'],
+      );
+    }
+    for (final rule in ['tag.p!0: 2', 'tag.p! 0 : 2', 'tag.p!0: - 1']) {
+      expect(
+        await evaluator.evaluate('@legacy:$rule@text', paragraphs, context),
+        ['one'],
+      );
+    }
+    expect(
+      await evaluator.evaluate(
+        '@legacy:section p.0: 2@text',
+        paragraphs,
+        context,
+      ),
+      ['zero', 'two'],
+    );
+    const spacedClasses =
+        '<div class="book"><p>inside</p></div><div class="book">outside</div>';
+    expect(
+      await evaluator.evaluate(
+        '@legacy:div.book p@text',
+        spacedClasses,
+        context,
+      ),
+      ['inside'],
+    );
+  });
   test('legacy extraction includes row root, direct text nodes, no destructive html', () async {
     final rows = await evaluator.evaluate(
       '@legacy:class.book',
