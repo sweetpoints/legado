@@ -187,7 +187,8 @@ def build(source, depot, env, target, jobs, pins):
         (destination / 'args.gn').write_text(args)
         revinfo = run([depot / 'gclient', 'revinfo', '--actual'], source.parent, env, capture=True)
         (destination / 'dependencies.txt').write_text(revinfo)
-        defines = run([depot / 'gn', 'desc', out, '//source_v8:source_v8', 'defines', '--format=json'], source, env, capture=True)
+        defines = run([depot / 'gn', 'desc', out, '//source_v8:source_v8', 'defines', '--format=json',
+                       '--root-target=//source_v8:source_v8'], source, env, capture=True)
         (destination / 'defines.json').write_text(defines)
         clang = source / 'third_party/llvm-build/Release+Asserts/bin/clang++'
         toolchain = {'clang': run([clang, '--version'], source, env, capture=True).strip(),

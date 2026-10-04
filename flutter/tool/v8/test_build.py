@@ -117,6 +117,7 @@ class BuildContractTests(unittest.TestCase):
                 if 'revinfo' in args:
                     return 'dependency@fixedsha'
                 if 'desc' in args:
+                    self.assertIn('--root-target=//source_v8:source_v8', args)
                     return '{"defines": ["feature"]}'
                 return 'official toolchain version'
             pins = builder.read_pins()
