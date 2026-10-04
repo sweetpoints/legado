@@ -42,6 +42,24 @@ class CodeSyntaxProjectionTest {
     }
 
     @Test
+    fun viewportStylingPreservesFullDocumentAndAbsoluteUtf16Offsets() = runTest {
+        val input = "😀 var first = true;\n" + "plain ".repeat(1000) + "const last = false;"
+        val start = input.indexOf("const")
+        val end = input.length
+        val projected = projectCodeSyntax(input, colors, start until end)
+        assertEquals(input, projected.text)
+        assertTrue(projected.spanStyles.all { it.start >= start && it.end <= end })
+        assertTrue(projected.spanStyles.any { it.start == start && it.end == start + 5 && it.item.color == Color.Cyan })
+        val clipped = projectCodeSyntax(input, colors, (start + 1) until (start + 4))
+        assertEquals(input, clipped.text)
+        assertEquals(start + 1, clipped.spanStyles.single().start)
+        assertEquals(start + 4, clipped.spanStyles.single().end)
+        val first = projectCodeSyntax(input, colors, 0 until input.indexOf('\n'))
+        assertTrue(first.spanStyles.any { it.start == input.indexOf("var") && it.item.color == Color.Cyan })
+        assertTrue(first.spanStyles.none { it.start >= start })
+    }
+
+    @Test
     fun canceledLargeProjectionStopsBeforeReturningAStaleDocument() = runTest {
         val job = Job()
         job.cancel()

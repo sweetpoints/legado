@@ -2,10 +2,11 @@ package io.legado.app.ui.book.source.edit
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -159,9 +160,10 @@ class BookSourceEditScreenTest {
     fun fieldInputAndOptionsHeaderHaveAccessibleTouchTargets() {
         show()
         val input = compose.onNodeWithTag("source-field-0-bookSourceUrl").getUnclippedBoundsInRoot()
-        val header = compose.onNodeWithTag("source-options-toggle").getUnclippedBoundsInRoot()
         assertTrue(input.bottom - input.top >= 48.dp)
-        assertTrue(header.bottom - header.top >= 48.dp)
+        // Material TextButton has a smaller visual height and expands its actual touch target.
+        compose.onNodeWithTag("source-options-toggle").assertTouchHeightIsEqualTo(48.dp).performClick()
+        compose.runOnIdle { assertTrue(state.value.document!!.optionsExpanded) }
     }
 
     @Test

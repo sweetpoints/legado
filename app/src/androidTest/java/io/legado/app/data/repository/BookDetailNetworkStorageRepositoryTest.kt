@@ -203,9 +203,10 @@ class BookDetailNetworkStorageRepositoryTest {
             assertNotNull(read("new"))
             repository.recover(plan!!)
             assertEquals(2, moves)
-            assertEquals(plan!!.targetJson, GSON.toJson(read("new")!!.copy()))
+            val recoveredBook = checkNotNull(read("new"))
+            assertEquals(plan.targetJson, GSON.toJson(recoveredBook.copy()))
             insert(read("new")!!.copy(durChapterPos = 77))
-            assertTrue(runCatching { repository.recover(plan!!) }.isFailure)
+            assertTrue(runCatching { repository.recover(plan) }.isFailure)
             assertEquals(77, read("new")!!.durChapterPos)
             assertEquals(2, moves)
         }
@@ -263,7 +264,7 @@ class BookDetailNetworkStorageRepositoryTest {
                 database.bookChapterDao.insert(chapter.copy(variable = "external"))
             }
             assertTrue(
-                runCatching { repo().recover(plan!!) }.exceptionOrNull() is BookDetailConflict
+                runCatching { repo().recover(plan) }.exceptionOrNull() is BookDetailConflict
             )
             assertEquals("external", chapters("old").single().variable)
         }

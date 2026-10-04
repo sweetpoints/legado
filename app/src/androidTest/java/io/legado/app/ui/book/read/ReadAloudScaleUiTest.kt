@@ -8,8 +8,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -27,9 +30,11 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.TextFile
 import io.legado.app.service.BaseReadAloudService
+import io.legado.app.testutil.saveSemantics
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.read.config.ReadAloudControlsDialog
 import io.legado.app.ui.book.read.page.ReadView
@@ -232,8 +237,8 @@ class ReadAloudScaleUiTest {
                 bar.height,
                 semanticsBounds.height.roundToInt(),
             )
-            assertEquals("Compose exposes the control X", bar.x, semanticsBounds.left, 1f)
-            assertEquals("Compose exposes the control Y", bar.y, semanticsBounds.top, 1f)
+            assertEquals("Compose exposes the control X", bar.x + hostBounds.left, semanticsBounds.left, 1f)
+            assertEquals("Compose exposes the control Y", bar.y + hostBounds.top, semanticsBounds.top, 1f)
             assertTrue(
                 "The complete Compose control stays within the host viewport",
                 semanticsBounds.left >= 0 &&
@@ -446,6 +451,7 @@ class ReadAloudScaleUiTest {
         }
         screenshot("aloud-scale-old40-clamped85-opacity90")
         var restoredWidth = 0
+        assertBackgroundOpacity(90)
         scenario!!.onActivity { activity ->
             restoredWidth = activity.readAloudControlsBounds.width
             assertEquals(
@@ -454,16 +460,11 @@ class ReadAloudScaleUiTest {
             )
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "new-defaults")
         }
-        assertEquals("Unset opacity uses 90 percent", 229, backgroundAlpha())
-        compose.onNodeWithTag("aloud-controls-value-Width").performScrollTo().assertTextEquals("85")
+        settingsNode("aloud-controls-value-Width").assertTextEquals("85")
         assertEquals(85, prefs.getInt("readAloudControlsWidth", -1))
-        compose
-            .onNodeWithTag("aloud-controls-value-Opacity")
-            .performScrollTo()
+        settingsNode("aloud-controls-value-Opacity")
             .assertTextEquals("90")
-        compose
-            .onNodeWithTag("aloud-controls-slider-Opacity")
-            .performScrollTo()
+        settingsNode("aloud-controls-slider-Opacity")
             .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(30f)) }
         scenario!!.onActivity {
             (it.supportFragmentManager.findFragmentByTag("new-defaults") as ReadAloudControlsDialog)
@@ -480,6 +481,7 @@ class ReadAloudScaleUiTest {
             it.readAloudControlsVisible
         }
         screenshot("aloud-scale-explicit-opacity30")
+        assertBackgroundOpacity(30)
         scenario!!.onActivity { activity ->
             assertEquals(
                 "Explicit opacity remains unchanged",
@@ -488,10 +490,7 @@ class ReadAloudScaleUiTest {
             )
             ReadAloudControlsDialog().show(activity.supportFragmentManager, "saved-opacity")
         }
-        assertEquals(76, backgroundAlpha())
-        compose
-            .onNodeWithTag("aloud-controls-value-Opacity")
-            .performScrollTo()
+        settingsNode("aloud-controls-value-Opacity")
             .assertTextEquals("30")
         scenario!!.onActivity {
             (it.supportFragmentManager.findFragmentByTag("saved-opacity")
@@ -500,14 +499,97 @@ class ReadAloudScaleUiTest {
         }
     }
 
-    private fun backgroundAlpha(): Int {
-        val bitmap =
-            compose.onNodeWithTag("reader-aloud-controls").captureToImage().asAndroidBitmap()
-        return try {
-            android.graphics.Color.alpha(bitmap.getPixel(bitmap.width / 2, bitmap.height / 10))
-        } finally {
-            bitmap.recycle()
+    private fun settingsNode(tag: String): SemanticsNodeInteraction {
+        try {
+            compose.onNodeWithTag("aloud-controls-settings-list")
+                .performScrollToNode(hasTestTag(tag))
+            return compose.onNodeWithTag(tag).assertIsDisplayed()
+        } catch (error: AssertionError) {
+            compose.saveSemantics(context, "$tag-timeout")
+            throw error
         }
+    }
+
+    private fun assertBackgroundOpacity(percent: Int) {
+        // PixelCopy captures the composed window, so its alpha is opaque. Compare the actual
+        // source-over RGB above the native reader. Position this fixture away from bottom toasts.
+        val savedPosition = listOf(PreferKey.readAloudControlsX, PreferKey.readAloudControlsY)
+            .associateWith { prefs.all[it] }
+        prefs.edit()
+            .putFloat(PreferKey.readAloudControlsX, .5f)
+            .putFloat(PreferKey.readAloudControlsY, .4f)
+            .commit()
+        try {
+            awaitSurfaceFrame()
+            val hostBounds = compose.onNodeWithTag("reader-host").fetchSemanticsNode().boundsInRoot
+            val bounds = compose.onNodeWithTag("reader-aloud-controls").fetchSemanticsNode().boundsInRoot
+            val sampleX = (bounds.left - hostBounds.left).roundToInt() + bounds.width.roundToInt() / 2
+            val sampleY = (bounds.top - hostBounds.top).roundToInt() + bounds.height.roundToInt() / 5
+            var foreground = 0
+            scenario!!.onActivity { activity ->
+                foreground = io.legado.app.utils.ColorUtils.withAlpha(activity.bottomBackground, percent / 100f)
+                playbackFlag("isRun", false)
+                activity.showReadAloudControls()
+            }
+            awaitSurfaceFrame()
+            val underlay = compose.onNodeWithTag("reader-host").captureToImage().asAndroidBitmap()
+            try {
+                val beneath = underlay.getPixel(sampleX, sampleY)
+                val expected = androidx.core.graphics.ColorUtils.compositeColors(foreground, beneath)
+                scenario!!.onActivity {
+                    playbackFlag("isRun", true)
+                    BaseReadAloudService.detachReadAloudFollow()
+                    it.showReadAloudControls()
+                }
+                awaitSurfaceFrame()
+                assertEquals(bounds, compose.onNodeWithTag("reader-aloud-controls").fetchSemanticsNode().boundsInRoot)
+                val bitmap = compose.onNodeWithTag("reader-host").captureToImage().asAndroidBitmap()
+                try {
+                    val actual = bitmap.getPixel(sampleX, sampleY)
+                    val channels = listOf<(Int) -> Int>(
+                        android.graphics.Color::red,
+                        android.graphics.Color::green,
+                        android.graphics.Color::blue,
+                    )
+                    if (channels.any { kotlin.math.abs(it(expected) - it(actual)) > 2 }) {
+                        for ((name, frame) in listOf("underlay" to underlay, "actual" to bitmap)) {
+                            File(context.getExternalFilesDir("ui-regression"), "aloud-opacity-$percent-$name.png")
+                                .outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        }
+                    }
+                    for (channel in channels) {
+                        assertEquals(
+                            "Rendered background uses $percent percent opacity at $sampleX,$sampleY " +
+                                "bounds=$bounds host=$hostBounds foreground=$foreground beneath=$beneath actual=$actual",
+                            channel(expected).toFloat(),
+                            channel(actual).toFloat(),
+                            2f,
+                        )
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+            } finally {
+                underlay.recycle()
+            }
+        } finally {
+            prefs.edit().apply {
+                savedPosition.forEach { (key, value) ->
+                    if (value is Float) putFloat(key, value) else remove(key)
+                }
+            }.commit()
+        }
+    }
+
+    private fun awaitSurfaceFrame() {
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        val rendered = CountDownLatch(1)
+        scenario!!.onActivity {
+            val decor = it.window.decorView
+            decor.postOnAnimation { decor.postOnAnimation { rendered.countDown() } }
+        }
+        assertTrue("Reader window rendered the updated controls", rendered.await(5, TimeUnit.SECONDS))
     }
 
     private fun drag(dx: Float, dy: Float) {

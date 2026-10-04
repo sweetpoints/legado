@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -46,6 +47,7 @@ internal fun CodeDialogScreen(
     val previousLabel = stringResource(R.string.help_search_prev)
     val nextLabel = stringResource(R.string.help_search_next)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
     var composing by remember { mutableStateOf(TextFieldValue()) }
     var menuOpen by remember { mutableStateOf(false) }
     val selection = TextRange(state.selectionStart, state.selectionEnd)
@@ -60,23 +62,41 @@ internal fun CodeDialogScreen(
             colorResource(R.color.md_orange_900),
             colorResource(R.color.md_light_blue_600),
         )
+    // Android's immutable SpannableString scans every span when drawing each text run.
+    // Keep the document and UTF-16 offsets intact, but style the viewport plus one screen
+    // of overscan so scrolling never brings an unstyled line into view.
+    val syntaxRange by remember(state.displayed, state.selectionStart, state.selectionEnd) {
+        derivedStateOf {
+            val result = layout
+            if (result == null || result.layoutInput.text.text != state.displayed || viewportHeight == 0) {
+                (state.selectionStart - 2048).coerceAtLeast(0) until
+                    (state.selectionEnd + 2048).coerceAtMost(state.displayed.length)
+            } else {
+                val first = result.getLineForVerticalPosition((scroll.value - viewportHeight).coerceAtLeast(0).toFloat())
+                val last = result.getLineForVerticalPosition((scroll.value + viewportHeight * 2).toFloat())
+                result.getLineStart(first) until result.getLineEnd(last)
+            }
+        }
+    }
     val syntax by
-        produceState(AnnotatedString(state.displayed), state.displayed, colors) {
+        produceState(AnnotatedString(state.displayed), state.displayed, colors, syntaxRange) {
             this.value =
-                withContext(Dispatchers.Default) { projectCodeSyntax(state.displayed, colors) }
+                withContext(Dispatchers.Default) { projectCodeSyntax(state.displayed, colors, syntaxRange) }
         }
     val matchBackground = MaterialTheme.colorScheme.secondary.copy(alpha = .28f)
     val transformation =
-        remember(syntax, state.matches, matchBackground) {
+        remember(syntax, state.matches, matchBackground, syntaxRange) {
             VisualTransformation { text ->
                 val annotated = buildAnnotatedString {
                     append(if (syntax.text == text.text) syntax else AnnotatedString(text.text))
                     state.matches.forEach { range ->
-                        if (range.first >= 0 && range.last < length)
+                        val start = maxOf(range.first, syntaxRange.first)
+                        val end = minOf(range.last + 1, syntaxRange.last + 1, length)
+                        if (start >= 0 && start < end)
                             addStyle(
                                 SpanStyle(background = matchBackground),
-                                range.first,
-                                range.last + 1,
+                                start,
+                                end,
                             )
                     }
                 }
@@ -232,6 +252,7 @@ internal fun CodeDialogScreen(
                 Box(
                     Modifier.weight(1f)
                         .fillMaxHeight()
+                        .onSizeChanged { viewportHeight = it.height }
                         .verticalScroll(scroll)
                         .testTag("code-scroll")
                 ) {

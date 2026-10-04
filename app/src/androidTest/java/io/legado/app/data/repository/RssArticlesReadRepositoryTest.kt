@@ -67,7 +67,7 @@ class RssArticlesReadRepositoryTest {
             assertEquals("Date", value.article.pubDate)
             assertEquals("Image", value.article.image)
             assertEquals("Latest header $type", value.source!!.header)
-            assertEquals("Content rule $type", value.source!!.ruleContent)
+            assertEquals("Content rule $type", value.source.ruleContent)
             assertTrue(
                 database.rssArticleDao.flowByOriginSort("source", "Category").first().single().read
             )

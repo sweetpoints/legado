@@ -25,6 +25,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.model.BookCover
+import io.legado.app.testutil.saveSemantics
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.utils.defaultSharedPreferences
@@ -102,8 +103,19 @@ class CoverStylePreviewUiTest {
 
     @Test
     fun orderedScrollableSettingsUpdateRealPreviewsAndSurviveRecreation() {
+        // A solid fixture avoids backend-dependent resampling of the textured default asset,
+        // while keeping the strict comparison of every interior title and author pixel.
+        val background = File(context.cacheDir, "cover-style-${UUID.randomUUID()}.png")
+        Bitmap.createBitmap(90, 120, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.rgb(241, 219, 184))
+            background.outputStream().use { compress(Bitmap.CompressFormat.PNG, 100, it) }
+            recycle()
+        }
+        files.add(background)
         preferences
             .edit()
+            .putString(PreferKey.defaultCover, background.path)
+            .putString(PreferKey.defaultCoverDark, background.path)
             .putBoolean(PreferKey.coverHorizontal, false)
             .putBoolean(PreferKey.coverTitleAdaptive, true)
             .putBoolean(PreferKey.coverKeepPunctuation, false)
@@ -208,6 +220,7 @@ class CoverStylePreviewUiTest {
                 compose.onNodeWithTag("cover-font-row-coverFont").performClick()
                 compose.onNodeWithTag("font-actions").performClick()
                 compose.onNodeWithTag("font-default").performClick()
+                waitUntil { preferences.getString(PreferKey.coverFont, "") == "" && BookCover.fontTypeface == null }
                 assertEquals("", preferences.getString(PreferKey.coverFont, ""))
                 assertNull(BookCover.fontTypeface)
                 assertEquals(systemFont, AppConfig.systemTypefaces)
@@ -219,6 +232,7 @@ class CoverStylePreviewUiTest {
 
     private fun scroll(settings: ActivityScenario<ConfigActivity>, key: String) {
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("cover-font-settings-list").fetchSemanticsNodes().isNotEmpty()
         }
         compose
@@ -251,75 +265,81 @@ class CoverStylePreviewUiTest {
                         .captureToImage()
                         .asAndroidBitmap()
                 }
-            val ready =
-                frames.withIndex().all { (index, frame) ->
-                    val expected =
-                        Bitmap.createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
-                    try {
-                        val canvas = Canvas(expected)
-                        val source = config.defaultBitmap
-                        val scale =
-                            maxOf(
-                                frame.width.toFloat() / source.width,
-                                frame.height.toFloat() / source.height,
+            try {
+                val ready =
+                    frames.withIndex().all { (index, frame) ->
+                        val expected =
+                            Bitmap.createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
+                        try {
+                            val canvas = Canvas(expected)
+                            val source = config.defaultBitmap
+                            val scale =
+                                maxOf(
+                                    frame.width.toFloat() / source.width,
+                                    frame.height.toFloat() / source.height,
+                                )
+                            val left = (frame.width - source.width * scale) / 2
+                            val top = (frame.height - source.height * scale) / 2
+                            canvas.drawBitmap(
+                                source,
+                                null,
+                                android.graphics.RectF(
+                                    left,
+                                    top,
+                                    left + source.width * scale,
+                                    top + source.height * scale,
+                                ),
+                                android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
                             )
-                        val left = (frame.width - source.width * scale) / 2
-                        val top = (frame.height - source.height * scale) / 2
-                        canvas.drawBitmap(
-                            source,
-                            null,
-                            android.graphics.RectF(
-                                left,
-                                top,
-                                left + source.width * scale,
-                                top + source.height * scale,
-                            ),
-                            android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
-                        )
-                        runBlocking {
-                            repo.title(
-                                CoverRequest(name = titles[index], author = authors[index]),
-                                config,
-                                frame.width,
-                                frame.height,
-                            )
-                        }
-                            ?.let { canvas.drawBitmap(it, 0f, 0f, null) }
-                        // ComposeCover rounds only the outer corners; compare the full interior
-                        // including actual text pixels.
-                        (14 until frame.height - 14).all { y ->
-                            (14 until frame.width - 14).all { x ->
-                                val a = frame.getPixel(x, y)
-                                val b = expected.getPixel(x, y)
-                                kotlin.math.abs(Color.red(a) - Color.red(b)) <= 3 &&
-                                    kotlin.math.abs(Color.green(a) - Color.green(b)) <= 3 &&
-                                    kotlin.math.abs(Color.blue(a) - Color.blue(b)) <= 3
+                            runBlocking {
+                                repo.title(
+                                    CoverRequest(name = titles[index], author = authors[index]),
+                                    config,
+                                    frame.width,
+                                    frame.height,
+                                )
                             }
+                                ?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+                            // ComposeCover rounds only the outer corners; compare the full interior
+                            // including actual text pixels.
+                            (14 until frame.height - 14).all { y ->
+                                (14 until frame.width - 14).all { x ->
+                                    val a = frame.getPixel(x, y)
+                                    val b = expected.getPixel(x, y)
+                                    kotlin.math.abs(Color.red(a) - Color.red(b)) <= 3 &&
+                                        kotlin.math.abs(Color.green(a) - Color.green(b)) <= 3 &&
+                                        kotlin.math.abs(Color.blue(a) - Color.blue(b)) <= 3
+                                }
+                            }
+                        } finally {
+                            expected.recycle()
                         }
-                    } finally {
-                        expected.recycle()
                     }
-                }
-            if (ready)
-                result = frames.map { bitmap ->
-                    IntArray(bitmap.width * bitmap.height).also {
-                        bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                        // First entry is the top-center background sample, outside the rounded
-                        // corner and title.
-                        it[0] = bitmap.getPixel(bitmap.width / 2, 2)
+                if (ready)
+                    result = frames.map { bitmap ->
+                        IntArray(bitmap.width * bitmap.height).also {
+                            bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                            // First entry is the top-center background sample, outside the rounded
+                            // corner and title.
+                            it[0] = bitmap.getPixel(bitmap.width / 2, 2)
+                        }
                     }
-                }
-            result != null
+                result != null
+            } finally {
+                frames.forEach(Bitmap::recycle)
+            }
         }
-        return result!!
+        return checkNotNull(result)
     }
 
     private fun waitUntil(predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 5000
         while (SystemClock.uptimeMillis() < deadline) {
+            compose.mainClock.advanceTimeByFrame()
             if (predicate()) return
             SystemClock.sleep(50)
         }
+        compose.saveSemantics(context, "cover-style-timeout-${SystemClock.uptimeMillis()}")
         error("cover style UI did not reach requested state")
     }
 

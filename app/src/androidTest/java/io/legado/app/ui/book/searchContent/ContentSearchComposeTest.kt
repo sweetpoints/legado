@@ -4,7 +4,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.R
 import io.legado.app.data.preferences.*
 import io.legado.app.data.repository.*
 import io.legado.app.model.book.ContentSearchMatch
@@ -172,7 +173,9 @@ class ContentSearchComposeTest {
         assertTrue(selected.isEmpty())
         compose.runOnIdle { state = state.copy(completed = false, results = listOf(match())) }
         compose.onNodeWithTag("content-search-empty").assertDoesNotExist()
-        compose.onNodeWithTag("content-search-count").assertTextContains(": 1")
+        compose.onNodeWithTag("content-search-count").assertTextEquals(
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.search_content_size) + ": 1"
+        )
         compose.onNodeWithTag("content-search-result-match").performClick()
         assertEquals(listOf("match"), selected)
     }
@@ -195,13 +198,22 @@ class ContentSearchComposeTest {
                 )
             }
         }
-        compose.waitUntil(5000) { positions.contains(15) }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            positions.contains(15)
+        }
         compose.onNodeWithTag("content-search-result-row-15").assertIsDisplayed()
         compose.onNodeWithTag("content-search-bottom").performClick()
-        compose.waitUntil(5000) { positions.any { it >= 20 } }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            positions.any { it >= 20 }
+        }
         compose.onNodeWithTag("content-search-result-row-30").assertIsDisplayed()
         compose.onNodeWithTag("content-search-top").performClick()
-        compose.waitUntil(5000) { positions.lastOrNull() == 0 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            positions.lastOrNull() == 0
+        }
         compose.onNodeWithTag("content-search-result-row-0").assertIsDisplayed()
         compose.onNodeWithTag("content-search-back").performClick()
         assertEquals(1, closed)
@@ -222,15 +234,24 @@ class ContentSearchComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         compose.runOnIdle { lifecycle.registry.currentState = Lifecycle.State.STARTED }
         compose.onNodeWithTag("content-search-result-match").performClick()
-        compose.waitUntil(5000) { model.state.value.pendingResult != null }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.pendingResult != null
+        }
         assertTrue(received.isEmpty())
         restoration.emulateSavedInstanceStateRestore()
         assertTrue(received.isEmpty())
         compose.runOnIdle { lifecycle.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { received.size == 1 && closed == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            received.size == 1 && closed == 1
+        }
         assertEquals(0, received.single().index)
         assertEquals("needle", received.single().selected.query)
         assertEquals(received.single().selected, received.single().results.single())
@@ -258,16 +279,25 @@ class ContentSearchComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         compose.onNodeWithTag("content-search-result-match").performClick()
-        compose.waitUntil(5000) { model.state.value.pendingResult != null }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.pendingResult != null
+        }
         assertTrue(received.isEmpty())
         compose.runOnIdle {
             ready = true
             lifecycle.registry.currentState = Lifecycle.State.STARTED
             lifecycle.registry.currentState = Lifecycle.State.RESUMED
         }
-        compose.waitUntil(5000) { received.size == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            received.size == 1
+        }
         assertEquals("needle", received.single().selected.query)
     }
 

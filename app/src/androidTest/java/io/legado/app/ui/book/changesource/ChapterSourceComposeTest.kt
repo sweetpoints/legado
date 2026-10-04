@@ -3,7 +3,7 @@ package io.legado.app.ui.book.changesource
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
@@ -314,18 +314,27 @@ class ChapterSourceComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         assertEquals(0, delivered)
         content.receiptGate = CompletableDeferred()
         content.receiptStarted = CompletableDeferred()
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { content.receiptStarted!!.isCompleted }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            content.receiptStarted!!.isCompleted
+        }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { content.receiptGate!!.complete(Unit) }
         compose.waitForIdle()
         assertEquals(0, delivered)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { delivered == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            delivered == 1
+        }
         compose.runOnIdle {
             owner.registry.currentState = Lifecycle.State.CREATED
             owner.registry.currentState = Lifecycle.State.RESUMED
@@ -350,12 +359,18 @@ class ChapterSourceComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         compose.runOnIdle { assertTrue(model.startAutomation(1, 1)) }
         compose.waitForIdle()
         assertEquals(0, content.cached)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { finished == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            finished == 1
+        }
         assertEquals(1, content.cached)
         assertEquals(1, delivered)
         compose.runOnIdle {
@@ -386,12 +401,18 @@ class ChapterSourceComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         compose.runOnIdle {
             model.startAutomation(1, 1)
             owner.registry.currentState = Lifecycle.State.RESUMED
         }
-        compose.waitUntil(5000) { content.commitStarted.isCompleted }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            content.commitStarted.isCompleted
+        }
         compose.onNodeWithTag("chapter-source-close").performClick()
         compose.runOnIdle {
             assertEquals(0, closed)
@@ -402,7 +423,10 @@ class ChapterSourceComposeTest {
         compose.onNodeWithTag("chapter-source-menu-Close").performScrollTo().performClick()
         assertEquals(0, closed)
         compose.runOnIdle { content.commitGate!!.complete(Unit) }
-        compose.waitUntil(5000) { finished == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            finished == 1
+        }
         assertEquals(1, content.cached)
         assertEquals(0, closed)
     }

@@ -155,6 +155,23 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
 
     private var isMove = false
     private val readPositionVersion = ReadPositionVersion()
+    private data class ScrollLayoutAnchor(
+        val bookUrl: String,
+        val chapterIndex: Int,
+        val version: Long,
+        val generation: Long,
+        val sourceChapter: TextChapter,
+        val position: ScrollReadAnchor,
+    )
+    private data class AppliedScrollLayoutAnchor(
+        val request: ScrollLayoutAnchor,
+        val targetChapter: TextChapter,
+    )
+    private var scrollLayoutGeneration = 0L
+    private var pendingScrollLayoutAnchor: ScrollLayoutAnchor? = null
+    private var appliedScrollLayoutAnchor: AppliedScrollLayoutAnchor? = null
+    private var bindingReadPositionVersion: Long? = null
+    private var scrollModeTransitionSource: TextChapter? = null
 
     // 起始点
     var startX: Float = 0f
@@ -660,6 +677,8 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
 
     fun markReadPositionChanged() {
         readPositionVersion.markChanged()
+        pendingScrollLayoutAnchor = null
+        appliedScrollLayoutAnchor = null
     }
 
     /** 长按选择 */
@@ -942,6 +961,13 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
     fun upPageAnim(upRecorder: Boolean = false) {
         val scroll = ReadBook.pageAnim() == PageAnim.scrollPageAnim
         if (pageDelegate != null) updateScrollReadPosition(preserveText = isScroll != scroll)
+        if (isScroll != scroll) {
+            // A mode switch can resize the native view before its newly formatted chapter
+            // is bound. The old page's character coordinates are not the new layout's.
+            scrollModeTransitionSource = curPage.textPage.textChapter
+            pendingScrollLayoutAnchor = null
+            appliedScrollLayoutAnchor = null
+        }
         isScroll = scroll
         // Runtime changes rebind content; initial inflation must not access Activity callbacks yet.
         if (pageDelegate != null) curPage.setIsScroll(isScroll)
@@ -992,6 +1018,15 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
      * @param relativePosition 相对位置 -1 上一页 0 当前页 1 下一页
      * @param resetPageOffset 滚动阅读是是否重置位置
      */
+    fun upContentWithReadPositionVersion(relativePosition: Int, resetPageOffset: Boolean, version: Long?) {
+        bindingReadPositionVersion = version
+        try {
+            upContent(relativePosition, resetPageOffset)
+        } finally {
+            bindingReadPositionVersion = null
+        }
+    }
+
     override fun upContent(relativePosition: Int, resetPageOffset: Boolean) {
         if (BuildConfig.DEBUG && relativePosition == 0)
             Log.d(
@@ -1004,17 +1039,44 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         }
         if (isScroll && !isAutoPage) {
             if (relativePosition == 0) {
+                fun matches(request: ScrollLayoutAnchor): Boolean =
+                    request.bookUrl == ReadBook.book?.bookUrl &&
+                        request.chapterIndex == ReadBook.durChapterIndex &&
+                        request.version == bindingReadPositionVersion &&
+                        readPositionVersion.isCurrent(request.version)
+                if (resetPageOffset && bindingReadPositionVersion == null) {
+                    // New books, explicit jumps and mode changes retain their ordinary reset.
+                    pendingScrollLayoutAnchor = null
+                    appliedScrollLayoutAnchor = null
+                }
+                val pending = pendingScrollLayoutAnchor?.takeIf(::matches)
+                val chapter = pageFactory.curPage.textChapter
+                val restore = pending?.takeIf { resetPageOffset && chapter !== it.sourceChapter }
+                val awaitingReplacement = pending?.sourceChapter === chapter
+                val alreadyRestored = appliedScrollLayoutAnchor?.let {
+                    matches(it.request) && it.targetChapter === chapter &&
+                        (pending == null || pending.generation == it.request.generation)
+                } == true
                 curPage.setContent(
                     pageFactory.curPage,
-                    resetPageOffset,
+                    resetPageOffset && !alreadyRestored && !awaitingReplacement,
                     replacePreview?.chapterPosition
                         ?: replacePreviewRestorePosition
                         ?: ReadBook.durChapterPos,
+                    // ReadBook has already translated the source-character anchor through
+                    // indentation/resegmentation; retain only its old canvas pixel position.
+                    scrollAnchor = restore?.position?.copy(chapterPosition = ReadBook.durChapterPos),
                 )
+                if (restore != null) {
+                    pendingScrollLayoutAnchor = null
+                    appliedScrollLayoutAnchor = AppliedScrollLayoutAnchor(restore, chapter)
+                }
             } else {
                 curPage.invalidateContentView()
             }
         } else {
+            pendingScrollLayoutAnchor = null
+            appliedScrollLayoutAnchor = null
             when (relativePosition) {
                 -1 -> prevPage.setContent(pageFactory.prevPage)
                 1 -> nextPage.setContent(pageFactory.nextPage)
@@ -1026,6 +1088,14 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
             }
         }
         callBack.screenOffTimerStart()
+        val transition = scrollModeTransitionSource
+        if (relativePosition == 0 && (transition == null ||
+                curPage.textPage.textChapter !== transition ||
+                transition.chapter.bookUrl != ReadBook.book?.bookUrl ||
+                transition.chapter.index != ReadBook.durChapterIndex)
+        ) {
+            scrollModeTransitionSource = null
+        }
         replacePreviewRestorePosition = null
     }
 
@@ -1122,6 +1192,34 @@ class ReadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         if (ReadBook.msg != null || !ReadBook.isLayoutAvailable) return
         // A replacement chapter can finish before its final UI bind runs.
         if (curPage.textPage.textChapter !== ReadBook.curTextChapter) return
+        // Preserve the source-character anchor captured before changing modes. Until the
+        // replacement is bound, old page geometry must not be mistaken for a scroll layout.
+        if (curPage.textPage.textChapter === scrollModeTransitionSource) return
+        val captured = pendingScrollLayoutAnchor
+        if (captured != null && captured.sourceChapter === curPage.textPage.textChapter &&
+            captured.bookUrl == ReadBook.book?.bookUrl &&
+            captured.chapterIndex == ReadBook.durChapterIndex &&
+            readPositionVersion.isCurrent(captured.version)
+        ) {
+            // Both the character and pixel anchors describe the first frame before reflow.
+            // A later size callback may already see reformatted lines in this same object.
+            return
+        }
+        if (preserveText && isScroll && ReadBook.isScroll) {
+            val position = curPage.captureScrollAnchor()
+            val bookUrl = ReadBook.book?.bookUrl
+            val chapter = ReadBook.curTextChapter
+            val existing = pendingScrollLayoutAnchor
+            if (position != null && bookUrl != null && chapter != null &&
+                (existing == null || existing.sourceChapter !== chapter ||
+                    existing.bookUrl != bookUrl || !readPositionVersion.isCurrent(existing.version))
+            ) {
+                pendingScrollLayoutAnchor = ScrollLayoutAnchor(
+                    bookUrl, ReadBook.durChapterIndex, readPositionVersion.snapshot(),
+                    ++scrollLayoutGeneration, chapter, position,
+                )
+            }
+        }
         if (BuildConfig.DEBUG)
             Log.d(
                 "ReadPosition",

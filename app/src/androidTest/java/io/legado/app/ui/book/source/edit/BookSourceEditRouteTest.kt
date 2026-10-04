@@ -1,7 +1,7 @@
 package io.legado.app.ui.book.source.edit
 
 import android.content.Context
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
@@ -57,14 +57,26 @@ class BookSourceEditRouteTest {
         compose.setContent {
             BookSourceEditRoute(model, {}, {}, { finishes++ }, {}, {}, { true }, false, 6, 1, false)
         }
-        compose.waitUntil(10_000) { model.state.value.document != null && !model.state.value.busy }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.document != null && !model.state.value.busy
+        }
         compose.runOnIdle { model.updateField(0, "bookSourceName", "dirty", 5, 5) }
         pressBack()
-        compose.waitUntil { model.state.value.confirmDiscard }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.confirmDiscard
+        }
         assertEquals(0, finishes)
         compose.onNodeWithText(context.getString(R.string.no)).performClick()
-        compose.waitUntil(10_000) { model.state.value.document!!.finished }
-        compose.waitUntil { finishes == 1 }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.document!!.finished
+        }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            finishes == 1
+        }
         runBlocking {
             withContext(Dispatchers.IO) {
                 assertTrue(directory.listFiles()!!.any { it.name.endsWith(".json") })

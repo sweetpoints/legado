@@ -1031,6 +1031,22 @@ class CodeSelectionUiTest {
                             ready
                         }
                         if (rss && !replacements) {
+                            // Saving updates the candidate before the child dialog's removal
+                            // transaction finishes. Wait for the parent to own input again.
+                            await(message = { "Saved preview was not removed before reopening" }) {
+                                var ready = false
+                                instrumentation.runOnMainSync {
+                                    ready =
+                                        !preview!!.isAdded &&
+                                            parent!!.childFragmentManager.fragments.none {
+                                                it === preview
+                                            } &&
+                                            parent!!.isResumed &&
+                                            !parent!!.childFragmentManager.isStateSaved &&
+                                            parent!!.dialog?.window?.decorView?.hasWindowFocus() == true
+                                }
+                                ready
+                            }
                             val derived = edited.replace("#edited", "#replacement-only")
                             val readOnlyPreview =
                                 CodeDialog(edited, false, "1", derived, showAlternate = true)
@@ -1048,7 +1064,9 @@ class CodeSelectionUiTest {
                                             ?.window
                                             ?.decorView
                                             ?.hasWindowFocus() == true &&
-                                            readOnlyPreview.model.state.value.loaded
+                                            readOnlyPreview.model.state.value.loaded &&
+                                            readOnlyPreview.isResumed &&
+                                            !readOnlyPreview.parentFragmentManager.isStateSaved
                                 }
                                 ready
                             }
@@ -1060,7 +1078,38 @@ class CodeSelectionUiTest {
                                 )
                             }
                             compose.onNodeWithTag("code-fullscreen").performClick()
-                            await {
+                            await(message = {
+                                var diagnostic = ""
+                                instrumentation.runOnMainSync {
+                                    val value = readOnlyPreview.model.state.value
+                                    val activities = Stage.values().joinToString { stage ->
+                                        val editors = ActivityLifecycleMonitorRegistry.getInstance()
+                                            .getActivitiesInStage(stage)
+                                            .filterIsInstance<CodeEditActivity>()
+                                        "$stage=" + editors.joinToString { activity ->
+                                            val editor = activity.findViewById<CodeEditor>(R.id.editText)
+                                            "length=${editor?.text?.length}," +
+                                                "matches=${editor?.text?.toString() == derived}," +
+                                                "editable=${editor?.isEditable}," +
+                                                "shown=${editor?.isShown}," +
+                                                "finishing=${activity.isFinishing}"
+                                        }
+                                    }
+                                    diagnostic =
+                                        "Read-only preview editor not ready: " +
+                                            "lifecycle=${readOnlyPreview.lifecycle.currentState}," +
+                                            "added=${readOnlyPreview.isAdded}," +
+                                            "stateSaved=${readOnlyPreview.parentFragmentManager.isStateSaved}," +
+                                            "pending=${value.editorPending}," +
+                                            "prepared=${value.editorPrepared}," +
+                                            "hasPath=${value.editorPath != null}," +
+                                            "readOnly=${value.editorReadOnly}," +
+                                            "effects=${value.effects.map { it.action }}," +
+                                            "hasError=${value.error != null}," +
+                                            "expectedLength=${derived.length}; $activities"
+                                }
+                                diagnostic
+                            }) {
                                 var ready = false
                                 instrumentation.runOnMainSync {
                                     editorActivity =

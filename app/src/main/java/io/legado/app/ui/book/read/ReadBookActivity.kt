@@ -1698,8 +1698,10 @@ class ReadBookActivity :
                 resetPageOffset &&
                     (readPositionVersion == null ||
                         isReadPositionVersionCurrent(readPositionVersion))
+            val hadSpeechHighlight = readView.curPage.textPage.hasReadAloudSpan
             if (relativePosition == 0) readView.cancelTouchGestures()
-            readView.upContent(relativePosition, shouldResetPageOffset)
+            readView.upContentWithReadPositionVersion(relativePosition, shouldResetPageOffset, readPositionVersion)
+            restoreSpeechHighlightAfterLayout(hadSpeechHighlight)
             scheduleAloudFollowCheck()
             observeBookmarks()
             upBookmarkIndicator()
@@ -1733,8 +1735,10 @@ class ReadBookActivity :
                 resetPageOffset &&
                     (readPositionVersion == null ||
                         isReadPositionVersionCurrent(readPositionVersion))
+            val hadSpeechHighlight = readView.curPage.textPage.hasReadAloudSpan
             if (relativePosition == 0) readView.cancelTouchGestures()
-            readView.upContent(relativePosition, shouldResetPageOffset)
+            readView.upContentWithReadPositionVersion(relativePosition, shouldResetPageOffset, readPositionVersion)
+            restoreSpeechHighlightAfterLayout(hadSpeechHighlight)
             scheduleAloudFollowCheck()
             observeBookmarks()
             upBookmarkIndicator()
@@ -1744,6 +1748,22 @@ class ReadBookActivity :
             loadStates = false
             loadReviewSummaryIfNeeded()
         }
+
+    private fun restoreSpeechHighlightAfterLayout(hadSpeechHighlight: Boolean) {
+        if (!BaseReadAloudService.isRun || !ReadAloud.followReadAloudPosition) return
+        // A paused reader may already show the current speech position after manually
+        // returning to it. Preserve that existing highlight without starting playback.
+        if (!BaseReadAloudService.isPlay() && !(BaseReadAloudService.pause && hadSpeechHighlight)) return
+        val chapter = ReadBook.curTextChapter ?: return
+        if (BaseReadAloudService.readAloudBookUrl != ReadBook.book?.bookUrl ||
+            !BaseReadAloudService.hasPreparedSpeechContent(chapter)) return
+        val position = ReadAloud.readAloudChapterStart
+        val page = chapter.getPageByReadPos(position) ?: return
+        if (readView.curPage.textPage !== page) return
+        page.upPageAloudSpan(position - chapter.getReadLength(page.index))
+        readView.curPage.invalidateContentView()
+        readView.submitRenderTask()
+    }
 
     override fun upPageAnim(upRecorder: Boolean) {
         lifecycleScope.launch {
@@ -1782,6 +1802,7 @@ class ReadBookActivity :
     }
 
     override fun onReadScroll(offset: Int) {
+        if (offset != 0) readView.markReadPositionChanged()
         if (BaseReadAloudService.isRun && !isAutoPage) {
             ReadAloud.detachReadAloudFollow()
             aloudControls.onMovement(

@@ -131,6 +131,35 @@ abstract class BaseReadAloudService : BaseService(),
         var readAloudChapterStart: Int = -1
             private set
 
+        private class PreparedSpeechContent(
+            val bookUrl: String,
+            val chapterIndex: Int,
+            val text: String,
+            @Volatile var equivalentLayout: TextChapter,
+        )
+
+        @Volatile
+        private var preparedSpeechContent: PreparedSpeechContent? = null
+
+        internal val readAloudBookUrl: String?
+            get() = preparedSpeechContent?.bookUrl
+
+        internal fun hasPreparedSpeechContent(chapter: TextChapter): Boolean {
+            val prepared = preparedSpeechContent ?: return false
+            if (!isRun || readAloudChapterStart < 0 || !chapter.isCompleted ||
+                prepared.bookUrl != chapter.chapter.bookUrl ||
+                prepared.chapterIndex != chapter.chapter.index ||
+                readAloudChapterIndex != chapter.chapter.index) return false
+            if (prepared.equivalentLayout === chapter) return true
+            if (prepared.text != chapter.getNeedReadAloud(0, false, 0)) return false
+            prepared.equivalentLayout = chapter
+            return true
+        }
+
+        private fun rememberPreparedSpeechContent(chapter: TextChapter, text: String) {
+            preparedSpeechContent = PreparedSpeechContent(chapter.chapter.bookUrl, chapter.chapter.index, text, chapter)
+        }
+
         @JvmStatic
         val followReadAloudPosition: Boolean
             get() = speechFollowState.followReadAloudPosition
@@ -208,6 +237,8 @@ abstract class BaseReadAloudService : BaseService(),
     private val chapterStopTimer = ChapterStopTimer()
     private var dsJob: Job? = null
     private var readAloudJob: Coroutine<*>? = null
+    internal val isReadAloudPreparing: Boolean
+        get() = readAloudJob?.isActive == true
     private val readAloudGeneration = AtomicLong()
     private var upNotificationJob: Coroutine<*>? = null
     private var cover: Bitmap =
@@ -227,7 +258,8 @@ abstract class BaseReadAloudService : BaseService(),
         val nowSpeak: Int,
         val readAloudChapterStart: Int,
         val paragraphStartPos: Int,
-        val consumedToLast: Boolean
+        val consumedToLast: Boolean,
+        val chapterContent: String,
     )
 
     private val broadcastReceiver = object : BroadcastReceiver() {
@@ -298,6 +330,7 @@ abstract class BaseReadAloudService : BaseService(),
         restoreReadAloudFollow()
         updateReadAloudChapterIndex(-1)
         readAloudChapterStart = -1
+        preparedSpeechContent = null
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -366,7 +399,8 @@ abstract class BaseReadAloudService : BaseService(),
             val textChapter = ReadBook.curTextChapter ?: return@execute
             if (!textChapter.isCompleted) return@execute
             val readAloudByPage = getPrefBoolean(PreferKey.readAloudByPage)
-            val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0)
+            val chapterContent = textChapter.getNeedReadAloud(0, false, 0)
+            val contentList = (if (readAloudByPage) textChapter.getNeedReadAloud(0, true, 0) else chapterContent)
                 .split("\n")
                 .filter { it.isNotEmpty() }
             var readAloudNumber = textChapter.getReadLength(pageIndex) + startPos
@@ -390,7 +424,8 @@ abstract class BaseReadAloudService : BaseService(),
                 nowSpeak = nowSpeak,
                 readAloudChapterStart = readAloudNumber,
                 paragraphStartPos = pos,
-                consumedToLast = toLast
+                consumedToLast = toLast,
+                chapterContent = chapterContent,
             )
             ensureActive()
             withContext(Main.immediate) {
@@ -400,6 +435,7 @@ abstract class BaseReadAloudService : BaseService(),
                 this@BaseReadAloudService.readAloudNumber = prepared.readAloudNumber
                 this@BaseReadAloudService.readAloudByPage = prepared.readAloudByPage
                 this@BaseReadAloudService.contentList = prepared.contentList
+                rememberPreparedSpeechContent(prepared.textChapter, prepared.chapterContent)
                 this@BaseReadAloudService.nowSpeak = prepared.nowSpeak
                 updateReadAloudChapterIndex(prepared.textChapter.chapter.index)
                 BaseReadAloudService.readAloudChapterStart = prepared.readAloudChapterStart
@@ -924,6 +960,7 @@ abstract class BaseReadAloudService : BaseService(),
                 if (page.index > 0) continue
             }
             textChapter = nextTextChapter
+            rememberPreparedSpeechContent(nextTextChapter, nextTextChapter.getNeedReadAloud(0, false, 0))
             updateReadAloudChapterIndex(chapter.index)
             readAloudChapterStart = 0
             pageIndex = 0

@@ -158,7 +158,12 @@ class ConfigActivity : BaseComposeActivity() {
                     factory = { context ->
                         FragmentContainerView(context).apply {
                             id = R.id.configFrameLayout
-                            doOnAttach { attachPage() }
+                            doOnAttach {
+                                // Compose creates this container after FragmentManager restores its
+                                // fragments. Reattach their existing views before selecting the page.
+                                supportFragmentManager.onContainerAvailable(this)
+                                attachPage()
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f).fillMaxWidth(),

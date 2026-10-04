@@ -3,7 +3,6 @@ package io.legado.app.data
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.testing.MigrationTestHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.constant.AppConst
@@ -45,8 +44,7 @@ class ReadRecordAuthorIdentityTest {
     @get:Rule
     val helper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
-        AppDatabase::class.java.canonicalName,
-        FrameworkSQLiteOpenHelperFactory(),
+        AppDatabase::class.java,
     )
 
     @Test

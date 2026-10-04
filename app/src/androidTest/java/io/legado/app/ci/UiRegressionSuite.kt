@@ -53,6 +53,7 @@ import org.junit.runners.Suite
     io.legado.app.ui.book.source.SourceOrderMetadataUpdateTest::class,
     io.legado.app.ui.main.MainScreenTest::class,
     io.legado.app.ui.main.MainActivityWindowInsetsTest::class,
+    io.legado.app.ui.book.read.ReaderWindowInsetsTest::class,
     io.legado.app.help.MediaHelpTest::class,
 )
 class UiRegressionSuite

@@ -2,7 +2,7 @@ package io.legado.app.ui.config
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -144,7 +144,9 @@ class CoverSettingsComposeTest {
         }
         row("rules").assertIsNotEnabled()
         row(CoverSettingImage.RecordDay.key).assertIsNotEnabled()
-        compose.onNodeWithTag("cover-settings-retry").performScrollTo().performClick()
+        compose.onNodeWithTag("cover-settings-list")
+            .performScrollToNode(hasTestTag("cover-settings-retry"))
+        compose.onNodeWithTag("cover-settings-retry").assertIsDisplayed().performClick()
         assertEquals(1, retries)
     }
 
@@ -169,7 +171,10 @@ class CoverSettingsComposeTest {
                 }
             }
         }
-        compose.waitUntil { model.state.value.settings != null }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.settings != null
+        }
         compose.runOnIdle {
             model.picker(CoverSettingImage.RecordDay)
             model.destination(CoverDestination.Rules)
@@ -179,7 +184,10 @@ class CoverSettingsComposeTest {
             assertTrue(nav.isEmpty())
             registryOwner.lifecycle.currentState = Lifecycle.State.RESUMED
         }
-        compose.waitUntil { images.size == 1 && nav.size == 1 }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            images.size == 1 && nav.size == 1
+        }
         compose.runOnIdle {
             registryOwner.lifecycle.currentState = Lifecycle.State.STARTED
             registryOwner.lifecycle.currentState = Lifecycle.State.RESUMED

@@ -24,7 +24,7 @@ class ReadAloudFollowPositionRegressionTest {
         val serviceKt = readProjectFile("src/main/java/io/legado/app/service/BaseReadAloudService.kt")
 
         assertTrue(readBookKt.contains("if (updateReadAloud && BaseReadAloudService.isRun && it.isCompleted)"))
-        assertTrue(readBookKt.contains("if (!syncReadAloudFollow)"))
+        assertTrue(readBookKt.contains("else if (!syncReadAloudFollow && !restartReadAloudFromVisiblePage)"))
         assertTrue(readBookKt.contains("curPageChanged(syncReadAloudFollow = syncReadAloudFollow)"))
         assertTrue(serviceKt.contains("fun shouldSyncSpeechNavigation(): Boolean"))
         assertTrue(serviceKt.contains("return speechFollowState.shouldSyncSpeechNavigation()"))

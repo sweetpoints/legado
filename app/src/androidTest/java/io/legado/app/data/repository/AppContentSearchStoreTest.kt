@@ -101,7 +101,6 @@ class AppContentSearchStoreTest {
                             { other.create(session, snapshot) },
                             {
                                 other.read(session)
-                                Unit
                             },
                         )
                     late.forEach { block ->

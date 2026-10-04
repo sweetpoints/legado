@@ -16,6 +16,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.constant.BookType
+import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -28,6 +29,7 @@ import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.utils.postEvent
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
@@ -157,6 +159,33 @@ class ReadingLayoutTransitionTest {
                         "The reproduction must include a nonzero scroll offset",
                         scrolled.offset < 0,
                     )
+                    var previousChapter = ReadBook.curTextChapter
+                    var lineTopBeforeRefresh = 0f
+                    scenario.onActivity { activity ->
+                        val view = activity.findViewById<ReadView>(R.id.read_view)
+                        previousChapter = ReadBook.curTextChapter
+                        lineTopBeforeRefresh = checkNotNull(view.getReadAloudPos()).second.lineTop
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                    }
+                    compose.waitUntil(30000) {
+                        compose.mainClock.advanceTimeByFrame()
+                        ReadBook.curTextChapter !== previousChapter &&
+                            ReadBook.curTextChapter?.isCompleted == true
+                    }
+                    awaitReader(scenario, book.bookUrl, true)
+                    scenario.onActivity { activity ->
+                        val view = activity.findViewById<ReadView>(R.id.read_view)
+                        assertEquals(
+                            "A pure layout refresh preserves the visible line's exact pixel anchor",
+                            lineTopBeforeRefresh,
+                            checkNotNull(view.getReadAloudPos()).second.lineTop,
+                            .01f,
+                        )
+                        val version = view.getReadPositionVersion()
+                        view.curPage.scroll(-1)
+                        assertTrue("Actual scrolling invalidates a layout anchor", view.getReadPositionVersion() > version)
+                        view.curPage.scroll(1)
+                    }
                     switchStyle(scenario, 2)
                     awaitReader(scenario, book.bookUrl, true)
                     val sameMode = capture(scenario, "layout-scroll-same-mode")

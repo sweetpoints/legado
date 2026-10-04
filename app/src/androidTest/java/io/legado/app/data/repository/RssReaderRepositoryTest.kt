@@ -84,8 +84,8 @@ class RssReaderRepositoryTest {
         val value = repository.load(request)!!
         assertNull(inputs)
         assertEquals("Favorite variable", value.article!!.variable)
-        assertEquals("Favorite title", value.article!!.title)
-        assertEquals(41, value.article!!.durPos)
+        assertEquals("Favorite title", value.article.title)
+        assertEquals(41, value.article.durPos)
         val document = value.document as RssReaderDocument.Html
         assertTrue(document.html.contains("Favorite body"))
         assertEquals(article.link, document.baseUrl)
@@ -112,8 +112,8 @@ class RssReaderRepositoryTest {
         assertEquals("Content rule", inputs!!.second)
         assertEquals("Owned agent", inputs!!.third.getHeaderMap()["User-Agent"])
         assertEquals("Concurrent title", value.article!!.title)
-        assertEquals("Concurrent variable", value.article!!.variable)
-        assertEquals("Parsed body", value.article!!.description)
+        assertEquals("Concurrent variable", value.article.variable)
+        assertEquals("Parsed body", value.article.description)
         withContext(Dispatchers.IO) {
             assertEquals(
                 "Concurrent title",
@@ -236,7 +236,7 @@ class RssReaderRepositoryTest {
         parse = { error("Owned failure") }
         val value = repository.load(request)!!
         assertTrue((value.document as RssReaderDocument.Html).html.contains("加载正文失败"))
-        assertTrue((value.document as RssReaderDocument.Html).html.contains("Owned failure"))
+        assertTrue(value.document.html.contains("Owned failure"))
         withContext(Dispatchers.IO) {
             assertNull(
                 database.rssArticleDao.get(article.origin, article.link, article.sort)!!.description
@@ -261,7 +261,7 @@ class RssReaderRepositoryTest {
             }
         val value = real.load(request)!!
         assertEquals("owned", value.article!!.getVariable("parsed"))
-        assertEquals("value", value.article!!.getVariable("key"))
+        assertEquals("value", value.article.getVariable("key"))
         withContext(Dispatchers.IO) {
             assertEquals(
                 "owned",
@@ -297,8 +297,8 @@ class RssReaderRepositoryTest {
             }
         val value = real.load(request)!!
         assertEquals("Concurrent", value.article!!.title)
-        assertEquals("external", value.article!!.getVariable("key"))
-        assertEquals("addition", value.article!!.getVariable("concurrent"))
-        assertEquals("owned", value.article!!.getVariable("parsed"))
+        assertEquals("external", value.article.getVariable("key"))
+        assertEquals("addition", value.article.getVariable("concurrent"))
+        assertEquals("owned", value.article.getVariable("parsed"))
     }
 }

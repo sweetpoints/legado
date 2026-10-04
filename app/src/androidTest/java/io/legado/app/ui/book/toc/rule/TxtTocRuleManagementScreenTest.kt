@@ -379,16 +379,16 @@ class TxtTocRuleManagementScreenTest {
 
         override fun observe() = rows
 
-        override suspend fun setEnabled(names: List<Long>, enabled: Boolean) {
-            this.enabled += names to enabled
+        override suspend fun setEnabled(ids: List<Long>, enabled: Boolean) {
+            this.enabled += ids to enabled
         }
 
-        override suspend fun delete(names: List<Long>) {
-            deleted += names
+        override suspend fun delete(ids: List<Long>) {
+            deleted += ids
         }
 
-        override suspend fun reorder(names: List<Long>) {
-            orders += names
+        override suspend fun reorder(ids: List<Long>) {
+            orders += ids
         }
 
         val edges = mutableListOf<Pair<List<Long>, Boolean>>()

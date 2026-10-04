@@ -11,6 +11,11 @@ import android.graphics.Rect
 import android.os.SystemClock
 import android.widget.FrameLayout
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -30,6 +35,7 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.BookCover
+import io.legado.app.testutil.saveSemantics
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
@@ -573,23 +579,50 @@ class CoverTitleAdaptiveUiTest {
             )
             .use {
                 scrollCoverStylePreference(PreferKey.coverTitleAdaptive)
+                awaitAdaptiveSetting(true)
                 compose
                     .onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}")
+                    .assertIsOn()
                     .performClick()
+                awaitAdaptiveSetting(false)
+                compose.onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}").assertIsOff()
                 assertFalse(preferences.getBoolean(PreferKey.coverTitleAdaptive, true))
                 assertFalse(BookCover.adaptiveTitleSize)
                 screenshot("cover-title-setting-off")
                 compose
                     .onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}")
+                    .assertIsOff()
                     .performClick()
+                awaitAdaptiveSetting(true)
+                compose.onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}").assertIsOn()
                 assertTrue(preferences.getBoolean(PreferKey.coverTitleAdaptive, false))
                 assertTrue(BookCover.adaptiveTitleSize)
                 screenshot("cover-title-setting-on")
             }
     }
 
+    private fun awaitAdaptiveSetting(expected: Boolean) {
+        try {
+            compose.waitUntil(10_000) {
+                compose.mainClock.advanceTimeByFrame()
+                val configuration = compose
+                    .onNodeWithTag("cover-font-row-${PreferKey.coverTitleAdaptive}")
+                    .fetchSemanticsNode().config
+                preferences.getBoolean(PreferKey.coverTitleAdaptive, !expected) == expected &&
+                    BookCover.adaptiveTitleSize == expected &&
+                    configuration.getOrNull(SemanticsProperties.ToggleableState) ==
+                        (if (expected) ToggleableState.On else ToggleableState.Off) &&
+                    !configuration.contains(SemanticsProperties.Disabled)
+            }
+        } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            compose.saveSemantics(context, "cover-title-adaptive-$expected-timeout")
+            throw error
+        }
+    }
+
     private fun scrollCoverStylePreference(key: String) {
         compose.waitUntil(timeoutMillis = 10000) {
+            compose.mainClock.advanceTimeByFrame()
             compose.onAllNodesWithTag("cover-font-settings-list").fetchSemanticsNodes().isNotEmpty()
         }
         compose

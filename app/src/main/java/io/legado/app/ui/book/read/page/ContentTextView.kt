@@ -42,10 +42,13 @@ import io.legado.app.utils.toastOnUi
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * 阅读内容视图
  */
+data class ScrollReadAnchor(val chapterPosition: Int, val lineTop: Float)
+
 class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     var selectAble = AppConfig.textSelectAble
     val selectedPaint by lazy {
@@ -69,6 +72,8 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     private val pageFactory get() = callBack.pageFactory
     private val pageDelegate get() = callBack.pageDelegate
     private var pageOffset = 0
+    // Layout metrics are fractional even though wheel/touch movement is in whole pixels.
+    private var layoutOffsetRemainder = 0f
     private var autoPager: AutoPager? = null
     private var isScroll = false
     private val renderRunnable by lazy { Runnable { preRenderPage() } }
@@ -129,6 +134,9 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (!isMainView) return
+        if (isScroll && callBack.isScroll) {
+            (parent?.parent?.parent as? ReadView)?.updateScrollReadPosition(preserveText = true)
+        }
         ChapterProvider.upViewSize(w, h)
         textPage.format()
     }
@@ -212,6 +220,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         }
         if (!pageFactory.hasPrev() && pageOffset > 0) {
             pageOffset = 0
+            layoutOffsetRemainder = 0f
             pageDelegate?.abortAnim()
         } else if (!pageFactory.hasNext()
             && pageOffset < 0
@@ -219,12 +228,14 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         ) {
             val offset = (ChapterProvider.visibleHeight - textPage.height).toInt()
             pageOffset = min(0, offset)
+            layoutOffsetRemainder = 0f
             pageDelegate?.abortAnim()
         } else if (pageOffset > 0) {
             if (pageFactory.moveToPrev(true)) {
                 pageOffset -= textPage.height.toInt()
             } else {
                 pageOffset = 0
+                layoutOffsetRemainder = 0f
                 pageDelegate?.abortAnim()
             }
         } else if (pageOffset < -textPage.height) {
@@ -233,6 +244,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
                 pageOffset += height.toInt()
             } else {
                 pageOffset = -height.toInt()
+                layoutOffsetRemainder = 0f
                 pageDelegate?.abortAnim()
             }
         }
@@ -275,10 +287,11 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
      */
     fun resetPageOffset() {
         pageOffset = 0
+        layoutOffsetRemainder = 0f
     }
 
     fun isAtChapterTop(): Boolean {
-        return textPage.index == 0 && pageOffset == 0
+        return textPage.index == 0 && pageOffset == 0 && layoutOffsetRemainder == 0f
     }
 
     fun restorePageOffset(chapterPos: Int) {
@@ -289,6 +302,28 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             ?: return
         if (line === textPage.lines.firstOrNull()) return
         scroll((ChapterProvider.paddingTop - line.lineTop).toInt())
+    }
+
+    internal fun captureScrollAnchor(): ScrollReadAnchor? {
+        val (_, line) = getReadPosition() ?: return null
+        return ScrollReadAnchor(
+            line.chapterPosition,
+            line.lineTop + relativeOffset(0) - textPage.paddingTop,
+        )
+    }
+
+    internal fun restoreScrollAnchor(anchor: ScrollReadAnchor): Boolean {
+        val line = textPage.lines.firstOrNull { it.chapterPosition == anchor.chapterPosition }
+            ?: textPage.lines.firstOrNull { anchor.chapterPosition in it.chapterIndices }
+            ?: return false
+        // A layout restore is not navigation: do not detach speech, emit scroll callbacks,
+        // or move to another page while replacing its geometry.
+        // Preserve the line within the readable viewport when a preset changes its padding.
+        val offset = (anchor.lineTop + textPage.paddingTop - line.lineTop).coerceAtMost(0f)
+        pageOffset = offset.roundToInt()
+        layoutOffsetRemainder = offset - pageOffset
+        postInvalidateOnAnimation()
+        return true
     }
 
     /**
@@ -1042,9 +1077,9 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
 
     private fun relativeOffset(relativePos: Int): Float {
         return when (relativePos) {
-            0 -> pageOffset.toFloat()
-            1 -> pageOffset + textPage.height
-            else -> pageOffset + textPage.height + pageFactory.nextPage.height
+            0 -> pageOffset + layoutOffsetRemainder
+            1 -> pageOffset + layoutOffsetRemainder + textPage.height
+            else -> pageOffset + layoutOffsetRemainder + textPage.height + pageFactory.nextPage.height
         }
     }
 

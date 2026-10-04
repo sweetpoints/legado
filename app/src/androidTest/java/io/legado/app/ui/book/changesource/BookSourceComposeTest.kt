@@ -3,7 +3,7 @@ package io.legado.app.ui.book.changesource
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
@@ -105,8 +105,9 @@ class BookSourceComposeTest {
         assertTrue(chosen.isEmpty())
         compose.onNodeWithTag("book-source-row-target").performScrollTo().performClick()
         assertEquals(listOf("target"), chosen)
-        compose.onNodeWithTag("book-source-count-target").assertTextContains("字数：120")
-        compose.onNodeWithTag("book-source-time-target").assertExists()
+        compose.onNodeWithTag("book-source-count-target", useUnmergedTree = true)
+            .assertTextEquals(checkNotNull(target.wordCountText))
+        compose.onNodeWithTag("book-source-time-target", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("book-source-good-target").performClick()
         compose.onNodeWithTag("book-source-bad-target").performClick()
         assertEquals(listOf("target" to 1, "target" to -1), scored)
@@ -307,12 +308,18 @@ class BookSourceComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         assertEquals(0, delivered)
         content.gate = CompletableDeferred()
         content.started = CompletableDeferred()
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { content.started!!.isCompleted }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            content.started!!.isCompleted
+        }
         compose.runOnIdle {
             owner.registry.currentState = Lifecycle.State.CREATED
             content.gate!!.complete(Unit)
@@ -320,7 +327,10 @@ class BookSourceComposeTest {
         compose.waitForIdle()
         assertEquals(0, delivered)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { delivered == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            delivered == 1
+        }
         assertEquals(1, closed)
         compose.runOnIdle {
             owner.registry.currentState = Lifecycle.State.CREATED
@@ -350,12 +360,18 @@ class BookSourceComposeTest {
             }
         }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { delivered == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            delivered == 1
+        }
         compose.runOnIdle {
             model.stop()
             generation++
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         compose.waitForIdle()
         assertEquals(1, delivered)
         assertNull(model.state.value.pendingReceipt)
@@ -389,10 +405,16 @@ class BookSourceComposeTest {
                 }
             }
         }
-        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            !model.state.value.loading
+        }
         assertEquals(0, warnings)
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        compose.waitUntil(5000) { warnings == 1 }
+        compose.waitUntil(5000) {
+            compose.mainClock.advanceTimeByFrame()
+            warnings == 1
+        }
         compose.runOnIdle {
             owner.registry.currentState = Lifecycle.State.CREATED
             owner.registry.currentState = Lifecycle.State.RESUMED

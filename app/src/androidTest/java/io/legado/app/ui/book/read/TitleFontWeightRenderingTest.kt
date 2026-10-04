@@ -76,6 +76,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -2444,6 +2445,9 @@ class TitleFontWeightRenderingTest {
             val currentPage = hasTestTag("reader-current-page")
             val currentTip = hasTestTag("reader-tip-header-left").and(hasAnyAncestor(currentPage))
             val renderedTip = compose.onNode(currentTip).captureToImage()
+            val rightTip = hasTestTag("reader-tip-header-right").and(hasAnyAncestor(currentPage))
+            val bandWidth = renderedTip.width +
+                compose.onNode(rightTip).fetchSemanticsNode().boundsInRoot.width.roundToInt()
             val renderedPixels =
                 renderedTip.toPixelMap().let { pixelMap ->
                     IntArray(pixelMap.width * pixelMap.height) { index ->
@@ -2462,12 +2466,12 @@ class TitleFontWeightRenderingTest {
             )
             capturedTipWidth?.let {
                 assertEquals(
-                    "Digit changes must keep the Compose slot geometry stable",
+                    "Battery digit changes preserve the total information band width",
                     it,
-                    renderedTip.width,
+                    bandWidth,
                 )
             }
-            capturedTipWidth = renderedTip.width
+            capturedTipWidth = bandWidth
             composePixels += renderedPixels
         }
         assertEquals(
@@ -2605,9 +2609,30 @@ class TitleFontWeightRenderingTest {
     }
 
     private fun dismissSettings() {
-        androidx.test.espresso.Espresso.pressBack()
-        compose.onNodeWithTag("read-style-tip").assertExists()
-        androidx.test.espresso.Espresso.pressBack()
+        fun dialogs(manager: androidx.fragment.app.FragmentManager): List<androidx.fragment.app.DialogFragment> =
+            manager.fragments.flatMap { fragment ->
+                dialogs(fragment.childFragmentManager) +
+                    listOfNotNull(fragment as? androidx.fragment.app.DialogFragment)
+            }
+        repeat(2) {
+            var focused: androidx.fragment.app.DialogFragment? = null
+            compose.waitUntil(10_000) {
+                compose.mainClock.advanceTimeByFrame()
+                scenario!!.onActivity { activity ->
+                    focused = dialogs(activity.supportFragmentManager)
+                        .firstOrNull { it.dialog?.window?.decorView?.hasWindowFocus() == true }
+                }
+                focused != null
+            }
+            val dismissed = checkNotNull(focused)
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(10_000) {
+                compose.mainClock.advanceTimeByFrame()
+                var gone = false
+                scenario!!.onActivity { gone = !dismissed.isAdded || dismissed.dialog?.isShowing != true }
+                gone
+            }
+        }
     }
 
     private fun assertFontWeight(typeface: Typeface, weight: Int) {

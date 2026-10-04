@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.page
 
 import android.content.Context
+import android.graphics.Rect
 import android.graphics.drawable.LayerDrawable
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -215,9 +216,19 @@ class PageView(context: Context) : FrameLayout(context) {
             upStyle()
             pageRoot.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
                 val statusBars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
+                val captionBar = windowInsets.getInsets(WindowInsetsCompat.Type.captionBar())
+                val navigationBars = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
                 val displayCutout = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                // Android 15+ interprets NEVER as ALWAYS for non-floating windows. Preserve
+                // the user's choice even when the platform no longer letterboxes the window.
+                val avoidCutout = AppConfig.paddingDisplayCutouts || !ReadBookConfig.readBodyToLh
                 val newNavigationBarInset = windowInsets.navigationBarHeight
-                if (statusBarInset != statusBars.top) statusBarInset = statusBars.top
+                val newTopInset = maxOf(
+                    statusBars.top,
+                    captionBar.top,
+                    if (avoidCutout && statusBarVisible) displayCutout.top else 0,
+                )
+                if (statusBarInset != newTopInset) statusBarInset = newTopInset
                 if (navigationBarInset != newNavigationBarInset)
                     navigationBarInset = newNavigationBarInset
                 val oldPadding =
@@ -227,18 +238,20 @@ class PageView(context: Context) : FrameLayout(context) {
                         pageRoot.paddingRight,
                         pageRoot.paddingBottom,
                     )
-                if (!ReadBookConfig.isNineBgImg) {
-                    if (AppConfig.paddingDisplayCutouts) {
-                        pageRoot.setPadding(
-                            displayCutout.left,
-                            if (statusBarVisible) 0 else displayCutout.top,
-                            displayCutout.right,
-                            displayCutout.bottom,
-                        )
-                    } else {
-                        pageRoot.setPadding(0, 0, 0, 0)
-                    }
-                }
+                // Nine-patch backgrounds own intrinsic border padding. Read it afresh so
+                // rotation or disabling cutout padding cannot retain an old safe inset.
+                val backgroundPadding = Rect()
+                if (ReadBookConfig.isNineBgImg) pageRoot.background?.getPadding(backgroundPadding)
+                pageRoot.setPadding(
+                    maxOf(backgroundPadding.left, navigationBars.left,
+                        if (avoidCutout) displayCutout.left else 0),
+                    maxOf(backgroundPadding.top,
+                        if (avoidCutout && !statusBarVisible) displayCutout.top else 0),
+                    maxOf(backgroundPadding.right, navigationBars.right,
+                        if (avoidCutout) displayCutout.right else 0),
+                    maxOf(backgroundPadding.bottom,
+                        if (avoidCutout) (displayCutout.bottom - newNavigationBarInset).coerceAtLeast(0) else 0),
+                )
                 updateBookmarkOffset()
                 val paddingChanged =
                     oldPadding[0] != pageRoot.paddingLeft ||
@@ -382,7 +395,7 @@ class PageView(context: Context) : FrameLayout(context) {
     /** 显示状态栏时隐藏header */
     fun upStatusBar() {
         statusBarVisible =
-            !ReadBookConfig.hideStatusBar && readBookActivity?.isInMultiWindow != true
+            !ReadBookConfig.hideStatusBar || readBookActivity?.isInMultiWindow == true
     }
 
     fun upNavigationBar() {
@@ -467,6 +480,7 @@ class PageView(context: Context) : FrameLayout(context) {
         textPage: TextPage,
         resetPageOffset: Boolean = true,
         chapterPosition: Int = ReadBook.durChapterPos,
+        scrollAnchor: ScrollReadAnchor? = null,
     ) {
         if (isMainView && !isScroll) {
             setProgress(textPage)
@@ -480,9 +494,13 @@ class PageView(context: Context) : FrameLayout(context) {
         }
         contentView.setContent(textPage)
         if (resetPageOffset && isMainView && isScroll) {
-            contentView.restorePageOffset(chapterPosition)
+            if (scrollAnchor == null || !contentView.restoreScrollAnchor(scrollAnchor)) {
+                contentView.restorePageOffset(chapterPosition)
+            }
         }
     }
+
+    internal fun captureScrollAnchor(): ScrollReadAnchor? = contentView.captureScrollAnchor()
 
     fun invalidateContentView() {
         contentView.invalidate()

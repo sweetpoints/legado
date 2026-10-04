@@ -128,7 +128,7 @@ class RuleSubscriptionDraftRepositoryTest {
             assertTrue(runCatching { store.save(ticket, value) }.isFailure)
             val pending = store.read(ticket)!!
             assertEquals(999L, pending.pendingSave!!.target.lastUpdate)
-            assertEquals("script", pending.pendingSave!!.target.js)
+            assertEquals("script", pending.pendingSave.target.js)
             store().save(ticket, pending)
             withContext(Dispatchers.IO) {
                 val row = database.ruleSubDao.all.single()

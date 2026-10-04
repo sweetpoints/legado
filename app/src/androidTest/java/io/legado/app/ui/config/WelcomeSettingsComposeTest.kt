@@ -2,7 +2,7 @@ package io.legado.app.ui.config
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -199,12 +199,12 @@ class WelcomeSettingsComposeTest {
         val repo = Repo()
         val registryOwner = Owner()
         val registry = registryOwner.lifecycle
-        var model: WelcomeSettingsViewModel? = null
+        lateinit var model: WelcomeSettingsViewModel
         val launches = mutableListOf<Boolean>()
         compose.runOnIdle {
             registry.currentState = Lifecycle.State.STARTED
             model = WelcomeSettingsViewModel(repo, Inputs(), SavedStateHandle())
-            owners += ViewModelStore().apply { put("vm", model!!) }
+            owners += ViewModelStore().apply { put("vm", model) }
         }
         val owner =
             object : LifecycleOwner {
@@ -212,23 +212,29 @@ class WelcomeSettingsComposeTest {
             }
         compose.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                LegadoComposeTheme { WelcomeSettingsRoute(model!!, { true }, { launches += it }) }
+                LegadoComposeTheme { WelcomeSettingsRoute(model, { true }, { launches += it }) }
             }
         }
-        compose.waitUntil { model!!.state.value.settings != null }
-        compose.runOnIdle { model!!.picker(true) }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            model.state.value.settings != null
+        }
+        compose.runOnIdle { model.picker(true) }
         compose.runOnIdle {
             assertTrue(launches.isEmpty())
             registry.currentState = Lifecycle.State.RESUMED
         }
-        compose.waitUntil { launches.size == 1 }
+        compose.waitUntil {
+            compose.mainClock.advanceTimeByFrame()
+            launches.size == 1
+        }
         compose.runOnIdle {
             registry.currentState = Lifecycle.State.STARTED
             registry.currentState = Lifecycle.State.RESUMED
         }
         compose.runOnIdle {
             assertEquals(listOf(true), launches)
-            assertNull(model!!.state.value.picker)
+            assertNull(model.state.value.picker)
         }
     }
 
