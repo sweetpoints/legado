@@ -97,10 +97,20 @@ Use the collected notices from the actual official source build for distribution
 
 ## Verification
 
-The earlier 136 tests, three Android device tests and Release/R8 result
-were obtained with the V8 14.3 baseline. They are historical evidence and do not
-verify this 15.4 source-built binary. New source-built runtime, cross-package,
-Android and Release validation must be reported separately after execution.
+The official source-built macOS ARM64 library has linked successfully and was
+loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
+46,032,368 bytes (43.90 MiB), and has SHA-256
+`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
+The source_v8 package's 21 tests passed; the workspace's eight static analyses
+were clean and all 139 tests passed (19/27/7/21/10/48/1/6). This evidence is in
+`tmp/flutter-source-check-stable-v8.log` relative to the repository root. The
+build manifest's initial validation flags remain build-only; executed-test
+evidence is recorded separately.
+
+The earlier 136-test result, three Android device tests and Release/R8 result
+belong to the V8 14.3 baseline. The new macOS result does not verify the new
+Android library, APK, device behavior or Release/R8. Android source compilation
+is ongoing; no new Android acceptance result is claimed here.
 
 After producing the correct local artifact, run `dart run test:test test` from
 this package to execute the native-assets hook before tests. Bare `dart test`

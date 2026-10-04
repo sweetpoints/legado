@@ -19,6 +19,13 @@ Future<void> main() async {
       final probe = V8Runtime();
       final cancellation = CancellationToken();
       try {
+        const expectedVersion = '15.4.80.24';
+        final actualVersion = probe.version;
+        if (actualVersion != expectedVersion) {
+          throw StateError(
+            'V8 runtime version mismatch: expected $expectedVersion, loaded $actualVersion',
+          );
+        }
         final result = await probe
             .evaluate(
               '1 + 1',
