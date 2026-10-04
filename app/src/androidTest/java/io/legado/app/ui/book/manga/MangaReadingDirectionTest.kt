@@ -3,6 +3,7 @@ package io.legado.app.ui.book.manga
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.Application
+import android.app.UiAutomation
 import android.app.Instrumentation
 import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -66,6 +68,7 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -368,13 +371,48 @@ class MangaReadingDirectionTest {
         toggle(R.string.enable_manga_horizontal_scroll)
         assertLayout(horizontal = false, rightToLeft = false)
         awaitPage(1, 1)
-        swipe(0.5f, 0.85f, 0.5f, 0.15f)
+        val viewportHeight =
+            compose.onNodeWithTag("manga-viewport").fetchSemanticsNode().boundsInRoot.height
+        // SemanticsNode.size is unclipped; a tall image's visible bounds omit its offscreen part.
+        val itemHeight = compose.onNodeWithTag("manga-item:1:1").fetchSemanticsNode().size.height
+        assertTrue(
+            "Vertical images and their viewport must have real geometry",
+            viewportHeight > 0f && itemHeight > 0,
+        )
+        val forwardGestures = ceil(itemHeight / (viewportHeight * .7f)).toInt() + 1
+        var advanced = false
+        repeat(forwardGestures) {
+            if (!advanced) {
+                swipe(0.5f, 0.85f, 0.5f, 0.15f)
+                compose.waitForIdle()
+                scenario!!.onActivity { activity ->
+                    advanced =
+                        visiblePage(activity)?.let { it.chapterIndex * 4 + it.pageIndex > 5 } == true
+                }
+            }
+        }
         awaitActivity("vertical swipe advances real content") {
             val page = visiblePage(it)
             page != null && page.chapterIndex * 4 + page.pageIndex > 5 && imageLoaded(it, page)
         }
         val forwardPage = currentPage()
-        key(KeyEvent.KEYCODE_PAGE_UP)
+        val forwardHeight =
+            compose.onNodeWithTag("manga-item:${forwardPage.first}:${forwardPage.second}")
+                .fetchSemanticsNode().size.height
+        assertTrue("The advanced image must retain its measured height", forwardHeight > 0)
+        val previousKeys = ceil(forwardHeight / viewportHeight).toInt() + 1
+        var movedBack = false
+        repeat(previousKeys) {
+            if (!movedBack) {
+                key(KeyEvent.KEYCODE_PAGE_UP)
+                compose.waitForIdle()
+                scenario!!.onActivity { activity ->
+                    movedBack = visiblePage(activity)?.let {
+                        it.chapterIndex * 4 + it.pageIndex < forwardPage.first * 4 + forwardPage.second
+                    } == true
+                }
+            }
+        }
         awaitActivity("vertical previous key moves back") {
             val page = visiblePage(it)
             page != null &&
@@ -716,16 +754,41 @@ class MangaReadingDirectionTest {
         key(KeyEvent.KEYCODE_PAGE_DOWN)
         awaitPage(1, 2)
         var originalOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        scenario!!.onActivity { originalOrientation = it.requestedOrientation }
+        var originalRotation = UiAutomation.ROTATION_FREEZE_0
+        var originalConfiguration = Configuration.ORIENTATION_UNDEFINED
+        var originalWidth = 0
+        var originalHeight = 0
+        var naturalPortrait = true
+        val originallyAutoRotating =
+            Settings.System.getInt(
+                context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0,
+            ) != 0
+        scenario!!.onActivity {
+            originalOrientation = it.requestedOrientation
+            originalRotation = it.window.decorView.display.rotation
+            originalConfiguration = it.resources.configuration.orientation
+            originalWidth = it.window.decorView.width
+            originalHeight = it.window.decorView.height
+            val portrait =
+                it.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+            naturalPortrait = if (originalRotation % 2 == 0) portrait else !portrait
+            it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
         try {
             listOf(
-                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT to Configuration.ORIENTATION_PORTRAIT,
-                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE to
-                        Configuration.ORIENTATION_LANDSCAPE,
-                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT to Configuration.ORIENTATION_PORTRAIT,
+                    Configuration.ORIENTATION_PORTRAIT,
+                    Configuration.ORIENTATION_LANDSCAPE,
+                    Configuration.ORIENTATION_PORTRAIT,
                 )
-                .forEach { (requested, expected) ->
-                    scenario!!.onActivity { it.requestedOrientation = requested }
+                .forEach { expected ->
+                    val rotation =
+                        if ((expected == Configuration.ORIENTATION_PORTRAIT) == naturalPortrait)
+                            UiAutomation.ROTATION_FREEZE_0
+                        else UiAutomation.ROTATION_FREEZE_90
+                    assertTrue(
+                        "The display must rotate to orientation $expected",
+                        instrumentation.uiAutomation.setRotation(rotation),
+                    )
                     awaitActivity("actual orientation $expected and resized reader") {
                         val recycler = it.window.decorView
                         it.resources.configuration.orientation == expected &&
@@ -741,7 +804,29 @@ class MangaReadingDirectionTest {
                     screenshot("manga-direction-rotation-$expected")
                 }
         } finally {
-            scenario?.onActivity { it.requestedOrientation = originalOrientation }
+            try {
+                try {
+                    assertTrue(
+                        "The original display rotation must be restored",
+                        instrumentation.uiAutomation.setRotation(originalRotation),
+                    )
+                } finally {
+                    scenario?.onActivity { it.requestedOrientation = originalOrientation }
+                }
+                awaitActivity("original display rotation, configuration and window restored") {
+                    val decor = it.window.decorView
+                    decor.display.rotation == originalRotation &&
+                        it.resources.configuration.orientation == originalConfiguration &&
+                        decor.width == originalWidth && decor.height == originalHeight
+                }
+            } finally {
+                if (originallyAutoRotating) {
+                    assertTrue(
+                        "Restore automatic display rotation",
+                        instrumentation.uiAutomation.setRotation(UiAutomation.ROTATION_UNFREEZE),
+                    )
+                }
+            }
         }
     }
 
