@@ -722,13 +722,55 @@ class FlutterSourceEngineTest {
                                         it.substringBefore(':').lowercase() to
                                             it.substringAfter(':').trim()
                                     }
-                            val body = ByteArray(headers.getValue("content-length").toInt())
-                            var offset = 0
-                            while (offset < body.size) {
-                                val count = input.read(body, offset, body.size - offset)
-                                check(count > 0) { "HTTP body ended early" }
-                                offset += count
+                            fun readExactly(size: Int): ByteArray {
+                                require(size in 0..1_048_576) { "Unexpected fixture body size" }
+                                val bytes = ByteArray(size)
+                                var offset = 0
+                                while (offset < size) {
+                                    val count = input.read(bytes, offset, size - offset)
+                                    check(count > 0) { "HTTP body ended early" }
+                                    offset += count
+                                }
+                                return bytes
                             }
+                            fun readFramingLine(): String {
+                                val bytes = java.io.ByteArrayOutputStream()
+                                while (true) {
+                                    val byte = input.read()
+                                    check(byte >= 0) { "HTTP chunk framing ended early" }
+                                    if (byte == 13) {
+                                        check(input.read() == 10) { "Expected framing CRLF" }
+                                        return bytes.toString("US-ASCII")
+                                    }
+                                    check(bytes.size() < 8192) {
+                                        "Unexpected fixture framing line size"
+                                    }
+                                    bytes.write(byte)
+                                }
+                            }
+                            val chunked =
+                                headers["transfer-encoding"].orEmpty().split(',').any {
+                                    it.trim().equals("chunked", ignoreCase = true)
+                                }
+                            val body =
+                                if (chunked) {
+                                    val decoded = java.io.ByteArrayOutputStream()
+                                    while (true) {
+                                        val size =
+                                            readFramingLine().substringBefore(';').trim().toInt(16)
+                                        if (size == 0) {
+                                            while (readFramingLine().isNotEmpty()) {}
+                                            break
+                                        }
+                                        decoded.write(readExactly(size))
+                                        check(readFramingLine().isEmpty()) {
+                                            "Expected chunk-ending CRLF"
+                                        }
+                                    }
+                                    decoded.toByteArray()
+                                } else {
+                                    readExactly(headers.getValue("content-length").toInt())
+                                }
                             requests.add(
                                 Triple(
                                     lines.first(),
