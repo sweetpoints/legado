@@ -39,11 +39,12 @@ python3 flutter/tool/v8/build.py bootstrap --target macos-arm64
 python3 flutter/tool/v8/build.py build --target macos-arm64 --jobs 4
 ```
 
-macOS ARM64 builds require a macOS ARM64 host. Android ARM64 requires a Linux
+macOS ARM64 builds require a macOS ARM64 host. Android ARM64 and x86_64 require a Linux
 x86_64 build host:
 
 ```sh
 python3 flutter/tool/v8/build.py build --target android-arm64 --jobs 4
+python3 flutter/tool/v8/build.py build --target android-x64 --jobs 4
 ```
 
 Source and tool caches are ignored under
@@ -77,8 +78,14 @@ That directory must contain the expected manifest and target artifact. Changing
 its path does not bypass source/version/integrity requirements. A missing or
 mismatched artifact is an explicit build error.
 
-Current source-build targets are macOS ARM64 (deployment target 13.0) and Android
-ARM64 (API 26). Every consuming macOS app must also set its actual Xcode
+Implemented source-build targets are macOS ARM64 (deployment target 13.0),
+Android ARM64 and Android x86_64 (API 26). The official Android x86_64 build completed on Linux x86_64. Its final library
+is 28,321,712 bytes (27.01 MiB), SHA-256
+`0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4`.
+ELF machine 62, three 16 KiB-aligned LOAD segments and ten sv8 exports were
+verified; DT_NEEDED contains only log/dl/m/c system libraries. The producer
+manifest still marks runtimeTested/sourceCompatibilityTested false; actual
+runtime/device acceptance remains pending. macOS remains ARM64 only. Every consuming macOS app must also set its actual Xcode
 `MACOSX_DEPLOYMENT_TARGET` to **13.0 or newer**; the generated example does so for
 all configurations. Flutter 3.47's native-assets tooling currently supplies a
 hardcoded macOS target version of 13 rather than reading the application's Xcode
@@ -114,9 +121,9 @@ The official source-built macOS ARM64 library has linked successfully and was
 loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
 46,032,368 bytes (43.90 MiB), and has SHA-256
 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
-The current page/request round passed the source_v8 package's 21 tests and all
-327 workspace tests (51/52/12/21/22/159/1/9), with eight clean analyses. Evidence is in
-`tmp/flutter-source-check-page-requests.log` relative to the repository root. The
+The current Flutter workspace passed 355 tests (51/53/12/23/22/173/1/20)
+and eight clean analyses. Evidence is in
+`tmp/flutter-source-check-app-replacement-current.log` relative to the repository root. The
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
@@ -132,11 +139,11 @@ Debug AAR and APK contain the same 26,306,760-byte library (25.09 MiB), SHA-256
 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`,
 matching the manifest. ELF inspection confirmed ARM64, 16 KiB PT_LOAD alignment
 and only c/dl/log/m system-library dependencies. The thirteen engine instrumentation
-cases passed in this acceptance round on the Android API 36 emulator; evidence is in
+cases passed in the preceding acceptance round on the Android API 36 emulator; evidence is in
 `tmp/flutter-android-test-page-requests-final.log`. These are thirteen test cases, not thirteen
 different device configurations.
 
-The current page/request round passed its local Android Release/R8
+The preceding page/request round passed its local Android Release/R8
 build. `tmp/flutter-android-release-page-requests.log` records BUILD
 SUCCESSFUL in 4m1s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
 Flutter assets and Release AAR/APK's seven Flutter assets each had matching
@@ -164,7 +171,22 @@ The legacy AnalyzeUrlPageTemplateGoldenTest also passed seven JVM tests;
 `tmp/flutter-legacy-page-jvm-golden.log` records this fixed-input page-template
 evidence. It does not establish all source or dynamic JavaScript compatibility.
 
-The final Android rerun passed thirteen tests with zero failures, errors or
+The preceding page/request round's final Android rerun passed thirteen tests with zero failures, errors or
 skips. The final Debug AAR/APK were rechecked for ten matching Flutter assets.
 Release artifact consistency is recorded in
 `tmp/flutter-page-requests-artifact-proof.json`.
+
+Mandatory Dart-only BookSource routing, editor migration preview and new auxiliary paths are implemented with this round's 355 Flutter tests/eight analyses passing. Default dual-ABI Debug/Release AAR preparation and native-hash validation passed
+in `tmp/flutter-app-replacement-prepare-dual.log`. The default dual-ABI full
+Release App build passed 3,949 JVM tests with zero failures or errors,
+`lintAppRelease`, R8 and `assembleAppRelease`; evidence is in
+`tmp/flutter-app-replacement-release-final.log`. The 40 Python contract tests (12/18/10)
+also passed. The unsigned APK is 112,607,581 bytes, SHA-256
+`3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e`.
+The complete `test-android.sh` runner passed all 63 unique tests across seven
+classes on ARM64 API 36 using the default dual-ABI build. Strict `--since`
+validation confirmed zero failures, errors or skips. Evidence is in
+`tmp/flutter-app-replacement-device-final-63.log`, ending in BUILD SUCCESSFUL
+in 12s. x86_64 CI is
+configured but has not run remotely; x86_64 device acceptance remains pending. The thirteen
+device cases and Release artifact checks above remain historical evidence.

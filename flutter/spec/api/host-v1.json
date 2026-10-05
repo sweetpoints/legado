@@ -359,5 +359,12 @@
     "runs": "synchronously before stage templating; returned stage must clear legacyRequestInput",
     "missingOrUnresolved": "legacy_request_adapter_required",
     "unsupportedSelectedRequest": "legacy_request_requires_migration"
+  },
+  "androidAuxiliaryProtocol": {
+    "evaluate": "protocolVersion1/taskId/sourceJson/script/JSON bindings/ephemeral strict boolean defaultfalse => {value}",
+    "ephemeral": "fresh engine, finally close, zero sessionStore reads/writes, no cache entry",
+    "migrate": "offline legacy source preview; executed=false verified=false; no engine created",
+    "bookSourceLegacyEntryError": "engine_migration_required",
+    "bindingConversionError": "engine_bindings_requires_migration"
   }
 }

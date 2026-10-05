@@ -8,15 +8,15 @@
 
 使用 [source_tools](packages/source_tools/README.md) 校验、迁移或执行书源。迁移输出原始配置、候选和报告，候选状态不是兼容验证通过。
 
-Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为 JDK 21 路径，在本目录运行 `bash tool/build-android.sh`。脚本构建 ARM64 Debug AAR 和启用新引擎的应用、仪器测试 APK；不会修改全局 Flutter JDK 设置。
+Android构建强制包含Flutter/V8；显式flutterSourceEngine=false报错，不能恢复旧引擎。先运行 `bash tool/prepare-android-aar.sh all` 准备Debug/Release AAR，普通Gradle构建会校验当前Dart源码摘要、固定V8来源、AAR/POM、资源和所选ABI库是否匹配。Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为 JDK 21 路径，在本目录运行 `bash tool/build-android.sh`。脚本默认构建arm64-v8a与x86_64双ABI Debug AAR 和默认使用新引擎的应用、仪器测试 APK；不会修改全局 Flutter JDK 设置。
 
 请使用此wrapper构建AAR：Flutter 3.47官方module模板默认minSdk为24，新V8要求26。wrapper只对AAR子进程使用工作区专用`.gradle-source-host/init.d`，通过公开Gradle beforeProject/androidComponents.finalizeDsl配置source_host为26，保持生成的`.android`文件不变。仅复用公共Gradle缓存与wrapper，不复制用户properties、init脚本或凭据；根Android应用仍使用原Gradle home。直接flutter build aar未应用该配置时会在API26检查失败。
 
 运行 `bash tool/build-android.sh --release` 构建 Release AAR 与启用新引擎的 Release 应用，包含现有 R8 缩减流程。签名使用项目既有配置，构建命令不发布产物。
 
-对现有 ARM64 设备或模拟器设置 `ANDROID_SERIAL`，运行 `bash tool/test-android.sh` 可重建并执行专门的 Flutter 引擎仪器测试。脚本使用独立的 `.fluttertest` 应用 ID 后缀，避免覆盖模拟器上已有的 Debug 应用。测试覆盖 Android 实际 V8、异步搜索/目录/正文、WebBook 路由、无限脚本取消后恢复，以及引擎关闭重建后的会话恢复和书源隔离。
+对匹配所选ABI的设备或模拟器设置 `ANDROID_SERIAL`，运行 `bash tool/test-android.sh` 可重建并执行专门的 Flutter 引擎仪器测试。脚本使用独立的 `.fluttertest` 应用 ID 后缀，避免覆盖模拟器上已有的 Debug 应用。测试覆盖 Android 实际 V8、异步搜索/目录/正文、WebBook 路由、无限脚本取消后恢复，以及引擎关闭重建后的会话恢复和书源隔离。
 
-在现有书源编辑器的注释中加入独立一行 `@engine:dart`，选择旧版兼容入口；使用 `@source:v1 ` 后接单行新版 JSON，选择新版入口。未选择的书源仍使用原引擎。选中 Dart 的书源失败时不会静默回退。构建未启用 `-PflutterSourceEngine=true` 时，选择 Dart 会明确报告缺少后端。
+Android书源的search/explore/info/toc/content默认全部调用Dart/V8，不再用@engine选择或失败后回退旧引擎。@source:v1后接单行JSON仍承载现代配置；没有此配置时导入旧格式。编辑器固定显示Flutter/V8，并提供离线迁移预览：合格候选只写入当前草稿，可撤销，用户仍需正式保存。复杂旧能力继续明确报告迁移问题，默认使用Dart不代表所有旧书源等价。
 
 ## 包边界
 
@@ -37,18 +37,20 @@ Android 构建需要现有 SDK、NDK 和 JDK 21。设置 `SOURCE_ENGINE_JDK` 为
 
 当前不是全部历史书源的等价替代。复杂旧脚本、Java 类互操作、未实现的宿主重载与 JSoup 专有规则会报告人工处理。分页、请求限速和部分编码已实现；浏览器、运行时与平台边界以 Reference 和实际测试为准。固定样本通过不代表所有联网书源或所有设备通过。
 
-V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码commit e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
+V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码commit e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64/x86_64均需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
 
-当前自编译目标为macOS ARM64与Android ARM64；当前宿主构建脚本和启用引擎APK限制为Android ARM64。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，本轮通过V8本包21项测试及全工作区327项测试、8项静态检查。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-page-requests.log`。
+构建实现现支持macOS ARM64及Android ARM64/x86_64；Android脚本/App默认双ABI，SOURCE_ENGINE_ANDROID_TARGETS可显式单选并映射flutterSourceAbis，单选仍强制Dart引擎。Android x86_64固定官方V8源码已在Linux amd64容器完成编译，库28,321,712字节（27.01 MiB），SHA-256为 `0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4`；ELF machine62、3个LOAD的16KiB对齐与10个sv8导出检查通过。默认双ABI Debug/Release AAR准备和两ABI哈希校验已通过，日志 `tmp/flutter-app-replacement-prepare-dual.log`；双ABI Release App已构建成功且APK SHA已记录；ARM64完整脚本63项测试通过，x86_64设备和远端CI验收仍待完成。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，本轮Flutter工作区355项测试、8项静态检查通过（51/53/12/23/22/173/1/20）。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-app-replacement-current.log`。
 
 此前官方 Flutter FFI example 的macOS Debug/Release已构建并运行成功，显示实际V8 15.4.80.24结果42。Release主可执行文件及V8 framework仅ARM64；local codesign有allow-jit。尚未完成notarization或Hardened Runtime分发验收。
 
-新版官方源码Android ARM64库也完成链接；Debug AAR/APK内库与manifest一致，为26,306,760字节（25.09 MiB）、SHA-256 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`。本轮API36模拟器13项引擎仪器测试全部通过，日志位于仓库根目录 `tmp/flutter-android-test-page-requests-final.log`；这是13个case，不是13种设备配置。
+新版官方源码Android ARM64库也完成链接；Debug AAR/APK内库与manifest一致，为26,306,760字节（25.09 MiB）、SHA-256 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`。此前API36模拟器13项引擎仪器测试全部通过，日志位于仓库根目录 `tmp/flutter-android-test-page-requests-final.log`；这是13个case，不是13种设备配置。
 
-本轮分页/选中请求修改的本地Release/R8已通过，日志 `tmp/flutter-android-release-page-requests.log` 明确 BUILD SUCCESSFUL in4m1s 且 minifyAppReleaseWithR8 实际执行。Debug AAR/APK的10项Flutter assets，以及Release AAR/APK的7项Flutter assets，均已逐项验证SHA-256一致。Release两产物内libapp.so均为3,277,704字节，SHA-256均为 `dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91`；libsource_v8.so均为26,306,760字节，SHA-256一致且匹配上述manifest。未签名APK属于本地构建结果，不表示正式发布或CI验收；固定case通过不证明所有历史书源兼容或完整Flutter UI迁移完成。旧版本及较早轮次的验证属于历史记录，不能替代本轮证明。
+此前分页/选中请求修改的本地Release/R8已通过，日志 `tmp/flutter-android-release-page-requests.log` 明确 BUILD SUCCESSFUL in4m1s 且 minifyAppReleaseWithR8 实际执行。Debug AAR/APK的10项Flutter assets，以及Release AAR/APK的7项Flutter assets，均已逐项验证SHA-256一致。Release两产物内libapp.so均为3,277,704字节，SHA-256均为 `dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91`；libsource_v8.so均为26,306,760字节，SHA-256一致且匹配上述manifest。未签名APK属于本地构建结果，不表示正式发布或CI验收；固定case通过不证明所有历史书源兼容或完整Flutter UI迁移完成。旧版本及较早轮次的验证属于历史记录，不能替代本轮证明。
 
 此前旧表单轮次的JVM 4组golden测试、16个固定输入已真实通过，日志 `tmp/flutter-legacy-form-jvm-golden.log`。该证明限于固定输入的旧表单行为，不代表整个书源或完整旧JVM引擎等价。
 
 旧JVM AnalyzeUrlPageTemplateGoldenTest的7项测试已通过，日志 `tmp/flutter-legacy-page-jvm-golden.log`；仅证明这组分页模板行为，不代表所有旧书源或任意动态JS兼容。
 
-Android最终重跑13个case均通过，fail/error/skip均为0；最终Debug AAR/APK的10项Flutter assets也已重新核对一致。本轮Release产物校验证据为 `tmp/flutter-page-requests-artifact-proof.json`。
+此前分页请求轮次的Android最终重跑13个case均通过，fail/error/skip均为0；最终Debug AAR/APK的10项Flutter assets也已重新核对一致。本轮Release产物校验证据为 `tmp/flutter-page-requests-artifact-proof.json`。
+
+本轮默认Dart-only书源执行、迁移预览及评论、登录和MCP辅助入口已接入。Flutter工作区355项测试、8项静态检查及40项Python契约测试（12/18/10）已通过。默认双ABI Android全量Release构建已通过：3,949项JVM测试无失败或错误，lintAppRelease、R8及assembleAppRelease成功，日志为 `tmp/flutter-app-replacement-release-final.log`。未签名APK大小112,607,581字节，SHA-256为 `3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e`。默认双ABI构建在ARM64 API36设备通过完整 `test-android.sh` 验证：7个测试类、63项唯一测试全部成功，无失败、错误或跳过；本次 `--since` 严格结果校验通过，日志 `tmp/flutter-app-replacement-device-final-63.log` 记录 BUILD SUCCESSFUL in12s。x86_64 CI配置已具备，远端CI及x86_64设备验收尚未完成。此前13个设备case属于早先分页请求轮次。

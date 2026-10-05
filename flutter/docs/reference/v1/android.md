@@ -2,18 +2,13 @@
 
 当前接入采用官方 Flutter module 运行 Dart 入口，不显示 Flutter 页面。Compose 继续调用 Kotlin Repository，Repository 管理任务状态并调用共享 Flutter Engine。Compose 重组不创建 Engine。
 
-## 启用
+## 默认执行与构建
 
-Android 构建通过 `-PflutterSourceEngine=true` 引用 Flutter AAR。先按 `flutter/modules/source_host` 和宿主构建说明生成 AAR；不启用时保留既有 Android 构建路径。当前启用 Flutter 的宿主 APK 限定 ARM64 ABI，避免其他 Android JNI 库使 APK 宣告 V8/AAR 尚未打包的架构。V8当前自编译Android目标也仅ARM64；未启用 Flutter 的既有构建不受此过滤影响。
+WebBook的search/explore/info/toc/content默认全部走Dart/V8；@engine不再选择执行引擎，失败不回退旧AnalyzeRule/AnalyzeUrl/JsSourceEngine。@source:v1后接单行JSON仍是现代配置carrier，没有时导入旧书源。BookSource进入旧规则/URL/JS执行入口报engine_migration_required；共享RSS和无BookSource场景不属于此次书源替换范围。
 
-构建AAR应从flutter工作区使用`bash tool/build-android.sh`（或`--release`）。wrapper为AAR子进程配置专用Gradle home/init.d，以公开DSL将官方source_host module的默认minSdk24提升为26；不编辑生成的.android，根app不使用该专用home。只复用公共cache/wrapper，不复制用户配置、init脚本或凭据。直接flutter build aar未配置module26时会触发V8 API26门槛错误。此配置检查不是新版Android native编译或设备验证证明。
+正常Android构建强制包含Flutter AAR，显式flutterSourceEngine=false失败。工作区运行 `bash tool/prepare-android-aar.sh all` 准备Debug/Release AAR，或使用build-android.sh构建当前模式及App。普通Gradle构建校验Dart源码摘要、官方native provenance、AAR/POM、Flutter assets与所选ABI库；过期或缺少AAR不能退回旧引擎。App构建默认arm64-v8a+x86_64；SOURCE_ENGINE_ANDROID_TARGETS可显式单选并映射Gradle flutterSourceAbis。单ABI不会启用旧引擎。x86_64官方native构建及双ABI Debug/Release AAR准备已通过；两ABI哈希校验日志为tmp/flutter-app-replacement-prepare-dual.log。默认双ABI Release App构建、全量JVM测试、lint及R8已通过；APK SHA已确认，ARM64 API36设备完整test-android.sh的7类63项测试全部通过（本次--since严格校验，无fail/error/skip，日志tmp/flutter-app-replacement-device-final-63.log）；x86_64设备及远端CI验收尚未完成，macOS仍仅ARM64。
 
-书源注释标记：
-
-- `@engine:dart`：选择 Dart 旧格式导入链路；有需要人工处理的 issue 时明确失败，受保护基址例外见下文。
-- `@source:v1 <single-line JSON>`：提供新版书源配置；JSON 必须为单行。
-
-选中 Dart 链路后失败会报告错误，不静默回到 Kotlin/Rhino。未标记的现有书源仍走既有链路，这不是已完成全量切换。
+AAR子进程的专用Gradle home/init.d通过公开DSL将source_host module minSdk设为26，不修改生成.android，根App不使用该home；直接flutter build aar未配置module26会触发V8 API26门槛。
 
 ## 通信协议 v1
 
@@ -25,6 +20,8 @@ MethodChannel：`legado/source_engine`。当前使用请求/异步结果协议�
 | `startupError` | Dart → Kotlin | 初始化失败，错误码 `runtime_initialization_failed`，就绪等待立即失败 |
 | `execute` | Kotlin → Dart | `protocolVersion:1`、`taskId`、`operation`、`sourceJson`、`input` |
 | `cancel` | Kotlin → Dart | `taskId` |
+| `evaluate` | Kotlin → Dart | protocolVersion:1、taskId、sourceJson、script、JSON bindings、可选严格bool ephemeral（默认false） |
+| `migrate` | Kotlin → Dart | protocolVersion:1、旧格式sourceJson；离线预览，不创建运行时 |
 
 初始化会执行真实 V8 `1 + 1` 自检；脚本 timeout 5秒、Dart 等待10秒、关闭等待5秒。失败通过 startupError 报 `runtime_initialization_failed`，不会先发送 ready。Kotlin 等待 ready 最多30秒，收到启动错误立即失败；没有握手时给出明确启动超时错误。
 
@@ -64,10 +61,26 @@ TOC 的 isVip/isPay/isVolume 原生Boolean直接保留。旧源的字符串按�
 
 ## 旧来源结果格式化与发现入口
 
-旧来源判定包括没有v1配置的 @engine:dart、v1 metadata.legacy=true，以及 metadata.legacyOriginal 为JSON对象的候选。search/explore/info 的旧来源结果在映射、过滤或写入前，沿用 BookHelp.formatBookName/formatBookAuthor 的旧regex与trim；数字wordCount按 StringUtils.wordCountFormat 处理，kind中已提取的换行改为逗号。现代来源不执行这些格式化；详情空字符串保持既有不覆盖行为。详情重命名权限：存在legacyOriginal时读取其ruleBookInfo.canReName是否非空，否则读取原BookSource规则是否非空；纯现代来源遵循调用方canReName。
+旧来源判定包括没有v1配置的旧格式书源、v1 metadata.legacy=true，以及 metadata.legacyOriginal 为JSON对象的候选。search/explore/info 的旧来源结果在映射、过滤或写入前，沿用 BookHelp.formatBookName/formatBookAuthor 的旧regex与trim；数字wordCount按 StringUtils.wordCountFormat 处理，kind中已提取的换行改为逗号。现代来源不执行这些格式化；详情空字符串保持既有不覆盖行为。详情重命名权限：存在legacyOriginal时读取其ruleBookInfo.canReName是否非空，否则读取原BookSource规则是否非空；纯现代来源遵循调用方canReName。
 
 Android发现输入同时提供原始url、exploreUrl和page，不再在Kotlin预展开page或拆解请求options。Dart请求适配器按旧来源的选中exploreUrl处理有限分页模板和每分类字面量options；现代入口仍可使用url。未知options和动态JS在Dart中明确拒绝，不把options作为URL发送。
 
 ## 受保护基址候选执行
 
 source_host 对导入issue仅允许精确例外：metadata.legacyBaseUrlUnavailable必须为true，且每个issue的code均为 legacy.base_url_requires_review、path均为 bookSourceUrl。此时允许进入引擎，由规则阶段的绝对HTTP(S) URL检查保护请求。任意其他issue、不同path或缺少flag仍阻断执行；例外不把候选status改成unverified或verified，也不允许从锚点猜测相对host。
+
+## 辅助脚本与临时配置提取
+
+evaluate返回 `{value: JSON结果}`，可取消并检查重复taskId。ephemeral=true为每次调用创建独立引擎和任务队列，finally关闭；不读取/写入sessionStore、不进入缓存或修改既有会话。配置提取evaluateConfiguration使用此模式。旧格式辅助脚本当前要求HTTP(S)书源identity及静态字符串headers，jsLib/动态headers仍报legacy_requires_migration；这与规则阶段的非HTTP ID锚点支持范围不同。
+
+BookSource同步evalJS在主线程报engine_migration_required，后台转到V8。bindings只接受显式JSON标量、字符串键Map、List、Book/BookChapter DTO；未知对象、非有限数、循环及深层结构报engine_bindings_requires_migration，不反射Java宿主。保留宿主名字java/source/sourceApi/cookie/cache/global/globalThis不从旧bindings传入。DTO没有旧Java实体方法。
+
+发现菜单、viewName/action脚本通过evaluate运行，infoMap为字符串键值JSON快照；校验成功后保存允许变更，旧InfoMap实体方法不兼容。动态菜单错误可显示ERROR条目或标签，取消仍传播。JS书源配置提取在后台的临时V8 lexical async IIFE捕获config/旧source并校验入口函数；原mainJs保留，配置能力检测只做静态分析：AST分析配合现代顶层声明lexer后备支持async及箭头函数，跳过注释、字符串、正则及模板字面量；它不执行脚本。
+
+preUpdateJs用V8辅助入口，返回后先校验book/sourceInfo再原子回写允许的元数据；允许的非空字符串字段为bookUrl/tocUrl/name/author，可空字符串字段为coverUrl/intro/kind/wordCount/latestChapterTitle；删除、其他字段变化、类型变化或只读sourceInfo变化明确拒绝且不部分写入。批量正文调度通过单章Dart路径处理待下载章节；这不表示旧批量缓存/回调协议或contentBatch已经等价支持。
+
+评论入口也通过V8 evaluate运行。可选的reviewSummary、reviewDetail、reviewReplies保留原位置参数，book/chapter作为JSON快照传入；包装器独立捕获mainJs中的函数并await返回值，缺失函数明确返回不存在。字符串结果保留，其他非空结果序列化为JSON。
+
+登录UI v2在async作用域调用并await `loginUi(state)` 或 `loginAction(action,state,form)`；状态和表单由JSON解析得到，book/chapter绑定为JSON快照。旧Java实体方法不能通过这些绑定调用。
+
+MCP书源脚本通过V8 evaluate执行：此上下文的source将JSON书源元数据置于现代host API原型之上，保留受保护的API名称，sourceApi为同一对象。它与mainJs中仅为JSON数据的source/sourceApi有不同绑定合同。RSS及无书源MCP脚本仍在各自原作用域执行；书源执行错误不会触发旧引擎回退。旧JsSourceBook已删除，JsSourceEngine仅保留非书源消费者使用的public normalizeJsResult。

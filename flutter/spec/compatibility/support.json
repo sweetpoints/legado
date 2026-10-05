@@ -6,11 +6,11 @@
     "provider": "official source self-build",
     "hookTargets": [
       "macos-arm64",
-      "android-arm64"
+      "android-arm64",
+      "android-x64"
     ],
     "unsupportedTargets": [
       "android-arm",
-      "android-x64",
       "ios",
       "linux",
       "windows"
@@ -98,9 +98,95 @@
         "errors": 0,
         "skipped": 0
       },
-      "macosExampleValidationRound": "earlier local validation, not rerun in this acceptance round"
+      "macosExampleValidationRound": "earlier local validation, not rerun in this acceptance round",
+      "validationScope": "previous page/request acceptance before mandatory Dart-only routing",
+      "mandatoryDartOnlyAcceptance": "pending"
     },
-    "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot"
+    "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot",
+    "targetImplementationStatus": {
+      "android-x64": "official pinned source build completed; ELF machine62/three LOAD16KiB/ten exports verified; AAR hash validated; runtime device/App acceptance pending",
+      "macos-arm64": "existing source-built target; ARM64 only",
+      "android-arm64": "official source-built target; mandatory routing full test-android.sh passed seven classes/63 unique tests on API36; strict since validation passed"
+    },
+    "currentReplacementSnapshot": {
+      "date": "2026-10-05",
+      "workspacePackageTests": [
+        51,
+        53,
+        12,
+        23,
+        22,
+        173,
+        1,
+        20
+      ],
+      "workspaceStaticAnalyses": 8,
+      "log": "tmp/flutter-source-check-app-replacement-current.log",
+      "androidJvmAcceptance": {
+        "tests": 3949,
+        "failures": 0,
+        "errors": 0,
+        "log": "tmp/flutter-app-replacement-release-final.log"
+      },
+      "androidDeviceAcceptance": {
+        "arm64": {
+          "classes": 7,
+          "uniqueTests": 63,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "apiLevel": 36,
+          "defaultDualAbiBuild": true,
+          "strictSinceValidation": true,
+          "fullRunnerExitCode": 0,
+          "log": "tmp/flutter-app-replacement-device-final-63.log"
+        },
+        "x86_64": "pending"
+      },
+      "androidDualAbiPackaging": "Default dual-ABI Release App assembled successfully; unsigned APK size and SHA verified",
+      "androidReleaseR8": {
+        "passed": true,
+        "lintAppReleasePassed": true,
+        "unsignedApk": true,
+        "log": "tmp/flutter-app-replacement-release-final.log"
+      },
+      "fullHistoricalSourceAcceptance": false,
+      "ciAcceptance": false,
+      "androidAarPreparationLog": "tmp/flutter-app-replacement-prepare-dual.log",
+      "officialNativeArtifacts": {
+        "android-x64": {
+          "bytes": 28321712,
+          "sha256": "0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4",
+          "elfMachine": 62,
+          "loadSegments16KiB": 3,
+          "sv8Exports": 10,
+          "runtimeDeviceAcceptance": false,
+          "dtNeeded": [
+            "log",
+            "dl",
+            "m",
+            "c"
+          ],
+          "producerRuntimeTested": false,
+          "producerSourceCompatibilityTested": false
+        },
+        "android-arm64": {
+          "bytes": 26306760,
+          "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593"
+        }
+      },
+      "pythonContractTests": 40,
+      "pythonContractPackageTests": [
+        12,
+        18,
+        10
+      ],
+      "unsignedReleaseApk": {
+        "bytes": 112607581,
+        "sha256": "3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e"
+      },
+      "ciConfigured": true
+    }
   },
   "engine": {
     "operations": [
@@ -283,7 +369,11 @@
         "whitespace"
       ]
     },
-    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; supported literal per-item options parsed by adapter; unknown options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review"
+    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; supported literal per-item options parsed by adapter; unknown options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review",
+    "mainJs": "V8 factory with old positional signatures and curated java host; legacyMainJs keeps legacy runtime mode; unsupported APIs runtime error; jsLib still manual",
+    "mainJsStringSemantics": "JSON DTO strings and java.ajax text are native JavaScript strings; no Java String wrapper or Java overload dispatch",
+    "mainJsSnapshotMethods": "source/sourceApi are JSON data, not Room entities; old entity/login/header methods require migration",
+    "appAuthoringExamples": "templates and js-source-guide retain stage/file/downloadUrls/login/explore/review contracts; no arbitrary Java class imports, jsLib/CryptoJS requires migration"
   },
   "migration": {
     "verifiedAutomatically": false,
@@ -298,7 +388,8 @@
     "finalCandidateMode": {
       "noIssues": {
         "legacy": false,
-        "compatibility": "unverified"
+        "compatibility": "unverified",
+        "exception": "legacyMainJs remains legacy=true"
       },
       "withIssues": {
         "legacy": true,
@@ -366,7 +457,8 @@
     "isolatedDebugApplicationId": "com.legado.app.fluttertest",
     "isolatedTestApplicationId": "com.legado.app.fluttertest.test",
     "enabledApkAbis": [
-      "arm64-v8a"
+      "arm64-v8a",
+      "x86_64"
     ],
     "sessionPersistence": {
       "formatVersion": 1,
@@ -392,6 +484,17 @@
       "everyIssuePath": "bookSourceUrl",
       "otherwise": "blocked",
       "verificationStatusChanged": false
-    }
+    },
+    "bookSourceRouting": "Dart-only default for all five WebBook stages; no @engine selector or legacy fallback",
+    "legacyBookSourceEntrypoints": "AnalyzeRule/AnalyzeUrl/JsSourceEngine blocked with engine_migration_required; RSS/no-source shared scope retained",
+    "mandatoryBuild": "Flutter AAR/source digest/native provenance validation; false rejected",
+    "auxiliaryEvaluate": "JSON bindings; optional strictbool ephemeral fresh engine without persistence/cache",
+    "migrationPreview": "offline, unexecuted/unverified, memory-only report; manual/stale apply blocked; eligible candidate changes draft with undo, no automatic save",
+    "abiSelection": "default dual ABI; SOURCE_ENGINE_ANDROID_TARGETS maps flutterSourceAbis; explicit single ABI remains mandatory Dart engine",
+    "reviewScripts": "V8 async factory; positional chapter/book/paragraph/review arguments are JSON snapshots; missing optional function reported explicitly",
+    "loginUiV2": "V8 async scope; loginUi(state) and loginAction(action,state,form) awaited; book/chapter bindings are JSON snapshots",
+    "mcpBookSource": "V8 evaluate; JSON source metadata over protected modern host API prototype; RSS/no-source retain separate scope; BookSource failures never fallback",
+    "configurationCapabilityAnalysis": "Non-executing AST analysis plus modern declaration lexer fallback for async/arrow functions; skips comments, strings, regex and template literals",
+    "legacyJsSourceBook": "removed; JsSourceEngine retains public normalization for non-BookSource consumers only"
   }
 }

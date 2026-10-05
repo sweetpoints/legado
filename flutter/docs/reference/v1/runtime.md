@@ -32,16 +32,20 @@ V8 编译参数、版本及引擎可用性应由诊断接口明确报告。运�
 这些链接描述 V8 机制；本项目的实际接口与支持状态见新版 Reference 和包测试。
 
 
-官方源码自编译 macOS ARM64 已完成链接并实际加载 V8 15.4.80.24。最终库包含10个 sv8 导出，大小46,032,368字节（43.90 MiB），SHA-256为 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`。V8包21项测试通过；本轮全工作区8项静态检查无问题，327项测试通过，日志为仓库根目录 `tmp/flutter-source-check-page-requests.log`。manifest的初始validation字段仍表示构建阶段，执行验证证据单独记录。
+官方源码自编译 macOS ARM64 已完成链接并实际加载 V8 15.4.80.24。最终库包含10个 sv8 导出，大小46,032,368字节（43.90 MiB），SHA-256为 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`。本轮Flutter全工作区8项静态检查无问题，355项测试通过（51/53/12/23/22/173/1/20），日志为仓库根目录 `tmp/flutter-source-check-app-replacement-current.log`。manifest的初始validation字段仍表示构建阶段，执行验证证据单独记录。
 
 此前官方 Flutter FFI example 的 Debug、Release 构建及界面执行已通过，界面显示实际 V8 15.4.80.24 计算结果42。Release主可执行文件和source_v8 framework经file检查均仅ARM64，local codesign检查确认allow-jit。这里只确认本地构建、运行和签名配置；尚未完成notarization或Hardened Runtime分发验收。
 
-官方源码Android ARM64库也完成链接，Debug AAR与APK中库均为26,306,760字节（25.09 MiB），SHA-256为 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`，与manifest一致。ELF检查确认ARM64、PT_LOAD 16 KiB对齐和仅c/dl/log/m系统依赖。本轮API36模拟器的13项引擎仪器测试通过，日志为 `tmp/flutter-android-test-page-requests-final.log`；这里是13个测试case，不是13种设备配置。
+官方源码Android ARM64库也完成链接，Debug AAR与APK中库均为26,306,760字节（25.09 MiB），SHA-256为 `0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593`，与manifest一致。ELF检查确认ARM64、PT_LOAD 16 KiB对齐和仅c/dl/log/m系统依赖。此前API36模拟器的13项引擎仪器测试通过，日志为 `tmp/flutter-android-test-page-requests-final.log`；这里是13个测试case，不是13种设备配置。
 
-本轮分页/选中请求修改的本地Release/R8已通过，日志 `tmp/flutter-android-release-page-requests.log` 明确 BUILD SUCCESSFUL in4m1s 且 minifyAppReleaseWithR8 实际执行。Debug AAR/APK的10项Flutter assets，以及Release AAR/APK的7项Flutter assets，均已逐项验证SHA-256一致。Release两产物内libapp.so均为3,277,704字节，SHA-256均为 `dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91`；libsource_v8.so均为26,306,760字节，SHA-256一致且匹配上述manifest。未签名APK属于本地构建结果，不表示正式发布或CI验收；固定case通过不证明所有历史书源兼容或完整Flutter UI迁移完成。旧版本及较早轮次的验证属于历史记录，不能替代本轮证明。
+此前分页/选中请求修改的本地Release/R8已通过，日志 `tmp/flutter-android-release-page-requests.log` 明确 BUILD SUCCESSFUL in4m1s 且 minifyAppReleaseWithR8 实际执行。Debug AAR/APK的10项Flutter assets，以及Release AAR/APK的7项Flutter assets，均已逐项验证SHA-256一致。Release两产物内libapp.so均为3,277,704字节，SHA-256均为 `dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91`；libsource_v8.so均为26,306,760字节，SHA-256一致且匹配上述manifest。未签名APK属于本地构建结果，不表示正式发布或CI验收；固定case通过不证明所有历史书源兼容或完整Flutter UI迁移完成。旧版本及较早轮次的验证属于历史记录，不能替代本轮证明。
 
 此前旧表单轮次的JVM 4组golden测试、16个固定输入已真实通过，日志 `tmp/flutter-legacy-form-jvm-golden.log`。该证明限于固定输入的旧表单行为，不代表整个书源或完整旧JVM引擎等价。
 
 旧JVM AnalyzeUrlPageTemplateGoldenTest的7项测试已通过，日志 `tmp/flutter-legacy-page-jvm-golden.log`；仅证明这组分页模板行为，不代表所有旧书源或任意动态JS兼容。
 
-Android最终重跑13个case均通过，fail/error/skip均为0；最终Debug AAR/APK的10项Flutter assets也已重新核对一致。本轮Release产物校验证据为 `tmp/flutter-page-requests-artifact-proof.json`。
+此前分页请求轮次的Android最终重跑13个case均通过，fail/error/skip均为0；最终Debug AAR/APK的10项Flutter assets也已重新核对一致。本轮Release产物校验证据为 `tmp/flutter-page-requests-artifact-proof.json`。
+
+本轮默认Dart-only书源执行、迁移预览及评论、登录和MCP辅助入口已接入。Flutter工作区355项测试、8项静态检查及40项Python契约测试（12/18/10）已通过。默认双ABI Android全量Release构建已通过：3,949项JVM测试无失败或错误，lintAppRelease、R8及assembleAppRelease成功，日志为 `tmp/flutter-app-replacement-release-final.log`。未签名APK大小112,607,581字节，SHA-256为 `3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e`。默认双ABI构建在ARM64 API36设备通过完整 `test-android.sh` 验证：7个测试类、63项唯一测试全部成功，无失败、错误或跳过；本次 `--since` 严格结果校验通过，日志 `tmp/flutter-app-replacement-device-final-63.log` 记录 BUILD SUCCESSFUL in12s。x86_64 CI配置已具备，远端CI及x86_64设备验收尚未完成。此前13个设备case属于早先分页请求轮次。
+
+Android x86_64目标CPU=x64、ABI=x86_64、minAPI26；官方源码已编译成功（40m21s），最终库28,321,712字节（27.01 MiB），SHA-256 `0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4`，ELF machine62、3个LOAD的16KiB对齐及10个sv8导出检查通过。默认双ABI Debug/Release AAR准备和native哈希校验通过，日志 `tmp/flutter-app-replacement-prepare-dual.log`；双ABI Release App已构建成功且APK SHA已记录；ARM64完整脚本63项测试通过，x86_64设备及远端CI验收仍待完成。Android默认arm64-v8a+x86_64，显式单选仍强制Dart/V8；macOS继续仅ARM64。

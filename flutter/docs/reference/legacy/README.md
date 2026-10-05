@@ -17,7 +17,7 @@
 | `ruleContent` | `stages.content`，URL 为 `{{chapterUrl}}` |
 | `nextTocUrl`、`nextContentUrl` | 对应 stage 的 `nextPage` |
 
-未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified。提取方法只放行 `@js: [return] java.getString/getStringList(单个字面量规则) [;]`；嵌套脚本、组合规则、模板、变量、额外参数以及 getElement/getElements 仍需人工处理；复杂脚本、组合规则、XPath、变量、不支持的URL请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。contentBatch/callBackJs 产生 legacy.pipeline_requires_review，不静默当作普通提取字段；`mainJs`、`jsLib`、登录字段、封面解码、并发配置等仅保存原始信息，不自动转换。非文本书源也需要人工处理。
+未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified。提取方法只放行 `@js: [return] java.getString/getStringList(单个字面量规则) [;]`；嵌套脚本、组合规则、模板、变量、额外参数以及 getElement/getElements 仍需人工处理；复杂脚本、组合规则、XPath、变量、不支持的URL请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。contentBatch/callBackJs 产生 legacy.pipeline_requires_review，不静默当作普通提取字段；非空mainJs按下文V8 wrapper执行；jsLib、登录字段、封面解码、并发配置等仍需明确迁移。非文本书源也需要人工处理。
 
 静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。读取 enabledCookieJar 且值不是 true 时产生 `legacy.cookie_policy_requires_review`，不会悄悄改成自动 Cookie 策略。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
 
@@ -75,3 +75,11 @@ POST没有明确非空 Content-Type 时：形似JSON对象或数组的body按旧
 URL choice必须为静态分支：其内部任意 `{{...}}`（包括page算术）、嵌套/未闭合角括号需人工处理。算术可独立出现在choice之外。旧URL/body模板动态插入角括号由运行时保护拒绝，不能借此自动模拟旧options全字符串替换顺序。
 
 导入器对包含已知input模板的普通旧URL也设置legacyPageTemplates=true，确保动态角括号输入无法绕过保护；并不因此允许任意JavaScript表达式。静态search锚点的query可包含有限page算术，host/path模板仍不能提供确定锚点。单项 `<>` 也不属于支持的URL choice。
+
+## 旧mainJs的V8 wrapper
+
+非空字符串mainJs导入SourceDefinition.script，标记legacyMainJs=true并保留legacyOriginal；迁移器保持legacy=true兼容模式，不自动转译整个脚本或宣称verified。代码在独立Function词法工厂捕获入口，按旧位置参数调用：search(key,page默认1)、explore(exploreUrl,page)、getBookInfo(book)、getChapters(book)、getContent(chapter,book,nextChapterUrl)。工厂提供key/page/url/book/chapter/nextChapterUrl/source/sourceApi；source/sourceApi为原始JSON DTO数据，没有Java DTO方法。book取input.book或flat input副本；chapter取input.chapter或仅包含url/title的chapterUrl/chapterTitle映射，不猜index或volume。
+
+search/explore/toc允许JSON字符串解析后必须为数组；info必须为对象，缺失函数或null/undefined/空字符串时返回输入book；content字符串原样、null为空字符串，其他值JSON.stringify。java仍仅提供旧宿主白名单，未知接口在运行时明确unsupported_api。jsLib及未实现能力继续manual；每次求值独立context，不提供跨阶段JS全局内存。默认Dart执行并不意味着所有旧mainJs均可执行。
+
+内置JS模板和App帮助示例按当前V8更新：不导入org/Packages或任意Java类；source/sourceApi为JSON snapshot，不能调用Room/登录信息/登录头对象方法。book/chapter及java.ajax返回文本为原生JS String，length是属性、严格相等与空字符串真值均遵JS，不提供Java String包装重载。jsLib/CryptoJS等库仍需迁移，已覆盖的摘要接口为java.md5Encode/java.digestHex。模板保留五阶段、文件源downloadUrls、发现/登录配置及评论位置参数，但保留配置形状不代表所有平台宿主能力已经支持。

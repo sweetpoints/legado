@@ -17,9 +17,9 @@
 | `issues` | `{path, code, message}` 列表 |
 | `verified` | 当前固定为 `false` |
 
-整体迁移完成后按最终 issues 重算候选 metadata：没有 issue 时 `legacy:false`、`compatibility:"unverified"`，可使用 modern 运行模式；有 issue 时 `legacy:true`、`compatibility:"manualRequired"`，保留兼容模式标记。保留 `legacyOriginal` 不代表候选仍启用旧宿主，且两种状态的 verified 均为 false。
+整体迁移完成后按最终 issues 重算候选 metadata：没有issue且不是legacyMainJs时 `legacy:false`、`compatibility:"unverified"`，可使用 modern 运行模式；有 issue 时 `legacy:true`、`compatibility:"manualRequired"`，保留兼容模式标记。保留 `legacyOriginal` 不代表候选仍启用旧宿主，mainJs候选即使没有issue也保留legacy:true兼容宿主模式；所有状态的verified均为false。
 
-原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成method/body/bodyEncoding/bodyTemplateMode/headers；安全的已知模板表单在替换后编码，受限page算术/URL choice可标记legacyPageTemplates；静态发现菜单形成legacyExploreItems并由请求适配器解析当前选中入口，旧charset及动态或未知选项仍为manualRequired。可使用下文 compare 对照一个阶段 case，但没有完整旧 JVM 对照验证、持久化切换或回滚操作；调用方应保存原始版本，在验证完成后自行决定是否启用候选。
+原始格式字段映射及字面量 URL,{JSON} 请求选项转换见[旧版 Reference](../reference/legacy/README.md)。严格字面量请求可生成method/body/bodyEncoding/bodyTemplateMode/headers；安全的已知模板表单在替换后编码，受限page算术/URL choice可标记legacyPageTemplates；静态发现菜单形成legacyExploreItems并由请求适配器解析当前选中入口，旧charset及动态或未知选项仍为manualRequired。可使用下文 compare 对照一个阶段 case，但没有完整旧JVM对照验证或自动保存。App迁移预览按当前草稿独立快照执行，报告仅内存保存；只有无issue、status=unverified、候选存在且草稿revision未变时可应用。manual、过期、未知状态或缺失候选禁止应用；关闭预览后迟到结果丢弃。应用写入草稿@source:v1单行JSON并保留其他字段/用户备注，可撤销，不自动正式保存；失败不改变草稿。
 
 ## 脚本转换
 
