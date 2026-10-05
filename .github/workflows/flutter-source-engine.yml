@@ -12,6 +12,16 @@ on:
       - 'app/src/main/java/io/legado/app/ui/book/source/**'
       - 'app/src/androidTest/java/io/legado/app/model/FlutterSourceEngineTest.kt'
       - 'app/src/androidTest/java/io/legado/app/ui/book/source/edit/BookSourceMigrationUiTest.kt'
+      - 'app/src/androidTest/java/io/legado/app/model/jsSource/JsSourceReviewV8Test.kt'
+      - 'app/src/androidTest/java/io/legado/app/model/login/FlutterLoginUiV2Test.kt'
+      - 'app/src/androidTest/java/io/legado/app/model/JsSourceV8ExecutionTest.kt'
+      - 'app/src/androidTest/java/io/legado/app/model/CryptoMigrationContractTest.kt'
+      - 'app/src/androidTest/java/io/legado/app/web/mcp/FlutterMcpSourceTest.kt'
+      - 'app/src/main/java/io/legado/app/web/mcp/**'
+      - 'app/src/main/java/io/legado/app/model/jsSource/**'
+      - 'app/src/main/java/io/legado/app/model/login/**'
+      - 'app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt'
+      - 'app/src/main/java/io/legado/app/data/entities/BaseSource.kt'
       - 'app/proguard-rules.pro'
       - 'app/build.gradle.kts'
       - 'settings.gradle.kts'
@@ -83,3 +93,57 @@ jobs:
         run: bash flutter/tool/prepare-android-aar.sh all
       - name: Compile Android integration with mandatory default engine
         run: ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest --console=plain --max-workers=2
+
+  android-runtime:
+    needs: android-v8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: official-v8-android
+          path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
+      - name: Verify downloaded official Android native provenance
+        run: python3 flutter/tool/verify-android-aar.py --native-only
+      - name: Verify strict instrumentation report contracts
+        run: python3 -m unittest discover -s flutter/tool -p 'test_verify_instrumentation.py'
+      - name: Prepare verified Flutter Android AARs
+        run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run all Flutter/V8 contracts on Android 16 x86_64
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 36
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ANDROID_SERIAL=emulator-5554 bash flutter/tool/test-android.sh
+      - name: Upload Flutter/V8 device evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: flutter-v8-android-api36-x64
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn

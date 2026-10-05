@@ -39,6 +39,92 @@ class FlutterSourceEngineTest {
             .newInstance(context) as SourceEngineBackend
     }
 
+    @Test
+    fun auxiliaryScriptsAndEphemeralJsConfigurationRunActualV8() = runBlocking {
+        assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
+        val definition =
+            BookSource(
+                bookSourceUrl = "https://v8-auxiliary.invalid/",
+                bookSourceName = "Auxiliary",
+            )
+        val value =
+            DartSourceEngine.evaluate(
+                definition,
+                "(async()=>{await Promise.resolve(); infoMap.title='changed'; return {value:java.base64Encode('V8'),infoMap};})()",
+                mapOf("infoMap" to mapOf("title" to "original")),
+            ) as Map<*, *>
+        assertEquals("Vjg=", value["value"])
+        assertEquals("changed", (value["infoMap"] as Map<*, *>)["title"])
+        val modern =
+            definition.copy(
+                jsLib = "legacyJsLibMustNotBeEvaluated()",
+                bookSourceComment =
+                    "@source:v1 " +
+                    """{"schemaVersion":1,"id":"modern-auxiliary","name":"Modern","baseUrl":"https://modern-auxiliary.invalid/","stages":{}}""",
+            )
+        assertEquals("undefined", DartSourceEngine.evaluate(modern, "typeof java"))
+        val script =
+            """
+            const config = {bookSourceUrl:'https://v8-config.invalid/',bookSourceName:'V8 config'};
+            const search = (key,page) => [{name:key+page,author:'V8',bookUrl:'https://v8-config.invalid/book'}];
+            function getChapters(book) { return [{title:'Chapter',url:'https://v8-config.invalid/chapter'}]; }
+            function getContent(chapter,book,nextChapterUrl) { return chapter.index+':'+book.name; }
+            """
+                .trimIndent()
+        val imported =
+            withContext(Dispatchers.IO) {
+                io.legado.app.model.jsSource.JsSourceConfig.extract(script)
+            }
+        assertEquals("V8 config", imported.bookSourceName)
+        assertEquals(script, imported.mainJs)
+        assertEquals("Actual2", WebBook.searchBookAwait(imported, "Actual", 2).single().name)
+        val book =
+            Book(
+                bookUrl = "https://v8-config.invalid/book",
+                name = "Actual2",
+                origin = imported.bookSourceUrl,
+            )
+        val chapter =
+            io.legado.app.data.entities.BookChapter(
+                bookUrl = book.bookUrl,
+                title = "Chapter",
+                url = "https://v8-config.invalid/chapter",
+                index = 7,
+            )
+        assertEquals(
+            "7:Actual2",
+            WebBook.getContentAwait(imported, book, chapter, needSave = false),
+        )
+    }
+
+    @Test
+    fun preUpdateScriptsApplyValidatedMetadataWithActualV8() = runBlocking {
+        assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
+        val definition =
+            BookSource(
+                bookSourceUrl = "https://v8-preupdate.invalid/",
+                bookSourceName = "Pre-update",
+                ruleToc =
+                    io.legado.app.data.entities.rule.TocRule(
+                        preUpdateJs =
+                            "await Promise.resolve(); book.name='Updated'; book.tocUrl='https://v8-preupdate.invalid/new-toc';"
+                    ),
+            )
+        val book =
+            Book(
+                bookUrl = "https://v8-preupdate.invalid/book",
+                name = "Original",
+                origin = definition.bookSourceUrl,
+            )
+        WebBook.runPreUpdateJs(definition, book).getOrThrow()
+        assertEquals("Updated", book.name)
+        assertEquals("https://v8-preupdate.invalid/new-toc", book.tocUrl)
+        definition.ruleToc!!.preUpdateJs = "book.name='Must not apply'; book.totalChapterNum=100;"
+        assertTrue(WebBook.runPreUpdateJs(definition, book).isFailure)
+        assertEquals("Updated", book.name)
+        assertEquals(0, book.totalChapterNum)
+    }
+
     private fun source(script: String): String =
         Gson()
             .toJson(
@@ -50,6 +136,136 @@ class FlutterSourceEngineTest {
                     "script" to script,
                 )
             )
+
+    private fun legacySearchSource(origin: String, nameRule: String = "a@text"): BookSource =
+        Gson()
+            .fromJson(
+                Gson()
+                    .toJson(
+                        mapOf(
+                            "bookSourceUrl" to origin,
+                            "bookSourceName" to "Unmarked legacy source",
+                            "bookSourceComment" to "ordinary comment preserved",
+                            "enabledCookieJar" to true,
+                            "searchUrl" to "$origin/search?q={{key}}",
+                            "ruleSearch" to
+                                mapOf(
+                                    "bookList" to ".row",
+                                    "name" to nameRule,
+                                    "author" to ".author@text",
+                                    "bookUrl" to "a@href",
+                                ),
+                        )
+                    ),
+                BookSource::class.java,
+            )
+
+    @Test
+    fun migrationChannelProducesApplicableUnverifiedPreviewWithoutMutatingSource() = runBlocking {
+        val bridge = backend()
+        try {
+            val original = legacySearchSource("https://example.org/migration")
+            val snapshot = Gson().toJson(original)
+            val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
+            assertTrue(preview.canApply)
+            assertTrue(!preview.requiresManualWork)
+            assertTrue(preview.issues.isEmpty())
+            assertEquals("unverified", preview.status)
+            val candidate =
+                Gson().fromJson(preview.candidateJson, com.google.gson.JsonObject::class.java)
+            assertEquals(1, candidate.get("schemaVersion").asInt)
+            assertEquals(original.bookSourceUrl, candidate.get("id").asString)
+            assertEquals(
+                Gson().fromJson(snapshot, com.google.gson.JsonObject::class.java),
+                candidate.getAsJsonObject("metadata").getAsJsonObject("legacyOriginal"),
+            )
+            assertEquals(snapshot, Gson().toJson(original))
+            assertTrue(bridge.tasks.value.isEmpty())
+        } finally {
+            bridge.close()
+        }
+    }
+
+    @Test
+    fun migrationChannelBlocksManualPreviewAndRejectsAfterShutdownWithoutMutation() = runBlocking {
+        val bridge = backend()
+        try {
+            val original =
+                legacySearchSource("https://example.org/manual", "@js:java.unknownApi(key)")
+            val snapshot = Gson().toJson(original)
+            val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
+            assertTrue(!preview.canApply)
+            assertTrue(preview.requiresManualWork)
+            assertTrue(preview.issues.isNotEmpty())
+            assertEquals("manualRequired", preview.status)
+            assertTrue(preview.candidateJson != null)
+            assertEquals(snapshot, Gson().toJson(original))
+            val candidateSnapshot = preview.candidateJson
+            bridge.close()
+            val failure = withTimeout(5_000) { runCatching { bridge.migrate(snapshot) } }
+            assertTrue(failure.isFailure)
+            assertTrue(
+                failure.exceptionOrNull()?.message.orEmpty().contains("repository is closed")
+            )
+            assertEquals(snapshot, Gson().toJson(original))
+            assertEquals(candidateSnapshot, preview.candidateJson)
+            assertTrue(!preview.canApply)
+            assertTrue(bridge.tasks.value.isEmpty())
+        } finally {
+            bridge.close()
+        }
+    }
+
+    @Test
+    fun unmarkedLegacySourcesUseDartV8ByDefault() = runBlocking {
+        assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val serving =
+                async(Dispatchers.IO) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10_000
+                        val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
+                        val request = reader.readLine()
+                        while (!reader.readLine().isNullOrEmpty()) {}
+                        val body =
+                            "<div class='row'><a href='/book'>Fixture title</a><span class='author'>Author</span></div>"
+                                .toByteArray(Charsets.UTF_8)
+                        socket.getOutputStream().apply {
+                            write(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                    .toByteArray()
+                            )
+                            write(body)
+                            flush()
+                        }
+                        request
+                    }
+                }
+            // V8 stack capture identifies the actual engine, while java.* exercises the
+            // compatibility host of a plain old source with no engine selection marker.
+            val original =
+                legacySearchSource(
+                    origin,
+                    "@js:java.base64Encode('Default V8')",
+                )
+            val snapshot = Gson().toJson(original)
+            assertTrue(!original.bookSourceComment.orEmpty().contains("@engine:dart"))
+            assertTrue(!original.bookSourceComment.orEmpty().contains("@source:v1"))
+            val rows = withTimeout(60_000) { WebBook.searchBookAwait(original, "key", 1) }
+            assertEquals(1, rows.size)
+            assertEquals("RGVmYXVsdCBWOA==", rows.single().name)
+            assertEquals(
+                "function",
+                DartSourceEngine.evaluate(original, "typeof Error.captureStackTrace"),
+            )
+            assertEquals("Author", rows.single().author)
+            assertEquals("$origin/book", rows.single().bookUrl)
+            assertEquals(origin, rows.single().origin)
+            assertEquals("GET /search?q=key HTTP/1.1", withTimeout(10_000) { serving.await() })
+            assertEquals(snapshot, Gson().toJson(original))
+        }
+    }
 
     @Test
     fun composeRepositoryRunsActualDartV8AndAsyncFunctions() = runBlocking {
@@ -103,7 +319,6 @@ class FlutterSourceEngineTest {
                 .apply {
                     bookSourceComment = "@source:v1 $definition"
                 }
-        assertTrue(DartSourceEngine.selected(selected))
         val result = withTimeout(60_000) { WebBook.searchBookAwait(selected, "Compose") }
         assertEquals("Compose V8", result.single().name)
         assertEquals(selected.bookSourceUrl, result.single().origin)
