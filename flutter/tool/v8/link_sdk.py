@@ -52,6 +52,14 @@ def _strings(value, label):
     return value
 
 
+def static_library_grouping(linking, target):
+    if 'staticLibraryGrouping' not in linking:
+        return False
+    if linking['staticLibraryGrouping'] != 'rescan' or not target.startswith('android-'):
+        raise ValueError('SDK static library grouping supports Android rescan only')
+    return True
+
+
 def verified_sdk(sdk_root, target, pins):
     if target not in PROFILES or target not in pins['targets']:
         raise ValueError('Bridge linking supports pinned Android/macOS profiles only')
@@ -68,6 +76,7 @@ def verified_sdk(sdk_root, target, pins):
         raise ValueError('Unsupported SDK linking schema')
     for key in ('includeDirs', 'defines', 'compileOptions', 'libraries', 'linkOptions', 'systemLibraries'):
         _strings(linking.get(key), key)
+    static_library_grouping(linking, target)
     platform_root = sdk_root / target
     indexed = {item['path'] for item in manifest['targets'][target]['files']}
     for label in linking['includeDirs']:
@@ -121,7 +130,12 @@ def command(sdk_root, target, linking, compiler, sysroot, output, files):
     args += ['-I' + str(platform_root / path) for path in linking['includeDirs']]
     args += ['-D' + define for define in linking['defines']]
     args += ['-I' + str(files['src/source_v8.h'].parent), str(files['src/source_v8.cpp'])]
+    rescan = static_library_grouping(linking, target)
+    if rescan:
+        args += ['-Wl,--start-group']
     args += [str(platform_root / path) for path in linking['libraries']]
+    if rescan:
+        args += ['-Wl,--end-group']
     args += linking['linkOptions']
     args += ['--target=' + triple, '--sysroot=' + str(sysroot)]
     if suffix == '.so':

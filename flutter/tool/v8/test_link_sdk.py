@@ -112,7 +112,7 @@ class LinkContractTests(unittest.TestCase):
             self.assertIn('-Wl,-z,max-page-size=16384', args)
             self.assertLess(args.index('/sdk/' + target + '/lib/monolith.a'), args.index('/sdk/' + target + '/lib/runtime.a'))
 
-    def test_android_sdk_contract_accepts_exact_no_external_unwind_link_option(self):
+    def test_android_sdk_contract_supports_exact_unwind_and_archive_rescan(self):
         fixture_spec = importlib.util.spec_from_file_location('sdk_download_fixture', Path(__file__).with_name('test_prebuilt.py'))
         fixture_module = importlib.util.module_from_spec(fixture_spec)
         fixture_spec.loader.exec_module(fixture_module)
@@ -127,7 +127,8 @@ class LinkContractTests(unittest.TestCase):
             path = root / target / 'linking.json'
             contract = {'schemaVersion': 1, 'includeDirs': ['include', 'stdlib/include'], 'defines': [],
                         'compileOptions': ['-std=c++20'], 'libraries': ['libv8_monolith.a', 'stdlib/libc++.a'],
-                        'linkOptions': ['-nostdlib++', '--unwindlib=none'], 'systemLibraries': ['dl', 'log', 'm']}
+                        'linkOptions': ['-nostdlib++', '--unwindlib=none'], 'systemLibraries': ['dl', 'log', 'm'],
+                        'staticLibraryGrouping': 'rescan'}
             manifest_path = root / 'manifest.json'
             manifest = json.loads(manifest_path.read_text())
             entry = manifest['targets'][target]
@@ -142,11 +143,33 @@ class LinkContractTests(unittest.TestCase):
             _, validated = linker.verified_sdk(root, target, fixture.local)
             args = linker.command(root, target, validated, Path('/clang++'), Path('/sysroot'), Path('/bridge.so'), linker.source_files())
             self.assertEqual(args.count('--unwindlib=none'), 1)
+            self.assertEqual(args.count('-Wl,--start-group'), 1)
+            self.assertEqual(args.count('-Wl,--end-group'), 1)
+            start, end = args.index('-Wl,--start-group'), args.index('-Wl,--end-group')
+            self.assertEqual(args[start + 1:end], [str(root / target / library) for library in contract['libraries']])
+            self.assertLess(end, args.index('--unwindlib=none'))
+            self.assertLess(end, args.index('-ldl'))
+            for unsupported in (None, 'none', 'wholeArchive', True, [], {}):
+                contract['staticLibraryGrouping'] = unsupported
+                update_contract()
+                with self.assertRaisesRegex(ValueError, 'Android rescan only'):
+                    linker.verified_sdk(root, target, fixture.local)
+            contract['staticLibraryGrouping'] = 'rescan'
             for unsupported in ('--unwindlib=libunwind', '--unwindlib=/untrusted/archive'):
                 contract['linkOptions'][-1] = unsupported
                 update_contract()
                 with self.assertRaisesRegex(ValueError, 'outside the supported'):
                     linker.verified_sdk(root, target, fixture.local)
+
+    def test_macos_rejects_android_archive_group_and_missing_marker_stays_ungrouped(self):
+        contract = {'includeDirs': [], 'defines': [], 'compileOptions': [],
+                    'libraries': ['lib/monolith.a', 'lib/runtime.a'], 'linkOptions': [], 'systemLibraries': []}
+        args = linker.command(Path('/sdk'), 'macos-arm64', contract, Path('/clang++'), Path('/sysroot'), Path('/bridge.dylib'), linker.source_files())
+        self.assertNotIn('-Wl,--start-group', args)
+        self.assertNotIn('-Wl,--end-group', args)
+        contract['staticLibraryGrouping'] = 'rescan'
+        with self.assertRaisesRegex(ValueError, 'Android rescan only'):
+            linker.command(Path('/sdk'), 'macos-arm64', contract, Path('/clang++'), Path('/sysroot'), Path('/bridge.dylib'), linker.source_files())
 
     def test_android_inspects_actual_elf_machine_and_alignment(self):
         with tempfile.TemporaryDirectory() as directory:
