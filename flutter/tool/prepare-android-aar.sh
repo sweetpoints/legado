@@ -32,9 +32,18 @@ task_source_sha="$(python3 "$workspace_root/tool/verify-android-aar.py" --print-
 # files or the user's global initialization scripts/properties.
 source_gradle_home="$workspace_root/.gradle-source-host"
 mkdir -p "$source_gradle_home/init.d"
-# Reuse only public build artifacts. Never copy properties, init scripts or credentials.
+# Kotlin DSL/instrumented caches are Gradle-user-home sensitive. Sharing the whole
+# caches tree through a symlink makes Flutter's included Kotlin plugin lose its
+# plugin classpath/accessors. Keep all dependency and generated caches physical
+# and private to this workspace; reuse only the downloaded Gradle distributions.
+# Upgrade the previous script-created symlink without deleting its target.
+if [[ -L "$source_gradle_home/caches" ]]; then
+    unlink "$source_gradle_home/caches"
+fi
+mkdir -p "$source_gradle_home/caches"
+# Never copy properties, init scripts or credentials.
 source_default_gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
-for source_cache_directory in caches wrapper; do
+for source_cache_directory in wrapper; do
     if [[ "$source_default_gradle_home" != "$source_gradle_home" && \
           -d "$source_default_gradle_home/$source_cache_directory" && \
           ! -e "$source_gradle_home/$source_cache_directory" && \

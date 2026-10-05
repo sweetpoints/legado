@@ -9,7 +9,7 @@ import unittest
 
 
 class PrepareMemoryContractTest(unittest.TestCase):
-    def invoke(self, override=None):
+    def invoke(self, override=None, legacy_shared_cache=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workspace = root / 'flutter'
@@ -32,6 +32,15 @@ fi
 ''')
             (binaries / 'java').chmod(0o700)
             fake_flutter.chmod(0o700)
+            public_cache = root / 'public-cache'
+            (public_cache / 'caches').mkdir(parents=True)
+            (public_cache / 'caches' / 'external-marker').write_text('keep external cache')
+            (public_cache / 'wrapper').mkdir()
+            # Existing users/CI may still have the symlink from the old script.
+            if legacy_shared_cache:
+                private_home = workspace / '.gradle-source-host'
+                private_home.mkdir()
+                (private_home / 'caches').symlink_to(public_cache / 'caches', target_is_directory=True)
             capture = root / 'captured.txt'
             env = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'],
                        SOURCE_ENGINE_JDK=str(root), SOURCE_ENGINE_ANDROID_TARGETS='android-arm64',
@@ -42,6 +51,12 @@ fi
                 env['SOURCE_ENGINE_AAR_GRADLE_JVMARGS'] = override
             subprocess.run(['bash', str(tool / 'prepare-android-aar.sh'), 'debug'], env=env, check=True, capture_output=True)
             # Parse exactly the shell-quoted options consumed by official gradlew.
+            private_home = workspace / '.gradle-source-host'
+            self.assertTrue((private_home / 'caches').is_dir())
+            self.assertFalse((private_home / 'caches').is_symlink())
+            self.assertFalse((private_home / 'caches' / 'external-marker').exists())
+            self.assertEqual((public_cache / 'caches' / 'external-marker').read_text(), 'keep external cache')
+            self.assertTrue((private_home / 'wrapper').is_symlink())
             options = shlex.split(capture.read_text())
             properties = {}
             for option in options:
@@ -49,6 +64,9 @@ fi
                     key, value = option[2:].split('=', 1)
                     properties[key] = value
             return properties
+
+    def test_previous_shared_cache_symlink_is_detached_without_touching_external_cache(self):
+        self.invoke(legacy_shared_cache=True)
 
     def test_ci_aar_limit_overrides_app_limit_as_one_daemon_property(self):
         args = '-Xmx2g -Xms256m -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8'
