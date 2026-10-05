@@ -5,6 +5,7 @@ import 'dart:convert';
 String wrapLegacyMainJs(String script, Map<String, Object?> original) {
   final factoryBody =
       '''
+return (function() {
 $script
 return {
   search: typeof search === 'function' ? search : null,
@@ -13,6 +14,7 @@ return {
   getChapters: typeof getChapters === 'function' ? getChapters : null,
   getContent: typeof getContent === 'function' ? getContent : null
 };
+})();
 ''';
   return '''
 const __legacyMainJs = (() => {

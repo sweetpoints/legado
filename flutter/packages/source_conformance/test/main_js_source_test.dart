@@ -95,6 +95,34 @@ void main() {
     );
   });
 
+  for (final declaration in ['const', 'let']) {
+    test(
+      'mainJs $declaration source config shadows the injected DTO safely',
+      () async {
+        final definition = LegacySourceImporter()
+            .import(
+              original('''
+        $declaration source = {bookSourceName:'Declared config'};
+        function search(key, page) {
+          return [{name:source.bookSourceName + ':' + key + ':' + page,author:sourceApi.bookSourceName}];
+        }
+      '''),
+            )
+            .source;
+        expect(
+          await engine.execute(
+            definition,
+            'search',
+            input: {'key': 'K', 'page': 2},
+          ),
+          [
+            {'name': 'Declared config:K:2', 'author': 'Full mainJs source'},
+          ],
+        );
+      },
+    );
+  }
+
   test('mainJs info and toc receive flattened or explicit book DTOs', () async {
     final imported = LegacySourceImporter().import(
       original(r'''
