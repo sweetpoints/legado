@@ -102,6 +102,10 @@ def verified_sdk(sdk_root, target, pins):
             framework = next(options, None)
             if framework is None or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', framework):
                 raise ValueError('Invalid Apple framework option pair')
+        elif option == '--unwindlib=none' and target.startswith('android-'):
+            # The SDK runtime already contains Chromium's pinned libunwind.
+            # Do not let Clang add an unrelated sysroot libunwind archive.
+            continue
         elif option not in allowed:
             raise ValueError('SDK compile/link option is outside the supported bridge profile')
     if any(not re.fullmatch(r'[A-Za-z0-9_+-]+', library) for library in linking['systemLibraries']):

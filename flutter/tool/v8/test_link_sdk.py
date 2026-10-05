@@ -12,6 +12,8 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import io
+import tarfile
 import unittest
 from unittest.mock import patch
 
@@ -109,6 +111,42 @@ class LinkContractTests(unittest.TestCase):
             self.assertIn('-Wl,--exclude-libs,ALL', args)
             self.assertIn('-Wl,-z,max-page-size=16384', args)
             self.assertLess(args.index('/sdk/' + target + '/lib/monolith.a'), args.index('/sdk/' + target + '/lib/runtime.a'))
+
+    def test_android_sdk_contract_accepts_exact_no_external_unwind_link_option(self):
+        fixture_spec = importlib.util.spec_from_file_location('sdk_download_fixture', Path(__file__).with_name('test_prebuilt.py'))
+        fixture_module = importlib.util.module_from_spec(fixture_spec)
+        fixture_spec.loader.exec_module(fixture_module)
+        fixture = fixture_module.Fixture()
+        target = 'android-arm64'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = fixture.payloads[fixture.pin['assets'][0]['name']]
+            with tarfile.open(fileobj=io.BytesIO(archive), mode='r:gz') as stream:
+                for member in stream:
+                    write(root / member.name, stream.extractfile(member).read())
+            path = root / target / 'linking.json'
+            contract = {'schemaVersion': 1, 'includeDirs': ['include', 'stdlib/include'], 'defines': [],
+                        'compileOptions': ['-std=c++20'], 'libraries': ['libv8_monolith.a', 'stdlib/libc++.a'],
+                        'linkOptions': ['-nostdlib++', '--unwindlib=none'], 'systemLibraries': ['dl', 'log', 'm']}
+            manifest_path = root / 'manifest.json'
+            manifest = json.loads(manifest_path.read_text())
+            entry = manifest['targets'][target]
+            def update_contract():
+                path.write_text(json.dumps(contract))
+                for inventory in (entry['files'], entry['targetFiles']):
+                    for item in inventory:
+                        if item['path'].endswith('/linking.json'):
+                            item.update(sha256=linker.consumer.sha(path), size=path.stat().st_size)
+                manifest_path.write_text(json.dumps(manifest))
+            update_contract()
+            _, validated = linker.verified_sdk(root, target, fixture.local)
+            args = linker.command(root, target, validated, Path('/clang++'), Path('/sysroot'), Path('/bridge.so'), linker.source_files())
+            self.assertEqual(args.count('--unwindlib=none'), 1)
+            for unsupported in ('--unwindlib=libunwind', '--unwindlib=/untrusted/archive'):
+                contract['linkOptions'][-1] = unsupported
+                update_contract()
+                with self.assertRaisesRegex(ValueError, 'outside the supported'):
+                    linker.verified_sdk(root, target, fixture.local)
 
     def test_android_inspects_actual_elf_machine_and_alignment(self):
         with tempfile.TemporaryDirectory() as directory:
