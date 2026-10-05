@@ -104,7 +104,7 @@ jobs:
         type: [release, releaseA]
       fail-fast: false
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       product: ${{ matrix.product }}
       type: ${{ matrix.type }}
@@ -155,7 +155,7 @@ jobs:
           fi
 
           chmod +x gradlew
-          ./gradlew :$product:assembleRelease -ParmOnly=true \
+          ./gradlew :$product:assembleRelease -ParmOnly=true -PflutterSourceAbis=arm64-v8a \
             --build-cache --no-daemon --max-workers=2 --warning-mode all
           mkdir -p "$GITHUB_WORKSPACE/apk"
           bash "$GITHUB_WORKSPACE/.github/scripts/collect-apks.sh" \
@@ -197,9 +197,9 @@ jobs:
               | sort -u \
               | paste -sd ' ' -)
             if [[ "$package_kind" = "universal" ]]; then
-              expected_native_abis="arm64-v8a armeabi-v7a x86 x86_64"
+              expected_native_abis="arm64-v8a x86_64"
             else
-              expected_native_abis="arm64-v8a armeabi-v7a"
+              expected_native_abis="arm64-v8a"
             fi
             if [[ "$packaged_abis" != "$expected_native_abis" ]]; then
               echo "$package_kind APK contains unexpected native ABIs: $packaged_abis"

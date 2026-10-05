@@ -1,5 +1,6 @@
 import de.undercouch.gradle.tasks.download.Download
 import java.math.BigInteger
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,7 +68,109 @@ try {
     // Keep source archives buildable when Git is unavailable.
 }
 
-val flutterSourceEngine = providers.gradleProperty("flutterSourceEngine").orNull == "true"
+val flutterSourceAbis = providers.gradleProperty("flutterSourceAbis")
+    .orElse("arm64-v8a,x86_64").get().split(",")
+check(flutterSourceAbis.isNotEmpty() && flutterSourceAbis.distinct().size == flutterSourceAbis.size &&
+    flutterSourceAbis.all { it in setOf("arm64-v8a", "x86_64") }) {
+    "flutterSourceAbis must contain unique arm64-v8a and/or x86_64."
+}
+val flutterSourceEngine = true
+check(providers.gradleProperty("flutterSourceEngine").orNull != "false") {
+    "The Flutter source engine is required. Disabling it cannot restore the removed legacy engine."
+}
+
+// AAR preparation is an explicit official Flutter build step. Fail before Maven
+// resolution with a useful action instead of silently producing a legacy APK.
+val flutterSourceRepository = file(
+    providers.gradleProperty("flutterSourceRepository")
+        .orElse("$rootDir/flutter/modules/source_host/build/host/outputs/repo").get()
+)
+val requestedFlutterModes = gradle.startParameter.taskNames.map { it.lowercase() }.let { names ->
+    val modes = mutableSetOf<String>()
+    if (names.any { "debug" in it }) modes.add("debug")
+    if (names.any { "release" in it }) modes.add("release")
+    if (modes.isEmpty()) modes.addAll(listOf("debug", "release"))
+    modes
+}
+if (gradle.startParameter.taskNames.any {
+    val name = it.lowercase()
+    listOf("assemble", "bundle", "test", "lint", "install", "compile", "check").any { part -> part in name }
+}) {
+    val stampFile = flutterSourceRepository.resolve("source-engine-artifacts.json")
+    check(stampFile.isFile) {
+        "Flutter source engine AAR assets are not prepared. Run bash flutter/tool/prepare-android-aar.sh " +
+            "with the pinned official Android V8 artifact, Flutter 3.47.6 and JDK 21 before this build."
+    }
+    val stamp = groovy.json.JsonSlurper().parse(stampFile) as Map<*, *>
+    val pins = groovy.json.JsonSlurper().parse(file("$rootDir/flutter/tool/v8/pins.json")) as Map<*, *>
+    check(stamp["schemaVersion"] == 1 && stamp["v8"] == pins["v8"] && stamp["depotTools"] == pins["depotTools"]) {
+        "Flutter AAR provenance does not match pinned V8. Run bash flutter/tool/prepare-android-aar.sh."
+    }
+    val bridgeDigest = MessageDigest.getInstance("SHA-256")
+    val bridgeFiles = mapOf(
+        "src/source_v8.cpp" to file("$rootDir/flutter/packages/source_v8/src/source_v8.cpp"),
+        "src/source_v8.h" to file("$rootDir/flutter/packages/source_v8/src/source_v8.h"),
+        "src/android_exports.map" to file("$rootDir/flutter/packages/source_v8/src/android_exports.map"),
+        "tool/v8/source_v8.gni" to file("$rootDir/flutter/tool/v8/source_v8.gni")
+    )
+    for ((label, sourceFile) in bridgeFiles.toSortedMap()) {
+        val name = label.toByteArray(Charsets.UTF_8)
+        val bytes = sourceFile.readBytes()
+        bridgeDigest.update(ByteBuffer.allocate(8).putLong(name.size.toLong()).array())
+        bridgeDigest.update(name)
+        bridgeDigest.update(ByteBuffer.allocate(8).putLong(bytes.size.toLong()).array())
+        bridgeDigest.update(bytes)
+    }
+    val bridgeHash = bridgeDigest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    val bridge = stamp["bridge"] as? Map<*, *>
+    check(bridge?.get("abi") == 1 && bridge?.get("sourceSha256") == bridgeHash) {
+        "Flutter AAR native bridge inputs changed. Rebuild official V8 and prepare the Flutter AAR repository."
+    }
+    val workspace = file("$rootDir/flutter")
+    val sourceFiles = mutableListOf<java.io.File>()
+    sourceFiles += workspace.resolve("modules/source_host/lib").walkTopDown().filter { it.isFile && it.extension == "dart" }.toList()
+    workspace.resolve("packages").listFiles()?.filter { it.isDirectory }?.forEach { packageDir ->
+        sourceFiles += packageDir.resolve("lib").walkTopDown().filter { it.isFile && it.extension == "dart" }.toList()
+        sourceFiles += packageDir.resolve("pubspec.yaml")
+    }
+    sourceFiles += listOf(workspace.resolve("pubspec.yaml"), workspace.resolve("pubspec.lock"),
+        workspace.resolve("modules/source_host/pubspec.yaml"))
+    val sourceDigest = MessageDigest.getInstance("SHA-256")
+    for (sourceFile in sourceFiles.sortedBy { it.relativeTo(rootDir).invariantSeparatorsPath }) {
+        val label = sourceFile.relativeTo(rootDir).invariantSeparatorsPath.toByteArray(Charsets.UTF_8)
+        val bytes = sourceFile.readBytes()
+        sourceDigest.update(ByteBuffer.allocate(8).putLong(label.size.toLong()).array())
+        sourceDigest.update(label)
+        sourceDigest.update(ByteBuffer.allocate(8).putLong(bytes.size.toLong()).array())
+        sourceDigest.update(bytes)
+    }
+    val sourceHash = sourceDigest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    check(stamp["sourceSha256"] == sourceHash) {
+        "Flutter AAR source inputs changed. Run bash flutter/tool/prepare-android-aar.sh before building."
+    }
+    val artifacts = stamp["artifacts"] as? Map<*, *> ?: emptyMap<Any, Any>()
+    for (mode in requestedFlutterModes) {
+        val entry = artifacts[mode] as? Map<*, *>
+        check(entry != null) { "Flutter $mode AAR is missing. Run bash flutter/tool/prepare-android-aar.sh." }
+        val aar = flutterSourceRepository.resolve(
+            "io/legado/source/source_host/flutter_$mode/1.0/flutter_$mode-1.0.aar"
+        )
+        check(aar.isFile && aar.resolveSibling("flutter_$mode-1.0.pom").isFile) {
+            "Flutter $mode AAR/POM assets are missing. Run bash flutter/tool/prepare-android-aar.sh."
+        }
+        val digest = MessageDigest.getInstance("SHA-256").digest(aar.readBytes())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        check(digest == entry["sha256"]) {
+            "Flutter $mode AAR checksum differs from preparation. Run bash flutter/tool/prepare-android-aar.sh."
+        }
+        ZipFile(aar).use { archive ->
+            check(flutterSourceAbis.all { archive.getEntry("jni/$it/libsource_v8.so") != null } &&
+                archive.getEntry("assets/flutter_assets/NativeAssetsManifest.json") != null) {
+                "Flutter $mode AAR lacks native V8/assets. Run bash flutter/tool/prepare-android-aar.sh."
+            }
+        }
+    }
+}
 
 // The isolated instrumentation application has no Firebase client registration.
 if (
@@ -376,10 +479,10 @@ android {
         )
         extensions.extraProperties.set("archivesBaseName", "${appName}_$appVersion")
 
-        // The source_host AAR built by flutter/tool currently packages ARM64.
+        // Package only ABIs backed by the prepared Flutter/V8 AAR.
         // Keep the enabled APK from advertising ABIs without Flutter/V8.
         if (flutterSourceEngine) {
-            ndk { abiFilters.add("arm64-v8a") }
+            ndk { abiFilters.addAll(flutterSourceAbis) }
         } else if (armOnly) {
             ndk {
                 abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))

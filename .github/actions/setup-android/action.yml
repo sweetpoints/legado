@@ -1,5 +1,5 @@
 name: Setup Android build
-description: Configure the project's Java toolchain, Android SDK and bounded CI memory.
+description: Prepare the mandatory official V8/Flutter engine and Android build tools.
 runs:
   using: composite
   steps:
@@ -25,3 +25,57 @@ runs:
         sed -i "s|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-XX:+UseParallelGC -Xmx${heap} -Xms256m -XX:MaxMetaspaceSize=1536m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8|" gradle.properties
         echo "CI Gradle heap: $heap; max workers: 2"
         chmod +x gradlew
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.47.6'
+        channel: stable
+        cache: true
+    - name: Restore exact official Android ARM64 artifact
+      id: native-arm64
+      uses: actions/cache/restore@v5
+      with:
+        path: flutter/packages/source_v8/.cache/ci-artifacts/android-arm64
+        key: official-v8-android-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/build.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
+    - name: Restore exact official Android x64 artifact
+      id: native-x64
+      uses: actions/cache/restore@v5
+      with:
+        path: flutter/packages/source_v8/.cache/ci-artifacts/android-x64
+        key: official-v8-android-x64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/build.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
+    - name: Build missing official native targets and merge verified caches
+      shell: bash
+      env:
+        ARM64_CACHE_HIT: ${{ steps.native-arm64.outputs.cache-hit }}
+        X64_CACHE_HIT: ${{ steps.native-x64.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        revision=$(python3 -c 'import json; print(json.load(open("flutter/tool/v8/pins.json"))["v8"]["revision"])')
+        for target in android-arm64 android-x64; do
+          cache="flutter/packages/source_v8/.cache/ci-artifacts/$target"
+          hit="$ARM64_CACHE_HIT"
+          if [[ "$target" == android-x64 ]]; then hit="$X64_CACHE_HIT"; fi
+          if [[ "$hit" == true ]]; then
+            python3 flutter/tool/cache-android-native.py import --target "$target" --cache "$cache"
+          else
+            python3 flutter/tool/v8/build.py bootstrap --target "$target"
+            sudo "flutter/packages/source_v8/.cache/v8-source/$revision/android-arm64/v8/build/install-build-deps.sh" --no-prompt
+            python3 flutter/tool/v8/build.py build --target "$target" --jobs 2
+            python3 flutter/tool/cache-android-native.py export --target "$target" --cache "$cache"
+          fi
+        done
+        python3 flutter/tool/verify-android-aar.py --native-only
+    - name: Save verified official Android ARM64 artifact
+      if: steps.native-arm64.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: flutter/packages/source_v8/.cache/ci-artifacts/android-arm64
+        key: ${{ steps.native-arm64.outputs.cache-primary-key }}
+    - name: Save verified official Android x64 artifact
+      if: steps.native-x64.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: flutter/packages/source_v8/.cache/ci-artifacts/android-x64
+        key: ${{ steps.native-x64.outputs.cache-primary-key }}
+    - name: Prepare verified Debug and Release Flutter AARs for both ABIs
+      shell: bash
+      run: bash flutter/tool/prepare-android-aar.sh all

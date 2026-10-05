@@ -5,10 +5,13 @@ on:
     paths:
       - 'flutter/**'
       - '.github/workflows/flutter-source-engine.yml'
+      - '.github/actions/setup-android/**'
       - 'app/src/flutterSource/**'
       - 'app/src/main/java/io/legado/app/model/webBook/**'
       - 'app/src/main/java/io/legado/app/model/sourceEngine/**'
+      - 'app/src/main/java/io/legado/app/ui/book/source/**'
       - 'app/src/androidTest/java/io/legado/app/model/FlutterSourceEngineTest.kt'
+      - 'app/src/androidTest/java/io/legado/app/ui/book/source/edit/BookSourceMigrationUiTest.kt'
       - 'app/proguard-rules.pro'
       - 'app/build.gradle.kts'
       - 'settings.gradle.kts'
@@ -24,7 +27,7 @@ concurrency:
 jobs:
   android-v8:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - name: Verify official build contracts
@@ -35,9 +38,14 @@ jobs:
         run: sudo flutter/packages/source_v8/.cache/v8-source/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee/android-arm64/v8/build/install-build-deps.sh --no-prompt
       - name: Build Android ARM64 shared bridge from source
         run: python3 flutter/tool/v8/build.py build --target android-arm64 --jobs 4
+      - name: Build Android x64 shared bridge from official source
+        run: |
+          python3 flutter/tool/v8/build.py bootstrap --target android-x64
+          sudo flutter/packages/source_v8/.cache/v8-source/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee/android-arm64/v8/build/install-build-deps.sh --no-prompt
+          python3 flutter/tool/v8/build.py build --target android-x64 --jobs 4
       - uses: actions/upload-artifact@v4
         with:
-          name: official-v8-android-arm64
+          name: official-v8-android
           path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
           include-hidden-files: true
           if-no-files-found: error
@@ -46,7 +54,7 @@ jobs:
   conformance:
     needs: android-v8
     runs-on: macos-15
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -56,12 +64,14 @@ jobs:
           cache: true
       - uses: actions/download-artifact@v4
         with:
-          name: official-v8-android-arm64
+          name: official-v8-android
           path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
       - name: Build macOS ARM64 shared bridge from source
         run: python3 flutter/tool/v8/build.py build --target macos-arm64 --jobs 4
       - name: Verify Dart, native V8, and bridge contracts
         run: bash flutter/tool/check.sh
+      - name: Verify AAR preparation contracts
+        run: python3 -m unittest discover -s flutter/tool -p 'test_*android*.py'
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -69,5 +79,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Compile Flutter AAR and Android integration
-        run: bash flutter/tool/build-android.sh
+      - name: Prepare verified Flutter Android AAR repository
+        run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Compile Android integration with mandatory default engine
+        run: ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest --console=plain --max-workers=2

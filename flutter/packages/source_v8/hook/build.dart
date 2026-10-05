@@ -12,13 +12,7 @@ void main(List<String> args) async {
     final code = input.config.code;
     final os = code.targetOS;
     final arch = code.targetArchitecture;
-    if (arch != Architecture.arm64 || (os != OS.macOS && os != OS.android)) {
-      throw UnsupportedError(
-        'Official self-built V8 supports macOS arm64 and Android arm64; '
-        'requested $os/$arch',
-      );
-    }
-    final target = os == OS.macOS ? 'macos-arm64' : 'android-arm64';
+    final target = artifactTarget(os, arch);
     final configuredRoot = input.userDefines.path('artifact_root');
     if (input.userDefines['artifact_root'] != null && configuredRoot == null) {
       throw FormatException('source_v8.artifact_root must be a path string');

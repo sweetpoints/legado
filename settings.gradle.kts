@@ -54,7 +54,7 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        if (providers.gradleProperty("flutterSourceEngine").orNull == "true") {
+        run {
             maven {
                 url =
                     uri(

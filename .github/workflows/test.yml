@@ -29,7 +29,7 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -57,7 +57,7 @@ jobs:
         package: [arm, universal]
       fail-fast: false
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     env:
       package: ${{ matrix.package }}
       product: ${{ matrix.product }}
@@ -131,7 +131,7 @@ jobs:
           chmod +x gradlew
           gradle_args=()
           if [[ "$package" == "arm" ]]; then
-            gradle_args+=(-ParmOnly=true)
+            gradle_args+=(-ParmOnly=true -PflutterSourceAbis=arm64-v8a)
           fi
           ./gradlew :app:assembleAppRelease "${gradle_args[@]}" \
             --build-cache --no-daemon --max-workers=2 --warning-mode all --stacktrace \
@@ -194,9 +194,9 @@ jobs:
               | sort -u \
               | paste -sd ' ' -)
             if [[ "$package_kind" == "universal" ]]; then
-              expected_native_abis="arm64-v8a armeabi-v7a x86 x86_64"
+              expected_native_abis="arm64-v8a x86_64"
             else
-              expected_native_abis="arm64-v8a armeabi-v7a"
+              expected_native_abis="arm64-v8a"
             fi
             if [[ "$packaged_abis" != "$expected_native_abis" ]]; then
               echo "$package_kind APK contains unexpected native ABIs: $packaged_abis"
@@ -270,7 +270,7 @@ jobs:
   startup:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:

@@ -151,7 +151,7 @@ jobs:
   dialog:
     runs-on: ubuntu-latest
     # Build/setup and the complete device suite exceeded 60 minutes in the previous run.
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7.0.1
         with:

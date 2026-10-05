@@ -38,7 +38,7 @@ jobs:
         product: [ app ]
       fail-fast: false
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       product: ${{ matrix.product }}
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -71,7 +71,7 @@ jobs:
           echo "开始进行${{ env.product }}构建"
           chmod +x gradlew
           if [[ "${{ env.product }}" == "app" ]]; then
-            ./gradlew assemble${{ env.product }}release -ParmOnly=true --build-cache --no-daemon --max-workers=2 --warning-mode all
+            ./gradlew assemble${{ env.product }}release -ParmOnly=true -PflutterSourceAbis=arm64-v8a --build-cache --no-daemon --max-workers=2 --warning-mode all
             mkdir -p ${{ github.workspace }}/apk/
             bash $GITHUB_WORKSPACE/.github/scripts/collect-apks.sh \
               $GITHUB_WORKSPACE/app/build/outputs/apk \

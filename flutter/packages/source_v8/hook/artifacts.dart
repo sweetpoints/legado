@@ -3,11 +3,27 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:code_assets/code_assets.dart';
 
 const v8Revision = 'e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee';
 const v8Version = '15.4.80.24';
 const depotToolsRevision = '8a5434051036b32412a2ecb10c213a72e3f3ccb9';
 const bridgeAbi = 1;
+
+String artifactTarget(OS os, Architecture architecture) {
+  if (os == OS.macOS && architecture == Architecture.arm64) {
+    return 'macos-arm64';
+  }
+  if (os == OS.android && architecture == Architecture.arm64) {
+    return 'android-arm64';
+  }
+  if (os == OS.android && architecture == Architecture.x64) {
+    return 'android-x64';
+  }
+  throw UnsupportedError(
+    'Official V8 supports macOS arm64 and Android arm64/x64; requested $os/$architecture',
+  );
+}
 
 /// These labels and the length-prefixed digest are shared with build.py.
 Map<String, File> bridgeSources(Directory packageRoot) => {
@@ -94,7 +110,7 @@ Future<VerifiedArtifact> verifyArtifact(
   );
   final targets = _object(manifest['targets'], 'targets');
   final target = _object(targets[targetName], 'targets.$targetName');
-  if (targetName == 'android-arm64') {
+  if (targetName == 'android-arm64' || targetName == 'android-x64') {
     _expect(target['minApi'], 26, '$targetName.minApi');
   } else if (targetName == 'macos-arm64') {
     _expect(target['minMacOS'], '13.0', '$targetName.minMacOS');

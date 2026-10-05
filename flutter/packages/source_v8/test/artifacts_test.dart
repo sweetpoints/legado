@@ -3,11 +3,24 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:code_assets/code_assets.dart';
 import 'package:test/test.dart';
 
 import '../hook/artifacts.dart';
 
 void main() {
+  test(
+    'Android selects matching official artifacts while macOS stays arm64',
+    () {
+      expect(artifactTarget(OS.android, Architecture.arm64), 'android-arm64');
+      expect(artifactTarget(OS.android, Architecture.x64), 'android-x64');
+      expect(artifactTarget(OS.macOS, Architecture.arm64), 'macos-arm64');
+      expect(
+        () => artifactTarget(OS.macOS, Architecture.x64),
+        throwsUnsupportedError,
+      );
+    },
+  );
   late Directory directory;
   late Directory package;
   late File binary;
@@ -54,6 +67,30 @@ void main() {
       expect(artifact.dependencies, hasLength(6));
     },
   );
+  test('authenticates Android x64 and enforces its API floor', () async {
+    final android = File('${directory.path}/android-x64/libsource_v8.so');
+    await android.parent.create();
+    await android.writeAsBytes([1, 2, 3, 4]);
+    final entry = <String, Object>{
+      'binary': 'android-x64/libsource_v8.so',
+      'sha256': sha256.convert([1, 2, 3, 4]).toString(),
+      'size': 4,
+      'minApi': 26,
+    };
+    (manifest['targets'] as Map)['android-x64'] = entry;
+    final file = File('${directory.path}/manifest.json');
+    await file.writeAsString(jsonEncode(manifest));
+    expect(
+      (await verifyArtifact(directory, package, 'android-x64')).binary.path,
+      android.path,
+    );
+    entry['minApi'] = 21;
+    await file.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, 'android-x64'),
+      throwsStateError,
+    );
+  });
   test('rejects a binary with changed contents', () async {
     await binary.writeAsBytes([4, 3, 2, 1]);
     await expectLater(verify(), throwsStateError);
