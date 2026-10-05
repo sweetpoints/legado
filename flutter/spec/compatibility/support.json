@@ -345,6 +345,8 @@
     "indexSpaces": "ASCII spaces inside matched numeric suffix only; selector spaces retained",
     "exploreInput": "raw input.exploreUrl selected URL; adaptLegacyRequest parses per-category literal options before templates; metadata URLs retain options",
     "manualFeatures": [
+      "declarative ruleReview HTTP/extraction protocol; distinct from supported mainJs review functions",
+      "coverDecodeJs and ruleContent.imageStyle/imageDecode/payAction/callBackJs, including sources with nonempty mainJs",
       "complex or unbalanced URL templates",
       "case-insensitive script markers",
       "contentBatch",
@@ -373,6 +375,7 @@
     "mainJs": "V8 factory with old positional signatures and curated java host; legacyMainJs keeps legacy runtime mode; unsupported APIs runtime error; jsLib still manual",
     "mainJsStringSemantics": "JSON DTO strings and java.ajax text are native JavaScript strings; no Java String wrapper or Java overload dispatch",
     "mainJsSnapshotMethods": "source/sourceApi are JSON data, not Room entities; old entity/login/header methods require migration",
+    "appHookBoundaries": "mainJs replaces stage extraction, not application-consumed content hooks; imageStyle/imageDecode/payAction/callBackJs remain manual with original values preserved; coverDecodeJs and declarative ruleReview remain source-level manual capabilities; no legacy AnalyzeRule/AnalyzeUrl fallback",
     "appAuthoringExamples": "templates and js-source-guide retain stage/file/downloadUrls/login/explore/review contracts; no arbitrary Java class imports, jsLib/CryptoJS requires migration"
   },
   "migration": {

@@ -67,6 +67,8 @@ return body;
 
 ## 需要人工处理
 
+声明式旧规则仅允许上述HTML Reference的scalar字面量替换子集：明确text/ownText/textNodes、恰好两个 `##`、安全字面量pattern/replacement，并且属于search/explore/info/toc已知getString字段。content、nextPage、kind/downloadUrls、list/未知字段、HTML或属性输出继续产生人工审查要求；无issue也不自动verified。详见[HTML兼容Reference](../reference/legacy/html.md)。
+
 当前遇到下列形式会拒绝自动脚本转换：函数、箭头函数、类、控制流、对象块、模板字符串、正则或斜杠 token、动态执行、Java 互操作、动态成员访问、未知 `java.*` 方法，以及 `java` 的别名或遮蔽。拒绝斜杠 token 也会拒绝除法，属于保守处理。
 
 错误标识：

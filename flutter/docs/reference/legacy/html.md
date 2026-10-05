@@ -39,3 +39,21 @@
 HTML 使用 Dart 序列化，不保证 JSoup pretty printing 的字节级一致。固定输入测试位于 `packages/source_engine/test/legacy_html_test.dart`。
 
 text/ownText不会在拼接后进行全局空白压缩。每个文本节点检查父元素及最多五级祖先中的pre/plaintext/title/textarea/script；保留上下文的原始空白，其余节点按JSoup子集归一化空白、移除零宽空格和软连字符。最终Java trim只移除两端U+0000..U+0020，不能与Dart trim混同。递归text仍忽略script/style内容。
+
+## Scalar字段的最后解码
+
+规则stage具有旧源provenance（`metadata.legacy == true` 或 `metadata.legacyOriginal` 为Map），字段规则去掉开头空白后显式以 `@legacy:` 开始（前缀大小写不敏感）时，search/explore/info/toc的scalar结果在规则替换、文本转换与换行join之后进行一次HTML4解码，再解析URL字段。`kind`、`downloadUrls`排除；content、列表规则及nextPage不采用此最后解码。现代CSS、无旧provenance的显式@legacy规则及mainJs返回值没有这个最后解码处理，不能用它推断所有提取路径均会反解实体。
+
+解码复用同一HTML4语义：252个HTML4命名实体，要求分号，单次解码；未知实体与HTML5扩展保留。它不等于浏览器HTML5实体处理，也不会递归解码替换结果。
+
+## 导入器的字面量替换子集
+
+导入器仅在以下旧scalar字段放行 `selector##literalPattern##literalReplacement`，候选仍未验证：
+
+| Stage | 旧字段 |
+|---|---|
+| search / explore | name、author、wordCount、lastChapter、intro、coverUrl、bookUrl |
+| info | name、author、wordCount、lastChapter、intro、coverUrl、tocUrl |
+| toc | chapterName、chapterUrl、updateTime、isVolume、isVip、isPay |
+
+必须恰好有两个 `##`，选择器按支持的HTML兼容子集归一化为显式 `@legacy:`，末尾必须明确为text、ownText或textNodes。pattern非空，不能含正则元字符、反斜杠、换行、`#`或引号；replacement不能含 `$`、反斜杠、换行、`#`、引号或 `&`。因此实体替换与捕获组替换不在自动放行范围。脚本、变量、模板、复合规则、XPath及不透明regex等仍需人工处理。content的所有字段、nextPage、kind、downloadUrls、list、管线扩展、未知字段，以及html/属性输出仍不放行。此限制属于旧源导入的保守边界，现代规则的正则替换能力不受它影响。

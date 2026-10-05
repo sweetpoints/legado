@@ -21,6 +21,8 @@
 
 静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。读取 enabledCookieJar 且值不是 true 时产生 `legacy.cookie_policy_requires_review`，不会悄悄改成自动 Cookie 策略。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
 
+应用扩展能力与五个 stage 的提取规则有独立边界。声明式 `ruleReview` 的 HTTP、提取和旧评论会话协议仍产生 `legacy.capability_requires_review`；它与已经通过 V8 辅助入口调用的 mainJs 评论函数不同。`coverDecodeJs` 同样产生该 issue。`ruleContent.imageStyle`、`imageDecode`、`payAction`、`callBackJs` 由阅读渲染、图片解码、支付按钮或生命周期回调继续读取，产生 `legacy.pipeline_requires_review`，原值保存在 `metadata.legacyOriginal`。这些字段即使与非空 mainJs 同时存在，也不能因为跳过 stage 提取规则而被自动接受。旧图片字节解码、Java 宿主动作或声明式评论协议需要明确迁移；辅助脚本可以运行并不表示对应应用协议已经恢复。书源不能回退到旧 AnalyzeRule/AnalyzeUrl 执行。
+
 ## 字面量请求选项
 
 旧阶段 URL 的 `URL,{JSON}` 形式可转换为 SourceStage 请求字段。分隔符为逗号后紧接 JSON 对象（允许空白），选项必须为严格字面量 JSON；这项导入能力不改变 java.ajax 等宿主对旧逗号 URL 的拒绝。
@@ -83,3 +85,5 @@ URL choice必须为静态分支：其内部任意 `{{...}}`（包括page算术�
 search/explore/toc允许JSON字符串解析后必须为数组；info必须为对象，缺失函数或null/undefined/空字符串时返回输入book；content字符串原样、null为空字符串，其他值JSON.stringify。java仍仅提供旧宿主白名单，未知接口在运行时明确unsupported_api。jsLib及未实现能力继续manual；每次求值独立context，不提供跨阶段JS全局内存。默认Dart执行并不意味着所有旧mainJs均可执行。
 
 内置JS模板和App帮助示例按当前V8更新：不导入org/Packages或任意Java类；source/sourceApi为JSON snapshot，不能调用Room/登录信息/登录头对象方法。book/chapter及java.ajax返回文本为原生JS String，length是属性、严格相等与空字符串真值均遵JS，不提供Java String包装重载。jsLib/CryptoJS等库仍需迁移，已覆盖的摘要接口为java.md5Encode/java.digestHex。模板保留五阶段、文件源downloadUrls、发现/登录配置及评论位置参数，但保留配置形状不代表所有平台宿主能力已经支持。
+
+即使非空mainJs替代了普通stage提取，ruleContent的imageStyle/imageDecode/payAction/callBackJs仍按App消费能力检查：非空值产生 `legacy.pipeline_requires_review`，非法值产生 `legacy.invalid_rule`，非Map的ruleContent产生 `legacy.invalid_rule_object`。null或空Map不因此产生issue；普通mainJs的stage字段不会被误判为这四个hooks。上述检查不意味着hooks已迁移或可通过旧引擎执行。

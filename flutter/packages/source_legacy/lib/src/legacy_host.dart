@@ -5,7 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
 import 'package:source_engine/source_engine.dart';
 
-import 'html4.dart';
 
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {

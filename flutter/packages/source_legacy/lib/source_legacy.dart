@@ -130,7 +130,7 @@ class LegacySourceImporter {
           );
           continue;
         }
-        if ([
+        final pipelineHook = [
           'init',
           'checkKeyWord',
           'webJs',
@@ -141,7 +141,8 @@ class LegacySourceImporter {
           'payAction',
           'contentBatch',
           'callBackJs',
-        ].contains(rule.key)) {
+        ].contains(rule.key);
+        if (pipelineHook) {
           issues.add(
             LegacyIssue(
               '$ruleKey.${rule.key}',
@@ -183,7 +184,12 @@ class LegacySourceImporter {
             RegExp(
               r'^@js:\s*(?:return\s+)?java\.(?:ajax|ajaxAll|connect|get|post|head|put|base64Encode|base64Decode|base64DecodeToByteArray|strToBytes|bytesToStr|hexDecodeToByteArray|hexDecodeToString|hexEncodeToString|md5Encode|md5Encode16|digestHex|digestBase64Str|encodeURI)\([^()]*\)\s*;?\s*$',
             ).hasMatch(text);
+        final literalReplacement =
+            !pipelineHook &&
+            _legacyScalarReplacementField(entry.key, rule.key.toString()) &&
+            _simpleLiteralReplacement(text);
         if (!simpleLegacyScript &&
+            !literalReplacement &&
             RegExp(
               r'@js:|<js>|@webjs:|@put:|@get:|##|&&|\|\||%%|\{\{|^//|^@XPath:',
               caseSensitive: false,
@@ -259,6 +265,40 @@ class LegacySourceImporter {
             : request.legacyPageTemplates,
         headers: selectedExplore ? null : request.headers,
       );
+    }
+    // mainJs owns stage extraction, but Android still consumes these content
+    // hooks outside that execution path. Keep their migration boundary explicit.
+    final contentRules = input['ruleContent'];
+    if (hasMainJs && contentRules != null && contentRules is! Map) {
+      issues.add(
+        const LegacyIssue(
+          'ruleContent',
+          'legacy.invalid_rule_object',
+          'Expected a rule object.',
+        ),
+      );
+    }
+    if (hasMainJs && contentRules is Map) {
+      for (final hook in [
+        'imageStyle',
+        'imageDecode',
+        'payAction',
+        'callBackJs',
+      ]) {
+        final value = contentRules[hook];
+        if (value == null || value == '') continue;
+        issues.add(
+          LegacyIssue(
+            'ruleContent.$hook',
+            value is String
+                ? 'legacy.pipeline_requires_review'
+                : 'legacy.invalid_rule',
+            value is String
+                ? 'This App-side content hook requires explicit implementation.'
+                : 'Rule must be a string.',
+          ),
+        );
+      }
     }
     for (final key in [
       'mainJs',
@@ -746,6 +786,79 @@ void _validateLegacyTemplates(
   if (withoutAngles.contains('<') || withoutAngles.contains('>')) {
     issue('Nested or unbalanced page-choice delimiters require review.');
   }
+}
+
+// Match the original App call sites that use AnalyzeRule.getString. Content
+// has a separate formatting contract; next-page/kind/download rules use lists.
+bool _legacyScalarReplacementField(String stage, String field) =>
+    switch (stage) {
+      'search' || 'explore' => const {
+        'name',
+        'author',
+        'wordCount',
+        'lastChapter',
+        'intro',
+        'coverUrl',
+        'bookUrl',
+      }.contains(field),
+      'info' => const {
+        'name',
+        'author',
+        'wordCount',
+        'lastChapter',
+        'intro',
+        'coverUrl',
+        'tocUrl',
+      }.contains(field),
+      'toc' => const {
+        'chapterName',
+        'chapterUrl',
+        'updateTime',
+        'isVolume',
+        'isVip',
+        'isPay',
+      }.contains(field),
+      _ => false,
+    };
+
+/// A replacement subset with identical Java/Dart regex semantics: literal
+/// matches and literal output, on an otherwise supported scalar extractor.
+/// It only removes a review issue; it never certifies a source as verified.
+bool _simpleLiteralReplacement(String rule) {
+  final parts = rule.split('##');
+  if (parts.length != 3) return false;
+  final selector = parts[0].trim();
+  final pattern = parts[1];
+  final replacement = parts[2];
+  if (pattern.isEmpty ||
+      RegExp(r"""[.\^$*+?{}\[\]\\|()#'"\r\n\u2028\u2029]""")
+          .hasMatch(pattern) ||
+      RegExp(r"""[$\\#&'"\r\n\u2028\u2029]""").hasMatch(replacement)) {
+    return false;
+  }
+  if (RegExp(
+    r'@js:|<js>|@webjs:|@put:|@get:|@xpath:|@regex:|@json:|&&|\|\||%%|\{\{|^//',
+    caseSensitive: false,
+  ).hasMatch(rule)) {
+    return false;
+  }
+  // CSS has already been normalized to the explicit legacy dialect. Do not
+  // use the replacement suffix to admit opaque/unknown @ rules or regex mode.
+  if (!selector.startsWith('@legacy:')) return false;
+  final extraction = selector.substring(8).trim();
+  if (extraction.isEmpty ||
+      extraction.startsWith(':') ||
+      extraction.startsWith('//') ||
+      extraction.startsWith(r'$')) {
+    return false;
+  }
+  if (extraction.startsWith('@') &&
+      !['@text', '@ownText', '@textNodes'].contains(extraction)) {
+    return false;
+  }
+  // Other outputs (HTML, attributes or implicit nodes) have additional
+  // scalar serialization/unescape contracts outside this replacement subset.
+  return RegExp(r'@(text|ownText|textNodes)$').hasMatch(extraction);
 }
 
 bool _simpleExtractionScript(String script) {

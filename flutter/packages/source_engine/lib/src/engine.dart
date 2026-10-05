@@ -8,6 +8,7 @@ import 'network.dart';
 import 'rules.dart';
 import 'form_encoding.dart';
 import 'page_templates.dart';
+import 'html4.dart';
 
 typedef SourceRequestAdapter = SourceStage Function(
   SourceDefinition source,
@@ -246,6 +247,17 @@ class SourceEngine {
             cancellation: cancellation,
           );
           var value = values.map(RuleEvaluator.text).join('\n');
+          // Old getString unescapes once after joining/replacement. Content
+          // formatting and kind/downloadUrls/nextPage use different old paths.
+          // Keep this provenance-bound; modern rules and string lists are raw.
+          if ((source.metadata['legacy'] == true ||
+                  source.metadata['legacyOriginal'] is Map) &&
+              operation != 'content' &&
+              entry.key != 'kind' &&
+              entry.key != 'downloadUrls' &&
+              entry.value.trimLeft().toLowerCase().startsWith('@legacy:')) {
+            value = unescapeHtml4(value);
+          }
           if ((entry.key.endsWith('Url') || entry.key == 'url') &&
               value.isNotEmpty) {
             value = response.url.resolve(value).toString();

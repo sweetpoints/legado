@@ -1,0 +1,158 @@
+[
+  {
+    "name": "chinese repeated",
+    "html": "<h2>广告正文广告</h2><h2>广告第二章</h2>",
+    "pattern": "广告",
+    "replacement": "书",
+    "extracted": [
+      "广告正文广告",
+      "广告第二章"
+    ],
+    "expectedList": [
+      "书正文书",
+      "书第二章"
+    ],
+    "expectedFields": [
+      "书正文书",
+      "书第二章"
+    ],
+    "expectedString": "书正文书\n书第二章"
+  },
+  {
+    "name": "ASCII non-overlap",
+    "html": "<h2>aaaa aa</h2><h2>baaa</h2>",
+    "pattern": "aa",
+    "replacement": "X",
+    "extracted": [
+      "aaaa aa",
+      "baaa"
+    ],
+    "expectedList": [
+      "XX X",
+      "bXa"
+    ],
+    "expectedFields": [
+      "XX X",
+      "bXa"
+    ],
+    "expectedString": "XX X\nbXa"
+  },
+  {
+    "name": "empty replacement",
+    "html": "<h2>REMOVE keep REMOVE</h2><h2>REMOVE</h2>",
+    "pattern": "REMOVE",
+    "replacement": "",
+    "extracted": [
+      "REMOVE keep REMOVE",
+      "REMOVE"
+    ],
+    "expectedList": [
+      " keep ",
+      ""
+    ],
+    "expectedFields": [
+      " keep ",
+      ""
+    ],
+    "expectedString": " keep \n"
+  },
+  {
+    "name": "no match",
+    "html": "<h2>第一章</h2><h2>第二章</h2>",
+    "pattern": "不存在",
+    "replacement": "保留",
+    "extracted": [
+      "第一章",
+      "第二章"
+    ],
+    "expectedList": [
+      "第一章",
+      "第二章"
+    ],
+    "expectedFields": [
+      "第一章",
+      "第二章"
+    ],
+    "expectedString": "第一章\n第二章"
+  },
+  {
+    "name": "mixed unicode",
+    "html": "<h2>中文A中中文 A</h2><h2>中文😀中文</h2>",
+    "pattern": "中文",
+    "replacement": "书",
+    "extracted": [
+      "中文A中中文 A",
+      "中文😀中文"
+    ],
+    "expectedList": [
+      "书A中书 A",
+      "书😀书"
+    ],
+    "expectedFields": [
+      "书A中书 A",
+      "书😀书"
+    ],
+    "expectedString": "书A中书 A\n书😀书"
+  },
+  {
+    "name": "empty extraction",
+    "html": "<h2> </h2>",
+    "pattern": "广告",
+    "replacement": "书",
+    "extracted": [],
+    "expectedList": [],
+    "expectedFields": [],
+    "expectedString": ""
+  },
+  {
+    "name": "double entity extracted",
+    "html": "<h2>广告&amp;amp;正文</h2><h2>&amp;lt;第二章</h2>",
+    "pattern": "广告",
+    "replacement": "",
+    "extracted": [
+      "广告&amp;正文",
+      "&lt;第二章"
+    ],
+    "expectedList": [
+      "&amp;正文",
+      "&lt;第二章"
+    ],
+    "expectedFields": [
+      "&正文",
+      "<第二章"
+    ],
+    "expectedString": "&正文\n<第二章"
+  },
+  {
+    "name": "replacement introduces entity",
+    "html": "<h2>广告正文广告</h2>",
+    "pattern": "广告",
+    "replacement": "&amp;",
+    "extracted": [
+      "广告正文广告"
+    ],
+    "expectedList": [
+      "&amp;正文&amp;"
+    ],
+    "expectedFields": [
+      "&正文&"
+    ],
+    "expectedString": "&正文&"
+  },
+  {
+    "name": "replacement matches extracted entity",
+    "html": "<h2>&amp;amp;正文</h2>",
+    "pattern": "&amp;",
+    "replacement": "&lt;",
+    "extracted": [
+      "&amp;正文"
+    ],
+    "expectedList": [
+      "&lt;正文"
+    ],
+    "expectedFields": [
+      "<正文"
+    ],
+    "expectedString": "<正文"
+  }
+]
