@@ -16,6 +16,10 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PACKAGE = ROOT / 'flutter/packages/source_v8'
+TARGETS = ('macos-arm64', 'android-arm64', 'android-x64')
+BRIDGE_EXPORTS = {'sv8_create', 'sv8_start', 'sv8_poll', 'sv8_resolve',
+                  'sv8_sync_poll', 'sv8_sync_reply', 'sv8_cancel', 'sv8_destroy',
+                  'sv8_free', 'sv8_version'}
 
 
 def read_pins():
@@ -25,6 +29,8 @@ def read_pins():
             raise ValueError('Pins require complete lowercase commit SHA')
         if not pins[key]['repository'].startswith('https://chromium.googlesource.com/'):
             raise ValueError('Only official Chromium source repositories permitted')
+    if set(pins.get('targets', {})) != set(TARGETS):
+        raise ValueError('Pinned target contract does not match supported platforms')
     return pins
 
 
@@ -57,6 +63,8 @@ def bridge_digest(files=None):
 
 
 def require_host(target):
+    if target not in TARGETS:
+        raise ValueError('Unsupported V8 target: ' + target)
     host = (platform.system(), platform.machine())
     expected = ('Darwin', 'arm64') if target == 'macos-arm64' else ('Linux', 'x86_64')
     if host != expected:
@@ -85,10 +93,13 @@ def bootstrap(cache, target, pins):
     run(['git', 'checkout', '--detach', pins['depotTools']['revision']], depot)
     env = dict(os.environ, PATH=str(depot) + os.pathsep + os.environ['PATH'], DEPOT_TOOLS_UPDATE='0')
     initialize_depot(depot, env)
-    workspace = cache / pins['v8']['revision'] / target
+    # Android ABIs share the fixed Linux-host DEPS checkout but have independent
+    # GN output directories, so x64 cannot replace ARM64 objects or binaries.
+    workspace_target = 'android-arm64' if target.startswith('android-') else target
+    workspace = cache / pins['v8']['revision'] / workspace_target
     workspace.mkdir(parents=True, exist_ok=True)
     gclient = 'solutions = ' + repr([{'name': 'v8', 'url': pins['v8']['repository'] + '@' + pins['v8']['revision'], 'deps_file': 'DEPS', 'managed': False, 'custom_deps': {}, 'custom_vars': {}}]) + '\n'
-    if target == 'android-arm64':
+    if target.startswith('android-'):
         gclient += "target_os = ['android']\n"
     (workspace / '.gclient').write_text(gclient)
     run([depot / 'gclient', 'sync', '--no-history', '--shallow', '--revision', 'v8@' + pins['v8']['revision']], workspace, env)
@@ -100,16 +111,62 @@ def bootstrap(cache, target, pins):
 
 
 def gn_arguments(target):
+    if target not in TARGETS:
+        raise ValueError('Unsupported V8 target: ' + target)
+    cpu = read_pins()['targets'][target]['cpu']
     args = {'is_debug': False, 'is_component_build': False, 'v8_monolithic': True,
             'v8_monolithic_for_shared_library': True, 'v8_use_external_startup_data': False,
             'use_custom_libcxx': True, 'v8_enable_i18n_support': False,
             'v8_enable_temporal_support': False, 'use_remoteexec': False,
-            'symbol_level': 0, 'target_cpu': 'arm64', 'v8_target_cpu': 'arm64'}
-    if target == 'android-arm64':
+            'symbol_level': 0, 'target_cpu': cpu, 'v8_target_cpu': cpu}
+    if target.startswith('android-'):
         args.update(target_os='android', android_ndk_api_level=26)
     else:
         args.update(target_os='mac', mac_deployment_target='13.0', use_lld=False)
     return '\n'.join(f'{key} = {json.dumps(value)}' for key, value in sorted(args.items())) + '\n'
+
+
+def inspect_android_elf(path, target):
+    """Validate the actual ELF ABI and every LOAD segment's 16 KiB alignment."""
+    if target not in ('android-arm64', 'android-x64'):
+        raise ValueError('ELF inspection requires Android target')
+    data = path.read_bytes()
+    if len(data) < 64 or data[:6] != b'\x7fELF\x02\x01':
+        raise ValueError('Android binary must be little-endian ELF64')
+    machine = struct.unpack_from('<H', data, 18)[0]
+    expected_machine = read_pins()['targets'][target]['elfMachine']
+    if machine != expected_machine:
+        raise ValueError(f'Android ELF machine {machine} differs from {target}')
+    if struct.unpack_from('<H', data, 16)[0] != 3:
+        raise ValueError('Android bridge must be an ELF shared library')
+    offset = struct.unpack_from('<Q', data, 32)[0]
+    size, count = struct.unpack_from('<HH', data, 54)
+    if size < 56 or count == 0 or offset + size * count > len(data):
+        raise ValueError('Invalid Android ELF program headers')
+    alignments = []
+    for index in range(count):
+        position = offset + index * size
+        if struct.unpack_from('<I', data, position)[0] != 1:
+            continue
+        file_offset, address = struct.unpack_from('<QQ', data, position + 8)
+        alignment = struct.unpack_from('<Q', data, position + 48)[0]
+        if alignment < 16384 or alignment & (alignment - 1) or file_offset % 16384 != address % 16384:
+            raise ValueError('Android ELF LOAD segment does not support 16 KiB pages')
+        alignments.append(alignment)
+    if not alignments:
+        raise ValueError('Android ELF has no LOAD segments')
+    return {'elfMachine': machine, 'loadSegmentAlignments': alignments}
+
+
+def validate_android_binary(path, source, target, env):
+    inspection = inspect_android_elf(path, target)
+    tools = source / 'third_party/llvm-build/Release+Asserts/bin'
+    symbols = run([tools / 'llvm-nm', '--dynamic', '--defined-only', '--format=posix', path], source, env, capture=True)
+    exported = {line.split()[0].split('@')[0] for line in symbols.splitlines() if line.strip()}
+    if exported != BRIDGE_EXPORTS:
+        raise ValueError('Android bridge dynamic exports differ from the sv8 ABI')
+    inspection['exports'] = sorted(exported)
+    return inspection
 
 
 def source_version(source):
@@ -154,7 +211,7 @@ def build(source, depot, env, target, jobs, pins):
     if bridge_digest(copied_files) != compiled_bridge_digest:
         raise ValueError('Bridge source changed while copying build overlay')
     (overlay / 'BUILD.gn').write_text('import("//source_v8/source_v8.gni")\nsource_v8_library("source_v8") {}\n')
-    out = source / 'out/source_v8'
+    out = source / ('out/source_v8_android_x64' if target == 'android-x64' else 'out/source_v8')
     out.mkdir(parents=True, exist_ok=True)
     args = gn_arguments(target)
     (out / 'args.gn').write_text(args)
@@ -164,6 +221,7 @@ def build(source, depot, env, target, jobs, pins):
     built = out / ('libsource_v8' + suffix)
     if not built.is_file():
         raise ValueError('Shared bridge output missing')
+    inspection = validate_android_binary(built, source, target, env) if target.startswith('android-') else None
     artifact = PACKAGE / '.cache/self-built' / pins['v8']['revision']
     artifact.mkdir(parents=True, exist_ok=True)
     with (artifact / '.publish.lock').open('a') as lock:
@@ -206,7 +264,9 @@ def build(source, depot, env, target, jobs, pins):
         if target == 'macos-arm64':
             entry['minMacOS'] = '13.0'
         else:
-            entry['minApi'] = 26
+            entry['minApi'] = pins['targets'][target]['minApi']
+            entry['abi'] = pins['targets'][target]['abi']
+            entry['binaryInspection'] = inspection
         manifest = {'schemaVersion': 1, 'v8': pins['v8'], 'depotTools': pins['depotTools'],
                     'bridge': {'abi': 1, 'sourceSha256': compiled_bridge_digest}, 'targets': {}}
         if previous is not None:
@@ -222,7 +282,7 @@ def build(source, depot, env, target, jobs, pins):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['bootstrap', 'build'])
-    parser.add_argument('--target', required=True, choices=['macos-arm64', 'android-arm64'])
+    parser.add_argument('--target', required=True, choices=TARGETS)
     parser.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
     args = parser.parse_args()
     if args.jobs < 1:

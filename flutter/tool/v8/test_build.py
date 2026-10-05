@@ -12,6 +12,17 @@ builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
 
+def elf_fixture(machine=183, alignment=16384):
+    binary = bytearray(120)
+    binary[:6] = b'\x7fELF\x02\x01'
+    struct.pack_into('<HH', binary, 16, 3, machine)
+    struct.pack_into('<Q', binary, 32, 64)
+    struct.pack_into('<HH', binary, 54, 56, 1)
+    struct.pack_into('<I', binary, 64, 1)
+    struct.pack_into('<Q', binary, 112, alignment)
+    return bytes(binary)
+
+
 class BuildContractTests(unittest.TestCase):
     def test_pins_are_official_fixed_revisions(self):
         pins = builder.read_pins()
@@ -38,10 +49,72 @@ class BuildContractTests(unittest.TestCase):
     def test_android_refuses_mac_and_linux_arm_host(self):
         for host in [('Darwin', 'arm64'), ('Linux', 'aarch64')]:
             with patch.object(builder.platform, 'system', return_value=host[0]), patch.object(builder.platform, 'machine', return_value=host[1]):
-                with self.assertRaisesRegex(ValueError, 'Linux x86_64'):
-                    builder.require_host('android-arm64')
+                for target in ('android-arm64', 'android-x64'):
+                    with self.assertRaisesRegex(ValueError, 'Linux x86_64'):
+                        builder.require_host(target)
         with patch.object(builder.platform, 'system', return_value='Linux'), patch.object(builder.platform, 'machine', return_value='x86_64'):
             builder.require_host('android-arm64')
+            builder.require_host('android-x64')
+
+    def test_android_abis_share_only_checkout_not_output_or_artifact(self):
+        pins = builder.read_pins()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            (cache / 'depot_tools-linux-x86_64').mkdir()
+            def checkout_run(args, cwd, env=None, capture=False):
+                if capture and args[1:4] == ['remote', 'get-url', 'origin']:
+                    return pins['depotTools']['repository']
+                if capture and args[1:3] == ['rev-parse', 'HEAD']:
+                    return pins['v8']['revision']
+                return None
+            with patch.object(builder, 'require_host'), patch.object(builder, 'initialize_depot'), patch.object(builder, 'run', side_effect=checkout_run):
+                arm, _, _ = builder.bootstrap(cache, 'android-arm64', pins)
+                x64, _, _ = builder.bootstrap(cache, 'android-x64', pins)
+            self.assertEqual(arm, x64)
+            self.assertIn("target_os = ['android']", (arm.parent / '.gclient').read_text())
+            self.assertEqual(arm.parent.name, 'android-arm64')
+
+    def test_android_x64_gn_matches_fixed_toolchain_with_distinct_cpu(self):
+        args = builder.gn_arguments('android-x64')
+        self.assertIn('target_cpu = "x64"', args)
+        self.assertIn('v8_target_cpu = "x64"', args)
+        self.assertIn('target_os = "android"', args)
+        self.assertIn('android_ndk_api_level = 26', args)
+        self.assertNotIn('mac_deployment_target', args)
+        self.assertEqual(builder.read_pins()['targets']['android-x64']['abi'], 'x86_64')
+        with self.assertRaisesRegex(ValueError, 'Unsupported V8 target'):
+            builder.gn_arguments('macos-x64')
+
+    def test_android_actual_elf_machine_and_16k_segments_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'libsource_v8.so'
+            for target, machine in [('android-arm64', 183), ('android-x64', 62)]:
+                binary.write_bytes(elf_fixture(machine))
+                actual = builder.inspect_android_elf(binary, target)
+                self.assertEqual(actual['elfMachine'], machine)
+                self.assertEqual(actual['loadSegmentAlignments'], [16384])
+                with self.assertRaisesRegex(ValueError, 'differs'):
+                    builder.inspect_android_elf(binary, 'android-x64' if machine == 183 else 'android-arm64')
+                binary.write_bytes(elf_fixture(machine, 4096))
+                with self.assertRaisesRegex(ValueError, '16 KiB'):
+                    builder.inspect_android_elf(binary, target)
+            binary.write_bytes(b'not ELF')
+            with self.assertRaisesRegex(ValueError, 'ELF64'):
+                builder.inspect_android_elf(binary, 'android-x64')
+
+    def test_android_export_validation_rejects_missing_or_cpp_symbols(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / 'libsource_v8.so'
+            binary.write_bytes(elf_fixture(62))
+            exports = '\n'.join(name + ' T 0 1' for name in sorted(builder.BRIDGE_EXPORTS))
+            with patch.object(builder, 'run', return_value=exports):
+                actual = builder.validate_android_binary(binary, root, 'android-x64', {})
+                self.assertEqual(actual['exports'], sorted(builder.BRIDGE_EXPORTS))
+            for bad in [exports.replace('sv8_version', 'bad_version'), exports + '\n_ZN2v8Something T 0 1']:
+                with patch.object(builder, 'run', return_value=bad):
+                    with self.assertRaisesRegex(ValueError, 'exports differ'):
+                        builder.validate_android_binary(binary, root, 'android-x64', {})
 
     def test_bridge_digest_uses_sorted_length_prefixed_labels_and_contents(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,7 +176,9 @@ class BuildContractTests(unittest.TestCase):
             (source / 'third_party').mkdir()
             out = source / 'out/source_v8'; out.mkdir(parents=True)
             (out / 'libsource_v8.dylib').write_bytes(b'mac binary')
-            (out / 'libsource_v8.so').write_bytes(b'android binary')
+            (out / 'libsource_v8.so').write_bytes(elf_fixture())
+            x64out = source / 'out/source_v8_android_x64'; x64out.mkdir(parents=True)
+            (x64out / 'libsource_v8.so').write_bytes(elf_fixture(62))
             bridge = root / 'bridge'; bridge.mkdir()
             files = {}
             for name in ['source_v8.cpp', 'source_v8.h', 'android_exports.map', 'source_v8.gni']:
@@ -114,6 +189,8 @@ class BuildContractTests(unittest.TestCase):
                     self.assertIn('--root-target=//source_v8:source_v8', args)
                 if not capture:
                     return None
+                if '--dynamic' in args:
+                    return '\n'.join(name + ' T 0 1' for name in sorted(builder.BRIDGE_EXPORTS))
                 if 'revinfo' in args:
                     return 'dependency@fixedsha'
                 if 'desc' in args:
@@ -128,10 +205,15 @@ class BuildContractTests(unittest.TestCase):
                 linux_notice.write_text('Linux dependency notice')
                 builder.build(source, root / 'depot', {}, 'android-arm64', 1, pins)
                 linux_notice.unlink()
+                builder.build(source, root / 'depot', {}, 'android-x64', 1, pins)
                 builder.build(source, root / 'depot', {}, 'macos-arm64', 1, pins)
                 artifact = package / '.cache/self-built' / pins['v8']['revision']
                 manifest = __import__('json').loads((artifact / 'manifest.json').read_text())
-                self.assertEqual(set(manifest['targets']), {'android-arm64', 'macos-arm64'})
+                self.assertEqual(set(manifest['targets']), {'android-arm64', 'android-x64', 'macos-arm64'})
+                self.assertEqual(manifest['targets']['android-x64']['abi'], 'x86_64')
+                self.assertEqual(manifest['targets']['android-x64']['binaryInspection']['elfMachine'], 62)
+                self.assertEqual(manifest['targets']['android-arm64']['binaryInspection']['elfMachine'], 183)
+                self.assertEqual((out / 'libsource_v8.so').read_bytes(), elf_fixture())
                 self.assertIn('appleLinker', manifest['targets']['macos-arm64']['toolchain'])
                 self.assertIn('xcode', manifest['targets']['macos-arm64']['toolchain'])
                 self.assertIn('macSdk', manifest['targets']['macos-arm64']['toolchain'])
