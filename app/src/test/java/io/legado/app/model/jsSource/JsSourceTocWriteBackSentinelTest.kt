@@ -9,14 +9,14 @@ class JsSourceTocWriteBackSentinelTest {
     @Test
     fun `chapter parsing writes book metadata after empty check`() {
         val source = readProjectFile(
-            "app/src/main/java/io/legado/app/model/jsSource/JsSourceBook.kt"
+            "app/src/main/java/io/legado/app/model/webBook/WebBook.kt"
         )
         val method = suspendMethodBody(source, "getChapterListAwait")
         val steps = listOf(
-            "JsSourceMarshaller.parseChapters",
+            "DartSourceEngine.execute(",
             "if (chapters.isEmpty())",
-            "BookChapterList.updateBookTocInfo(book, chapters)",
-            "\n            chapters",
+            "BookChapterList.updateBookTocInfo(book, ArrayList(chapters))",
+            "\n                chapters",
         )
         val positions = steps.map { step ->
             method.indexOf(step).also { position ->

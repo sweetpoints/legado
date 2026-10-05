@@ -9,7 +9,7 @@ import org.junit.Test
 
 class SourceLoginFormRepositoryTest {
     @Test
-    fun actualV2ScriptRenderAndActionKeepJsonBoundaryAndImmutableRows() = runTest {
+    fun parsedV2ResultsKeepJsonBoundaryAndImmutableRows() = runTest {
         val delegate =
             BookSource(
                 bookSourceUrl = "https://example.com",
@@ -32,7 +32,43 @@ class SourceLoginFormRepositoryTest {
             object : BaseSource by delegate {
                 override fun getLoginInfoMap() = mutableMapOf("phone" to "stored")
             }
-        val repo = AppSourceLoginFormRepository(source, null, null, emptyMap())
+        val caller = Thread.currentThread().threadId()
+        var worker = caller
+        val repo =
+            AppSourceLoginFormRepository(source, null, null, emptyMap()) { _, _, bindings ->
+                worker = Thread.currentThread().threadId()
+                if (bindings.containsKey("__loginAction")) {
+                    val form =
+                        com.google.gson.JsonParser.parseString(bindings["__loginForm"] as String)
+                            .asJsonObject
+                    val phone = form.get("phone")?.asString
+                    if (phone == null) mapOf("error" to mapOf("phone" to "required"))
+                    else
+                        mapOf("state" to mapOf("phone" to phone), "login" to mapOf("token" to "ok"))
+                } else {
+                    val state =
+                        com.google.gson.JsonParser.parseString(bindings["__loginState"] as String)
+                            .asJsonObject
+                    mapOf(
+                        "rows" to
+                            listOf(
+                                mapOf(
+                                    "name" to "Phone",
+                                    "key" to "phone",
+                                    "type" to "text",
+                                    "hint" to "Required",
+                                    "value" to state.get("phone")?.asString,
+                                ),
+                                mapOf(
+                                    "name" to "Send",
+                                    "type" to "button",
+                                    "action" to "send",
+                                    "countdown" to 30,
+                                ),
+                            )
+                    )
+                }
+            }
         val initial = repo.render(emptyMap(), "{}")
         assertEquals("stored", initial.stored["phone"])
         assertEquals("Required", initial.rows.first().hint)
@@ -45,6 +81,7 @@ class SourceLoginFormRepositoryTest {
         val next = repo.render(emptyMap(), command.stateJson!!)
         assertEquals("123", next.rows.first().value)
         assertNull(initial.rows.first().value)
+        assertNotEquals(caller, worker)
     }
 
     @Test

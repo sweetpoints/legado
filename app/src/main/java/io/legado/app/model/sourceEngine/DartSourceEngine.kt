@@ -39,7 +39,7 @@ object DartSourceEngine {
         source: BookSource,
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
-    ): Any? = backend.evaluate(GSON.toJson(source), script, jsonObject(bindings))
+    ): Any? = backend.evaluate(sourceJson(source), script, jsonObject(bindings))
 
     suspend fun evaluateConfiguration(script: String): Any? =
         backend.evaluate(
@@ -82,6 +82,10 @@ object DartSourceEngine {
         operation: String,
         input: Map<String, Any?>,
     ): List<Map<String, Any?>> {
+        return backend.execute(operation, sourceJson(source), input)
+    }
+
+    internal fun sourceJson(source: BookSource): String {
         val candidate =
             source.bookSourceComment
                 .orEmpty()
@@ -89,7 +93,7 @@ object DartSourceEngine {
                 .map { it.trim() }
                 .firstOrNull { it.startsWith("@source:v1 ") }
                 ?.removePrefix("@source:v1 ")
-        return backend.execute(operation, candidate ?: GSON.toJson(source), input)
+        return candidate ?: GSON.toJson(source)
     }
 
     fun jsonObject(value: Any): Map<String, Any?> =

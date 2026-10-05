@@ -4,24 +4,43 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssSource
+import io.legado.app.exception.BookSourceLegacyEngineRemovedException
 import io.legado.app.data.entities.rule.ReviewRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import kotlin.coroutines.EmptyCoroutineContext
 
 class ReviewRuleParserFallbackTest {
 
+    // These fixtures cover the retained shared/RSS rule parser, not book-source execution.
+    @Test
+    fun bookSourceCannotEnterTheSharedLegacyParser() {
+        assertThrows(BookSourceLegacyEngineRemovedException::class.java) {
+            ReviewRuleParser.parseSummary(
+                body = "{\"items\": []}",
+                rule = ReviewRule(summaryListRule = "$.items", summaryParagraphIndexRule = "$.index"),
+                source = BookSource(bookSourceUrl = "https://fixture.invalid"),
+                book = Book(),
+                chapter = BookChapter(),
+                baseUrl = "https://fixture.invalid",
+                context = EmptyCoroutineContext,
+            )
+        }
+    }
+
     @Test
     fun `missing optional JSONPath fields stay empty without error logs`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -81,13 +100,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `rule failures keep empty fallback and are recorded`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -170,13 +189,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `summary falls back to list order and ignores unusable counts`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -219,13 +238,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `missing required count JSONPath is recorded once`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -257,13 +276,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `missing required detail and reply content JSONPaths are recorded once each`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -310,13 +329,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `summary accepts a JSON array string returned by JavaScript`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
@@ -343,13 +362,13 @@ class ReviewRuleParserFallbackTest {
 
     @Test
     fun `summary keeps every regex list match`() {
-        val source = BookSource(
-            bookSourceUrl = "https://example.com",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "https://example.com",
+            sourceName = "Shared parser fixture",
         )
         val book = Book(
             bookUrl = "https://example.com/book",
-            origin = source.bookSourceUrl,
+            origin = source.sourceUrl,
         )
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",

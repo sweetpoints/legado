@@ -670,9 +670,7 @@ JavaScript 单文件书源使用一个完整的 `.js` 文件描述书源。它�
 还必须声明 `getChapters`、`getContent`；文件源（`bookSourceType: 3`）必须声明
 `getBookInfo` 并返回 `downloadUrls`，可以省略目录与正文函数。`explore` 和 `login` 按需声明。
 
-保存或导入时，应用会先在不含 `java`、`source`、`sourceApi` 等运行时绑定的安全作用域中执行脚本，
-提取 `config` 并检查函数。网络请求、数据库访问和其他运行时代码必须写在函数内部，
-不要在顶层直接调用。
+保存或导入时，应用在临时 V8 lexical scope 中执行配置提取，捕获 `config` 或旧版配置对象并检查函数；每次提取关闭独立运行时，不保存脚本会话。网络及其他运行时代码必须写在函数内部，不要在顶层调用。V8 不提供 `org`/`Packages` 或任意 Java 类，顶层类导入会立即失败。上文旧接口清单属于历史能力参考，不能视为当前 V8 的完整兼容保证。
 
 <!-- js-source-example:start -->
 ```js
@@ -692,35 +690,35 @@ var config = {
     lastUpdateTime: 0
 };
 
-function login() {
-    var loginInfo = JSON.parse(source.getLoginInfo() || "{}");
-    // 发起登录请求，失败时可 throw "错误信息"。
+async function login() {
+    // 配对函数保留；source/sourceApi 是 JSON snapshot，不能调用旧实体登录方法。
+    throw "engine_migration_required: 请迁移登录信息与请求头处理";
 }
 
-function search(key, page) {
-    var html = java.ajax(config.bookSourceUrl + "/search?q=" + encodeURIComponent(key) + "&p=" + page);
+async function search(key, page) {
+    var html = await java.ajax(config.bookSourceUrl + "/search?q=" + encodeURIComponent(key) + "&p=" + page);
     return [];
 }
 
-function explore(url, page) {
-    var html = java.ajax(url + "?page=" + page);
+async function explore(url, page) {
+    var html = await java.ajax(url + "?page=" + page);
     return [];
 }
 
-function getBookInfo(book) {
+async function getBookInfo(book) {
     return {
         intro: "",
         tocUrl: book.bookUrl
     };
 }
 
-function getChapters(book) {
+async function getChapters(book) {
     return [];
 }
 
-function getContent(chapter, book, nextChapterUrl) {
-    var html = java.ajax(chapter.url);
-    return java.htmlFormat(String(html || ""), chapter.url);
+async function getContent(chapter, book, nextChapterUrl) {
+    var html = await java.ajax(chapter.url);
+    return java.getString("article@text", html);
 }
 ```
 <!-- js-source-example:end -->
@@ -732,13 +730,10 @@ function getContent(chapter, book, nextChapterUrl) {
 ### config、source 与 sourceApi
 
 - `config` 是脚本声明的普通配置对象，例如读取 `config.bookSourceUrl`。
-- `source` 是数据库中的运行时书源对象，用于读取登录信息、登录请求头和持久化书源变量。
-- `sourceApi` 是 `source` 的兼容别名，供旧版脚本继续使用。
+- `source` 与 `sourceApi` 是书源 JSON snapshot，不是 Room/Java 实体，不提供 getLoginInfo、putLoginHeader、put/get 等对象方法。
+- 此处 mainJs 的 `source` 是数据绑定，不能混同新版规则脚本中用于 Promise API 的 `source` 函数命名空间。
 
-新脚本不要再声明同名 `source` 配置对象，否则会覆盖运行时 `source` 绑定。旧版脚本的
-`var source = {...}` 仍可导入、保存和运行，并可继续通过 `sourceApi.getLoginInfo()` 等方法
-访问书源实体。脚本同时声明完整的 `config` 与旧版 `source` 配置时，导入以 `config` 为准；
-无关或未定义的 `config` 不影响旧版 `source` 导入。
+旧版脚本的 `var source = {...}` 配置仍可提取，导入保留 mainJs；`sourceApi` 不恢复 Java 对象方法。脚本同时声明完整 `config` 与旧版配置时以 `config` 为准；无关或未定义的 `config` 不影响旧版 `source` 导入。JSON DTO 的属性可以读取，调用旧实体方法须迁移。
 
 ### config 常用字段
 
@@ -753,7 +748,7 @@ function getContent(chapter, book, nextChapterUrl) {
 |`header`|请求头 JSON 字符串|
 |`enabledCookieJar`|是否自动保存请求 Cookie|
 |`concurrentRate`|并发限制|
-|`jsLib`|公共 JavaScript 库文本|
+|`jsLib`|历史公共库字段；当前运行需显式迁移，不自动加载任意库|
 |`exploreUrl`|发现分类，支持 JSON 数组，或“名称::url”文本（换行或 `&&` 分隔）；与 `explore` 函数配对|
 |`loginUrl`|WebView 登录地址|
 |`loginUi`|旧版表单登录配置，与 `login` 函数配对；动态登录界面不要填写此字段|
@@ -771,7 +766,7 @@ function getContent(chapter, book, nextChapterUrl) {
 |`getBookInfo(book)`|文件源必选，其他类型可选|详情字段对象|
 |`getChapters(book)`|非文件源必选|非空章节数组|
 |`getContent(chapter, book, nextChapterUrl)`|非文件源必选|非空正文字符串|
-|`getContentBatch(chapters, book)`|可选，与 `config.maxBatchSize` 成对声明|返回值忽略，正文用 `java.cacheContent` 回存|
+|`getContentBatch(chapters, book)`|历史可选声明，与 `config.maxBatchSize` 配对校验|旧批量缓存协议尚需迁移；应用可调度单章 getContent|
 |`login()`|`loginUi` 非空时必选|返回值不限，失败时可 `throw`|
 |`loginUi(state)`|动态登录界面，与 `loginAction` 成对声明|`{rows:[...]}`|
 |`loginAction(action, state, form)`|动态登录界面，与 `loginUi` 成对声明|命令对象或空值|
@@ -804,18 +799,19 @@ function loginUi(state) {
     ] };
 }
 
-function loginAction(action, state, form) {
+async function loginAction(action, state, form) {
     if (action === "sendCode") {
         if (!form.phone) return { error: { phone: "请输入手机号" } };
-        java.ajax(config.bookSourceUrl + "/sms?phone=" + encodeURIComponent(form.phone));
+        await java.ajax(config.bookSourceUrl + "/sms?phone=" + encodeURIComponent(form.phone));
         return { state: { step: "code", phone: form.phone } };
     }
     if (action === "verify") {
-        var result = JSON.parse(java.ajax(
+        var result = JSON.parse(await java.ajax(
             config.bookSourceUrl + "/verify?code=" + encodeURIComponent(form.code)
         ));
         if (!result.ok) return { error: { code: result.message || "验证码错误" } };
-        source.putLoginHeader(JSON.stringify({ Authorization: "Bearer " + result.token }));
+        // 命令可保存表单登录信息；source.putLoginHeader 不是 JSON snapshot 方法。
+        // 若站点还要求持久认证头，必须先完成对应平台能力迁移。
         return { login: { phone: state.phone }, close: true };
     }
 }
@@ -840,7 +836,7 @@ function loginAction(action, state, form) {
 |`login` 对象|加密保存登录信息，重新打开时按 `key` 回填|
 |`close: true`|关闭登录界面|
 
-返回空值表示动作只执行脚本副作用。认证请求头仍使用 `source.putLoginHeader(json)` 保存；工具栏“清除登录信息”会同时删除登录信息和登录头。
+返回空值表示没有界面命令。login/state/error/close 的命令形状保留，但不能用旧 source 实体方法保存认证头；相关能力需显式迁移，不把界面命令接受等同完整旧登录宿主兼容。
 
 #### search 与 explore
 
@@ -865,7 +861,7 @@ function loginAction(action, state, form) {
 `variable` 支持普通对象或 JSON 字符串，内容应为字符串键值：
 
 ```js
-function getBookInfo(book) {
+async function getBookInfo(book) {
     return {
         tocUrl: book.bookUrl + "/chapters",
         variable: { token: "abc", categoryId: "12" }
@@ -887,53 +883,18 @@ URL，打开时作为空正文的卷名分隔页显示，不调用 `getContent`�
 当前正文函数包含三个参数：
 
 ```js
-function getContent(chapter, book, nextChapterUrl) {
-    var html = java.ajax(chapter.url);
-    return java.htmlFormat(String(html || ""), chapter.url);
+async function getContent(chapter, book, nextChapterUrl) {
+    var html = await java.ajax(chapter.url);
+    return java.getString("article@text", html);
 }
 ```
 
 `nextChapterUrl` 是下一章地址，末章可能为 `null`。返回值必须是非空字符串。
-应用不会自动把任意网页 HTML 转换成正文，需要时应由脚本提取正文节点，或显式调用
-`java.htmlFormat`；第二个参数用于按当前页面地址补全正文中的相对图片链接。
+应用不会自动把任意网页 HTML 转换成正文；示例使用白名单 java.getString(rule,html)提取文本，选择器应按站点修改。java.htmlFormat、任意 Java JSoup 类或旧图片重定向宿主不属于已保证的接口，所需图文格式需显式迁移。
 
 #### getContentBatch
 
-可选的批量正文函数,和 `config.maxBatchSize` 成对声明:只写其中一个会在导入/保存时报错。
-`maxBatchSize` 是每批最多的章节数,必须是大于 1 的整数,上限 50;不启用批量时删除该字段。
-
-```js
-const config = {
-    bookSourceName: "示例源",
-    bookSourceUrl: "https://example.com",
-    maxBatchSize: 10
-};
-
-function getContentBatch(chapters, book) {
-    // 站点支持一次取多章时,整批只发一次请求
-    var urls = chapters.map(function (c) { return c.url; });
-    var list = JSON.parse(java.post(
-        config.bookSourceUrl + "/api/contents",
-        JSON.stringify({ urls: urls }),
-        { "Content-Type": "application/json" }
-    ).body());
-    list.forEach(function (item, i) {
-        // 优先传章节对象,重复 url 的目录只有对象能精确对应
-        java.cacheContent(chapters[i], item.content);
-    });
-}
-```
-
-`chapters` 是本批需要缓存的章节数组,每项含 `url`、`title`、`index` 等字段。
-函数返回值会被忽略,正文一律通过 `java.cacheContent(chapter, content)` 回存,
-每回存一章即刻写入缓存,不必等整批结束。第一个参数也接受 url 字符串,但仅限该 url
-在本批内唯一;重复 url 字符串会报错,必须传章节对象才能保证不写错章节。
-
-回存的正文会自动套用书源的正文替换规则(`replaceRegex`)。没有回存的章节会自动
-退回 `getContent` 单章下载,所以部分章节失败不影响同批其它章节,也不需要在脚本里自己重试。
-
-手动缓存和阅读时的自动预下载都会使用批量。每批算一次书源并发率,批内脚本自己
-发出的请求仍各自受并发率限制。
+历史可选批量函数与 config.maxBatchSize 仍按配对、整数范围等配置约束校验，但 java.cacheContent 及旧批量回存/replaceRegex 协议不属于当前白名单。应用可将待缓存章节调度到 getContent 单章路径；不要生成依赖未迁移批量宿主的脚本或宣称旧批量执行等价。
 
 ### 登录与发现
 - 只设置 `loginUrl` 时使用 WebView 登录，不要求实现 `login`。
@@ -942,9 +903,7 @@ function getContentBatch(chapters, book) {
 - `loginUi` 和 `exploreUrl` 的空数组会被视为未配置，不要求对应函数。
 
 `loginUi` 可直接写数组，也可写 JSON 字符串；数组中的每项必须具有非空 `name`。
-登录函数内可通过 `source.getLoginInfo()` 读取用户填写的数据，并使用
-`source.putLoginHeader(...)` 保存后续请求需要的登录头。旧版脚本可继续使用
-`sourceApi.getLoginInfo()` 和 `sourceApi.putLoginHeader(...)`。
+登录入口及配对校验保留。函数中的 source/sourceApi 是JSON snapshot，旧 getLoginInfo/putLoginHeader等方法调用须迁移；动态表单 action 可使用显式state/form参数，不能借sourceApi恢复Java实体。
 
 ### 段评
 
@@ -953,8 +912,8 @@ function getContentBatch(chapters, book) {
 章节加载后先调用统计函数，点击正文段评图标时再调用详情函数。
 
 ```js
-function getReviewSummary(chapter, book) {
-    var json = JSON.parse(java.ajax(config.bookSourceUrl + "/review/summary?url=" + chapter.url));
+async function getReviewSummary(chapter, book) {
+    var json = JSON.parse(await java.ajax(config.bookSourceUrl + "/review/summary?url=" + chapter.url));
     return json.map(function (item) {
         return {
             paraIndex: item.paraIndex,
@@ -964,8 +923,8 @@ function getReviewSummary(chapter, book) {
     });
 }
 
-function getReviewDetail(chapter, book, paraIndex, paraData, page) {
-    var json = JSON.parse(java.ajax(
+async function getReviewDetail(chapter, book, paraIndex, paraData, page) {
+    var json = JSON.parse(await java.ajax(
         config.bookSourceUrl + "/review/detail?para=" + paraIndex + "&data=" + paraData + "&page=" + page
     ));
     return {
@@ -985,8 +944,8 @@ function getReviewDetail(chapter, book, paraIndex, paraData, page) {
     };
 }
 
-function getReviewReplies(chapter, book, paraIndex, paraData, reviewId, page) {
-    var json = JSON.parse(java.ajax(
+async function getReviewReplies(chapter, book, paraIndex, paraData, reviewId, page) {
+    var json = JSON.parse(await java.ajax(
         config.bookSourceUrl + "/review/replies?id=" + reviewId + "&page=" + page
     ));
     return {
@@ -1012,55 +971,26 @@ function getReviewReplies(chapter, book, paraIndex, paraData, reviewId, page) {
 
 ### 运行环境与并发
 
-函数运行时可使用 `java`、`source`、`sourceApi`、`baseUrl`、`cookie`、`cache` 和当前函数参数。
-每次调用都会建立新的脚本作用域并重新执行主脚本，编译缓存不会保留顶层变量值。
+函数由固定 V8 执行。mainJs 的 source/sourceApi/book/chapter 是 JSON DTO，baseUrl为字符串；java仅提供已列明的同步兼容白名单，不提供任意Java类、Room方法或隐式cookie/cache对象。每次调用创建独立脚本context，没有跨阶段顶层变量内存。
 
-#### Java String 包装边界
+#### 原生 JS String
 
-`key`、`baseUrl` 等直接绑定的字符串是 JS 原生字符串。从 Java 对象成员或 Java 方法取得的
-字符串，例如 `book.bookUrl`、`chapter.title`、`chapter.url`、Jsoup 的 `.text()`/`.attr()`
-以及 `java.ajax()` 返回值，则可能保留为 Java `String` 包装对象。两者显示和拼接结果相同，
-但类型、真假值、严格相等和同名方法分派不同。
-
-以下示例假设 `chapter.title` 为 `"第1章"`、`chapter.url` 为 `"https://a/b/"`、
-`chapter.tag` 为 Java 空字符串：
+book.bookUrl、chapter.title/url、java.ajax等返回文本均为原生 JS String，没有 Java String wrapper。假设title为“第1章”、url为“https://a/b/”、tag为空字符串：
 
 |表达式|当前行为|
 |---|---|
-|`typeof chapter.title`|`"object"`|
-|`typeof chapter.title.length`|`"function"`；Java 长度应调用 `chapter.title.length()`|
-|`chapter.tag ? "T" : "F"`|`"T"`；包装后的 Java 空字符串仍是真值|
-|`chapter.title === "第1章"`|`false`；使用宽松相等 `==` 才按文本相等|
-|`chapter.url.replace(/b/, "X")`|可能因 Java `replace` 重载无法唯一选择而抛错|
-|`chapter.url.split("/").length`|`4`；调用 Java `split(regex)`，会丢弃尾部空串|
-|`chapter.url.split("/", -1).length`|`5`；Java 双参数重载可保留尾部空串|
+|`typeof chapter.title`|`"string"`|
+|`chapter.title.length`|`3`；length为属性，不调用length()|
+|`chapter.tag ? "T" : "F"`|`"F"`|
+|`chapter.title === "第1章"`|`true`|
+|`chapter.url.replace(/b/, "X")`|`https://a/X/`，原生正则语义|
+|`chapter.url.split("/").length`|`5`，保留尾部空项|
 
-需要使用 JS 的正则 `replace`、`split`、`.length` 属性、空串真假值或严格相等时，先用
-`String(...)` 归一化：
+旧 length() 或 Java split(regex,limit) 调用须改为JS语言方法。不要假定字符串显示相同就保留Java重载或包装对象真值。
 
-```js
-var url = String(chapter.url || "");
-var title = String(chapter.title || "");
-var tag = String(chapter.tag || "");
+不要依赖跨请求可变全局状态或固定阶段顺序。白名单内的变量能力使用java.get/put；source.put/get、source.putVariable/getVariable、sourceApi方法与旧cache/cookie对象不因此获得支持。jsLib、CryptoJS和任意Java互操作需明确迁移；已有摘要需求可使用白名单java.md5Encode或java.digestHex，不能笼统宣称java.*全兼容。
 
-url.replace(/b/, "X");       // https://a/X/
-url.split("/").length;       // 5，使用 JS split 语义
-title.length;                 // 3，使用 JS length 属性
-tag ? "T" : "F";             // F
-title === "第1章";           // true
-```
-
-若明确需要 Java 语义，可以直接调用 `length()`、`indexOf(...)`、`split(regex, limit)` 等
-Java 方法。不要依赖某个方法名恰好回落到 `String.prototype`；跨 Java/JS 边界后先归一化最稳妥。
-
-- 不要依赖顶层可变变量在函数或请求之间传递状态。
-- 不要假设搜索、详情、目录和正文一定按固定顺序执行。
-- 同一个书源可能同时执行多个请求。
-- 持久状态使用 `cache.put/get`、`source.put/get` 或
-  `source.putVariable/getVariable`；旧版脚本中的 `sourceApi` 调用保持兼容。
-
-脚本由 Rhino 执行。为保持兼容，优先使用模板中的 `function` 和 `var` 写法，
-不要依赖 `async/await`、Promise、`import`、`export` 等浏览器或模块运行时能力。
+java.ajax等HTTP调用返回Promise，必须await后再把正文交给JSON.parse或java.getString。入口可声明async function，位置参数保持不变；V8支持语言级async/await和Promise；旧位置参数入口不等于浏览器环境，不自动提供DOM、fetch或模块import/export加载器。新版规则API的source命名空间与mainJs数据snapshot分别管理，不能混用。
 
 ### 导入、导出与分享
 

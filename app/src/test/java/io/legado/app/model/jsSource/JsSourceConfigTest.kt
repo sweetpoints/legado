@@ -258,4 +258,15 @@ class JsSourceConfigTest {
 
         assertEquals(expected, JsSourceConfig.stampLastUpdateTime(script, 123456))
     }
+    @Test fun `modern async declarations use static fallback without executing code`() {
+        assertTrue(JsSourceConfig.declaresReviewFunctions("async function getReviewSummary(){throw 'do not run';} const getReviewDetail=async()=>[];"))
+        assertTrue(JsSourceConfig.declaresReviewRepliesFunction("const getReviewReplies=async()=>[];"))
+        assertFalse(JsSourceConfig.declaresReviewFunctions("async function outer(){function getReviewSummary(){} function getReviewDetail(){}}"))
+        assertFalse(JsSourceConfig.declaresReviewFunctions("async function getReviewSummary(){} async function getReviewDetail(){};getReviewSummary=3;"))
+    }
+    @Test fun `async source update stamp survives legacy parser rejection`() {
+        val script="var config={lastUpdateTime:Date.now()}; async function search(){}"
+        assertEquals("var config={lastUpdateTime:123456}; async function search(){}",JsSourceConfig.stampLastUpdateTime(script,123456))
+    }
+
 }

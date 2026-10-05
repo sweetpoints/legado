@@ -4,7 +4,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.BookSourceLegacyEngineRemovedException
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.model.jsSource.JsSourceEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -32,9 +31,6 @@ class BookSourceLegacyEnginePolicyTest {
         }
         assertThrows(BookSourceLegacyEngineRemovedException::class.java) {
             AnalyzeUrl("{{throw new Error('must never execute')}}", source = source)
-        }
-        assertThrows(BookSourceLegacyEngineRemovedException::class.java) {
-            JsSourceEngine(source)
         }
     }
 }

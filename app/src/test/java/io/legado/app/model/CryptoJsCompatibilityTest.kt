@@ -8,8 +8,6 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.help.source.clearSharedGlobalState
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.model.jsSource.JsSourceConfig
-import io.legado.app.model.jsSource.JsSourceEngine
 import org.htmlunit.corejs.javascript.TopLevel
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -127,17 +125,12 @@ class CryptoJsCompatibilityTest {
     }
 
     @Test
-    fun `blank js libraries fall back at all four entry points`() {
+    fun `blank js libraries fall back at retained RSS entry points`() {
         val expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        val source = BookSource(
-            bookSourceUrl = "https://127.0.0.1",
-            bookSourceName = "Crypto source",
+        val source = RssSource(
+            sourceUrl = "https://127.0.0.1",
+            sourceName = "Crypto source",
             jsLib = " ",
-            mainJs = """
-                function digest() {
-                    return CryptoJS.SHA256('abc').toString();
-                }
-            """.trimIndent(),
         )
 
         assertEquals(
@@ -158,17 +151,13 @@ class CryptoJsCompatibilityTest {
             expected,
             source.evalJS("CryptoJS.SHA256('abc').toString()"),
         )
-        assertEquals(
-            expected,
-            JsSourceEngine(source).callFunction("digest", emptyList()),
-        )
     }
 
     @Test
-    fun `js library receives runtime bindings through explicit top level this`() {
-        val source = BookSource(
-            bookSourceUrl = "https://127.0.0.1/runtime-this",
-            bookSourceName = "Runtime this compatibility",
+    fun `RSS js library receives runtime bindings through explicit top level this`() {
+        val source = RssSource(
+            sourceUrl = "https://127.0.0.1/runtime-this",
+            sourceName = "Runtime this compatibility",
             jsLib = """
                 function requestApiUrl(path, data, runtime) {
                     try {
@@ -197,22 +186,16 @@ class CryptoJsCompatibilityTest {
     }
 
     @Test
-    fun `custom js library preserves explicit globals across entry points`() {
+    fun `RSS custom js library preserves explicit globals across retained entry points`() {
         val jsLib = "var pixivLibraryMarker = 'ready';"
-        val source = BookSource(
-            bookSourceUrl = "https://127.0.0.1/pixiv",
-            bookSourceName = "Pixiv compatibility",
+        val source = RssSource(
+            sourceUrl = "https://127.0.0.1/pixiv",
+            sourceName = "Pixiv compatibility",
             jsLib = jsLib,
-            mainJs = """
-                function readEnvironment() {
-                    return globalThis.environment.IS_LEGADO &&
-                        globalThis.settings.language === 'zh-CN';
-                }
-            """.trimIndent(),
         )
-        val otherSource = BookSource(
-            bookSourceUrl = "https://127.0.0.1/other",
-            bookSourceName = "Other source",
+        val otherSource = RssSource(
+            sourceUrl = "https://127.0.0.1/other",
+            sourceName = "Other source",
             jsLib = jsLib,
         )
 
@@ -259,7 +242,7 @@ class CryptoJsCompatibilityTest {
                 """.trimIndent(),
             ),
         )
-        assertEquals("true", JsSourceEngine(source).callFunction("readEnvironment", emptyList()))
+        assertEquals(true, source.evalJS("globalThis.environment.IS_LEGADO && globalThis.settings.language === 'zh-CN'"))
         assertEquals(
             "undefined",
             AnalyzeRule(source = otherSource).evalJS("typeof globalThis.environment"),
@@ -317,7 +300,7 @@ class CryptoJsCompatibilityTest {
         source.evalJS("globalThis.__defineGetter__(0, function() { return 10; });")
         assertEquals(10.0, AnalyzeRule(source = source).evalJS("globalThis[0]"))
 
-        val frozenSource = otherSource.copy(bookSourceUrl = "https://127.0.0.1/frozen")
+        val frozenSource = otherSource.copy(sourceUrl = "https://127.0.0.1/frozen")
         assertEquals(
             "undefined",
             frozenSource.evalJS(
@@ -397,31 +380,31 @@ class CryptoJsCompatibilityTest {
     }
 
     @Test
-    fun `production state cleanup is source specific and refresh aware`() {
+    fun `RSS state cleanup is source specific and refresh aware`() {
         val jsLib = "var cleanupLibraryMarker = true;"
         val sourceKey = "https://127.0.0.1/shared-key"
-        val bookSource = BookSource(
-            bookSourceUrl = sourceKey,
-            bookSourceName = "Book cleanup",
+        val firstSource = RssSource(
+            sourceUrl = sourceKey,
+            sourceName = "First RSS cleanup",
             jsLib = jsLib,
         )
         val rssSource = RssSource(
-            sourceUrl = sourceKey,
+            sourceUrl = "$sourceKey/other",
             sourceName = "RSS cleanup",
             jsLib = jsLib,
         )
 
-        bookSource.evalJS("globalThis.sourceKind = 'book';")
+        firstSource.evalJS("globalThis.sourceKind = 'book';")
         rssSource.evalJS("globalThis.sourceKind = 'rss';")
-        bookSource.clearSharedGlobalState()
+        firstSource.clearSharedGlobalState()
 
-        assertEquals("undefined", bookSource.evalJS("typeof globalThis.sourceKind"))
+        assertEquals("undefined", firstSource.evalJS("typeof globalThis.sourceKind"))
         assertEquals("rss", rssSource.evalJS("globalThis.sourceKind"))
 
-        bookSource.evalJS("globalThis.sourceKind = 'book-again';")
+        firstSource.evalJS("globalThis.sourceKind = 'book-again';")
         SharedJsScope.remove(jsLib)
 
-        assertEquals("undefined", bookSource.evalJS("typeof globalThis.sourceKind"))
+        assertEquals("undefined", firstSource.evalJS("typeof globalThis.sourceKind"))
         assertEquals("undefined", rssSource.evalJS("typeof globalThis.sourceKind"))
     }
 
@@ -468,30 +451,6 @@ class CryptoJsCompatibilityTest {
             executor.shutdownNow()
             assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS))
         }
-    }
-
-    @Test
-    fun `js source config exposes the requested top level runtime`() {
-        val source = JsSourceConfig.extract(
-            """
-                var config = {
-                    bookSourceUrl: 'https://127.0.0.1',
-                    bookSourceName: CryptoJS.MD5('abc').toString(),
-                    bookSourceComment: [
-                        typeof Packages,
-                        typeof java,
-                        typeof getClass,
-                        typeof __legadoSecureRandomInt
-                    ].join('|')
-                };
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-                function getContent(chapter) { return ''; }
-            """.trimIndent(),
-        )
-
-        assertEquals("900150983cd24fb0d6963f7d28e17f72", source.bookSourceName)
-        assertEquals("object|object|function|undefined", source.bookSourceComment)
     }
 
     @Test

@@ -1,6 +1,8 @@
 package io.legado.app.model.analyzeRule
 
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssSource
+import io.legado.app.exception.BookSourceLegacyEngineRemovedException
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.NetworkUtils
@@ -21,9 +23,20 @@ import java.util.concurrent.TimeUnit
 class AnalyzeUrlNetworkOptionsTest {
 
     @Test
-    fun cookieDomainFollowsResolvedRequestUrl() {
+    fun bookSourceUrlCannotEnterTheSharedLegacyNetworkEngine() {
+        assertThrows(BookSourceLegacyEngineRemovedException::class.java) {
+            AnalyzeUrl(
+                "https://fixture.invalid/request",
+                source = BookSource(bookSourceUrl = "https://fixture.invalid"),
+                headerMapF = emptyMap(),
+            )
+        }
+    }
+
+    @Test
+    fun rssCookieDomainFollowsResolvedRequestUrl() {
         val requestUrl = "https://images.assets.net/cover.jpg"
-        val source = BookSource(bookSourceUrl = "https://source.example.com")
+        val source = RssSource(sourceUrl = "https://source.example.com")
         val analyzedUrl = AnalyzeUrl(
             requestUrl,
             source = source,
@@ -32,7 +45,7 @@ class AnalyzeUrlNetworkOptionsTest {
         val domain = cookieDomain(analyzedUrl)
 
         assertEquals(NetworkUtils.getSubDomain(requestUrl), domain)
-        assertFalse(domain == NetworkUtils.getSubDomain(source.bookSourceUrl))
+        assertFalse(domain == NetworkUtils.getSubDomain(source.sourceUrl))
     }
 
     @Test

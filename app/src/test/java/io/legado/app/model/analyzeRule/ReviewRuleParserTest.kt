@@ -3,6 +3,8 @@ package io.legado.app.model.analyzeRule
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssSource
+import io.legado.app.exception.BookSourceLegacyEngineRemovedException
 import io.legado.app.data.entities.rule.ReviewRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,11 +16,27 @@ import kotlin.coroutines.EmptyCoroutineContext
 
 class ReviewRuleParserTest {
 
-    private val source = BookSource(
-        bookSourceUrl = "https://example.com",
-        bookSourceName = "Review source",
+    // These fixtures cover the retained shared/RSS rule parser, not book-source execution.
+    @Test
+    fun bookSourceCannotEnterTheSharedLegacyParser() {
+        assertThrows(BookSourceLegacyEngineRemovedException::class.java) {
+            ReviewRuleParser.parseSummary(
+                body = "{\"items\": []}",
+                rule = ReviewRule(summaryListRule = "$.items", summaryParagraphIndexRule = "$.index"),
+                source = BookSource(bookSourceUrl = "https://fixture.invalid"),
+                book = Book(),
+                chapter = BookChapter(),
+                baseUrl = "https://fixture.invalid",
+                context = EmptyCoroutineContext,
+            )
+        }
+    }
+
+    private val source = RssSource(
+        sourceUrl = "https://example.com",
+        sourceName = "Shared parser fixture",
     )
-    private val book = Book(bookUrl = "https://example.com/book", origin = source.bookSourceUrl)
+    private val book = Book(bookUrl = "https://example.com/book", origin = source.sourceUrl)
     private val chapter = BookChapter(
         url = "https://example.com/chapter/1",
         bookUrl = book.bookUrl,
@@ -275,12 +293,12 @@ class ReviewRuleParserTest {
 
     @Test
     fun `detail JavaScript keeps grouped roots and replies when optional badges are missing`() {
-        val source = BookSource(
-            bookSourceUrl = "review-js://grouped-detail",
-            bookSourceName = "Review source",
+        val source = RssSource(
+            sourceUrl = "review-js://grouped-detail",
+            sourceName = "Shared parser fixture",
             jsLib = "function formatEmoji(value) { return value; }",
         )
-        val book = Book(bookUrl = "https://example.com/book", origin = source.bookSourceUrl)
+        val book = Book(bookUrl = "https://example.com/book", origin = source.sourceUrl)
         val chapter = BookChapter(
             url = "https://example.com/chapter/1",
             bookUrl = book.bookUrl,

@@ -7,15 +7,18 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.exception.ContentEmptyException
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
+import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
+import io.legado.app.model.jsSource.JsSourceMarshaller
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.StringUtils.wordCountFormat
@@ -52,6 +55,7 @@ object WebBook {
     }
 
     private fun canRenameDartBook(source: BookSource): Boolean {
+        if (source.isJsSource()) return true
         if (!usesLegacyDartFields(source)) return true
         val definition =
             source.bookSourceComment
@@ -215,7 +219,6 @@ object WebBook {
                 if (allowRename || book.author.isEmpty()) book.author = it
             }
         (fields["tocUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.tocUrl = it }
-        if (book.tocUrl.isBlank()) book.tocUrl = book.bookUrl
         (fields["coverUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.coverUrl = it }
         (fields["intro"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.intro = it }
         (fields["kind"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.kind = it }
@@ -223,6 +226,19 @@ object WebBook {
         (fields["latestChapterTitle"] as? String)
             ?.takeIf { it.isNotEmpty() }
             ?.let { book.latestChapterTitle = it }
+        JsSourceMarshaller.mergeBookInfo(
+            book,
+            GSON.toJson(fields.filterKeys { it in setOf("type", "downloadUrls", "variable") }),
+            bookSource,
+            canReName = false,
+        )
+        if (bookSource.bookSourceType == io.legado.app.constant.BookSourceType.file) {
+            book.addType(bookSource.getBookType())
+        }
+        if (!book.isWebFile && book.tocUrl.isBlank()) book.tocUrl = book.bookUrl
+        if (book.isWebFile && book.downloadUrls.isNullOrEmpty()) {
+            throw NoStackTraceException("下载链接为空")
+        }
         return book
     }
 
@@ -478,6 +494,7 @@ object WebBook {
         val content =
             row["content"] as? String
                 ?: throw IllegalStateException("Dart content stage did not return content")
+        if (!bookChapter.isVolume && content.isBlank()) throw ContentEmptyException("内容为空")
         if (saveToken != null) {
             val saved =
                 BookHelp.saveContent(

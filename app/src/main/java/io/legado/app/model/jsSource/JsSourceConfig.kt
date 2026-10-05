@@ -76,22 +76,17 @@ object JsSourceConfig {
     }
 
     private fun declaresTopLevelFunctions(text: String, names: Set<String>): Boolean {
+        val root = runCatching { Parser().parse(text, null, 1) }.getOrNull()
+            ?: return JsSourceDeclarations.declares(text, names)
         val declared = hashSetOf<String>()
-        val root = runCatching { Parser().parse(text, null, 1) }.getOrNull() ?: return false
         root.visit { node ->
             when (node) {
-                is FunctionNode ->
-                    if (node.enclosingFunction == null && node.name in names) {
-                        declared.add(node.name)
-                    }
-
-                is VariableInitializer ->
-                    if (node.enclosingFunction == null && node.initializer is FunctionNode) {
-                        (node.target as? Name)
-                            ?.identifier
-                            ?.takeIf { it in names }
-                            ?.let(declared::add)
-                    }
+                is FunctionNode -> if (node.enclosingFunction == null && node.name in names) {
+                    declared.add(node.name)
+                }
+                is VariableInitializer -> if (node.enclosingFunction == null && node.initializer is FunctionNode) {
+                    (node.target as? Name)?.identifier?.takeIf { it in names }?.let(declared::add)
+                }
             }
             declared.size < names.size
         }
@@ -331,8 +326,7 @@ object JsSourceConfig {
                 }
             }
         }
-            .getOrNull()
-            .orEmpty()
+            .getOrNull() ?: JsSourceDeclarations.timestampRanges(text)
         if (ranges.isEmpty()) return null
         return ranges
             .sortedByDescending { it.first }
