@@ -6,13 +6,23 @@ import io.legado.app.utils.GSON
 import kotlinx.coroutines.flow.StateFlow
 import splitties.init.appCtx
 
-/** App-facing boundary: default builds have no Flutter dependency. */
+/** App-facing boundary for the embedded Flutter book-source engine. */
 data class SourceTaskState(val taskId: String, val phase: String, val error: String? = null)
 
 interface SourceEngineBackend {
     val tasks: StateFlow<Map<String, SourceTaskState>>
 
     suspend fun close()
+
+    suspend fun migrate(sourceJson: String): SourceMigrationPreview =
+        throw UnsupportedOperationException("Book-source migration is unavailable")
+
+    suspend fun evaluate(
+        sourceJson: String,
+        script: String,
+        bindings: Map<String, Any?>,
+        ephemeral: Boolean = false,
+    ): Any? = throw UnsupportedOperationException("Book-source auxiliary evaluation is unavailable")
 
     suspend fun execute(
         operation: String,
@@ -22,10 +32,28 @@ interface SourceEngineBackend {
 }
 
 object DartSourceEngine {
-    fun selected(source: BookSource): Boolean =
-        source.bookSourceComment.orEmpty().lineSequence().any {
-            it.trim() == "@engine:dart" || it.trim().startsWith("@source:v1 ")
-        }
+    suspend fun migrate(source: BookSource): SourceMigrationPreview =
+        backend.migrate(GSON.toJson(source))
+
+    suspend fun evaluate(
+        source: BookSource,
+        script: String,
+        bindings: Map<String, Any?> = emptyMap(),
+    ): Any? = backend.evaluate(GSON.toJson(source), script, jsonObject(bindings))
+
+    suspend fun evaluateConfiguration(script: String): Any? =
+        backend.evaluate(
+            GSON.toJson(
+                mapOf(
+                    "bookSourceUrl" to
+                        "https://source-import.invalid/${java.util.UUID.randomUUID()}",
+                    "bookSourceName" to "Source configuration import",
+                )
+            ),
+            script,
+            emptyMap(),
+            ephemeral = true,
+        )
 
     private val backend: SourceEngineBackend by lazy {
         try {
@@ -38,7 +66,7 @@ object DartSourceEngine {
                 .newInstance(appCtx) as SourceEngineBackend
         } catch (error: ClassNotFoundException) {
             throw IllegalStateException(
-                "Dart engine is selected but this build has no Flutter engine. Build with -PflutterSourceEngine=true and the source_host AAR repository.",
+                "This app requires the Flutter/V8 source engine. Prepare the source_host AAR before building.",
                 error,
             )
         } catch (error: ReflectiveOperationException) {

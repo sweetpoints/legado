@@ -2,6 +2,8 @@ package io.legado.app.ui.book.source.edit
 
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.entities.BookSource
+import io.legado.app.model.sourceEngine.SourceMigrationIssue
+import io.legado.app.model.sourceEngine.SourceMigrationPreview
 import io.legado.app.utils.GSON
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
@@ -484,6 +486,236 @@ class BookSourceComposeViewModelTest {
             runCurrent()
             assertEquals(replacement, model.state.value.document)
             assertEquals(null, model.state.value.error)
+        }
+
+    private fun migrationPreview(
+        manual: Boolean = false,
+        candidate: String =
+            """{"schemaVersion":1,"id":"old","name":"candidate","baseUrl":"https://fixture.invalid"}""",
+    ) =
+        SourceMigrationPreview(
+            if (manual)
+                listOf(SourceMigrationIssue("ruleSearch.name", "legacy.unsupported", "需要手工迁移"))
+            else emptyList(),
+            candidate,
+            manual,
+            if (manual) "manualRequired" else "unverified",
+        )
+
+    @Test
+    fun migrationUsesCurrentDraftWithoutSavingAndAppliesOnlyToCommentDraft() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val savedState = SavedStateHandle()
+            var snapshot: BookSource? = null
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    savedState,
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = {
+                        snapshot = it
+                        migrationPreview()
+                    },
+                )
+            runCurrent()
+            model.updateField(0, "bookSourceName", "edited", 6, 6)
+            model.updateField(0, "bookSourceComment", "user comment", 12, 12)
+            runCurrent()
+            model.previewMigration()
+            runCurrent()
+            assertEquals("edited", snapshot!!.bookSourceName)
+            assertEquals("user comment", snapshot!!.bookSourceComment)
+            assertEquals("user comment", model.state.value.document!!.source().bookSourceComment)
+            assertEquals(0, repository.saves)
+            assertEquals(setOf("bookSourceDraftId"), savedState.keys())
+            model.applyMigration()
+            runCurrent()
+            val applied = model.state.value.document!!
+            assertTrue(applied.source().bookSourceComment!!.startsWith("@source:v1 "))
+            assertTrue(applied.source().bookSourceComment!!.endsWith("user comment"))
+            assertEquals("edited", applied.source().bookSourceName)
+            assertTrue(applied.dirty())
+            assertEquals(0, repository.saves)
+            assertEquals(null, model.state.value.migrationReport)
+            model.focus(0, "bookSourceComment")
+            model.undo()
+            assertEquals("user comment", model.state.value.document!!.source().bookSourceComment)
+        }
+
+    @Test
+    fun migrationManualReportCannotApplyCandidate() =
+        runTest(dispatcher) {
+            val repository = FakeRepository()
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    SavedStateHandle(),
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = { migrationPreview(manual = true) },
+                )
+            runCurrent()
+            val before = model.state.value.document
+            model.previewMigration()
+            runCurrent()
+            model.applyMigration()
+            runCurrent()
+            assertEquals(before, model.state.value.document)
+            assertTrue(model.state.value.migrationReport!!.preview.requiresManualWork)
+            assertEquals(0, repository.saves)
+        }
+
+    @Test
+    fun asynchronousMigrationCannotApplyAfterDraftRevisionChanges() =
+        runTest(dispatcher) {
+            val pending = CompletableDeferred<SourceMigrationPreview>()
+            val model =
+                BookSourceComposeViewModel(
+                    FakeRepository(),
+                    SavedStateHandle(),
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = { pending.await() },
+                )
+            runCurrent()
+            model.previewMigration()
+            runCurrent()
+            assertTrue(model.state.value.migrationRunning)
+            model.updateField(0, "bookSourceName", "changed later", 13, 13)
+            pending.complete(migrationPreview())
+            runCurrent()
+            val before = model.state.value.document
+            assertTrue(model.state.value.migrationReport!!.revision != before!!.revision)
+            model.applyMigration()
+            runCurrent()
+            assertEquals(before, model.state.value.document)
+        }
+
+    @Test
+    fun migrationFailureAndMalformedCandidateLeaveOriginalDraftUntouched() =
+        runTest(dispatcher) {
+            var failure = true
+            val model =
+                BookSourceComposeViewModel(
+                    FakeRepository(),
+                    SavedStateHandle(),
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = {
+                        if (failure) error("migration failed")
+                        else migrationPreview(candidate = "[]")
+                    },
+                )
+            runCurrent()
+            val before = model.state.value.document
+            model.previewMigration()
+            runCurrent()
+            assertEquals("migration failed", model.state.value.migrationError)
+            assertEquals(before, model.state.value.document)
+            failure = false
+            model.previewMigration()
+            runCurrent()
+            model.applyMigration()
+            runCurrent()
+            assertTrue(model.state.value.migrationError != null)
+            assertEquals(before, model.state.value.document)
+        }
+
+    @Test
+    fun dismissingMigrationRejectsLateResultAndReportIsNotRestored() =
+        runTest(dispatcher) {
+            val pending = CompletableDeferred<SourceMigrationPreview>()
+            val repository = FakeRepository()
+            val saved = SavedStateHandle()
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    saved,
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = { pending.await() },
+                )
+            runCurrent()
+            model.previewMigration()
+            runCurrent()
+            model.dismissMigration()
+            pending.complete(migrationPreview())
+            runCurrent()
+            assertEquals(null, model.state.value.migrationReport)
+            assertFalse(model.state.value.migrationRunning)
+            val restored =
+                BookSourceComposeViewModel(
+                    repository,
+                    SavedStateHandle(
+                        mapOf("bookSourceDraftId" to saved.get<String>("bookSourceDraftId"))
+                    ),
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = { migrationPreview() },
+                )
+            runCurrent()
+            assertEquals(null, restored.state.value.migrationReport)
+            assertEquals(setOf("bookSourceDraftId"), saved.keys())
+        }
+
+    @Test
+    fun unavailableBuildDoesNotRequestMigration() =
+        runTest(dispatcher) {
+            var calls = 0
+            val model =
+                BookSourceComposeViewModel(
+                    FakeRepository(),
+                    SavedStateHandle(),
+                    "old",
+                    migrationAvailable = false,
+                    migrateSource = {
+                        calls++
+                        migrationPreview()
+                    },
+                )
+            runCurrent()
+            model.previewMigration()
+            runCurrent()
+            assertEquals(0, calls)
+            assertFalse(model.state.value.migrationRunning)
+        }
+
+    @Test
+    fun existingModernCandidateIsPreservedAndDoesNotCallMigrationBackend() =
+        runTest(dispatcher) {
+            var calls = 0
+            val repository = FakeRepository()
+            val model =
+                BookSourceComposeViewModel(
+                    repository,
+                    SavedStateHandle(),
+                    "old",
+                    migrationAvailable = true,
+                    migrateSource = {
+                        calls++
+                        migrationPreview()
+                    },
+                )
+            runCurrent()
+            val comment =
+                """@source:v1 {"schemaVersion":1,"id":"existing-modern","script":"modern payload"}
+用户说明"""
+            model.updateField(0, "bookSourceComment", comment, comment.length, comment.length)
+            runCurrent()
+            val before = model.state.value.document
+            model.previewMigration()
+            runCurrent()
+            model.applyMigration()
+            runCurrent()
+            assertEquals(0, calls)
+            assertEquals(before, model.state.value.document)
+            assertEquals(comment, model.state.value.document!!.source().bookSourceComment)
+            assertEquals("已使用新版配置，无需再次从旧字段迁移", model.state.value.migrationError)
+            assertEquals(null, model.state.value.migrationReport)
+            assertFalse(model.state.value.migrationRunning)
+            assertEquals(0, repository.saves)
         }
 
     private class FakeRepository : BookSourceEditorRepository {

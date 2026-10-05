@@ -16,6 +16,7 @@ import io.legado.app.help.source.getShareScope
 import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.BatchContentContext
 import io.legado.app.model.SharedJsScope
+import io.legado.app.model.sourceEngine.BookSourceLegacyEnginePolicy
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -38,6 +39,10 @@ class JsSourceEngine(
     private val source: BookSource,
     private val coroutineContext: CoroutineContext? = null,
 ) : JsExtensions {
+
+    init {
+        BookSourceLegacyEnginePolicy.requireLegacyAllowed(true)
+    }
 
     /** 批量正文上下文,只在 getContentBatch 调用期间设置,供 java.cacheContent 回存 */
     private var batchContext: BatchContentContext? = null

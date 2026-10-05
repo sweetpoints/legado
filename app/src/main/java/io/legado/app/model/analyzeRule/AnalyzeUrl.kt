@@ -17,6 +17,7 @@ import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookSource
 import io.legado.app.help.CacheManager
 import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.JsExtensions
@@ -42,6 +43,7 @@ import io.legado.app.help.source.getShareScope
 import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.Debug
 import io.legado.app.model.SharedJsScope
+import io.legado.app.model.sourceEngine.BookSourceLegacyEnginePolicy
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -97,6 +99,10 @@ class AnalyzeUrl(
     private val infoMap: MutableMap<String, String>? = null,
     private val extraParams: Map<String, String>? = null
 ) : JsExtensions {
+    init {
+        BookSourceLegacyEnginePolicy.requireLegacyAllowed(source is BookSource)
+    }
+
     constructor(mUrl: String) : this(mUrl, null)
 
     var ruleUrl = ""

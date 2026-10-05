@@ -23,6 +23,7 @@ import io.legado.app.model.SharedJsScope
 import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
+import io.legado.app.model.sourceEngine.BookSourceScriptBridge
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -407,6 +408,9 @@ interface BaseSource : JsExtensions {
      */
     @Throws(Exception::class)
     fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
+        if (this is BookSource) {
+            return BookSourceScriptBridge.evaluate(this, jsStr, bindingsConfig, isMainThread)
+        }
         val bindings = buildScriptBindings { bindings ->
             bindings["java"] = this
             bindings["source"] = this

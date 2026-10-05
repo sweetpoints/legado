@@ -7,33 +7,37 @@ import java.io.File
 class JsSourceDispatchSentinelTest {
 
     @Test
-    fun `web book entries dispatch before declarative handling`() {
+    fun `all web book source execution routes use Dart`() {
         val webBook = readProjectFile(
             "app/src/main/java/io/legado/app/model/webBook/WebBook.kt"
         )
-        val contracts = listOf(
-            DispatchContract("searchBookAwait", "JsSourceBook.searchAwait", "val searchUrl"),
-            DispatchContract("exploreBookAwait", "JsSourceBook.exploreAwait", "val ruleData"),
-            DispatchContract("getBookInfoAwait", "JsSourceBook.getBookInfoAwait", "book.removeAllBookType()"),
-            DispatchContract("getChapterListAwait", "JsSourceBook.getChapterListAwait", "book.removeAllBookType()"),
-            DispatchContract("getContentAwait", "JsSourceBook.getContentAwait", "val contentRule"),
+        val contracts = mapOf(
+            "searchBookAwait" to "search",
+            "exploreBookAwait" to "explore",
+            "getBookInfoAwait" to "info",
+            "getChapterListAwait" to "toc",
+            "getContentAwait" to "content",
         )
-
-        contracts.forEach { contract ->
-            val method = suspendMethodBody(webBook, contract.methodName)
-            val dispatch = method.indexOf(contract.dispatchCall)
-            val declarativeStart = method.indexOf(contract.declarativeStart)
-
-            assertTrue("${contract.methodName} is missing ${contract.dispatchCall}", dispatch >= 0)
-            assertTrue(
-                "${contract.methodName} is missing declarative marker ${contract.declarativeStart}",
-                declarativeStart >= 0,
-            )
-            assertTrue(
-                "${contract.methodName} must dispatch JS sources before declarative handling",
-                dispatch < declarativeStart,
-            )
+        contracts.forEach { (methodName, operation) ->
+            val method = suspendMethodBody(webBook, methodName)
+            assertTrue("$methodName must execute Dart", method.contains("DartSourceEngine.execute("))
+            assertTrue("$methodName must keep its stage", method.contains("\"$operation\""))
         }
+        val oldRoutes = listOf(
+            "DartSourceEngine.selected", "JsSourceBook.", "AnalyzeRule", "AnalyzeUrl",
+            "BookList.analyze", "BookInfo.analyze", "BookContent.analyze", "BookChapterList.analyze",
+        )
+        for (oldRoute in oldRoutes) {
+            assertTrue("Old source execution route remains: $oldRoute", !webBook.contains(oldRoute))
+        }
+        assertTrue(webBook.contains("BookChapterList.updateBookTocInfo"))
+        assertTrue(webBook.contains("BookHelp.saveContent"))
+        val hook = suspendMethodBody(webBook, "runPreUpdateJs")
+        assertTrue(hook.contains("DartSourceEngine.evaluate("))
+        assertTrue(hook.contains("\"book\" to before"))
+        assertTrue(hook.contains("\"sourceInfo\" to sourceInfo"))
+        val batch = suspendMethodBody(webBook, "getContentBatchAwait")
+        assertTrue(batch.contains("return chapters"))
     }
 
     private fun suspendMethodBody(source: String, methodName: String): String {
@@ -64,9 +68,4 @@ class JsSourceDispatchSentinelTest {
         return file.readText()
     }
 
-    private data class DispatchContract(
-        val methodName: String,
-        val dispatchCall: String,
-        val declarativeStart: String,
-    )
 }

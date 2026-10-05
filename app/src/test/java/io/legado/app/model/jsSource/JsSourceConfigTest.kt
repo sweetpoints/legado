@@ -1,50 +1,180 @@
 package io.legado.app.model.jsSource
 
 import io.legado.app.constant.BookSourceType
+import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.model.login.LoginUiV2
-import io.legado.app.utils.GSON
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 
+/** JVM verifies configuration contracts; actual V8 execution belongs to device acceptance. */
 class JsSourceConfigTest {
+    private val base =
+        mapOf<String, Any?>("bookSourceUrl" to "https://example.com", "bookSourceName" to "示例源")
+    private val required = JsSourceConfig.requiredFunctions.associateWith { "function" }
 
-    private val validScript = """
-        var config = {
-            bookSourceUrl: "https://example.com",
-            bookSourceName: "示例源",
-            header: "{\"User-Agent\":\"test\"}"
-        };
-        function search(key, page) { return []; }
-        function getChapters(book) { return []; }
-        function getContent(chapter, book) { return "content"; }
-    """.trimIndent()
+    private fun materialize(
+        config: Any? = base,
+        functions: Map<String, String> = required,
+        legacy: Any? = null,
+    ): BookSource =
+        JsSourceConfig.materializeRuntimeConfig(
+            mapOf("config" to config, "legacyConfig" to legacy, "functions" to functions),
+            "original script",
+        )
+
+    private fun error(part: String, action: () -> Unit) {
+        val failure = assertThrows(NoStackTraceException::class.java, action)
+        assertTrue(failure.message.orEmpty(), failure.message.orEmpty().contains(part))
+    }
 
     @Test
-    fun `batch size requires a numeric exact int without truncation`() {
-        for (value in listOf("2.5", "2147483648", "4294967298", "1e100", "'2'", "null", "true")) {
-            assertExtractError(
-                validScript + "\nconfig.maxBatchSize = $value; function getContentBatch(chapters, book) {}",
-                "必须是整数",
-            )
+    fun configurationPrecedenceAndSourceMetadataArePreserved() {
+        assertEquals("示例源", materialize().bookSourceName)
+        assertEquals("original script", materialize().mainJs)
+        assertEquals("示例源", materialize(legacy = base + ("bookSourceName" to "旧版")).bookSourceName)
+        assertEquals(
+            "旧版",
+            materialize(
+                    config = mapOf("unrelated" to true),
+                    legacy = base + ("bookSourceName" to "旧版"),
+                )
+                .bookSourceName,
+        )
+        assertEquals("示例源", materialize(config = null, legacy = base).bookSourceName)
+        error("缺少顶层") { materialize(config = null) }
+        error("不是合法对象") { materialize(config = listOf(1)) }
+        error("bookSourceUrl 不能为空") { materialize(base + ("bookSourceUrl" to "")) }
+        error("bookSourceName 不能为空") { materialize(base + ("bookSourceName" to "")) }
+    }
+
+    @Test
+    fun requiredFunctionsAndFileSourceContractsRemainDistinct() {
+        for (name in JsSourceConfig.requiredFunctions) {
+            error("必备函数 $name") { materialize(functions = required - name) }
+            error("必备函数 $name") { materialize(functions = required + (name to "string")) }
         }
-        assertEquals(2, JsSourceConfig.extract(
-            validScript + "\nconfig.maxBatchSize = 2.0; function getContentBatch(chapters, book) {}"
-        ).contentBatchSize())
-        assertEquals(io.legado.app.data.entities.BookSource.MAX_CONTENT_BATCH_SIZE,
-            JsSourceConfig.extract(
-                validScript + "\nconfig.maxBatchSize = 2147483647; function getContentBatch(chapters, book) {}"
-            ).contentBatchSize())
+        val file = base + ("bookSourceType" to BookSourceType.file)
+        assertEquals(
+            BookSourceType.file,
+            materialize(file, mapOf("search" to "function", "getBookInfo" to "function"))
+                .bookSourceType,
+        )
+        error("getBookInfo") { materialize(file, required) }
+        error("search") { materialize(file, mapOf("getBookInfo" to "function")) }
+    }
+
+    @Test
+    fun declarativeRulesAreStrippedAndUpdateTimeRemainsMetadata() {
+        val source =
+            materialize(
+                base +
+                    mapOf(
+                        "mainJs" to "injected",
+                        "ruleSearch" to mapOf("name" to "x"),
+                        "ruleContent" to mapOf("content" to "x"),
+                        "lastUpdateTime" to 1752449000000L,
+                    )
+            )
+        assertNull(source.ruleSearch)
+        assertNull(source.ruleContent)
+        assertEquals("original script", source.mainJs)
+        assertEquals(1752449000000L, source.lastUpdateTime)
+        assertEquals(0L, materialize().lastUpdateTime)
+    }
+
+    @Test
+    fun exploreAndLoginArraysRetainNormalizationAndMatchingFunctionValidation() {
+        val explore = base + ("exploreUrl" to listOf(mapOf("title" to "分类", "url" to "/kind")))
+        error("explore 函数") { materialize(explore) }
+        assertTrue(
+            materialize(explore, required + ("explore" to "function"))
+                .exploreUrl
+                .orEmpty()
+                .startsWith("[")
+        )
+        error("缺少 title") { materialize(base + ("exploreUrl" to listOf(mapOf("url" to "/kind")))) }
+        val login = base + ("loginUi" to listOf(mapOf("name" to "username", "type" to "text")))
+        error("login 函数") { materialize(login) }
+        assertTrue(
+            materialize(login, required + ("login" to "function")).loginUi.orEmpty().startsWith("[")
+        )
+        error("缺少 name") { materialize(base + ("loginUi" to listOf(mapOf("type" to "text")))) }
+        assertNull(materialize(base + ("loginUi" to emptyList<Any>())).loginUi)
+        assertNull(materialize(base + ("loginUi" to " [ ] ")).loginUi)
+        assertEquals(
+            "https://login.example",
+            materialize(base + ("loginUrl" to "https://login.example")).loginUrl,
+        )
+    }
+
+    @Test
+    fun loginUiFunctionRequiresActionAndCannotConflictWithConfiguredData() {
+        error("loginAction") { materialize(functions = required + ("loginUi" to "function")) }
+        val functions = required + mapOf("loginUi" to "function", "loginAction" to "function")
+        assertEquals(LoginUiV2.MARKER, materialize(functions = functions).loginUi)
+        error("二选一") {
+            materialize(base + ("loginUi" to listOf(mapOf("name" to "username"))), functions)
+        }
+    }
+
+    @Test
+    fun reviewPropertiesRequireFunctionTypesAndPairing() {
+        for (name in listOf("getReviewSummary", "getReviewDetail", "getReviewReplies")) {
+            error("必须是函数") { materialize(functions = required + (name to "number")) }
+        }
+        error("getReviewDetail") {
+            materialize(functions = required + ("getReviewSummary" to "function"))
+        }
+        error("getReviewSummary") {
+            materialize(functions = required + ("getReviewDetail" to "function"))
+        }
+        error("getReviewSummary/getReviewDetail") {
+            materialize(functions = required + ("getReviewReplies" to "function"))
+        }
+        materialize(
+            functions =
+                required +
+                    listOf("getReviewSummary", "getReviewDetail", "getReviewReplies")
+                        .associateWith { "function" }
+        )
+    }
+
+    @Test
+    fun batchSizeRequiresExactNumericIntegerAndMatchingBatchFunction() {
+        for (value in listOf<Any?>(2.5, 2147483648L, 4294967298L, 1e100, "2", null, true)) {
+            error("必须是整数") {
+                materialize(
+                    base + ("maxBatchSize" to value),
+                    required + ("getContentBatch" to "function"),
+                )
+            }
+        }
+        error("必须大于1") { materialize(base + ("maxBatchSize" to 1)) }
+        error("getContentBatch") { materialize(base + ("maxBatchSize" to 2)) }
+        error("maxBatchSize") {
+            materialize(functions = required + ("getContentBatch" to "function"))
+        }
+        assertEquals(
+            2,
+            materialize(
+                    base + ("maxBatchSize" to 2.0),
+                    required + ("getContentBatch" to "function"),
+                )
+                .contentBatchSize(),
+        )
+        assertEquals(
+            BookSource.MAX_CONTENT_BATCH_SIZE,
+            materialize(
+                    base + ("maxBatchSize" to Int.MAX_VALUE),
+                    required + ("getContentBatch" to "function"),
+                )
+                .contentBatchSize(),
+        )
     }
 
     @Test
@@ -54,9 +184,7 @@ class JsSourceConfigTest {
                 "/* function getReviewSummary() {} function getReviewDetail() {} */"
             )
         )
-        assertFalse(
-            JsSourceConfig.declaresReviewFunctions("function getReviewSummary() {}")
-        )
+        assertFalse(JsSourceConfig.declaresReviewFunctions("function getReviewSummary() {}"))
         assertTrue(
             JsSourceConfig.declaresReviewFunctions(
                 "function getReviewSummary() {} function getReviewDetail() {}"
@@ -64,8 +192,7 @@ class JsSourceConfigTest {
         )
         assertTrue(
             JsSourceConfig.declaresReviewFunctions(
-                "var getReviewSummary = function() {}; " +
-                    "var getReviewDetail = function() {};"
+                "var getReviewSummary = function() {}; " + "var getReviewDetail = function() {};"
             )
         )
     }
@@ -73,425 +200,12 @@ class JsSourceConfigTest {
     @Test
     fun `review reply capability ignores comments and accepts a top level function`() {
         assertFalse(
-            JsSourceConfig.declaresReviewRepliesFunction(
-                "/* function getReviewReplies() {} */"
-            )
+            JsSourceConfig.declaresReviewRepliesFunction("/* function getReviewReplies() {} */")
         )
+        assertTrue(JsSourceConfig.declaresReviewRepliesFunction("function getReviewReplies() {}"))
         assertTrue(
-            JsSourceConfig.declaresReviewRepliesFunction(
-                "function getReviewReplies() {}"
-            )
+            JsSourceConfig.declaresReviewRepliesFunction("var getReviewReplies = function() {};")
         )
-        assertTrue(
-            JsSourceConfig.declaresReviewRepliesFunction(
-                "var getReviewReplies = function() {};"
-            )
-        )
-    }
-
-    @Test
-    fun `extracts metadata and keeps full script`() {
-        val source = JsSourceConfig.extract(validScript)
-
-        assertEquals("https://example.com", source.bookSourceUrl)
-        assertEquals("示例源", source.bookSourceName)
-        assertEquals("{\"User-Agent\":\"test\"}", source.header)
-        assertEquals(validScript, source.mainJs)
-        assertTrue(source.isJsSource())
-    }
-
-    @Test
-    fun `extracts modern source configuration without rewriting declarations`() {
-        val script = """
-            const config = {
-                bookSourceUrl: "https://audio.example",
-                bookSourceName: "Audio source",
-                loginUi: [{ name: "token", type: "text" }],
-                exploreUrl: [{ title: "Daily", url: "daily" }]
-            };
-            function copy(params) {
-                const result = {};
-                for (const key in params) result[key] = String(params[key]);
-                if (params.mode === "free") {
-                    const value = "free";
-                    result.value = value;
-                } else {
-                    const value = "paid";
-                    result.value = value;
-                }
-                return result;
-            }
-            function search(key, page) { return [copy({ key: key, page: page })]; }
-            function explore(url, page) { return search(url, page); }
-            function getBookInfo(book) { return book; }
-            function getChapters(book) { return []; }
-            function getContent(chapter, book) { return "content"; }
-            function login() { return true; }
-        """.trimIndent()
-
-        val source = JsSourceConfig.extract(script)
-
-        assertEquals("https://audio.example", source.bookSourceUrl)
-        assertEquals("Audio source", source.bookSourceName)
-        assertTrue(source.loginUi.orEmpty().contains("token"))
-        assertTrue(source.exploreUrl.orEmpty().contains("Daily"))
-        assertEquals(script, source.mainJs)
-    }
-
-    @Test
-    fun `accepts legacy source config object`() {
-        val source = JsSourceConfig.extract(
-            validScript.replaceFirst("var config =", "var source =")
-        )
-
-        assertEquals("https://example.com", source.bookSourceUrl)
-        assertEquals("示例源", source.bookSourceName)
-    }
-
-    @Test
-    fun `prefers config object over legacy source object`() {
-        val source = JsSourceConfig.extract(
-            """
-                var source = {
-                    bookSourceUrl: "https://legacy.example",
-                    bookSourceName: "旧配置"
-                };
-                var config = {
-                    bookSourceUrl: "https://config.example",
-                    bookSourceName: "新配置"
-                };
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-                function getContent(chapter, book) { return "content"; }
-            """.trimIndent()
-        )
-
-        assertEquals("https://config.example", source.bookSourceUrl)
-        assertEquals("新配置", source.bookSourceName)
-    }
-
-    @Test
-    fun `ignores unrelated config object for legacy source`() {
-        val source = JsSourceConfig.extract(
-            "var config = { timeout: 10000 };\n" +
-                validScript.replaceFirst("var config =", "var source =")
-        )
-
-        assertEquals("https://example.com", source.bookSourceUrl)
-        assertEquals("示例源", source.bookSourceName)
-    }
-
-    @Test
-    fun `ignores incomplete config object for legacy source`() {
-        val source = JsSourceConfig.extract(
-            "var config = { bookSourceUrl: 'https://partial.example' };\n" +
-                validScript.replaceFirst("var config =", "var source =")
-        )
-
-        assertEquals("https://example.com", source.bookSourceUrl)
-        assertEquals("示例源", source.bookSourceName)
-    }
-
-    @Test
-    fun `ignores undefined config for legacy source`() {
-        val source = JsSourceConfig.extract(
-            "var config;\n" + validScript.replaceFirst("var config =", "var source =")
-        )
-
-        assertEquals("https://example.com", source.bookSourceUrl)
-        assertEquals("示例源", source.bookSourceName)
-    }
-
-    @Test
-    fun `requires config or legacy source object`() {
-        assertExtractError(
-            """
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-                function getContent(chapter, book) { return "content"; }
-            """.trimIndent(),
-            "config",
-        )
-    }
-
-    @Test
-    fun `requires core functions`() {
-        assertExtractError(
-            """
-                var config = { bookSourceUrl: "https://a.com", bookSourceName: "缺函数" };
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-            """.trimIndent(),
-            "getContent",
-        )
-    }
-
-    @Test
-    fun `file source requires only search and book info`() {
-        val source = JsSourceConfig.extract(
-            """
-                var config = {
-                    bookSourceUrl: "https://a.com",
-                    bookSourceName: "文件源",
-                    bookSourceType: 3
-                };
-                function search(key, page) { return []; }
-                function getBookInfo(book) { return {}; }
-            """.trimIndent()
-        )
-
-        assertEquals(BookSourceType.file, source.bookSourceType)
-    }
-
-    @Test
-    fun `file source requires book info`() {
-        assertExtractError(
-            """
-                var config = {
-                    bookSourceUrl: "https://a.com",
-                    bookSourceName: "文件源",
-                    bookSourceType: 3
-                };
-                function search(key, page) { return []; }
-            """.trimIndent(),
-            "getBookInfo",
-        )
-    }
-
-    @Test
-    fun `file source still requires search`() {
-        assertExtractError(
-            """
-                var config = {
-                    bookSourceUrl: "https://a.com",
-                    bookSourceName: "文件源",
-                    bookSourceType: 3
-                };
-                function getBookInfo(book) { return {}; }
-            """.trimIndent(),
-            "search",
-        )
-    }
-
-    @Test
-    fun `strips declarative rules from config`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "ruleSearch: { bookList: \"ignored\" }",
-            )
-        )
-
-        assertNull(source.ruleSearch)
-        assertTrue(source.mainJs.orEmpty().contains("ruleSearch"))
-    }
-
-    @Test
-    fun `normalizes explore array`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "exploreUrl: [{ title: \"分类\", url: \"https://example.com/list\" }]",
-            ) + "\nfunction explore(url, page) { return []; }"
-        )
-
-        assertTrue(source.exploreUrl.orEmpty().contains("分类"))
-        assertTrue(source.exploreUrl.orEmpty().contains("https://example.com/list"))
-    }
-
-    @Test
-    fun `explore metadata requires matching function`() {
-        assertExtractError(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "exploreUrl: \"分类::https://example.com/list\"",
-            ),
-            "explore",
-        )
-    }
-
-    @Test
-    fun `normalizes login form array`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                """loginUi: [
-                    { name: "账号", type: "text" },
-                    { name: "密码", type: "password" }
-                ]""".trimIndent(),
-            ) + "\nfunction login() {}"
-        )
-
-        val rows = GSON.fromJson(source.loginUi, Array<RowUi>::class.java)
-        assertEquals(2, rows.size)
-        assertEquals("账号", rows[0].name)
-        assertEquals("password", rows[1].type)
-    }
-
-    @Test
-    fun `empty login form does not require login function`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "loginUi: []",
-            )
-        )
-
-        assertNull(source.loginUi)
-    }
-
-    @Test
-    fun `empty login form json string folds to none`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "loginUi: \"[ ]\"",
-            )
-        )
-
-        assertNull(source.loginUi)
-    }
-
-    @Test
-    fun `login form item requires name`() {
-        assertExtractError(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "loginUi: [{ type: \"text\" }]",
-            ) + "\nfunction login() {}",
-            "缺少 name",
-        )
-    }
-
-    @Test
-    fun `login form requires login function`() {
-        assertExtractError(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "loginUi: [{ name: \"账号\", type: \"text\" }]",
-            ),
-            "login",
-        )
-    }
-
-    @Test
-    fun `web login url does not require login function`() {
-        val source = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "loginUrl: \"https://example.com/login\"",
-            )
-        )
-
-        assertEquals("https://example.com/login", source.loginUrl)
-    }
-
-    @Test
-    fun `review functions accept optional paged replies`() {
-        val source = JsSourceConfig.extract(
-            validScript + "\n" + """
-                function getReviewSummary(chapter, book) { return []; }
-                function getReviewDetail(chapter, book, paraIndex, paraData, page) {
-                    return { items: [] };
-                }
-                function getReviewReplies(chapter, book, paraIndex, paraData, reviewId, page) {
-                    return { items: [] };
-                }
-            """.trimIndent()
-        )
-
-        assertTrue(source.mainJs.orEmpty().contains("getReviewSummary"))
-        assertTrue(JsSourceReview.hasReviewRepliesCapability(source))
-    }
-
-    @Test
-    fun `review summary requires matching detail function`() {
-        assertExtractError(
-            validScript + "\nfunction getReviewSummary(chapter, book) { return []; }",
-            "getReviewDetail",
-        )
-    }
-
-    @Test
-    fun `review detail requires matching summary function`() {
-        assertExtractError(
-            validScript + "\n" + """
-                function getReviewDetail(chapter, book, paraIndex, paraData, page) {
-                    return { items: [] };
-                }
-            """.trimIndent(),
-            "getReviewSummary",
-        )
-    }
-
-    @Test
-    fun `review properties must be functions`() {
-        assertExtractError(
-            validScript + "\n" + """
-                var getReviewSummary = [];
-                function getReviewDetail() { return { items: [] }; }
-            """.trimIndent(),
-            "getReviewSummary",
-        )
-    }
-
-    @Test
-    fun `both review properties must be functions`() {
-        assertExtractError(
-            validScript + "\n" + """
-                var getReviewSummary = [];
-                var getReviewDetail = {};
-            """.trimIndent(),
-            "getReviewSummary",
-        )
-    }
-
-    @Test
-    fun `review replies require the review function pair`() {
-        assertExtractError(
-            validScript + "\nfunction getReviewReplies() { return { items: [] }; }",
-            "getReviewSummary/getReviewDetail",
-        )
-    }
-
-    @Test
-    fun `review replies property must be a function`() {
-        assertExtractError(
-            validScript + "\n" + """
-                function getReviewSummary() { return []; }
-                function getReviewDetail() { return { items: [] }; }
-                var getReviewReplies = [];
-            """.trimIndent(),
-            "getReviewReplies",
-        )
-    }
-
-    @Test(timeout = 5_000)
-    fun `cancellation escapes infinite top level script`() {
-        JsSourceConfig.extract(validScript)
-
-        assertThrows(TimeoutCancellationException::class.java) {
-            runBlocking {
-                withTimeout(500) {
-                    JsSourceConfig.extract("while (true) {}", currentCoroutineContext())
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `allows top level capability access`() {
-        val source = JsSourceConfig.extract(
-            """
-                var probe = new java.net.URL("https://example.com");
-                var config = { bookSourceUrl: "https://a.com", bookSourceName: "越权" };
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-                function getContent(chapter, book) { return ""; }
-            """.trimIndent(),
-        )
-
-        assertEquals("越权", source.bookSourceName)
     }
 
     @Test
@@ -504,98 +218,44 @@ class JsSourceConfigTest {
     }
 
     @Test
-    fun `extracts declared update time and defaults missing to zero`() {
-        val declared = JsSourceConfig.extract(
-            validScript.replace(
-                "header: \"{\\\"User-Agent\\\":\\\"test\\\"}\"",
-                "lastUpdateTime: 1752449000000",
-            )
-        )
-
-        assertEquals(1752449000000L, declared.lastUpdateTime)
-        assertEquals(0L, JsSourceConfig.extract(validScript).lastUpdateTime)
-    }
-
-    @Test
     fun `stamps numeric update time without touching later declarations`() {
-        val script = """
+        val script =
+            """
             var source = {
                 lastUpdateTime: 0 // version timestamp
             };
             var fallback = { lastUpdateTime: 1 };
-        """.trimIndent()
-        val expected = """
+            """
+                .trimIndent()
+        val expected =
+            """
             var source = {
                 lastUpdateTime: 123456 // version timestamp
             };
             var fallback = { lastUpdateTime: 1 };
-        """.trimIndent()
+            """
+                .trimIndent()
 
         assertEquals(expected, JsSourceConfig.stampLastUpdateTime(script, 123456))
     }
 
     @Test
     fun `ignores comments and unrelated objects before declared update time`() {
-        val script = """
+        val script =
+            """
             // lastUpdateTime: 1
             var metadata = { lastUpdateTime: 2 };
             var config = { "lastUpdateTime": Date.now() };
-        """.trimIndent()
-        val expected = """
+            """
+                .trimIndent()
+        val expected =
+            """
             // lastUpdateTime: 1
             var metadata = { lastUpdateTime: 2 };
             var config = { "lastUpdateTime": 123456 };
-        """.trimIndent()
+            """
+                .trimIndent()
 
         assertEquals(expected, JsSourceConfig.stampLastUpdateTime(script, 123456))
-    }
-
-    @Test
-    fun `loginUi function enables v2`() {
-        val source = JsSourceConfig.extract(
-            validScript + "\n" + """
-                function loginUi(state) { return { rows: [] }; }
-                function loginAction(action, state, form) { return {}; }
-            """.trimIndent()
-        )
-
-        assertEquals(LoginUiV2.MARKER, source.loginUi)
-    }
-
-    @Test
-    fun `loginUi function requires loginAction`() {
-        assertExtractError(
-            validScript + "\nfunction loginUi(state) { return { rows: [] }; }",
-            "loginAction",
-        )
-    }
-
-    @Test
-    fun `loginUi function conflicts with config data`() {
-        assertExtractError(
-            """
-                var config = {
-                    bookSourceUrl: "https://example.com",
-                    bookSourceName: "冲突源",
-                    loginUi: [{ name: "账号", type: "text" }]
-                };
-                function search(key, page) { return []; }
-                function getChapters(book) { return []; }
-                function getContent(chapter, book) { return ""; }
-                function login() {}
-                function loginUi(state) { return { rows: [] }; }
-                function loginAction(action, state, form) { return {}; }
-            """.trimIndent(),
-            "二选一",
-        )
-    }
-
-    private fun assertExtractError(script: String, messagePart: String) {
-        try {
-            JsSourceConfig.extract(script)
-            fail("Expected extract failure containing $messagePart")
-        } catch (error: NoStackTraceException) {
-            assertTrue(error.message.orEmpty().contains(messagePart))
-        }
     }
 }

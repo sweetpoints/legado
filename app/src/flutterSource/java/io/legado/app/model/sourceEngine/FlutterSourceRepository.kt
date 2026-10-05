@@ -153,6 +153,102 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
         }
 
+    override suspend fun migrate(sourceJson: String): SourceMigrationPreview {
+        ensureStarted()
+        return withContext(Dispatchers.Main.immediate) {
+            check(!closed) { "Flutter source repository is closed" }
+            val requestId = UUID.randomUUID().toString()
+            val response = CompletableDeferred<Any?>()
+            responses[requestId] = response
+            try {
+                channel!!.invokeMethod(
+                    "migrate",
+                    mapOf("protocolVersion" to 1, "sourceJson" to sourceJson),
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            response.complete(result)
+                        }
+
+                        override fun error(code: String, message: String?, details: Any?) {
+                            response.completeExceptionally(
+                                IllegalStateException("$code: ${message.orEmpty()}")
+                            )
+                        }
+
+                        override fun notImplemented() {
+                            response.completeExceptionally(
+                                IllegalStateException("Book-source migration protocol unavailable")
+                            )
+                        }
+                    },
+                )
+                SourceMigrationPreview.fromChannel(withTimeout(30_000) { response.await() })
+            } finally {
+                responses.remove(requestId)
+            }
+        }
+    }
+
+    override suspend fun evaluate(
+        sourceJson: String,
+        script: String,
+        bindings: Map<String, Any?>,
+        ephemeral: Boolean,
+    ): Any? {
+        ensureStarted()
+        return withContext(Dispatchers.Main.immediate) {
+            check(!closed) { "Flutter source repository is closed" }
+            val taskId = UUID.randomUUID().toString()
+            val response = CompletableDeferred<Any?>()
+            responses[taskId] = response
+            mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
+            try {
+                channel!!.invokeMethod(
+                    "evaluate",
+                    mapOf(
+                        "protocolVersion" to 1,
+                        "taskId" to taskId,
+                        "sourceJson" to sourceJson,
+                        "script" to script,
+                        "bindings" to bindings,
+                        "ephemeral" to ephemeral,
+                    ),
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            response.complete(result)
+                        }
+
+                        override fun error(code: String, message: String?, details: Any?) {
+                            response.completeExceptionally(
+                                IllegalStateException("$code: ${message.orEmpty()}")
+                            )
+                        }
+
+                        override fun notImplemented() {
+                            response.completeExceptionally(
+                                IllegalStateException("Book-source evaluation protocol unavailable")
+                            )
+                        }
+                    },
+                )
+                val result = withTimeout(120_000) { response.await() }
+                require(result is Map<*, *> && result.containsKey("value")) {
+                    "Invalid script evaluation result"
+                }
+                result["value"]
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    try {
+                        channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
+                    } finally {
+                        responses.remove(taskId)
+                        mutableTasks.value = mutableTasks.value - taskId
+                    }
+                }
+            }
+        }
+    }
+
     override suspend fun execute(
         operation: String,
         sourceJson: String,

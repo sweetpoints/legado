@@ -1,20 +1,23 @@
 package io.legado.app.ui.main.explore
 
 import androidx.appcompat.app.AppCompatActivity
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.source.clearExploreKindsCache
+import io.legado.app.help.source.evaluateExploreScript
 import io.legado.app.help.source.exploreKinds
+import io.legado.app.help.source.exploreScriptResultText
 import io.legado.app.model.ExploreInfoMapStore.exploreInfoMapList
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.utils.GSON
 import io.legado.app.utils.InfoMap
 import io.legado.app.utils.MD5Utils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -117,17 +120,18 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                                     kind.viewName!!.drop(1).dropLast(1)
                                 else ->
                                     try {
-                                        runScriptWithContext {
-                                            source
-                                                .evalJS(kind.viewName!!) {
-                                                    put("infoMap", values)
-                                                }
-                                                .toString()
-                                        }
+                                        exploreScriptResultText(
+                                                evaluateExploreScript(
+                                                    source,
+                                                    kind.viewName!!,
+                                                    values,
+                                                )
+                                            )
                                             .takeIf { it.isNotEmpty() } ?: "null"
                                     } catch (failure: Exception) {
+                                        currentCoroutineContext().ensureActive()
                                         AppLog.put("${source.getTag()} exploreUi err", failure)
-                                        "null"
+                                        "ERROR:${failure.localizedMessage}"
                                     }
                             }
                         val style = kind.style()
@@ -171,15 +175,10 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                 val source = appDb.bookSourceDao.getBookSource(url) ?: return@withLock
                 if (action.isBlank()) return@withLock
                 val info = infoMap(url).apply { putAll(values) }
-                val bridge = SourceLoginJsExtensions(activity, source, callback = callback)
                 try {
-                    runScriptWithContext {
-                        source.evalJS(action) {
-                            put("java", bridge)
-                            put("infoMap", info)
-                        }
-                    }
+                    evaluateExploreScript(source, action, info)
                 } catch (failure: Exception) {
+                    currentCoroutineContext().ensureActive()
                     AppLog.put("ExploreUI Button JavaScript error", failure)
                     throw failure
                 }

@@ -25,6 +25,7 @@ import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
 import io.legado.app.model.SharedJsScope
+import io.legado.app.model.sourceEngine.BookSourceLegacyEnginePolicy
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -66,6 +67,10 @@ class AnalyzeRule(
     private val preUpdateJs: Boolean = false,
     private var isFromBookInfo : Boolean = false
 ) : JsExtensions {
+
+    init {
+        BookSourceLegacyEnginePolicy.requireLegacyAllowed(source is BookSource)
+    }
 
     private val book get() = ruleData as? BaseBook
     private val rssArticle get() = ruleData as? RssArticle
