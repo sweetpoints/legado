@@ -98,6 +98,9 @@ jobs:
     needs: android-v8
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      # The generated Flutter module otherwise requests 8 GiB heap / 4 GiB metaspace.
+      SOURCE_ENGINE_AAR_GRADLE_JVMARGS: '-Xmx2g -Xms256m -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8'
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -117,6 +120,16 @@ jobs:
         with:
           name: official-v8-android
           path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
+      - name: Bound App Gradle memory while leaving room for the emulator
+        run: |
+          set -euo pipefail
+          memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+          heap=2g
+          if (( memory_kib >= 14 * 1024 * 1024 )); then heap=4g; fi
+          echo "GRADLE_OPTS=-Dorg.gradle.jvmargs=\"-XX:+UseParallelGC -Xmx${heap} -Xms256m -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\" -Dorg.gradle.workers.max=2" >> "$GITHUB_ENV"
+          echo "CI App Gradle heap: $heap; AAR heap: 2g; max workers: 2"
+      - name: Verify AAR CI memory override contract
+        run: python3 -m unittest discover -s flutter/tool -p 'test_prepare_android_memory.py'
       - name: Verify downloaded official Android native provenance
         run: python3 flutter/tool/verify-android-aar.py --native-only
       - name: Verify strict instrumentation report contracts

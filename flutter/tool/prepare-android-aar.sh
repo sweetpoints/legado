@@ -46,10 +46,17 @@ done
 cp "$workspace_root/tool/source-host-min-sdk.gradle" \
     "$source_gradle_home/init.d/source-host-min-sdk.gradle"
 
+task_aar_gradle_opts="${GRADLE_OPTS:-} -Dorg.gradle.java.home=$task_java_home"
+if [[ -n "${SOURCE_ENGINE_AAR_GRADLE_JVMARGS:-}" ]]; then
+    # Gradle's documented system property overrides generated gradle.properties.
+    # Keep the complete daemon argument list in one quoted client JVM option.
+    task_aar_gradle_opts+=" -Dorg.gradle.jvmargs=\"$SOURCE_ENGINE_AAR_GRADLE_JVMARGS\""
+fi
+
 (
     cd "$workspace_root/modules/source_host"
     GRADLE_USER_HOME="$source_gradle_home" \
-        GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.home=$task_java_home" \
+        GRADLE_OPTS="$task_aar_gradle_opts" \
         flutter build aar "${task_flutter_arguments[@]}" --target-platform "$task_android_targets"
 )
 python3 "$workspace_root/tool/verify-android-aar.py" --write-stamp \
