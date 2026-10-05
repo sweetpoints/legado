@@ -97,7 +97,7 @@ class SourceMigrator {
     metadata['compatibility'] = issues.isEmpty
         ? 'unverified'
         : 'manualRequired';
-    metadata['legacy'] = issues.isNotEmpty;
+    metadata['legacy'] = issues.isNotEmpty || metadata['legacyMainJs'] == true;
     candidate['metadata'] = metadata;
     return MigrationCandidate(
       imported.original,

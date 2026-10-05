@@ -778,7 +778,7 @@ void main() {
   test('unknown features require review', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',
-      'mainJs': 'java.lang.String',
+      'jsLib': 'java.lang.String',
       'ruleContent': {'content': '@js:java.ajax(url)'},
     });
     expect(result.requiresManualWork, isTrue);

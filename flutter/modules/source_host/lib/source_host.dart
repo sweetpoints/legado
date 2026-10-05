@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:source_engine/source_engine.dart';
 import 'package:source_legacy/source_legacy.dart';
+import 'package:source_migration/source_migration.dart';
 
 import 'session_store.dart';
 
@@ -36,7 +37,7 @@ class SourceHost {
 
   Future<Object?> handle(MethodCall call) async {
     final args = Map<String, Object?>.from(call.arguments as Map? ?? {});
-    final id = args['taskId'] as String?;
+    final id = args['taskId'] is String ? args['taskId'] as String : null;
     if (call.method == 'shutdown') {
       await close();
       return null;
@@ -51,6 +52,8 @@ class SourceHost {
       }
       return null;
     }
+    if (call.method == 'migrate') return _migrate(args);
+    if (call.method == 'evaluate') return _evaluate(args, id);
     if (call.method != 'execute') throw MissingPluginException(call.method);
     if (_closed) throw PlatformException(code: 'host_closed');
     if (args['protocolVersion'] != 1 || id == null || id.isEmpty) {
@@ -121,6 +124,208 @@ class SourceHost {
     }
   }
 
+  Future<Map<String, Object?>> _evaluate(
+    Map<String, Object?> args,
+    String? id,
+  ) async {
+    if (_closed) throw PlatformException(code: 'host_closed');
+    if (args['protocolVersion'] != 1 ||
+        id == null ||
+        id.isEmpty ||
+        args['sourceJson'] is! String ||
+        args['script'] is! String ||
+        args['bindings'] is! Map) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Protocol v1, taskId, sourceJson, script and JSON bindings required',
+      );
+    }
+    if (_tasks.containsKey(id)) {
+      throw PlatformException(
+        code: 'duplicate_task',
+        message: 'Task ID is already running',
+      );
+    }
+    if (args.containsKey('ephemeral') && args['ephemeral'] is! bool) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'ephemeral must be a boolean',
+      );
+    }
+    final ephemeral = args['ephemeral'] == true;
+    Map<String, Object?> bindings;
+    try {
+      bindings = Map<String, Object?>.from(
+        jsonDecode(jsonEncode(args['bindings'])) as Map,
+      );
+    } catch (_) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Bindings must contain JSON values',
+      );
+    }
+    final token = CancellationToken();
+    _tasks[id] = token;
+    try {
+      final decoded = jsonDecode(args['sourceJson'] as String);
+      if (decoded is! Map) {
+        throw const FormatException('Source object required');
+      }
+      final raw = Map<String, Object?>.from(decoded);
+      final SourceDefinition identity;
+      if (raw.containsKey('schemaVersion')) {
+        identity = SourceDefinition.fromJson(raw);
+      } else {
+        final sourceId = raw['bookSourceUrl'];
+        final base = sourceId is String ? Uri.tryParse(sourceId) : null;
+        if (base == null ||
+            !['http', 'https'].contains(base.scheme) ||
+            base.host.isEmpty) {
+          throw PlatformException(
+            code: 'legacy_requires_migration',
+            message: 'Auxiliary legacy scripts require an explicit HTTP(S) source identity',
+          );
+        }
+        if (raw['jsLib'] != null && raw['jsLib'].toString().trim().isNotEmpty) {
+          throw PlatformException(
+            code: 'legacy_requires_migration',
+            message: 'Auxiliary legacy jsLib requires explicit migration',
+          );
+        }
+        final staticHeaders = <String, String>{};
+        final header = raw['header'];
+        if (header != null && header.toString().trim().isNotEmpty) {
+          Object? decodedHeader = header;
+          if (header is String) {
+            try {
+              decodedHeader = jsonDecode(header);
+            } on FormatException {
+              throw PlatformException(
+                code: 'legacy_requires_migration',
+                message: 'Auxiliary legacy dynamic headers require migration',
+              );
+            }
+          }
+          if (decodedHeader is! Map ||
+              decodedHeader.keys.any((key) => key is! String) ||
+              decodedHeader.values.any((value) => value is! String)) {
+            throw PlatformException(
+              code: 'legacy_requires_migration',
+              message: 'Auxiliary legacy headers require a static string map',
+            );
+          }
+          staticHeaders.addAll(Map<String, String>.from(decodedHeader));
+        }
+        identity = SourceDefinition(
+          id: sourceId as String,
+          name: raw['bookSourceName']?.toString() ?? sourceId,
+          baseUrl: base,
+          metadata: const {'legacy': true},
+          headers: staticHeaders,
+        );
+      }
+      final scriptSource = SourceDefinition(
+        id: identity.id,
+        name: identity.name,
+        baseUrl: identity.baseUrl,
+        metadata: identity.metadata,
+        headers: identity.headers,
+        script:
+            'async function search(input){return [{value: await eval(${jsonEncode(args['script'])})}];}',
+      );
+      final key = '${identity.id}:${identity.metadata['legacy'] == true}';
+      if (ephemeral) {
+        return await _serialize('__ephemeral:$id', token, () async {
+          final engine = createEngine(scriptSource);
+          try {
+            final records = await engine.execute(
+              scriptSource,
+              'search',
+              input: {...bindings, 'taskId': id},
+              cancellation: token,
+            );
+            token.throwIfCancelled();
+            return {'value': records.single['value']};
+          } finally {
+            await engine.close();
+          }
+        });
+      }
+      return await _serialize(key, token, () async {
+        final records = await _execute(
+          scriptSource,
+          key,
+          'search',
+          {...bindings, 'taskId': id},
+          token,
+          fingerprintSource: identity,
+          preserveCachedConfiguration: !raw.containsKey('schemaVersion'),
+        );
+        return {'value': records.single['value']};
+      });
+    } on EngineException catch (error) {
+      throw PlatformException(code: error.code, message: error.message);
+    } on PlatformException {
+      rethrow;
+    } on FormatException {
+      throw PlatformException(
+        code: 'invalid_source',
+        message: 'Source JSON or configuration is invalid',
+      );
+    } on TypeError {
+      throw PlatformException(
+        code: 'invalid_source',
+        message: 'Source fields have invalid types',
+      );
+    } catch (_) {
+      throw PlatformException(
+        code: 'engine_failed',
+        message: 'Auxiliary script evaluation failed',
+      );
+    } finally {
+      _tasks.remove(id);
+    }
+  }
+
+  /// Offline preview only: never creates an engine or changes saved sources.
+  Map<String, Object?> _migrate(Map<String, Object?> args) {
+    if (_closed) throw PlatformException(code: 'host_closed');
+    if (args['protocolVersion'] != 1 || args['sourceJson'] is! String) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Protocol v1 and sourceJson required',
+      );
+    }
+    try {
+      final decoded = jsonDecode(args['sourceJson'] as String);
+      if (decoded is! Map || decoded.containsKey('schemaVersion')) {
+        throw const FormatException('Legacy source object required');
+      }
+      final result = SourceMigrator().migrate(
+        Map<String, Object?>.from(decoded),
+      );
+      return {
+        'protocolVersion': 1,
+        ...result.toJson(),
+        'requiresManualWork': result.issues.isNotEmpty,
+        'verified': false,
+        'executed': false,
+      };
+    } on EngineException catch (error) {
+      throw PlatformException(code: error.code, message: error.message);
+    } on FormatException {
+      throw PlatformException(
+        code: 'invalid_source',
+        message: 'A valid legacy source JSON object is required',
+      );
+    } on TypeError {
+      throw PlatformException(
+        code: 'invalid_source',
+        message: 'Legacy source fields have invalid types',
+      );
+    }
+  }
+
   /// Serialize mutations of one source session; different sources remain concurrent.
   Future<T> _serialize<T>(
     String key,
@@ -163,11 +368,17 @@ class SourceHost {
     String key,
     String operation,
     Map<String, Object?> input,
-    CancellationToken token,
-  ) async {
-    final fingerprint = jsonEncode(_canonical(source.toJson()));
+    CancellationToken token, {
+    SourceDefinition? fingerprintSource,
+    bool preserveCachedConfiguration = false,
+  }) async {
+    final fingerprint = jsonEncode(
+      _canonical((fingerprintSource ?? source).toJson()),
+    );
     var entry = _engines[key];
-    if (entry != null && entry.fingerprint != fingerprint) {
+    if (entry != null &&
+        entry.fingerprint != fingerprint &&
+        !preserveCachedConfiguration) {
       // The source queue ensures no old task is using the replaced runtime.
       _engines.remove(key);
       await entry.engine.close();

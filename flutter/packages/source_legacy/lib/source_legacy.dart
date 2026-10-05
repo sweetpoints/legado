@@ -3,6 +3,8 @@ library;
 
 import 'dart:convert';
 
+import 'src/main_js.dart';
+
 export 'src/legacy_host.dart';
 
 import 'package:source_engine/source_engine.dart';
@@ -85,6 +87,8 @@ class LegacySourceImporter {
         );
       }
     }
+    final mainJs = input['mainJs'];
+    final hasMainJs = mainJs is String && mainJs.trim().isNotEmpty;
     final stages = <String, SourceStage>{};
     final exploreItems = <Map<String, Object?>>[];
     final mapping = {
@@ -94,7 +98,10 @@ class LegacySourceImporter {
       'toc': ('ruleToc', null, 'chapterList'),
       'content': ('ruleContent', null, null),
     };
-    for (final entry in mapping.entries) {
+    for (final entry
+        in hasMainJs
+            ? <MapEntry<String, (String, String?, String?)>>[]
+            : mapping.entries) {
       final (ruleKey, urlKey, listKey) = entry.value;
       final raw = input[ruleKey];
       if (raw == null) continue;
@@ -264,6 +271,7 @@ class LegacySourceImporter {
       'exploreScreen',
       'ruleReview',
     ]) {
+      if (key == 'mainJs' && hasMainJs) continue;
       if (input[key] != null && input[key] != '') {
         issues.add(
           LegacyIssue(
@@ -300,9 +308,11 @@ class LegacySourceImporter {
         name: input['bookSourceName']?.toString() ?? base.host,
         baseUrl: base,
         stages: stages,
+        script: hasMainJs ? wrapLegacyMainJs(mainJs, original) : null,
         headers: requestHeaders,
         metadata: {
           'legacy': true,
+          if (hasMainJs) 'legacyMainJs': true,
           if (legacyBaseUrlUnavailable) 'legacyBaseUrlUnavailable': true,
           'legacyOriginal': original,
           if (exploreItems.isNotEmpty) 'legacyExploreItems': exploreItems,

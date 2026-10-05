@@ -32,6 +32,8 @@ dependencies:
     path: ../../packages/source_engine
   source_legacy:
     path: ../../packages/source_legacy
+  source_migration:
+    path: ../../packages/source_migration
   source_v8:
     path: ../../packages/source_v8
   source_platform:
