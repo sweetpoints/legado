@@ -60,7 +60,7 @@ class FlutterSourceEngineTest {
                 jsLib = "legacyJsLibMustNotBeEvaluated()",
                 bookSourceComment =
                     "@source:v1 " +
-                    """{"schemaVersion":1,"id":"modern-auxiliary","name":"Modern","baseUrl":"https://modern-auxiliary.invalid/","stages":{}}""",
+                        """{"schemaVersion":1,"id":"modern-auxiliary","name":"Modern","baseUrl":"https://modern-auxiliary.invalid/","stages":{}}""",
             )
         assertEquals("undefined", DartSourceEngine.evaluate(modern, "typeof java"))
         val script =
@@ -159,6 +159,83 @@ class FlutterSourceEngineTest {
                     ),
                 BookSource::class.java,
             )
+
+    @Test
+    fun legacyLiteralReplacementAndFinalHtml4DecodeRunThroughApp() = runBlocking {
+        assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val origin = "http://127.0.0.1:${server.localPort}"
+            val original = legacySearchSource(origin, "a@text##旧##新")
+            val snapshot = Gson().toJson(original)
+            val bridge = backend()
+            try {
+                val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
+                assertTrue(preview.canApply)
+                assertTrue(preview.issues.isEmpty())
+                assertEquals("unverified", preview.status)
+            } finally {
+                bridge.close()
+            }
+            val serving =
+                async(Dispatchers.IO) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10_000
+                        val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
+                        val request = reader.readLine()
+                        while (!reader.readLine().isNullOrEmpty()) {}
+                        val body =
+                            "<div class='row'><a href='/book'>旧&amp;amp;正文</a><span class='author'>Author</span></div>"
+                                .toByteArray(Charsets.UTF_8)
+                        socket.getOutputStream().apply {
+                            write(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                    .toByteArray()
+                            )
+                            write(body)
+                            flush()
+                        }
+                        request
+                    }
+                }
+            val book = withTimeout(60_000) { WebBook.searchBookAwait(original, "key", 1).single() }
+            assertEquals("新&正文", book.name)
+            assertEquals("$origin/book", book.bookUrl)
+            assertEquals("GET /search?q=key HTTP/1.1", withTimeout(10_000) { serving.await() })
+            assertEquals(snapshot, Gson().toJson(original))
+        }
+    }
+
+    @Test
+    fun mixedMainJsAppHooksRequireManualMigrationThroughActualHost() = runBlocking {
+        val bridge = backend()
+        try {
+            for (hook in listOf("imageStyle", "imageDecode", "payAction", "callBackJs")) {
+                val snapshot =
+                    Gson()
+                        .toJson(
+                            mapOf(
+                                "bookSourceUrl" to "https://mixed-hooks.invalid/$hook",
+                                "bookSourceName" to "Mixed hook",
+                                "enabledCookieJar" to true,
+                                "mainJs" to "function search(){return [];}",
+                                "ruleContent" to mapOf(hook to "old-hook"),
+                            )
+                        )
+                val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
+                assertTrue(preview.requiresManualWork)
+                assertTrue(!preview.canApply)
+                assertEquals("manualRequired", preview.status)
+                val candidate =
+                    Gson().fromJson(preview.candidateJson, com.google.gson.JsonObject::class.java)
+                assertEquals(
+                    Gson().fromJson(snapshot, com.google.gson.JsonObject::class.java),
+                    candidate.getAsJsonObject("metadata").getAsJsonObject("legacyOriginal"),
+                )
+            }
+        } finally {
+            bridge.close()
+        }
+    }
 
     @Test
     fun migrationChannelProducesApplicableUnverifiedPreviewWithoutMutatingSource() = runBlocking {
