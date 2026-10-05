@@ -107,6 +107,6 @@ STAGE 为 search/explore/info/toc/content。旧发现阶段通过 --variables �
 
 本次用户backup.zip集合共554个书源（enabled546、disabled8），其中文本473、非文本81；enabled且文本466。第五轮离线结构导入与迁移审计生成529个候选，其中13个unverified、516个manualRequired；25个未生成候选。相对第四轮状态及issue数未变；相对第三轮仅3个未生成候选变为manualRequired；网络请求、实际执行数与verified数均为0，不表示联网行为、旧JVM等价或整套历史书源兼容通过。
 
-静态菜单metadata覆盖277个源、13,162个入口，10,029个style保留；52个源使用legacyFormUtf8，89个源使用legacyJsonString。issue总数8,121，包含逐入口审查项，总数增减不能单独作为行为兼容改善或退化证明。已知URL模板marker修复后，legacyPageTemplates覆盖529个候选、2,173个阶段；这表示保护标记已写入，不等于实际执行或兼容验收。安全汇总已核对ignored的 round5/summary.json。ID锚点与旧请求支持仍受明确边界约束，详情见[旧版Reference](../reference/legacy/README.md)。
+静态菜单metadata覆盖277个源、13,162个入口，10,029个style保留；52个源使用legacyFormUtf8，89个源使用legacyJsonString。issue总数8,115（较前次减少6项rule_requires_review），包含逐入口审查项，总数增减不能单独作为行为兼容改善或退化证明。已知URL模板marker修复后，legacyPageTemplates覆盖529个候选、2,173个阶段；这表示保护标记已写入，不等于实际执行或兼容验收。安全汇总已核对ignored的 round8/summary.json。ID锚点与旧请求支持仍受明确边界约束，详情见[旧版Reference](../reference/legacy/README.md)。
 
 这里只记录安全汇总；私有原书源及逐源数据不进入Git提交，审计summary保存在ignored的私有临时目录。

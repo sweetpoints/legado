@@ -121,9 +121,9 @@ The official source-built macOS ARM64 library has linked successfully and was
 loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is
 46,032,368 bytes (43.90 MiB), and has SHA-256
 `c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`.
-The current Flutter workspace passed 355 tests (51/53/12/23/22/173/1/20)
+The current Flutter workspace passed 378 tests (64/60/15/23/22/173/1/20)
 and eight clean analyses. Evidence is in
-`tmp/flutter-source-check-app-replacement-current.log` relative to the repository root. The
+`tmp/flutter-source-check-legacy-scalars.log` relative to the repository root. The
 build manifest's initial validation flags remain build-only; executed-test
 evidence is recorded separately.
 
@@ -143,20 +143,6 @@ cases passed in the preceding acceptance round on the Android API 36 emulator; e
 `tmp/flutter-android-test-page-requests-final.log`. These are thirteen test cases, not thirteen
 different device configurations.
 
-The preceding page/request round passed its local Android Release/R8
-build. `tmp/flutter-android-release-page-requests.log` records BUILD
-SUCCESSFUL in 4m1s with minifyAppReleaseWithR8 executed. Debug AAR/APK's ten
-Flutter assets and Release AAR/APK's seven Flutter assets each had matching
-SHA-256 values. The Release artifacts contain identical 3,277,704-byte
-libapp.so files (SHA-256
-`dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91`)
-and manifest-matching 26,306,760-byte libsource_v8.so files with
-the V8 SHA-256 above. These unsigned APKs are local build results, not a
-published release or CI acceptance. Fixed-case checks do not establish all
-historical-source compatibility or a complete Flutter UI migration. Older
-versions and earlier acceptance rounds are historical evidence and do not
-replace this round's checks.
-
 After producing the correct local artifact, run `dart run test:test test` from
 this package to execute the native-assets hook before tests. Bare `dart test`
 does not build the hook's native assets. Tests exercise actual V8 async/sync host
@@ -171,22 +157,24 @@ The legacy AnalyzeUrlPageTemplateGoldenTest also passed seven JVM tests;
 `tmp/flutter-legacy-page-jvm-golden.log` records this fixed-input page-template
 evidence. It does not establish all source or dynamic JavaScript compatibility.
 
-The preceding page/request round's final Android rerun passed thirteen tests with zero failures, errors or
-skips. The final Debug AAR/APK were rechecked for ten matching Flutter assets.
-Release artifact consistency is recorded in
-`tmp/flutter-page-requests-artifact-proof.json`.
+Current scalar acceptance passed 378 Flutter tests, eight analyses and 42 Python
+contract tests (12 native and 30 tooling). Default dual-ABI Debug/Release AARs
+built with a 2 GiB heap and 1 GiB metaspace; native hashes passed validation
+in `tmp/flutter-legacy-scalars-prepare-dual-2g.log`. The full ARM64 API 36
+runner passed 65 unique tests across seven classes with no failures, errors or
+skips (`tmp/flutter-legacy-scalars-device-final-65.log`, BUILD SUCCESSFUL in 13s).
 
-Mandatory Dart-only BookSource routing, editor migration preview and new auxiliary paths are implemented with this round's 355 Flutter tests/eight analyses passing. Default dual-ABI Debug/Release AAR preparation and native-hash validation passed
-in `tmp/flutter-app-replacement-prepare-dual.log`. The default dual-ABI full
-Release App build passed 3,949 JVM tests with zero failures or errors,
-`lintAppRelease`, R8 and `assembleAppRelease`; evidence is in
-`tmp/flutter-app-replacement-release-final.log`. The 40 Python contract tests (12/18/10)
-also passed. The unsigned APK is 112,607,581 bytes, SHA-256
-`3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e`.
-The complete `test-android.sh` runner passed all 63 unique tests across seven
-classes on ARM64 API 36 using the default dual-ABI build. Strict `--since`
-validation confirmed zero failures, errors or skips. Evidence is in
-`tmp/flutter-app-replacement-device-final-63.log`, ending in BUILD SUCCESSFUL
-in 12s. x86_64 CI is
-configured but has not run remotely; x86_64 device acceptance remains pending. The thirteen
-device cases and Release artifact checks above remain historical evidence.
+The full App Release build passed with an 8 GiB heap: 3,949 JVM tests with zero
+failures, errors or skips, lint, R8 and assembly succeeded in 3m28s, recorded
+in `tmp/flutter-legacy-scalars-release-final-8g.log`. The initial 4 GiB full
+Release attempt stopped under GC thrashing protection; the successful 4 GiB
+App Debug and 2 GiB AAR checks do not establish 4 GiB Release acceptance.
+Final APK content/hash-chain verification passed in
+`tmp/flutter-final-release-apk-evidence.json`: APK 112,607,581 bytes, SHA-256
+`eb76a5454a4f2baca369f5ba0413e31ecf7c46e783264a6a5520b58171666c1e`;
+Release AAR 22,595,466 bytes, SHA-256
+`283857c85b48c9b5506f5ea78c91a4d4b5f53db18ba67810b14136b754a6ef77`.
+Source digest/stamp, dual-ABI V8 manifest/AAR libraries, current AOT libraries,
+both NativeAssets mappings and the Flutter SDK-to-APK library chain matched. The APK is unsigned;
+x86_64 device and remote CI acceptance remain pending. Fixed tests do not
+establish full historical-source compatibility or complete Flutter UI migration.

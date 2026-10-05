@@ -104,16 +104,16 @@
     },
     "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot",
     "targetImplementationStatus": {
-      "android-x64": "official pinned source build completed; ELF machine62/three LOAD16KiB/ten exports verified; AAR hash validated; runtime device/App acceptance pending",
+      "android-x64": "official pinned source build completed; ELF machine62/three LOAD16KiB/ten exports verified; default dual-ABI App packaging and final artifact hashes passed; x86_64 runtime device acceptance pending",
       "macos-arm64": "existing source-built target; ARM64 only",
-      "android-arm64": "official source-built target; mandatory routing full test-android.sh passed seven classes/63 unique tests on API36; strict since validation passed"
+      "android-arm64": "official source-built target; mandatory routing full test-android.sh passed seven classes/65 unique tests on API36"
     },
     "currentReplacementSnapshot": {
       "date": "2026-10-05",
       "workspacePackageTests": [
-        51,
-        53,
-        12,
+        64,
+        60,
+        15,
         23,
         22,
         173,
@@ -121,17 +121,18 @@
         20
       ],
       "workspaceStaticAnalyses": 8,
-      "log": "tmp/flutter-source-check-app-replacement-current.log",
+      "log": "tmp/flutter-source-check-legacy-scalars.log",
       "androidJvmAcceptance": {
         "tests": 3949,
         "failures": 0,
         "errors": 0,
-        "log": "tmp/flutter-app-replacement-release-final.log"
+        "skipped": 0,
+        "log": "tmp/flutter-legacy-scalars-release-final-8g.log"
       },
       "androidDeviceAcceptance": {
         "arm64": {
           "classes": 7,
-          "uniqueTests": 63,
+          "uniqueTests": 65,
           "failures": 0,
           "errors": 0,
           "skipped": 0,
@@ -139,20 +140,22 @@
           "defaultDualAbiBuild": true,
           "strictSinceValidation": true,
           "fullRunnerExitCode": 0,
-          "log": "tmp/flutter-app-replacement-device-final-63.log"
+          "log": "tmp/flutter-legacy-scalars-device-final-65.log"
         },
         "x86_64": "pending"
       },
-      "androidDualAbiPackaging": "Default dual-ABI Release App assembled successfully; unsigned APK size and SHA verified",
+      "androidDualAbiPackaging": "Current default dual-ABI App Release assembled successfully; complete APK hash-chain verification passed",
       "androidReleaseR8": {
         "passed": true,
         "lintAppReleasePassed": true,
         "unsignedApk": true,
-        "log": "tmp/flutter-app-replacement-release-final.log"
+        "gradleHeapGiB": 8,
+        "initial4GiBFullRelease": "terminated by GC thrashing protection; not passed",
+        "log": "tmp/flutter-legacy-scalars-release-final-8g.log"
       },
       "fullHistoricalSourceAcceptance": false,
       "ciAcceptance": false,
-      "androidAarPreparationLog": "tmp/flutter-app-replacement-prepare-dual.log",
+      "androidAarPreparationLog": "tmp/flutter-legacy-scalars-prepare-dual-2g.log",
       "officialNativeArtifacts": {
         "android-x64": {
           "bytes": 28321712,
@@ -175,17 +178,35 @@
           "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593"
         }
       },
-      "pythonContractTests": 40,
-      "pythonContractPackageTests": [
-        12,
-        18,
-        10
-      ],
+      "pythonContractTests": 42,
+      "pythonContractPackageTests": {
+        "native": 12,
+        "tooling": 30
+      },
+      "ciConfigured": true,
+      "androidAarPreparationMemory": {
+        "gradleHeapGiB": 2,
+        "metaspaceGiB": 1,
+        "defaultDualAbi": true,
+        "debugReleasePassed": true,
+        "nativeHashesValidated": true
+      },
       "unsignedReleaseApk": {
         "bytes": 112607581,
-        "sha256": "3c9701ba9bf501886f72953dfab62a469973269a6578d2bb3c16d0960932d78e"
+        "sha256": "eb76a5454a4f2baca369f5ba0413e31ecf7c46e783264a6a5520b58171666c1e"
       },
-      "ciConfigured": true
+      "releaseArtifactProof": {
+        "log": "tmp/flutter-final-release-apk-evidence.json",
+        "producerHead": "2939b35555b3987ab487441df1ed5df0418db51f",
+        "sourceDigest": "380042cdc734ebfb5303fd3343e4362bae9d2761768c3f71997ff0fb4e877aa4",
+        "releaseAarBytes": 22595466,
+        "releaseAarSha256": "283857c85b48c9b5506f5ea78c91a4d4b5f53db18ba67810b14136b754a6ef77",
+        "sourceStampMatched": true,
+        "dualAbiV8ManifestAarMatched": true,
+        "currentAotAarMatched": true,
+        "nativeAssetsBothMappingsValidated": true,
+        "sdkMergedStrippedApkMatched": true
+      }
     }
   },
   "engine": {
@@ -434,7 +455,7 @@
       "networkRequests": 0,
       "actuallyExecuted": 0,
       "verified": 0,
-      "issueCount": 8121,
+      "issueCount": 8115,
       "issueCountMeaning": "Per-entry review inventory; count changes alone do not prove behavioral compatibility",
       "menuSources": 277,
       "menuItems": 13162,
@@ -447,7 +468,10 @@
       "date": "2026-10-05",
       "legacyPageTemplateSources": 529,
       "legacyPageTemplateStages": 2173,
-      "summarySnapshot": "private ignored round5/summary.json; original data not committed"
+      "summarySnapshot": "private ignored round8/summary.json; original data not committed",
+      "issueDeltaFromPrevious": {
+        "rule_requires_review": -6
+      }
     }
   },
   "androidBridge": {
