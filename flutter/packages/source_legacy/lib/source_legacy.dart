@@ -292,7 +292,11 @@ class LegacySourceImporter {
         ),
       );
     }
-    if ((input['bookSourceType'] ?? 0) != 0) {
+    final sourceType = input['bookSourceType'] ?? 0;
+    // File download fields are handled by the positional mainJs adapter and
+    // Android's file-book pipeline. Other media and declarative files remain
+    // outside the supported legacy stage contract.
+    if (sourceType != 0 && !(hasMainJs && sourceType == 3)) {
       issues.add(
         const LegacyIssue(
           'bookSourceType',
