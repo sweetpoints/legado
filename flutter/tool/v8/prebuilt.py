@@ -218,8 +218,10 @@ def validate_sdk(root, manifest, pin, local_pins, only_target=None):
         binary = str(_relative(entry.get('binary')))
         if PurePosixPath(binary).parts[0] != name or PurePosixPath(binary).suffix not in ('.a', '.lib'):
             raise ValueError('SDK monolith archive must reside in its target directory')
+        if 'targetConfig' in entry and entry['targetConfig'] != config:
+            raise ValueError('SDK target configuration differs from application pins')
         for field in ('abi', 'minApi', 'minMacOS', 'minIOS'):
-            if field in config and entry.get(field) != config[field]:
+            if field in config and (field in entry or 'targetConfig' not in entry) and entry.get(field) != config[field]:
                 raise ValueError('SDK target platform contract differs from pins')
         size = _positive_size(entry.get('size'))
         path = root / binary

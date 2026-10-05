@@ -120,6 +120,26 @@ class Fixture:
 
 
 class PrebuiltContractTests(unittest.TestCase):
+    def test_full_target_config_is_checked_without_redundant_flat_platform_fields(self):
+        for mismatch in (False, True):
+            f = Fixture()
+            def mutate(files):
+                manifest = json.loads(files['manifest.json'])
+                entry = manifest['targets']['android-arm64']
+                entry.pop('abi'); entry.pop('minApi')
+                entry['targetConfig'] = copy.deepcopy(f.local['targets']['android-arm64'])
+                if mismatch:
+                    entry['targetConfig']['minApi'] = 27
+                files['manifest.json'] = encoded(manifest)
+                f.manifests['android-arm64'] = manifest
+            f.mutate_archive(mutate)
+            with tempfile.TemporaryDirectory() as directory:
+                if mismatch:
+                    with self.assertRaises(ValueError):
+                        f.install(directory)
+                else:
+                    self.assertTrue((f.install(directory) / 'manifest.json').is_file())
+
     def test_exact_tag_verified_download_installs_pure_sdk_manifest_contract(self):
         f = Fixture()
         with tempfile.TemporaryDirectory() as directory:
