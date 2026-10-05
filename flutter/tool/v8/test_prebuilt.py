@@ -32,19 +32,22 @@ class Fixture:
         }
         self.pin = {'schemaVersion': 1, 'repository': 'owner/v8-prebuilt', 'tag': 'v8-15.4.80.24',
                     'v8': self.local['v8'], 'depotTools': self.local['depotTools'],
-                    'bridge': {'abi': 1, 'sourceSha256': 'c' * 64}, 'assets': []}
+                    'assets': []}
         self.manifests = {}
         self.payloads = {}
         for target in targets:
-            files = {target + '/libsource_v8.so': b'fixed native binary ' + target.encode(),
+            files = {target + '/libv8_monolith.a': b'!<arch>\nfixed V8 archive ' + target.encode(),
                      target + '/args.gn': b'target_cpu = "arm64"\n',
                      target + '/dependencies.txt': b'fixed deps\n', target + '/defines.json': b'[]\n',
                      target + '/include/v8.h': b'// Fixed public headers\n',
+                     target + '/linking.json': encoded({'schemaVersion': 1, 'target': target, 'compileFlags': ['-std=c++20'], 'includeDirectories': [target + '/include', target + '/stdlib/include'], 'libraries': [target + '/libv8_monolith.a', target + '/stdlib/libc++.a']}),
+                     target + '/stdlib/include/__config': b'// matching libc++ configuration\n',
+                     target + '/stdlib/libc++.a': b'!<arch>\nstandard library',
                      target + '/runtime-smoke.json': b'{"passed":true}\n',
                      'licenses/LICENSE': b'Official BSD license\n', 'licenses/AUTHORS': b'Authors\n',
                      'licenses/third_party/example/NOTICE': b'Notice\n'}
-            entry = {'binary': target + '/libsource_v8.so', 'sha256': digest(files[target + '/libsource_v8.so']),
-                     'size': len(files[target + '/libsource_v8.so']), 'abi': self.local['targets'][target]['abi'],
+            entry = {'artifactKind': 'v8-static-sdk', 'binary': target + '/libv8_monolith.a', 'sha256': digest(files[target + '/libv8_monolith.a']),
+                     'size': len(files[target + '/libv8_monolith.a']), 'abi': self.local['targets'][target]['abi'],
                      'minApi': 26, 'gnArgs': files[target + '/args.gn'].decode(),
                      'gnArgsSha256': digest(files[target + '/args.gn']),
                      'dependencyInventorySha256': digest(files[target + '/dependencies.txt']),
@@ -53,7 +56,7 @@ class Fixture:
             entry['files'] = [{'path': p, 'sha256': digest(data), 'size': len(data)} for p, data in files.items() if p.startswith(target + '/')]
             entry['targetFiles'] = copy.deepcopy(entry['files'])
             manifest = {'schemaVersion': 1, 'v8': self.pin['v8'], 'depotTools': self.pin['depotTools'],
-                        'bridge': self.pin['bridge'], 'targets': {target: entry},
+                        'targets': {target: entry},
                         'licenses': [{'path': p, 'sha256': digest(data)} for p, data in files.items() if p.startswith('licenses/')]}
             self.manifests[target] = manifest
             files['manifest.json'] = encoded(manifest)
@@ -76,7 +79,7 @@ class Fixture:
         return output.getvalue()
 
     def refresh_release(self):
-        release_manifest = {k: self.pin[k] for k in ('schemaVersion', 'v8', 'depotTools', 'bridge', 'assets')}
+        release_manifest = {k: self.pin[k] for k in ('schemaVersion', 'v8', 'depotTools', 'assets')}
         release_manifest['targets'] = {t: m['targets'][t] for t, m in self.manifests.items()}
         release_manifest['licenses'] = {t: m['licenses'] for t, m in self.manifests.items()}
         payload = encoded(release_manifest)
@@ -101,7 +104,7 @@ class Fixture:
 
     def install(self, directory, target='android-arm64'):
         return consumer.install(self.pin, target, local_pins=self.local,
-                                actual_bridge_digest='c' * 64, cache_root=directory, downloader=self.fetch)
+                                cache_root=directory, downloader=self.fetch)
 
     def mutate_archive(self, mutation):
         asset = self.pin['assets'][0]
@@ -117,15 +120,16 @@ class Fixture:
 
 
 class PrebuiltContractTests(unittest.TestCase):
-    def test_exact_tag_verified_download_installs_existing_native_manifest_contract(self):
+    def test_exact_tag_verified_download_installs_pure_sdk_manifest_contract(self):
         f = Fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = f.install(directory)
             manifest = json.loads((root / 'manifest.json').read_text())
             self.assertEqual(manifest['v8'], f.local['v8'])
-            self.assertEqual(manifest['bridge'], f.pin['bridge'])
+            self.assertNotIn('bridge', manifest)
+            self.assertEqual(manifest['targets']['android-arm64']['artifactKind'], 'v8-static-sdk')
             self.assertFalse(manifest['targets']['android-arm64']['validation']['runtimeTested'])
-            self.assertEqual(consumer.sha(root / 'android-arm64/libsource_v8.so'), manifest['targets']['android-arm64']['sha256'])
+            self.assertEqual(consumer.sha(root / 'android-arm64/libv8_monolith.a'), manifest['targets']['android-arm64']['sha256'])
             self.assertEqual(len(list(root.glob('licenses/**/*NOTICE'))), 1)
             self.assertTrue(f.urls[0].endswith('/releases/tags/v8-15.4.80.24'))
             self.assertFalse(any('/latest' in url for url in f.urls))
@@ -140,7 +144,7 @@ class PrebuiltContractTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError):
                     f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40)).exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
                 self.assertFalse(list(Path(directory).glob('*.lock')))
 
     def test_wrong_tag_draft_prerelease_asset_origin_or_digest_is_rejected(self):
@@ -153,7 +157,7 @@ class PrebuiltContractTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
 
-    def test_wrong_source_revision_bridge_abi_digest_and_moving_selector_fail_before_network(self):
+    def test_wrong_source_revision_combined_bridge_and_moving_selector_fail_before_network(self):
         for key, value in [('tag', 'latest'), ('bridge', {'abi': 2, 'sourceSha256': 'c' * 64}),
                            ('bridge', {'abi': 1, 'sourceSha256': 'd' * 64}),
                            ('v8', {'version': 'new', 'revision': 'f' * 40}),
@@ -164,7 +168,7 @@ class PrebuiltContractTests(unittest.TestCase):
             self.assertEqual(f.urls, [])
 
     def test_corrupt_binary_license_build_metadata_and_unindexed_payload_fail_before_publish(self):
-        changes = [lambda files: files.update({'android-arm64/libsource_v8.so': b'corrupt'}),
+        changes = [lambda files: files.update({'android-arm64/libv8_monolith.a': b'corrupt'}),
                    lambda files: files.update({'licenses/LICENSE': b'corrupt'}),
                    lambda files: files.update({'android-arm64/args.gn': b'corrupt'}),
                    lambda files: files.update({'execute-me': b'not indexed'}),
@@ -173,7 +177,7 @@ class PrebuiltContractTests(unittest.TestCase):
             f = Fixture(); f.mutate_archive(change)
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40)).exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
 
     def test_archive_rejects_traversal_absolute_links_and_duplicate_names(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -188,29 +192,45 @@ class PrebuiltContractTests(unittest.TestCase):
             archive.write_bytes(Fixture.archive({'same': b'first'}, tarfile.TarInfo('same')))
             with self.assertRaisesRegex(ValueError, 'Duplicate'): consumer._extract(archive, root)
 
-    def test_two_targets_merge_without_losing_existing_verified_binary_or_licenses(self):
+    def test_sdk_targets_are_isolated_and_leave_existing_app_bridge_cache_unchanged(self):
         f = Fixture(('android-arm64', 'android-x64'))
         with tempfile.TemporaryDirectory() as directory:
-            root = f.install(directory)
-            old = (root / 'android-arm64/libsource_v8.so').read_bytes()
-            self.assertEqual(root, f.install(directory, 'android-x64'))
-            self.assertEqual((root / 'android-arm64/libsource_v8.so').read_bytes(), old)
-            self.assertEqual(set(json.loads((root / 'manifest.json').read_text())['targets']), {'android-arm64', 'android-x64'})
+            cache = Path(directory) / 'source_sdk'
+            bridge = Path(directory) / 'self-built' / ('a' * 40)
+            bridge.mkdir(parents=True)
+            (bridge / 'libsource_v8.so').write_bytes(b'previous App bridge')
+            root = f.install(cache)
+            old = (root / 'android-arm64/libv8_monolith.a').read_bytes()
+            other = f.install(cache, 'android-x64')
+            self.assertNotEqual(root, other)
+            self.assertEqual((root / 'android-arm64/libv8_monolith.a').read_bytes(), old)
+            self.assertEqual(set(json.loads((root / 'manifest.json').read_text())['targets']), {'android-arm64'})
+            self.assertEqual(set(json.loads((other / 'manifest.json').read_text())['targets']), {'android-x64'})
+            self.assertEqual((bridge / 'libsource_v8.so').read_bytes(), b'previous App bridge')
 
-    def test_existing_source_built_cache_without_release_pin_or_inventory_can_merge(self):
-        f = Fixture(('android-arm64', 'android-x64'))
-        with tempfile.TemporaryDirectory() as directory:
-            root = f.install(directory)
-            manifest = json.loads((root / 'manifest.json').read_text())
-            del manifest['targets']['android-arm64']['files']
-            del manifest['targets']['android-arm64']['targetFiles']
-            (root / 'android-arm64/include/v8.h').unlink()
-            (root / 'android-arm64/runtime-smoke.json').unlink()
-            (root / 'manifest.json').write_bytes(encoded(manifest))
-            (root / 'pins.json').unlink()
-            (root / '.publish.lock').touch()
-            f.install(directory, 'android-x64')
-            self.assertEqual(set(json.loads((root / 'manifest.json').read_text())['targets']), {'android-arm64', 'android-x64'})
+    def test_sdk_rejects_combined_bridge_headers_artifact_kind_and_thin_archive(self):
+        def bridge_header(files):
+            files['android-arm64/include/source_v8.h'] = b'App bridge header'
+        def combined_kind(files):
+            manifest = json.loads(files['manifest.json'])
+            manifest['targets']['android-arm64']['artifactKind'] = 'source-v8-bridge'
+            files['manifest.json'] = encoded(manifest)
+        def bridge_provenance(files):
+            manifest = json.loads(files['manifest.json'])
+            manifest['bridge'] = {'abi': 1, 'sourceSha256': 'c' * 64}
+            files['manifest.json'] = encoded(manifest)
+        def thin_archive(files):
+            files['android-arm64/libv8_monolith.a'] = b'!<thin>\nexternal objects'
+            manifest = json.loads(files['manifest.json'])
+            entry = manifest['targets']['android-arm64']
+            entry['sha256'] = digest(files[entry['binary']])
+            entry['size'] = len(files[entry['binary']])
+            files['manifest.json'] = encoded(manifest)
+        for change in (bridge_header, combined_kind, bridge_provenance, thin_archive):
+            f = Fixture(); f.mutate_archive(change)
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(ValueError): f.install(directory)
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
 
     def test_inventory_requires_all_files_and_cannot_disagree_with_source_index(self):
         def without_header(files):
@@ -227,7 +247,7 @@ class PrebuiltContractTests(unittest.TestCase):
             f = Fixture(); f.mutate_archive(change)
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40)).exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
 
     def test_failed_new_download_preserves_installed_cache(self):
         f = Fixture(('android-arm64', 'android-x64'))
@@ -244,18 +264,29 @@ class PrebuiltContractTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 root = f.install(directory)
                 if symlink:
-                    binary = root / 'android-arm64/libsource_v8.so'; binary.unlink()
+                    binary = root / 'android-arm64/libv8_monolith.a'; binary.unlink()
                     binary.symlink_to(root / 'licenses/LICENSE')
                 else:
                     (root / 'licenses/LICENSE').write_bytes(b'conflict')
                 old = (root / 'manifest.json').read_bytes()
-                with self.assertRaises(ValueError): f.install(directory, 'android-x64')
+                with self.assertRaises(ValueError): f.install(directory)
                 self.assertEqual((root / 'manifest.json').read_bytes(), old)
+
+    def test_sdk_refuses_bridge_cache_root_and_symlink_revision(self):
+        f = Fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = Path(directory) / 'self-built'
+            with self.assertRaisesRegex(ValueError, 'separate'): f.install(bridge)
+            cache = Path(directory) / 'source_sdk'; cache.mkdir()
+            other = Path(directory) / 'other'; other.mkdir()
+            (cache / ('a' * 40)).symlink_to(other, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'symlink'): f.install(cache)
+            self.assertFalse(list(other.iterdir()))
 
     def test_lock_refuses_concurrent_install_and_never_removes_other_lock(self):
         f = Fixture()
         with tempfile.TemporaryDirectory() as directory:
-            lock = Path(directory) / ('.prebuilt-' + 'a' * 40 + '.lock'); lock.mkdir()
+            lock = Path(directory) / ('.sdk-' + 'a' * 40 + '-android-arm64.lock'); lock.mkdir()
             with self.assertRaisesRegex(ValueError, 'locked'): f.install(directory)
             self.assertTrue(lock.exists())
             self.assertEqual(f.urls, [])

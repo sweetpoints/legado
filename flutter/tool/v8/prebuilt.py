@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install reviewed, SHA-pinned V8 Release archives into the native cache.
+"""Install reviewed, SHA-pinned pure V8 SDK Release archives into an SDK cache.
 
 This command never discovers a latest version or updates application pins.
 The release pin is an explicit reviewed input, independent of downloaded data.
@@ -11,7 +11,6 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import struct
 import tarfile
 import tempfile
 import urllib.parse
@@ -59,25 +58,13 @@ def _relative(value):
     return PurePosixPath(value)
 
 
-def bridge_digest():
-    files = {name: PACKAGE / name for name in (
-        'src/source_v8.cpp', 'src/source_v8.h', 'src/android_exports.map')}
-    files['tool/v8/source_v8.gni'] = HERE / 'source_v8.gni'
-    digest = hashlib.sha256()
-    for label, path in sorted(files.items()):
-        name, data = label.encode(), path.read_bytes()
-        digest.update(struct.pack('>Q', len(name)) + name)
-        digest.update(struct.pack('>Q', len(data)) + data)
-    return digest.hexdigest()
-
-
 def _object(value, label):
     if not isinstance(value, dict):
         raise ValueError(label + ' must be a JSON object')
     return value
 
 
-def validate_pin(pin, local_pins, actual_bridge_digest):
+def validate_pin(pin, local_pins):
     _object(pin, 'Release pin')
     if type(pin.get('schemaVersion')) is not int or pin['schemaVersion'] != 1:
         raise ValueError('Unsupported release pin schema')
@@ -102,9 +89,8 @@ def validate_pin(pin, local_pins, actual_bridge_digest):
             raise ValueError('Official source repository and complete fixed revision required')
     if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){2,3}', pin['v8'].get('version', '')):
         raise ValueError('Fixed V8 source version required')
-    expected_bridge = {'abi': 1, 'sourceSha256': _digest(actual_bridge_digest)}
-    if pin.get('bridge') != expected_bridge or type(pin['bridge'].get('abi')) is not int:
-        raise ValueError('Release bridge ABI/source differs from application bridge')
+    if 'bridge' in pin:
+        raise ValueError('Pure SDK release pins must not include a Legado bridge')
     assets = pin.get('assets')
     if not isinstance(assets, list) or not assets:
         raise ValueError('Reviewed release assets required')
@@ -116,6 +102,8 @@ def validate_pin(pin, local_pins, actual_bridge_digest):
         if '/' in name or not name.endswith('.tar.gz'):
             raise ValueError('Expected a root tar.gz release asset')
         target = asset.get('target')
+        if not isinstance(target, str) or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)+', target):
+            raise ValueError('SDK target must be a fixed platform identifier')
         if target not in local_pins.get('targets', {}):
             raise ValueError('Asset target is not supported by application pins')
         if name in names or target in targets:
@@ -207,47 +195,52 @@ def _extract(archive, root):
 def _provenance(manifest, pin):
     if type(manifest.get('schemaVersion')) is not int or manifest['schemaVersion'] != 1:
         raise ValueError('Unsupported native manifest schema')
-    for key in ('v8', 'depotTools', 'bridge'):
+    for key in ('v8', 'depotTools'):
         if manifest.get(key) != pin[key]:
-            raise ValueError('Native manifest ' + key + ' provenance mismatch')
+            raise ValueError('SDK manifest ' + key + ' provenance mismatch')
+    if 'bridge' in manifest:
+        raise ValueError('Pure SDK manifests must not include a Legado bridge')
 
 
-def validate_native(root, manifest, pin, local_pins, only_target=None):
+def validate_sdk(root, manifest, pin, local_pins, only_target=None):
     _provenance(manifest, pin)
-    targets = _object(manifest.get('targets'), 'Native targets')
-    if not targets or (only_target and set(targets) != {only_target}):
+    targets = _object(manifest.get('targets'), 'SDK targets')
+    if not only_target or set(targets) != {only_target}:
         raise ValueError('Archive must contain exactly its pinned target')
-    expected_files = {'manifest.json'}
-    if (root / 'pins.json').is_file():
-        expected_files.add('pins.json')
+    expected_files = {'manifest.json', 'pins.json'}
     for name, entry in targets.items():
-        _object(entry, 'Native target')
+        _object(entry, 'SDK target')
+        if entry.get('artifactKind') != 'v8-static-sdk':
+            raise ValueError('Pure V8 static SDK artifact required')
         config = local_pins.get('targets', {}).get(name)
         if config is None:
-            raise ValueError('Native target unsupported by application pins')
+            raise ValueError('SDK target unsupported by application pins')
         binary = str(_relative(entry.get('binary')))
-        if PurePosixPath(binary).parts[0] != name:
-            raise ValueError('Native binary must reside in its target directory')
-        for field in ('abi', 'minApi', 'minMacOS'):
+        if PurePosixPath(binary).parts[0] != name or PurePosixPath(binary).suffix not in ('.a', '.lib'):
+            raise ValueError('SDK monolith archive must reside in its target directory')
+        for field in ('abi', 'minApi', 'minMacOS', 'minIOS'):
             if field in config and entry.get(field) != config[field]:
-                raise ValueError('Native target platform contract differs from pins')
+                raise ValueError('SDK target platform contract differs from pins')
         size = _positive_size(entry.get('size'))
         path = root / binary
         if not path.is_file() or path.is_symlink() or path.stat().st_size != size or sha(path) != _digest(entry.get('sha256')):
-            raise ValueError('Native binary checksum/size mismatch')
+            raise ValueError('SDK monolith checksum/size mismatch')
+        with path.open('rb') as library:
+            if library.read(8) != b'!<arch>\n':
+                raise ValueError('SDK library must be a self-contained static archive')
         if entry.get('validation', {}).get('built') is not True:
-            raise ValueError('Native artifact is not marked built')
+            raise ValueError('SDK artifact is not marked built')
         expected_files.add(binary)
         for basename, field in (('args.gn', 'gnArgsSha256'), ('dependencies.txt', 'dependencyInventorySha256'), ('defines.json', 'definesSha256')):
             label = name + '/' + basename
             metadata = root / label
             if not metadata.is_file() or sha(metadata) != _digest(entry.get(field)):
-                raise ValueError('Native build metadata checksum mismatch')
+                raise ValueError('SDK build metadata checksum mismatch')
             expected_files.add(label)
         if (root / name / 'args.gn').read_text() != entry.get('gnArgs'):
-            raise ValueError('Native GN arguments mismatch')
+            raise ValueError('SDK GN arguments mismatch')
         inventory = entry.get('files', entry.get('targetFiles'))
-        if only_target and inventory is None:
+        if inventory is None:
             raise ValueError('Release target file checksum inventory required')
         if 'files' in entry and 'targetFiles' in entry and entry['files'] != entry['targetFiles']:
             raise ValueError('Release/source target inventory mismatch')
@@ -264,12 +257,16 @@ def validate_native(root, manifest, pin, local_pins, only_target=None):
                 file = root / label
                 if not file.is_file() or file.is_symlink() or file.stat().st_size != _positive_size(item.get('size')) or sha(file) != _digest(item.get('sha256')):
                     raise ValueError('Target file inventory checksum/size mismatch')
-            if not {binary, name + '/args.gn', name + '/dependencies.txt', name + '/defines.json'}.issubset(indexed_target):
-                raise ValueError('Target inventory must include binary and build metadata')
+            if not {binary, name + '/args.gn', name + '/dependencies.txt', name + '/defines.json',
+                    name + '/include/v8.h', name + '/linking.json'}.issubset(indexed_target):
+                raise ValueError('SDK inventory must include monolith, V8 headers, linking and build metadata')
+            if any(PurePosixPath(label).name in ('source_v8.h', 'source_v8.cpp', 'android_exports.map') for label in indexed_target):
+                raise ValueError('Legado bridge files are not part of a pure V8 SDK')
+            _object(json.loads((root / name / 'linking.json').read_text()), 'SDK linking metadata')
             expected_files.update(indexed_target)
     licenses = manifest.get('licenses')
     if not isinstance(licenses, list) or not licenses:
-        raise ValueError('Native licenses index required')
+        raise ValueError('SDK licenses index required')
     indexed = set()
     for entry in licenses:
         _object(entry, 'License')
@@ -285,34 +282,39 @@ def validate_native(root, manifest, pin, local_pins, only_target=None):
     actual = set()
     for path in root.rglob('*'):
         if path.is_symlink():
-            raise ValueError('Native cache symlinks forbidden')
-        if path.is_file() and not (only_target is None and path.relative_to(root).as_posix() == '.publish.lock'):
+            raise ValueError('SDK cache symlinks forbidden')
+        if path.is_file():
             actual.add(path.relative_to(root).as_posix())
     if actual != expected_files:
-        raise ValueError('Native archive/cache contains unindexed or missing files')
+        raise ValueError('SDK archive/cache contains unindexed or missing files')
     return targets
 
 
-def install(pin, target, *, local_pins=None, actual_bridge_digest=None,
+def install(pin, target, *, local_pins=None,
             cache_root=None, downloader=download):
     local_pins = local_pins or json.loads((HERE / 'pins.json').read_text())
-    validate_pin(pin, local_pins, actual_bridge_digest or bridge_digest())
+    validate_pin(pin, local_pins)
     matches = [a for a in pin['assets'] if a['target'] == target]
     if len(matches) != 1:
         raise ValueError('Target absent from reviewed release pin')
     asset = matches[0]
-    cache_root = Path(cache_root) if cache_root else PACKAGE / '.cache/self-built'
+    cache_root = Path(cache_root) if cache_root else PACKAGE / '.cache/source_sdk'
+    if 'self-built' in cache_root.parts:
+        raise ValueError('SDK cache must be separate from the App bridge cache')
     if cache_root.is_symlink():
         raise ValueError('Cache root symlinks forbidden')
     cache_root.mkdir(parents=True, exist_ok=True)
-    destination = cache_root / pin['v8']['revision']
-    lock = cache_root / ('.prebuilt-' + pin['v8']['revision'] + '.lock')
+    destination = cache_root / pin['v8']['revision'] / target
+    if destination.parent.is_symlink():
+        raise ValueError('SDK revision directory symlink forbidden')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock = cache_root / ('.sdk-' + pin['v8']['revision'] + '-' + target + '.lock')
     try:
         lock.mkdir()
     except FileExistsError as error:
-        raise ValueError('Native cache installation already locked') from error
+        raise ValueError('SDK cache installation already locked') from error
     try:
-        with tempfile.TemporaryDirectory(prefix='.prebuilt-', dir=cache_root) as directory:
+        with tempfile.TemporaryDirectory(prefix='.sdk-', dir=cache_root) as directory:
             work = Path(directory)
             api = 'https://api.github.com/repos/' + pin['repository'] + '/releases/tags/' + urllib.parse.quote(pin['tag'], safe='')
             release_path = work / 'release.json'
@@ -331,39 +333,26 @@ def install(pin, target, *, local_pins=None, actual_bridge_digest=None,
             _download_checked(downloader, url, archive, asset['sha256'], asset['size'])
             incoming = work / 'incoming'; incoming.mkdir()
             _extract(archive, incoming)
-            manifest = _object(json.loads((incoming / 'manifest.json').read_text()), 'Native manifest')
+            manifest = _object(json.loads((incoming / 'manifest.json').read_text()), 'SDK manifest')
             archive_pins = _object(json.loads((incoming / 'pins.json').read_text()), 'Archive pins')
             for key in ('v8', 'depotTools'):
                 if archive_pins.get(key) != local_pins[key]:
                     raise ValueError('Archive source pins mismatch')
             if archive_pins.get('targets', {}).get(target) != local_pins['targets'][target]:
                 raise ValueError('Archive target pins mismatch')
-            validate_native(incoming, manifest, pin, local_pins, target)
+            validate_sdk(incoming, manifest, pin, local_pins, target)
             if release_manifest.get('targets', {}).get(target) != manifest['targets'][target]:
-                raise ValueError('Release/native target provenance mismatch')
+                raise ValueError('Release/SDK target provenance mismatch')
             if _object(release_manifest.get('licenses'), 'Release license index').get(target) != manifest['licenses']:
-                raise ValueError('Release/native license index mismatch')
-            merged = work / 'merged'
+                raise ValueError('Release/SDK license index mismatch')
+            # SDK targets are isolated: platform-specific standard libraries and
+            # licenses must never overwrite another SDK or a built App bridge.
             if destination.exists():
                 if destination.is_symlink():
-                    raise ValueError('Native cache destination symlink forbidden')
-                previous = _object(json.loads((destination / 'manifest.json').read_text()), 'Existing manifest')
-                validate_native(destination, previous, pin, local_pins)
-                shutil.copytree(destination, merged)
-                indexed = {i['path']: i for i in previous['licenses']}
-                for entry in manifest['licenses']:
-                    if entry['path'] in indexed and indexed[entry['path']] != entry:
-                        raise ValueError('Existing license provenance conflict')
-                    indexed[entry['path']] = entry
-                manifest['licenses'] = [indexed[k] for k in sorted(indexed)]
-                manifest['targets'] = previous['targets'] | manifest['targets']
-            else:
-                merged.mkdir()
-            shutil.copytree(incoming, merged, dirs_exist_ok=True)
-            (merged / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-            # Keep one coherent application cache contract, not an archive-specific pin set.
-            (merged / 'pins.json').write_text(json.dumps(local_pins, indent=2) + '\n')
-            validate_native(merged, manifest, pin, local_pins)
+                    raise ValueError('SDK cache destination symlink forbidden')
+                previous = _object(json.loads((destination / 'manifest.json').read_text()), 'Existing SDK manifest')
+                validate_sdk(destination, previous, pin, local_pins, target)
+            merged = incoming
             backup = work / 'previous'
             if destination.exists():
                 os.replace(destination, backup)
@@ -380,16 +369,16 @@ def install(pin, target, *, local_pins=None, actual_bridge_digest=None,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pin', required=True, type=Path, help='Reviewed immutable Release pin JSON')
+    parser.add_argument('--pin', required=True, type=Path, help='Reviewed immutable pure V8 SDK Release pin JSON')
     parser.add_argument('--target', required=True)
     parser.add_argument('--cache-root', type=Path)
     args = parser.parse_args()
     installed = install(json.loads(args.pin.read_text()), args.target, cache_root=args.cache_root)
-    print(json.dumps({'artifactRoot': str(installed), 'target': args.target, 'verifiedChecksums': True}))
+    print(json.dumps({'sdkRoot': str(installed), 'target': args.target, 'verifiedChecksums': True}))
 
 
 if __name__ == '__main__':
     try:
         main()
     except (ValueError, OSError, KeyError, TypeError, tarfile.TarError) as error:
-        raise SystemExit('Pinned V8 installation failed: ' + str(error))
+        raise SystemExit('Pinned V8 SDK installation failed: ' + str(error))
