@@ -201,13 +201,14 @@ class ExploreRefreshUiTest {
         for (mode in listOf("Long list", "Short list")) {
             val entered = CountDownLatch(1)
             val release = CountDownLatch(1)
-            val server = object : NanoHTTPD("127.0.0.1", 0) {
-                override fun serve(session: IHTTPSession): Response {
-                    entered.countDown()
-                    check(release.await(10, TimeUnit.SECONDS))
-                    return newFixedLengthResponse("ready")
+            val server =
+                object : NanoHTTPD("127.0.0.1", 0) {
+                    override fun serve(session: IHTTPSession): Response {
+                        entered.countDown()
+                        check(release.await(10, TimeUnit.SECONDS))
+                        return newFixedLengthResponse("ready")
+                    }
                 }
-            }
             server.start()
             try {
                 exploreInfoMapList[source.bookSourceUrl]!!.putAll(
@@ -219,10 +220,17 @@ class ExploreRefreshUiTest {
                     "Category mode",
                     "Rendered + $mode",
                 ) {
-                    compose.onNodeWithTag("explore-home-control:37")
-                        .onChildren().filter(hasClickAction()).onFirst().performClick()
+                    compose
+                        .onNodeWithTag("explore-home-control:37")
+                        .onChildren()
+                        .filter(hasClickAction())
+                        .onFirst()
+                        .performClick()
                     compose.onNodeWithText(mode).performClick()
-                    assertTrue("Async V8 action must be in flight", entered.await(5, TimeUnit.SECONDS))
+                    // Keep advancing Compose frames so its LaunchedEffect can dispatch the
+                    // clicked action. A blocking latch wait here stalls the test frame clock.
+                    compose.waitUntil(timeoutMillis = 5_000) { entered.count == 0L }
+                    assertTrue("Async V8 action must be in flight", entered.count == 0L)
                     // Collect an unrelated JVM control while the actual action owns its callback.
                     // The source no longer has reflective access to Packages.java.*.
                     fun probe() = WeakReference(Any())
