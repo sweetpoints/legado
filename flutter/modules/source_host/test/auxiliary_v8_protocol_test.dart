@@ -16,6 +16,8 @@ void main() {
     Map<String, Object?> bindings = const {},
     String prelude = '',
     int timeout = 1000,
+    String descriptorBaseUrl = 'https://fixture.invalid/',
+    Map<String, String> headers = const {'X-Fixture': 'value'},
   }) async {
     final result = await host.handle(
       MethodCall('evaluateAuxiliary', {
@@ -27,8 +29,8 @@ void main() {
         'prelude': prelude,
         'timeoutMs': timeout,
         'sourceJson': {
-          'baseUrl': 'https://fixture.invalid/',
-          'headers': {'X-Fixture': 'value'},
+          'baseUrl': descriptorBaseUrl,
+          'headers': headers,
         },
       }),
     ) as Map;
@@ -62,6 +64,25 @@ void main() {
   test('null owner calls are ephemeral', () async {
     await evaluate('globalThis.privateValue=42', owner: null);
     expect(await evaluate('typeof privateValue', owner: null), 'undefined');
+  });
+  test('same owner keeps globals when page and source headers change', () async {
+    await evaluate(
+      'var counter=41; globalThis.saved=99;',
+      bindings: {'baseUrl': 'https://fixture.invalid/book/first'},
+    );
+    expect(
+      await evaluate(
+        '({counter:++counter,saved:globalThis.saved,baseUrl})',
+        bindings: {'baseUrl': 'https://next.invalid/book/second'},
+        descriptorBaseUrl: 'https://next.invalid/',
+        headers: {'X-Fixture': 'changed'},
+      ),
+      {
+        'counter': 42,
+        'saved': 99,
+        'baseUrl': 'https://next.invalid/book/second',
+      },
+    );
   });
   test(
     'current page baseUrl binding is not replaced by source descriptor origin',

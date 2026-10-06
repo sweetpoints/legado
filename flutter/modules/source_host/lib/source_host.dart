@@ -213,13 +213,10 @@ class SourceHost {
       final key = '__aux:$owner';
       return await _serialize(key, token, () async {
         _CachedEngine? entry = retained ? _engines[key] : null;
-        final fingerprint = jsonEncode(_canonical(source.toJson()));
-        if (entry != null && entry.fingerprint != fingerprint) {
-          _engines.remove(key);
-          await entry.engine.close();
-          entry = null;
-        }
-        entry ??= _CachedEngine(fingerprint, createEngine(source));
+        // Auxiliary descriptors describe this call, not the retained VM recipe.
+        // The runtime handles prelude changes; pages and headers must preserve
+        // source globals while evaluateAuxiliary receives the current descriptor.
+        entry ??= _CachedEngine(key, createEngine(source));
         if (retained) _engines[key] = entry;
         _active.add(key);
         try {
