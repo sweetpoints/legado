@@ -112,7 +112,7 @@ class LinkContractTests(unittest.TestCase):
             self.assertIn('-Wl,-z,max-page-size=16384', args)
             self.assertLess(args.index('/sdk/' + target + '/lib/monolith.a'), args.index('/sdk/' + target + '/lib/runtime.a'))
 
-    def test_android_sdk_contract_supports_exact_unwind_and_archive_rescan(self):
+    def test_android_sdk_contract_supports_unwind_rescan_and_allocator_wrappers(self):
         fixture_spec = importlib.util.spec_from_file_location('sdk_download_fixture', Path(__file__).with_name('test_prebuilt.py'))
         fixture_module = importlib.util.module_from_spec(fixture_spec)
         fixture_spec.loader.exec_module(fixture_module)
@@ -157,6 +157,20 @@ class LinkContractTests(unittest.TestCase):
             contract['staticLibraryGrouping'] = 'rescan'
             for unsupported in ('--unwindlib=libunwind', '--unwindlib=/untrusted/archive'):
                 contract['linkOptions'][-1] = unsupported
+                update_contract()
+                with self.assertRaisesRegex(ValueError, 'outside the supported'):
+                    linker.verified_sdk(root, target, fixture.local)
+
+            contract['linkOptions'][-1] = '--unwindlib=none'
+            contract['linkOptions'].append('-Wl,-wrap,realpath')
+            for wrapper in ('-Wl,-wrap,realpath', '-Wl,--wrap=getcwd', '-Wl,-wrap,_allocator123'):
+                contract['linkOptions'][-1] = wrapper
+                update_contract()
+                _, validated = linker.verified_sdk(root, target, fixture.local)
+                args = linker.command(root, target, validated, Path('/clang++'), Path('/sysroot'), Path('/bridge.so'), linker.source_files())
+                self.assertEqual(args.count(wrapper), 1)
+            for wrapper in ('-Wl,-wrap,/untrusted/file', '-Wl,--wrap=getcwd,other', '-Wl,-wrap,*', '-Wl,--wrap='):
+                contract['linkOptions'][-1] = wrapper
                 update_contract()
                 with self.assertRaisesRegex(ValueError, 'outside the supported'):
                     linker.verified_sdk(root, target, fixture.local)

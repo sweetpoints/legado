@@ -111,6 +111,9 @@ def verified_sdk(sdk_root, target, pins):
             framework = next(options, None)
             if framework is None or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', framework):
                 raise ValueError('Invalid Apple framework option pair')
+        elif target.startswith('android-') and re.fullmatch(r'-Wl,(?:-wrap,|--wrap=)[A-Za-z_][A-Za-z0-9_]*', option):
+            # Preserve only symbol wrappers recorded by the official SDK GN build.
+            continue
         elif option == '--unwindlib=none' and target.startswith('android-'):
             # The SDK runtime already contains Chromium's pinned libunwind.
             # Do not let Clang add an unrelated sysroot libunwind archive.
