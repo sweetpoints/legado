@@ -25,6 +25,16 @@ object LegacySourceScriptRunner {
 
     internal fun prelude(library: String): String =
         """
+        globalThis.__legacyNativeJava = globalThis.__legacyNativeJava || globalThis.java;
+        globalThis.java = new Proxy(globalThis.__legacyNativeJava, {
+            get: (target, name) => ['get','put'].includes(String(name))
+                ? (...args) => name === 'get' && args.length !== 1
+                    ? target[name](...args)
+                    : __sourceHostSync('analyze.' + String(name), args)
+                : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
+                    ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
+                    : target[name]
+        });
         globalThis.__legacyAsyncSource = globalThis.__legacyAsyncSource || globalThis.source;
         globalThis.source = new Proxy(globalThis.__legacyAsyncSource, {
             get: (target, name) => name === 'getTag' ? () => __legacySourceTag
