@@ -118,7 +118,7 @@
     {
       "name": "io.legado.app.data.repository.MainRssRepositoryTest",
       "source": "app/src/androidTest/java/io/legado/app/data/repository/MainRssRepositoryTest.kt",
-      "sourceSha256": "19727db99516aa303bee6c22599efc63d281272cabf09aebfa0d9ca85e97d0a0",
+      "sourceSha256": "41be921cbb8f3f2eb89a0eb89693d3d6751501c092716be109514d8980a6a90a",
       "methods": [
         "deleteUsesFreshCompleteEntityAndEstablishedSourceCleanupPipeline",
         "legacyMetadataLibraryKeepsOwnerStateAndRefreshesCurrentSourceSnapshot",
