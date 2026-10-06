@@ -34,6 +34,13 @@ class BatchContentDownloadTest {
 
     @Test
     fun documentedWrappersAndBareJavascriptSaveRealChapterFiles() = runBlocking {
+        // An explicit hook runs V8 and rejects an identifier outside its actual batch.
+        // This requires the Android storage boundary, unlike the empty-hook JVM guard.
+        Fixture().use { f ->
+            f.setBatch("java.cacheContent('1','text')")
+            assertEquals(f.chapters, WebBook.getContentBatchAwait(f.source, f.book, f.chapters))
+            f.chapters.forEach { assertNull(BookHelp.getContent(f.book, it)) }
+        }
         for (wrap in
             listOf<(String) -> String>(
                 { it },
