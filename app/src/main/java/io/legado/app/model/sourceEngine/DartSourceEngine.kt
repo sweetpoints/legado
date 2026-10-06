@@ -163,6 +163,18 @@ object DartSourceEngine {
             if (method == "crypto.randomInt32") {
                 require(arguments.isEmpty()) { "randomInt32 takes no arguments" }
                 secureRandom.nextInt()
+            } else if (method.startsWith("sourceState.") && original != null) {
+                fun text(index: Int): String = arguments.getOrNull(index)?.toString() ?: ""
+                when (method) {
+                    "sourceState.getLoginInfo" -> original.getLoginInfo()
+                    "sourceState.putLoginInfo" -> original.putLoginInfo(text(0))
+                    "sourceState.getLoginHeader" -> original.getLoginHeader()
+                    "sourceState.putLoginHeader" -> { original.putLoginHeader(text(0)); null }
+                    "sourceState.getVariable" -> original.getVariable()
+                    "sourceState.putVariable" -> { original.putVariable(arguments.firstOrNull()?.toString()); null }
+                    "sourceState.removeLoginInfo" -> { original.removeLoginInfo(); null }
+                    else -> error("Unsupported source-state callback: $method")
+                }
             } else {
                 check(caller != null) { "Unbound V8 host callback: $method" }
                 caller.call(method, arguments)
