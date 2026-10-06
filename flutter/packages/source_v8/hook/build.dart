@@ -44,12 +44,12 @@ void main(List<String> args) async {
     final name = os == OS.macOS ? 'libsource_v8.dylib' : 'libsource_v8.so';
     final destination = input.outputDirectory.resolve(name);
     final copied = await artifact.binary.copy(destination.toFilePath());
-    // A source build can publish new files while another hook is bundling.
+    // Bridge linking can publish new files while another hook is bundling.
     // Authenticate the actual bundled bytes, not only the earlier source file.
     if ((await sha256.bind(copied.openRead()).first).toString() !=
         artifact.target['sha256']) {
       await copied.delete();
-      throw StateError('V8 binary changed while copying; rerun the build');
+      throw StateError('V8 bridge artifact changed while copying; retry SDK preparation');
     }
     output.dependencies.addAll(artifact.dependencies);
     output.dependencies.addAll([
