@@ -19,6 +19,15 @@ import io.legado.app.utils.GSON
 import kotlinx.coroutines.flow.StateFlow
 import splitties.init.appCtx
 
+/** Script-visible baseUrl is data; networking always has a valid, separate origin. */
+internal fun auxiliaryNetworkBaseUrl(value: Any?): String {
+    val text = value as? String ?: return "https://script.legado.invalid/"
+    val location = runCatching { URI(text) }.getOrNull()
+    return if (location?.scheme?.lowercase() in setOf("http", "https") && !location?.host.isNullOrBlank()) {
+        text
+    } else "https://script.legado.invalid/"
+}
+
 /** App-facing boundary for the embedded Flutter book-source engine. */
 data class SourceTaskState(val taskId: String, val phase: String, val error: String? = null)
 
@@ -138,6 +147,8 @@ object DartSourceEngine {
             }
         }
         original?.let { globals.putIfAbsent("baseUrl", descriptor?.get("baseUrl") ?: it.getKey()) }
+        val networkDescriptor = (descriptor ?: emptyMap()).toMutableMap()
+        networkDescriptor["baseUrl"] = auxiliaryNetworkBaseUrl(descriptor?.get("baseUrl") ?: globals["baseUrl"])
         val context = currentCoroutineContext()
         val caller = context[SourceHostCallbacks]
         return withContext(SourceHostCallbacks { method, arguments ->
@@ -150,7 +161,7 @@ object DartSourceEngine {
             }
         }) {
             backend.evaluateAuxiliary(
-                script, BookSourceScriptBridge.jsonBindings(globals), owner, descriptor,
+                script, BookSourceScriptBridge.jsonBindings(globals), owner, networkDescriptor,
                 prelude ?: withContext(Dispatchers.IO) { SharedJsScope.resolveLibrary(original?.jsLib, currentCoroutineContext()) }, timeoutMs,
             )
         }

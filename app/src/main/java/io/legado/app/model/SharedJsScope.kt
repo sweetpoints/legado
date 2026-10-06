@@ -24,7 +24,7 @@ object SharedJsScope {
         appCtx.assets.open("scripts/cryptojs.min.js").bufferedReader().use { it.readText() }
     }
     private val cryptoPrelude by lazy {
-        "(function(){\n$cryptoJs\n}).call(globalThis);\n" +
+        "(function(){\n$cryptoJs\nglobalThis.CryptoJS = CryptoJS;\n}).call(globalThis);\n" +
             "globalThis.CryptoJS.lib.WordArray.random = function(nBytes) { " +
             "var words=[]; for(var i=0;i<nBytes;i+=4) " +
             "words.push(__sourceHostSync('crypto.randomInt32', [])); " +
