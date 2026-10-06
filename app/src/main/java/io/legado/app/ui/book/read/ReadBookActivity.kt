@@ -92,6 +92,9 @@ import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.model.jsSource.JsSourceReview
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.MobiFile
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
+import io.legado.app.model.sourceEngine.SourceVariablePatch
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.receiver.TimeBatteryReceiver
 import io.legado.app.service.BaseReadAloudService
@@ -139,7 +142,6 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.ACache
-import io.legado.app.utils.inflateMenuModel
 import io.legado.app.utils.Debounce
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
@@ -153,6 +155,7 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
+import io.legado.app.utils.inflateMenuModel
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isTrue
 import io.legado.app.utils.launch
@@ -1129,8 +1132,10 @@ class ReadBookActivity :
     /** 鼠标滚轮和手表旋钮事件 */
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         // Compose can consume wheel events before the Activity fallback is reached.
-        if (event.action == MotionEvent.ACTION_SCROLL &&
-            !menuLayoutIsVisible && AppConfig.mouseWheelPage
+        if (
+            event.action == MotionEvent.ACTION_SCROLL &&
+                !menuLayoutIsVisible &&
+                AppConfig.mouseWheelPage
         ) {
             val axisValue =
                 when {
@@ -1700,7 +1705,11 @@ class ReadBookActivity :
                         isReadPositionVersionCurrent(readPositionVersion))
             val hadSpeechHighlight = readView.curPage.textPage.hasReadAloudSpan
             if (relativePosition == 0) readView.cancelTouchGestures()
-            readView.upContentWithReadPositionVersion(relativePosition, shouldResetPageOffset, readPositionVersion)
+            readView.upContentWithReadPositionVersion(
+                relativePosition,
+                shouldResetPageOffset,
+                readPositionVersion,
+            )
             restoreSpeechHighlightAfterLayout(hadSpeechHighlight)
             scheduleAloudFollowCheck()
             observeBookmarks()
@@ -1737,7 +1746,11 @@ class ReadBookActivity :
                         isReadPositionVersionCurrent(readPositionVersion))
             val hadSpeechHighlight = readView.curPage.textPage.hasReadAloudSpan
             if (relativePosition == 0) readView.cancelTouchGestures()
-            readView.upContentWithReadPositionVersion(relativePosition, shouldResetPageOffset, readPositionVersion)
+            readView.upContentWithReadPositionVersion(
+                relativePosition,
+                shouldResetPageOffset,
+                readPositionVersion,
+            )
             restoreSpeechHighlightAfterLayout(hadSpeechHighlight)
             scheduleAloudFollowCheck()
             observeBookmarks()
@@ -1753,10 +1766,14 @@ class ReadBookActivity :
         if (!BaseReadAloudService.isRun || !ReadAloud.followReadAloudPosition) return
         // A paused reader may already show the current speech position after manually
         // returning to it. Preserve that existing highlight without starting playback.
-        if (!BaseReadAloudService.isPlay() && !(BaseReadAloudService.pause && hadSpeechHighlight)) return
+        if (!BaseReadAloudService.isPlay() && !(BaseReadAloudService.pause && hadSpeechHighlight))
+            return
         val chapter = ReadBook.curTextChapter ?: return
-        if (BaseReadAloudService.readAloudBookUrl != ReadBook.book?.bookUrl ||
-            !BaseReadAloudService.hasPreparedSpeechContent(chapter)) return
+        if (
+            BaseReadAloudService.readAloudBookUrl != ReadBook.book?.bookUrl ||
+                !BaseReadAloudService.hasPreparedSpeechContent(chapter)
+        )
+            return
         val position = ReadAloud.readAloudChapterStart
         val page = chapter.getPageByReadPos(position) ?: return
         if (readView.curPage.textPage !== page) return
@@ -2248,14 +2265,7 @@ class ReadBookActivity :
                         val chapter =
                             appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                                 ?: throw Exception("no find chapter")
-                        runScriptWithContext {
-                            source.evalJS(click) {
-                                put("java", java)
-                                put("book", book)
-                                put("chapter", chapter)
-                                put("result", src)
-                            }
-                        }
+                        evaluateImageClick(source, book, chapter, click, src, java)
                     }
                     .onError {
                         AppLog.put("执行图片链接click键值出错\n${it.localizedMessage}", it, true)
@@ -2293,18 +2303,75 @@ class ReadBookActivity :
                 val chapter =
                     appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                         ?: throw Exception("no find chapter")
-                runScriptWithContext {
-                    source.evalJS(click) {
-                        put("java", java)
-                        put("book", book)
-                        put("chapter", chapter)
-                        put("result", src)
-                    }
-                }
+                evaluateImageClick(source, book, chapter, click, src, java)
             }
             .onError {
                 AppLog.put("执行图片链接click键值出错\n${it.localizedMessage}", it, true)
             }
+    }
+
+    private suspend fun evaluateImageClick(
+        source: BookSource,
+        book: Book,
+        chapter: BookChapter,
+        click: String,
+        src: String,
+        java: SourceLoginJsExtensions,
+    ) {
+        val result =
+            withContext(
+                SourceHostCallbacks { method, arguments ->
+                    withContext(Main.immediate) {
+                        when (method) {
+                            "browser.show" ->
+                                java.showBrowser(
+                                    arguments[0] as String,
+                                    arguments.getOrNull(1) as? String,
+                                    arguments.getOrNull(2) as? String,
+                                    arguments.getOrNull(3) as? String,
+                                )
+                            "browser.start" ->
+                                java.startBrowser(
+                                    arguments[0] as String,
+                                    arguments[1] as String,
+                                    arguments.getOrNull(2) as? String,
+                                )
+                            "browser.video" ->
+                                java.openVideoPlayer(
+                                    arguments[0] as String,
+                                    arguments[1] as String,
+                                    arguments.getOrNull(2) == true,
+                                )
+                            "browser.openUrl" ->
+                                java.openUrl(
+                                    arguments[0] as String,
+                                    arguments.getOrNull(1) as? String,
+                                )
+                            else -> error("Unsupported image click host API $method")
+                        }
+                    }
+                    null
+                }
+            ) {
+                DartSourceEngine.evaluate(
+                    source,
+                    SourceVariablePatch.script(click),
+                    mapOf(
+                        "book" to DartSourceEngine.jsonObject(book),
+                        "chapter" to DartSourceEngine.jsonObject(chapter),
+                        "initialBookVariables" to book.variableMap.toMap(),
+                        "initialChapterVariables" to chapter.variableMap.toMap(),
+                        "result" to src,
+                    ),
+                )
+            }
+        val patch = SourceVariablePatch.fromResult(result)
+        // A completed task may belong to a previous reader after navigation.
+        withContext(Main.immediate) {
+            if (ReadBook.book !== book || ReadBook.bookSource !== source) return@withContext
+            patch.book.forEach { (key, value) -> book.putVariable(key, value) }
+            patch.chapter.forEach { (key, value) -> chapter.putVariable(key, value) }
+        }
     }
 
     override fun onReviewClick(paragraphNum: Int, count: Int, chapterIndex: Int) {
