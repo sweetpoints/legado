@@ -194,8 +194,22 @@ class McpServiceContractTest {
         val baseSource =
             projectFile("app/src/main/java/io/legado/app/data/entities/BaseSource.kt").compact()
         assertTrue(baseSource.contains("getSourceNavigationContext()"))
-        assertTrue(baseSource.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(baseSource.contains("LegacySourceScriptRunner.evaluateBlocking("))
         assertTrue(baseSource.contains("source=this"))
+        val sourceRunner =
+            projectFile(
+                    "app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt"
+                )
+                .compact()
+        assertTrue(sourceRunner.contains("valoriginal=source.getSource()?:source"))
+        assertTrue(
+            sourceRunner.contains("SharedJsScope.resolveLibrary(original.jsLib,coroutineContext)")
+        )
+        assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(sourceRunner.contains("context,prelude=prelude(library),source=source"))
+        val auxiliaryExecutor =
+            projectFile("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
+        assertTrue(auxiliaryExecutor.contains("DartSourceEngine.evaluateAuxiliary("))
         assertTrue(generalBranch.contains("JsSourceEngine.normalizeJsResult(raw)"))
         assertFalse(compactExecutor.contains("catch("))
         assertTrue(evalTool.contains("catch (error: CancellationException)"))

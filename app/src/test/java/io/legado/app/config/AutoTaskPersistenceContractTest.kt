@@ -184,7 +184,32 @@ class AutoTaskPersistenceContractTest {
         assertTrue(protocol.contains("WebBook.getBookInfoAwait"))
         assertTrue(protocol.contains("WebBook.getChapterListAwait"))
         assertTrue(protocol.contains("appDb.runInTransaction"))
-        assertTrue(runner.contains("DartSourceEngine.evaluate(source, script)"))
+        val compactRunner = runner.replace(Regex("\\s+"), "")
+        // Task IDs are opaque owners, not HTTP book-source execution identities.
+        assertTrue(
+            compactRunner.contains(
+                "source.withSourceNavigationContext(callerContext+taskCallbacks)"
+            )
+        )
+        assertTrue(compactRunner.contains("valrawResult=runInterruptible{"))
+        assertTrue(compactRunner.contains("taskSource.evalJS(taskScriptWrapper)"))
+        assertTrue(compactRunner.contains("put(\"__autoTaskScript\",script)"))
+        assertTrue(compactRunner.contains("source.log(arguments.firstOrNull())"))
+        assertFalse(compactRunner.contains("DartSourceEngine.evaluate(source,script)"))
+        val baseSource =
+            file("app/src/main/java/io/legado/app/data/entities/BaseSource.kt").readText()
+        val sourceRunner =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt")
+                .readText()
+        val executor =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
+                .readText()
+        assertTrue(baseSource.contains("LegacySourceScriptRunner.evaluateBlocking("))
+        assertTrue(
+            sourceRunner.contains("SharedJsScope.resolveLibrary(original.jsLib, coroutineContext)")
+        )
+        assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(executor.contains("DartSourceEngine.evaluateAuxiliary("))
         assertTrue(runner.contains("error.autoTaskCancellation()?.let { throw it }"))
         assertTrue(runner.contains("else -> cause as? CancellationException"))
     }
