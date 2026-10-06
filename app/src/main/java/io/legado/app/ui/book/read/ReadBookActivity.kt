@@ -33,7 +33,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.room.withTransaction
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
-import com.script.rhino.runScriptWithContext
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.AppConst
@@ -82,6 +81,7 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.model.sourceEngine.SourceUiScriptRunner
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.paramPattern
@@ -2174,19 +2174,19 @@ class ReadBookActivity :
                         }
                         val java =
                             SourceLoginJsExtensions(this@ReadBookActivity, source, BookType.text)
-                        runScriptWithContext {
-                            source
-                                .evalJS(payAction) {
-                                    put("java", java)
-                                    put("book", book)
-                                    put("chapter", chapter)
-                                    put("title", chapter.title)
-                                    put("baseUrl", chapter.url)
-                                    put("result", null)
-                                    put("src", null)
-                                }
-                                .toString()
-                        }
+                        SourceUiScriptRunner.evaluate(
+                            source,
+                            payAction,
+                            mapOf(
+                                "book" to book,
+                                "chapter" to chapter,
+                                "title" to chapter.title,
+                                "baseUrl" to chapter.url,
+                                "result" to null,
+                                "src" to null,
+                            ),
+                            java,
+                        ).toString()
                     }
                     .onSuccess { result ->
                         if (result.isAbsUrl()) {
