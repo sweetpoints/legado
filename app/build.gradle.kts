@@ -111,7 +111,9 @@ if (gradle.startParameter.taskNames.any {
         "src/source_v8.cpp" to file("$rootDir/flutter/packages/source_v8/src/source_v8.cpp"),
         "src/source_v8.h" to file("$rootDir/flutter/packages/source_v8/src/source_v8.h"),
         "src/android_exports.map" to file("$rootDir/flutter/packages/source_v8/src/android_exports.map"),
-        "tool/v8/source_v8.gni" to file("$rootDir/flutter/tool/v8/source_v8.gni")
+        "tool/v8/source_v8.gni" to file("$rootDir/flutter/tool/v8/source_v8.gni"),
+        "tool/v8/link_sdk.py" to file("$rootDir/flutter/tool/v8/link_sdk.py"),
+        "tool/v8/toolchain-pins.json" to file("$rootDir/flutter/tool/v8/toolchain-pins.json")
     )
     for ((label, sourceFile) in bridgeFiles.toSortedMap()) {
         val name = label.toByteArray(Charsets.UTF_8)
@@ -124,7 +126,7 @@ if (gradle.startParameter.taskNames.any {
     val bridgeHash = bridgeDigest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
     val bridge = stamp["bridge"] as? Map<*, *>
     check(bridge?.get("abi") == 1 && bridge?.get("sourceSha256") == bridgeHash) {
-        "Flutter AAR native bridge inputs changed. Rebuild official V8 and prepare the Flutter AAR repository."
+        "Flutter AAR native bridge inputs changed. Relink the bridge against the pinned prebuilt V8 SDK and prepare the Flutter AAR repository."
     }
     val workspace = file("$rootDir/flutter")
     val sourceFiles = mutableListOf<java.io.File>()
