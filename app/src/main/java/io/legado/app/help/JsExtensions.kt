@@ -6,8 +6,6 @@ import androidx.annotation.Keep
 import androidx.appcompat.app.AppCompatActivity
 import cn.hutool.core.codec.Base64
 import cn.hutool.core.util.HexUtil
-import com.script.rhino.rhinoContext
-import com.script.rhino.rhinoContextOrNull
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.dateFormat
 import io.legado.app.constant.AppLog
@@ -65,15 +63,11 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import okio.use
 import org.jsoup.Connection
 import org.jsoup.Jsoup
-import org.htmlunit.corejs.javascript.Function
-import org.htmlunit.corejs.javascript.Scriptable
-import org.htmlunit.corejs.javascript.ScriptableObject
-import org.htmlunit.corejs.javascript.Undefined
-import org.htmlunit.corejs.javascript.Wrapper
 import splitties.init.appCtx
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -147,11 +141,10 @@ interface JsExtensions : JsEncodeUtils {
      */
     @JavascriptInterface
     fun cacheContent(chapter: Any?, content: String): Boolean {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         val batchContext = getBatchContext()
             ?: throw NoStackTraceException("java.cacheContent 只能在批量正文规则中调用")
-        val identifier = if (chapter is Wrapper) chapter.unwrap() else chapter
-        return batchContext.saveContent(identifier, content)
+        return batchContext.saveContent(chapter, content)
     }
 
     fun refreshBookInfo() {
@@ -167,8 +160,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     private val context: CoroutineContext
-        get() = (rhinoContextOrNull?.coroutineContext ?: EmptyCoroutineContext) +
-            getSourceNavigationContext()
+        get() = getSourceNavigationContext()
 
     /**
      * 访问网络,返回String
@@ -187,7 +179,7 @@ interface JsExtensions : JsEncodeUtils {
         return kotlin.runCatching {
             analyzeUrl.getStrResponse().body
         }.onFailure {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             AppLog.put("ajax(${urlStr}) error\n${it.localizedMessage}", it)
         }.getOrElse {
             it.stackTraceStr
@@ -246,7 +238,7 @@ interface JsExtensions : JsEncodeUtils {
         return kotlin.runCatching {
             analyzeUrl.getStrResponse()
         }.onFailure {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             AppLog.put("connect(${urlStr}) error\n${it.localizedMessage}", it)
         }.getOrElse {
             StrResponse(analyzeUrl.url, it.stackTraceStr)
@@ -269,7 +261,7 @@ interface JsExtensions : JsEncodeUtils {
         return kotlin.runCatching {
             analyzeUrl.getStrResponse()
         }.onFailure {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             AppLog.put("connect($urlStr,$header) error\n${it.localizedMessage}", it)
         }.getOrElse {
             StrResponse(analyzeUrl.url, it.stackTraceStr)
@@ -401,7 +393,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     fun startBrowser(url: String, title: String, html: String?) {
-        rhinoContext.ensureActive()
+        context.ensureActive()
         if (!canOpenSourceUi()) return
         SourceVerificationHelp.startBrowser(getSource(), url, title, html=html)
     }
@@ -418,7 +410,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     fun startBrowserAwait(url: String, title: String, refetchAfterSuccess: Boolean, html: String?): StrResponse {
-        rhinoContext.ensureActive()
+        context.ensureActive()
         if (!canOpenSourceUi()) throw NoStackTraceException("已阻止当前操作中的书源网页跳转")
         return when (val result = SourceVerificationHelp.getVerificationResult(
             getSource(), url, title, true, refetchAfterSuccess, html, context
@@ -440,7 +432,7 @@ interface JsExtensions : JsEncodeUtils {
      * 打开图片验证码对话框，等待返回验证结果
      */
     fun getVerificationCode(imageUrl: String): String {
-        rhinoContext.ensureActive()
+        context.ensureActive()
         val result = SourceVerificationHelp.getVerificationResult(
             getSource(), imageUrl, "", false, coroutineContext = context
         )
@@ -516,7 +508,7 @@ interface JsExtensions : JsEncodeUtils {
      */
     @JavascriptInterface
     fun downloadFile(url: String): String {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         val analyzeUrl = AnalyzeUrl(url, source = getSource(), coroutineContext = context)
         val type = analyzeUrl.type ?: UrlUtil.getSuffix(url)
         val path = FileUtils.getPath(
@@ -552,7 +544,7 @@ interface JsExtensions : JsEncodeUtils {
     )
     @JavascriptInterface
     fun downloadFile(content: String, url: String): String {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         val type = AnalyzeUrl(url, source = getSource(), coroutineContext = context).type
             ?: return ""
         val path = FileUtils.getPath(
@@ -583,7 +575,7 @@ interface JsExtensions : JsEncodeUtils {
         } else headerMap
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val response = rateLimiter.withLimitBlocking {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             Jsoup.connect(urlStr)
                 .sslContext(SSLHelper.unsafeSSLContext)
                 .timeout(timeout ?: 30000)
@@ -610,7 +602,7 @@ interface JsExtensions : JsEncodeUtils {
         } else headerMap
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val response = rateLimiter.withLimitBlocking {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             Jsoup.connect(urlStr)
                 .sslContext(SSLHelper.unsafeSSLContext)
                 .timeout(timeout ?: 30000)
@@ -637,7 +629,7 @@ interface JsExtensions : JsEncodeUtils {
         } else headerMap
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val response = rateLimiter.withLimitBlocking {
-            rhinoContextOrNull?.ensureActive()
+            context.ensureActive()
             Jsoup.connect(urlStr)
                 .sslContext(SSLHelper.unsafeSSLContext)
                 .timeout(timeout ?: 30000)
@@ -1187,7 +1179,7 @@ interface JsExtensions : JsEncodeUtils {
      * 弹窗提示
      */
     fun toast(msg: Any?) {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         appCtx.toastOnUi("${getTag()}: ${msg.toString()}")
     }
 
@@ -1195,7 +1187,7 @@ interface JsExtensions : JsEncodeUtils {
      * 弹窗提示 停留时间较长
      */
     fun longToast(msg: Any?) {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         appCtx.longToastOnUi("${getTag()}: ${msg.toString()}")
     }
 
@@ -1203,7 +1195,7 @@ interface JsExtensions : JsEncodeUtils {
      * 输出调试日志
      */
     fun log(msg: Any?): Any? {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         getSource()?.let {
             Debug.log(it.getKey(), msg.toString())
         } ?: Debug.log(msg.toString())
@@ -1247,7 +1239,7 @@ interface JsExtensions : JsEncodeUtils {
     @JavascriptInterface
     fun openUrl(url: String, mimeType: String? = null) {
         require(url.length < 64 * 1024) { "openUrl parameter url too long" }
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         if (!canOpenSourceUi()) return
         if (url.startsWith("legado://") || url.startsWith("yuedu://")) {
             appCtx.startActivity<OnLineImportActivity> {
@@ -1278,7 +1270,7 @@ interface JsExtensions : JsEncodeUtils {
         preloadJs: String?,
         config: String?
     ) {
-        rhinoContextOrNull?.ensureActive()
+        context.ensureActive()
         if (!canOpenSourceUi()) return
         val activity = LifecycleHelp.getTopActivity() as? AppCompatActivity ?: return
         val source = getSource() ?: return
@@ -1302,43 +1294,25 @@ interface JsExtensions : JsEncodeUtils {
         return false
     }
 
-    fun singleFlight(
-        name: String,
-        action: Function,
-        timeoutMs: Long
-    ) {
+    fun singleFlight(name: String, action: () -> Unit, timeoutMs: Long) {
+        context.ensureActive()
         SourceLock.singleFlight(sourceConcurrencyKey(name), timeoutMs) {
-            val cx = rhinoContext
-            action.call(cx, action.parentScope, functionThisObj(action), emptyArray<Any?>())
+            context.ensureActive()
+            action()
         }
     }
 
-    private fun functionThisObj(action: Function): Scriptable {
-        val top = action.parentScope?.let { ScriptableObject.getTopLevelScope(it) }
-        return top?.globalThis
-            ?: Undefined.SCRIPTABLE_UNDEFINED
-    }
+    fun singleFlight(name: String, action: () -> Unit) = singleFlight(name, action, 15_000L)
 
-    fun singleFlight(
-        name: String,
-        action: Function
-    ) = singleFlight(name, action, 15_000L)
-
-    fun lock(
-        name: String,
-        action: Function,
-        timeoutMs: Long
-    ) {
+    fun lock(name: String, action: () -> Unit, timeoutMs: Long) {
+        context.ensureActive()
         SourceLock.lock(sourceConcurrencyKey(name), timeoutMs) {
-            val cx = rhinoContext
-            action.call(cx, action.parentScope, functionThisObj(action), emptyArray<Any?>())
+            context.ensureActive()
+            action()
         }
     }
 
-    fun lock(
-        name: String,
-        action: Function
-    ) = lock(name, action, 15_000L)
+    fun lock(name: String, action: () -> Unit) = lock(name, action, 15_000L)
 
     fun tick(name: String): Int {
         return SourceLock.tick(sourceConcurrencyKey(name))

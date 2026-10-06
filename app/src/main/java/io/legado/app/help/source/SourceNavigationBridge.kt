@@ -1,21 +1,36 @@
 package io.legado.app.help.source
 
 import android.webkit.JavascriptInterface
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.VideoPlay
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.ensureActive
 
-/** WebView calls its Java bridge on a different thread from the rule's Rhino context. */
+/** Carries the owning task across WebView's separate Java bridge thread. */
 internal fun BaseSource.withSourceNavigationContext(context: CoroutineContext): BaseSource {
-    if (context[SuppressSourceNavigation] == null) return this
     val original = this
     return object : BaseSource by original {
-        private fun allowed() = !shouldSuppressSourceNavigation(AppConfig.blockSourceNavigation, context)
+        override fun getSourceNavigationContext(): CoroutineContext = context
+
+        private fun allowed(): Boolean {
+            context.ensureActive()
+            return !shouldSuppressSourceNavigation(AppConfig.blockSourceNavigation, context)
+        }
+
+        override fun evalJS(
+            jsStr: String,
+            bindingsConfig: MutableMap<String, Any?>.() -> Unit,
+        ): Any? {
+            context.ensureActive()
+            return super<BaseSource>.evalJS(jsStr, bindingsConfig)
+        }
 
         @JavascriptInterface
-        override fun login() = runScriptWithContext(context) { original.login() }
+        override fun login() {
+            context.ensureActive()
+            super<BaseSource>.login()
+        }
 
         @JavascriptInterface
         override fun openVideoPlayer(url: String, title: String) =
@@ -26,8 +41,7 @@ internal fun BaseSource.withSourceNavigationContext(context: CoroutineContext): 
             if (allowed()) original.openVideoPlayer(url, title, isFloat)
         }
 
-        @JavascriptInterface
-        override fun openUrl(url: String) = openUrl(url, null)
+        @JavascriptInterface override fun openUrl(url: String) = openUrl(url, null)
 
         @JavascriptInterface
         override fun openUrl(url: String, mimeType: String?) {

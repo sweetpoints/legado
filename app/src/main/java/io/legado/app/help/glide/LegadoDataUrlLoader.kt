@@ -9,12 +9,14 @@ import com.bumptech.glide.load.model.ModelLoaderFactory
 import com.bumptech.glide.load.model.MultiModelLoaderFactory
 import com.bumptech.glide.signature.ObjectKey
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.source.withSourceNavigationContext
 import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.ImageUtils
-import com.script.rhino.runScriptWithContext
-import kotlinx.coroutines.Job
 import java.io.InputStream
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 
 class LegadoDataUrlLoader : ModelLoader<String, InputStream> {
 
@@ -22,7 +24,7 @@ class LegadoDataUrlLoader : ModelLoader<String, InputStream> {
         model: String,
         width: Int,
         height: Int,
-        options: Options
+        options: Options,
     ): ModelLoader.LoadData<InputStream>? {
         if (options.get(OkHttpModelLoader.mangaOption) == false) {
             return null
@@ -40,18 +42,27 @@ class LegadoDataUrlLoader : ModelLoader<String, InputStream> {
 
         override fun loadData(
             priority: Priority,
-            callback: DataFetcher.DataCallback<in InputStream>
+            callback: DataFetcher.DataCallback<in InputStream>,
         ) {
             try {
-                val bytes = AnalyzeUrl(
-                    model, source = ReadManga.bookSource,
-                    coroutineContext = coroutineContext
-                ).getByteArray()
-                val decoded = runScriptWithContext(coroutineContext) {
-                    ImageUtils.decode(
-                        model, bytes, isCover = false, ReadManga.bookSource, ReadManga.book
-                    )?.inputStream()
-                }
+                val bytes =
+                    AnalyzeUrl(
+                            model,
+                            source = ReadManga.bookSource,
+                            coroutineContext = coroutineContext,
+                        )
+                        .getByteArray()
+                val decoded =
+                    runBlocking(coroutineContext + IO) {
+                        ImageUtils.decode(
+                                model,
+                                bytes,
+                                isCover = false,
+                                ReadManga.bookSource?.withSourceNavigationContext(coroutineContext),
+                                ReadManga.book,
+                            )
+                            ?.inputStream()
+                    }
                 if (decoded == null) {
                     throw NoStackTraceException("漫画图片解密失败")
                 }
@@ -76,11 +87,12 @@ class LegadoDataUrlLoader : ModelLoader<String, InputStream> {
         override fun getDataSource(): DataSource {
             return DataSource.LOCAL
         }
-
     }
 
     class Factory : ModelLoaderFactory<String, InputStream> {
-        override fun build(multiFactory: MultiModelLoaderFactory): ModelLoader<String, InputStream> {
+        override fun build(
+            multiFactory: MultiModelLoaderFactory
+        ): ModelLoader<String, InputStream> {
             return LegadoDataUrlLoader()
         }
 
@@ -88,5 +100,4 @@ class LegadoDataUrlLoader : ModelLoader<String, InputStream> {
             // do nothing
         }
     }
-
 }

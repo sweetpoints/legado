@@ -1,12 +1,12 @@
 package io.legado.app.help.source
 
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.utils.ACache
 import io.legado.app.utils.MD5Utils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 
 private val aCache by lazy { ACache.get("rssSortUrl") }
@@ -18,7 +18,7 @@ internal fun RssSource.requireSourceUrl() {
 }
 
 private fun RssSource.getSortUrlsKey(): String {
-    return MD5Utils.md5Encode(sourceUrl + sortUrl)
+    return MD5Utils.md5Encode("v8-rss-sort-v1:$sourceUrl:$sortUrl:$jsLib")
 }
 
 private const val jsPrefix = "@js:"
@@ -93,9 +93,8 @@ suspend fun RssSource.sortUrls(): List<Pair<String, String>> {
         }
         var evaluatedResult: String? = null
         resolveRssSortUrls(configuredSortUrl, sourceUrl, cachedResult) { script ->
-            runScriptWithContext {
-                evalJS(script)?.toString()
-            }.also { evaluatedResult = it }
+            withSourceNavigationContext(currentCoroutineContext()).evalJS(script)?.toString()
+                .also { evaluatedResult = it }
         }.also {
             if (cachedResult.isNullOrBlank()) {
                 evaluatedResult?.takeIf { result -> result.isNotBlank() }?.let { result ->
