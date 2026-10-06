@@ -181,7 +181,7 @@ class ContentReversalCacheTest {
                                                     "fields" to
                                                         mapOf(
                                                             "content" to
-                                                                "@js:if (result.indexOf('version=') < 0) throw new Error('Missing fixture body'); result + '\\nbook=' + book.name",
+                                                                "@js:(() => { if (result.indexOf('version=') < 0) throw new Error('Missing fixture body'); return result + '\\nbook=' + book.name; })()",
                                                             "variable" to
                                                                 "@js:JSON.stringify({acceptedVersion:result.substring(result.lastIndexOf('version='))})",
                                                         ),
