@@ -12,6 +12,8 @@ on:
       - '.github/workflows/cronet-runtime-test.yml'
       - '.github/scripts/cronet-runtime-test.init.gradle'
       - '.github/scripts/run-cronet-runtime.sh'
+      - '.github/scripts/verify-cronet-apk.py'
+      - '.github/scripts/test_verify_cronet_apk.py'
       - '.github/scripts/verify-cronet-dynamic.py'
       - 'app/cronetlib/**'
       - 'app/*proguard*'
@@ -48,6 +50,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+      - name: Verify mandatory Flutter APK ABI contract
+        run: python3 -m unittest discover -s .github/scripts -p test_verify_cronet_apk.py
       - name: Setup Android build
         uses: ./.github/actions/setup-android
       - name: Verify untouched official Cronet artifacts

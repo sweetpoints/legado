@@ -37,7 +37,8 @@ concurrency:
 jobs:
   android-v8:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    # Build both pinned architectures completely; cold source builds exceed 3h.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v7
       - name: Verify official build contracts
