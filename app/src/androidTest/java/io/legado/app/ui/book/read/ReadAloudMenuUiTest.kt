@@ -318,6 +318,7 @@ class ReadAloudMenuUiTest {
         // Settle the initial preparation before tests replace the audio endpoint. An engine
         // that initialized during startup may already have enqueued its first play command.
         var beforePreparation = 0L
+        var requestedChapter = ReadBook.curTextChapter
         scenario!!.onActivity { activity ->
             beforePreparation =
                 (BaseReadAloudService::class
@@ -328,9 +329,10 @@ class ReadAloudMenuUiTest {
                     .get()
             startedService.textChapter = null
             startedService.contentList = emptyList()
+            requestedChapter = ReadBook.curTextChapter
             ReadAloud.play(activity, play = false, pageIndex = ReadBook.durPageIndex)
         }
-        await("initial service preparation and callbacks finish") {
+        await("initial service preparation and callbacks finish") { activity ->
             val generation =
                 (BaseReadAloudService::class
                         .java
@@ -344,6 +346,26 @@ class ReadAloudMenuUiTest {
                     .getDeclaredField("readAloudJob")
                     .apply { isAccessible = true }
                     .get(startedService) as? io.legado.app.help.coroutine.Coroutine<*>
+            val currentChapter = ReadBook.curTextChapter
+            val currentPage = activity.findViewById<ReadView>(R.id.read_view).curPage.textPage
+            // The service's real play command can trigger another reader reflow after the
+            // geometry check. A preparation that sees that unfinished chapter returns early.
+            // Reissue only after that replacement has completed, while retaining the original
+            // timeout and requiring the new command's generation and prepared queue below.
+            if (
+                generation > beforePreparation &&
+                    preparation?.isCompleted == true &&
+                    startedService.contentList.isEmpty() &&
+                    currentChapter !== requestedChapter &&
+                    currentChapter?.isCompleted == true &&
+                    currentPage.textChapter === currentChapter &&
+                    !currentPage.isMsgPage
+            ) {
+                beforePreparation = generation
+                requestedChapter = currentChapter
+                ReadAloud.play(activity, play = false, pageIndex = ReadBook.durPageIndex)
+                return@await false
+            }
             generation > beforePreparation &&
                 preparation?.isCompleted == true &&
                 ReadBook.curTextChapter?.let {
