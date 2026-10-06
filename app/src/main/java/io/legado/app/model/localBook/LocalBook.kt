@@ -471,6 +471,7 @@ object LocalBook {
                 name = bookMess["name"] ?: ""
                 author = bookMess["author"]?.takeIf { it.length != tempFileName.length } ?: ""
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException || e is InterruptedException) throw e
                 AppLog.put("执行导入文件名规则出错\n${e.localizedMessage}", e)
             }
         }

@@ -1,6 +1,7 @@
 package io.legado.app.model.sourceEngine
 
 import android.os.Looper
+import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.RegexJsExtensions
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -15,10 +16,20 @@ object V8ScriptExecutor {
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
         timeoutMillis: Long = 10_000,
+        sourceId: String? = null,
+        prelude: String? = null,
+        source: BaseSource? = null,
     ): Any? {
         require(timeoutMillis > 0) { "Script timeout must be positive" }
         return withTimeout(timeoutMillis) {
-            DartSourceEngine.evaluateAuxiliary(script, bindings)
+            DartSourceEngine.evaluateAuxiliary(
+                script,
+                bindings,
+                sourceId = sourceId,
+                prelude = prelude,
+                timeoutMs = timeoutMillis,
+                source = source,
+            )
         }
     }
 
@@ -26,7 +37,11 @@ object V8ScriptExecutor {
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
         timeoutMillis: Long = 10_000,
-    ): String = evaluate(script, bindings, timeoutMillis)?.toString() ?: "null"
+        sourceId: String? = null,
+        prelude: String? = null,
+        source: BaseSource? = null,
+    ): String =
+        evaluate(script, bindings, timeoutMillis, sourceId, prelude, source)?.toString() ?: "null"
 
     /** Blocking reader operations run off the UI thread and retain their caller cancellation. */
     fun evaluateBlocking(
@@ -34,12 +49,15 @@ object V8ScriptExecutor {
         bindings: Map<String, Any?> = emptyMap(),
         coroutineContext: CoroutineContext = EmptyCoroutineContext,
         timeoutMillis: Long = 10_000,
+        sourceId: String? = null,
+        prelude: String? = null,
+        source: BaseSource? = null,
     ): Any? {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "V8 scripts must be awaited on the main thread"
         }
         return runBlocking(coroutineContext + Dispatchers.IO) {
-            evaluate(script, bindings, timeoutMillis)
+            evaluate(script, bindings, timeoutMillis, sourceId, prelude, source)
         }
     }
 
