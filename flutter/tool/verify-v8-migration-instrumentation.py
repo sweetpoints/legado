@@ -20,6 +20,9 @@ TEST_FILES = (
     'model/analyzeRule/AnalyzeRuleElementsNormalizationTest.kt',
     'ui/replace/edit/ReplacePreviewV8Test.kt',
     'model/analyzeRule/ReviewRuleParserV8Test.kt',
+    'data/repository/AutoTaskDebugRepositoryTest.kt',
+    'data/repository/MainRssRepositoryTest.kt',
+    'ui/book/source/edit/JsSourceEditAcceptedIoTest.kt',
 )
 DEFAULT_MANIFEST = Path(__file__).with_name('v8-migration-instrumentation.json')
 spec = importlib.util.spec_from_file_location('original_instrumentation', Path(__file__).with_name('verify-instrumentation.py'))

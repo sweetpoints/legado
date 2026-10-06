@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 51,
+  "caseCount": 65,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -101,6 +101,41 @@
         "summaryAcceptsAJSONArrayStringReturnedByJavaScript",
         "summaryKeepsEveryRegexListMatch",
         "urlExtraParametersPreserveInfoMapAndOnlyAddSuppliedGlobals"
+      ]
+    },
+    {
+      "name": "io.legado.app.data.repository.AutoTaskDebugRepositoryTest",
+      "source": "app/src/androidTest/java/io/legado/app/data/repository/AutoTaskDebugRepositoryTest.kt",
+      "sourceSha256": "3ee2ea87ee5c9d9ef87ec1d9544f093ea77ab08f75a6ce9c982a3ffc929d83f6",
+      "methods": [
+        "busyAcquireCannotReplaceOrCancelAnotherOwnerAndReleasedLeaseCannotReleaseSuccessor",
+        "diskRestoreBoundsOutputKeepsRunMarkerAndRejectsOlderSnapshots",
+        "immutableSnapshotRunsRealV8StreamsScopedLogsAndDoesNotPersistRuntime",
+        "realFailureLogContainsScriptErrorAndLeaseIsSingleUse",
+        "realRunnerCancellationInterruptsV8AndScopedLeaseCleanupLeavesRuntimeUntouched"
+      ]
+    },
+    {
+      "name": "io.legado.app.data.repository.MainRssRepositoryTest",
+      "source": "app/src/androidTest/java/io/legado/app/data/repository/MainRssRepositoryTest.kt",
+      "sourceSha256": "6aa244aa98dadfd814c132b6a54ce50068a76a5992595526b43b5b3bb0785b85",
+      "methods": [
+        "deleteUsesFreshCompleteEntityAndEstablishedSourceCleanupPipeline",
+        "narrowTopAndDisableRereadCurrentMetadataRatherThanDisplayedSnapshot",
+        "navigationUsesLatestSourceAndEvaluatesWithCompleteMetadataOffMain",
+        "realEnabledSearchAndExactGroupQueriesKeepGlobalOrderAndHeaderDataProjection",
+        "realV8StartHtmlEvaluationRetainsRuleContextAndLegacyNavigationChoice"
+      ]
+    },
+    {
+      "name": "io.legado.app.ui.book.source.edit.JsSourceEditAcceptedIoTest",
+      "source": "app/src/androidTest/java/io/legado/app/ui/book/source/edit/JsSourceEditAcceptedIoTest.kt",
+      "sourceSha256": "da949f89460d0e39981b0e02627c8ab36300aa2875c07102e619e3019ee083e0",
+      "methods": [
+        "originalV8ParsingRemainsCancelableBeforeRoomAccept",
+        "realAtomicSavingCheckpointRequiresExplicitRetryBeforeRoomMutation",
+        "realRoomAcceptAndAtomicReceiptFinishWhenCallerIsCanceled",
+        "unchangedSourceStillWritesReceiptWithoutRestampingSource"
       ]
     }
   ]
