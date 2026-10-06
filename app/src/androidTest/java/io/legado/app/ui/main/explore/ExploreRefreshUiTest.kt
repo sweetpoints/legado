@@ -35,11 +35,13 @@ import io.legado.app.utils.GSON
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.utils.defaultSharedPreferences
 import fi.iki.elonen.NanoHTTPD
+import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -233,16 +235,25 @@ class ExploreRefreshUiTest {
                     assertTrue("Async V8 action must be in flight", entered.count == 0L)
                     // Collect an unrelated JVM control while the actual action owns its callback.
                     // The source no longer has reflective access to Packages.java.*.
-                    fun probe() = WeakReference(Any())
-                    val weak = probe()
+                    val queue = ReferenceQueue<Any>()
+                    val holder = AtomicReference<WeakReference<Any>>()
+                    // Create the referent on a separate stack and wait for that thread to exit.
+                    // Reading weak.get() before GC can retain the object in an ART stack slot.
+                    val creator =
+                        Thread({ holder.set(WeakReference(Any(), queue)) }, "explore-gc-probe")
+                    creator.start()
+                    creator.join()
+                    val weak = checkNotNull(holder.get())
+                    var collected = false
                     repeat(30) {
-                        if (weak.get() != null) {
+                        if (!collected) {
                             System.gc()
                             System.runFinalization()
-                            Thread.sleep(10)
+                            collected = queue.remove(10) === weak
                         }
                     }
-                    assertTrue("Actual JVM GC must collect the control probe", weak.get() == null)
+                    assertTrue("Actual JVM GC must collect the control probe", collected)
+                    assertTrue("Collected control probe must be cleared", weak.get() == null)
                     release.countDown()
                 }
             } finally {
