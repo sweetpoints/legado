@@ -186,11 +186,16 @@ class McpServiceContractTest {
         assertFalse(bookBranch.contains("mainJs"))
         val generalBranch = compactExecutor.substringAfter("}else{")
         assertTrue(generalBranch.contains("V8ScriptExecutor.evaluate(script,values)"))
-        assertTrue(
-            generalBranch.contains(
-                "V8ScriptExecutor.evaluate(wrapped,values+(\"__mcpSource\"tometadata))"
-            )
-        )
+        // Source-backed RSS calls retain their library, headers and persistent owner;
+        // metadata-only auxiliary evaluation cannot replace that source context.
+        assertTrue(generalBranch.contains("runInterruptible{"))
+        assertTrue(generalBranch.contains("source.evalJS(script){"))
+        assertTrue(generalBranch.contains("values.forEach{(key,value)->put(key,value)}"))
+        val baseSource =
+            projectFile("app/src/main/java/io/legado/app/data/entities/BaseSource.kt").compact()
+        assertTrue(baseSource.contains("getSourceNavigationContext()"))
+        assertTrue(baseSource.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(baseSource.contains("source=this"))
         assertTrue(generalBranch.contains("JsSourceEngine.normalizeJsResult(raw)"))
         assertFalse(compactExecutor.contains("catch("))
         assertTrue(evalTool.contains("catch (error: CancellationException)"))
