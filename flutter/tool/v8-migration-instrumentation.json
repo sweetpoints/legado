@@ -29,7 +29,7 @@
     {
       "name": "io.legado.app.model.CryptoJsV8CompatibilityTest",
       "source": "app/src/androidTest/java/io/legado/app/model/CryptoJsV8CompatibilityTest.kt",
-      "sourceSha256": "9b67611c74ffaf5bc0311b457c24fe48be1a5bf55da60fd42dee565933d5d1cf",
+      "sourceSha256": "f1121dfdc2dc79c8a8bfb151863fe7a13a7f7c6c3e8e631c3314fe03ea687830",
       "methods": [
         "blankLibraryInstallsCryptoAtEveryRetainedRssEntryPoint",
         "clearingOneSourceStateLeavesOtherSourceStateUsable",
