@@ -21,10 +21,18 @@ if [[ -z "${ANDROID_SERIAL:-}" ]]; then
     exit 2
 fi
 
+# Freeze the combined legacy-migration + engine/UI source inventory before
+# compiling. Both runner selection and report validation use this same file.
+task_manifest_directory="$(mktemp -d "${TMPDIR:-/tmp}/legado-v8-instrumentation.XXXXXXXX")"
+trap 'rm -rf "$task_manifest_directory"' EXIT
+task_test_manifest="$task_manifest_directory/combined.json"
+task_test_verifier="$workspace_root/tool/verify-v8-migration-instrumentation.py"
+python3 "$task_test_verifier" --include-existing --write-manifest "$task_test_manifest"
+
 SOURCE_ENGINE_TEST_SUFFIX=.fluttertest bash "$workspace_root/tool/build-android.sh"
 cd "$repository_root"
 task_test_started="$(python3 -c 'import time; print(time.time())')"
-task_test_regex="$(python3 "$workspace_root/tool/verify-instrumentation.py" --tests-regex)"
+task_test_regex="$(python3 "$task_test_verifier" --manifest "$task_test_manifest" --tests-regex)"
 ./gradlew :app:connectedAppDebugAndroidTest \
     "-Dorg.gradle.java.home=$task_java_home" \
     "-PflutterSourceAbis=$task_android_abis" \
@@ -34,4 +42,4 @@ task_test_regex="$(python3 "$workspace_root/tool/verify-instrumentation.py" --te
 
 # Reject Gradle's occasional successful exit after installation failures, stale
 # reports, and any incomplete/unknown/skipped instrumentation result.
-python3 "$workspace_root/tool/verify-instrumentation.py" --since "$task_test_started"
+python3 "$task_test_verifier" --manifest "$task_test_manifest" --since "$task_test_started"

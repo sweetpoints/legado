@@ -12,18 +12,18 @@ on:
       - 'app/src/main/java/io/legado/app/model/webBook/**'
       - 'app/src/main/java/io/legado/app/model/sourceEngine/**'
       - 'app/src/main/java/io/legado/app/ui/book/source/**'
-      - 'app/src/androidTest/java/io/legado/app/model/FlutterSourceEngineTest.kt'
-      - 'app/src/androidTest/java/io/legado/app/ui/book/source/edit/BookSourceMigrationUiTest.kt'
-      - 'app/src/androidTest/java/io/legado/app/model/jsSource/JsSourceReviewV8Test.kt'
-      - 'app/src/androidTest/java/io/legado/app/model/login/FlutterLoginUiV2Test.kt'
-      - 'app/src/androidTest/java/io/legado/app/model/JsSourceV8ExecutionTest.kt'
-      - 'app/src/androidTest/java/io/legado/app/model/CryptoMigrationContractTest.kt'
-      - 'app/src/androidTest/java/io/legado/app/web/mcp/FlutterMcpSourceTest.kt'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/assets/**'
+      - 'app/src/main/java/io/legado/app/model/analyzeRule/**'
+      - 'app/src/main/java/io/legado/app/model/SharedJsScope.kt'
+      - 'app/src/main/java/io/legado/app/help/**'
+      - 'app/src/main/java/io/legado/app/ui/replace/**'
+      - 'app/src/main/java/io/legado/app/service/HttpReadAloudService.kt'
+      - 'app/src/main/java/io/legado/app/service/CheckSourceService.kt'
       - 'app/src/main/java/io/legado/app/web/mcp/**'
       - 'app/src/main/java/io/legado/app/model/jsSource/**'
       - 'app/src/main/java/io/legado/app/model/login/**'
-      - 'app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt'
-      - 'app/src/main/java/io/legado/app/data/entities/BaseSource.kt'
+      - 'app/src/main/java/io/legado/app/data/entities/**'
       - 'app/proguard-rules.pro'
       - 'app/build.gradle.kts'
       - 'settings.gradle.kts'
@@ -138,7 +138,7 @@ jobs:
       - name: Verify downloaded official Android native provenance
         run: python3 flutter/tool/verify-android-aar.py --native-only
       - name: Verify strict instrumentation report contracts
-        run: python3 -m unittest discover -s flutter/tool -p 'test_verify_instrumentation.py'
+        run: python3 -m unittest discover -s flutter/tool -p 'test_*instrumentation*.py'
       - name: Prepare verified Flutter Android AARs
         run: bash flutter/tool/prepare-android-aar.sh all
       - name: Prepare pinned UI regression test assets
