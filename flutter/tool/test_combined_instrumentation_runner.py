@@ -28,6 +28,26 @@ class CombinedRunnerTests(unittest.TestCase):
         original = set(combined.original.required_cases())
         records = combined.manifest(True)['classes']
         cases = [(r['name'], m) for r in records for m in r['methods']]
+        (root / 'compiled-cases.json').write_text(json.dumps(cases))
+        classes = root / 'app/build/intermediates/built_in_kotlinc/appDebugAndroidTest/compileAppDebugAndroidTestKotlin/classes'
+        for record in records:
+            compiled = classes / (record['name'].replace('.', '/') + '.class')
+            compiled.parent.mkdir(parents=True, exist_ok=True)
+            compiled.write_bytes(b'fixture-only; not executable bytecode')
+        binaries = root / 'fixture-bin'; binaries.mkdir()
+        javap = binaries / 'javap'
+        javap.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+root=pathlib.Path(os.environ['FIXTURE_ROOT'])
+classes=root/'app/build/intermediates/built_in_kotlinc/appDebugAndroidTest/compileAppDebugAndroidTestKotlin/classes'
+name='.'.join(pathlib.Path(sys.argv[-1]).relative_to(classes).with_suffix('').parts)
+cases=json.loads((root/'compiled-cases.json').read_text())
+for class_name, method in cases:
+    if class_name == name:
+        result='java.lang.Exception' if os.environ['FIXTURE_MODE']=='non-void' and (class_name,method)==tuple(cases[0]) else 'void'
+        print('  public final '+result+' '+method+'();')
+''')
+        javap.chmod(0o755)
         if mode == 'old-only': cases = [(name, method) for name, method in cases if name in original]
         (root / 'cases.json').write_text(json.dumps(cases))
         (tools / 'build-android.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
@@ -35,6 +55,7 @@ class CombinedRunnerTests(unittest.TestCase):
         wrapper.write_text('''#!/usr/bin/env python3
 import json, os, pathlib, re, sys, xml.etree.ElementTree as ET
 root=pathlib.Path(__file__).parent
+(root/'device-run-started').write_text('fixture only')
 option=next(a for a in sys.argv if a.startswith('-Pandroid.testInstrumentationRunnerArguments.tests_regex='))
 value=option.split('=',1)[1]
 assert value.startswith("'") and value.endswith("'")
@@ -52,7 +73,8 @@ if os.environ['FIXTURE_MODE']=='changed-source':
 ''')
         wrapper.chmod(0o755)
         env = dict(os.environ, ANDROID_SERIAL='fixture-only', FIXTURE_MODE=mode,
-                   FIXTURE_FIRST_SOURCE=records[0]['source'])
+                   FIXTURE_FIRST_SOURCE=records[0]['source'], FIXTURE_ROOT=str(root),
+                   PATH=str(binaries)+os.pathsep+os.environ['PATH'])
         return subprocess.run(['bash', str(tools / 'test-android.sh')], env=env,
                               capture_output=True, text=True)
 
@@ -74,6 +96,13 @@ if os.environ['FIXTURE_MODE']=='changed-source':
             result = self.fixture(d, 'changed-source')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('manifest differs from current source', result.stderr)
+
+    def test_non_void_compiled_test_is_rejected_before_device_execution(self):
+        with tempfile.TemporaryDirectory() as d:
+            result = self.fixture(d, 'non-void')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('public instance void method', result.stderr)
+            self.assertFalse((Path(d) / 'device-run-started').exists())
 
     def test_workflow_trigger_covers_combined_tests_and_script_helpers(self):
         text = (combined.ROOT / '.github/workflows/flutter-source-engine.yml').read_text()

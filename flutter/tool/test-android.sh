@@ -30,6 +30,19 @@ task_test_verifier="$workspace_root/tool/verify-v8-migration-instrumentation.py"
 python3 "$task_test_verifier" --include-existing --write-manifest "$task_test_manifest"
 
 SOURCE_ENGINE_TEST_SUFFIX=.fluttertest bash "$workspace_root/tool/build-android.sh"
+# AGP 9 built-in Kotlin uses intermediates; older Kotlin plugins use tmp.
+# Fail before installing/running an invalid JUnit class (non-void tests can be
+# dropped by AndroidJUnitRunner's method filter without an XML testcase).
+task_kotlin_classes="$repository_root/app/build/intermediates/built_in_kotlinc/appDebugAndroidTest/compileAppDebugAndroidTestKotlin/classes"
+if [[ ! -d "$task_kotlin_classes" ]]; then
+    task_kotlin_classes="$repository_root/app/build/tmp/kotlin-classes/appDebugAndroidTest"
+fi
+if [[ ! -d "$task_kotlin_classes" ]]; then
+    echo 'Compiled Android instrumentation classes are missing after assembly.' >&2
+    exit 2
+fi
+python3 "$task_test_verifier" --manifest "$task_test_manifest" \
+    --compiled-classes "$task_kotlin_classes" --verify-compiled-only
 cd "$repository_root"
 task_test_started="$(python3 -c 'import time; print(time.time())')"
 task_test_regex="$(python3 "$task_test_verifier" --manifest "$task_test_manifest" --tests-regex)"
@@ -42,4 +55,4 @@ task_test_regex="$(python3 "$task_test_verifier" --manifest "$task_test_manifest
 
 # Reject Gradle's occasional successful exit after installation failures, stale
 # reports, and any incomplete/unknown/skipped instrumentation result.
-python3 "$task_test_verifier" --manifest "$task_test_manifest" --since "$task_test_started"
+python3 "$task_test_verifier" --manifest "$task_test_manifest" --compiled-classes "$task_kotlin_classes" --since "$task_test_started"
