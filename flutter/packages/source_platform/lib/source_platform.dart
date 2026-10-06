@@ -45,12 +45,32 @@ class SourcePlatform implements ScriptHost {
   Future<Object?> call(String method, List<Object?> arguments) async {
     switch (method) {
       case 'browser.open':
-        return browser({
-          'sourceId': sourceId,
-          'url': arguments.first as String,
-          'title': arguments.length > 1 ? arguments[1] as String : '',
-          'taskId': arguments.length > 2 ? arguments[2] as String : null,
-        });
+      case 'browser.show':
+      case 'browser.start':
+      case 'batch.cacheContent':
+        if (arguments.isEmpty ||
+            arguments.last is! Map ||
+            (arguments.last as Map)['__sourceTaskId'] is! String) {
+          throw const EngineException(
+            'invalid_request',
+            'Host call requires a task',
+          );
+        }
+        final taskId = (arguments.last as Map)['__sourceTaskId'] as String;
+        final result = await const MethodChannel('legado/source_host_platform')
+            .invokeMethod<Object?>('call', {
+              'sourceId': sourceId,
+              'taskId': taskId,
+              'method': method,
+              'arguments': arguments.sublist(0, arguments.length - 1),
+            });
+        if (method == 'batch.cacheContent' && result is! bool) {
+          throw const EngineException(
+            'invalid_host_response',
+            'cacheContent must return a boolean',
+          );
+        }
+        return result;
       case 'storage.read':
         _checkPublicKey(arguments.first as String);
         return read(sourceId, arguments.first as String);

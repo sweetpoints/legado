@@ -5,7 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
 import 'package:source_engine/source_engine.dart';
 
-
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
   'ajax',
@@ -32,6 +31,10 @@ const legacySupportedMethods = {
   'getElement',
   'getElements',
   'encodeURI',
+  'cacheContent',
+  'showBrowser',
+  'startBrowser',
+  'startBrowserAwait',
 };
 
 /// StrResponse and Jsoup response method facades. Dart only transports JSON;
@@ -160,6 +163,60 @@ class LegacyScriptHost implements ScriptHost {
 
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
+      case 'cacheContent':
+        arity(2);
+        return delegate.call('batch.cacheContent', [arguments[0], str(1)]);
+      case 'showBrowser':
+        arity(1, 4);
+        str(0);
+        for (var i = 1; i < arguments.length; i++) {
+          if (arguments[i] != null) str(i);
+        }
+        return delegate.call('browser.show', arguments);
+      case 'startBrowser':
+        arity(2, 3);
+        str(0);
+        str(1);
+        if (arguments.length == 3 && arguments[2] != null) str(2);
+        return delegate.call('browser.start', arguments);
+      case 'startBrowserAwait':
+        arity(2, 4);
+        final url = str(0);
+        final title = str(1);
+        if (arguments.length > 2 && arguments[2] is! bool) {
+          throw ArgumentError('refetchAfterSuccess must be boolean');
+        }
+        if (arguments.length == 4 && arguments[3] != null) str(3);
+        final raw = await delegate.call('browser.open', [
+          url,
+          title,
+          {
+            'refetchAfterSuccess': arguments.length > 2 ? arguments[2] : true,
+            if (arguments.length == 4) 'html': arguments[3],
+          },
+        ]);
+        if (raw is! Map) {
+          throw const EngineException(
+            'invalid_host_response',
+            'Browser response required',
+          );
+        }
+        if (raw['refetch'] == true) {
+          return _request(url, 'GET', null, null);
+        }
+        if (raw['body'] is! String) {
+          throw const EngineException(
+            'invalid_host_response',
+            'Browser body required',
+          );
+        }
+        return {
+          ...Map<String, Object?>.from(raw),
+          'url': raw['url'] ?? url,
+          'status': 200,
+          '__legacyResponseKind': 'str',
+        };
+
       case 'base64Encode':
         arity(1, 2);
         final flags = arguments.length == 2 ? _flags(arguments[1]) : 2;

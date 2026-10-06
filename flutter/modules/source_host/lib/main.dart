@@ -6,6 +6,7 @@ import 'package:source_v8/source_v8.dart';
 
 import 'source_host.dart';
 import 'session_store.dart';
+import 'task_host.dart';
 
 @pragma('vm:entry-point')
 Future<void> main() async {
@@ -73,10 +74,10 @@ class _SourceRuntime implements ScriptRuntime, SourceRuntimeState {
       variables: context.variables,
       host: legacy
           ? LegacyScriptHost(
-              _TaskHost(context.host, context.variables['taskId']),
+              TaskScriptHost(context.host, context.variables['taskId']),
               variables: variables,
             )
-          : _TaskHost(context.host, context.variables['taskId']),
+          : TaskScriptHost(context.host, context.variables['taskId']),
       timeout: context.timeout,
     ),
     cancellation: cancellation,
@@ -100,24 +101,6 @@ class _SourceRuntime implements ScriptRuntime, SourceRuntimeState {
 
   @override
   Future<void> close() => runtime.close();
-}
-
-/// Attach cancellation identity without requiring source authors to pass it.
-class _TaskHost implements ScriptHost {
-  _TaskHost(this.delegate, this.taskId);
-  final ScriptHost delegate;
-  final Object? taskId;
-  @override
-  Future<Object?> call(String method, List<Object?> arguments) {
-    if (method == 'browser.open' && arguments.length < 3) {
-      return delegate.call(method, [
-        arguments.first,
-        arguments.length > 1 ? arguments[1] : '',
-        taskId,
-      ]);
-    }
-    return delegate.call(method, arguments);
-  }
 }
 
 class _StartupHost implements ScriptHost {
