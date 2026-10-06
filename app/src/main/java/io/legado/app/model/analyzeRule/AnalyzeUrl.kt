@@ -398,7 +398,7 @@ class AnalyzeUrl(
             "baseUrl" to baseUrl, "page" to page, "key" to key,
             "speakText" to speakText, "speakSpeed" to speakSpeed,
             "book" to (ruleData as? Book)?.let { DartSourceEngine.jsonObject(it) },
-            "sourceData" to source?.let { DartSourceEngine.jsonObject(it) },
+            "sourceData" to source?.let { DartSourceEngine.jsonObject(it.getSource() ?: it) },
             "result" to result, "infoMap" to infoMap,
         )
         extraParams?.forEach { (name, value) ->
