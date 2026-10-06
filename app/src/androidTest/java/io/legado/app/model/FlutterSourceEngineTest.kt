@@ -9,6 +9,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceEngineBackend
+import io.legado.app.model.sourceEngine.SourceScriptException
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -377,7 +378,12 @@ class FlutterSourceEngineTest {
                 )
             }
             assertTrue("Modern source must reject java.*", oldApi.isFailure)
-            assertTrue(oldApi.exceptionOrNull()?.message.orEmpty().contains("script_error"))
+            val error = oldApi.exceptionOrNull()
+            assertTrue(
+                "Modern source must report a structured script failure",
+                error is SourceScriptException,
+            )
+            assertEquals("script_error", (error as SourceScriptException).code)
             assertEquals(
                 "Test V8",
                 bridge.execute("search", definition, mapOf("key" to "Test")).single()["name"],
