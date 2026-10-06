@@ -109,7 +109,6 @@ object DartSourceEngine {
         }
         original?.let {
             globals.putIfAbsent("sourceData", jsonObject(it))
-            globals.putIfAbsent("baseUrl", it.getKey())
         }
         val descriptor = original?.let {
             val definition = (it as? BookSource)?.let { bookSource ->
@@ -138,6 +137,7 @@ object DartSourceEngine {
                 put("sourceKind", when (it) { is BookSource -> "book"; is RssSource -> "rss"; is HttpTTS -> "tts"; else -> "auxiliary" })
             }
         }
+        original?.let { globals.putIfAbsent("baseUrl", descriptor?.get("baseUrl") ?: it.getKey()) }
         val context = currentCoroutineContext()
         val caller = context[SourceHostCallbacks]
         return withContext(SourceHostCallbacks { method, arguments ->
