@@ -35,6 +35,8 @@ def inventory(root):
 
 
 def verify(root, item):
+    if root.is_symlink() or (root / 'toolchain-receipt.json').is_symlink():
+        raise ValueError('Toolchain root/receipt must not be symbolic links')
     for p in root.rglob('*'):
         if p.is_symlink() and not p.resolve().is_relative_to(root.resolve()):
             raise ValueError('Clang symlink escapes verified toolchain')

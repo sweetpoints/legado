@@ -36,5 +36,6 @@
     "android-arm64": "a5a63dd9e6a796c3443ac8e7d1a16cbd7b521f41c19032e34fe1f728fb58e99b",
     "android-x64": "f5476e80bcb3215338acf50569615b6c8b577ab7b0107240e74c3a4e0c872faa",
     "macos-arm64": "408deb50ea2ed8b683e3ad8c6e308cf275c7ca63e1e486947e9cb5382e631e84"
-  }
+  },
+  "sdkPinsSha256": "f04d578f82c6b5d39ebd103d26adf0dae79be5194c9bb56d26720e10706b7fe1"
 }

@@ -158,11 +158,17 @@ class PrebuiltContractTests(unittest.TestCase):
     def test_reviewed_manifest_allows_offline_cache_reuse_but_rejects_header_tampering(self):
         f = Fixture()
         f.pin['sdkManifestSha256'] = {'android-arm64': digest(encoded(f.manifests['android-arm64']))}
+        f.pin['sdkPinsSha256'] = digest(encoded(f.local))
         with tempfile.TemporaryDirectory() as directory:
             root = f.install(directory)
             f.urls.clear()
             self.assertEqual(f.install(directory), root)
             self.assertEqual(f.urls, [])
+            original_pins = (root / 'pins.json').read_bytes()
+            (root / 'pins.json').write_text('{}')
+            with self.assertRaises(ValueError):
+                f.install(directory)
+            (root / 'pins.json').write_bytes(original_pins)
             (root / 'android-arm64/include/v8.h').write_text('changed ABI header')
             with self.assertRaises(ValueError):
                 f.install(directory)

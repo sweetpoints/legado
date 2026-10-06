@@ -316,6 +316,8 @@ def install(pin, target, *, local_pins=None,
         if destination.exists():
             if destination.is_symlink() or sha(destination / 'manifest.json') != expected_manifest:
                 raise ValueError('Cached SDK manifest differs from reviewed release')
+            if pin.get('sdkPinsSha256') is not None and sha(destination / 'pins.json') != _digest(pin['sdkPinsSha256']):
+                raise ValueError('Cached SDK pins differ from reviewed release')
             cached = json.loads((destination / 'manifest.json').read_text())
             validate_sdk(destination, cached, pin, local_pins, target)
             return destination
@@ -347,6 +349,8 @@ def install(pin, target, *, local_pins=None,
             if expected_manifest is not None and sha(incoming / 'manifest.json') != expected_manifest:
                 raise ValueError('SDK manifest differs from reviewed release digest')
             manifest = _object(json.loads((incoming / 'manifest.json').read_text()), 'SDK manifest')
+            if pin.get('sdkPinsSha256') is not None and sha(incoming / 'pins.json') != _digest(pin['sdkPinsSha256']):
+                raise ValueError('SDK pins differ from reviewed release digest')
             archive_pins = _object(json.loads((incoming / 'pins.json').read_text()), 'Archive pins')
             for key in ('v8', 'depotTools'):
                 if archive_pins.get(key) != local_pins[key]:
