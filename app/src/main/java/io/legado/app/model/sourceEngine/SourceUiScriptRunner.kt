@@ -3,6 +3,7 @@ package io.legado.app.model.sourceEngine
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.shouldSuppressSourceNavigation
+import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.rss.read.RssJsExtensions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -11,6 +12,10 @@ import kotlinx.coroutines.withContext
 
 /** UI scripts retain Android capabilities through explicit task callbacks, never Java objects. */
 object SourceUiScriptRunner {
+    private fun loginExtensions(extensions: RssJsExtensions): SourceLoginJsExtensions =
+        extensions as? SourceLoginJsExtensions
+            ?: error("Login UI callbacks are unavailable in this operation")
+
     suspend fun evaluate(
         source: BaseSource,
         script: String,
@@ -76,6 +81,27 @@ object SourceUiScriptRunner {
                     withContext(Dispatchers.Main.immediate) {
                         context.ensureActive()
                         when (method) {
+                            "ui.copyText" -> loginExtensions(extensions).copyText(text(0))
+                            "ui.upLoginData" -> {
+                                val data = args.getOrNull(0)
+                                require(data == null || data is Map<*, *>) {
+                                    "Login data must be a JSON object"
+                                }
+                                val map =
+                                    (data as? Map<*, *>)?.entries?.associate { (key, value) ->
+                                        require(key is String) { "Login data keys must be strings" }
+                                        key to value
+                                    }
+                                loginExtensions(extensions).upLoginData(map)
+                            }
+                            "ui.reLoginView" -> {
+                                require(args.isEmpty() || args[0] is Boolean) {
+                                    "deltaUp must be boolean"
+                                }
+                                loginExtensions(extensions).reLoginView(args.getOrNull(0) == true)
+                            }
+                            "ui.refreshExplore" -> loginExtensions(extensions).refreshExplore()
+                            "ui.clearTtsCache" -> loginExtensions(extensions).clearTtsCache()
                             "ui.searchBook" -> extensions.searchBook(text(0), optional(1))
                             "ui.addBook" -> extensions.addBook(text(0))
                             "ui.showPhoto" -> extensions.showPhoto(text(0))
@@ -110,7 +136,8 @@ object SourceUiScriptRunner {
                     const previousJava = globalThis.java;
                     const java = new Proxy(Object.create(null), {
                         get: (_, name) => ['get','put','searchBook','addBook','showPhoto','open',
-                            'getString','getStringList','setContent','setBaseUrl','setRedirectUrl'].includes(String(name))
+                            'getString','getStringList','setContent','setBaseUrl','setRedirectUrl',
+                            'copyText','upLoginData','reLoginView','refreshExplore','clearTtsCache'].includes(String(name))
                             ? (...args) => {
                                 const result = __sourceHostSync('ui.' + String(name), args);
                                 return ['setContent','setBaseUrl'].includes(String(name)) ? java : result;
