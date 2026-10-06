@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Bind migrated V8 instrumentation results to every method in the current source."""
+import argparse
+import hashlib
+import importlib.util
+import json
+import math
+from pathlib import Path
+import re
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE_ROOT = Path('app/src/androidTest/java/io/legado/app')
+TEST_FILES = (
+    'V8ApplicationScriptTest.kt',
+    'model/CryptoJsV8CompatibilityTest.kt',
+    'help/book/BookExportFileNameV8Test.kt',
+    'model/analyzeRule/AnalyzeUrlV8TemplateGoldenTest.kt',
+    'model/analyzeRule/AnalyzeRuleElementsNormalizationTest.kt',
+    'ui/replace/edit/ReplacePreviewV8Test.kt',
+    'model/analyzeRule/ReviewRuleParserV8Test.kt',
+)
+DEFAULT_MANIFEST = Path(__file__).with_name('v8-migration-instrumentation.json')
+spec = importlib.util.spec_from_file_location('original_instrumentation', Path(__file__).with_name('verify-instrumentation.py'))
+original = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(original)
+
+
+def kotlin_code(source):
+    """Mask Kotlin comments and literals so examples cannot declare fake tests."""
+    pattern = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"""[\s\S]*?"""|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+    return pattern.sub(lambda match: ''.join('\n' if character == '\n' else ' ' for character in match[0]), source)
+
+
+def class_record(relative, root):
+    path = SOURCE_ROOT / relative
+    data = (root / path).read_bytes()
+    code = kotlin_code(data.decode('utf-8'))
+    package = re.search(r'^package\s+([\w.]+)', code, re.MULTILINE)
+    classes = re.findall(r'^\s*(?:internal\s+)?class\s+(\w+)', code, re.MULTILINE)
+    methods = re.findall(r'@Test\s+(?:public\s+)?fun\s+([A-Za-z_]\w*)\s*\(\s*\)', code)
+    annotations = re.findall(r'@Test\b', code)
+    if not package or len(classes) != 1 or not methods or len(methods) != len(annotations):
+        raise ValueError(f'Every @Test must be an explicit zero-argument DEX-safe method: {path}')
+    if len(set(methods)) != len(methods) or re.search(r'@Ignore\b', code):
+        raise ValueError(f'Duplicate or ignored instrumentation declaration: {path}')
+    return {'name': f'{package[1]}.{classes[0]}', 'source': path.as_posix(),
+            'sourceSha256': hashlib.sha256(data).hexdigest(), 'methods': sorted(methods)}
+
+
+def manifest(include_existing=False, root=ROOT):
+    files = TEST_FILES + (original.TEST_FILES if include_existing else ())
+    records = [class_record(path, root) for path in files]
+    names = [record['name'] for record in records]
+    if len(set(names)) != len(names):
+        raise ValueError('Duplicate class in instrumentation source inventory')
+    return {'schemaVersion': 1, 'includeExisting': include_existing,
+            'caseCount': sum(len(record['methods']) for record in records), 'classes': records}
+
+
+def required_cases(document):
+    return {record['name']: set(record['methods']) for record in document['classes']}
+
+
+def runner_regex(document):
+    # No commas: AGP serializes runner options as a comma-separated map. Only
+    # exact Class#method identities are selected, including every declared case.
+    return '^(?:' + '|'.join(re.escape(record['name']) + '#(?:' +
+                           '|'.join(re.escape(method) for method in record['methods']) + ')'
+                           for record in document['classes']) + ')$'
+
+
+def validate_manifest(document, root=ROOT):
+    if not isinstance(document, dict):
+        raise ValueError('Instrumentation manifest must be a JSON object')
+    if type(document.get('includeExisting')) is not bool:
+        raise ValueError('Manifest requires an explicit includeExisting Boolean')
+    if document != manifest(document['includeExisting'], root):
+        raise ValueError('Instrumentation manifest differs from current source; regenerate before building/running')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--write-manifest', type=Path)
+    parser.add_argument('--include-existing', action='store_true', help='Generate a combined inventory with the original engine/UI classes')
+    parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--classes', action='store_true')
+    parser.add_argument('--tests-regex', action='store_true')
+    parser.add_argument('--since', type=float)
+    parser.add_argument('--reports', type=Path, default=ROOT / 'app/build/outputs/androidTest-results/connected/debug/flavors/app')
+    args = parser.parse_args()
+    if args.write_manifest:
+        document = manifest(args.include_existing)
+        args.write_manifest.parent.mkdir(parents=True, exist_ok=True)
+        args.write_manifest.write_text(json.dumps(document, indent=2) + '\n')
+        print(f"Wrote {document['caseCount']} cases across {len(document['classes'])} source-bound classes to {args.write_manifest}.")
+        return
+    if args.include_existing:
+        parser.error('--include-existing is only used with --write-manifest; execute with the generated --manifest')
+    document = json.loads(args.manifest.read_text())
+    validate_manifest(document)
+    if args.tests_regex:
+        print(runner_regex(document))
+        return
+    if args.classes:
+        print(','.join(record['name'] for record in document['classes']))
+        return
+    if args.since is None or not math.isfinite(args.since) or args.since <= 0:
+        parser.error('--since requires a positive finite run-start Unix timestamp to reject stale reports')
+    counts = original.verify_reports(args.reports, args.since, required_cases(document))
+    print(json.dumps({'verified': True, 'caseCount': sum(counts.values()), 'classes': counts,
+                      'manifestSha256': hashlib.sha256(args.manifest.read_bytes()).hexdigest()}, indent=2))
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, ET.ParseError) as error:
+        raise SystemExit(str(error))

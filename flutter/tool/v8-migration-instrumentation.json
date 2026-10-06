@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "includeExisting": false,
+  "caseCount": 51,
+  "classes": [
+    {
+      "name": "io.legado.app.V8ApplicationScriptTest",
+      "source": "app/src/androidTest/java/io/legado/app/V8ApplicationScriptTest.kt",
+      "sourceSha256": "e996f2be2e0b5da3bbac97e217e5fd22b48c487597d302c51022bd101b8933ac",
+      "methods": [
+        "bundledFormatterExecutesOfflineInActualV8",
+        "cancellationInterruptsNativeLoopAndLeavesNextRequestUsable",
+        "customToJsonAndConstructedProtocolAreConvertedByActualV8",
+        "dynamicEvaluationUsesCurrentBindingsAndStandardLexicalLifetime",
+        "dynamicLoginDefaultsExecuteOnceAndPersistTheirDecodedValue",
+        "headerWrappersExecuteThroughTheProductionSourceInActualV8",
+        "jsonBindingsPreserveMapChapterAndArrayValues",
+        "parallelPromisesAndDispatcherHandoffsRemainIsolated",
+        "regexPreviewCallsHostHelpersAndPreservesStateAcrossMatches",
+        "regexPreviewNativeLoopHitsRuleTimeoutAndCallerCancellation",
+        "removedJvmClassLoadingAndE4xCannotExecute",
+        "runtimeErrorsReachCallerAndNestedErrorsRetainTheirMessage",
+        "sourceElementFacadePreservesAttributeTextAndListObservations",
+        "stableSyntaxAndLexicalScopesFollowV8",
+        "syntaxValidationDoesNotExecuteAndReportsSourcePosition",
+        "unicodeChapterRegularExpressionAndNativeStringsKeepTheirMeaning"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.CryptoJsV8CompatibilityTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/CryptoJsV8CompatibilityTest.kt",
+      "sourceSha256": "9b67611c74ffaf5bc0311b457c24fe48be1a5bf55da60fd42dee565933d5d1cf",
+      "methods": [
+        "blankLibraryInstallsCryptoAtEveryRetainedRssEntryPoint",
+        "clearingOneSourceStateLeavesOtherSourceStateUsable",
+        "cryptoRemainsStableUnderConcurrentRequests",
+        "customLibraryCanUseCryptoAndRuntimeBindings",
+        "customLibraryInitializationAndRuleVariablesDoNotLeakBetweenRequests",
+        "independentSourcesHaveIndependentCryptoAndBuiltinObjects",
+        "sourceGlobalsAreSharedAcrossEntryPointsAndRemainSourceSpecific",
+        "supportsAesWithExplicitKeyAndIv",
+        "supportsHashesHmacAndBase64",
+        "usesSecureRandomForWordArraysAndPassphraseSalts"
+      ]
+    },
+    {
+      "name": "io.legado.app.help.book.BookExportFileNameV8Test",
+      "source": "app/src/androidTest/java/io/legado/app/help/book/BookExportFileNameV8Test.kt",
+      "sourceSha256": "0c7b18b9c877812592cc9bd7a12b99c0b7cd2ecbd481d081e0fabd39c6e3dc16",
+      "methods": [
+        "emptyAndFailedScriptsFallBackInBothOverloads",
+        "ordinaryExportNormalizesDefaultAndCustomResults",
+        "ruleValidationUsesActualJavaScriptResults",
+        "scalarScriptResultsKeepTheirJavaScriptValues",
+        "splitExportNormalizesDefaultAndCustomResults"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.analyzeRule.AnalyzeUrlV8TemplateGoldenTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/analyzeRule/AnalyzeUrlV8TemplateGoldenTest.kt",
+      "sourceSha256": "b73f9beac6b332f521302fa4ec01e3d195cd691aaae306bae89d40b6c3433589",
+      "methods": [
+        "bodyPageArithmeticIsSubstitutedBeforeJsonOptionsAndFormEncoding",
+        "constructorReplacesTemplateThenParsesOptionsThenEncodesForm",
+        "pageArithmeticUsesOriginalJavaScriptBeforeUrlOptionsParsing",
+        "pageChoiceAlsoMutatesXmlTagsInsideOptionsBody",
+        "templateIntroducedFormSeparatorsAreParsedAfterSubstitution"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.analyzeRule.AnalyzeRuleElementsNormalizationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/analyzeRule/AnalyzeRuleElementsNormalizationTest.kt",
+      "sourceSha256": "375cfd214cfa6c5dd82b64ed8cc74cab3e3f9dde69e1ea0cb7b333be3a72a942",
+      "methods": [
+        "javascriptArrayResultsBecomeUsableElementLists"
+      ]
+    },
+    {
+      "name": "io.legado.app.ui.replace.edit.ReplacePreviewV8Test",
+      "source": "app/src/androidTest/java/io/legado/app/ui/replace/edit/ReplacePreviewV8Test.kt",
+      "sourceSha256": "72d9c07038e15b0120b2a6d528674bf6a3f8bca7f5be89aa25c9111a9f9919ed",
+      "methods": [
+        "previewAllowsBookAsAJsStringLiteral",
+        "previewPreservesJsReplacementSemantics",
+        "previewStopsAnInfiniteJsReplacementAtTheRuleTimeout"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.analyzeRule.ReviewRuleParserV8Test",
+      "source": "app/src/androidTest/java/io/legado/app/model/analyzeRule/ReviewRuleParserV8Test.kt",
+      "sourceSha256": "6c5e1b708d1ac530ab6fe665da627dc2234776ab41acae8e2d037615f140c399",
+      "methods": [
+        "detailJavaScriptKeepsGroupedRootsAndRepliesWhenOptionalBadgesAreMissing",
+        "detailJavaScriptListFieldsExecuteAgainstNativeObjects",
+        "localRuleBindingsAreExplicitAndLimitedToReviewVariables",
+        "parsesDetailContentProtocolRepliesAndLocalNextPageVariables",
+        "parsesJSONSummaryReturnedAsANativeArray",
+        "ruleFailuresKeepEmptyFallbackAndAreRecorded",
+        "standaloneReplyListFailuresAreRetryableErrors",
+        "standaloneReplyRuleIsNotEvaluatedAgainstDetailItems",
+        "summaryAcceptsAJSONArrayStringReturnedByJavaScript",
+        "summaryKeepsEveryRegexListMatch",
+        "urlExtraParametersPreserveInfoMapAndOnlyAddSuppliedGlobals"
+      ]
+    }
+  ]
+}
