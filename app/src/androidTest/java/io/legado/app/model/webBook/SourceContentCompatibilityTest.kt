@@ -49,7 +49,9 @@ class SourceContentCompatibilityTest {
                 """
                 async function getContent(input) {
                     const response = await source.net.get(input.chapterUrl);
-                    const text = await source.parse.getString('@legacy:.chapter_content@textNodes', response.body);
+                    // This source used JSoup's self-closing anchor behavior; HTML5 ignores it.
+                const normalized = response.replace(/<a\s*\/>/gi, '</a>');
+                const text = await source.parse.getString('@legacy:.chapter_content@textNodes', normalized);
                     return text.replace(/【请收藏 303文学 303wx.com】|.*www\.303wx\.com.*|您现在阅读的是/g, '').trim();
                 }
                 """
@@ -81,7 +83,7 @@ class SourceContentCompatibilityTest {
                 """
                 async function getContent(input) {
                     const response = await source.net.get(input.chapterUrl);
-                    const encoded = response.body.match(/PHA\+[A-Za-z0-9+\/]+={0,2}/g);
+                    const encoded = response.match(/PHA\+[A-Za-z0-9+\/]+={0,2}/g);
                     if (!encoded) throw new Error('Content decryption requires browser migration');
                     const decoded = await Promise.all(encoded.map(value => source.encoding.base64DecodeWithCharset(value, 'UTF-8')));
                     const text = await source.parse.getString('@legacy:p@text', decoded.join('\n'));

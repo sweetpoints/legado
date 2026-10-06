@@ -412,7 +412,7 @@ class SourceNavigationUiTest {
                     async function load() {
                         await source.browser.openUrl('https://navigation.invalid/login');
                         const response = await source.net.get('$pageUrl');
-                        return {name:await source.parse.getString('@legacy:h2@text',response.body),bookUrl:'$pageUrl'};
+                        return {name:await source.parse.getString('@legacy:h2@text',response),bookUrl:'$pageUrl'};
                     }
                     async function search() {return [await load()];}
                     async function explore() {return [await load()];}
@@ -481,7 +481,7 @@ class SourceNavigationUiTest {
                             await source.storage.write('navigationTest','stored');
                             const html=await source.net.get('$pageUrl');
                             return (await source.storage.read('navigationTest')) + ':' +
-                                (await source.parse.getString('@legacy:h2@text',html.body)) + ':' +
+                                (await source.parse.getString('@legacy:h2@text',html)) + ':' +
                                 (await source.storage.read('navigationLogin'));
                         })()
                     """
