@@ -74,7 +74,7 @@ void main() {
     () async {
       final artifact = await verify();
       expect(artifact.binary.path, binary.path);
-      expect(artifact.dependencies, hasLength(7));
+      expect(artifact.dependencies, hasLength(9));
     },
   );
   test('authenticates Android x64 and enforces its API floor', () async {

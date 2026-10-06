@@ -35,7 +35,9 @@ SPEC.loader.exec_module(consumer)
 
 def source_files():
     return {name: PACKAGE / name for name in ('src/source_v8.cpp', 'src/source_v8.h', 'src/android_exports.map')} | {
-        'tool/v8/source_v8.gni': HERE / 'source_v8.gni'}
+        'tool/v8/source_v8.gni': HERE / 'source_v8.gni',
+        'tool/v8/link_sdk.py': HERE / 'link_sdk.py',
+        'tool/v8/toolchain-pins.json': HERE / 'toolchain-pins.json'}
 
 
 def source_digest(files=None):
@@ -202,6 +204,20 @@ def inspect_exports(binary, target, nm):
     return sorted(actual)
 
 
+def strip_android(binary, stripper):
+    """Match AGP StripDebugSymbolsTask: --strip-unneeded, without weakening AAR equality."""
+    stripper = Path(stripper)
+    if not stripper.is_file():
+        raise ValueError('Pinned NDK llvm-strip is required for Android bridge publication')
+    _run([stripper, '--strip-unneeded', binary])
+    first = consumer.sha(binary)
+    _run([stripper, '--strip-unneeded', binary])
+    if consumer.sha(binary) != first:
+        raise ValueError('Android --strip-unneeded transformation is not idempotent')
+    return {'toolSha256': consumer.sha(stripper), 'version': _run([stripper, '--version']).strip(),
+            'flags': ['--strip-unneeded'], 'idempotent': True}
+
+
 @contextlib.contextmanager
 def _publish_lock(path):
     import fcntl
@@ -268,6 +284,10 @@ def link(sdk_root, target, *, compiler, sysroot, nm, pins=None, cache_root=None,
         output = work / ('libsource_v8' + PROFILES[target][1])
         args = command(sdk_root, target, linking, compiler, sysroot, output, files)
         _run(args)
+        strip_evidence = None
+        if target.startswith('android-'):
+            # Use the fixed NDK tool from the same sysroot selected by prepare_sdk.
+            strip_evidence = strip_android(output, Path(sysroot).parent / 'bin/llvm-strip')
         inspection = inspect_binary(output, target)
         inspection['exports'] = inspect_exports(output, target, nm)
         # Revalidate SDK/source after compilation: never publish mixed input revisions.
@@ -320,6 +340,8 @@ def link(sdk_root, target, *, compiler, sysroot, nm, pins=None, cache_root=None,
                                   'monolithSha256': sdk_entry['sha256'], 'target': target,
                                   'releaseManifestSha256': json.loads((HERE / 'release-pin.json').read_text())['releaseManifestSha256']},
             }
+            if strip_evidence is not None:
+                entry['strip'] = strip_evidence
             if 'depsSha256' in sdk_entry:
                 entry['depsSha256'] = sdk_entry['depsSha256']
             config = pins['targets'][target]

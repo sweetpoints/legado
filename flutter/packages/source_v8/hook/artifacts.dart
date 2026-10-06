@@ -35,6 +35,10 @@ Map<String, File> bridgeSources(Directory packageRoot) => {
   'tool/v8/source_v8.gni': File(
     '${packageRoot.path}/../../tool/v8/source_v8.gni',
   ),
+  'tool/v8/link_sdk.py': File('${packageRoot.path}/../../tool/v8/link_sdk.py'),
+  'tool/v8/toolchain-pins.json': File(
+    '${packageRoot.path}/../../tool/v8/toolchain-pins.json',
+  ),
 };
 
 Future<String> bridgeDigest(Map<String, File> files) async {

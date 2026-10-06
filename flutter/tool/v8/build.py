@@ -29,7 +29,9 @@ def sha(path):
 
 def bridge_files():
     return {name: PACKAGE / name for name in ('src/source_v8.cpp', 'src/source_v8.h', 'src/android_exports.map')} | {
-        'tool/v8/source_v8.gni': HERE / 'source_v8.gni'}
+        'tool/v8/source_v8.gni': HERE / 'source_v8.gni',
+        'tool/v8/link_sdk.py': HERE / 'link_sdk.py',
+        'tool/v8/toolchain-pins.json': HERE / 'toolchain-pins.json'}
 
 
 def bridge_digest(files=None):

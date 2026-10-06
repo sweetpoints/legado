@@ -50,6 +50,11 @@ with the fixed compiler. The SDK supplies matching libc++, compiler-rt and unwin
 archives; the linker retains NDK CRT objects and avoids adding an unrelated
 implicit compiler runtime. All ten sv8 exports and Android16KiB LOAD alignment
 are checked on the resulting bridge.
+Android bridge publication applies the pinned NDK `llvm-strip --strip-unneeded`
+before computing its checksum, matching AGP's packaging transformation. A second
+strip must leave the bytes unchanged; exports and ELF alignment are checked
+afterward. The bridge input digest includes consumer linking rules and toolchain
+pins, so changed publication rules invalidate older cache targets.
 
 Verified SDKs cache under `.cache/source_sdk/`; only application bridge outputs
 use the historical `.cache/self-built/<V8 revision>/` path. The name does not
