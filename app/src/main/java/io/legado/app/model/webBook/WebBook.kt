@@ -12,11 +12,13 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
+import io.legado.app.help.book.isOnLineTxt
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.help.source.getBookType
+import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
 import io.legado.app.model.jsSource.JsSourceMarshaller
 import io.legado.app.model.sourceEngine.DartSourceEngine
@@ -24,7 +26,10 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.StringUtils.wordCountFormat
 import io.legado.app.utils.isTrue
 import java.math.BigDecimal
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -495,6 +500,35 @@ object WebBook {
             row["content"] as? String
                 ?: throw IllegalStateException("Dart content stage did not return content")
         if (!bookChapter.isVolume && content.isBlank()) throw ContentEmptyException("内容为空")
+        // Stage fields are JSON transport values, never live Java chapter objects.
+        // Validate the entire patch before touching metadata or publishing the cache.
+        val variable = row["variable"]
+        val variables =
+            when (variable) {
+                null -> null
+                is String -> GSON.fromJson(variable, JsonObject::class.java)
+                is Map<*, *> -> GSON.toJsonTree(variable).asJsonObject
+                else -> throw IllegalStateException("Dart chapter variable must be a JSON object")
+            }
+        require(
+            variables == null ||
+                variables.entrySet().all {
+                    it.value.isJsonPrimitive && it.value.asJsonPrimitive.isString
+                }
+        ) {
+            "Dart chapter variable values must be strings"
+        }
+        require(!row.containsKey("imgUrl") || row["imgUrl"] == null || row["imgUrl"] is String) {
+            "Dart chapter imgUrl must be a string"
+        }
+        variables?.let {
+            bookChapter.variableMap.clear()
+            it.entrySet().forEach { entry ->
+                bookChapter.variableMap[entry.key] = entry.value.asString
+            }
+            bookChapter.variable = GSON.toJson(bookChapter.variableMap)
+        }
+        if (row.containsKey("imgUrl")) bookChapter.imgUrl = row["imgUrl"] as String?
         if (saveToken != null) {
             val saved =
                 BookHelp.saveContent(
@@ -513,17 +547,104 @@ object WebBook {
         return content
     }
 
-    /**
-     * 批量章节内容。
-     *
-     * 无批量钩子的书源返回待处理章节，由调用方通过 Dart 单章流程获取正文。 批量缓存协议尚未迁移，批量钩子不执行，调用方统一按 Dart 单章流程兜底。
-     */
+    private val dartBatches = ConcurrentHashMap<String, BatchContentContext>()
+
+    /** Native storage callback for the scoped Dart batch host capability. */
+    fun saveDartBatchContent(batchId: String, identifier: Any?, content: String): Boolean {
+        val batch = dartBatches[batchId] ?: return false
+        val chapter =
+            when (identifier) {
+                is Map<*, *> -> {
+                    val index =
+                        identifier["index"] as? Number
+                            ?: throw IllegalArgumentException("Batch chapter requires an index")
+                    require(index.toDouble() == index.toInt().toDouble()) {
+                        "Invalid chapter index"
+                    }
+                    batch.chapters.firstOrNull { it.index == index.toInt() }
+                        ?: throw IllegalArgumentException("Chapter does not belong to this batch")
+                }
+                else ->
+                    batch.resolveChapter(identifier)
+                        ?: throw IllegalArgumentException("Batch chapter URL must be unique")
+            }
+        return batch.savePreparedContent(chapter, content)
+    }
+
+    /** V8 executes the hook; each callback publishes under its original cache version. */
     suspend fun getContentBatchAwait(
         bookSource: BookSource,
         book: Book,
         chapters: List<BookChapter>,
     ): List<BookChapter> {
-        return chapters // caller executes uncached chapters through the Dart single-chapter path
+        val script = bookSource.getContentRule().contentBatch.orEmpty()
+        if (script.isBlank() && !bookSource.isJsSource()) return chapters
+        val context = currentCoroutineContext()
+        val batch =
+            BatchContentContext(
+                bookSource,
+                book,
+                chapters,
+                context,
+                chapters.associate { it.index to BookHelp.contentSaveToken(book, it) },
+            )
+        val batchId = UUID.randomUUID().toString()
+        dartBatches[batchId] = batch
+        try {
+            val wrapped =
+                Regex("(?is)<js>(.*?)</js>").findAll(script).map { it.groupValues[1] }.toList()
+            val body =
+                if (wrapped.isNotEmpty()) wrapped.joinToString("\n")
+                else script.removePrefix("@js:")
+            val replace = bookSource.getContentRule().replaceRegex.orEmpty()
+            val replacement =
+                if (replace.startsWith("@js:", ignoreCase = true))
+                    "eval(" + GSON.toJson(replace.substring(4)) + ")"
+                else "java.getString(" + GSON.toJson(replace) + ", result)"
+            val code =
+                """
+                (async () => {
+                    const previousJava = globalThis.java;
+                    const save = (identifier, content) => {
+                        const chapter = typeof identifier === 'object' && identifier !== null ? identifier :
+                            chapters.filter(c => c.url === identifier || c.absoluteUrl === identifier).reduce((a,c) => a === null ? c : false, null);
+                        if (!chapter) throw new Error('Batch chapter URL must be unique');
+                        const baseUrl = chapter.absoluteUrl;
+                        let result = String(content);
+                        ${if (replace.isBlank()) "" else "result = result.split('\\n').map(s => s.trim()).join('\\n'); result = String($replacement);"}
+                        ${if (replace.isNotBlank() && book.isOnLineTxt) "result = result.split('\\n').map(s => '　　' + s).join('\\n');" else ""}
+                        return __sourceHostSync('batch.cacheContent', [${GSON.toJson(batchId)}, identifier, result]);
+                    };
+                    globalThis.java = new Proxy(previousJava || {}, {get(target,key) {
+                        return key === 'cacheContent' ? save : Reflect.get(target,key);
+                    }});
+                    try {
+                        ${if (bookSource.isJsSource()) bookSource.mainJs + "\nreturn await getContentBatch(chapters, book);" else body}
+                    } finally { globalThis.java = previousJava; }
+                })()
+            """
+                    .trimIndent()
+            DartSourceEngine.evaluate(
+                bookSource,
+                code,
+                mapOf(
+                    "book" to DartSourceEngine.jsonObject(book),
+                    "chapters" to
+                        chapters.map {
+                            DartSourceEngine.jsonObject(it) + ("absoluteUrl" to it.getAbsoluteURL())
+                        },
+                ),
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            context.ensureActive()
+            Debug.log(bookSource.bookSourceUrl, "批量正文: ${error.localizedMessage}")
+        } finally {
+            batch.close()
+            dartBatches.remove(batchId, batch)
+        }
+        return batch.missingChapters()
     }
 
     /** 精准搜索 */

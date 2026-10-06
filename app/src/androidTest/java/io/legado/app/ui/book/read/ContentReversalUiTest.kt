@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.os.SystemClock
 import android.view.View
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -250,9 +249,30 @@ class ContentReversalUiTest {
                 .putBoolean(PreferKey.cronet, false)
                 .putInt(PreferKey.preDownloadNum, 2)
                 .commit()
-            source.getContentRule().content =
-                "@js:chapter.putVariable('refreshVersion', " +
-                    "result.substring(result.lastIndexOf('Version '))); chapter.putImgUrl(''); result"
+            source.bookSourceComment =
+                "@source:v1 " +
+                    io.legado.app.utils.GSON.toJson(
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "id" to source.bookSourceUrl,
+                            "name" to source.bookSourceName,
+                            "baseUrl" to base,
+                            "stages" to
+                                mapOf(
+                                    "content" to
+                                        mapOf(
+                                            "url" to "{{chapterUrl}}",
+                                            "fields" to
+                                                mapOf(
+                                                    "content" to "@js:result",
+                                                    "variable" to
+                                                        "@js:JSON.stringify({refreshVersion:result.substring(result.lastIndexOf('Version '))})",
+                                                    "imgUrl" to "@js:''",
+                                                ),
+                                        )
+                                ),
+                        )
+                    )
             appDb.bookSourceDao.insert(source)
             book.durChapterIndex = 3
             book.durChapterPos = 0
@@ -933,7 +953,8 @@ class ContentReversalUiTest {
         await("reader menu canvas and chapter layout settled") {
             val reader = it.findViewById<ReadView>(R.id.read_view)
             val page = reader.curPage.textPage
-            it.readMenu.isVisible && reader.curPage.isCanvasReady &&
+            it.readMenu.isVisible &&
+                reader.curPage.isCanvasReady &&
                 (page.isMsgPage ||
                     ReadBook.curTextChapter?.let { chapter ->
                         chapter.isCompleted && page.textChapter === chapter
@@ -966,14 +987,18 @@ class ContentReversalUiTest {
             val chapter = ReadBook.curTextChapter ?: return@await false
             val reader = activity.findViewById<ReadView>(R.id.read_view)
             val page = reader.curPage.textPage
-            if (ReadBook.book?.bookUrl != book.bookUrl ||
-                ReadBook.durChapterIndex != 0 ||
-                chapter.chapter.url != chapters[0].url ||
-                !chapter.isCompleted || !activity.isInitFinish ||
-                !activity.window.decorView.hasWindowFocus() ||
-                page.textChapter !== chapter || page.isMsgPage ||
-                !reader.curPage.isCanvasReady
-            ) return@await false
+            if (
+                ReadBook.book?.bookUrl != book.bookUrl ||
+                    ReadBook.durChapterIndex != 0 ||
+                    chapter.chapter.url != chapters[0].url ||
+                    !chapter.isCompleted ||
+                    !activity.isInitFinish ||
+                    !activity.window.decorView.hasWindowFocus() ||
+                    page.textChapter !== chapter ||
+                    page.isMsgPage ||
+                    !reader.curPage.isCanvasReady
+            )
+                return@await false
             val images =
                 chapter.pages
                     .flatMap { page -> page.lines }
@@ -1048,9 +1073,12 @@ class ContentReversalUiTest {
             val reader = it.findViewById<ReadView>(R.id.read_view)
             val canvas = reader.curPage.findViewById<ContentTextView>(R.id.content_text_view)
             val bounds = runCatching {
-                reader.curPage.javaClass.getDeclaredMethod("getContentBounds")
-                    .apply { isAccessible = true }.invoke(reader.curPage)
-            }.getOrNull()
+                reader.curPage.javaClass
+                    .getDeclaredMethod("getContentBounds")
+                    .apply { isAccessible = true }
+                    .invoke(reader.curPage)
+            }
+                .getOrNull()
             pageState =
                 "messagePage=${it.findViewById<ReadView>(R.id.read_view).curPage.textPage.isMsgPage}, " +
                     "readerMenu=${it.readMenu.isVisible}, bottomDialog=${it.bottomDialog}, " +

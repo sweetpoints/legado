@@ -154,14 +154,40 @@ class ContentReversalCacheTest {
                         chapterName = "text"
                         chapterUrl = "href"
                     }
-                    source.getContentRule().content =
-                        """
-                        @js:
-                        if (result.indexOf('version=') < 0) throw new Error('Missing fixture body');
-                        chapter.putVariable('acceptedVersion', result.substring(result.lastIndexOf('version=')));
-                        result + '\nbook=' + book.name
-                        """
-                            .trimIndent()
+                    source.bookSourceComment =
+                        "@source:v1 " +
+                            io.legado.app.utils.GSON.toJson(
+                                mapOf(
+                                    "schemaVersion" to 1,
+                                    "id" to source.bookSourceUrl,
+                                    "name" to source.bookSourceName,
+                                    "baseUrl" to base,
+                                    "stages" to
+                                        mapOf(
+                                            "toc" to
+                                                mapOf(
+                                                    "url" to "{{tocUrl}}",
+                                                    "list" to "@legacy:a",
+                                                    "fields" to
+                                                        mapOf(
+                                                            "title" to "@legacy:text",
+                                                            "url" to "@legacy:href",
+                                                        ),
+                                                ),
+                                            "content" to
+                                                mapOf(
+                                                    "url" to "{{chapterUrl}}",
+                                                    "fields" to
+                                                        mapOf(
+                                                            "content" to
+                                                                "@js:if (result.indexOf('version=') < 0) throw new Error('Missing fixture body'); result + '\\nbook=' + book.name",
+                                                            "variable" to
+                                                                "@js:JSON.stringify({acceptedVersion:result.substring(result.lastIndexOf('version='))})",
+                                                        ),
+                                                ),
+                                        ),
+                                )
+                            )
                     val books = listOf(first, second)
                     val chapters = books.mapIndexed { id, book ->
                         book.origin = source.bookSourceUrl

@@ -3,7 +3,6 @@ package io.legado.app.help.book
 import android.os.ParcelFileDescriptor
 import androidx.core.util.AtomicFile
 import androidx.documentfile.provider.DocumentFile
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.EventBus
@@ -14,13 +13,12 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.getFolderName
 import io.legado.app.data.entities.isEpub
 import io.legado.app.help.config.AppConfig
-import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
-import io.legado.app.utils.ImageUtils
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.StringUtils
@@ -606,11 +604,36 @@ object BookHelp {
     }
 
     internal suspend fun fetchImage(bookSource: BookSource?, book: Book, src: String): ByteArray? {
-        val bytes =
-            AnalyzeUrl(src, source = bookSource, coroutineContext = currentCoroutineContext())
-                .getByteArrayAwait()
-        return runScriptWithContext {
-            ImageUtils.decode(src, bytes, isCover = false, bookSource, book)
+        // Empty image-only callers still need a valid engine session identity.
+        val source =
+            bookSource?.takeIf { it.bookSourceUrl.isNotBlank() }
+                ?: BookSource(
+                    bookSourceUrl = java.net.URI(src).resolve("/").toString(),
+                    bookSourceName = "Chapter images",
+                )
+        val decode = bookSource?.getContentRule()?.imageDecode.orEmpty()
+        val value =
+            DartSourceEngine.evaluate(
+                source,
+                """
+            (async () => {
+                const response = __sourceHostSync('net.request', [{url: src, charset: 'latin1'}]);
+                if (response.status >= 400) throw new Error('Image HTTP ' + response.status);
+                const result = response.bytes;
+                return ${if (decode.isBlank()) "result" else "await eval(" + io.legado.app.utils.GSON.toJson(decode) + ")"};
+            })()
+            """
+                    .trimIndent(),
+                mapOf("src" to src, "book" to DartSourceEngine.jsonObject(book)),
+            )
+        val bytes = value as? List<*> ?: throw IOException("Dart image decoder must return bytes")
+        return ByteArray(bytes.size) { index ->
+            val byte = bytes[index] as? Number ?: throw IOException("Invalid image byte")
+            val number = byte.toDouble()
+            require(number.isFinite() && number % 1.0 == 0.0 && number in -128.0..255.0) {
+                "Invalid image byte"
+            }
+            byte.toInt().toByte()
         }
     }
 

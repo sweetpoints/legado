@@ -8,23 +8,22 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentSaveToken
 import io.legado.app.help.book.isOnLineTxt
-import kotlinx.coroutines.ensureActive
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.utils.NetworkUtils
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * 批量正文下载上下文。
  *
- * 书源在 contentBatch 规则(或 JS 源的 getContentBatch 函数)里拿到本批章节数组后,
- * 每处理完一章就调用 java.cacheContent(chapter, content) 主动回存。
+ * 书源在 contentBatch 规则(或 JS 源的 getContentBatch 函数)里拿到本批章节数组后, 每处理完一章就调用 java.cacheContent(chapter,
+ * content) 主动回存。
  *
- * 章节身份一律用 [BookChapter.index] 判定,不用 url:目录允许多章共用同一 url
- * (靠序号/标题/tag 区分),缓存文件名也是按 index + 标题生成的。按 url 认章会把
- * 正文写到错误章节,并让同 url 的其余章节被误判为已完成。
+ * 章节身份一律用 [BookChapter.index] 判定,不用 url:目录允许多章共用同一 url (靠序号/标题/tag 区分),缓存文件名也是按 index + 标题生成的。按 url
+ * 认章会把 正文写到错误章节,并让同 url 的其余章节被误判为已完成。
  *
  * JS 侧可能在多个线程/协程里并发回调,所有可变状态都在 lock 下访问。
  */
@@ -45,18 +44,16 @@ class BatchContentContext(
     private val baseUrl: String
         get() = book.tocUrl.ifBlank { bookSource.bookSourceUrl }
 
-    /**
-     * url -> 候选章节。同一 url 可能对应多章,值一律是列表。
-     * 同时登记原始 url、绝对 url 和规范化 url,书源回传哪种形式都能匹配。
-     */
+    /** url -> 候选章节。同一 url 可能对应多章,值一律是列表。 同时登记原始 url、绝对 url 和规范化 url,书源回传哪种形式都能匹配。 */
     private val chaptersByUrl: Map<String, List<BookChapter>> =
         buildMap<String, MutableList<BookChapter>> {
             chapters.forEach { chapter ->
                 sequenceOf(
-                    chapter.url,
-                    runCatching { chapter.getAbsoluteURL() }.getOrNull(),
-                    normalize(chapter.url)
-                ).filterNot { it.isNullOrBlank() }
+                        chapter.url,
+                        runCatching { chapter.getAbsoluteURL() }.getOrNull(),
+                        normalize(chapter.url),
+                    )
+                    .filterNot { it.isNullOrBlank() }
                     .distinct()
                     .forEach { key ->
                         val candidates = getOrPut(key!!) { mutableListOf() }
@@ -87,22 +84,21 @@ class BatchContentContext(
     private fun resolveByUrl(url: String): BookChapter? {
         val trimmedUrl = url.trim()
         if (trimmedUrl.isEmpty()) return null
-        val candidates = chaptersByUrl[trimmedUrl].orEmpty() +
-            normalize(trimmedUrl)?.let { chaptersByUrl[it] }.orEmpty()
-        //回调可能乱序,已保存状态不能消除 URL 的歧义。唯一 URL 仍允许重复回存。
+        val candidates =
+            chaptersByUrl[trimmedUrl].orEmpty() +
+                normalize(trimmedUrl)?.let { chaptersByUrl[it] }.orEmpty()
+        // 回调可能乱序,已保存状态不能消除 URL 的歧义。唯一 URL 仍允许重复回存。
         return candidates.distinctBy { it.index }.singleOrNull()
     }
 
     private fun normalize(url: String?): String? {
         if (url.isNullOrBlank()) return null
         return runCatching { NetworkUtils.getAbsoluteURL(baseUrl, url) }
-            .getOrNull()?.takeIf { it.isNotBlank() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
     }
 
-    /**
-     * 对批量回传的正文套用书源的正文替换规则,与单章流程保持一致。
-     * 未配置 replaceRegex 时原样返回。
-     */
+    /** 对批量回传的正文套用书源的正文替换规则,与单章流程保持一致。 未配置 replaceRegex 时原样返回。 */
     fun applyContentReplace(chapter: BookChapter, content: String): String {
         val replaceRegex = bookSource.getContentRule().replaceRegex
         if (replaceRegex.isNullOrEmpty()) return content
@@ -119,20 +115,30 @@ class BatchContentContext(
     }
 
     /** Resolve, replace and save under one lock, including duplicate-URL callbacks. */
-    fun saveContent(identifier: Any?, content: String): Boolean = synchronized(lock) {
-        coroutineContext.ensureActive()
-        if (closed) return false
-        val chapter = resolveChapter(identifier)
-            ?: throw NoStackTraceException("java.cacheContent 未唯一匹配到本批次章节,重复 URL 请传章节对象: $identifier")
-        val replaced = applyContentReplace(chapter, content)
-        if (replaced.isBlank()) return false
-        val token = saveTokens[chapter.index]
-            ?: throw NoStackTraceException("批量正文缺少请求开始时的缓存版本")
-        coroutineContext.ensureActive()
-        val saved = BookHelp.saveContent(bookSource, book, chapter, replaced, token)
-        if (saved) savedIndexes.add(chapter.index)
-        saved
-    }
+    fun saveContent(identifier: Any?, content: String): Boolean =
+        saveContentInternal(identifier, content, prepared = false)
+
+    /** Dart/V8 has already applied source replacement in the active runtime. */
+    fun savePreparedContent(identifier: Any?, content: String): Boolean =
+        saveContentInternal(identifier, content, prepared = true)
+
+    private fun saveContentInternal(identifier: Any?, content: String, prepared: Boolean): Boolean =
+        synchronized(lock) {
+            coroutineContext.ensureActive()
+            if (closed) return false
+            val chapter =
+                resolveChapter(identifier)
+                    ?: throw NoStackTraceException(
+                        "java.cacheContent 未唯一匹配到本批次章节,重复 URL 请传章节对象: $identifier"
+                    )
+            val replaced = if (prepared) content else applyContentReplace(chapter, content)
+            if (replaced.isBlank()) return false
+            val token = saveTokens[chapter.index] ?: throw NoStackTraceException("批量正文缺少请求开始时的缓存版本")
+            coroutineContext.ensureActive()
+            val saved = BookHelp.saveContent(bookSource, book, chapter, replaced, token)
+            if (saved) savedIndexes.add(chapter.index)
+            saved
+        }
 
     fun close() = synchronized(lock) { closed = true }
 
@@ -142,14 +148,16 @@ class BatchContentContext(
         }
     }
 
-    fun isSaved(chapter: BookChapter): Boolean = synchronized(lock) {
-        savedIndexes.contains(chapter.index)
-    }
+    fun isSaved(chapter: BookChapter): Boolean =
+        synchronized(lock) {
+            savedIndexes.contains(chapter.index)
+        }
 
     fun savedCount(): Int = synchronized(lock) { savedIndexes.size }
 
     /** 本批次中书源没有回存的章节,交由调用方按普通单章流程重试 */
-    fun missingChapters(): List<BookChapter> = synchronized(lock) {
-        chapters.filterNot { savedIndexes.contains(it.index) }
-    }
+    fun missingChapters(): List<BookChapter> =
+        synchronized(lock) {
+            chapters.filterNot { savedIndexes.contains(it.index) }
+        }
 }
