@@ -32,6 +32,67 @@ class SourceEngine {
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
   final Map<String, List<Map<String, Object?>>> _pendingCookies = {};
+  Future<Object?> evaluateAuxiliary(
+    SourceDefinition source,
+    String script, {
+    Map<String, Object?> bindings = const {},
+    String prelude = '',
+    Duration timeout = const Duration(seconds: 10),
+    CancellationToken? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
+    final auxiliary = runtime;
+    if (auxiliary is! AuxiliaryScriptRuntime) {
+      throw const EngineException(
+        'unsupported_runtime',
+        'Runtime has no auxiliary execution',
+      );
+    }
+    final network =
+        _providedNetwork ??
+        _sessions.putIfAbsent(source.id, () => NetworkClient());
+    final pending = _pendingCookies.remove(source.id);
+    if (pending != null) network.restoreCookies(pending);
+    final variables = _variables.putIfAbsent(source.id, () => {});
+    final baseHost = _EngineHost(
+      network,
+      source.baseUrl,
+      variables,
+      cancellation,
+      platform,
+      runtime,
+      source.headers,
+    );
+    return auxiliary.evaluateAuxiliary(
+      script,
+      ScriptContext(
+        variables: {
+          ...bindings,
+          'sourceId': source.id,
+          'baseUrl': bindings['baseUrl'] ?? source.baseUrl.toString(),
+        },
+        host: hostAdapter?.call(baseHost) ?? baseHost,
+        timeout: timeout,
+      ),
+      prelude: prelude,
+      cancellation: cancellation,
+    );
+  }
+
+  Future<ScriptDiagnostic?> checkAuxiliarySyntax(
+    String script, {
+    CancellationToken? cancellation,
+  }) {
+    final auxiliary = runtime;
+    if (auxiliary is! AuxiliaryScriptRuntime) {
+      throw const EngineException(
+        'unsupported_runtime',
+        'Runtime has no compile-only parser',
+      );
+    }
+    return auxiliary.checkSyntax(script, cancellation: cancellation);
+  }
+
   Future<List<Map<String, Object?>>> execute(
     SourceDefinition source,
     String operation, {

@@ -45,6 +45,32 @@ abstract interface class ScriptRuntime {
   Future<void> close();
 }
 
+/// A parser diagnostic for the original script, with one-based source positions.
+class ScriptDiagnostic {
+  const ScriptDiagnostic(this.message, this.lineNumber, this.columnNumber);
+  final String message;
+  final int lineNumber;
+  final int columnNumber;
+  Map<String, Object?> toJson() => {
+    'message': message,
+    'lineNumber': lineNumber,
+    'columnNumber': columnNumber,
+  };
+}
+
+abstract interface class AuxiliaryScriptRuntime implements ScriptRuntime {
+  Future<ScriptDiagnostic?> checkSyntax(
+    String code, {
+    CancellationToken? cancellation,
+  });
+  Future<Object?> evaluateAuxiliary(
+    String code,
+    ScriptContext context, {
+    String prelude = '',
+    CancellationToken? cancellation,
+  });
+}
+
 class SourceStage {
   const SourceStage({
     required this.url,

@@ -6,6 +6,7 @@
 #include <libplatform/libplatform.h>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <v8.h>
@@ -26,10 +27,23 @@ struct Runtime {
   std::mutex mutex;
   std::condition_variable cv;
   bool done = false;
+  std::atomic<bool> busy{false};
   std::atomic<bool> expired{false};
   std::thread timer;
   std::string error;
+  std::string error_code;
+  int timeout_ms = 30000;
+  bool bootstrapped = false;
+  std::string prelude;
+  std::set<std::string> binding_keys;
+  bool immediate = false;
+  std::string immediate_json;
 };
+static void complete(Runtime *r) {
+  { std::lock_guard<std::mutex> lock(r->mutex); r->done = true; }
+  r->busy = false;
+  r->cv.notify_all();
+}
 static std::once_flag initialized;
 static std::unique_ptr<Platform> runtime_platform;
 static Local<String> str(Isolate *i, const std::string &s) {
@@ -40,6 +54,17 @@ static std::string utf(Isolate *i, Local<Value> v) {
     return "execution_timeout";
   String::Utf8Value s(i, v);
   return *s ? *s : "";
+}
+static std::string error_text(Runtime *r, Isolate *i, Local<Context> c, Local<Value> value) {
+  if (!value.IsEmpty() && value->IsObject()) {
+    Local<Value> code, message;
+    if (value.As<Object>()->Get(c,str(i,"__sourceErrorCode")).ToLocal(&code) &&
+        code->IsString() && utf(i,code)=="nested_script_requires_migration") {
+      r->error_code = "nested_script_requires_migration";
+      if (value.As<Object>()->Get(c,str(i,"message")).ToLocal(&message)) return utf(i,message);
+    }
+  }
+  return utf(i,value);
 }
 static std::string json(Isolate *i, Local<Context> c, Local<Value> v) {
   Local<String> s;
@@ -164,11 +189,13 @@ __attribute__((visibility("default"))) const char *sv8_version() {
 __attribute__((visibility("default"))) Runtime *sv8_create(int timeout_ms,
                                                            int heap_mb) {
   std::call_once(initialized, [] {
+    V8::InitializeICUDefaultLocation(nullptr);
     runtime_platform = v8::platform::NewDefaultPlatform();
     V8::InitializePlatform(runtime_platform.get());
     V8::Initialize();
   });
   auto *r = new Runtime();
+  r->timeout_ms = timeout_ms;
   r->allocator = ArrayBuffer::Allocator::NewDefaultAllocator();
   Isolate::CreateParams p;
   p.array_buffer_allocator = r->allocator;
@@ -196,15 +223,6 @@ __attribute__((visibility("default"))) Runtime *sv8_create(int timeout_ms,
                   .ToLocalChecked())
         .FromMaybe(false);
   }
-  r->timer = std::thread([r, timeout_ms] {
-    std::unique_lock<std::mutex> l(r->mutex);
-    if (!r->cv.wait_for(l, std::chrono::milliseconds(timeout_ms),
-                        [r] { return r->done; })) {
-      r->expired = true;
-      r->isolate->TerminateExecution();
-      r->cv.notify_all();
-    }
-  });
   return r;
 }
 __attribute__((visibility("default"))) void sv8_start(Runtime *r,
@@ -214,8 +232,8 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
   // Cancellation can arrive before the worker enters V8. Do not consume its
   // termination exception while setting up a context or trying syntax
   // fallbacks.
-  if (r->expired)
-    return;
+  complete(r);
+  if (r->timer.joinable()) r->timer.join();
   auto *i = r->isolate;
   Locker locker(i);
   Isolate::Scope is(i);
@@ -223,19 +241,71 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
   auto c = r->context.Get(i);
   Context::Scope cs(c);
   TryCatch tc(i);
+  i->CancelTerminateExecution();
+  r->expired = false;
+  r->error.clear();
+  r->error_code.clear();
+  r->result.Reset();
+  for (auto &entry : r->pending) entry.second.Reset();
+  r->pending.clear();
+  r->requests.clear();
+  { std::lock_guard<std::mutex> lock(r->mutex); r->sync_requests.clear(); r->sync_responses.clear(); }
+  r->immediate = false;
+  r->immediate_json.clear();
   auto stopped = [&] { return r->expired || tc.HasTerminated(); };
   if (stopped())
     return;
   Local<Value> vars;
   if (!JSON::Parse(c, str(i, variables)).ToLocal(&vars)) {
-    r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+    r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
     return;
+  }
+  std::string mode = "execute";
+  int timeout = r->timeout_ms;
+  if (vars->IsObject()) {
+    auto envelope = vars.As<Object>(); Local<Value> marker;
+    if (envelope->Get(c, str(i, "__sv8Protocol")).ToLocal(&marker) && marker->IsInt32() && marker.As<Int32>()->Value() == 1) {
+      Local<Value> value;
+      if (envelope->Get(c, str(i, "mode")).ToLocal(&value)) mode = utf(i, value);
+      if (envelope->Get(c, str(i, "timeoutMs")).ToLocal(&value) && value->IsInt32()) timeout = value.As<Int32>()->Value();
+      if (!envelope->Get(c, str(i, "bindings")).ToLocal(&vars) || !vars->IsObject()) { r->error = "invalid_bindings"; return; }
+    }
+  }
+  if (mode != "execute" && mode != "aux" && mode != "syntax") { r->error = "invalid_mode"; return; }
+  { std::lock_guard<std::mutex> lock(r->mutex); r->done = false; }
+  r->busy = true;
+  r->timer = std::thread([r, timeout] {
+    std::unique_lock<std::mutex> lock(r->mutex);
+    if (!r->cv.wait_for(lock, std::chrono::milliseconds(timeout), [r] { return r->done; })) {
+      r->expired = true; r->isolate->TerminateExecution(); r->cv.notify_all();
+    }
+  });
+  if (mode == "syntax") {
+    Local<Script> compiled;
+    auto diagnostic = Object::New(i); diagnostic->SetPrototype(c, Null(i)).FromMaybe(false);
+    diagnostic->CreateDataProperty(c, str(i, "status"), str(i, "done")).FromMaybe(false);
+    Local<Value> value = Null(i);
+    if (!Script::Compile(c, str(i, script)).ToLocal(&compiled)) {
+      if (stopped()) { r->error = "execution_timeout"; return; }
+      auto message = tc.Message(); auto detail = Object::New(i);
+      detail->SetPrototype(c, Null(i)).FromMaybe(false);
+      detail->CreateDataProperty(c, str(i,"message"), str(i,error_text(r,i,c,tc.Exception()))).FromMaybe(false);
+      detail->CreateDataProperty(c, str(i,"lineNumber"), Integer::New(i,message.IsEmpty()?1:message->GetLineNumber(c).FromMaybe(1))).FromMaybe(false);
+      detail->CreateDataProperty(c, str(i,"columnNumber"), Integer::New(i,message.IsEmpty()?1:message->GetStartColumn(c).FromMaybe(0)+1)).FromMaybe(false);
+      value = detail;
+    }
+    diagnostic->CreateDataProperty(c,str(i,"value"),value).FromMaybe(false);
+    r->immediate_json = json(i,c,diagnostic); r->immediate = true; complete(r); return;
   }
   if (vars->IsObject()) {
     auto o = vars.As<Object>();
+    for (const auto &key : r->binding_keys) {
+      if (!o->HasOwnProperty(c,str(i,key)).FromMaybe(false)) c->Global()->Delete(c,str(i,key)).FromMaybe(false);
+    }
+    r->binding_keys.clear();
     Local<Array> keys;
     if (!o->GetOwnPropertyNames(c).ToLocal(&keys)) {
-      r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+      r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
       return;
     }
     for (uint32_t n = 0; n < keys->Length(); n++) {
@@ -243,9 +313,10 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
       if (stopped() || !keys->Get(c, n).ToLocal(&key) ||
           !o->Get(c, key).ToLocal(&value) ||
           !c->Global()->Set(c, key, value).FromMaybe(false)) {
-        r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+        r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
         return;
       }
+      r->binding_keys.insert(utf(i,key));
     }
   }
   if (stopped())
@@ -258,17 +329,27 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
       "_,t,args)=>__sourceHost(path,args)});}";
   Local<Script> b;
   Local<Value> unused;
-  if (!Script::Compile(c, str(i, bootstrap + prelude)).ToLocal(&b) ||
-      stopped() || !b->Run(c).ToLocal(&unused)) {
-    r->error = stopped() ? "execution_timeout" : utf(i, tc.Exception());
+  std::string initialization = (!r->bootstrapped ? bootstrap : "") + (r->prelude != prelude || !r->bootstrapped ? prelude : "");
+  if (!initialization.empty() && (!Script::Compile(c, str(i, initialization)).ToLocal(&b) ||
+      stopped() || !b->Run(c).ToLocal(&unused))) {
+    r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
     return;
   }
+  r->bootstrapped = true; r->prelude = prelude;
   if (stopped())
     return;
   std::string code =
       "(async()=>{ return await (" + std::string(script) + "\n); })()";
   Local<Script> s;
   Local<Value> result;
+  if (mode == "aux" && Script::Compile(c,str(i,script)).ToLocal(&s)) {
+    if (stopped() || !s->Run(c).ToLocal(&result)) { r->error = r->expired ? "execution_timeout" : error_text(r,i,c,tc.Exception()); return; }
+    Local<Promise::Resolver> resolver;
+    if (!Promise::Resolver::New(c).ToLocal(&resolver)) { r->error = "runtime_start_failed"; return; }
+    resolver->Resolve(c,result).FromMaybe(false); r->result.Reset(i,resolver->GetPromise());
+    i->PerformMicrotaskCheckpoint(); return;
+  }
+  if (mode == "aux") { if (stopped() || !tc.CanContinue()) { r->error = "execution_timeout"; return; } tc.Reset(); }
   if (!Script::Compile(c, str(i, code)).ToLocal(&s)) {
     // Only ordinary syntax errors may trigger the statement-body fallback.
     // Resetting a caught termination would allow cancelled code to run again.
@@ -279,20 +360,22 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
     tc.Reset();
     code = "(async()=>{ " + std::string(script) + "\n })()";
     if (!Script::Compile(c, str(i, code)).ToLocal(&s)) {
-      r->error = utf(i, tc.Exception());
+      r->error = error_text(r,i,c,tc.Exception());
       return;
     }
   }
   if (stopped() || !s->Run(c).ToLocal(&result)) {
-    r->error = r->expired ? "execution_timeout" : utf(i, tc.Exception());
+    r->error = r->expired ? "execution_timeout" : error_text(r,i,c,tc.Exception());
     return;
   }
   r->result.Reset(i, result.As<Promise>());
   i->PerformMicrotaskCheckpoint();
 }
 __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
-  if (r->expired)
+  if (r->expired) {
+    complete(r);
     return output("{\"status\":\"error\",\"error\":\"execution_timeout\"}");
+  }
   auto *i = r->isolate;
   Locker locker(i);
   Isolate::Scope is(i);
@@ -300,6 +383,7 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
   auto c = r->context.Get(i);
   Context::Scope cs(c);
   TryCatch tc(i);
+  if (r->immediate) return output(r->immediate_json);
   i->PerformMicrotaskCheckpoint();
   if (!r->error.empty()) {
     auto o = Object::New(i);
@@ -308,12 +392,17 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
         .FromMaybe(false);
     o->CreateDataProperty(c, str(i, "error"), str(i, r->error))
         .FromMaybe(false);
-    return output(json(i, c, o));
+    o->CreateDataProperty(c,str(i,"code"),str(i,r->error_code)).FromMaybe(false);
+    auto encoded = json(i,c,o); complete(r); return output(encoded);
   }
-  if (r->expired)
+  if (r->expired) {
+    complete(r);
     return output("{\"status\":\"error\",\"error\":\"execution_timeout\"}");
-  if (r->result.IsEmpty())
+  }
+  if (r->result.IsEmpty()) {
+    complete(r);
     return output("{\"status\":\"error\",\"error\":\"runtime_start_failed\"}");
+  }
   auto p = r->result.Get(i);
   if (p->State() != Promise::kPending) {
     auto o = Object::New(i);
@@ -322,9 +411,10 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
     o->CreateDataProperty(c, str(i, "status"), str(i, ok ? "done" : "error"))
         .FromMaybe(false);
     o->CreateDataProperty(c, str(i, ok ? "value" : "error"),
-                          ok ? p->Result() : str(i, utf(i, p->Result())))
+                          ok ? p->Result() : str(i, error_text(r,i,c,p->Result())))
         .FromMaybe(false);
-    return output(json(i, c, o));
+    if (!ok) o->CreateDataProperty(c,str(i,"code"),str(i,r->error_code)).FromMaybe(false);
+    auto encoded = json(i,c,o); complete(r); return output(encoded);
   }
   std::string q = "{\"status\":\"pending\",\"requests\":[";
   for (size_t n = 0; n < r->requests.size(); n++) {
@@ -361,6 +451,7 @@ sv8_resolve(Runtime *r, int id, const char *value, int rejected) {
   i->PerformMicrotaskCheckpoint();
 }
 __attribute__((visibility("default"))) void sv8_cancel(Runtime *r) {
+  if (!r->busy) return;
   r->expired = true;
   r->isolate->TerminateExecution();
   r->cv.notify_all();
@@ -371,7 +462,7 @@ __attribute__((visibility("default"))) void sv8_destroy(Runtime *r) {
     r->done = true;
   }
   r->cv.notify_one();
-  r->timer.join();
+  if (r->timer.joinable()) r->timer.join();
   {
     Locker locker(r->isolate);
     r->isolate->CancelTerminateExecution();

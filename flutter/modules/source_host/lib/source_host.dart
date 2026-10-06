@@ -53,6 +53,9 @@ class SourceHost {
       return null;
     }
     if (call.method == 'migrate') return _migrate(args);
+    if (call.method == 'evaluateAuxiliary') return _auxiliary(args, id);
+    if (call.method == 'checkAuxiliarySyntax') return _syntax(args, id);
+    if (call.method == 'clearSourceState') return _clearSource(args, id);
     if (call.method == 'evaluate') return _evaluate(args, id);
     if (call.method != 'execute') throw MissingPluginException(call.method);
     if (_closed) throw PlatformException(code: 'host_closed');
@@ -122,6 +125,188 @@ class SourceHost {
     } finally {
       _tasks.remove(id);
     }
+  }
+
+  void _auxRequest(Map<String, Object?> args, String? id) {
+    if (_closed) throw PlatformException(code: 'host_closed');
+    if (args['protocolVersion'] != 1 || id == null || id.isEmpty) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Protocol v1 and taskId required',
+      );
+    }
+    if (_tasks.containsKey(id)) {
+      throw PlatformException(code: 'duplicate_task');
+    }
+  }
+
+  SourceDefinition _auxIdentity(
+    Map<String, Object?> args,
+    String identity,
+    Map<String, Object?> bindings,
+  ) {
+    Object? descriptor = args['sourceJson'];
+    if (descriptor is String) descriptor = jsonDecode(descriptor);
+    if (descriptor != null && descriptor is! Map) {
+      throw const FormatException('Source descriptor must be an object');
+    }
+    final data = descriptor is Map
+        ? Map<String, Object?>.from(descriptor)
+        : <String, Object?>{};
+    final location =
+        data['baseUrl'] ??
+        bindings['baseUrl'] ??
+        'https://script.legado.invalid/';
+    final base = Uri.tryParse(location.toString());
+    if (base == null ||
+        !['http', 'https'].contains(base.scheme) ||
+        base.host.isEmpty) {
+      throw const EngineException(
+        'invalid_request',
+        'Auxiliary baseUrl must be absolute HTTP(S)',
+      );
+    }
+    final rawHeaders = data['headers'];
+    if (rawHeaders != null && rawHeaders is! Map) {
+      throw const FormatException('Static headers required');
+    }
+    return SourceDefinition(
+      id: identity,
+      name: data['name']?.toString() ?? identity,
+      baseUrl: base,
+      headers: Map<String, String>.from(rawHeaders as Map? ?? {}),
+      metadata: const {'legacy': true},
+    );
+  }
+
+  Future<Map<String, Object?>> _auxiliary(
+    Map<String, Object?> args,
+    String? id,
+  ) async {
+    _auxRequest(args, id);
+    if (args['script'] is! String ||
+        args['bindings'] is! Map ||
+        (args['sourceId'] != null && args['sourceId'] is! String) ||
+        (args['prelude'] != null && args['prelude'] is! String)) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Script, JSON bindings and optional owner/prelude required',
+      );
+    }
+    final timeout = args['timeoutMs'] ?? 10000;
+    if (timeout is! int || timeout < 1 || timeout > 300000) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Invalid auxiliary timeout',
+      );
+    }
+    final token = CancellationToken();
+    _tasks[id!] = token;
+    try {
+      final bindings = Map<String, Object?>.from(
+        jsonDecode(jsonEncode(args['bindings'])) as Map,
+      );
+      final requested = args['sourceId'] as String?;
+      final retained = requested != null && requested.isNotEmpty;
+      final owner = retained ? requested : 'auxiliary:$id';
+      final source = _auxIdentity(args, owner, bindings);
+      final key = '__aux:$owner';
+      return await _serialize(key, token, () async {
+        _CachedEngine? entry = retained ? _engines[key] : null;
+        final fingerprint = jsonEncode(_canonical(source.toJson()));
+        if (entry != null && entry.fingerprint != fingerprint) {
+          _engines.remove(key);
+          await entry.engine.close();
+          entry = null;
+        }
+        entry ??= _CachedEngine(fingerprint, createEngine(source));
+        if (retained) _engines[key] = entry;
+        _active.add(key);
+        try {
+          final value = await entry.engine.evaluateAuxiliary(
+            source,
+            args['script'] as String,
+            bindings: {...bindings, 'taskId': id},
+            prelude: args['prelude'] as String? ?? '',
+            timeout: Duration(milliseconds: timeout),
+            cancellation: token,
+          );
+          token.throwIfCancelled();
+          return {'value': value};
+        } finally {
+          _active.remove(key);
+          if (!retained) await entry.engine.close();
+          while (_engines.length > 32) {
+            final idle = _engines.keys.where(
+              (candidate) => !_active.contains(candidate),
+            );
+            if (idle.isEmpty) break;
+            final removed = _engines.remove(idle.first)!;
+            await removed.engine.close();
+          }
+        }
+      });
+    } on EngineException catch (error) {
+      throw PlatformException(code: error.code, message: error.message);
+    } on PlatformException {
+      rethrow;
+    } catch (_) {
+      throw PlatformException(
+        code: 'invalid_request',
+        message: 'Invalid JSON auxiliary request',
+      );
+    } finally {
+      _tasks.remove(id);
+    }
+  }
+
+  Future<Map<String, Object?>?> _syntax(
+    Map<String, Object?> args,
+    String? id,
+  ) async {
+    _auxRequest(args, id);
+    if (args['script'] is! String) {
+      throw PlatformException(code: 'invalid_request');
+    }
+    final token = CancellationToken();
+    _tasks[id!] = token;
+    final engine = createEngine(
+      SourceDefinition(
+        id: 'syntax:$id',
+        name: 'syntax',
+        baseUrl: Uri.parse('https://script.legado.invalid/'),
+      ),
+    );
+    try {
+      return (await engine.checkAuxiliarySyntax(
+        args['script'] as String,
+        cancellation: token,
+      ))?.toJson();
+    } on EngineException catch (error) {
+      throw PlatformException(code: error.code, message: error.message);
+    } finally {
+      _tasks.remove(id);
+      await engine.close();
+    }
+  }
+
+  Future<Object?> _clearSource(Map<String, Object?> args, String? id) async {
+    _auxRequest(args, id);
+    final owner = args['sourceId'];
+    if (owner is! String || owner.isEmpty) {
+      throw PlatformException(code: 'invalid_request');
+    }
+    final token = CancellationToken();
+    _tasks[id!] = token;
+    try {
+      await _serialize('__aux:$owner', token, () async {
+        final entry = _engines.remove('__aux:$owner');
+        await entry?.engine.close();
+      });
+    } finally {
+      _tasks.remove(id);
+    }
+    return null;
   }
 
   Future<Map<String, Object?>> _evaluate(

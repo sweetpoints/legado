@@ -20,7 +20,7 @@ Future<void> main() async {
       final probe = V8Runtime();
       final cancellation = CancellationToken();
       try {
-        const expectedVersion = '15.4.80.24';
+        const expectedVersion = '15.4.80.25';
         final actualVersion = probe.version;
         if (actualVersion != expectedVersion) {
           throw StateError(
@@ -57,12 +57,42 @@ SourceEngine createSourceEngine(
   platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
 );
 
-class _SourceRuntime implements ScriptRuntime, SourceRuntimeState {
+class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
   _SourceRuntime({required this.legacy})
-    : runtime = V8Runtime(prelude: legacy ? legacyScriptPrelude : '');
+    : runtime = V8Runtime(
+        prelude: legacy ? legacyScriptPrelude : '',
+        persistent: true,
+      );
   final bool legacy;
   final V8Runtime runtime;
   final variables = <String, String>{};
+  ScriptContext _context(ScriptContext context) => ScriptContext(
+    variables: context.variables,
+    host: legacy
+        ? LegacyScriptHost(
+            TaskScriptHost(context.host, context.variables['taskId']),
+            variables: variables,
+          )
+        : TaskScriptHost(context.host, context.variables['taskId']),
+    timeout: context.timeout,
+  );
+  @override
+  Future<ScriptDiagnostic?> checkSyntax(
+    String code, {
+    CancellationToken? cancellation,
+  }) => runtime.checkSyntax(code, cancellation: cancellation);
+  @override
+  Future<Object?> evaluateAuxiliary(
+    String code,
+    ScriptContext context, {
+    String prelude = '',
+    CancellationToken? cancellation,
+  }) => runtime.evaluateAuxiliary(
+    code,
+    _context(context),
+    prelude: prelude,
+    cancellation: cancellation,
+  );
   @override
   Future<Object?> evaluate(
     String code,
