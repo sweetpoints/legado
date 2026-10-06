@@ -393,11 +393,14 @@ class AnalyzeUrl(
             "speakText" to speakText, "speakSpeed" to speakSpeed,
             "book" to (ruleData as? Book)?.let { DartSourceEngine.jsonObject(it) },
             "sourceData" to source?.let { DartSourceEngine.jsonObject(it.getSource() ?: it) },
-            "result" to result, "infoMap" to infoMap,
+            "result" to result,
         )
         extraParams?.forEach { (name, value) ->
             bindings[name] = if (name == "page") value.toIntOrNull() ?: value else value
         }
+        // Login state remains authoritative even when a URL supplies an extra
+        // parameter with the same name, as in the original binding contract.
+        bindings["infoMap"] = infoMap
         bindings["__analyzeScript"] = jsStr
         val parentCallbacks = coroutineContext[SourceHostCallbacks]
         val callbacks = SourceHostCallbacks { method, args ->
