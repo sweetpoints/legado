@@ -157,4 +157,69 @@ void main() {
     ]);
     expect(calls.every((c) => (c.arguments as Map)['taskId'] == 'task'), true);
   });
+  test(
+    'explicit batch ID and external navigation retain complete RPC arguments',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return (call.arguments as Map)['method'] == 'batch.cacheContent'
+            ? false
+            : null;
+      });
+      final legacy = LegacyScriptHost(
+        TaskScriptHost(const SourcePlatform(sourceId: 'source'), 'task'),
+      );
+      expect(
+        await legacy.call('java.cacheContent', [
+          'batch-id',
+          {'index': 7},
+          'body',
+        ]),
+        false,
+      );
+      await legacy.call('java.openUrl', ['https://example.test', 'text/html']);
+      await legacy.call('java.openVideoPlayer', [
+        'https://example.test/video',
+        'Video',
+        true,
+      ]);
+      expect(calls.map((c) => (c.arguments as Map)['method']), [
+        'batch.cacheContent',
+        'browser.openUrl',
+        'browser.video',
+      ]);
+      expect((calls[0].arguments as Map)['arguments'], [
+        'batch-id',
+        {'index': 7},
+        'body',
+      ]);
+      expect((calls[1].arguments as Map)['arguments'], [
+        'https://example.test',
+        'text/html',
+      ]);
+      expect((calls[2].arguments as Map)['arguments'], [
+        'https://example.test/video',
+        'Video',
+        true,
+      ]);
+      expect(
+        calls.every((c) => (c.arguments as Map)['taskId'] == 'task'),
+        true,
+      );
+      await expectLater(
+        legacy.call('java.openVideoPlayer', [
+          'https://example.test',
+          'Video',
+          1,
+        ]),
+        throwsArgumentError,
+      );
+      await expectLater(
+        legacy.call('java.cacheContent', ['batch-id', 'chapter', null]),
+        throwsArgumentError,
+      );
+      expect(calls, hasLength(3));
+    },
+  );
 }

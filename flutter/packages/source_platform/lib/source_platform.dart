@@ -47,6 +47,8 @@ class SourcePlatform implements ScriptHost {
       case 'browser.open':
       case 'browser.show':
       case 'browser.start':
+      case 'browser.openUrl':
+      case 'browser.video':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||

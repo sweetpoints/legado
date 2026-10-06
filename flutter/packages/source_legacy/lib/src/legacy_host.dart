@@ -35,6 +35,8 @@ const legacySupportedMethods = {
   'showBrowser',
   'startBrowser',
   'startBrowserAwait',
+  'openUrl',
+  'openVideoPlayer',
 };
 
 /// StrResponse and Jsoup response method facades. Dart only transports JSON;
@@ -164,8 +166,24 @@ class LegacyScriptHost implements ScriptHost {
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
       case 'cacheContent':
-        arity(2);
-        return delegate.call('batch.cacheContent', [arguments[0], str(1)]);
+        arity(2, 3);
+        // Native callbacks accept both implicit batch context and explicit ID.
+        if (arguments.length == 3) str(0);
+        str(arguments.length - 1);
+        return delegate.call('batch.cacheContent', arguments);
+      case 'openUrl':
+        arity(1, 2);
+        str(0);
+        if (arguments.length == 2 && arguments[1] != null) str(1);
+        return delegate.call('browser.openUrl', arguments);
+      case 'openVideoPlayer':
+        arity(2, 3);
+        str(0);
+        str(1);
+        if (arguments.length == 3 && arguments[2] is! bool) {
+          throw ArgumentError('isFloat must be boolean');
+        }
+        return delegate.call('browser.video', arguments);
       case 'showBrowser':
         arity(1, 4);
         str(0);

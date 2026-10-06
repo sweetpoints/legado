@@ -10,6 +10,8 @@ class TaskScriptHost implements ScriptHost {
     'browser.open',
     'browser.show',
     'browser.start',
+    'browser.openUrl',
+    'browser.video',
   };
   @override
   Future<Object?> call(String method, List<Object?> arguments) async {
