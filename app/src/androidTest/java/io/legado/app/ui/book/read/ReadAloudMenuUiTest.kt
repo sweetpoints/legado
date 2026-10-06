@@ -1373,7 +1373,8 @@ class ReadAloudMenuUiTest {
             BookSource(bookSourceUrl = "$base/source", bookSourceName = "Speech return fixture")
                 .also {
                     it.bookSourceComment =
-                        "@source:v1 " +
+                        io.legado.app.model.sourceEngine.SourceEngineSourcePolicy.withCandidate(
+                            it.bookSourceComment,
                             io.legado.app.utils.GSON.toJson(
                                 mapOf(
                                     "schemaVersion" to 1,
@@ -1389,7 +1390,8 @@ class ReadAloudMenuUiTest {
                                                 )
                                         ),
                                 )
-                            )
+                            ),
+                        )
                     speechSource = it
                 }
         val previousBook = checkNotNull(book)

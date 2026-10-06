@@ -250,7 +250,8 @@ class ContentReversalUiTest {
                 .putInt(PreferKey.preDownloadNum, 2)
                 .commit()
             source.bookSourceComment =
-                "@source:v1 " +
+                io.legado.app.model.sourceEngine.SourceEngineSourcePolicy.withCandidate(
+                    source.bookSourceComment,
                     io.legado.app.utils.GSON.toJson(
                         mapOf(
                             "schemaVersion" to 1,
@@ -272,7 +273,8 @@ class ContentReversalUiTest {
                                         )
                                 ),
                         )
-                    )
+                    ),
+                )
             appDb.bookSourceDao.insert(source)
             book.durChapterIndex = 3
             book.durChapterPos = 0

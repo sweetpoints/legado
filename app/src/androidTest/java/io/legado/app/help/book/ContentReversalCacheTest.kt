@@ -155,7 +155,8 @@ class ContentReversalCacheTest {
                         chapterUrl = "href"
                     }
                     source.bookSourceComment =
-                        "@source:v1 " +
+                        io.legado.app.model.sourceEngine.SourceEngineSourcePolicy.withCandidate(
+                            source.bookSourceComment,
                             io.legado.app.utils.GSON.toJson(
                                 mapOf(
                                     "schemaVersion" to 1,
@@ -187,7 +188,8 @@ class ContentReversalCacheTest {
                                                 ),
                                         ),
                                 )
-                            )
+                            ),
+                        )
                     val books = listOf(first, second)
                     val chapters = books.mapIndexed { id, book ->
                         book.origin = source.bookSourceUrl

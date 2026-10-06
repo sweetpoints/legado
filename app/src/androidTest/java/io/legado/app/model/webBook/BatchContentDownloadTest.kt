@@ -315,7 +315,8 @@ class BatchContentDownloadTest {
             // Explicit migrated stages coexist with the legacy batch capability facade.
             // contentBatch is exercised by WebBook, never silently auto-imported.
             source.bookSourceComment =
-                "@source:v1 " +
+                io.legado.app.model.sourceEngine.SourceEngineSourcePolicy.withCandidate(
+                    source.bookSourceComment,
                     io.legado.app.utils.GSON.toJson(
                         mapOf(
                             "schemaVersion" to 1,
@@ -332,7 +333,8 @@ class BatchContentDownloadTest {
                                         )
                                 ),
                         )
-                    )
+                    ),
+                )
             appDb.bookDao.insert(book)
             appDb.bookChapterDao.insert(*chapters.toTypedArray())
             model = CacheBook.getOrCreate(source, book)
