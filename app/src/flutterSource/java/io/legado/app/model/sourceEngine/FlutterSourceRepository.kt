@@ -5,6 +5,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.JsExtensions
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
@@ -44,7 +45,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val browserJobs = mutableMapOf<String, MutableSet<Job>>()
 
-    private data class HostTask(val sourceId: String, val context: CoroutineContext)
+    private data class HostTask(
+        val sourceId: String,
+        val context: CoroutineContext,
+        val sourceKind: String = "book",
+        val navigationSourceId: String = sourceId,
+    )
 
     private val hostTasks = mutableMapOf<String, HostTask>()
     private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
@@ -234,6 +240,18 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     }
 
     private suspend fun callHost(task: HostTask, method: String, args: List<Any?>): Any? {
+        val callbackMethods = setOf(
+            "analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList",
+            "analyze.getElements", "analyze.getElement", "crypto.randomInt32",
+            "replacement.log", "replacement.logType", "replacement.t2s", "replacement.s2t",
+            "replacement.get", "replacement.put", "localBook.putVolume",
+        )
+        if (method in callbackMethods) {
+            val caller = task.context[SourceHostCallbacks]
+                ?: error("Source task has no bound callback for $method")
+            return caller.call(method, args)
+        }
+
         if (method == "batch.cacheContent") {
             require(args.size == 3 && args[0] is String && args[2] is String) {
                 "Invalid batch content callback"
@@ -247,8 +265,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             check(method != "browser.open") { "Source navigation is suppressed for this operation" }
             return null
         }
-        val source =
-            appDb.bookSourceDao.getBookSource(task.sourceId) ?: error("Browser source not found")
+        val source: BaseSource = when (task.sourceKind) {
+            "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
+            "tts" -> task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
+            "book" -> appDb.bookSourceDao.getBookSource(task.navigationSourceId)
+            else -> null
+        } ?: error("Browser source not found")
         if (method == "browser.open") {
             require(args.size in 2..3 && args[0] is String && args[1] is String)
             val options = args.getOrNull(2) as? Map<*, *> ?: emptyMap<Any?, Any?>()
@@ -285,7 +307,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             object : JsExtensions {
                 override fun getSource() = source
 
-                override fun getTag() = source.bookSourceName
+                override fun getTag() = source.getTag()
 
                 override fun getSourceNavigationContext() = task.context
             }
@@ -432,6 +454,87 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 }
             }
         }
+    }
+
+    private suspend fun auxiliaryCall(
+        method: String,
+        arguments: Map<String, Any?>,
+        sourceId: String? = null,
+        sourceJson: Map<String, Any?>? = null,
+        timeoutMs: Long = 10_000,
+    ): Any? {
+        ensureStarted()
+        return withContext(Dispatchers.Main.immediate) {
+            check(!closed) { "Flutter source repository is closed" }
+            val taskId = UUID.randomUUID().toString()
+            val effectiveId = sourceId ?: "auxiliary:$taskId"
+            val response = CompletableDeferred<Any?>()
+            responses[taskId] = response
+            hostTasks[taskId] = HostTask(
+                effectiveId, currentCoroutineContext(),
+                sourceJson?.get("sourceKind") as? String ?: "auxiliary",
+                sourceJson?.get("navigationSourceId") as? String ?: effectiveId,
+            )
+            mutableTasks.value += taskId to SourceTaskState(taskId, "running")
+            try {
+                channel!!.invokeMethod(
+                    method,
+                    arguments + mapOf("protocolVersion" to 1, "taskId" to taskId),
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) { response.complete(result) }
+                        override fun error(code: String, message: String?, details: Any?) {
+                            response.completeExceptionally(IllegalStateException("$code: ${message.orEmpty()}"))
+                        }
+                        override fun notImplemented() {
+                            response.completeExceptionally(IllegalStateException("V8 $method protocol unavailable"))
+                        }
+                    },
+                )
+                withTimeout(timeoutMs + 5_000) { response.await() }
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    try { channel?.invokeMethod("cancel", mapOf("taskId" to taskId)) }
+                    finally {
+                        responses.remove(taskId)
+                        hostTasks.remove(taskId)
+                        browserJobs.remove(taskId)?.forEach { it.cancel() }
+                        mutableTasks.value -= taskId
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun evaluateAuxiliary(
+        script: String,
+        bindings: Map<String, Any?>,
+        sourceId: String?,
+        sourceJson: Map<String, Any?>?,
+        prelude: String?,
+        timeoutMs: Long,
+    ): Any? {
+        val result = auxiliaryCall(
+            "evaluateAuxiliary",
+            mapOf("script" to script, "bindings" to bindings, "sourceId" to sourceId,
+                  "sourceJson" to sourceJson, "prelude" to prelude, "timeoutMs" to timeoutMs),
+            sourceId, sourceJson, timeoutMs,
+        )
+        require(result is Map<*, *> && result.containsKey("value")) { "Invalid V8 auxiliary result" }
+        return result["value"]
+    }
+
+    override suspend fun checkAuxiliarySyntax(script: String): V8ScriptDiagnostic? {
+        val result = auxiliaryCall("checkAuxiliarySyntax", mapOf("script" to script)) ?: return null
+        require(result is Map<*, *>) { "Invalid V8 syntax result" }
+        val message = result["message"] as? String ?: error("Syntax message missing")
+        val line = (result["lineNumber"] as? Number)?.toInt() ?: error("Syntax line missing")
+        val column = (result["columnNumber"] as? Number)?.toInt() ?: error("Syntax column missing")
+        require(line > 0 && column > 0) { "Syntax positions must be one-based" }
+        return V8ScriptDiagnostic(message, line, column)
+    }
+
+    override suspend fun clearSourceState(sourceId: String) {
+        auxiliaryCall("clearSourceState", mapOf("sourceId" to sourceId), sourceId = sourceId)
     }
 
     override suspend fun execute(

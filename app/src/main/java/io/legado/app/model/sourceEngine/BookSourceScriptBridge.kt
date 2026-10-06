@@ -1,13 +1,11 @@
 package io.legado.app.model.sourceEngine
 
-import com.script.ScriptBindings
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.htmlunit.corejs.javascript.Wrapper
 import java.util.IdentityHashMap
 
 class BookSourceBindingsUnsupportedException : NoStackTraceException(
@@ -20,22 +18,8 @@ class BookSourceBindingsUnsupportedException : NoStackTraceException(
 object BookSourceScriptBridge {
     private val hostNames = setOf("java", "source", "sourceApi", "cookie", "cache", "global", "globalThis")
 
-    fun bindings(configure: ScriptBindings.() -> Unit): Map<String, Any?> {
-        val bindings = ScriptBindings().apply(configure)
-        val explicit = linkedMapOf<String, Any?>()
-        // TopLevel.put forwards ordinary assignments to its isolated globalThis.
-        // ScopeObject.ids contains only lexical slots, so enumerate both owners,
-        // without traversing the prototype that carries standard JS builtins.
-        val ids: List<Any?> = buildList<Any?> {
-            addAll(bindings.ids.toList())
-            addAll(bindings.globalThis.ids.toList())
-        }.distinct()
-        for (id in ids) {
-            if (id !is String) throw BookSourceBindingsUnsupportedException()
-            if (id !in hostNames) explicit[id] = bindings.get(id, bindings)
-        }
-        return jsonBindings(explicit)
-    }
+    fun bindings(configure: MutableMap<String, Any?>.() -> Unit): Map<String, Any?> =
+        jsonBindings(linkedMapOf<String, Any?>().apply(configure))
 
     fun jsonBindings(values: Map<String, Any?>): Map<String, Any?> {
         val visiting = IdentityHashMap<Any, Boolean>()
@@ -50,7 +34,6 @@ object BookSourceScriptBridge {
             if (visiting.put(value, true) != null) throw BookSourceBindingsUnsupportedException()
             try {
                 return when (value) {
-                    is Wrapper -> convert(value.unwrap(), depth + 1)
                     is Book, is BookChapter -> convert(DartSourceEngine.jsonObject(value), depth + 1)
                     is Map<*, *> -> value.entries.associate { (key, item) ->
                         if (key !is String) throw BookSourceBindingsUnsupportedException()
@@ -69,7 +52,7 @@ object BookSourceScriptBridge {
     fun evaluate(
         source: BookSource,
         script: String,
-        configure: ScriptBindings.() -> Unit,
+        configure: MutableMap<String, Any?>.() -> Unit,
         onMainThread: Boolean,
         evaluator: suspend (BookSource, String, Map<String, Any?>) -> Any? = DartSourceEngine::evaluate,
     ): Any? {

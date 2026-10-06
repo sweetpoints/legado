@@ -2,9 +2,6 @@ package io.legado.app.data.entities
 
 import android.webkit.JavascriptInterface
 import cn.hutool.crypto.symmetric.AES
-import com.script.ScriptBindings
-import com.script.buildScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern.JS_PATTERN
@@ -17,13 +14,13 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.crypto.SymmetricCryptoAndroid
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.clearExploreKindsCache
-import io.legado.app.help.source.getShareScope
-import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.SharedJsScope
 import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
 import io.legado.app.model.sourceEngine.BookSourceScriptBridge
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -263,7 +260,7 @@ interface BaseSource : JsExtensions {
         }
     }
 
-    private fun configureScriptBindings(): ScriptBindings.() -> Unit = {
+    private fun configureScriptBindings(): MutableMap<String, Any?>.() -> Unit = {
         put("result", mutableMapOf<String, String>())
         put("book", null)
         put("chapter", null)
@@ -393,6 +390,7 @@ interface BaseSource : JsExtensions {
         }
         runBlocking {
             remove(jsLib)
+            DartSourceEngine.clearSourceState(this@BaseSource)
         }
     }
 
@@ -407,28 +405,10 @@ interface BaseSource : JsExtensions {
      * 执行JS
      */
     @Throws(Exception::class)
-    fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
-        if (this is BookSource) {
-            return BookSourceScriptBridge.evaluate(this, jsStr, bindingsConfig, isMainThread)
-        }
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["source"] = this
-            bindings["sourceApi"] = this
-            bindings["baseUrl"] = getKey()
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings.apply(bindingsConfig)
-        }
-        val sharedGlobalStateKey = getSharedGlobalStateKey()
-        val sharedScope = getShareScope() ?: SharedJsScope.getCryptoScope(this, null)
-        val scope = if (sharedScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings)
-        } else {
-            bindings.apply {
-                chainTo(sharedScope, sharedGlobalStateKey)
-            }
-        }
-        return RhinoScriptEngine.eval(jsStr, scope)
+    fun evalJS(jsStr: String, bindingsConfig: MutableMap<String, Any?>.() -> Unit = {}): Any? {
+        val values = BookSourceScriptBridge.bindings(bindingsConfig)
+        return V8ScriptExecutor.evaluateBlocking(
+            jsStr, values, getSourceNavigationContext(), source = this,
+        )
     }
 }

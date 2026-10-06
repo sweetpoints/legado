@@ -2,6 +2,19 @@ package io.legado.app.model.sourceEngine
 
 import com.google.gson.reflect.TypeToken
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BaseSource
+import io.legado.app.model.SharedJsScope
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.constant.AppConst
+import io.legado.app.help.config.AppConfig
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers
+import io.legado.app.data.entities.RssSource
+import io.legado.app.data.entities.HttpTTS
+import kotlinx.coroutines.withContext
+import java.net.URI
+import java.security.SecureRandom
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.flow.StateFlow
 import splitties.init.appCtx
@@ -23,6 +36,22 @@ interface SourceEngineBackend {
         bindings: Map<String, Any?>,
         ephemeral: Boolean = false,
     ): Any? = throw UnsupportedOperationException("Book-source auxiliary evaluation is unavailable")
+
+    suspend fun evaluateAuxiliary(
+        script: String,
+        bindings: Map<String, Any?>,
+        sourceId: String?,
+        sourceJson: Map<String, Any?>?,
+        prelude: String?,
+        timeoutMs: Long,
+    ): Any? = throw UnsupportedOperationException("V8 auxiliary protocol unavailable")
+
+    suspend fun checkAuxiliarySyntax(script: String): V8ScriptDiagnostic? =
+        throw UnsupportedOperationException("V8 syntax protocol unavailable")
+
+    suspend fun clearSourceState(sourceId: String) {
+        throw UnsupportedOperationException("V8 source-state protocol unavailable")
+    }
 
     suspend fun execute(
         operation: String,
@@ -54,6 +83,73 @@ object DartSourceEngine {
             emptyMap(),
             ephemeral = true,
         )
+
+    private val secureRandom by lazy { SecureRandom() }
+
+    fun ownerId(source: BaseSource): String {
+        val original = source.getSource() ?: source
+        return "${original.javaClass.name}:${original.getKey()}"
+    }
+
+    suspend fun evaluateAuxiliary(
+        script: String,
+        bindings: Map<String, Any?> = emptyMap(),
+        sourceId: String? = null,
+        prelude: String? = null,
+        timeoutMs: Long = 10_000,
+        source: BaseSource? = null,
+    ): Any? {
+        require(timeoutMs > 0) { "Script timeout must be positive" }
+        val original = source?.let { it.getSource() ?: it }
+        val owner = original?.let(::ownerId) ?: sourceId
+        require(sourceId == null || original == null || sourceId == owner) { "Auxiliary source identity mismatch" }
+        val globals = bindings.toMutableMap()
+        require(globals.keys.none { it in setOf("java", "source", "sourceApi", "__sourceHostSync", "globalThis") }) {
+            "V8 host bindings cannot be replaced"
+        }
+        original?.let {
+            globals.putIfAbsent("sourceData", jsonObject(it))
+            globals.putIfAbsent("baseUrl", it.getKey())
+        }
+        val descriptor = original?.let {
+            val headers = linkedMapOf<String, String>()
+            it.header?.let { text -> GSON.fromJsonObject<Map<String, String>>(text).getOrNull()?.let(headers::putAll) }
+            if (headers.keys.none { key -> key.equals(AppConst.UA_NAME, ignoreCase = true) }) {
+                headers[AppConst.UA_NAME] = AppConfig.userAgent
+            }
+            it.getLoginHeaderMap()?.let(headers::putAll)
+            val base = runCatching { URI(it.getKey()) }.getOrNull()
+            buildMap<String, Any?> {
+                if (base?.scheme in setOf("http", "https") && !base?.host.isNullOrBlank()) put("baseUrl", base.toString())
+                put("headers", headers)
+                put("navigationSourceId", it.getKey())
+                put("sourceKind", when (it) { is BookSource -> "book"; is RssSource -> "rss"; is HttpTTS -> "tts"; else -> "auxiliary" })
+            }
+        }
+        val context = currentCoroutineContext()
+        val caller = context[SourceHostCallbacks]
+        return withContext(SourceHostCallbacks { method, arguments ->
+            if (method == "crypto.randomInt32") {
+                require(arguments.isEmpty()) { "randomInt32 takes no arguments" }
+                secureRandom.nextInt()
+            } else {
+                check(caller != null) { "Unbound V8 host callback: $method" }
+                caller.call(method, arguments)
+            }
+        }) {
+            backend.evaluateAuxiliary(
+                script, BookSourceScriptBridge.jsonBindings(globals), owner, descriptor,
+                prelude ?: withContext(Dispatchers.IO) { SharedJsScope.resolveLibrary(original?.jsLib, currentCoroutineContext()) }, timeoutMs,
+            )
+        }
+    }
+
+    suspend fun checkAuxiliarySyntax(script: String): V8ScriptDiagnostic? =
+        backend.checkAuxiliarySyntax(script)
+
+    suspend fun clearSourceState(owner: BaseSource) = clearSourceState(ownerId(owner))
+
+    suspend fun clearSourceState(owner: String) = backend.clearSourceState(owner)
 
     private val backend: SourceEngineBackend by lazy {
         try {
