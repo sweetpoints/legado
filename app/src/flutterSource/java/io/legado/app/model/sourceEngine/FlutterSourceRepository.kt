@@ -5,18 +5,27 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import io.legado.app.data.appDb
+import io.legado.app.help.JsExtensions
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.help.source.VerificationResult
+import io.legado.app.help.source.shouldSuppressSourceNavigation
+import io.legado.app.model.webBook.WebBook
+import io.legado.app.utils.GSON
 import java.util.UUID
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -33,7 +42,11 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     private var channel: MethodChannel? = null
     private var closed = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val browserJobs = mutableMapOf<String, Job>()
+    private val browserJobs = mutableMapOf<String, MutableSet<Job>>()
+
+    private data class HostTask(val sourceId: String, val context: CoroutineContext)
+
+    private val hostTasks = mutableMapOf<String, HostTask>()
     private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
     private val ready = CompletableDeferred<Unit>()
     private val mutableTasks = MutableStateFlow<Map<String, SourceTaskState>>(emptyMap())
@@ -77,55 +90,116 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         )
                     platform.setMethodCallHandler { call, result ->
                         if (call.method == "cancelBrowser") {
-                            browserJobs.remove(call.argument<String>("taskId"))?.cancel()
+                            browserJobs.remove(call.argument<String>("taskId"))?.forEach {
+                                it.cancel()
+                            }
                             result.success(null)
+                        } else if (call.method == "call") {
+                            val taskId = call.argument<String>("taskId")
+                            val job =
+                                scope.launch(start = CoroutineStart.LAZY) {
+                                    try {
+                                        val task =
+                                            hostTasks[taskId]
+                                                ?: error("Source task is no longer active")
+                                        require(
+                                            call.argument<String>("sourceId") == task.sourceId
+                                        ) {
+                                            "Source task identity mismatch"
+                                        }
+                                        task.context.ensureActive()
+                                        val method = requireNotNull(call.argument<String>("method"))
+                                        val arguments =
+                                            requireNotNull(call.argument<List<Any?>>("arguments"))
+                                        val value =
+                                            withContext(task.context + Dispatchers.IO) {
+                                                callHost(task, method, arguments)
+                                            }
+                                        result.success(value)
+                                    } catch (error: Exception) {
+                                        result.error("HOST_CALL_FAILED", error.message, null)
+                                    } finally {
+                                        if (taskId != null)
+                                            browserJobs[taskId]?.remove(
+                                                currentCoroutineContext()[Job]
+                                            )
+                                    }
+                                }
+                            if (taskId != null)
+                                browserJobs.getOrPut(taskId) { mutableSetOf() }.add(job)
+                            job.start()
                         } else if (call.method != "browser") result.notImplemented()
                         else {
                             val browserTaskId = call.argument<String>("taskId")
-                            val job = scope.launch {
-                                try {
-                                    val sourceId = requireNotNull(call.argument<String>("sourceId"))
-                                    val url = requireNotNull(call.argument<String>("url"))
-                                    val title = call.argument<String>("title").orEmpty()
-                                    val response =
-                                        withContext(Dispatchers.IO) {
-                                            val source =
-                                                appDb.bookSourceDao.getBookSource(sourceId)
-                                                    ?: error("Browser source not found")
-                                            SourceVerificationHelp.getVerificationResult(
-                                                source,
-                                                url,
-                                                title,
-                                                true,
-                                                false,
-                                                coroutineContext = coroutineContext,
-                                            )
+                            val job =
+                                scope.launch(start = CoroutineStart.LAZY) {
+                                    try {
+                                        val sourceId =
+                                            requireNotNull(call.argument<String>("sourceId"))
+                                        val task =
+                                            hostTasks[browserTaskId]
+                                                ?: error("Source task is no longer active")
+                                        require(sourceId == task.sourceId) {
+                                            "Source task identity mismatch"
                                         }
-                                    when (response) {
-                                        is VerificationResult.Response ->
-                                            result.success(
-                                                mapOf(
-                                                    "url" to response.value.first,
-                                                    "body" to response.value.second,
-                                                    "cookie" to CookieStore.getCookie(url),
-                                                )
+                                        task.context.ensureActive()
+                                        check(
+                                            !shouldSuppressSourceNavigation(
+                                                AppConfig.blockSourceNavigation,
+                                                task.context,
                                             )
-                                        VerificationResult.Refetch ->
-                                            result.success(
-                                                mapOf(
-                                                    "url" to url,
-                                                    "refetch" to true,
-                                                    "cookie" to CookieStore.getCookie(url),
+                                        ) {
+                                            "Source navigation is suppressed for this operation"
+                                        }
+                                        val url = requireNotNull(call.argument<String>("url"))
+                                        val title = call.argument<String>("title").orEmpty()
+                                        val options =
+                                            call.argument<Map<String, Any?>>("options").orEmpty()
+                                        val response =
+                                            withContext(Dispatchers.IO) {
+                                                val source =
+                                                    appDb.bookSourceDao.getBookSource(sourceId)
+                                                        ?: error("Browser source not found")
+                                                SourceVerificationHelp.getVerificationResult(
+                                                    source,
+                                                    url,
+                                                    title,
+                                                    true,
+                                                    options["refetchAfterSuccess"] == true,
+                                                    html = options["html"] as? String,
+                                                    coroutineContext = task.context,
                                                 )
+                                            }
+                                        when (response) {
+                                            is VerificationResult.Response ->
+                                                result.success(
+                                                    mapOf(
+                                                        "url" to response.value.first,
+                                                        "body" to response.value.second,
+                                                        "cookie" to CookieStore.getCookie(url),
+                                                    )
+                                                )
+                                            VerificationResult.Refetch ->
+                                                result.success(
+                                                    mapOf(
+                                                        "url" to url,
+                                                        "refetch" to true,
+                                                        "cookie" to CookieStore.getCookie(url),
+                                                    )
+                                                )
+                                        }
+                                    } catch (error: Exception) {
+                                        result.error("BROWSER_FAILED", error.message, null)
+                                    } finally {
+                                        if (browserTaskId != null)
+                                            browserJobs[browserTaskId]?.remove(
+                                                currentCoroutineContext()[Job]
                                             )
                                     }
-                                } catch (error: Exception) {
-                                    result.error("BROWSER_FAILED", error.message, null)
-                                } finally {
-                                    if (browserTaskId != null) browserJobs.remove(browserTaskId)
                                 }
-                            }
-                            if (browserTaskId != null) browserJobs[browserTaskId] = job
+                            if (browserTaskId != null)
+                                browserJobs.getOrPut(browserTaskId) { mutableSetOf() }.add(job)
+                            job.start()
                         }
                     }
                     engine = created
@@ -152,6 +226,113 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 )
             }
         }
+
+    private fun sourceIdentity(sourceJson: String): String {
+        val source = GSON.fromJson(sourceJson, Map::class.java)
+        return (source["id"] ?: source["bookSourceUrl"]) as? String
+            ?: error("Source identity missing")
+    }
+
+    private suspend fun callHost(task: HostTask, method: String, args: List<Any?>): Any? {
+        if (method == "batch.cacheContent") {
+            require(args.size == 3 && args[0] is String && args[2] is String) {
+                "Invalid batch content callback"
+            }
+            return WebBook.saveDartBatchContent(args[0] as String, args[1], args[2] as String)
+        }
+        if (
+            method.startsWith("browser.") &&
+                shouldSuppressSourceNavigation(AppConfig.blockSourceNavigation, task.context)
+        ) {
+            check(method != "browser.open") { "Source navigation is suppressed for this operation" }
+            return null
+        }
+        val source =
+            appDb.bookSourceDao.getBookSource(task.sourceId) ?: error("Browser source not found")
+        if (method == "browser.open") {
+            require(args.size in 2..3 && args[0] is String && args[1] is String)
+            val options = args.getOrNull(2) as? Map<*, *> ?: emptyMap<Any?, Any?>()
+            val url = args[0] as String
+            val response =
+                SourceVerificationHelp.getVerificationResult(
+                    source,
+                    url,
+                    args[1] as String,
+                    true,
+                    options["refetchAfterSuccess"] == true,
+                    html = options["html"] as? String,
+                    coroutineContext = task.context,
+                )
+            return when (response) {
+                is VerificationResult.Response ->
+                    mapOf(
+                        "url" to response.value.first,
+                        "body" to response.value.second,
+                        "cookie" to CookieStore.getCookie(url),
+                    )
+                VerificationResult.Refetch ->
+                    mapOf(
+                        "url" to url,
+                        "refetch" to true,
+                        "cookie" to CookieStore.getCookie(url),
+                    )
+            }
+        }
+        task.context[SourceHostCallbacks]?.let {
+            return it.call(method, args)
+        }
+        val ui =
+            object : JsExtensions {
+                override fun getSource() = source
+
+                override fun getTag() = source.bookSourceName
+
+                override fun getSourceNavigationContext() = task.context
+            }
+        when (method) {
+            "browser.show" -> {
+                require(
+                    args.size in 1..4 &&
+                        args[0] is String &&
+                        args.drop(1).all { it == null || it is String }
+                )
+                ui.showBrowser(
+                    args[0] as String,
+                    args.getOrNull(1) as? String,
+                    args.getOrNull(2) as? String,
+                    args.getOrNull(3) as? String,
+                )
+            }
+            "browser.start" -> {
+                require(
+                    args.size in 2..3 &&
+                        args[0] is String &&
+                        args[1] is String &&
+                        (args.getOrNull(2) == null || args[2] is String)
+                )
+                SourceVerificationHelp.startBrowser(
+                    source,
+                    args[0] as String,
+                    args[1] as String,
+                    html = args.getOrNull(2) as? String,
+                )
+            }
+            "browser.video" -> {
+                require(args.size in 2..3 && args[0] is String && args[1] is String)
+                source.openVideoPlayer(
+                    args[0] as String,
+                    args[1] as String,
+                    args.getOrNull(2) == true,
+                )
+            }
+            "browser.openUrl" -> {
+                require(args.size in 1..2 && args[0] is String)
+                ui.openUrl(args[0] as String, args.getOrNull(1) as? String)
+            }
+            else -> error("Unsupported app host API $method")
+        }
+        return null
+    }
 
     override suspend fun migrate(sourceJson: String): SourceMigrationPreview {
         ensureStarted()
@@ -201,6 +382,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             val taskId = UUID.randomUUID().toString()
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
+            hostTasks[taskId] = HostTask(sourceIdentity(sourceJson), currentCoroutineContext())
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             try {
                 channel!!.invokeMethod(
@@ -242,6 +424,8 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
+                        hostTasks.remove(taskId)
+                        browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
                 }
@@ -261,6 +445,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
+            hostTasks[taskId] = HostTask(sourceIdentity(sourceJson), currentCoroutineContext())
             try {
                 channel!!.invokeMethod(
                     "execute",
@@ -305,6 +490,8 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
+                        hostTasks.remove(taskId)
+                        browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
                 }
@@ -322,12 +509,13 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             // Callers own execute coroutines; cancelling our browser scope cannot wake them.
             val pending = responses.values.toList()
             responses.clear()
+            hostTasks.clear()
             pending.forEach {
                 it.completeExceptionally(
                     IllegalStateException("Flutter source repository is closed")
                 )
             }
-            browserJobs.values.forEach { it.cancel() }
+            browserJobs.values.flatten().forEach { it.cancel() }
             browserJobs.clear()
             try {
                 val response = CompletableDeferred<Unit>()
