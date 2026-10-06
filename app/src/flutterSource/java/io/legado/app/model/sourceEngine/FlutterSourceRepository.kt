@@ -376,13 +376,14 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         bindings: Map<String, Any?>,
         ephemeral: Boolean,
     ): Any? {
+        val sourceId = sourceIdentity(sourceJson)
         ensureStarted()
         return withContext(Dispatchers.Main.immediate) {
             check(!closed) { "Flutter source repository is closed" }
             val taskId = UUID.randomUUID().toString()
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
-            hostTasks[taskId] = HostTask(sourceIdentity(sourceJson), currentCoroutineContext())
+            hostTasks[taskId] = HostTask(sourceId, currentCoroutineContext())
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             try {
                 channel!!.invokeMethod(
@@ -438,6 +439,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         sourceJson: String,
         input: Map<String, Any?>,
     ): List<Map<String, Any?>> {
+        val sourceId = sourceIdentity(sourceJson)
         ensureStarted()
         val taskId = UUID.randomUUID().toString()
         return withContext(Dispatchers.Main.immediate) {
@@ -445,7 +447,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
-            hostTasks[taskId] = HostTask(sourceIdentity(sourceJson), currentCoroutineContext())
+            hostTasks[taskId] = HostTask(sourceId, currentCoroutineContext())
             try {
                 channel!!.invokeMethod(
                     "execute",

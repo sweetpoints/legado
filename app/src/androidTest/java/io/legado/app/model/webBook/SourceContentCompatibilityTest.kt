@@ -10,6 +10,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.model.analyzeRule.AnalyzeByXPath
 import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -163,7 +164,8 @@ class SourceContentCompatibilityTest {
                 original.copy(
                     bookSourceUrl = origin,
                     bookSourceComment =
-                        "@source:v1 " +
+                        SourceEngineSourcePolicy.withCandidate(
+                            original.bookSourceComment,
                             GSON.toJson(
                                 mapOf(
                                     "schemaVersion" to 1,
@@ -173,6 +175,7 @@ class SourceContentCompatibilityTest {
                                     "script" to script,
                                 )
                             ),
+                        ),
                 )
             val book = Book(bookUrl = "$origin/book", name = "测试书籍", origin = origin)
             val chapter =

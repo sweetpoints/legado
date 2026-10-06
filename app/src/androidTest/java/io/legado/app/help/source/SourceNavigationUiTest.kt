@@ -25,6 +25,7 @@ import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
@@ -398,7 +399,8 @@ class SourceNavigationUiTest {
             server.start()
             val pageUrl = "http://127.0.0.1:${server.listeningPort}/search"
             source.bookSourceComment =
-                "@source:v1 " +
+                SourceEngineSourcePolicy.withCandidate(
+                    source.bookSourceComment,
                     GSON.toJson(
                         mapOf(
                             "schemaVersion" to 1,
@@ -418,9 +420,19 @@ class SourceNavigationUiTest {
                 """
                                     .trimIndent(),
                         )
-                    )
+                    ),
+                )
             appDb.bookSourceDao.insert(source)
             instrumentation.addMonitor(monitor)
+
+            val malformed = source.copy(bookSourceComment = "@source:v1 {")
+            assertTrue(
+                runCatching { DartSourceEngine.execute(malformed, "search", emptyMap()) }.isFailure
+            )
+            assertTrue(
+                "Rejected source JSON must not leave a pending task",
+                DartSourceEngine.tasks.value.isEmpty(),
+            )
 
             // The real search entry marks its operation even when the caller does not.
             assertEquals(1, WebBook.searchBookAwait(source, "fixture").size)
