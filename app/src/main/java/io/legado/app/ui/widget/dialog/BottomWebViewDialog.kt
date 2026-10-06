@@ -974,7 +974,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                     val bookType = args.getInt("bookType", 0)
                     withContext(Dispatchers.Main) {
                         currentWebView.onResume() // 缓存库拿的需要激活
-                        initWebView(page.url, spliceHtml, page.headers, bookType)
+                        initWebView(page.url, spliceHtml, HashMap(page.headers), bookType)
                         currentWebView.clearHistory()
                     }
                 }
