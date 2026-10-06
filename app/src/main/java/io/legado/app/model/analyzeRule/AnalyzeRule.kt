@@ -15,7 +15,6 @@ import io.legado.app.help.JsExtensions
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
-import io.legado.app.model.sourceEngine.BookSourceLegacyEnginePolicy
 import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceHostCallbacks
@@ -56,10 +55,6 @@ class AnalyzeRule(
     private val preUpdateJs: Boolean = false,
     private var isFromBookInfo : Boolean = false
 ) : JsExtensions {
-
-    init {
-        BookSourceLegacyEnginePolicy.requireLegacyAllowed(source is BookSource)
-    }
 
     private val book get() = ruleData as? BaseBook
     private val rssArticle get() = ruleData as? RssArticle

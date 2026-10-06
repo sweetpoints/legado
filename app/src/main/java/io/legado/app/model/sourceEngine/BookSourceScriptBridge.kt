@@ -56,7 +56,7 @@ object BookSourceScriptBridge {
         onMainThread: Boolean,
         evaluator: suspend (BookSource, String, Map<String, Any?>) -> Any? = DartSourceEngine::evaluate,
     ): Any? {
-        if (onMainThread) BookSourceLegacyEnginePolicy.rejectBookSourceExecution()
+        check(!onMainThread) { "V8 scripts must be awaited on the main thread" }
         val converted = bindings(configure)
         // runBlocking owns a fresh Job and responds to interruption of its caller.
         return runBlocking(Dispatchers.IO) { evaluator(source, script, converted) }
