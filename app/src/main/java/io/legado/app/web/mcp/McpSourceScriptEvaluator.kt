@@ -1,15 +1,14 @@
 package io.legado.app.web.mcp
 
 import com.google.gson.GsonBuilder
-import com.script.rhino.RhinoScriptEngine
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.BookSource
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.sourceEngine.BookSourceScriptBridge
 import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 /** Keeps the caller Job attached to V8 requests, so MCP timeouts reach native cancellation. */
@@ -61,20 +60,18 @@ internal object McpSourceScriptEvaluator {
                     else -> json.toJson(value)
                 }
             } else {
-                // General MCP and RSS retain their own runtime; book-source failures never enter
-                // it.
-                val context = currentCoroutineContext()
-                val raw = runScriptWithContext {
-                    if (source == null)
-                        RhinoScriptEngine.eval(script) {
-                            bindings.forEach { (key, value) -> put(key, value) }
+                val values = BookSourceScriptBridge.jsonBindings(bindings)
+                val raw =
+                    if (source == null) {
+                        V8ScriptExecutor.evaluate(script, values)
+                    } else {
+                        runInterruptible {
+                            source.evalJS(script) {
+                                values.forEach { (key, value) -> put(key, value) }
+                            }
                         }
-                    else
-                        source.evalJS(script) {
-                            bindings.forEach { (key, value) -> put(key, value) }
-                        }
-                }
-                JsSourceEngine.normalizeJsResult(raw, context)
+                    }
+                JsSourceEngine.normalizeJsResult(raw)
             }
         }
 }

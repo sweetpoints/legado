@@ -1,6 +1,5 @@
 package io.legado.app.ui.login
 
-import com.script.rhino.RhinoInterruptError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -12,8 +11,6 @@ internal suspend fun <T> evaluateLoginUiScript(
     return try {
         Result.success(block())
     } catch (error: CancellationException) {
-        throw error
-    } catch (error: RhinoInterruptError) {
         throw error
     } catch (error: Exception) {
         currentCoroutineContext().ensureActive()

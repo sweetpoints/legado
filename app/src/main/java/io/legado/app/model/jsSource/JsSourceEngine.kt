@@ -1,84 +1,18 @@
 package io.legado.app.model.jsSource
 
-import com.script.rhino.RhinoContext
-import com.script.rhino.RhinoScriptEngine
-import io.legado.app.exception.NoStackTraceException
 import io.legado.app.utils.GSON
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import org.htmlunit.corejs.javascript.Context
-import org.htmlunit.corejs.javascript.NativeJSON
-import org.htmlunit.corejs.javascript.Scriptable
-import org.htmlunit.corejs.javascript.ScriptableObject
-import org.htmlunit.corejs.javascript.Undefined
-import org.htmlunit.corejs.javascript.Wrapper
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.ensureActive
 
-/** Normalizes values for non-book script consumers; book execution lives in Dart/V8. */
+/** Normalizes the JSON values returned by V8; serialization runs inside V8 before transport. */
 object JsSourceEngine {
-    /**
-     * JS 返回值归一化(spec §2-5):String 原样;null/Undefined→null;
-     * NativeObject/NativeArray 等 Scriptable 改走 JS 引擎自身 JSON.stringify(回退方案,见下);
-     * 其余包装对象走 GSON——BaseSource.loginUi 先例。
-     * [coroutineContext] 可选,转发给 stringifyScriptable 用于在 stringify 执行期间
-     * (JS 侧自定义 toJSON/getter 可能耗时)传递协程取消信号。
-     */
     fun normalizeJsResult(result: Any?, coroutineContext: CoroutineContext? = null): String? {
-        var value = result
-        if (value is Wrapper) value = value.unwrap()
-        return when {
-            value == null || value is Undefined -> null
-            value is String -> value
-            value is CharSequence -> value.toString()
-            value is Scriptable ->
-                stringifyScriptable(value, coroutineContext) ?: GSON.toJson(value)
-
-            else -> GSON.toJson(value)
-        }
-    }
-
-    /**
-     * GSON 反射不认识 Rhino 内部惰性类型:'u' + page 这类拼接产生 ConsString,嵌套在
-     * NativeArray/NativeObject 属性里会被反射成 {left,right,length,isFlat} 内部字段。
-     * 改走引擎自身序列化:直调公开静态入口 NativeJSON.stringify。序列化仍可能执行
-     * 返回对象的 toJSON/getter,因此临时 Context 复用与正常 eval 相同的执行闸门和
-     * 协程取消检查,保留书源手写 `JSON.stringify(...)` 的完整语义。
-     *
-     * 调用点在 eval 之外,无活跃 Context 可复用,自行 Context.enter()/exit() 进临时
-     * Context,并注入 [coroutineContext](同 RhinoScriptEngine.eval 的注入/还原写法)。
-     * stringify 执行抛异常(典型如循环引用)包装成 NoStackTraceException 明确抛出,
-     * GSON 反射遇循环引用会栈溢出,明确报错优于栈炸;取不到顶层作用域时返回 null
-     * 交给调用方回退 GSON。
-     */
-    private fun stringifyScriptable(
-        value: Scriptable,
-        coroutineContext: CoroutineContext? = null,
-    ): String? {
-        val topScope = value.parentScope?.let { ScriptableObject.getTopLevelScope(it) }
-            ?: return null
-        val cx = Context.enter() as RhinoContext
-        val previousCoroutineContext = cx.coroutineContext
-        val previousAllowScriptRun = cx.allowScriptRun
-        if (coroutineContext != null && coroutineContext[Job] != null) {
-            cx.coroutineContext = coroutineContext
-        }
-        cx.allowScriptRun = true
-        cx.recursiveCount++
-        try {
-            cx.checkRecursive()
-            val raw = try {
-                NativeJSON.stringify(cx, topScope, value, null, null)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                throw NoStackTraceException("JS返回值 JSON.stringify 失败: ${e.message}")
-            }
-            return RhinoScriptEngine.unwrapReturnValue(raw) as? String
-        } finally {
-            cx.recursiveCount--
-            cx.allowScriptRun = previousAllowScriptRun
-            cx.coroutineContext = previousCoroutineContext
-            Context.exit()
+        coroutineContext?.ensureActive()
+        return when (result) {
+            null -> null
+            is String -> result
+            is CharSequence -> result.toString()
+            else -> GSON.toJson(result)
         }
     }
 }

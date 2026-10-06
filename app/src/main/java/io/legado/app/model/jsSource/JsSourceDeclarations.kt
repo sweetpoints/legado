@@ -1,8 +1,8 @@
 package io.legado.app.model.jsSource
 
 /**
- * Static capability hints, without evaluating programs or parsing function bodies
- * with the legacy Rhino grammar. Only direct top-level bindings are recognized.
+ * Static capability hints, without evaluating programs or parsing function bodies with an execution
+ * engine. Only direct top-level bindings are recognized.
  */
 internal object JsSourceDeclarations {
     fun declares(text: String, names: Set<String>): Boolean {
@@ -19,23 +19,45 @@ internal object JsSourceDeclarations {
                     val previous = tokens.getOrNull(index - 1)
                     val beforeAsync = tokens.getOrNull(index - 2)
                     val boundary = if (previous?.value == "async") beforeAsync else previous
-                    if (boundary == null || boundary.value in setOf(";", "}") ||
-                        text.substring(boundary.end, token.start).contains('\n') && boundary.value !in setOf("=", ",", ":")) {
-                        val name = tokens.getOrNull(index + if (tokens.getOrNull(index + 1)?.value == "*") 2 else 1)?.value
+                    if (
+                        boundary == null ||
+                            boundary.value in setOf(";", "}") ||
+                            text.substring(boundary.end, token.start).contains('\n') &&
+                                boundary.value !in setOf("=", ",", ":")
+                    ) {
+                        val name =
+                            tokens
+                                .getOrNull(
+                                    index + if (tokens.getOrNull(index + 1)?.value == "*") 2 else 1
+                                )
+                                ?.value
                         if (name in names) found.add(name!!)
                     }
                 }
-                if (current in names && tokens.getOrNull(index + 1)?.value == "=" &&
-                    tokens.getOrNull(index - 1)?.value !in setOf(".", "?.")) {
-                    if (functionValue(tokens, index + 2)) found.add(current) else found.remove(current)
+                if (
+                    current in names &&
+                        tokens.getOrNull(index + 1)?.value == "=" &&
+                        tokens.getOrNull(index - 1)?.value !in setOf(".", "?.")
+                ) {
+                    if (functionValue(tokens, index + 2)) found.add(current)
+                    else found.remove(current)
                 }
             }
-            if (current == "=>" && braces == 0 && parens == 0 && brackets == 0 && tokens.getOrNull(index + 1)?.value != "{") {
+            if (
+                current == "=>" &&
+                    braces == 0 &&
+                    parens == 0 &&
+                    brackets == 0 &&
+                    tokens.getOrNull(index + 1)?.value != "{"
+            ) {
                 var nested = 0
                 expressionBodyEnd = tokens.lastIndex
                 for (end in index + 1 until tokens.size) {
                     val value = tokens[end].value
-                    if (nested == 0 && value in setOf(";", ",")) { expressionBodyEnd = end - 1; break }
+                    if (nested == 0 && value in setOf(";", ",")) {
+                        expressionBodyEnd = end - 1
+                        break
+                    }
                     if (value in setOf("(", "[", "{")) nested++
                     if (value in setOf(")", "]", "}")) nested--
                 }
@@ -62,22 +84,43 @@ internal object JsSourceDeclarations {
         var brackets = 0
         for (index in tokens.indices) {
             val token = tokens[index]
-            if (depth == 0 && parens == 0 && brackets == 0 &&
-                token.value in setOf("config", "source") && tokens.getOrNull(index - 1)?.value in setOf("var", "let", "const") &&
-                tokens.getOrNull(index + 1)?.value == "=" && tokens.getOrNull(index + 2)?.value == "{") {
+            if (
+                depth == 0 &&
+                    parens == 0 &&
+                    brackets == 0 &&
+                    token.value in setOf("config", "source") &&
+                    tokens.getOrNull(index - 1)?.value in setOf("var", "let", "const") &&
+                    tokens.getOrNull(index + 1)?.value == "=" &&
+                    tokens.getOrNull(index + 2)?.value == "{"
+            ) {
                 val end = matching(tokens, index + 2, "{", "}") ?: return emptyList()
                 var nested = 0
                 for (property in index + 3 until end) {
                     val key = tokens[property]
                     val literalKey = text.substring(key.start, key.end)
-                    if (nested == 0 && (key.value == "lastUpdateTime" || literalKey in setOf("'lastUpdateTime'", "\"lastUpdateTime\"")) &&
-                        tokens.getOrNull(property - 1)?.value in setOf("{", ",") && tokens.getOrNull(property + 1)?.value == ":") {
+                    if (
+                        nested == 0 &&
+                            (key.value == "lastUpdateTime" ||
+                                literalKey in setOf("'lastUpdateTime'", "\"lastUpdateTime\"")) &&
+                            tokens.getOrNull(property - 1)?.value in setOf("{", ",") &&
+                            tokens.getOrNull(property + 1)?.value == ":"
+                    ) {
                         val valueIndex = property + 2
                         val value = tokens.getOrNull(valueIndex) ?: continue
-                        val number = Regex("(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)").matches(value.value)
-                        val date = tokens.subList(valueIndex, minOf(valueIndex + 5, tokens.size)).map { it.value } == listOf("Date", ".", "now", "(", ")")
+                        val number =
+                            Regex(
+                                    "(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)"
+                                )
+                                .matches(value.value)
+                        val date =
+                            tokens.subList(valueIndex, minOf(valueIndex + 5, tokens.size)).map {
+                                it.value
+                            } == listOf("Date", ".", "now", "(", ")")
                         val valueEnd = valueIndex + if (date) 4 else 0
-                        if ((number || date) && tokens.getOrNull(valueEnd + 1)?.value in setOf(",", "}")) {
+                        if (
+                            (number || date) &&
+                                tokens.getOrNull(valueEnd + 1)?.value in setOf(",", "}")
+                        ) {
                             result.add(value.start until tokens[valueEnd].end)
                         }
                     }
@@ -108,7 +151,8 @@ internal object JsSourceDeclarations {
             val paramsEnd = matching(tokens, index, "(", ")") ?: return false
             val bodyEnd = matching(tokens, paramsEnd + 1, "{", "}") ?: return false
             // An immediately invoked function is not a function-valued binding.
-            return tokens.getOrNull(bodyEnd + 1)?.value !in setOf("(", ".", "?.", "[", "?", "+", "-", "||", "&&")
+            return tokens.getOrNull(bodyEnd + 1)?.value !in
+                setOf("(", ".", "?.", "[", "?", "+", "-", "||", "&&")
         }
         if (tokens.getOrNull(index)?.value == "(") {
             index = (matching(tokens, index, "(", ")") ?: return false) + 1
@@ -129,11 +173,17 @@ internal object JsSourceDeclarations {
         return null
     }
 
-    private data class Token(val value: String, val start: Int, val end: Int, val identifier: Boolean = false)
+    private data class Token(
+        val value: String,
+        val start: Int,
+        val end: Int,
+        val identifier: Boolean = false,
+    )
 
     private class Lexer(private val text: String) {
         private var position = 0
         private var previous = ""
+
         fun tokens(): List<Token> {
             val result = arrayListOf<Token>()
             while (position < text.length) {
@@ -143,6 +193,7 @@ internal object JsSourceDeclarations {
             }
             return result
         }
+
         private fun next(): Token? {
             val start = position
             val c = text[position++]
@@ -165,68 +216,110 @@ internal object JsSourceDeclarations {
                 template()
                 return Token("literal", start, position)
             }
-            if (c == '/' && previous in setOf("", "=", "(", "[", "{", ",", ":", ";", "return", "throw", "=>", "!", "?", "&&", "||")) {
+            if (
+                c == '/' &&
+                    previous in
+                        setOf(
+                            "",
+                            "=",
+                            "(",
+                            "[",
+                            "{",
+                            ",",
+                            ":",
+                            ";",
+                            "return",
+                            "throw",
+                            "=>",
+                            "!",
+                            "?",
+                            "&&",
+                            "||",
+                        )
+            ) {
                 regex()
                 return Token("literal", start, position)
             }
             if (c.isLetter() || c == '_' || c == '$') {
-                while (position < text.length && (text[position].isLetterOrDigit() || text[position] in "_$")) position++
+                while (
+                    position < text.length &&
+                        (text[position].isLetterOrDigit() || text[position] in "_$")
+                ) position++
                 return Token(text.substring(start, position), start, position, true)
             }
             if (c.isDigit()) {
-                val number = Regex("(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)").find(text, start)!!
+                val number =
+                    Regex(
+                            "(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)"
+                        )
+                        .find(text, start)!!
                 position = number.range.last + 1
                 return Token(number.value, start, position)
             }
             val pair = if (position < text.length) "$c${text[position]}" else ""
-            if (pair in setOf("=>", "?.", "&&", "||", "==", "!=", "++", "--", "+=", "-=", "*=", "/=")) {
+            if (
+                pair in
+                    setOf("=>", "?.", "&&", "||", "==", "!=", "++", "--", "+=", "-=", "*=", "/=")
+            ) {
                 position++
                 return Token(pair, start, position)
             }
             return Token(c.toString(), start, position)
         }
+
         private fun quoted(quote: Char) {
             while (position < text.length) {
                 val c = text[position++]
-                if (c == '\\') { require(position < text.length); position++ }
-                else if (c == quote) return
-                else require(c != '\n' && c != '\r')
+                if (c == '\\') {
+                    require(position < text.length)
+                    position++
+                } else if (c == quote) return else require(c != '\n' && c != '\r')
             }
             error("Unclosed string")
         }
+
         private fun regex() {
             var inClass = false
             while (position < text.length) {
                 when (val c = text[position++]) {
-                    '\\' -> { require(position < text.length); position++ }
+                    '\\' -> {
+                        require(position < text.length)
+                        position++
+                    }
                     '[' -> inClass = true
                     ']' -> inClass = false
-                    '/' -> if (!inClass) {
-                        while (position < text.length && text[position].isLetter()) position++
-                        return
-                    }
+                    '/' ->
+                        if (!inClass) {
+                            while (position < text.length && text[position].isLetter()) position++
+                            return
+                        }
                     else -> require(c != '\n' && c != '\r')
                 }
             }
             error("Unclosed regex")
         }
+
         private fun template() {
             while (position < text.length) {
                 when (text[position++]) {
-                    '\\' -> { require(position < text.length); position++ }
-                    '`' -> return
-                    '$' -> if (position < text.length && text[position] == '{') {
+                    '\\' -> {
+                        require(position < text.length)
                         position++
-                        var depth = 1
-                        previous = "{"
-                        while (position < text.length && depth > 0) {
-                            val token = next() ?: continue
-                            if (token.value == "{") depth++
-                            if (token.value == "}") depth--
-                            previous = token.value
-                        }
-                        require(depth == 0)
                     }
+                    '`' -> return
+                    '$' ->
+                        if (position < text.length && text[position] == '{') {
+                            position++
+                            var depth = 1
+                            previous = "{"
+                            while (position < text.length && depth > 0) {
+                                val token = next() ?: continue
+                                if (token.value == "{") depth++
+                                if (token.value == "}") depth--
+                                previous = token.value
+                            }
+                            require(depth == 0)
+                        }
                 }
             }
             error("Unclosed template")

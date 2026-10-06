@@ -1,7 +1,6 @@
 package io.legado.app.data.repository
 
 import androidx.room.withTransaction
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
@@ -140,7 +139,7 @@ class AppMainRssRepository(
         withTimeout(10_000) {
             withContext(Dispatchers.IO) {
                 val source = current(id)?.copy() ?: return@withContext null
-                val navigation = runScriptWithContext {
+                val navigation = runInterruptible {
                     mainRssNavigation(source) { script -> evaluate(source, script) }
                 }
                 currentCoroutineContext().ensureActive()

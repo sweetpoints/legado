@@ -14,15 +14,6 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.htmlunit.corejs.javascript.Parser
-import org.htmlunit.corejs.javascript.ast.FunctionCall
-import org.htmlunit.corejs.javascript.ast.FunctionNode
-import org.htmlunit.corejs.javascript.ast.Name
-import org.htmlunit.corejs.javascript.ast.NumberLiteral
-import org.htmlunit.corejs.javascript.ast.ObjectLiteral
-import org.htmlunit.corejs.javascript.ast.ObjectProperty
-import org.htmlunit.corejs.javascript.ast.StringLiteral
-import org.htmlunit.corejs.javascript.ast.VariableInitializer
 
 object JsSourceConfig {
 
@@ -76,21 +67,7 @@ object JsSourceConfig {
     }
 
     private fun declaresTopLevelFunctions(text: String, names: Set<String>): Boolean {
-        val root = runCatching { Parser().parse(text, null, 1) }.getOrNull()
-            ?: return JsSourceDeclarations.declares(text, names)
-        val declared = hashSetOf<String>()
-        root.visit { node ->
-            when (node) {
-                is FunctionNode -> if (node.enclosingFunction == null && node.name in names) {
-                    declared.add(node.name)
-                }
-                is VariableInitializer -> if (node.enclosingFunction == null && node.initializer is FunctionNode) {
-                    (node.target as? Name)?.identifier?.takeIf { it in names }?.let(declared::add)
-                }
-            }
-            declared.size < names.size
-        }
-        return declared.containsAll(names)
+        return JsSourceDeclarations.declares(text, names)
     }
 
     internal fun configurationScript(text: String): String {
@@ -292,41 +269,7 @@ object JsSourceConfig {
     }
 
     fun stampLastUpdateTime(text: String, stamp: Long): String? {
-        val ranges = runCatching {
-            mutableListOf<IntRange>().apply {
-                Parser().parse(text, null, 1).visit { node ->
-                    val initializer = node as? VariableInitializer ?: return@visit true
-                    val name = (initializer.target as? Name)?.identifier
-                    val config = initializer.initializer as? ObjectLiteral
-                    if (
-                        initializer.enclosingFunction != null ||
-                            name != CONFIG_PROPERTY && name != LEGACY_CONFIG_PROPERTY ||
-                            config == null
-                    ) {
-                        return@visit true
-                    }
-                    config.elements.filterIsInstance<ObjectProperty>().forEach { property ->
-                        val key =
-                            when (val nodeKey = property.key) {
-                                is Name -> nodeKey.identifier
-                                is StringLiteral -> nodeKey.value
-                                else -> null
-                            }
-                        val value = property.value
-                        val isSupportedValue =
-                            value is NumberLiteral ||
-                                value is FunctionCall &&
-                                    value.arguments.isEmpty() &&
-                                    value.target.toSource() == "Date.now"
-                        if (key == "lastUpdateTime" && isSupportedValue) {
-                            add(value.absolutePosition until value.absolutePosition + value.length)
-                        }
-                    }
-                    true
-                }
-            }
-        }
-            .getOrNull() ?: JsSourceDeclarations.timestampRanges(text)
+        val ranges = JsSourceDeclarations.timestampRanges(text)
         if (ranges.isEmpty()) return null
         return ranges
             .sortedByDescending { it.first }
