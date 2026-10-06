@@ -118,6 +118,8 @@ object DartSourceEngine {
         }
         original?.let {
             globals.putIfAbsent("sourceData", jsonObject(it))
+            globals["__legacySourceTag"] = it.getTag()
+            globals["__legacySourceKey"] = it.getKey()
         }
         val descriptor = original?.let {
             val definition = (it as? BookSource)?.let { bookSource ->
@@ -150,6 +152,12 @@ object DartSourceEngine {
         val networkDescriptor = (descriptor ?: emptyMap()).toMutableMap()
         networkDescriptor["baseUrl"] = auxiliaryNetworkBaseUrl(descriptor?.get("baseUrl") ?: globals["baseUrl"])
         val context = currentCoroutineContext()
+        val library = prelude ?: withContext(Dispatchers.IO) {
+            SharedJsScope.resolveLibrary(original?.jsLib, currentCoroutineContext())
+        }
+        // A source owner must see identical preload text across BaseSource,
+        // analyzers and UI helpers; changing it reinitializes its cached library.
+        val ownerPrelude = if (original != null) LegacySourceScriptRunner.prelude(library.orEmpty()) else library
         val caller = context[SourceHostCallbacks]
         return withContext(SourceHostCallbacks { method, arguments ->
             if (method == "crypto.randomInt32") {
@@ -162,7 +170,7 @@ object DartSourceEngine {
         }) {
             backend.evaluateAuxiliary(
                 script, BookSourceScriptBridge.jsonBindings(globals), owner, networkDescriptor,
-                prelude ?: withContext(Dispatchers.IO) { SharedJsScope.resolveLibrary(original?.jsLib, currentCoroutineContext()) }, timeoutMs,
+                ownerPrelude, timeoutMs,
             )
         }
     }

@@ -2,10 +2,7 @@ package io.legado.app.model.sourceEngine
 
 import android.os.Looper
 import io.legado.app.data.entities.BaseSource
-import io.legado.app.model.SharedJsScope
 import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 
 /** Synchronous legacy entity helpers are lexical adapters; modern source APIs stay async. */
 object LegacySourceScriptRunner {
@@ -18,22 +15,10 @@ object LegacySourceScriptRunner {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "V8 scripts must be awaited on the main thread"
         }
-        val original = source.getSource() ?: source
-        val library =
-            runBlocking(context + Dispatchers.IO) {
-                    SharedJsScope.resolveLibrary(original.jsLib, coroutineContext)
-                }
-                .orEmpty()
         return V8ScriptExecutor.evaluateBlocking(
             wrap(),
-            bindings +
-                mapOf(
-                    "__baseSourceScript" to script,
-                    "__legacySourceTag" to original.getTag(),
-                    "__legacySourceKey" to original.getKey(),
-                ),
+            bindings + ("__baseSourceScript" to script),
             context,
-            prelude = prelude(library),
             source = source,
         )
     }
