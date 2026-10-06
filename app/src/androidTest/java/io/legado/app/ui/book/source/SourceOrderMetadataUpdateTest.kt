@@ -1,6 +1,5 @@
 package io.legado.app.ui.book.source
 
-import android.os.SystemClock
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -220,22 +219,35 @@ class SourceOrderMetadataUpdateTest {
                     ready
                 }
                 compose.onNodeWithTag("replace-rule-enabled-${stale[0].id}").performClick()
+                fun readyForMutation(): Boolean {
+                    var ready = false
+                    scenario.onActivity {
+                        val state = it.managementModel.state.value
+                        ready = state.loaded && !state.busy && state.pending == null
+                    }
+                    return ready
+                }
                 waitUntil("replacement switch enabled") {
-                    appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true
+                    appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true &&
+                        readyForMutation()
                 }
                 assertState(setOf(stale[0].id))
+                // Room commits before the model completes its mutation. The next user action
+                // must wait for the busy state to clear, or enabled() correctly ignores it.
                 scenario.onActivity {
                     it.managementModel.enabled(stale.map { row -> row.id }, true)
                 }
                 waitUntil("replacement selection enabled") {
-                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true }
+                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true } &&
+                        readyForMutation()
                 }
                 assertState(keys)
                 scenario.onActivity {
                     it.managementModel.enabled(stale.map { row -> row.id }, false)
                 }
                 waitUntil("replacement selection disabled") {
-                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false }
+                    keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false } &&
+                        readyForMutation()
                 }
                 assertState(emptySet())
             }
