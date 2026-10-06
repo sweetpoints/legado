@@ -6,6 +6,8 @@ on:
       - 'flutter/**'
       - '.github/workflows/flutter-source-engine.yml'
       - '.github/actions/setup-android/**'
+      - '.github/scripts/prepare-pdf-zoom-fixture.py'
+      - '.github/scripts/prepare-reported-rss-fixture.py'
       - 'app/src/flutterSource/**'
       - 'app/src/main/java/io/legado/app/model/webBook/**'
       - 'app/src/main/java/io/legado/app/model/sourceEngine/**'
@@ -92,6 +94,10 @@ jobs:
           packages: platform-tools
       - name: Prepare verified Flutter Android AAR repository
         run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Prepare pinned UI regression test assets
+        run: |
+          python3 .github/scripts/prepare-pdf-zoom-fixture.py
+          python3 .github/scripts/prepare-reported-rss-fixture.py
       - name: Compile Android integration with mandatory default engine
         run: ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest --console=plain --max-workers=2
 
@@ -137,6 +143,10 @@ jobs:
         run: python3 -m unittest discover -s flutter/tool -p 'test_verify_instrumentation.py'
       - name: Prepare verified Flutter Android AARs
         run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Prepare pinned UI regression test assets
+        run: |
+          python3 .github/scripts/prepare-pdf-zoom-fixture.py
+          python3 .github/scripts/prepare-reported-rss-fixture.py
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
