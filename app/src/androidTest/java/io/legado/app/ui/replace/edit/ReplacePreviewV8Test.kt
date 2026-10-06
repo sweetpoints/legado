@@ -12,7 +12,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ReplacePreviewV8Test {
     @Test
-    fun `preview preserves js replacement semantics`() {
+    // preview preserves js replacement semantics
+    fun previewPreservesJsReplacementSemantics() {
         val rule =
             ReplaceRule(
                 name = "uppercase",
@@ -25,7 +26,8 @@ class ReplacePreviewV8Test {
     }
 
     @Test
-    fun `preview allows book as a js string literal`() {
+    // preview allows book as a js string literal
+    fun previewAllowsBookAsAJsStringLiteral() {
         val rule =
             ReplaceRule(
                 pattern = ".",
@@ -37,7 +39,8 @@ class ReplacePreviewV8Test {
     }
 
     @Test
-    fun `preview stops an infinite js replacement at the rule timeout`() {
+    // preview stops an infinite js replacement at the rule timeout
+    fun previewStopsAnInfiniteJsReplacementAtTheRuleTimeout() {
         val rule =
             ReplaceRule(
                 pattern = ".",

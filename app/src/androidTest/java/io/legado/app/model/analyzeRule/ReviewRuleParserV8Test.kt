@@ -24,7 +24,8 @@ class ReviewRuleParserV8Test {
     private val chapter = BookChapter(url = "https://example.com/chapter/1", bookUrl = book.bookUrl)
 
     @Test
-    fun `parses JSON summary returned as a native array`() = runBlocking {
+    // parses JSON summary returned as a native array
+    fun parsesJSONSummaryReturnedAsANativeArray() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val result =
@@ -61,7 +62,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `parses detail content protocol replies and local next page variables`() = runBlocking {
+    // parses detail content protocol replies and local next page variables
+    fun parsesDetailContentProtocolRepliesAndLocalNextPageVariables() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val result =
@@ -150,7 +152,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `standalone reply list failures are retryable errors`() = runBlocking {
+    // standalone reply list failures are retryable errors
+    fun standaloneReplyListFailuresAreRetryableErrors() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             assertThrows(Exception::class.java) {
@@ -175,7 +178,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `detail JavaScript keeps grouped roots and replies when optional badges are missing`() =
+    // detail JavaScript keeps grouped roots and replies when optional badges are missing
+    fun detailJavaScriptKeepsGroupedRootsAndRepliesWhenOptionalBadgesAreMissing() =
         runBlocking {
             assertTrue(
                 "Mandatory Flutter/V8 backend is required",
@@ -284,7 +288,8 @@ class ReviewRuleParserV8Test {
         }
 
     @Test
-    fun `detail JavaScript list fields execute against native objects`() = runBlocking {
+    // detail JavaScript list fields execute against native objects
+    fun detailJavaScriptListFieldsExecuteAgainstNativeObjects() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val result =
@@ -314,7 +319,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `local rule bindings are explicit and limited to review variables`() = runBlocking {
+    // local rule bindings are explicit and limited to review variables
+    fun localRuleBindingsAreExplicitAndLimitedToReviewVariables() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val analyzeRule = AnalyzeRule().setContent("{}")
@@ -340,7 +346,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `url extra parameters preserve info map and only add supplied globals`() = runBlocking {
+    // url extra parameters preserve info map and only add supplied globals
+    fun urlExtraParametersPreserveInfoMapAndOnlyAddSuppliedGlobals() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val infoMap = mutableMapOf("token" to "ok")
@@ -375,7 +382,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `rule failures keep empty fallback and are recorded`() = runBlocking {
+    // rule failures keep empty fallback and are recorded
+    fun ruleFailuresKeepEmptyFallbackAndAreRecorded() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val source =
@@ -473,7 +481,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `summary accepts a JSON array string returned by JavaScript`() = runBlocking {
+    // summary accepts a JSON array string returned by JavaScript
+    fun summaryAcceptsAJSONArrayStringReturnedByJavaScript() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val source =
@@ -514,7 +523,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `summary keeps every regex list match`() = runBlocking {
+    // summary keeps every regex list match
+    fun summaryKeepsEveryRegexListMatch() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val source =
@@ -554,7 +564,8 @@ class ReviewRuleParserV8Test {
     }
 
     @Test
-    fun `standalone reply rule is not evaluated against detail items`() = runBlocking {
+    // standalone reply rule is not evaluated against detail items
+    fun standaloneReplyRuleIsNotEvaluatedAgainstDetailItems() = runBlocking {
         assertTrue("Mandatory Flutter/V8 backend is required", BuildConfig.FLUTTER_SOURCE_ENGINE)
         withContext(Dispatchers.IO) {
             val result =
