@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:source_host/source_host.dart';
@@ -28,10 +30,7 @@ void main() {
         'bindings': bindings,
         'prelude': prelude,
         'timeoutMs': timeout,
-        'sourceJson': {
-          'baseUrl': descriptorBaseUrl,
-          'headers': headers,
-        },
+        'sourceJson': {'baseUrl': descriptorBaseUrl, 'headers': headers},
       }),
     ) as Map;
     return result['value'];
@@ -65,25 +64,71 @@ void main() {
     await evaluate('globalThis.privateValue=42', owner: null);
     expect(await evaluate('typeof privateValue', owner: null), 'undefined');
   });
-  test('same owner keeps globals when page and source headers change', () async {
-    await evaluate(
-      'var counter=41; globalThis.saved=99;',
-      bindings: {'baseUrl': 'https://fixture.invalid/book/first'},
+  test('bundled CryptoJS exports from its wrapper and initializes once', () async {
+    final cryptoJs = await File(
+      '../../../app/src/main/assets/scripts/cryptojs.min.js',
+    ).readAsString();
+    await expectLater(
+      evaluate(
+        '0',
+        owner: 'broken-wrapper',
+        prelude:
+            '(function(){\n$cryptoJs\n}).call(globalThis);\n'
+            'globalThis.CryptoJS.lib.WordArray;',
+      ),
+      throwsA(
+        isA<PlatformException>().having((e) => e.code, 'code', 'script_error'),
+      ),
     );
+    final library =
+        '(function(){\n$cryptoJs\n'
+        'globalThis.CryptoJS=CryptoJS;\n}).call(globalThis);\n'
+        'globalThis.CryptoJS.lib.WordArray.random=function(nBytes){'
+        'var words=[];for(var i=0;i<nBytes;i+=4)'
+        'words.push(__sourceHostSync("crypto.randomInt32",[]));'
+        'return globalThis.CryptoJS.lib.WordArray.create(words,nBytes);};\n'
+        'globalThis.cryptoInitializations=(globalThis.cryptoInitializations||0)+1;';
+    expect(
+      await evaluate('CryptoJS.MD5("abc").toString()', prelude: library),
+      '900150983cd24fb0d6963f7d28e17f72',
+    );
+    await evaluate('var cryptoSaved=42;', prelude: library);
     expect(
       await evaluate(
-        '({counter:++counter,saved:globalThis.saved,baseUrl})',
-        bindings: {'baseUrl': 'https://next.invalid/book/second'},
-        descriptorBaseUrl: 'https://next.invalid/',
-        headers: {'X-Fixture': 'changed'},
+        '({saved:cryptoSaved,initializations:cryptoInitializations,'
+        'hash:CryptoJS.SHA256("abc").toString()})',
+        prelude: library,
       ),
       {
-        'counter': 42,
-        'saved': 99,
-        'baseUrl': 'https://next.invalid/book/second',
+        'saved': 42,
+        'initializations': 1,
+        'hash':
+            'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
       },
     );
   });
+  test(
+    'same owner keeps globals when page and source headers change',
+    () async {
+      await evaluate(
+        'var counter=41; globalThis.saved=99;',
+        bindings: {'baseUrl': 'https://fixture.invalid/book/first'},
+      );
+      expect(
+        await evaluate(
+          '({counter:++counter,saved:globalThis.saved,baseUrl})',
+          bindings: {'baseUrl': 'https://next.invalid/book/second'},
+          descriptorBaseUrl: 'https://next.invalid/',
+          headers: {'X-Fixture': 'changed'},
+        ),
+        {
+          'counter': 42,
+          'saved': 99,
+          'baseUrl': 'https://next.invalid/book/second',
+        },
+      );
+    },
+  );
   test(
     'current page baseUrl binding is not replaced by source descriptor origin',
     () async {
