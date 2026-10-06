@@ -6,7 +6,7 @@
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
       "source": "app/src/androidTest/java/io/legado/app/V8ApplicationScriptTest.kt",
-      "sourceSha256": "e996f2be2e0b5da3bbac97e217e5fd22b48c487597d302c51022bd101b8933ac",
+      "sourceSha256": "28ac794b58c0e3c647c979e81a5e8f066d6b482dce55b3d9647ba80794fd88b3",
       "methods": [
         "bundledFormatterExecutesOfflineInActualV8",
         "cancellationInterruptsNativeLoopAndLeavesNextRequestUsable",
@@ -88,7 +88,7 @@
     {
       "name": "io.legado.app.model.analyzeRule.ReviewRuleParserV8Test",
       "source": "app/src/androidTest/java/io/legado/app/model/analyzeRule/ReviewRuleParserV8Test.kt",
-      "sourceSha256": "6c5e1b708d1ac530ab6fe665da627dc2234776ab41acae8e2d037615f140c399",
+      "sourceSha256": "1d5f8a324c84d0df231279a4edf5e05b468a3a7ca19fa6b7ffb213852506ce15",
       "methods": [
         "detailJavaScriptKeepsGroupedRootsAndRepliesWhenOptionalBadgesAreMissing",
         "detailJavaScriptListFieldsExecuteAgainstNativeObjects",

@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,11 +80,31 @@ def validate_manifest(document, root=ROOT):
         raise ValueError('Instrumentation manifest differs from current source; regenerate before building/running')
 
 
+def verify_compiled_methods(directory, document):
+    """JUnit4 requires public instance void methods; invalid classes may be filtered out."""
+    checked = 0
+    for record in document['classes']:
+        compiled = directory / (record['name'].replace('.', '/') + '.class')
+        if not compiled.is_file():
+            raise ValueError('Compiled instrumentation class missing: ' + record['name'])
+        result = subprocess.run(['javap', '-p', str(compiled)], capture_output=True, text=True, timeout=15)
+        if result.returncode:
+            raise ValueError('Cannot inspect compiled instrumentation class: ' + record['name'])
+        signatures = set(re.findall(r'^\s+public\s+(?:final\s+)?void\s+(\w+)\(\);$', result.stdout, re.MULTILINE))
+        for method in record['methods']:
+            if method not in signatures:
+                raise ValueError('JUnit4 test must compile to a public instance void method: ' + record['name'] + '#' + method)
+            checked += 1
+    return checked
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write-manifest', type=Path)
     parser.add_argument('--include-existing', action='store_true', help='Generate a combined inventory with the original engine/UI classes')
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--compiled-classes', type=Path, help='Verify every declared test is a compiled public instance void method')
+    parser.add_argument('--verify-compiled-only', action='store_true')
     parser.add_argument('--classes', action='store_true')
     parser.add_argument('--tests-regex', action='store_true')
     parser.add_argument('--since', type=float)
@@ -99,6 +120,12 @@ def main():
         parser.error('--include-existing is only used with --write-manifest; execute with the generated --manifest')
     document = json.loads(args.manifest.read_text())
     validate_manifest(document)
+    compiled_count = verify_compiled_methods(args.compiled_classes, document) if args.compiled_classes else None
+    if args.verify_compiled_only:
+        if args.compiled_classes is None:
+            parser.error('--verify-compiled-only requires --compiled-classes')
+        print(json.dumps({'compiledMethodCount': compiled_count, 'deviceExecuted': False}, indent=2))
+        return
     if args.tests_regex:
         print(runner_regex(document))
         return
@@ -115,5 +142,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, ValueError, ET.ParseError) as error:
+    except (OSError, ValueError, ET.ParseError, subprocess.TimeoutExpired) as error:
         raise SystemExit(str(error))

@@ -102,12 +102,12 @@ class V8ApplicationScriptTest {
 
     @Test
     fun dynamicEvaluationUsesCurrentBindingsAndStandardLexicalLifetime() = runBlocking {
-        val bindings = mapOf("cache" to "EXEC_ENV")
-        assertEquals("EXEC_ENV", evaluate("(0,eval)('cache')", bindings))
-        assertEquals("EXEC_ENV", evaluate("new Function('return cache')()", bindings))
+        val bindings = mapOf("runtimeValue" to "EXEC_ENV")
+        assertEquals("EXEC_ENV", evaluate("(0,eval)('runtimeValue')", bindings))
+        assertEquals("EXEC_ENV", evaluate("new Function('return runtimeValue')()", bindings))
         assertEquals(
             "EXEC_ENV-L",
-            evaluate("function f(){var local='-L';return eval('cache+local')}f()", bindings),
+            evaluate("function f(){var local='-L';return eval('runtimeValue+local')}f()", bindings),
         )
         assertEquals(
             "fn:ok",
@@ -115,7 +115,9 @@ class V8ApplicationScriptTest {
         )
         assertEquals(
             "var:ok",
-            evaluate("eval(\"var gzip=function(value){return 'var:'+value}\");eval(\"gzip('ok')\")"),
+            evaluate(
+                "eval(\"var gzip=function(value){return 'var:'+value}\");eval(\"gzip('ok')\")"
+            ),
         )
         assertEquals("undefined", evaluate("eval(\"let lexical='value'\");typeof lexical"))
         assertEquals("undefined", evaluate("with({}){const scoped='value'}typeof scoped"))
@@ -148,12 +150,12 @@ class V8ApplicationScriptTest {
         assertEquals("/artist/1|n|1|true", result)
         assertTrue(
             runCatching {
-                    DartSourceEngine.evaluate(
-                        source,
-                        "java.getElements('#video-artist-name a').html()",
-                        mapOf("result" to html),
-                    )
-                }
+                DartSourceEngine.evaluate(
+                    source,
+                    "java.getElements('#video-artist-name a').html()",
+                    mapOf("result" to html),
+                )
+            }
                 .isFailure
         )
     }
@@ -217,7 +219,8 @@ class V8ApplicationScriptTest {
     fun cancellationInterruptsNativeLoopAndLeavesNextRequestUsable() = runBlocking {
         val failure = runCatching {
             withTimeout(150) { evaluate("while(true){}") }
-        }.exceptionOrNull()
+        }
+            .exceptionOrNull()
         assertTrue(failure is CancellationException)
         assertEquals("healthy", evaluate("'healthy'"))
     }
@@ -286,7 +289,8 @@ class V8ApplicationScriptTest {
         assertTrue(timeout is ReplacePreviewException)
         val cancelled = runCatching {
             withTimeout(100) { ReplacePreview.apply(rule.copy(timeoutMillisecond = 3000), "x") }
-        }.exceptionOrNull()
+        }
+            .exceptionOrNull()
         assertTrue(cancelled is CancellationException)
     }
 
@@ -304,14 +308,16 @@ class V8ApplicationScriptTest {
     fun runtimeErrorsReachCallerAndNestedErrorsRetainTheirMessage() = runBlocking {
         val thrown = runCatching {
             evaluate("var prefix='ok';\nthrow new Error('boom');")
-        }.exceptionOrNull()
+        }
+            .exceptionOrNull()
         assertNotNull(thrown)
         assertTrue(thrown!!.message.orEmpty().contains("boom"))
         val nested = runCatching {
             evaluate(
                 "function inner(){var value=null;return value.missing()}function outer(){return inner()}outer()"
             )
-        }.exceptionOrNull()
+        }
+            .exceptionOrNull()
         assertNotNull(nested)
         assertTrue(nested!!.message.orEmpty().contains("missing"))
     }
