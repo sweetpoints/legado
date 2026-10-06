@@ -19,7 +19,7 @@ import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
 import io.legado.app.model.sourceEngine.BookSourceScriptBridge
-import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.LegacySourceScriptRunner
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.utils.GSON
@@ -430,23 +430,8 @@ interface BaseSource : JsExtensions {
                 }
             }
         }
-        val script = """
-            (async function() {
-                var nativeJava = globalThis.java;
-                var java = new Proxy(Object.create(null), {
-                    get: (_, name) => ['get','put'].includes(String(name))
-                        ? (...args) => name === 'get' && args.length !== 1
-                            ? nativeJava[name](...args)
-                            : __sourceHostSync('analyze.' + String(name), args)
-                        : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
-                            ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
-                            : nativeJava && nativeJava[name]
-                });
-                return await eval(__baseSourceScript);
-            }).call(globalThis)
-        """.trimIndent()
-        return V8ScriptExecutor.evaluateBlocking(
-            script, values, context + callbacks, source = this,
+        return LegacySourceScriptRunner.evaluateBlocking(
+            jsStr, values, context + callbacks, source = this,
         )
     }
 }

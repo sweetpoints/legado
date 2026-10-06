@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.RssSource
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -160,5 +162,38 @@ class MainRssRepositoryTest {
         val result = repo.prepare(id(first))!!
         assertEquals(MainRssDestination.ReaderHtml, result.destination)
         assertEquals("<html>${first.getTag()}</html>", result.value)
+    }
+
+    @Test
+    fun legacyMetadataLibraryKeepsOwnerStateAndRefreshesCurrentSourceSnapshot() = runBlocking {
+        val source =
+            first.copy(
+                sourceUrl = "https://metadata-state-main.invalid",
+                jsLib =
+                    "var metadataCalls = 0; function nextMetadata() { metadataCalls++; return source.getTag() + ':' + source.getKey() + ':' + metadataCalls; }",
+            )
+        try {
+            withContext(Dispatchers.IO) {
+                assertEquals("First:${source.sourceUrl}:1", source.evalJS("nextMetadata()"))
+                val renamed = source.copy(sourceName = "Updated")
+                assertEquals("Updated:${source.sourceUrl}:2", renamed.evalJS("nextMetadata()"))
+                assertEquals("Updated", renamed.evalJS("sourceApi.getTag()"))
+                assertEquals(
+                    "stored",
+                    renamed.evalJS(
+                        "source.put('metadata-test','stored'); source.get('metadata-test')"
+                    ),
+                )
+                assertEquals(
+                    "function",
+                    V8ScriptExecutor.evaluate(
+                        "typeof source.variables.get('metadata-test').then",
+                        source = renamed,
+                    ),
+                )
+            }
+        } finally {
+            DartSourceEngine.clearSourceState(source)
+        }
     }
 }

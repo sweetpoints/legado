@@ -144,11 +144,22 @@ object SourceUiScriptRunner {
                             }
                             : previousJava && previousJava[name]
                     });
+                    const source = new Proxy(globalThis.source, {
+                        get: (target, name) => name === 'getTag' ? () => uiSourceTag
+                            : name === 'getKey' ? () => uiSourceKey
+                            : ['get','put'].includes(String(name)) ? java[name] : target[name]
+                    });
+                    const sourceApi = source;
                     return await eval(uiScript);
                 })()
                 """
                     .trimIndent(),
-                BookSourceScriptBridge.jsonBindings(bindings) + ("uiScript" to script),
+                BookSourceScriptBridge.jsonBindings(bindings) +
+                    mapOf(
+                        "uiScript" to script,
+                        "uiSourceTag" to source.getTag(),
+                        "uiSourceKey" to source.getKey(),
+                    ),
                 source = source,
             )
         }
