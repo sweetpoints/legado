@@ -47,8 +47,26 @@ object SourceUiScriptRunner {
                 error("Source navigation is suppressed for this operation")
             }
             when (method) {
-                "ui.get" -> extensions.get(text(0))
-                "ui.put" -> extensions.put(text(0), text(1))
+                "ui.get",
+                "analyze.get" -> extensions.get(text(0))
+                "ui.put",
+                "analyze.put" -> extensions.put(text(0), text(1))
+                "sourceState.getLoginInfo" -> source.getLoginInfo()
+                "sourceState.putLoginInfo" -> source.putLoginInfo(text(0))
+                "sourceState.getLoginHeader" -> source.getLoginHeader()
+                "sourceState.putLoginHeader" -> {
+                    source.putLoginHeader(text(0))
+                    null
+                }
+                "sourceState.getVariable" -> source.getVariable()
+                "sourceState.putVariable" -> {
+                    source.putVariable(optional(0))
+                    null
+                }
+                "sourceState.removeLoginInfo" -> {
+                    source.removeLoginInfo()
+                    null
+                }
                 "ui.getString" ->
                     extensions.analyzeRule.withScriptCallback {
                         if (args.size == 2 && args[1] is Boolean) {
