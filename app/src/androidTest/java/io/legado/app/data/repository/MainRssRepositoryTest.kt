@@ -6,8 +6,12 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.RssSource
+import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceUiScriptRunner
 import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.ui.rss.read.RssJsExtensions
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -177,6 +181,28 @@ class MainRssRepositoryTest {
                 assertEquals("First:${source.sourceUrl}:1", source.evalJS("nextMetadata()"))
                 val renamed = source.copy(sourceName = "Updated")
                 assertEquals("Updated:${source.sourceUrl}:2", renamed.evalJS("nextMetadata()"))
+                assertEquals(
+                    "Updated:${source.sourceUrl}:3",
+                    AnalyzeRule(source = renamed).evalJS("nextMetadata()"),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:4",
+                    AnalyzeUrl(
+                            mUrl = "https://metadata-state-main.invalid/no-network",
+                            source = renamed,
+                            coroutineContext = coroutineContext,
+                        )
+                        .evalJS("nextMetadata()"),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:5",
+                    SourceUiScriptRunner.evaluate(
+                        renamed,
+                        "nextMetadata()",
+                        extensions = RssJsExtensions(null, renamed),
+                    ),
+                )
+                assertEquals("Updated:${source.sourceUrl}:6", renamed.evalJS("nextMetadata()"))
                 assertEquals("Updated", renamed.evalJS("sourceApi.getTag()"))
                 assertEquals(
                     "stored",
@@ -185,12 +211,13 @@ class MainRssRepositoryTest {
                     ),
                 )
                 assertEquals(
-                    "function",
+                    "function:function",
                     V8ScriptExecutor.evaluate(
-                        "typeof source.variables.get('metadata-test').then",
+                        "[typeof source.variables.get('metadata-test').then, typeof source.crypto.md5('abc').then].join(':')",
                         source = renamed,
                     ),
                 )
+                assertEquals("Updated:${source.sourceUrl}:7", renamed.evalJS("nextMetadata()"))
             }
         } finally {
             DartSourceEngine.clearSourceState(source)
