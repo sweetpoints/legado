@@ -20,7 +20,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PACKAGE = ROOT / 'flutter/packages/source_v8'
 RELEASE_MANIFEST = 'release-manifest.json'
-API_VERSION = '2026-03-10'
 MAX_METADATA_BYTES = 8 * 1024 * 1024
 MAX_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024
 MAX_MEMBERS = 10000
@@ -115,18 +114,39 @@ def validate_pin(pin, local_pins):
     return pin
 
 
+RELEASE_HOSTS = {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
+
+
+def validate_download_url(url, *, initial=False):
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != 'https' or parsed.hostname not in RELEASE_HOSTS
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port not in (None, 443) or parsed.fragment):
+        raise ValueError('Only trusted HTTPS public GitHub release downloads permitted')
+    if initial and (parsed.hostname != 'github.com' or parsed.query or
+                    not re.fullmatch(r'/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/download/[^/]+/[^/]+', parsed.path)):
+        raise ValueError('Initial SDK URL must identify an exact public release asset')
+
+
+class PublicReleaseRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        validate_download_url(new_url)
+        redirected = super().redirect_request(request, response, code, message, headers, new_url)
+        if redirected is not None:
+            redirected.remove_header('Authorization')
+            redirected.remove_header('Cookie')
+        return redirected
+
+
 def download(url, destination, limit):
-    """Bounded public GitHub download; credentials are never sent to redirects."""
-    if urllib.parse.urlsplit(url).scheme != 'https':
-        raise ValueError('Only HTTPS downloads permitted')
+    """Bounded public assets only; no API request, token lookup or credentials."""
+    validate_download_url(url, initial=True)
     request = urllib.request.Request(url, headers={
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': API_VERSION,
+        'Accept': 'application/octet-stream',
         'User-Agent': 'legado-v8-pinned-consumer',
     })
-    with urllib.request.urlopen(request, timeout=60) as response:
-        if urllib.parse.urlsplit(response.geturl()).scheme != 'https':
-            raise ValueError('Download redirected outside HTTPS')
+    with urllib.request.build_opener(PublicReleaseRedirect()).open(request, timeout=60) as response:
+        validate_download_url(response.geturl())
         size = 0
         with Path(destination).open('wb') as output:
             while True:
@@ -147,21 +167,13 @@ def _download_checked(downloader, url, path, digest, size=None):
         raise ValueError('Release asset SHA256 mismatch')
 
 
-def _release_asset(release, pin, name, digest=None, size=None):
-    if release.get('tag_name') != pin['tag'] or release.get('draft') is not False or release.get('prerelease') is not False:
-        raise ValueError('Release must be the exact published stable pinned tag')
-    matches = [a for a in release.get('assets', []) if isinstance(a, dict) and a.get('name') == name]
-    if len(matches) != 1:
-        raise ValueError('Pinned release asset missing or duplicated')
-    asset = matches[0]
+def release_asset_url(pin, name):
+    _relative(name)
+    if '/' in name:
+        raise ValueError('Release asset name must not contain a directory')
     url = ('https://github.com/' + pin['repository'] + '/releases/download/' +
            urllib.parse.quote(pin['tag'], safe='') + '/' + urllib.parse.quote(name, safe=''))
-    if asset.get('state') != 'uploaded' or asset.get('browser_download_url') != url:
-        raise ValueError('Unexpected release asset download origin/state')
-    if size is not None and asset.get('size') != size:
-        raise ValueError('Release metadata asset size differs from pin')
-    if asset.get('digest') is not None and asset['digest'] != 'sha256:' + digest:
-        raise ValueError('GitHub asset digest differs from pin')
+    validate_download_url(url, initial=True)
     return url
 
 
@@ -329,19 +341,15 @@ def install(pin, target, *, local_pins=None,
     try:
         with tempfile.TemporaryDirectory(prefix='.sdk-', dir=cache_root) as directory:
             work = Path(directory)
-            api = 'https://api.github.com/repos/' + pin['repository'] + '/releases/tags/' + urllib.parse.quote(pin['tag'], safe='')
-            release_path = work / 'release.json'
-            downloader(api, release_path, MAX_METADATA_BYTES)
-            release = _object(json.loads(release_path.read_text()), 'Release response')
             release_manifest_path = work / RELEASE_MANIFEST
-            url = _release_asset(release, pin, RELEASE_MANIFEST, pin['releaseManifestSha256'])
+            url = release_asset_url(pin, RELEASE_MANIFEST)
             _download_checked(downloader, url, release_manifest_path, pin['releaseManifestSha256'])
             release_manifest = _object(json.loads(release_manifest_path.read_text()), 'Release manifest')
             _provenance(release_manifest, pin)
             advertised = [a for a in release_manifest.get('assets', []) if a.get('target') == target]
             if advertised != [asset]:
                 raise ValueError('Release manifest asset differs from reviewed pin')
-            url = _release_asset(release, pin, asset['name'], asset['sha256'], asset['size'])
+            url = release_asset_url(pin, asset['name'])
             archive = work / 'artifact.tar.gz'
             _download_checked(downloader, url, archive, asset['sha256'], asset['size'])
             incoming = work / 'incoming'; incoming.mkdir()

@@ -8,6 +8,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('v8_prebuilt', Path(__file__).with_name('prebuilt.py'))
 consumer = importlib.util.module_from_spec(SPEC)
@@ -151,7 +152,9 @@ class PrebuiltContractTests(unittest.TestCase):
             self.assertFalse(manifest['targets']['android-arm64']['validation']['runtimeTested'])
             self.assertEqual(consumer.sha(root / 'android-arm64/libv8_monolith.a'), manifest['targets']['android-arm64']['sha256'])
             self.assertEqual(len(list(root.glob('licenses/**/*NOTICE'))), 1)
-            self.assertTrue(f.urls[0].endswith('/releases/tags/v8-15.4.80.24'))
+            self.assertTrue(f.urls[0].endswith('/releases/download/v8-15.4.80.24/release-manifest.json'))
+            self.assertEqual(len(f.urls), 2)
+            self.assertFalse(any('api.github.com' in url for url in f.urls))
             self.assertFalse(any('/latest' in url for url in f.urls))
             self.assertEqual(json.loads((root / 'pins.json').read_text()), f.local)
 
@@ -186,15 +189,55 @@ class PrebuiltContractTests(unittest.TestCase):
                 self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
                 self.assertFalse(list(Path(directory).glob('*.lock')))
 
-    def test_wrong_tag_draft_prerelease_asset_origin_or_digest_is_rejected(self):
-        mutations = [lambda r: r.update(tag_name='v8-other'), lambda r: r.update(draft=True),
-                     lambda r: r.update(prerelease=True),
-                     lambda r: r['assets'][0].update(browser_download_url='https://untrusted.invalid/file'),
-                     lambda r: r['assets'][0].update(digest='sha256:' + 'd' * 64)]
-        for mutate in mutations:
-            f = Fixture(); mutate(f.release)
-            with tempfile.TemporaryDirectory() as directory:
-                with self.assertRaises(ValueError): f.install(directory)
+    def test_api_quota_and_mutable_api_metadata_are_not_build_inputs(self):
+        f = Fixture()
+        f.release = {'draft': True, 'tag_name': 'untrusted mutable metadata'}
+        fetch = f.fetch
+        def public_only(url, path, limit):
+            if 'api.github.com' in url:
+                raise AssertionError('Anonymous release API quota must not be used')
+            return fetch(url, path, limit)
+        with tempfile.TemporaryDirectory() as directory:
+            root = consumer.install(f.pin, 'android-arm64', local_pins=f.local,
+                                    cache_root=directory, downloader=public_only)
+            self.assertTrue((root / 'manifest.json').is_file())
+            self.assertTrue(all('/releases/download/' in url for url in f.urls))
+
+    def test_public_download_never_sends_environment_ci_tokens(self):
+        response = io.BytesIO(b'asset')
+        response.geturl = lambda: 'https://release-assets.githubusercontent.com/public-object?signature=fixture'
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'asset'
+            with patch.dict(consumer.os.environ, {'GITHUB_TOKEN': 'fixture-not-real', 'GH_TOKEN': 'fixture-not-real'}), \
+                    patch.object(consumer.urllib.request, 'build_opener') as opener:
+                opener.return_value.open.return_value = response
+                consumer.download('https://github.com/owner/repo/releases/download/v8-fixed/sdk.tar.gz', output, 5)
+                request = opener.return_value.open.call_args.args[0]
+                self.assertIsNone(request.get_header('Authorization'))
+                self.assertIsNone(request.get_header('Cookie'))
+                self.assertFalse(any('fixture-not-real' in value for _, value in request.header_items()))
+            self.assertEqual(output.read_bytes(), b'asset')
+
+    def test_download_origin_rejects_api_credentials_plain_http_and_untrusted_redirect(self):
+        urls = ['https://api.github.com/repos/owner/repo/releases/tags/v8-fixed',
+                'https://token@github.com/owner/repo/releases/download/v8-fixed/sdk.tar.gz',
+                'http://github.com/owner/repo/releases/download/v8-fixed/sdk.tar.gz',
+                'https://github.com/owner/repo/releases/download/v8-fixed/sdk.tar.gz?token=bad']
+        with patch.object(consumer.urllib.request, 'build_opener') as open_request:
+            for url in urls:
+                with self.assertRaises(ValueError):
+                    consumer.download(url, Path('/unused'), 100)
+            open_request.assert_not_called()
+        request = consumer.urllib.request.Request('https://github.com/owner/repo/releases/download/v8-fixed/sdk.tar.gz',
+                                                  headers={'Authorization': 'fixture-not-a-real-token', 'Cookie': 'fixture'})
+        handler = consumer.PublicReleaseRedirect()
+        redirected = handler.redirect_request(request, None, 302, 'Found', {},
+                                               'https://release-assets.githubusercontent.com/object?signature=public-asset')
+        self.assertIsNone(redirected.get_header('Authorization'))
+        self.assertIsNone(redirected.get_header('Cookie'))
+        for url in ['https://untrusted.invalid/object', 'http://release-assets.githubusercontent.com/object']:
+            with self.assertRaises(ValueError):
+                handler.redirect_request(request, None, 302, 'Found', {}, url)
 
     def test_wrong_source_revision_combined_bridge_and_moving_selector_fail_before_network(self):
         for key, value in [('tag', 'latest'), ('bridge', {'abi': 2, 'sourceSha256': 'c' * 64}),
