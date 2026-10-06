@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -71,15 +72,15 @@ object SourceCallBack {
         bookType: Int = 0,
         result: String? = null,
         noCall: (() -> Unit)? = null,
-    ) {
+    ): Job? {
         if (source == null || !source.eventListener) {
             noCall?.invoke()
-            return
+            return null
         }
         val jsStr = source.getContentRule().callBackJs
         if (jsStr.isNullOrEmpty()) {
             noCall?.invoke()
-            return
+            return null
         }
         val request =
             if (event == CLICK_CUSTOM_BUTTON || event == LONG_CLICK_CUSTOM_BUTTON) {
@@ -92,12 +93,12 @@ object SourceCallBack {
                     event,
                 )
             } else null
-        if (request != null && !pendingCustomButtons.add(request)) return
+        if (request != null && !pendingCustomButtons.add(request)) return null
         val browserKey = request?.let {
             GSON.toJson(listOf(it.sourceKey, it.bookUrl, it.chapterIndex, it.bookType, it.event))
         }
         // Finish on Main after any showBrowser work posted by the script.
-        activity.lifecycleScope
+        return activity.lifecycleScope
             .launch(start = CoroutineStart.LAZY) {
                 if (
                     browserKey != null &&

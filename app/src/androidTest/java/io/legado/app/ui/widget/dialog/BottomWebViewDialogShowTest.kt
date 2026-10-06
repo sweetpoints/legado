@@ -28,6 +28,9 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.model.SourceCallBack
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.utils.defaultSharedPreferences
 import org.junit.After
@@ -139,10 +142,10 @@ class BottomWebViewDialogShowTest {
                 java.showBrowser('${source.bookSourceUrl}/dialog', html);
                 true;
             """.trimIndent()
+            var firstCallback: Job? = null
             scenario!!.onActivity { activity ->
-                repeat(2) {
-                    SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null)
-                }
+                firstCallback = SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null)
+                assertEquals(null, SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null))
             }
             assertTrue("The real source callback must reach HTTP", entered.await(5, TimeUnit.SECONDS))
             assertFalse("A second click must not launch another pending callback",
@@ -152,6 +155,9 @@ class BottomWebViewDialogShowTest {
                 visibleDialogs(manager) == 1
             })
             assertEquals(1, requests.get())
+            // A displayed dialog can precede the Dart task's completion. Await the
+            // actual callback claim cleanup before dismissing and starting a new one.
+            runBlocking { withTimeout(5_000) { checkNotNull(firstCallback).join() } }
             scenario!!.onActivity { activity ->
                 val dialog = activity.supportFragmentManager.fragments.filterIsInstance<BottomWebViewDialog>()
                     .single { it.dialog?.isShowing == true }
