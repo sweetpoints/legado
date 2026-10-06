@@ -3,7 +3,8 @@ package io.legado.app.model
 import android.content.Context
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.AutoTaskRule
-import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.help.source.withSourceNavigationContext
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.utils.stackTraceStr
 import java.time.Instant
 import java.time.ZoneId
@@ -11,6 +12,7 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 
 object AutoTaskRunner {
 
@@ -43,7 +45,21 @@ object AutoTaskRunner {
         val source = AutoTask.buildSource(task)
         Debug.log(source.bookSourceUrl, "Running ${task.name}")
         return try {
-            val rawResult = DartSourceEngine.evaluate(source, script)
+            val callerContext = currentCoroutineContext()
+            val caller = callerContext[SourceHostCallbacks]
+            val taskCallbacks = SourceHostCallbacks { method, arguments ->
+                if (method == "replacement.log") {
+                    require(arguments.size == 1) { "Task logging requires one JSON value" }
+                    source.log(arguments.firstOrNull())
+                } else {
+                    check(caller != null) { "Unbound task host callback: $method" }
+                    caller.call(method, arguments)
+                }
+            }
+            val taskSource = source.withSourceNavigationContext(callerContext + taskCallbacks)
+            val rawResult = runInterruptible {
+                taskSource.evalJS(taskScriptWrapper) { put("__autoTaskScript", script) }
+            }
             currentCoroutineContext().ensureActive()
             val actionLogs = mutableListOf<String>()
             val protocolSummary =
@@ -73,6 +89,29 @@ object AutoTaskRunner {
             failure(task, error, persist)
         }
     }
+
+    /** Task scripts keep opaque source ownership and scoped logging in the auxiliary V8 route. */
+    private val taskScriptWrapper =
+        """
+        (async function(__taskJava) {
+          const previousJava=globalThis.java;
+          const previousLog=globalThis.log;
+          const log=value=>__sourceHostSync('replacement.log',[value]);
+          const java=new Proxy(Object.create(null), {
+            get:(_,name)=>name==='log'?log:__taskJava&&__taskJava[name]
+          });
+          globalThis.java=java;
+          globalThis.log=log;
+          try {
+            return await eval(__autoTaskScript);
+          } finally {
+            globalThis.java=previousJava;
+            if(previousLog===undefined) delete globalThis.log;
+            else globalThis.log=previousLog;
+          }
+        }).call(globalThis,java)
+        """
+            .trimIndent()
 
     private fun failure(task: AutoTaskRule, error: Throwable, persist: Boolean): Result {
         val finishedAt = System.currentTimeMillis()
