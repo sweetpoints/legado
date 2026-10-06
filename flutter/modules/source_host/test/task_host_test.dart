@@ -238,13 +238,24 @@ void main() {
       'localBook.putVolume',
       'analyze.getString',
       'crypto.randomInt32',
+      'ui.upLoginData',
+      'ui.reLoginView',
+      'sourceState.getLoginHeader',
+      'sourceState.putVariable',
     ]) {
-      expect(await task.call(method, ['input']), ['input']);
+      final args = method == 'ui.upLoginData'
+          ? <Object?>[
+              {
+                'nested': [true, null, 1],
+              },
+            ]
+          : <Object?>['input'];
+      expect(await task.call(method, args), args);
       expect(calls.last.arguments, {
         'sourceId': 'auxiliary',
         'taskId': 'local-task',
         'method': method,
-        'arguments': ['input'],
+        'arguments': args,
       });
     }
   });

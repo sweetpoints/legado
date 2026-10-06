@@ -63,6 +63,29 @@ class SourcePlatform implements ScriptHost {
       case 'analyze.getElements':
       case 'analyze.getElement':
       case 'crypto.randomInt32':
+      case 'ui.get':
+      case 'ui.put':
+      case 'ui.searchBook':
+      case 'ui.addBook':
+      case 'ui.showPhoto':
+      case 'ui.open':
+      case 'ui.getString':
+      case 'ui.getStringList':
+      case 'ui.setContent':
+      case 'ui.setBaseUrl':
+      case 'ui.setRedirectUrl':
+      case 'ui.copyText':
+      case 'ui.upLoginData':
+      case 'ui.reLoginView':
+      case 'ui.refreshExplore':
+      case 'ui.clearTtsCache':
+      case 'sourceState.getLoginInfo':
+      case 'sourceState.putLoginInfo':
+      case 'sourceState.getLoginHeader':
+      case 'sourceState.putLoginHeader':
+      case 'sourceState.getVariable':
+      case 'sourceState.putVariable':
+      case 'sourceState.removeLoginInfo':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||
