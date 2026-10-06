@@ -104,7 +104,7 @@ object DartSourceEngine {
         val owner = original?.let(::ownerId) ?: sourceId
         require(sourceId == null || original == null || sourceId == owner) { "Auxiliary source identity mismatch" }
         val globals = bindings.toMutableMap()
-        require(globals.keys.none { it in setOf("java", "source", "sourceApi", "__sourceHostSync", "globalThis") }) {
+        require(globals.keys.none { it in setOf("java", "source", "sourceApi", "__sourceHostSync", "globalThis", "cookie", "cache", "global") }) {
             "V8 host bindings cannot be replaced"
         }
         original?.let {
@@ -112,13 +112,25 @@ object DartSourceEngine {
             globals.putIfAbsent("baseUrl", it.getKey())
         }
         val descriptor = original?.let {
+            val definition = (it as? BookSource)?.let { bookSource ->
+                GSON.fromJsonObject<Map<String, Any?>>(sourceJson(bookSource)).getOrNull()
+                    ?.takeIf { definition -> (definition["version"] as? Number)?.toDouble() == 1.0 }
+            }
             val headers = linkedMapOf<String, String>()
-            it.header?.let { text -> GSON.fromJsonObject<Map<String, String>>(text).getOrNull()?.let(headers::putAll) }
+            val modernHeaders = definition?.get("headers") as? Map<*, *>
+            if (modernHeaders != null) {
+                modernHeaders.forEach { (key, value) ->
+                    require(key is String && value is String) { "Modern auxiliary headers must be strings" }
+                    headers[key] = value
+                }
+            } else {
+                it.header?.let { text -> GSON.fromJsonObject<Map<String, String>>(text).getOrNull()?.let(headers::putAll) }
+            }
             if (headers.keys.none { key -> key.equals(AppConst.UA_NAME, ignoreCase = true) }) {
                 headers[AppConst.UA_NAME] = AppConfig.userAgent
             }
             it.getLoginHeaderMap()?.let(headers::putAll)
-            val base = runCatching { URI(it.getKey()) }.getOrNull()
+            val base = runCatching { URI(definition?.get("baseUrl") as? String ?: it.getKey()) }.getOrNull()
             buildMap<String, Any?> {
                 if (base?.scheme in setOf("http", "https") && !base?.host.isNullOrBlank()) put("baseUrl", base.toString())
                 put("headers", headers)

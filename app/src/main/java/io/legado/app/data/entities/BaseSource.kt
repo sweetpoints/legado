@@ -21,6 +21,7 @@ import io.legado.app.model.login.LoginUiV2
 import io.legado.app.model.sourceEngine.BookSourceScriptBridge
 import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -260,7 +261,7 @@ interface BaseSource : JsExtensions {
         }
     }
 
-    private fun configureScriptBindings(): MutableMap<String, Any?>.() -> Unit = {
+    private fun configureEvalBindings(): MutableMap<String, Any?>.() -> Unit = {
         put("result", mutableMapOf<String, String>())
         put("book", null)
         put("chapter", null)
@@ -280,7 +281,7 @@ interface BaseSource : JsExtensions {
                 JsSourceEngine.normalizeJsResult(
                     evalJS(
                         "${getLoginJs() ?: ""}\n$loginUiJs",
-                        configureScriptBindings()
+                        configureEvalBindings()
                     )
                 ).orEmpty()
             } else {
@@ -406,9 +407,46 @@ interface BaseSource : JsExtensions {
      */
     @Throws(Exception::class)
     fun evalJS(jsStr: String, bindingsConfig: MutableMap<String, Any?>.() -> Unit = {}): Any? {
-        val values = BookSourceScriptBridge.bindings(bindingsConfig)
+        val original = getSource() ?: this
+        val values = BookSourceScriptBridge.bindings(bindingsConfig).toMutableMap()
+        values["__baseSourceScript"] = jsStr
+        val context = getSourceNavigationContext()
+        val caller = context[SourceHostCallbacks]
+        val callbacks = SourceHostCallbacks { method, args ->
+            fun text(index: Int): String = args.getOrNull(index)?.toString() ?: ""
+            when (method) {
+                "analyze.get" -> original.get(text(0))
+                "analyze.put" -> original.put(text(0), text(1))
+                "sourceState.getLoginInfo" -> original.getLoginInfo()
+                "sourceState.putLoginInfo" -> original.putLoginInfo(text(0))
+                "sourceState.getLoginHeader" -> original.getLoginHeader()
+                "sourceState.putLoginHeader" -> { original.putLoginHeader(text(0)); null }
+                "sourceState.getVariable" -> original.getVariable()
+                "sourceState.putVariable" -> { original.putVariable(args.firstOrNull()?.toString()); null }
+                "sourceState.removeLoginInfo" -> { original.removeLoginInfo(); null }
+                else -> {
+                    check(caller != null) { "Unbound source callback: $method" }
+                    caller.call(method, args)
+                }
+            }
+        }
+        val script = """
+            (async function() {
+                var nativeJava = globalThis.java;
+                var java = new Proxy(Object.create(null), {
+                    get: (_, name) => ['get','put'].includes(String(name))
+                        ? (...args) => name === 'get' && args.length !== 1
+                            ? nativeJava[name](...args)
+                            : __sourceHostSync('analyze.' + String(name), args)
+                        : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
+                            ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
+                            : nativeJava && nativeJava[name]
+                });
+                return await eval(__baseSourceScript);
+            }).call(globalThis)
+        """.trimIndent()
         return V8ScriptExecutor.evaluateBlocking(
-            jsStr, values, getSourceNavigationContext(), source = this,
+            script, values, context + callbacks, source = this,
         )
     }
 }

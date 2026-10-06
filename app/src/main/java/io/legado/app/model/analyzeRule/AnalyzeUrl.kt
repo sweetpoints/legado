@@ -9,9 +9,6 @@ import cn.hutool.core.net.RFC3986
 import cn.hutool.core.util.HexUtil
 import com.bumptech.glide.load.model.GlideUrl
 import com.google.gson.annotations.SerializedName
-import com.script.buildScriptBindings
-import com.script.rhino.RhinoScriptEngine
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppConst.UA_NAME
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.BaseSource
@@ -39,11 +36,11 @@ import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.postForm
 import io.legado.app.help.http.postJson
 import io.legado.app.help.http.postMultipart
-import io.legado.app.help.source.getShareScope
-import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.Debug
-import io.legado.app.model.SharedJsScope
 import io.legado.app.model.sourceEngine.BookSourceLegacyEnginePolicy
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -142,9 +139,7 @@ class AnalyzeUrl(
         coroutineContext = coroutineContext.minusKey(ContinuationInterceptor)
         val urlMatcher = paramPattern.matcher(baseUrl)
         if (urlMatcher.find()) baseUrl = baseUrl.substring(0, urlMatcher.start())
-        (headerMapF ?: runScriptWithContext(coroutineContext) {
-            source?.getHeaderMap(hasLoginHeader && isLoginHeaderSite(mUrl))
-        })?.let {
+        (headerMapF ?: source?.getHeaderMap(hasLoginHeader && isLoginHeaderSite(mUrl)))?.let {
             headerMap.putAll(it)
             if (it.containsKey("proxy")) {
                 proxy = it["proxy"]
@@ -399,34 +394,45 @@ class AnalyzeUrl(
      * 执行JS
      */
     fun evalJS(jsStr: String, result: Any? = null): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["baseUrl"] = baseUrl
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings["page"] = page
-            bindings["key"] = key
-            bindings["speakText"] = speakText
-            bindings["speakSpeed"] = speakSpeed
-            bindings["book"] = ruleData as? Book
-            bindings["source"] = source
-            bindings["result"] = result
-            extraParams?.forEach { (name, value) ->
-                bindings[name] = if (name == "page") value.toIntOrNull() ?: value else value
-            }
-            bindings["infoMap"] = infoMap
+        val bindings = linkedMapOf<String, Any?>(
+            "baseUrl" to baseUrl, "page" to page, "key" to key,
+            "speakText" to speakText, "speakSpeed" to speakSpeed,
+            "book" to (ruleData as? Book)?.let { DartSourceEngine.jsonObject(it) },
+            "sourceData" to source?.let { DartSourceEngine.jsonObject(it) },
+            "result" to result, "infoMap" to infoMap,
+        )
+        extraParams?.forEach { (name, value) ->
+            bindings[name] = if (name == "page") value.toIntOrNull() ?: value else value
         }
-        val sharedGlobalStateKey = source?.getSharedGlobalStateKey()
-        val sharedScope = source?.getShareScope(coroutineContext)
-            ?: SharedJsScope.getCryptoScope(source ?: this, coroutineContext)
-        val scope = if (sharedScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings)
-        } else {
-            bindings.apply {
-                chainTo(sharedScope, sharedGlobalStateKey)
+        bindings["__analyzeScript"] = jsStr
+        val parentCallbacks = coroutineContext[SourceHostCallbacks]
+        val callbacks = SourceHostCallbacks { method, args ->
+            fun text(index: Int): String = args.getOrNull(index)?.toString() ?: ""
+            when (method) {
+                "analyze.get" -> get(text(0))
+                "analyze.put" -> put(text(0), text(1))
+                else -> {
+                    check(parentCallbacks != null) { "Unbound URL callback: $method" }
+                    parentCallbacks.call(method, args)
+                }
             }
         }
-        return RhinoScriptEngine.eval(jsStr, scope, coroutineContext)
+        val script = """
+            (async function() {
+                var nativeJava = globalThis.java;
+                var java = new Proxy(Object.create(null), {
+                    get: (_, name) => ['get','put'].includes(String(name))
+                        ? (...args) => name === 'get' && args.length !== 1
+                            ? nativeJava[name](...args)
+                            : __sourceHostSync('analyze.' + String(name), args)
+                        : nativeJava && nativeJava[name]
+                });
+                return await eval(__analyzeScript);
+            }).call(globalThis)
+        """.trimIndent()
+        return V8ScriptExecutor.evaluateBlocking(
+            script, bindings, coroutineContext + callbacks, source = source,
+        )
     }
 
     fun put(key: String, value: String): String {

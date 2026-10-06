@@ -122,6 +122,8 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                                                 callHost(task, method, arguments)
                                             }
                                         result.success(value)
+                                    } catch (error: SourceScriptException) {
+                                        result.error(error.code, error.message, null)
                                     } catch (error: Exception) {
                                         result.error("HOST_CALL_FAILED", error.message, null)
                                     } finally {
@@ -233,6 +235,10 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
         }
 
+    private fun protocolFailure(code: String, message: String?): Exception =
+        if (code in setOf("script_error", "syntax_error", "nested_script_requires_migration")) SourceScriptException(code, message.orEmpty())
+        else IllegalStateException("$code: ${message.orEmpty()}")
+
     private fun sourceIdentity(sourceJson: String): String {
         val source = GSON.fromJson(sourceJson, Map::class.java)
         return (source["id"] ?: source["bookSourceUrl"]) as? String
@@ -245,6 +251,11 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             "analyze.getElements", "analyze.getElement", "crypto.randomInt32",
             "replacement.log", "replacement.logType", "replacement.t2s", "replacement.s2t",
             "replacement.get", "replacement.put", "localBook.putVolume",
+            "ui.get", "ui.put", "ui.searchBook", "ui.addBook", "ui.showPhoto", "ui.open",
+            "ui.getString", "ui.getStringList", "ui.setContent", "ui.setBaseUrl", "ui.setRedirectUrl",
+            "ui.copyText", "ui.upLoginData", "ui.reLoginView", "ui.refreshExplore", "ui.clearTtsCache",
+            "sourceState.getLoginInfo", "sourceState.putLoginInfo", "sourceState.getLoginHeader",
+            "sourceState.putLoginHeader", "sourceState.getVariable", "sourceState.putVariable", "sourceState.removeLoginInfo",
         )
         if (method in callbackMethods) {
             val caller = task.context[SourceHostCallbacks]
@@ -374,7 +385,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                IllegalStateException("$code: ${message.orEmpty()}")
+                                protocolFailure(code, message)
                             )
                         }
 
@@ -425,7 +436,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                IllegalStateException("$code: ${message.orEmpty()}")
+                                protocolFailure(code, message)
                             )
                         }
 
@@ -483,7 +494,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                     object : MethodChannel.Result {
                         override fun success(result: Any?) { response.complete(result) }
                         override fun error(code: String, message: String?, details: Any?) {
-                            response.completeExceptionally(IllegalStateException("$code: ${message.orEmpty()}"))
+                            response.completeExceptionally(protocolFailure(code, message))
                         }
                         override fun notImplemented() {
                             response.completeExceptionally(IllegalStateException("V8 $method protocol unavailable"))
@@ -568,7 +579,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                IllegalStateException("$code: ${message.orEmpty()}")
+                                protocolFailure(code, message)
                             )
                         }
 
@@ -634,7 +645,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                IllegalStateException("$code: ${message.orEmpty()}")
+                                protocolFailure(code, message)
                             )
                         }
 
