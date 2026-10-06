@@ -73,6 +73,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
@@ -2324,10 +2325,11 @@ class ReadBookActivity :
                                     arguments.getOrNull(3) as? String,
                                 )
                             "browser.start" ->
-                                java.startBrowser(
+                                SourceVerificationHelp.startBrowser(
+                                    source,
                                     arguments[0] as String,
                                     arguments[1] as String,
-                                    arguments.getOrNull(2) as? String,
+                                    html = arguments.getOrNull(2) as? String,
                                 )
                             "browser.video" ->
                                 java.openVideoPlayer(
