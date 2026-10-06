@@ -1,6 +1,5 @@
 package io.legado.app.data.entities
 
-import com.script.ScriptBindings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,7 +54,7 @@ class BaseSourceHeaderTest {
 
         override fun evalJS(
             jsStr: String,
-            bindingsConfig: ScriptBindings.() -> Unit,
+            bindingsConfig: MutableMap<String, Any?>.() -> Unit,
         ): Any? {
             evaluatedScripts.add(jsStr)
             val value = if ("tag" in jsStr) "tag" else "prefix"

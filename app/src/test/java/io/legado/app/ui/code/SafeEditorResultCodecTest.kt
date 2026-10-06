@@ -1,8 +1,6 @@
 package io.legado.app.ui.code
 
 import com.google.gson.Gson
-import com.script.ScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.github.rosemoe.sora.text.Content
 import java.io.File
 import java.security.MessageDigest
@@ -155,18 +153,6 @@ class SafeEditorResultCodecTest {
             "40789fde39e23977976d6e5ca7f6d9ec294bbb0462f5e6563e64001b76b802eb",
             hash,
         )
-        val formatted =
-            RhinoScriptEngine.eval(
-                """
-                var window = {};
-                ${runtime.readText()}
-                window.js_beautify('function demo(){return 1;}', { indent_size: 4 });
-            """
-                    .trimIndent(),
-                ScriptBindings(),
-            )
-
-        assertEquals("function demo() {\n    return 1;\n}", formatted)
         assertTrue(license.readText().contains("The MIT License"))
         assertTrue(viewModel.contains("appCtx.assets.open(\"scripts/beautify.min.js\")"))
         assertFalse(viewModel.contains("cdnjs.cloudflare.com/ajax/libs/js-beautify"))

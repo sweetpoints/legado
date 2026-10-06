@@ -105,7 +105,6 @@ class BookSourceMigrationUiTest {
         }
         compose.onNodeWithText("书源引擎：Flutter/V8").assertIsDisplayed()
         compose.onNodeWithText("旧引擎").assertDoesNotExist()
-        compose.onNodeWithText("JVM / Rhino").assertDoesNotExist()
         compose.onNodeWithTag("source-engine-legacy").assertDoesNotExist()
         compose.onNodeWithTag("sourceMigrationPreview").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1, previews) }

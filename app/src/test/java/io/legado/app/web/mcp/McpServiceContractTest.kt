@@ -185,9 +185,13 @@ class McpServiceContractTest {
         assertFalse(bookBranch.contains("catch("))
         assertFalse(bookBranch.contains("mainJs"))
         val generalBranch = compactExecutor.substringAfter("}else{")
-        assertTrue(generalBranch.contains("if(source==null)RhinoScriptEngine.eval(script)"))
-        assertTrue(generalBranch.contains("elsesource.evalJS(script)"))
-        assertTrue(generalBranch.contains("JsSourceEngine.normalizeJsResult(raw,context)"))
+        assertTrue(generalBranch.contains("V8ScriptExecutor.evaluate(script,values)"))
+        assertTrue(
+            generalBranch.contains(
+                "V8ScriptExecutor.evaluate(wrapped,values+(\"__mcpSource\"tometadata))"
+            )
+        )
+        assertTrue(generalBranch.contains("JsSourceEngine.normalizeJsResult(raw)"))
         assertFalse(compactExecutor.contains("catch("))
         assertTrue(evalTool.contains("catch (error: CancellationException)"))
         assertFalse(evalTool.contains("debugScope.async"))

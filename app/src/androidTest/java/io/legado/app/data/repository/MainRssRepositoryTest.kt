@@ -154,7 +154,7 @@ class MainRssRepositoryTest {
     }
 
     @Test
-    fun realRhinoStartHtmlEvaluationRetainsRuleContextAndLegacyNavigationChoice() = runBlocking {
+    fun realV8StartHtmlEvaluationRetainsRuleContextAndLegacyNavigationChoice() = runBlocking {
         val scripted = first.copy(startHtml = "@js:'<html>' + source.getTag() + '</html>'")
         withContext(Dispatchers.IO) { database.rssSourceDao.update(scripted) }
         val result = repo.prepare(id(first))!!

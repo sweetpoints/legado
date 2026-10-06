@@ -33,7 +33,7 @@ class AutoTaskDebugRepositoryTest {
     private fun repo() = AppAutoTaskDebugRepository(context, database, {}, directory)
 
     @Test
-    fun immutableSnapshotRunsRealRhinoStreamsScopedLogsAndDoesNotPersistRuntime() = runBlocking {
+    fun immutableSnapshotRunsRealV8StreamsScopedLogsAndDoesNotPersistRuntime() = runBlocking {
         val repository = repo()
         val task =
             AutoTaskRule(
@@ -102,7 +102,7 @@ class AutoTaskDebugRepositoryTest {
         }
 
     @Test
-    fun realRunnerCancellationInterruptsRhinoAndScopedLeaseCleanupLeavesRuntimeUntouched() =
+    fun realRunnerCancellationInterruptsV8AndScopedLeaseCleanupLeavesRuntimeUntouched() =
         runBlocking {
             val repository = repo()
             val task =

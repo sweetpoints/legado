@@ -1,7 +1,5 @@
 package io.legado.app.model
 
-import com.script.rhino.RhinoInterruptError
-import com.script.rhino.RhinoScriptEngine
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import io.legado.app.data.entities.AutoTaskRule
@@ -14,8 +12,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
-import org.htmlunit.corejs.javascript.ConsString
-import org.htmlunit.corejs.javascript.Scriptable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -34,11 +30,12 @@ class AutoTaskCoreTest {
 
     @Test
     fun movesUsingTheAdjacentVisibleTask() {
-        val rules = listOf(
-            AutoTaskRule(id = "a", customOrder = 0),
-            AutoTaskRule(id = "hidden", customOrder = 1),
-            AutoTaskRule(id = "c", customOrder = 2)
-        )
+        val rules =
+            listOf(
+                AutoTaskRule(id = "a", customOrder = 0),
+                AutoTaskRule(id = "hidden", customOrder = 1),
+                AutoTaskRule(id = "c", customOrder = 2),
+            )
         val expectedVisibleOrder = listOf("c", "a")
 
         val reordered = mergeAutoTaskOrder(rules, expectedVisibleOrder)
@@ -58,7 +55,11 @@ class AutoTaskCoreTest {
         assertEquals("Update Test", task.name)
         assertEquals(AutoTask.DEFAULT_CRON, task.cron)
 
-        val action = AutoTaskProtocol.parseActions(RhinoScriptEngine.eval(task.script))?.single()
+        val action =
+            AutoTaskProtocol.parseActions(
+                    JsonParser.parseString(task.script.removePrefix("(").removeSuffix(")"))
+                )
+                ?.single()
         assertEquals("refreshToc", action?.get("type"))
         assertEquals(bookUrl, action?.get("bookUrl"))
         assertEquals(book.name, action?.get("bookName"))
@@ -76,22 +77,23 @@ class AutoTaskCoreTest {
     fun findsGeneratedBookUpdateTaskAfterSourceChange() {
         val oldBook = Book(bookUrl = "old", name = "Test", author = "Author")
         val oldTask = AutoTask.buildBookUpdateTask(oldBook, "Update Test")
-        val otherTask = AutoTask.buildBookUpdateTask(
-            Book(bookUrl = "other", name = "Test", author = "Other"),
-            "Update Other"
-        )
+        val otherTask =
+            AutoTask.buildBookUpdateTask(
+                Book(bookUrl = "other", name = "Test", author = "Other"),
+                "Update Other",
+            )
 
         assertEquals(
             oldTask,
             AutoTask.findBookUpdateTask(
                 listOf(oldTask, otherTask),
-                Book(bookUrl = "new", name = "Test", author = "Author")
-            )
+                Book(bookUrl = "new", name = "Test", author = "Author"),
+            ),
         )
         assertNull(
             AutoTask.findBookUpdateTask(
                 listOf(oldTask),
-                Book(bookUrl = "new", name = "Test", author = "Changed")
+                Book(bookUrl = "new", name = "Test", author = "Changed"),
             )
         )
     }
@@ -100,19 +102,21 @@ class AutoTaskCoreTest {
     fun buildsBatchBookUpdateTasksWithoutStealingExactMatches() {
         val movedBook = Book(bookUrl = "new", name = "Test", author = "Author")
         val exactBook = Book(bookUrl = "exact", name = "Test", author = "Author")
-        val movedTask = AutoTask.buildBookUpdateTask(
-            Book(bookUrl = "old", name = "Test", author = "Author"),
-            "Old"
-        )
+        val movedTask =
+            AutoTask.buildBookUpdateTask(
+                Book(bookUrl = "old", name = "Test", author = "Author"),
+                "Old",
+            )
         val exactTask = AutoTask.buildBookUpdateTask(exactBook, "Exact").copy(enable = false)
         val cron = "0 */2 * * *"
 
-        val tasks = AutoTask.buildBookUpdateTasks(
-            books = listOf(movedBook, exactBook),
-            existingTasks = listOf(exactTask, movedTask),
-            cron = cron,
-            nameOf = { "Update ${it.name}" }
-        )
+        val tasks =
+            AutoTask.buildBookUpdateTasks(
+                books = listOf(movedBook, exactBook),
+                existingTasks = listOf(exactTask, movedTask),
+                cron = cron,
+                nameOf = { "Update ${it.name}" },
+            )
 
         assertEquals(listOf(movedTask.id, exactTask.id), tasks.map { it.id })
         assertEquals(listOf(true, false), tasks.map { it.enable })
@@ -120,9 +124,12 @@ class AutoTaskCoreTest {
         assertEquals(
             listOf(movedBook.bookUrl, exactBook.bookUrl),
             tasks.map {
-                AutoTaskProtocol.parseActions(RhinoScriptEngine.eval(it.script))
-                    ?.single()?.get("bookUrl")
-            }
+                AutoTaskProtocol.parseActions(
+                        JsonParser.parseString(it.script.removePrefix("(").removeSuffix(")"))
+                    )
+                    ?.single()
+                    ?.get("bookUrl")
+            },
         )
     }
 
@@ -136,29 +143,27 @@ class AutoTaskCoreTest {
     @Test
     fun parsesProtocolArrayObjectAndWrapper() {
         assertEquals(1, AutoTaskProtocol.parseActions("{\"type\":\"notify\"}")?.size)
-        assertEquals(2, AutoTaskProtocol.parseActions("[{\"type\":\"notify\"},{\"type\":\"refreshToc\"}]")?.size)
-        assertEquals(1, AutoTaskProtocol.parseActions("{\"actions\":[{\"type\":\"notify\"}]}")?.size)
+        assertEquals(
+            2,
+            AutoTaskProtocol.parseActions("[{\"type\":\"notify\"},{\"type\":\"refreshToc\"}]")?.size,
+        )
+        assertEquals(
+            1,
+            AutoTaskProtocol.parseActions("{\"actions\":[{\"type\":\"notify\"}]}")?.size,
+        )
     }
 
     @Test
-    fun parsesRhinoProtocolWithLazyStrings() {
-        val result = RhinoScriptEngine.eval("var n = 1; [{type: 'notify', title: 'Task ' + n}]")
-        val array = result as Scriptable
-        val action = array.get(0, array) as Scriptable
-
-        assertTrue(action.get("title", action) is ConsString)
+    fun parsesDecodedProtocolStrings() {
+        val result = listOf(mapOf("type" to "notify", "title" to "Task 1"))
         assertEquals("Task 1", AutoTaskProtocol.parseActions(result)?.single()?.get("title"))
     }
 
     @Test
-    fun preservesCancellationWhileParsingRhinoProtocol() {
-        val result = RhinoScriptEngine.eval(
-            "[{type: 'notify', toJSON: function() { return this; }}]"
-        )
+    fun cancelledJobStopsProtocolParsing() {
         val job = Job().apply { cancel() }
-
         assertThrows(CancellationException::class.java) {
-            AutoTaskProtocol.parseActions(result, job)
+            AutoTaskProtocol.parseActions(listOf(mapOf("type" to "notify")), job)
         }
     }
 
@@ -169,10 +174,13 @@ class AutoTaskCoreTest {
 
     @Test
     fun boundsStoredLogLength() {
-        assertEquals(AutoTaskLogFormatter.MAX_LENGTH, AutoTaskLogFormatter.trim("x".repeat(8_000)).length)
+        assertEquals(
+            AutoTaskLogFormatter.MAX_LENGTH,
+            AutoTaskLogFormatter.trim("x".repeat(8_000)).length,
+        )
         assertEquals(
             AutoTaskLogFormatter.MAX_ERROR_LENGTH,
-            AutoTaskLogFormatter.trimError("x".repeat(8_000)).length
+            AutoTaskLogFormatter.trimError("x".repeat(8_000)).length,
         )
     }
 
@@ -197,11 +205,11 @@ class AutoTaskCoreTest {
     }
 
     @Test
-    fun rhinoWrappedCancellationIsNeverConvertedToFailure() {
-        val cancellation = CancellationException("stop Rhino")
+    fun wrappedCancellationIsNeverConvertedToFailure() {
+        val cancellation = CancellationException("stop V8 request")
         assertEquals(
             cancellation,
-            RhinoInterruptError(cancellation).autoTaskCancellation()
+            IllegalStateException("channel stopped", cancellation).autoTaskCancellation(),
         )
     }
 
@@ -217,7 +225,7 @@ class AutoTaskCoreTest {
                 clear = {
                     clearCount++
                     legacyJson = null
-                }
+                },
             )
         }
 
@@ -229,29 +237,35 @@ class AutoTaskCoreTest {
 
     @Test
     fun autoTaskJsonFieldsHaveStableSerializedNames() {
-        val expected = setOf(
-            "id",
-            "name",
-            "enable",
-            "cron",
-            "loginUrl",
-            "loginUi",
-            "loginCheckJs",
-            "comment",
-            "script",
-            "header",
-            "jsLib",
-            "concurrentRate",
-            "enabledCookieJar",
-            "customOrder",
-            "lastRunAt",
-            "lastResult",
-            "lastError",
-            "lastLog"
-        )
-        val serializedNames = AutoTaskRule::class.java.declaredFields.mapNotNull { field ->
-            field.getAnnotation(SerializedName::class.java)?.value
-        }.toSet()
+        val expected =
+            setOf(
+                "id",
+                "name",
+                "enable",
+                "cron",
+                "loginUrl",
+                "loginUi",
+                "loginCheckJs",
+                "comment",
+                "script",
+                "header",
+                "jsLib",
+                "concurrentRate",
+                "enabledCookieJar",
+                "customOrder",
+                "lastRunAt",
+                "lastResult",
+                "lastError",
+                "lastLog",
+            )
+        val serializedNames =
+            AutoTaskRule::class
+                .java
+                .declaredFields
+                .mapNotNull { field ->
+                    field.getAnnotation(SerializedName::class.java)?.value
+                }
+                .toSet()
 
         assertEquals(expected, serializedNames)
     }
@@ -260,26 +274,27 @@ class AutoTaskCoreTest {
     fun exportedAutoTaskJsonContainsOnlyReusableConfiguration() {
         assertEquals("[]", AutoTask.exportJson(emptyList()))
 
-        val rule = AutoTaskRule(
-            id = "task-id",
-            name = "task-name",
-            enable = false,
-            cron = "1 2 3 4 5",
-            loginUrl = "https://example.com/login",
-            loginUi = "login-ui",
-            loginCheckJs = "login-check",
-            comment = "comment",
-            script = "script",
-            header = "header",
-            jsLib = "library",
-            concurrentRate = "2/1000",
-            enabledCookieJar = false,
-            customOrder = 7,
-            lastRunAt = 8L,
-            lastResult = "result",
-            lastError = "error",
-            lastLog = "log",
-        )
+        val rule =
+            AutoTaskRule(
+                id = "task-id",
+                name = "task-name",
+                enable = false,
+                cron = "1 2 3 4 5",
+                loginUrl = "https://example.com/login",
+                loginUi = "login-ui",
+                loginCheckJs = "login-check",
+                comment = "comment",
+                script = "script",
+                header = "header",
+                jsLib = "library",
+                concurrentRate = "2/1000",
+                enabledCookieJar = false,
+                customOrder = 7,
+                lastRunAt = 8L,
+                lastResult = "result",
+                lastError = "error",
+                lastLog = "log",
+            )
 
         val json = AutoTask.exportJson(listOf(rule))
         val exported = JsonParser.parseString(json).asJsonArray.single().asJsonObject
@@ -299,9 +314,9 @@ class AutoTaskCoreTest {
                 "header",
                 "jsLib",
                 "concurrentRate",
-                "enabledCookieJar"
+                "enabledCookieJar",
             ),
-            exported.keySet()
+            exported.keySet(),
         )
         assertEquals(
             rule.copy(
@@ -311,7 +326,7 @@ class AutoTaskCoreTest {
                 lastError = null,
                 lastLog = null,
             ),
-            imported
+            imported,
         )
     }
 
@@ -330,7 +345,7 @@ class AutoTaskCoreTest {
                 clear = {
                     clearCount++
                     legacyJson = null
-                }
+                },
             )
         }
 
@@ -347,14 +362,25 @@ class AutoTaskCoreTest {
         var clearAttempts = 0
 
         runCatching {
-            loader.load(existing, read = { null }, persist = {}, clear = {
-                clearAttempts++
-                error("cleanup failed")
-            })
+            loader.load(
+                existing,
+                read = { null },
+                persist = {},
+                clear = {
+                    clearAttempts++
+                    error("cleanup failed")
+                },
+            )
         }
-        val result = loader.load(existing, read = { null }, persist = {}, clear = {
-            clearAttempts++
-        })
+        val result =
+            loader.load(
+                existing,
+                read = { null },
+                persist = {},
+                clear = {
+                    clearAttempts++
+                },
+            )
 
         assertEquals(existing, result)
         assertEquals(2, clearAttempts)
@@ -362,12 +388,14 @@ class AutoTaskCoreTest {
 
     @Test
     fun notificationIdRangesNeverOverlap() {
-        val taskIds = listOf(Int.MIN_VALUE, -1, 0, 9_999, Int.MAX_VALUE).map {
-            AutoTaskProtocol.taskNotificationId(it, "ignored")
-        } + AutoTaskProtocol.taskNotificationId(null, "task")
-        val bookIds = listOf("", "book", "another").map {
-            AutoTaskProtocol.bookUpdateNotificationId(it)
-        }
+        val taskIds =
+            listOf(Int.MIN_VALUE, -1, 0, 9_999, Int.MAX_VALUE).map {
+                AutoTaskProtocol.taskNotificationId(it, "ignored")
+            } + AutoTaskProtocol.taskNotificationId(null, "task")
+        val bookIds =
+            listOf("", "book", "another").map {
+                AutoTaskProtocol.bookUpdateNotificationId(it)
+            }
 
         assertTrue(taskIds.all { it in 30_000..39_999 })
         assertTrue(bookIds.all { it in 50_000..59_999 })
@@ -378,11 +406,11 @@ class AutoTaskCoreTest {
     fun notificationTextIsBoundedBeforePosting() {
         assertEquals(
             AutoTaskProtocol.MAX_NOTIFICATION_TITLE_LENGTH,
-            AutoTaskProtocol.trimNotificationTitle("x".repeat(1_000)).length
+            AutoTaskProtocol.trimNotificationTitle("x".repeat(1_000)).length,
         )
         assertEquals(
             AutoTaskProtocol.MAX_NOTIFICATION_CONTENT_LENGTH,
-            AutoTaskProtocol.trimNotificationContent("x".repeat(8_000)).length
+            AutoTaskProtocol.trimNotificationContent("x".repeat(8_000)).length,
         )
     }
 
@@ -396,45 +424,49 @@ class AutoTaskCoreTest {
             0,
             AutoTaskProtocol.countNewChapters(
                 before = listOf(chapter1),
-                after = listOf(volume, chapter1)
-            )
+                after = listOf(volume, chapter1),
+            ),
         )
         assertEquals(
             1,
             AutoTaskProtocol.countNewChapters(
                 before = listOf(volume, chapter1),
-                after = listOf(chapter1, chapter2)
-            )
+                after = listOf(chapter1, chapter2),
+            ),
         )
     }
 
     @Test
     fun findsNewContentChaptersByUrlAndSkipsVolumes() {
-        val old = listOf(
-            BookChapter(url = "volume", title = "Volume", isVolume = true),
-            BookChapter(url = "one", title = "Chapter 1"),
-            BookChapter(url = "two", title = "Chapter 2"),
-        )
-        val after = listOf(
-            BookChapter(url = "one", title = "Chapter 1"),
-            BookChapter(url = "new-volume", title = "New volume", isVolume = true),
-            BookChapter(url = "new", title = "New chapter"),
-            BookChapter(url = "two", title = "Chapter 2"),
-        )
+        val old =
+            listOf(
+                BookChapter(url = "volume", title = "Volume", isVolume = true),
+                BookChapter(url = "one", title = "Chapter 1"),
+                BookChapter(url = "two", title = "Chapter 2"),
+            )
+        val after =
+            listOf(
+                BookChapter(url = "one", title = "Chapter 1"),
+                BookChapter(url = "new-volume", title = "New volume", isVolume = true),
+                BookChapter(url = "new", title = "New chapter"),
+                BookChapter(url = "two", title = "Chapter 2"),
+            )
 
         assertEquals(1, AutoTaskProtocol.countNewChapters(old, after))
         assertEquals(
             listOf("new"),
-            AutoTaskProtocol.newContentChapters(old, after).map { it.url }
+            AutoTaskProtocol.newContentChapters(old, after).map { it.url },
         )
         assertTrue(
             AutoTaskProtocol.newContentChapters(
-                before = old,
-                after = listOf(
-                    BookChapter(url = "rotated-one", title = "Chapter 1"),
-                    BookChapter(url = "rotated-two", title = "Chapter 2"),
+                    before = old,
+                    after =
+                        listOf(
+                            BookChapter(url = "rotated-one", title = "Chapter 1"),
+                            BookChapter(url = "rotated-two", title = "Chapter 2"),
+                        ),
                 )
-            ).isEmpty()
+                .isEmpty()
         )
     }
 
@@ -444,18 +476,19 @@ class AutoTaskCoreTest {
         val second = BookChapter(url = "second")
         val attempts = mutableMapOf<String, Int>()
 
-        val failure = assertThrows(IllegalStateException::class.java) {
-            runBlocking {
-                AutoTaskProtocol.cacheChaptersWithRetry(
-                    chapters = listOf(first, second),
-                    retryDelayMillis = 0,
-                ) { chapter ->
-                    val attempt = attempts.getOrDefault(chapter.url, 0) + 1
-                    attempts[chapter.url] = attempt
-                    if (chapter == first || attempt < 3) error(chapter.url)
+        val failure =
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking {
+                    AutoTaskProtocol.cacheChaptersWithRetry(
+                        chapters = listOf(first, second),
+                        retryDelayMillis = 0,
+                    ) { chapter ->
+                        val attempt = attempts.getOrDefault(chapter.url, 0) + 1
+                        attempts[chapter.url] = attempt
+                        if (chapter == first || attempt < 3) error(chapter.url)
+                    }
                 }
             }
-        }
 
         assertEquals("first", failure.message)
         assertEquals(3, attempts["first"])

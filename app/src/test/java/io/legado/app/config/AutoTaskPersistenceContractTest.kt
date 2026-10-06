@@ -184,9 +184,9 @@ class AutoTaskPersistenceContractTest {
         assertTrue(protocol.contains("WebBook.getBookInfoAwait"))
         assertTrue(protocol.contains("WebBook.getChapterListAwait"))
         assertTrue(protocol.contains("appDb.runInTransaction"))
-        assertTrue(runner.contains("runScriptWithContext {"))
+        assertTrue(runner.contains("DartSourceEngine.evaluate(source, script)"))
         assertTrue(runner.contains("error.autoTaskCancellation()?.let { throw it }"))
-        assertTrue(runner.contains("is RhinoInterruptError -> cause as? CancellationException"))
+        assertTrue(runner.contains("else -> cause as? CancellationException"))
     }
 
     @Test
