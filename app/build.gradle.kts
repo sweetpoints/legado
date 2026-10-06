@@ -453,9 +453,7 @@ android {
     }
     defaultConfig {
         applicationId = "com.legado.app"
-        // 26：未裁剪的 HtmlUnit(Rhino fork) 含 MethodHandle.invoke 调用，D8 要求 --min-api 26。
-        // 原先仅在 .github/scripts/source-browser-test.init.gradle 里为测试变体绕过，
-        // 导致 assembleAppDebug 一直是坏的（release 因 R8 只告警而正常）。
+        // V8 native assets and the Flutter source host require Android API 26.
         minSdk = 26
         targetSdk = 36
         versionCode = versionCodeValue
@@ -719,7 +717,6 @@ dependencies {
     implementation(libs.json.path)
     implementation(libs.jsoupxpath)
     implementation(project(":modules:book"))
-    implementation(project(":modules:rhino"))
 
     // 网络
     implementation(libs.okhttp)

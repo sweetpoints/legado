@@ -33,12 +33,6 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven {
-            url = uri("$rootDir/third_party/maven")
-            content {
-                includeModule("org.htmlunit", "htmlunit-core-js")
-            }
-        }
         //原仓库
         google {
             content {
@@ -79,4 +73,3 @@ rootProject.name = "legado"
 
 include(":app")
 include(":modules:book")
-include(":modules:rhino")
