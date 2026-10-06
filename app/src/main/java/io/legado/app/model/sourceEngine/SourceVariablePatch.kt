@@ -48,6 +48,7 @@ data class SourceVariablePatch(
                     });
                     return delta;
                 }
+                const baseUrl = imageBaseUrl;
                 const bookVariables = facade(book, initialBookVariables);
                 const chapterVariables = facade(chapter, initialChapterVariables);
                 await eval(${GSON.toJson(code)});

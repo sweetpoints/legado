@@ -82,9 +82,6 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.paramPattern
 import io.legado.app.model.analyzeRule.ReviewRuleParser
@@ -2280,12 +2277,8 @@ class ReadBookActivity :
                         appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                             ?: throw Exception("no find chapter")
                     val urlNoOption = src.take(urlMatcher.start())
-                    AnalyzeRule(book, source).apply {
-                        setCoroutineContext(coroutineContext)
-                        setBaseUrl(chapter.url)
-                        setChapter(chapter)
-                        evalJS(jsStr, urlNoOption)
-                    }
+                    val java = SourceLoginJsExtensions(this@ReadBookActivity, source, BookType.text)
+                    evaluateImageClick(source, book, chapter, jsStr, urlNoOption, java)
                 }
                 .onError {
                     AppLog.put("执行图片链接js键值出错\n${it.localizedMessage}", it, true)
@@ -2362,6 +2355,7 @@ class ReadBookActivity :
                         "initialBookVariables" to book.variableMap.toMap(),
                         "initialChapterVariables" to chapter.variableMap.toMap(),
                         "result" to src,
+                        "imageBaseUrl" to chapter.getAbsoluteURL(),
                     ),
                 )
             }
