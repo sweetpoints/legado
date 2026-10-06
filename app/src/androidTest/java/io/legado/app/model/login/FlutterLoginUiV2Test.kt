@@ -212,10 +212,20 @@ class FlutterLoginUiV2Test {
 
     @Test
     fun synchronousV2EvaluationRejectsMainThread() = runBlocking {
-        val failure =
-            withContext(Dispatchers.Main.immediate) { runCatching { source.evalLoginUiV2("{}") } }
-        assertTrue(
-            failure.exceptionOrNull()?.message.orEmpty().contains("engine_migration_required")
-        )
+        val failures =
+            withContext(Dispatchers.Main.immediate) {
+                listOf(
+                    runCatching { source.evalLoginUiV2("{}") }.exceptionOrNull(),
+                    runCatching { source.evalLoginActionV2("sendCode", "{}", "{}") }
+                        .exceptionOrNull(),
+                )
+            }
+        failures.forEach { failure ->
+            assertTrue(
+                "Synchronous V8 calls must reject the main thread",
+                failure is IllegalStateException,
+            )
+            assertEquals("V8 scripts must be awaited on the main thread", failure?.message)
+        }
     }
 }
