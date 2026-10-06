@@ -202,6 +202,7 @@ jobs:
               echo "$package_kind APK contains unexpected native ABIs: $packaged_abis"
               exit 1
             fi
+            python3 .github/scripts/verify-v8-only.py --apk "$apk"
             verified[$package_kind]=$apk
           done
 
