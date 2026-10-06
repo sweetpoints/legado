@@ -13,6 +13,7 @@ import android.view.PixelCopy
 import android.view.View
 import android.view.Window
 import android.view.inspector.WindowInspector
+import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
@@ -296,7 +297,7 @@ class HighlightGroupUiTest {
         compose.onNodeWithTag("highlight-group-rename-confirm").performClick()
         awaitGroup("People")
         screenshot("highlight-group-manager")
-        pressBack()
+        dismissGroupManager()
         // Renaming the active group must not leave a stale, empty filter behind.
         awaitRules(dao.all)
 
@@ -310,7 +311,7 @@ class HighlightGroupUiTest {
         await { dao.all.count { it.group == namedUngrouped } == 3 }
         assertEquals("Quotes", dao.all.single { it.name == "Quote" }.group)
         assertNull(dao.all.single { it.name == "Loose rule" }.group)
-        pressBack()
+        dismissGroupManager()
         awaitRules(dao.all)
 
         filter("[$namedUngrouped]")
@@ -320,7 +321,7 @@ class HighlightGroupUiTest {
         compose.onNodeWithTag("highlight-group-choose-move").performClick()
         compose.onNodeWithTag("highlight-group-move-none").performClick()
         await { dao.all.count { it.group == null } == 4 }
-        pressBack()
+        dismissGroupManager()
         awaitRules(dao.all)
         filter(context.getString(R.string.no_group))
         awaitRules(dao.all.filter { it.group == null })
@@ -335,9 +336,16 @@ class HighlightGroupUiTest {
             fixtures.filter { it.group != "Quotes" }.map { it.uuid }.toSet(),
             dao.all.map { it.uuid }.toSet(),
         )
-        pressBack()
+        dismissGroupManager()
         awaitRules(dao.all)
         screenshot("highlight-group-after-move-delete")
+    }
+
+    private fun dismissGroupManager() {
+        compose.waitForIdle()
+        // Send real back events to the currently focused dialog. Espresso's
+        // cached root can still refer to its covered activity after a move.
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
     }
 
     @Test
