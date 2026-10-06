@@ -201,12 +201,26 @@ class McpServiceContractTest {
                     "app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt"
                 )
                 .compact()
-        assertTrue(sourceRunner.contains("valoriginal=source.getSource()?:source"))
-        assertTrue(
-            sourceRunner.contains("SharedJsScope.resolveLibrary(original.jsLib,coroutineContext)")
-        )
         assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
-        assertTrue(sourceRunner.contains("context,prelude=prelude(library),source=source"))
+        assertTrue(sourceRunner.contains("context,source=source"))
+        val auxiliary =
+            projectFile("app/src/main/java/io/legado/app/model/sourceEngine/DartSourceEngine.kt")
+                .substringAfter("object DartSourceEngine")
+                .substringAfter("suspend fun evaluateAuxiliary(")
+                .substringBefore("suspend fun checkAuxiliarySyntax(")
+                .compact()
+        assertTrue(auxiliary.contains("valoriginal=source?.let{it.getSource()?:it}"))
+        assertTrue(auxiliary.contains("valowner=original?.let(::ownerId)?:sourceId"))
+        assertTrue(
+            auxiliary.contains(
+                "SharedJsScope.resolveLibrary(original?.jsLib,currentCoroutineContext())"
+            )
+        )
+        assertTrue(auxiliary.contains("LegacySourceScriptRunner.prelude(library.orEmpty())"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceTag\"]=it.getTag()"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceKey\"]=it.getKey()"))
+        assertTrue(auxiliary.contains("backend.evaluateAuxiliary("))
+        assertTrue(auxiliary.contains("ownerPrelude,timeoutMs"))
         val auxiliaryExecutor =
             projectFile("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
         assertTrue(auxiliaryExecutor.contains("DartSourceEngine.evaluateAuxiliary("))

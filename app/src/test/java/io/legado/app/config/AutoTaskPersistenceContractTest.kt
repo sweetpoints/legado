@@ -205,11 +205,28 @@ class AutoTaskPersistenceContractTest {
             file("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
                 .readText()
         assertTrue(baseSource.contains("LegacySourceScriptRunner.evaluateBlocking("))
-        assertTrue(
-            sourceRunner.contains("SharedJsScope.resolveLibrary(original.jsLib, coroutineContext)")
-        )
         assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(sourceRunner.replace(Regex("\\s+"), "").contains("context,source=source"))
         assertTrue(executor.contains("DartSourceEngine.evaluateAuxiliary("))
+        // Shared library preload is centralized across source callers, not owned by the runner.
+        val auxiliary =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/DartSourceEngine.kt")
+                .readText()
+                .substringAfter("object DartSourceEngine")
+                .substringAfter("suspend fun evaluateAuxiliary(")
+                .substringBefore("suspend fun checkAuxiliarySyntax(")
+                .replace(Regex("\\s+"), "")
+        assertTrue(auxiliary.contains("valowner=original?.let(::ownerId)?:sourceId"))
+        assertTrue(
+            auxiliary.contains(
+                "SharedJsScope.resolveLibrary(original?.jsLib,currentCoroutineContext())"
+            )
+        )
+        assertTrue(auxiliary.contains("LegacySourceScriptRunner.prelude(library.orEmpty())"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceTag\"]=it.getTag()"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceKey\"]=it.getKey()"))
+        assertTrue(auxiliary.contains("backend.evaluateAuxiliary("))
+        assertTrue(auxiliary.contains("ownerPrelude,timeoutMs"))
         assertTrue(runner.contains("error.autoTaskCancellation()?.let { throw it }"))
         assertTrue(runner.contains("else -> cause as? CancellationException"))
     }
