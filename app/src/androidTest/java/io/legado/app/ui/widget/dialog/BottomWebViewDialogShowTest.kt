@@ -74,6 +74,42 @@ class BottomWebViewDialogShowTest {
     }
 
     @Test
+    fun browserWithoutSuppliedHtmlFetchesThroughTheDartSourceSession() {
+        val received = CountDownLatch(1)
+        var fixtureHeader: String? = null
+        val server = object : NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response {
+                fixtureHeader = session.headers["x-browser-fixture"]
+                received.countDown()
+                return newFixedLengthResponse(Response.Status.OK, "text/html",
+                    "<html><head><title>Dart browser request</title></head><body>Fetched page</body></html>")
+            }
+        }
+        server.start()
+        try {
+            source.header = """{"X-Browser-Fixture":"source-header"}"""
+            appDb.bookSourceDao.insert(source)
+            lateinit var browser: BottomWebViewDialog
+            scenario!!.onActivity { activity ->
+                browser = BottomWebViewDialog(source.bookSourceUrl, 0,
+                    "http://127.0.0.1:${server.listeningPort}/page")
+                browser.show(activity.supportFragmentManager, "dart-request")
+            }
+            assertTrue("The Dart HTTP request must reach the local server",
+                received.await(10, TimeUnit.SECONDS))
+            assertEquals("source-header", fixtureHeader)
+            assertTrue("The fetched document must render in the browser", awaitCondition {
+                val container = browser.view?.findViewById<View>(io.legado.app.R.id.web_view_container)
+                    as? android.view.ViewGroup
+                val web = container?.getChildAt(0) as? WebView
+                web?.title == "Dart browser request" && web.progress == 100
+            })
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun repeatedCustomCallbacksFetchOneDynamicPageAndCanReopen() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)

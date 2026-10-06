@@ -177,6 +177,7 @@ internal class AppExploreHomeRepository : ExploreHomeRepository {
                 val info = infoMap(url).apply { putAll(values) }
                 try {
                     evaluateExploreScript(source, action, info)
+                    callback.reUiView()
                 } catch (failure: Exception) {
                     currentCoroutineContext().ensureActive()
                     AppLog.put("ExploreUI Button JavaScript error", failure)
