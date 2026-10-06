@@ -1584,15 +1584,9 @@ class CodeSelectionUiTest {
 
     @Test
     fun reportedRssPreviewMeasuresOpeningImeAndEditsWithItsActualIcon() {
-        val connection =
-            java.net
-                .URL("https://github.com/user-attachments/files/32066159/shareRssSource.json")
-                .openConnection()
-                .apply {
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                }
-        val bytes = connection.getInputStream().use { it.readBytes() }
+        // CI prepares the original reporter bytes and verifies their pin before APK assembly.
+        val bytes =
+            instrumentation.context.assets.open("reported_rss_source.json").use { it.readBytes() }
         val digest =
             java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") {
                 "%02x".format(it.toInt() and 255)
