@@ -35,14 +35,14 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: flutter/packages/source_v8/.cache/ci-artifacts/android-arm64
-        key: official-v8-android-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/build.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
+        key: official-v8-android-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/release-pin.json', 'flutter/tool/v8/toolchain-pins.json', 'flutter/tool/v8/prepare_sdk.py', 'flutter/tool/v8/prebuilt.py', 'flutter/tool/v8/link_sdk.py', 'flutter/tool/v8/toolchains.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
     - name: Restore exact official Android x64 artifact
       id: native-x64
       uses: actions/cache/restore@v5
       with:
         path: flutter/packages/source_v8/.cache/ci-artifacts/android-x64
-        key: official-v8-android-x64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/build.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
-    - name: Build missing official native targets and merge verified caches
+        key: official-v8-android-x64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/pins.json', 'flutter/tool/v8/release-pin.json', 'flutter/tool/v8/toolchain-pins.json', 'flutter/tool/v8/prepare_sdk.py', 'flutter/tool/v8/prebuilt.py', 'flutter/tool/v8/link_sdk.py', 'flutter/tool/v8/toolchains.py', 'flutter/tool/v8/source_v8.gni', 'flutter/tool/cache-android-native.py', 'flutter/packages/source_v8/src/source_v8.cpp', 'flutter/packages/source_v8/src/source_v8.h', 'flutter/packages/source_v8/src/android_exports.map') }}
+    - name: Link missing application bridges from pinned SDKs and merge verified caches
       shell: bash
       env:
         ARM64_CACHE_HIT: ${{ steps.native-arm64.outputs.cache-hit }}
@@ -57,9 +57,8 @@ runs:
           if [[ "$hit" == true ]]; then
             python3 flutter/tool/cache-android-native.py import --target "$target" --cache "$cache"
           else
-            python3 flutter/tool/v8/build.py bootstrap --target "$target"
-            sudo "flutter/packages/source_v8/.cache/v8-source/$revision/android-arm64/v8/build/install-build-deps.sh" --no-prompt
-            python3 flutter/tool/v8/build.py build --target "$target" --jobs 2
+            sdkmanager "ndk;30.0.15729638"
+            python3 flutter/tool/v8/prepare_sdk.py --target "$target"
             python3 flutter/tool/cache-android-native.py export --target "$target" --cache "$cache"
           fi
         done

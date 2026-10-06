@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "v8Revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "clangScriptsRevision": "450d823868eaee61e2b2cb986e19aec287f16d58",
+    "packageVersion": "llvmorg-24-init-3796-g20e97c4b-4"
+  },
+  "hosts": {
+    "macos-arm64": {
+      "url": "https://commondatastorage.googleapis.com/chromium-browser-clang/Mac_arm64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "sha256": "264d803970f9b58ddbdc90464ad82e54cef642c58ec371ba5356dfa7342ece4d",
+      "size": 47226204,
+      "filesSha256": "40e25ae35d1119b232a8b10f4ce6fd23024ab703fc346500ce9bc80482b519c3"
+    },
+    "linux-x64": {
+      "url": "https://commondatastorage.googleapis.com/chromium-browser-clang/Linux_x64/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "sha256": "565f7d980b31411e76d9478731cf3f0ac907a46f274d289ea7f03d9137354053",
+      "size": 56894668,
+      "filesSha256": "b2f74c667ed457b8445ef36473ab7c2cfa3ff0f7cf5939fa92eed53828016a61"
+    }
+  },
+  "androidNdkVersion": "30.0.15729638"
+}

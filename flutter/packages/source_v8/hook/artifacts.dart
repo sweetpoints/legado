@@ -5,8 +5,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:code_assets/code_assets.dart';
 
-const v8Revision = 'e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee';
-const v8Version = '15.4.80.24';
+const v8Revision = 'c45871fec706a6e7b715e607065bb4578b23ce9f';
+const v8Version = '15.4.80.25';
 const depotToolsRevision = '8a5434051036b32412a2ecb10c213a72e3f3ccb9';
 const bridgeAbi = 1;
 
@@ -85,8 +85,8 @@ Future<VerifiedArtifact> verifyArtifact(
   final manifestFile = File('${artifactRoot.path}/manifest.json');
   if (!await manifestFile.exists()) {
     throw StateError(
-      'Official self-built V8 manifest is missing: ${manifestFile.path}. '
-      'Run flutter/tool/v8/build.py for $targetName, or configure '
+      'SDK-linked V8 bridge manifest is missing: ${manifestFile.path}. '
+      'Run flutter/tool/v8/prepare_sdk.py --target $targetName, or configure '
       'hooks.user_defines.source_v8.artifact_root in the root pubspec.yaml.',
     );
   }
@@ -110,6 +110,29 @@ Future<VerifiedArtifact> verifyArtifact(
   );
   final targets = _object(manifest['targets'], 'targets');
   final target = _object(targets[targetName], 'targets.$targetName');
+  final releasePinFile = File(
+    '${packageRoot.path}/../../tool/v8/release-pin.json',
+  );
+  final releasePin = _object(
+    jsonDecode(await releasePinFile.readAsString()),
+    'release pin',
+  );
+  final sdk = _object(target['sdkProvenance'], 'sdkProvenance');
+  _expect(sdk['target'], targetName, 'sdkProvenance.target');
+  _expect(
+    sdk['releaseManifestSha256'],
+    releasePin['releaseManifestSha256'] as String,
+    'sdkProvenance.releaseManifestSha256',
+  );
+  final manifestHashes = _object(
+    releasePin['sdkManifestSha256'],
+    'sdkManifestSha256',
+  );
+  _expect(
+    sdk['manifestSha256'],
+    manifestHashes[targetName] as String,
+    'sdkProvenance.manifestSha256',
+  );
   if (targetName == 'android-arm64' || targetName == 'android-x64') {
     _expect(target['minApi'], 26, '$targetName.minApi');
   } else if (targetName == 'macos-arm64') {
@@ -127,9 +150,7 @@ Future<VerifiedArtifact> verifyArtifact(
   }
   final binary = File('${artifactRoot.path}/$path');
   if (!await binary.exists()) {
-    throw StateError(
-      'Official self-built V8 binary is missing: ${binary.path}',
-    );
+    throw StateError('SDK-linked V8 bridge binary is missing: ${binary.path}');
   }
   final root = await artifactRoot.resolveSymbolicLinks();
   if (!(await binary.resolveSymbolicLinks()).startsWith('$root/')) {
@@ -144,6 +165,7 @@ Future<VerifiedArtifact> verifyArtifact(
   _expect(target['sha256'], digest, '$targetName.sha256');
   return VerifiedArtifact(binary, [
     manifestFile.uri,
+    releasePinFile.uri,
     binary.uri,
     ...sources.values.map((file) => file.uri),
   ], target);

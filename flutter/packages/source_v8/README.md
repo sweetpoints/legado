@@ -21,77 +21,46 @@ implementations must cooperate with task cancellation.
 
 ## Build provenance
 
-The default input is locally built official V8 **15.4.80.24**, pinned to
-`e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee`. This is the selected stable V8 version. The official source URLs and complete
-commit pins are recorded in [`../../tool/v8/pins.json`](../../tool/v8/pins.json).
-The pinned depot_tools revision is `8a5434051036b32412a2ecb10c213a72e3f3ccb9`.
+Legado consumes the published pure V8 SDK release
+[`v8-15.4.80.25`](https://github.com/sweetpoints/v8-prebuilt/releases/tag/v8-15.4.80.25),
+with upstream revision `c45871fec706a6e7b715e607065bb4578b23ce9f`.
+[`release-pin.json`](../../tool/v8/release-pin.json) fixes the release manifest,
+each SDK archive and extracted SDK manifest by SHA-256. Headers, static libraries,
+feature definitions, linking metadata and license inventories are authenticated.
+Legado does not build V8, fetch a source checkout, run GN/Ninja or fall back to
+self-building the engine. The retired build.py source-build command fails closed.
 
-The source build uses V8's DEPS-resolved Chromium compiler and custom libc++.
-The bridge and V8 are compiled in the same GN graph. Dart consumes only the
-`sv8_*` C ABI, rather than linking a separately built C++ bridge against an
-incompatible precompiled engine. The default path does not download a
-third-party precompiled V8 library and has no fallback to the former build.
-
-From the repository root, bootstrap or build the official source:
-
-```sh
-python3 flutter/tool/v8/build.py bootstrap --target macos-arm64
-python3 flutter/tool/v8/build.py build --target macos-arm64 --jobs 4
-```
-
-macOS ARM64 builds require a macOS ARM64 host. Android ARM64 and x86_64 require a Linux
-x86_64 build host:
+The native hook prepares a verified SDK and compiles only Legado's own
+`source_v8.cpp` bridge against the SDK's matching headers/static libraries.
+The minimal official Chromium Clang package is pinned by URL, archive size/SHA,
+file inventory and exact compiler version; its fixed source metadata is recorded
+in [`toolchain-pins.json`](../../tool/v8/toolchain-pins.json). There is no
+V8/depot_tools bootstrap to obtain this compiler.
 
 ```sh
-python3 flutter/tool/v8/build.py build --target android-arm64 --jobs 4
-python3 flutter/tool/v8/build.py build --target android-x64 --jobs 4
+python3 flutter/tool/v8/prepare_sdk.py --target macos-arm64
+python3 flutter/tool/v8/prepare_sdk.py --target android-arm64
+python3 flutter/tool/v8/prepare_sdk.py --target android-x64
 ```
 
-Source and tool caches are ignored under
-`flutter/packages/source_v8/.cache/v8-source/`. Output defaults to
-`flutter/packages/source_v8/.cache/self-built/<V8 commit>/manifest.json`, with
-per-target binaries beneath that directory. The source build emits the final
-shared bridge, GN arguments, actual dependency inventory, public defines,
-compiler/GN version information and collected license files. The license
-collector copies V8 LICENSE/AUTHORS and third_party LICENSE/COPYING/NOTICE/AUTHORS
-files into the artifact root, with individual hashes in the manifest. This is
-source notice collection rather than a complete license audit. No generated
-binaries are committed.
+macOS ARM64 uses the Xcode SDK with deployment target 13.0. Android requires
+API26 and installed NDK30.0.15729638, selected through ANDROID_SDK_ROOT or
+ANDROID_HOME. Both macOS ARM64 and Linux x64 hosts can link the Android bridge
+with the fixed compiler. The SDK supplies matching libc++, compiler-rt and unwind
+archives; the linker retains NDK CRT objects and avoids adding an unrelated
+implicit compiler runtime. All ten sv8 exports and Android16KiB LOAD alignment
+are checked on the resulting bridge.
 
-The manifest records V8/depot_tools pins, bridge ABI and source digest, target
-library SHA-256/size, minimum OS/API, GN arguments and their hash, DEPS and actual
-dependency-inventory hashes, public-defines hash and toolchain version. A target
-built by this script is marked built, with runtime/source-compatibility testing
-still false. Building a binary does not set those validation claims to true.
+Verified SDKs cache under `.cache/source_sdk/`; only application bridge outputs
+use the historical `.cache/self-built/<V8 revision>/` path. The name does not
+mean V8 was built here. Source changes invalidate all old bridge targets;
+publication remains atomic. Generated files are ignored, and no binary is committed.
+A user override `hooks.user_defines.source_v8.artifact_root` still requires the
+exact SDK and bridge provenance; it does not permit a source-build fallback.
 
-The native-assets hook reads these local artifacts. A custom root can be selected
-through the official Pub hooks user define:
-
-```yaml
-hooks:
-  user_defines:
-    source_v8:
-      artifact_root: /absolute/path/to/self-built/artifacts
-```
-
-That directory must contain the expected manifest and target artifact. Changing
-its path does not bypass source/version/integrity requirements. A missing or
-mismatched artifact is an explicit build error.
-
-Implemented source-build targets are macOS ARM64 (deployment target 13.0),
-Android ARM64 and Android x86_64 (API 26). The official Android x86_64 build completed on Linux x86_64. Its final library
-is 28,321,712 bytes (27.01 MiB), SHA-256
-`0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4`.
-ELF machine 62, three 16 KiB-aligned LOAD segments and ten sv8 exports were
-verified; DT_NEEDED contains only log/dl/m/c system libraries. The producer
-manifest still marks runtimeTested/sourceCompatibilityTested false; actual
-runtime/device acceptance remains pending. macOS remains ARM64 only. Every consuming macOS app must also set its actual Xcode
-`MACOSX_DEPLOYMENT_TARGET` to **13.0 or newer**; the generated example does so for
-all configurations. Flutter 3.47's native-assets tooling currently supplies a
-hardcoded macOS target version of 13 rather than reading the application's Xcode
-deployment target. A successful hook therefore does not verify the app's minimum
-OS setting. The hook also does not reject standalone Dart's default target of 12
-when executing locally: the supported runtime requirement remains macOS 13+.
+The supported Legado targets remain macOS ARM64 and Android ARM64/x86_64.
+Every macOS consumer must set its actual Xcode deployment target to13.0 or newer;
+a successful native hook does not verify the application's Xcode setting.
 
 For a macOS app signed with Hardened Runtime, the app's release entitlements
 must include `com.apple.security.cs.allow-jit = true`: this V8 build uses
@@ -106,16 +75,16 @@ write protection uses `pthread_jit_write_protect_np()`, so do not add
 with that API. This configuration change is separate from signed release
 acceptance and notarization.
 
-Intl and Temporal are disabled by the GN configuration; external
-startup data is disabled, so the snapshot is embedded. Other targets do not
-become supported merely because Flutter's generated example contains platform
-folders. The configurable 64 MiB old-generation limit is not a process memory hard
-cap.
-
+The selected full-feature SDK includes Intl, embedded ICU, default Temporal,
+JIT and WebAssembly. External startup data is disabled; snapshots are embedded.
+The configurable64MiB old-generation limit is not a process memory hard cap.
 License provenance is described in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-Use the collected notices from the actual official source build for distribution.
+Use the notices from the authenticated SDK archive for distribution.
 
-## Verification
+## Historical verification
+
+The following acceptance snapshot predates the15.4.80.25 SDK-consumer switch.
+It does not establish acceptance of the current bridge or application.
 
 The official source-built macOS ARM64 library has linked successfully and was
 loaded as V8 **15.4.80.24**. Its final library contains 10 `sv8_*` exports, is

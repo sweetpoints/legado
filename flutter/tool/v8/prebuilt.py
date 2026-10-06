@@ -310,6 +310,15 @@ def install(pin, target, *, local_pins=None,
     if destination.parent.is_symlink():
         raise ValueError('SDK revision directory symlink forbidden')
     destination.parent.mkdir(parents=True, exist_ok=True)
+    expected_manifest = pin.get('sdkManifestSha256', {}).get(target)
+    if expected_manifest is not None:
+        _digest(expected_manifest)
+        if destination.exists():
+            if destination.is_symlink() or sha(destination / 'manifest.json') != expected_manifest:
+                raise ValueError('Cached SDK manifest differs from reviewed release')
+            cached = json.loads((destination / 'manifest.json').read_text())
+            validate_sdk(destination, cached, pin, local_pins, target)
+            return destination
     lock = cache_root / ('.sdk-' + pin['v8']['revision'] + '-' + target + '.lock')
     try:
         lock.mkdir()
@@ -335,6 +344,8 @@ def install(pin, target, *, local_pins=None,
             _download_checked(downloader, url, archive, asset['sha256'], asset['size'])
             incoming = work / 'incoming'; incoming.mkdir()
             _extract(archive, incoming)
+            if expected_manifest is not None and sha(incoming / 'manifest.json') != expected_manifest:
+                raise ValueError('SDK manifest differs from reviewed release digest')
             manifest = _object(json.loads((incoming / 'manifest.json').read_text()), 'SDK manifest')
             archive_pins = _object(json.loads((incoming / 'pins.json').read_text()), 'Archive pins')
             for key in ('v8', 'depotTools'):

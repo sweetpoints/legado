@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "repository": "sweetpoints/v8-prebuilt",
+  "tag": "v8-15.4.80.25",
+  "releaseManifestSha256": "d01f58c45b713edcccf3fdc3bc5969d2eb417773d895522e3ae330df8c71f0f2",
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "version": "15.4.80.25"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  },
+  "assets": [
+    {
+      "name": "v8-15.4.80.25-android-arm64.tar.gz",
+      "sha256": "e521a76b6649f818b87c26aeb28cc739713763bbfef97b9e66bf7b7d75764cca",
+      "size": 59358330,
+      "target": "android-arm64"
+    },
+    {
+      "name": "v8-15.4.80.25-android-x64.tar.gz",
+      "sha256": "68144a7deabe3716d74bf28e711de6bf6cdbe7e50aca2894bb8c17a23846f05d",
+      "size": 60446539,
+      "target": "android-x64"
+    },
+    {
+      "name": "v8-15.4.80.25-macos-arm64.tar.gz",
+      "sha256": "6f43f0a9c25b0bae59d8b569e50884c6fb7e7ba9b4a8875ef4d3012ec81a2cc8",
+      "size": 53917923,
+      "target": "macos-arm64"
+    }
+  ],
+  "sdkManifestSha256": {
+    "android-arm64": "a5a63dd9e6a796c3443ac8e7d1a16cbd7b521f41c19032e34fe1f728fb58e99b",
+    "android-x64": "f5476e80bcb3215338acf50569615b6c8b577ab7b0107240e74c3a4e0c872faa",
+    "macos-arm64": "408deb50ea2ed8b683e3ad8c6e308cf275c7ca63e1e486947e9cb5382e631e84"
+  }
+}

@@ -39,27 +39,25 @@ concurrency:
 jobs:
   android-v8:
     runs-on: ubuntu-24.04
-    # Build both pinned architectures completely; cold source builds exceed 3h.
-    timeout-minutes: 360
+    # Download the fixed SDKs and compile only the application bridge.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Verify official build contracts
         run: python3 -m unittest discover -s flutter/tool/v8 -p 'test_*.py'
-      - name: Checkout fixed official V8 and toolchain
-        run: python3 flutter/tool/v8/build.py bootstrap --target android-arm64
-      - name: Install official Linux build dependencies
-        run: sudo flutter/packages/source_v8/.cache/v8-source/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee/android-arm64/v8/build/install-build-deps.sh --no-prompt
-      - name: Build Android ARM64 shared bridge from source
-        run: python3 flutter/tool/v8/build.py build --target android-arm64 --jobs 4
-      - name: Build Android x64 shared bridge from official source
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install pinned Android NDK sysroot
+        run: sdkmanager "ndk;30.0.15729638"
+      - name: Link both Android application bridges against pinned released SDKs
         run: |
-          python3 flutter/tool/v8/build.py bootstrap --target android-x64
-          sudo flutter/packages/source_v8/.cache/v8-source/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee/android-arm64/v8/build/install-build-deps.sh --no-prompt
-          python3 flutter/tool/v8/build.py build --target android-x64 --jobs 4
+          python3 flutter/tool/v8/prepare_sdk.py --target android-arm64
+          python3 flutter/tool/v8/prepare_sdk.py --target android-x64
       - uses: actions/upload-artifact@v4
         with:
           name: official-v8-android
-          path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
@@ -78,9 +76,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: official-v8-android
-          path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
-      - name: Build macOS ARM64 shared bridge from source
-        run: python3 flutter/tool/v8/build.py build --target macos-arm64 --jobs 4
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
+      - name: Link macOS ARM64 application bridge against pinned released SDK
+        run: python3 flutter/tool/v8/prepare_sdk.py --target macos-arm64
       - name: Verify Dart, native V8, and bridge contracts
         run: bash flutter/tool/check.sh
       - name: Verify AAR preparation contracts
@@ -126,7 +124,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: official-v8-android
-          path: flutter/packages/source_v8/.cache/self-built/e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
       - name: Bound App Gradle memory while leaving room for the emulator
         run: |
           set -euo pipefail

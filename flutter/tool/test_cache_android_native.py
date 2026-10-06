@@ -24,10 +24,13 @@ class NativeCacheTest(unittest.TestCase):
         notice.parent.mkdir()
         notice.write_bytes(license_bytes)
         pins = cache.verifier.builder.read_pins()
+        release_pin = json.loads((cache.verifier.HERE / 'v8/release-pin.json').read_text())
         manifest = {'schemaVersion': 1, 'v8': pins['v8'], 'depotTools': pins['depotTools'],
                     'bridge': {'abi': 1, 'sourceSha256': cache.verifier.builder.bridge_digest()},
                     'targets': {target: {'binary': f'{target}/libsource_v8.so', 'minApi': 26,
-                                        'size': binary.stat().st_size, 'sha256': cache.verifier.builder.sha(binary)}},
+                                        'size': binary.stat().st_size, 'sha256': cache.verifier.builder.sha(binary),
+                                        'sdkProvenance': {'target': target, 'manifestSha256': release_pin['sdkManifestSha256'][target],
+                                                          'releaseManifestSha256': release_pin['releaseManifestSha256']}}},
                     'licenses': [{'path': 'licenses/LICENSE', 'sha256': cache.verifier.builder.sha(notice)}]}
         (root / 'manifest.json').write_text(json.dumps(manifest))
         return root
@@ -44,6 +47,16 @@ class NativeCacheTest(unittest.TestCase):
         source = self.fixture('android-x64')
         (source / 'android-x64/libsource_v8.so').write_bytes(b'corrupt')
         with self.assertRaisesRegex(ValueError, 'checksum or size'):
+            cache.transfer(source, self.root / 'combined', 'android-x64')
+        self.assertFalse((self.root / 'combined').exists())
+
+    def test_cache_without_reviewed_sdk_origin_is_rejected(self):
+        source = self.fixture('android-x64')
+        manifest_path = source / 'manifest.json'
+        data = json.loads(manifest_path.read_text())
+        data['targets']['android-x64'].pop('sdkProvenance')
+        manifest_path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'pinned released V8 SDK'):
             cache.transfer(source, self.root / 'combined', 'android-x64')
         self.assertFalse((self.root / 'combined').exists())
 

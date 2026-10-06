@@ -142,6 +142,9 @@ def command(sdk_root, target, linking, compiler, sysroot, output, files):
     args += linking['linkOptions']
     args += ['--target=' + triple, '--sysroot=' + str(sysroot)]
     if suffix == '.so':
+        # SDK explicitly supplies compiler-rt/libunwind/libc++ archives. Keep
+        # NDK CRT objects, but do not add a second implicit host Clang runtime.
+        args += ['-nodefaultlibs', '-lc']
         args += ['-shared', '-Wl,--no-undefined', '-Wl,--exclude-libs,ALL',
                  '-Wl,--version-script=' + str(files['src/android_exports.map']), '-Wl,-z,max-page-size=16384',
                  '-Wl,-soname,libsource_v8.so']
@@ -279,7 +282,13 @@ def link(sdk_root, target, *, compiler, sysroot, nm, pins=None, cache_root=None,
             if previous is None and any(p.name != '.publish.lock' for p in destination.iterdir()):
                 raise ValueError('Existing bridge cache files have no provenance manifest')
             if previous:
-                verify_existing_cache(destination, previous, pins, bridge)
+                if previous.get('bridge') != bridge:
+                    # New application bridge source: verify the old cache, then
+                    # discard every old target instead of relabeling stale bytes.
+                    verify_existing_cache(destination, previous, pins, previous['bridge'])
+                    previous = None
+                else:
+                    verify_existing_cache(destination, previous, pins, bridge)
             staged = work / 'staged'
             if previous:
                 shutil.copytree(destination, staged)
@@ -308,7 +317,8 @@ def link(sdk_root, target, *, compiler, sysroot, nm, pins=None, cache_root=None,
                 'toolchain': {'clang': compiler_version}, 'binaryInspection': inspection,
                 'validation': {'built': True, 'runtimeTested': False, 'sourceCompatibilityTested': False},
                 'sdkProvenance': {'manifestSha256': sdk_manifest_hash, 'linkingSha256': sdk_linking_hash,
-                                  'monolithSha256': sdk_entry['sha256'], 'target': target},
+                                  'monolithSha256': sdk_entry['sha256'], 'target': target,
+                                  'releaseManifestSha256': json.loads((HERE / 'release-pin.json').read_text())['releaseManifestSha256']},
             }
             if 'depsSha256' in sdk_entry:
                 entry['depsSha256'] = sdk_entry['depsSha256']

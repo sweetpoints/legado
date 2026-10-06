@@ -37,7 +37,9 @@ Android书源的search/explore/info/toc/content默认全部调用Dart/V8，不�
 
 当前不是全部历史书源的等价替代。复杂旧脚本、Java 类互操作、未实现的宿主重载与 JSoup 专有规则会报告人工处理。分页、请求限速和部分编码已实现；浏览器、运行时与平台边界以 Reference 和实际测试为准。固定样本通过不代表所有联网书源或所有设备通过。
 
-V8默认从官方源码自编译：当前固定稳定版本15.4.80.24、源码commit e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee，depot_tools固定8a5434051036b32412a2ecb10c213a72e3f3ccb9。不默认使用第三方预编译引擎。源码构建入口为`python3 flutter/tool/v8/build.py build --target macos-arm64`（仓库根目录），Android ARM64/x86_64均需在Linux x86_64主机构建。来源、工具链、GN参数、最终库哈希及收集的许可证记录在自产manifest中，native hook只消费匹配的本地artifact。具体命令与manifest覆盖方式见[source_v8](packages/source_v8/README.md)。
+V8固定消费已发布[sweetpoints/v8-prebuilt v8-15.4.80.25](https://github.com/sweetpoints/v8-prebuilt/releases/tag/v8-15.4.80.25)，源码身份c45871fec706a6e7b715e607065bb4578b23ce9f。Legado禁止构建V8：release manifest、SDK包、headers/staticlibs/flags均严格SHA校验；只下载固定官方Clang工具链并编译自有C++桥接层。入口为 `python3 flutter/tool/v8/prepare_sdk.py --target macos-arm64`，Android对应android-arm64/android-x64。旧V8源码构建入口已禁用，无GN/Ninja/源码bootstrap或自编译fallback。详见[source_v8](packages/source_v8/README.md)。
+
+以下验收记录属于SDK消费者切换之前的历史轮次，不代表当前版本重新验收。
 
 构建实现现支持macOS ARM64及Android ARM64/x86_64；Android脚本/App默认双ABI，SOURCE_ENGINE_ANDROID_TARGETS可显式单选并映射flutterSourceAbis，单选仍强制Dart引擎。Android x86_64固定官方V8源码已在Linux amd64容器完成编译，库28,321,712字节（27.01 MiB），SHA-256为 `0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4`；ELF machine62、3个LOAD的16KiB对齐与10个sv8导出检查通过。默认双ABI Debug/Release AAR准备和两ABI哈希校验已通过，日志 `tmp/flutter-app-replacement-prepare-dual.log`；当前App验收见下文。新版官方源码macOS ARM64库已完成链接、实际加载15.4.80.24，本轮Flutter工作区378项测试、8项静态检查通过（64/60/15/23/22/173/1/20）。库大小46,032,368字节（43.90 MiB），SHA-256为`c704139a9965577130dedc8262170d13c119a0281ca15d719960f89fcbb0f8c7`，验证日志位于仓库根目录`tmp/flutter-source-check-legacy-scalars.log`。
 

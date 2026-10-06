@@ -34,6 +34,15 @@ void main() {
     binary = File('${directory.path}/macos-arm64/libsource_v8.dylib');
     await binary.parent.create();
     await binary.writeAsBytes([1, 2, 3, 4]);
+    final releasePin = jsonDecode(
+      await File('${package.path}/../../tool/v8/release-pin.json')
+          .readAsString(),
+    ) as Map;
+    Map<String, Object?> sdkOrigin(String target) => {
+      'target': target,
+      'releaseManifestSha256': releasePin['releaseManifestSha256'],
+      'manifestSha256': (releasePin['sdkManifestSha256'] as Map)[target],
+    };
     manifest = {
       'schemaVersion': 1,
       'v8': {'revision': v8Revision, 'version': v8Version},
@@ -48,6 +57,7 @@ void main() {
           'sha256': sha256.convert([1, 2, 3, 4]).toString(),
           'size': 4,
           'minMacOS': '13.0',
+          'sdkProvenance': sdkOrigin('macos-arm64'),
         },
       },
     };
@@ -64,18 +74,28 @@ void main() {
     () async {
       final artifact = await verify();
       expect(artifact.binary.path, binary.path);
-      expect(artifact.dependencies, hasLength(6));
+      expect(artifact.dependencies, hasLength(7));
     },
   );
   test('authenticates Android x64 and enforces its API floor', () async {
     final android = File('${directory.path}/android-x64/libsource_v8.so');
     await android.parent.create();
     await android.writeAsBytes([1, 2, 3, 4]);
+    final releasePin = jsonDecode(
+      await File('${package.path}/../../tool/v8/release-pin.json')
+          .readAsString(),
+    ) as Map;
     final entry = <String, Object>{
       'binary': 'android-x64/libsource_v8.so',
       'sha256': sha256.convert([1, 2, 3, 4]).toString(),
       'size': 4,
       'minApi': 26,
+      'sdkProvenance': {
+        'target': 'android-x64',
+        'releaseManifestSha256': releasePin['releaseManifestSha256'],
+        'manifestSha256':
+            (releasePin['sdkManifestSha256'] as Map)['android-x64'],
+      },
     };
     (manifest['targets'] as Map)['android-x64'] = entry;
     final file = File('${directory.path}/manifest.json');
@@ -93,6 +113,12 @@ void main() {
   });
   test('rejects a binary with changed contents', () async {
     await binary.writeAsBytes([4, 3, 2, 1]);
+    await expectLater(verify(), throwsStateError);
+  });
+  test('rejects a bridge linked from an unreviewed SDK manifest', () async {
+    (((manifest['targets'] as Map)['macos-arm64'] as Map)['sdkProvenance']
+            as Map)['manifestSha256'] =
+        '0' * 64;
     await expectLater(verify(), throwsStateError);
   });
   test('rejects stale bridge source digest', () async {
@@ -127,7 +153,7 @@ void main() {
         isA<StateError>().having(
           (error) => error.toString(),
           'message',
-          contains('Run flutter/tool/v8/build.py'),
+          contains('Run flutter/tool/v8/prepare_sdk.py'),
         ),
       ),
     );

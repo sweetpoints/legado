@@ -155,6 +155,19 @@ class PrebuiltContractTests(unittest.TestCase):
             self.assertFalse(any('/latest' in url for url in f.urls))
             self.assertEqual(json.loads((root / 'pins.json').read_text()), f.local)
 
+    def test_reviewed_manifest_allows_offline_cache_reuse_but_rejects_header_tampering(self):
+        f = Fixture()
+        f.pin['sdkManifestSha256'] = {'android-arm64': digest(encoded(f.manifests['android-arm64']))}
+        with tempfile.TemporaryDirectory() as directory:
+            root = f.install(directory)
+            f.urls.clear()
+            self.assertEqual(f.install(directory), root)
+            self.assertEqual(f.urls, [])
+            (root / 'android-arm64/include/v8.h').write_text('changed ABI header')
+            with self.assertRaises(ValueError):
+                f.install(directory)
+            self.assertEqual(f.urls, [])
+
     def test_downloaded_metadata_never_overrides_reviewed_archive_or_manifest_hash(self):
         for which in ('archive', 'manifest'):
             f = Fixture()

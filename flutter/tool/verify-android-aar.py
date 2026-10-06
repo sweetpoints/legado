@@ -36,6 +36,7 @@ def configured_targets(value=None):
 
 def native_provenance(target_names=None, root=None):
     pins = builder.read_pins()
+    release_pin = json.loads((HERE / 'v8/release-pin.json').read_text())
     root = root or builder.PACKAGE / '.cache/self-built' / pins['v8']['revision']
     manifest = json.loads((root / 'manifest.json').read_text())
     if (manifest.get('schemaVersion') != 1 or manifest['v8'] != pins['v8']
@@ -45,6 +46,10 @@ def native_provenance(target_names=None, root=None):
     targets = {}
     for name in target_names or configured_targets():
         target = manifest['targets'][name]
+        sdk = target.get('sdkProvenance', {})
+        if (sdk.get('target') != name or sdk.get('manifestSha256') != release_pin['sdkManifestSha256'][name]
+                or sdk.get('releaseManifestSha256') != release_pin['releaseManifestSha256']):
+            raise ValueError('Android bridge must consume the pinned released V8 SDK')
         binary = (root / target['binary']).resolve()
         if not binary.is_relative_to(root.resolve()) or target.get('minApi') != 26:
             raise ValueError('Invalid Android native artifact contract')
@@ -137,5 +142,5 @@ if __name__ == '__main__':
         main()
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
         raise SystemExit(f'Flutter source AAR preparation failed: {error}. '
-                         'Build the pinned official Android V8 artifact, then run '
+                         'Link the application bridge from the pinned released SDK with prepare_sdk.py, then run '
                          'bash flutter/tool/prepare-android-aar.sh with JDK 21 and Flutter 3.47.6.')

@@ -21,6 +21,18 @@ void main(List<String> args) async {
       configuredRoot ??
           input.packageRoot.resolve('.cache/self-built/$v8Revision/'),
     );
+    if (configuredRoot == null) {
+      final result = await Process.run('python3', [
+        input.packageRoot.resolve('../../tool/v8/prepare_sdk.py').toFilePath(),
+        '--target',
+        target,
+      ]);
+      if (result.exitCode != 0) {
+        throw StateError(
+          'Pinned SDK bridge preparation failed: ${result.stderr}',
+        );
+      }
+    }
     final artifact = await verifyArtifact(
       root,
       Directory.fromUri(input.packageRoot),
@@ -40,6 +52,17 @@ void main(List<String> args) async {
       throw StateError('V8 binary changed while copying; rerun the build');
     }
     output.dependencies.addAll(artifact.dependencies);
+    output.dependencies.addAll([
+      for (final name in [
+        'prepare_sdk.py',
+        'prebuilt.py',
+        'link_sdk.py',
+        'toolchains.py',
+        'pins.json',
+        'toolchain-pins.json',
+      ])
+        input.packageRoot.resolve('../../tool/v8/$name'),
+    ]);
     output.assets.code.add(
       CodeAsset(
         package: input.packageName,
