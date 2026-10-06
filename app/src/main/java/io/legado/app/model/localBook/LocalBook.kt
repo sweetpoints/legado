@@ -1,10 +1,9 @@
 package io.legado.app.model.localBook
 
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import android.net.Uri
 import android.util.Base64
 import androidx.documentfile.provider.DocumentFile
-import com.script.ScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
@@ -463,11 +462,10 @@ object LocalBook {
                 val js =
                     AppConfig.bookImportFileName + "\nJSON.stringify({author:author,name:name})"
                 //在脚本中定义如何分解文件名成书名、作者名
-                val jsonStr = RhinoScriptEngine.run {
-                    val bindings = ScriptBindings()
-                    bindings["src"] = tempFileName
-                    eval(js, bindings)
-                }.toString()
+                val jsonStr = V8ScriptExecutor.evaluateBlocking(
+                    js,
+                    mapOf("src" to tempFileName),
+                ).toString()
                 val bookMess = GSON.fromJsonObject<HashMap<String, String>>(jsonStr)
                     .getOrThrow()
                 name = bookMess["name"] ?: ""

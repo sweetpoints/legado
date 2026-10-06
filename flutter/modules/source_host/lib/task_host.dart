@@ -12,6 +12,20 @@ class TaskScriptHost implements ScriptHost {
     'browser.start',
     'browser.openUrl',
     'browser.video',
+    'replacement.log',
+    'replacement.logType',
+    'replacement.t2s',
+    'replacement.s2t',
+    'replacement.get',
+    'replacement.put',
+    'localBook.putVolume',
+    'analyze.get',
+    'analyze.put',
+    'analyze.getString',
+    'analyze.getStringList',
+    'analyze.getElements',
+    'analyze.getElement',
+    'crypto.randomInt32',
   };
   @override
   Future<Object?> call(String method, List<Object?> arguments) async {

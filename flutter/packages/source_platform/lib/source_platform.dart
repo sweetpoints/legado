@@ -49,6 +49,20 @@ class SourcePlatform implements ScriptHost {
       case 'browser.start':
       case 'browser.openUrl':
       case 'browser.video':
+      case 'replacement.log':
+      case 'replacement.logType':
+      case 'replacement.t2s':
+      case 'replacement.s2t':
+      case 'replacement.get':
+      case 'replacement.put':
+      case 'localBook.putVolume':
+      case 'analyze.get':
+      case 'analyze.put':
+      case 'analyze.getString':
+      case 'analyze.getStringList':
+      case 'analyze.getElements':
+      case 'analyze.getElement':
+      case 'crypto.randomInt32':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||

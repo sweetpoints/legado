@@ -222,4 +222,30 @@ void main() {
       expect(calls, hasLength(3));
     },
   );
+  test('application callbacks use the same isolated task channel', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return (call.arguments as Map)['arguments'];
+    });
+    final task = TaskScriptHost(
+      const SourcePlatform(sourceId: 'auxiliary'),
+      'local-task',
+    );
+    for (final method in [
+      'replacement.put',
+      'replacement.t2s',
+      'localBook.putVolume',
+      'analyze.getString',
+      'crypto.randomInt32',
+    ]) {
+      expect(await task.call(method, ['input']), ['input']);
+      expect(calls.last.arguments, {
+        'sourceId': 'auxiliary',
+        'taskId': 'local-task',
+        'method': method,
+        'arguments': ['input'],
+      });
+    }
+  });
 }
