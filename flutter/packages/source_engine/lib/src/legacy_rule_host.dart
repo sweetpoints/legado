@@ -26,17 +26,29 @@ abstract interface class LegacyRuleEvaluator {
 
 /// JSON-only transport to the Android parser; no JVM objects enter Dart/V8.
 class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
-  const HostLegacyRuleEvaluator({this.allowScripts = false});
+  const HostLegacyRuleEvaluator({
+    this.allowScripts = false,
+    this.allowWebScripts = false,
+  });
   final bool allowScripts;
+  final bool allowWebScripts;
 
   /// JS-bearing rules stay on V8, rather than reentering it from a host RPC.
-  static bool canEvaluate(String rule, {bool allowScripts = false}) =>
-      !RegExp(r'@webjs:', caseSensitive: false).hasMatch(rule) &&
+  static bool canEvaluate(
+    String rule, {
+    bool allowScripts = false,
+    bool allowWebScripts = false,
+  }) =>
+      (allowWebScripts ||
+          !RegExp(r'@webjs:', caseSensitive: false).hasMatch(rule)) &&
       (allowScripts ||
           !RegExp(r'@js:|<js>|\{\{', caseSensitive: false).hasMatch(rule));
   @override
-  bool supportsRule(String rule) =>
-      canEvaluate(rule, allowScripts: allowScripts);
+  bool supportsRule(String rule) => canEvaluate(
+    rule,
+    allowScripts: allowScripts,
+    allowWebScripts: allowWebScripts,
+  );
   @override
   Future<List<Object?>> evaluate(
     String rule,

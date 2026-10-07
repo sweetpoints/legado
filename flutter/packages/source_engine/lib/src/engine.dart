@@ -164,7 +164,34 @@ class SourceEngine {
       }
       return _records(result);
     }
+    final original = source.metadata['legacyOriginal'];
     var selectedStage = source.stages[operation];
+    if (operation == 'explore' &&
+        original is Map &&
+        legacyRuleEvaluator != null) {
+      Object? explore = original['ruleExplore'];
+      if (explore is String) {
+        try {
+          explore = jsonDecode(explore);
+        } on FormatException {
+          explore = null;
+        }
+      }
+      final bookList = explore is Map ? explore['bookList'] : null;
+      // Old BookList selects the entire SearchRule when Explore.bookList is blank.
+      // This is execution-only; original Explore fields and menu data remain intact.
+      if (bookList == null ||
+          (bookList is String && _trimLegacyLine(bookList).isEmpty)) {
+        final search = source.stages['search'];
+        if (search != null) {
+          selectedStage = SourceStage.fromJson({
+            ...search.toJson(),
+            'url': '{{exploreUrl}}',
+            'legacyRequestInput': 'exploreUrl',
+          });
+        }
+      }
+    }
     if (selectedStage == null) {
       throw EngineException('missing_stage', 'Source has no $operation stage');
     }
@@ -264,7 +291,6 @@ class SourceEngine {
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
     }
-    final original = source.metadata['legacyOriginal'];
     String? legacyHook(String group, String name) {
       if (original is! Map) return null;
       Object? container = original[group];
@@ -292,6 +318,9 @@ class SourceEngine {
         : null;
     final contentReplace = operation == 'content'
         ? legacyHook('ruleContent', 'replaceRegex')
+        : null;
+    final subContent = operation == 'content'
+        ? legacyHook('ruleContent', 'subContent')
         : null;
     final legacyHost = original is Map ? legacyRuleEvaluator : null;
     final scopedLegacy = legacyHost != null;
@@ -382,6 +411,8 @@ class SourceEngine {
     for (final hook in [
       if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) infoInit,
       if (contentReplace != null && contentReplace.isNotEmpty) contentReplace,
+      if (subContent != null && _trimLegacyLine(subContent).isNotEmpty)
+        subContent,
     ]) {
       if (legacyHost == null || !legacyHost.supportsRule(hook)) {
         throw const EngineException(
@@ -565,7 +596,9 @@ class SourceEngine {
           if (original is Map &&
               ((operation == 'info' && entry.key == 'init') ||
                   (operation == 'content' &&
-                      (entry.key == 'replaceRegex' || entry.key == 'title')))) {
+                      (entry.key == 'replaceRegex' ||
+                          entry.key == 'title' ||
+                          entry.key == 'subContent')))) {
             continue;
           }
           final isLink = {
@@ -667,9 +700,76 @@ class SourceEngine {
     }
     if (operation == 'content' && results.isNotEmpty) {
       final merged = Map<String, Object?>.from(results.first);
-      var content = results
-          .map((r) => r['content']?.toString() ?? '')
-          .join('\n');
+      final parts = results.map((r) => r['content']?.toString() ?? '').toList();
+      if (subContent != null && _trimLegacyLine(subContent).isNotEmpty) {
+        // Old BookContent reads the first page after pagination. Extraction
+        // failures propagate; only the subsequent optional URL/media work is caught.
+        final values = await legacyHost!.evaluate(
+          subContent,
+          firstPageBody,
+          firstPageContext!,
+          source: source,
+          operation: operation,
+          scalar: true,
+          cancellation: cancellation,
+        );
+        final raw = values.map(RuleEvaluator.text).join('\n');
+        if (input['__legacyOnLineTxt'] == true) {
+          parts.add(raw);
+        } else {
+          try {
+            var value = _trimLegacyLine(raw);
+            if (value.toLowerCase().startsWith('http')) {
+              if (nativeFetcher == null) {
+                throw const EngineException(
+                  'legacy_pipeline_host_required',
+                  'Legacy URL subcontent requires the native request pipeline',
+                );
+              }
+              final response = await nativeFetcher.fetch(
+                source,
+                operation,
+                input,
+                scopedContext(
+                  firstPageContext,
+                  requestScope,
+                  bookSnapshot,
+                  null,
+                ),
+                nextUrl: value,
+                cancellation: cancellation,
+              );
+              value = response.body;
+            }
+            if (input['__legacyIsAudio'] == true) {
+              chapterVariables['lyric'] = value;
+            } else if (input['__legacyIsVideo'] == true) {
+              chapterVariables['danmaku'] = value;
+            }
+            if (input['__legacyIsAudio'] == true ||
+                input['__legacyIsVideo'] == true) {
+              // The original putLyric/putDanmaku updates the entity outside
+              // rule evaluation. Seed a fresh parser scope with that full state,
+              // so its old dirty-key overlay cannot undo the external update.
+              firstPageContext = scopedContext(
+                firstPageContext,
+                scope(
+                  'post-subcontent',
+                  'chapter',
+                  bookVariables,
+                  chapterVariables,
+                ),
+                bookSnapshot,
+                chapterSnapshot,
+              );
+            }
+            // Ordinary text sources do not append subcontent in the original path.
+          } catch (_) {
+            cancellation?.throwIfCancelled();
+          }
+        }
+      }
+      var content = parts.join('\n');
       if (contentReplace != null && contentReplace.isNotEmpty) {
         content = content.split('\n').map(_trimLegacyLine).join('\n');
         final replaced = await legacyHost!.evaluate(
