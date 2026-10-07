@@ -30,6 +30,16 @@ class Host implements ScriptHost {
   }
 }
 
+class ConcurrentHost implements ScriptHost {
+  @override
+  Future<Object?> call(String method, List<Object?> args) async {
+    await Future<void>.delayed(
+      Duration(milliseconds: args.first == 'late' ? 60 : 10),
+    );
+    return '${args.first}!';
+  }
+}
+
 void main() {
   test('actual recursive callback rejects before queueing a second script VM entry', () async {
     final session = V8Runtime(persistent: true);
@@ -105,6 +115,125 @@ void main() {
         ScriptContext(host: Host()),
       ),
       'legacy!',
+    );
+  });
+  test(
+    'same-context synchronous await assimilates Promise and thenable',
+    () async {
+      expect(
+        await runtime.evaluate(
+          '''globalThis.sameVm = {count: 0};
+        const first = __sourceAwaitSync(Promise.resolve(20).then(value => {
+          sameVm.count++; return value + 1;
+        }));
+        const second = __sourceAwaitSync({then(resolve) {resolve(first * 2)}});
+        return [second, sameVm.count, __sourceAwaitSync("string")];''',
+          ScriptContext(host: Host()),
+        ),
+        [42, 1, 'string'],
+      );
+    },
+  );
+  test(
+    'same-context await services async host and preserves sync strings',
+    () async {
+      expect(
+        await runtime.evaluate(
+          '''globalThis.sameVm = "same";
+        const value = __sourceAwaitSync((async () => {
+          const one = await source.net.get("async");
+          return one + ":" + await source.net.get(sameVm);
+        })());
+        const syncString = __sourceHostSync("net.get", ["sync"]);
+        return [value + ":" + syncString, typeof syncString, sameVm];''',
+          ScriptContext(host: Host()),
+        ),
+        ['async!:same!:sync!', 'string', 'same'],
+      );
+    },
+  );
+  test(
+    'await preserves root Promise and late concurrent host responses',
+    () async {
+      expect(
+        await runtime.evaluate(
+          '''const late = source.net.get("late");
+        const immediate = __sourceAwaitSync(source.net.get("immediate"));
+        return immediate + ":" + await late;''',
+          ScriptContext(host: ConcurrentHost()),
+        ),
+        'immediate!:late!',
+      );
+    },
+  );
+  test('await rejects without replacing the original JS exception', () async {
+    expect(
+      await runtime.evaluate(
+        '''try { __sourceAwaitSync(Promise.reject(new Error("original"))); }
+        catch (error) { return error.message; }''',
+        ScriptContext(host: Host()),
+      ),
+      'original',
+    );
+  });
+  test(
+    'pending synchronous await inside microtask rejects and VM recovers',
+    () async {
+      final session = V8Runtime(persistent: true);
+      try {
+        await expectLater(
+          session.evaluate(
+            'Promise.resolve().then(() => __sourceAwaitSync(Promise.resolve(42).then(x => x)))',
+            ScriptContext(host: Host()),
+          ),
+          throwsA(
+            isA<EngineException>().having(
+              (error) => error.message,
+              'message',
+              contains('inside a microtask'),
+            ),
+          ),
+        );
+        expect(await session.evaluate('42', ScriptContext(host: Host())), 42);
+      } finally {
+        await session.close();
+      }
+    },
+  );
+  test('same-context await keeps original watchdog deadline', () async {
+    await expectLater(
+      runtime.evaluate(
+        '''const started = Date.now();
+        while (Date.now() - started < 50) {}
+        __sourceAwaitSync(new Promise(() => {}));''',
+        ScriptContext(host: Host(), timeout: const Duration(milliseconds: 80)),
+      ),
+      throwsA(
+        isA<EngineException>().having(
+          (error) => error.code,
+          'code',
+          'script_timeout',
+        ),
+      ),
+    );
+  });
+  test('cancellation interrupts same-context await', () async {
+    final token = CancellationToken();
+    final pending = runtime.evaluate(
+      '__sourceAwaitSync(new Promise(() => {}))',
+      ScriptContext(host: Host()),
+      cancellation: token,
+    );
+    Timer(const Duration(milliseconds: 60), token.cancel);
+    await expectLater(
+      pending,
+      throwsA(
+        isA<EngineException>().having(
+          (error) => error.code,
+          'code',
+          'cancelled',
+        ),
+      ),
     );
   });
   test('watchdog terminates busy script', () async {

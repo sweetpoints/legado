@@ -161,6 +161,100 @@ static void host_sync(const FunctionCallbackInfo<Value> &args) {
   else
     args.GetReturnValue().Set(v);
 }
+// Only the isolate owner consumes Promise responses. While it is blocked in
+// Script::Run, Dart's existing sync transport remains live on the caller isolate.
+static bool service_await_responses(Runtime *r, Local<Context> c,
+                                    bool forward_requests = true) {
+  auto *i = r->isolate;
+  std::map<int, std::pair<std::string, bool>> responses;
+  {
+    std::lock_guard<std::mutex> lock(r->mutex);
+    if (forward_requests) {
+      for (auto &request : r->requests)
+        r->sync_requests.push_back(std::move(request));
+      r->requests.clear();
+    }
+    for (auto it = r->sync_responses.begin(); it != r->sync_responses.end();) {
+      if (r->pending.count(it->first)) {
+        responses.emplace(it->first, std::move(it->second));
+        it = r->sync_responses.erase(it);
+      } else {
+        ++it; // A synchronous host callback owns this response.
+      }
+    }
+  }
+  for (const auto &response : responses) {
+    if (r->expired || i->IsExecutionTerminating()) return false;
+    Local<Value> value;
+    if (!JSON::Parse(c, str(i, response.second.first)).ToLocal(&value))
+      return false;
+    auto it = r->pending.find(response.first);
+    auto resolver = it->second.Get(i);
+    bool resolved = response.second.second
+        ? resolver->Reject(c, value).FromMaybe(false)
+        : resolver->Resolve(c, value).FromMaybe(false);
+    it->second.Reset();
+    r->pending.erase(it);
+    if (!resolved) return false;
+  }
+  return true;
+}
+static void await_sync(const FunctionCallbackInfo<Value> &args) {
+  auto *i = args.GetIsolate();
+  auto c = i->GetCurrentContext();
+  auto *r =
+      (Runtime *)Local<External>::Cast(args.Data())->Value(kRuntimePointerTag);
+  Local<Value> value = args[0];
+  if (!value->IsObject()) {
+    args.GetReturnValue().Set(value);
+    return;
+  }
+  Local<Promise> promise;
+  if (value->IsPromise()) {
+    promise = value.As<Promise>();
+  } else {
+    Local<Promise::Resolver> resolver;
+    if (!Promise::Resolver::New(c).ToLocal(&resolver) ||
+        !resolver->Resolve(c, value).FromMaybe(false)) return;
+    promise = resolver->GetPromise();
+  }
+  promise->MarkAsHandled();
+  // V8 explicitly disallows a recursive checkpoint on an executing queue.
+  // Never pretend pumping that queue can advance a pending continuation.
+  if (promise->State() == Promise::kPending &&
+      MicrotasksScope::IsRunningMicrotasks(i)) {
+    i->ThrowException(Exception::Error(str(
+        i, "__sourceAwaitSync cannot await a pending Promise inside a microtask")));
+    return;
+  }
+  while (promise->State() == Promise::kPending) {
+    if (r->expired || i->IsExecutionTerminating()) return;
+    if (!service_await_responses(r, c)) return;
+    // Background V8 jobs may post foreground tasks, but no new execution or
+    // watchdog is started here. The original root result stays untouched.
+    while (platform::PumpMessageLoop(runtime_platform.get(), i)) {
+      if (r->expired || i->IsExecutionTerminating()) return;
+    }
+    i->PerformMicrotaskCheckpoint();
+    if (r->expired || i->IsExecutionTerminating()) return;
+    if (promise->State() == Promise::kPending) {
+      if (!service_await_responses(r, c)) return;
+      std::unique_lock<std::mutex> lock(r->mutex);
+      // Match the host transport cadence, waking immediately for a response or
+      // cancellation; the bounded wait also lets foreground V8 tasks progress.
+      r->cv.wait_for(lock, std::chrono::milliseconds(5), [r] {
+        if (r->expired) return true;
+        for (const auto &response : r->sync_responses)
+          if (r->pending.count(response.first)) return true;
+        return false;
+      });
+    }
+  }
+  if (promise->State() == Promise::kRejected)
+    i->ThrowException(promise->Result());
+  else
+    args.GetReturnValue().Set(promise->Result());
+}
 extern "C" {
 __attribute__((visibility("default"))) char *sv8_sync_poll(Runtime *r) {
   std::lock_guard<std::mutex> lock(r->mutex);
@@ -210,6 +304,13 @@ __attribute__((visibility("default"))) Runtime *sv8_create(int timeout_ms,
     auto c = Context::New(r->isolate);
     r->context.Reset(r->isolate, c);
     Context::Scope cs(c);
+    c->Global()
+        ->DefineOwnProperty(c, str(r->isolate, "__sourceAwaitSync"),
+              Function::New(c, await_sync,
+                            External::New(r->isolate, r, kRuntimePointerTag))
+                  .ToLocalChecked(),
+              static_cast<PropertyAttribute>(ReadOnly | DontDelete | DontEnum))
+        .FromMaybe(false);
     c->Global()
         ->Set(c, str(r->isolate, "__sourceHostSync"),
               Function::New(c, host_sync,
@@ -384,6 +485,9 @@ __attribute__((visibility("default"))) char *sv8_poll(Runtime *r) {
   Context::Scope cs(c);
   TryCatch tc(i);
   if (r->immediate) return output(r->immediate_json);
+  // A host response forwarded through the sync transport may arrive after the
+  // inner await returned (another concurrent Promise can still own it).
+  service_await_responses(r, c, false);
   i->PerformMicrotaskCheckpoint();
   if (!r->error.empty()) {
     auto o = Object::New(i);
