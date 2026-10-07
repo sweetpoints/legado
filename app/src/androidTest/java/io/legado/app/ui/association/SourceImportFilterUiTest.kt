@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -675,7 +676,25 @@ class SourceImportFilterUiTest {
             val menuName = if (rss) RssImportMenu.valueOf(option.name).name else option.name
             compose.onNodeWithTag("$prefix-menu").performClick()
             compose.onNodeWithTag("$prefix-menu-$menuName").performClick()
-            awaitReady()
+            // A focusable DropdownMenu owns a separate Window. Its dismissal and Android
+            // layout/draw must settle before checking the import controls, rather than
+            // polling the underlying dialog's transient window-focus flag.
+            compose.waitForIdle()
+            val menuNames = if (rss) RssImportMenu.entries.map { it.name }
+                else BookImportMenu.entries.map { it.name }
+            menuNames.forEach { name ->
+                compose.onNodeWithTag("$prefix-menu-$name").assertDoesNotExist()
+            }
+            await("Import menu action did not return to an interactive dialog: rss=$rss") {
+                main {
+                    parent.dialog?.isShowing == true &&
+                        parent.view?.isShown == true &&
+                        parent.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        (if (rss) feed.state.value.interactive else book.state.value.interactive)
+                }
+            }
+            compose.onNodeWithTag("$prefix-menu").assertIsDisplayed().assertIsEnabled()
+            compose.onNodeWithTag("$prefix-search").assertIsDisplayed().assertIsEnabled()
         }
 
         fun open(position: Int, originalIndex: Int): CodeDialog {
