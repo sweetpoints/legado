@@ -19,6 +19,7 @@ import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.model.sourceEngine.SourceScriptException
+import io.legado.app.model.sourceEngine.BookSourceScriptBridge
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -58,6 +59,20 @@ class AnalyzeRule(
 
     private val book get() = ruleData as? BaseBook
     private val rssArticle get() = ruleData as? RssArticle
+
+    private var scriptBookSnapshot: Map<String, Any?>? = null
+    private var scriptChapterSnapshot: Map<String, Any?>? = null
+
+    /** Read-only JSON context for a parser hosted outside the original book object. */
+    fun setScriptContextSnapshots(
+        book: Map<String, Any?>?,
+        chapter: Map<String, Any?>?,
+    ): AnalyzeRule {
+        BookSourceScriptBridge.jsonBindings(mapOf("book" to book, "chapter" to chapter))
+        scriptBookSnapshot = book?.toMap()
+        scriptChapterSnapshot = chapter?.toMap()
+        return this
+    }
 
     private var chapter: BookChapter? = null
     private var nextChapterUrl: String? = null
@@ -836,12 +851,14 @@ class AnalyzeRule(
     fun get(key: String): String {
         localBindings[key]?.let { return it }
         when (key) {
-            "bookName" -> book?.let {
-                return it.name
+            "bookName" -> {
+                book?.let { return it.name }
+                (scriptBookSnapshot?.get("name") as? String)?.let { return it }
             }
 
-            "title" -> chapter?.let {
-                return it.title
+            "title" -> {
+                chapter?.let { return it.title }
+                (scriptChapterSnapshot?.get("title") as? String)?.let { return it }
             }
         }
         return chapter?.getVariable(key)?.takeIf { it.isNotEmpty() }
@@ -877,10 +894,10 @@ class AnalyzeRule(
             else -> DartSourceEngine.jsonObject(value)
         }
         val bindings = linkedMapOf<String, Any?>(
-            "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book),
+            "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book ?: scriptBookSnapshot),
             "result" to jsonValue(result), "baseUrl" to baseUrl,
-            "chapter" to jsonValue(chapter), "chapters" to jsonValue(batchContext?.chapters),
-            "title" to chapter?.title, "src" to jsonValue(content),
+            "chapter" to jsonValue(chapter ?: scriptChapterSnapshot), "chapters" to jsonValue(batchContext?.chapters),
+            "title" to (chapter?.title ?: scriptChapterSnapshot?.get("title")), "src" to jsonValue(content),
             "nextChapterUrl" to nextChapterUrl, "rssArticle" to jsonValue(rssArticle),
             "fromBookInfo" to isFromBookInfo,
         )
