@@ -92,6 +92,8 @@ search/explore/toc允许JSON字符串解析后必须为数组；info必须为对
 
 typed DOM 与共享列表 toArray 已生产接入；只读节点方法、task-local 引用、InfoMap 的原秒 TTL/save 标记、原生 init/subContent/replace 顺序及 source/book/chapter 变量层详见 [宿主 Reference](host.md)。Android 外层声明式 WebJS 使用独立后台能力和任务取消上下文，脚本提取回调仍禁止递归 JS/WebJS；独立 CLI 不由此获得 Android WebView。
 
-原生 parser 能力与导入审核/应用 pipeline gates 分开；接线不会自动清除全部 manualRequired，也不会恢复任意 Java 类。当前固定公开四源采样仍一项成功、三项失败（index1 空结果、index2 HttpException、index3 TLS）；第三次采样尚未执行。不能将局部 checkpoint 或生产方法接入写成全源 verified 或整体验收通过。Release 原生反射注册 keep 与 Flutter 注册入口仍需保留，具体见 host.md。
+原生 parser 能力与导入审核/应用 pipeline gates 分开；接线不会自动清除全部 manualRequired，也不会恢复任意 Java 类。最新固定公开四源严格验收仍失败：掌阅成功，悠读空结果（原 parser 同 response 与 V8 均0），9书 HTTP 错误，笔趣 SSL 错误。不能将局部 checkpoint 或生产方法接入写成全源 verified 或整体验收通过。Release 原生反射注册 keep 与 Flutter 注册入口仍需保留，具体见 host.md。
 
 Android 的六个旧 HTTP 方法已委派原 AnalyzeUrl/Jsoup，使用真实任务绑定来源（未保存源不要求 DAO）及旧域 CookieStore 合同。显式无源调用屏蔽继承来源；现代 source.net 与其他平台旧 Dart 路径不变。IO 失败为 network_error、Jsoup HTTP 状态错误为 legacy.http_error，不再把失败堆栈当正文或伪造200；这是明确错误行为差异，不是所有旧失败完全兼容。精确重载与来源/Cookie边界见 [网络宿主](host.md#android-原生旧-http)。
+
+Android 旧 HTTP 已接入同所有者请求续传、Header eval 和 URL/body 变量恢复；microtask 内同步等待仍 pending Promise 的嵌套明确拒绝，不能据此承诺一般 async 完全兼容。旧 source 状态 facade 和 cache 13方法已接入原宿主；cache 保留全局共享键、秒 TTL 与文本/Java字节区别，现代每源隔离 API 不变。签名及边界见 [host.md](host.md)。

@@ -73,6 +73,12 @@ Android 旧路径使用原按域共享的 CookieStore/客户端 Cookie 合同，
 
 错误处理有明确变化：IO 失败返回 typed `network_error`，Jsoup HttpStatusException 返回 `legacy.http_error`，取消继续传播；不会把 ajax/connect 的失败堆栈变为正文或合成成功200，也不会失败后静默改走 Dart HTTP。因此成功请求沿原语义，不等于所有旧错误行为完全兼容。
 
+### 同所有者请求续传
+
+原生请求中的 Header eval、URL/body 模板脚本通过 begin→continue→stepCall→abort 内部协议续传；脚本仍在当前 V8 VM、原来源/library 上下文运行，不另造来源或第二个脚本运行时。token 与递增 sequence 由宿主校验并绑定活动请求所有者；临时 result/baseUrl 等请求变量保存后恢复，finally 中 abort 释放续传，错误与取消不会改走另一 HTTP 管线。这些内部方法不是任意脚本可选择所有者的公开网络 API。
+
+Header eval 与 URL/body 变量恢复已经接线，但同步等待不支持所有异步嵌套：在 microtask 内等待仍 pending 的 Promise 时明确报 `__sourceAwaitSync cannot await a pending Promise inside a microtask`。不能承诺任意 async header、递归 pending Promise 或无限重入兼容。
+
 ### 非 Android 的 Dart portable 子集
 
 下表描述未启用 useNativeHttp 的 LegacyScriptHost，不能用它覆盖上面的 Android 行为。
@@ -97,6 +103,26 @@ body 和 url 为可调用对象，支持字符串强制转换以兼容属性形�
 ## 变量
 
 `get(key)` 的单参数形式读取变量，缺失为空字符串；它与两/三参数 HTTP get 不同。`put(key,value)` 接受字符串键和值，保存并返回值。变量属于该 LegacyScriptHost 使用的变量表，不自动持久化到 Room。
+
+## Android 旧 cache
+
+`cache` 已绑定真实 CacheManager，键在 JS 中 String 转换，null key/value 拒绝。它是旧全局共享缓存，不自动加 source 前缀；来源任务约束调用生命周期，并不把数据隔离成现代每源 storage/variables。消费者需要自行避免共享键冲突。
+
+| 方法 | 结果与重载 |
+|---|---|
+| `put(key,value[,ttlSeconds])` | 无返回值；默认 TTL=0；普通值按 JS String 转换保存，已标记 Java byte[] 保持字节存储 |
+| `get(key[,onlyDisk])` | String/null；onlyDisk 默认 false，显式必须 Boolean |
+| `delete(key)`、`deleteMemory(key)` | 无返回值；分别原全存储删除与仅内存删除 |
+| `putMemory(key,value)`、`getFromMemory(key)` | 保存可传输 JSON 值或已标记字节；读取原值/null，无持久化 TTL 参数 |
+| `getInt/getLong/getDouble/getFloat(key)` | 原数值读取或 null；不是任意默认值重载 |
+| `getByteArray(key)` | signed 字节数组或 null |
+| `putFile(key,text[,ttlSeconds])`、`getFile(key)` | ACache 文本写入/读取；text 必须 String，读取 String/null |
+
+TTL 是有符号 Int **秒**，默认0沿原实现表示无到期时间，不新增毫秒或负值规范化策略。String 存储与 Java ByteArray 存储保持区别：prelude 只对原字节 API 返回的数组作 VM 弱标记，普通 `[1,2]` 不会自动当 Java byte[]；复制/重建普通数组不继承标记。putMemory 的普通 JSON 不是任意 Java 对象，不能保留 Java 类身份。以上13方法为明确白名单，不开放整个 CacheManager。
+
+## Android 旧 source 对象
+
+已绑定真实来源的旧脚本入口提供 JSON 字段视图及有限方法：getKey/getTag、getLoginInfo/putLoginInfo、getLoginHeader/putLoginHeader、getVariable/putVariable/removeLoginInfo（具体入口按已注入 facade）。状态方法同步调用受信 sourceState 宿主，作用于原来源对象，不是脚本任选的 Room/Java 对象；原 source/sourceApi JSON 字段与新版异步 source.* API 不能混用。缺少来源的 guest 调用不因此获得这些状态能力。现代 namespace 和各平台 standalone 合同保持独立。
 
 ## 编码与字节
 
@@ -161,4 +187,4 @@ WebJS 是独立 Android 后台能力：仅外层声明式规则显式允许时�
 
 Release 的反射注册入口需要既有 keep 规则：JsoupXpath AxisSelector/NodeTest/Function 实现和 Jsoup 类，以及 Flutter GeneratedPluginRegistrant.registerWith。保留这些原生注册路径不等于 Java 反射对脚本开放。
 
-实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。当前固定公开四源采样仍为一项成功、三项失败：index1 空结果、index2 HttpException、index3 TLS 错误；第三次采样尚未执行，不能据本次 HTTP 接线宣称网络失败已修复。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。
+实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。最新固定公开四源严格验收仍失败：掌阅成功；悠读为空（原 parser 对同一 response 为0，V8 也为0）；9书为 HTTP 错误；笔趣为 SSL 错误。局部实现和回归通过不能将这四源结果标为全部成功。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。
