@@ -11,6 +11,10 @@ const legacyDomPrelude = r'''
       html:{value:()=>shared ? __sourceHostSync('javaHost.domCall',[shared,'html',[]]) : result.map(node=>node.html()).join('\n')},
       select:{value:selector=>shared ? materialize(__sourceHostSync('javaHost.domCall',[shared,'select',[selector]])) : list(result.flatMap(node=>node.select(selector)))}
     });
+    if (shared) Object.defineProperties(result, {
+      toString:{value:()=>__sourceHostSync('javaHost.domCall',[shared,'toString',[]])},
+      toJSON:{value:()=>shared}
+    });
     return result;
   };
   function materialize(value) {

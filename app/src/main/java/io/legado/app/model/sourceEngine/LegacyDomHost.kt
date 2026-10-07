@@ -261,6 +261,7 @@ object LegacyDomHost {
             }
             val result =
                 when (operation) {
+                    "toString" -> { noArgs(); elements.toString() }
                     "text" -> {
                         noArgs()
                         elements.text()

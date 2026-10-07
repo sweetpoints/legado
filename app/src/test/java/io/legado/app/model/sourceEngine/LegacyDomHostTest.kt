@@ -43,6 +43,11 @@ class LegacyDomHostTest {
         assertTrue(ancestors is List<*>)
 
     }
+    @Test fun sharedListStringMatchesActualJsoupElementsExactly() {
+        val nodes = Jsoup.parse("<a>First</a><a>Second</a>").select("a")
+        assertEquals("<a>First</a>\n<a>Second</a>", nodes.toString())
+        assertEquals(nodes.toString(), LegacyDomHost.call(LegacyDomHost.serialize(nodes.toList()) as Map<*, *>, "toString", emptyList()))
+    }
     @Test fun deepDomIsFlatAndDoesNotConsumeJsonRecursionDepth() {
         val document = Jsoup.parse("<body></body>")
         var child = document.body()
