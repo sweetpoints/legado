@@ -58,7 +58,10 @@ internal data class CodeDialogState(
         get() = if (showingAlternate) alternate ?: original else original
 
     val busy: Boolean
-        get() = editorPending || refreshPending
+        get() =
+            editorPending ||
+                refreshPending ||
+                effects.any { it.action == CodeDialogAction.EditorSaved }
 }
 
 /** Host owns Activity results and callbacks; effects are small and consumed before delivery. */

@@ -970,8 +970,33 @@ class CodeSelectionUiTest {
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
+                                        val expected =
+                                            if (draft == invalid) draft
+                                            else edited.replace("#edited", "#edited-once")
+                                        val settledHost =
+                                            if (rss) {
+                                                val value =
+                                                    ViewModelProvider(parent!!)[
+                                                            RssImportViewModel::class.java]
+                                                        .state
+                                                        .value
+                                                !value.loading &&
+                                                    !value.busy &&
+                                                    !value.pendingRefresh
+                                            } else {
+                                                val value =
+                                                    ViewModelProvider(parent!!)[
+                                                            BookImportViewModel::class.java]
+                                                        .state
+                                                        .value
+                                                !value.loading &&
+                                                    !value.busy &&
+                                                    !value.pendingRefresh
+                                            }
                                         ready =
-                                            preview!!.currentOriginalCode() == draft &&
+                                            settledHost &&
+                                                preview!!.model.state.value.displayed == expected &&
+                                                preview!!.currentOriginalCode() == draft &&
                                                 preview!!
                                                     .dialog
                                                     ?.window
@@ -979,9 +1004,6 @@ class CodeSelectionUiTest {
                                                     ?.hasWindowFocus() == true &&
                                                 !preview!!.model.state.value.busy
                                         if (ready) {
-                                            val expected =
-                                                if (draft == invalid) draft
-                                                else edited.replace("#edited", "#edited-once")
                                             assertEquals(
                                                 expected,
                                                 preview!!.model.state.value.displayed,

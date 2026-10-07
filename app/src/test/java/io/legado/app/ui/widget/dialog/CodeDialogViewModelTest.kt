@@ -209,6 +209,17 @@ class CodeDialogViewModelTest {
         assertFalse(model.state.value.finished)
         assertFalse(model.state.value.showingAlternate)
         assertEquals(CodeDialogAction.EditorSaved, model.state.value.effects.single().action)
+        assertTrue(
+            "An undelivered return must not allow saving an unrefreshed source",
+            model.state.value.busy,
+        )
+        model.action(CodeDialogAction.Save)
+        model.close()
+        assertFalse(model.state.value.finished)
+        assertEquals(
+            listOf(CodeDialogAction.EditorSaved),
+            model.state.value.effects.map { it.action },
+        )
         model.editorResult("duplicate")
         assertEquals("new", model.state.value.original)
     }
@@ -308,6 +319,12 @@ class CodeDialogViewModelTest {
         model.consume(model.state.value.effects.single().id)
         model.editorResult("edited", 3)
         assertFalse(model.state.value.showingAlternate)
+        assertTrue(model.state.value.busy)
+        // CodeDialogRoute consumes the one return effect before its host refreshes
+        // replacements; model.alternate below represents that delivered response.
+        val returned = model.state.value.effects.single()
+        assertEquals(CodeDialogAction.EditorSaved, returned.action)
+        model.consume(returned.id)
         model.alternate("replaced edited")
         assertTrue(model.state.value.showingAlternate)
         assertEquals("replaced edited", model.state.value.displayed)
