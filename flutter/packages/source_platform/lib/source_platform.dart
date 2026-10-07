@@ -145,6 +145,19 @@ class SourcePlatform implements ScriptHost {
       case 'javaHttp.ajaxAllResolved':
       case 'javaHttp.headerGet':
       case 'javaHttp.headerPut':
+      case 'cacheHost.put':
+      case 'cacheHost.get':
+      case 'cacheHost.delete':
+      case 'cacheHost.putMemory':
+      case 'cacheHost.getFromMemory':
+      case 'cacheHost.deleteMemory':
+      case 'cacheHost.getInt':
+      case 'cacheHost.getLong':
+      case 'cacheHost.getDouble':
+      case 'cacheHost.getFloat':
+      case 'cacheHost.getByteArray':
+      case 'cacheHost.putFile':
+      case 'cacheHost.getFile':
       case 'legacyRule.evaluate':
       case 'legacyRequest.fetch':
       case 'legacyRequest.resolve':

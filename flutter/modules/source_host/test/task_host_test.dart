@@ -14,6 +14,60 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
+  test('cache methods require the registered task and preserve exact source identity', () async {
+    final calls = <Map>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.arguments as Map);
+      return null;
+    });
+    final host = TaskScriptHost(
+      const SourcePlatform(sourceId: 'opaque-owner'),
+      'cache-task',
+    );
+    for (final method in [
+      'put',
+      'get',
+      'delete',
+      'putMemory',
+      'getFromMemory',
+      'deleteMemory',
+      'getInt',
+      'getLong',
+      'getDouble',
+      'getFloat',
+      'getByteArray',
+      'putFile',
+      'getFile',
+    ]) {
+      await host.call('cacheHost.$method', ['fixture-key']);
+    }
+    expect(calls, hasLength(13));
+    for (final call in calls) {
+      expect(call['sourceId'], 'opaque-owner');
+      expect(call['taskId'], 'cache-task');
+      expect(call['fromScript'], true);
+      expect(call['arguments'], ['fixture-key']);
+    }
+    await expectLater(
+      host.call('cacheHost.unknown', []),
+      throwsA(isA<EngineException>()),
+    );
+    await expectLater(
+      TaskScriptHost(
+        const SourcePlatform(sourceId: 'opaque-owner'),
+        null,
+      ).call('cacheHost.get', ['fixture-key']),
+      throwsA(
+        isA<EngineException>().having(
+          (error) => error.code,
+          'code',
+          'invalid_request',
+        ),
+      ),
+    );
+    expect(calls, hasLength(13));
+  });
+
   test(
     'all explicit explore InfoMap methods retain trusted task/source origin',
     () async {

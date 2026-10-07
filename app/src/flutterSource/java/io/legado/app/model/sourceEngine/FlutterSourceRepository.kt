@@ -290,6 +290,9 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
             return task.legacyRules.evaluate(payload, fromScript, allowWebScripts = !fromScript)
         }
+        if (method in NativeLegacyCacheHost.methods) {
+            return NativeLegacyCacheHost.call(method, args, task.context)
+        }
         val callbackMethods = setOf(
             "analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList",
             "analyze.getElements", "analyze.getElement", "crypto.randomInt32",

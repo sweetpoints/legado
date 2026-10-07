@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'legacy_dom.dart';
 import 'legacy_cookie.dart';
+import 'legacy_cache.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
@@ -64,12 +65,17 @@ const legacySupportedMethods = {
 /// response methods are materialized in JS after the synchronous host returns.
 const legacyScriptPrelude =
     legacyCookiePrelude +
+    legacyCachePrelude +
     legacyDomPrelude +
     r"""
 (() => {
   // A dedicated function keeps request-bridge locals out of the header's scope.
   // Its eval still uses this V8 context and the existing source globals/library.
   const __legacyHeaderEvaluator = new Function('__legacyHeaderCode', 'return eval(__legacyHeaderCode);');
+  function __legacyMarkedBytes(__legacyValue) {
+    return typeof globalThis.__legacyCacheMarkBytes === 'function'
+      ? globalThis.__legacyCacheMarkBytes(__legacyValue) : __legacyValue;
+  }
   function response(value) {
     if (Array.isArray(value)) return value.map(response);
     if (!value || typeof value !== 'object' || !value.__legacyResponseKind) return value;
@@ -105,7 +111,7 @@ const legacyScriptPrelude =
       headers: callable(headers), header, hasHeader: name => header(name) !== null,
       isSuccessful: () => value.status >= 200 && value.status < 300,
       callTime: () => value.callTime || 0,
-      bodyAsBytes: () => value.bytes,
+      bodyAsBytes: () => __legacyMarkedBytes(value.bytes),
       multiHeaders: () => value.multiHeaders || {},
       cookies: () => value.cookieMap || {}, cookie: name => (value.cookieMap || {})[name] ?? null,
       hasCookie: name => Object.prototype.hasOwnProperty.call(value.cookieMap || {}, name),
@@ -203,12 +209,14 @@ const legacyScriptPrelude =
             return result.value;
           };
           for (const operation of ['encrypt','encryptHex','encryptBase64','decrypt','decryptStr']) {
-            crypto[operation] = (...values) => invoke(operation, values);
+            crypto[operation] = (...values) => ['encrypt','decrypt'].includes(operation)
+                ? __legacyMarkedBytes(invoke(operation, values)) : invoke(operation, values);
           }
           crypto.setIv = iv => {invoke('setIv', [iv]); return crypto;};
           return crypto;
         }
 
+        if (['strToBytes','base64DecodeToByteArray','hexDecodeToByteArray'].includes(String(name))) return __legacyMarkedBytes(value);
         if (String(name) === 'log') return args[0];
         if (String(name) === 'getElement') return element(value);
         if (String(name) === 'getElements') return elementList(value);
