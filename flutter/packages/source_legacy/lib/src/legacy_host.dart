@@ -7,6 +7,11 @@ import 'package:source_engine/source_engine.dart';
 
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
+  'HMacHex',
+  'HMacBase64',
+  'androidId',
+  'randomUUID',
+  'toNumChapter',
   'log',
   'logType',
   'toast',
@@ -175,6 +180,22 @@ class LegacyScriptHost implements ScriptHost {
 
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
+      case 'HMacHex':
+      case 'HMacBase64':
+        arity(3);
+        str(0);
+        str(1);
+        str(2);
+        return delegate.call('javaHost.$name', arguments);
+      case 'androidId':
+      case 'randomUUID':
+        arity(0);
+        return delegate.call('javaHost.$name', arguments);
+      case 'toNumChapter':
+        arity(1);
+        if (arg != null) str(0);
+        return delegate.call('javaHost.toNumChapter', arguments);
+
       case 'log':
       case 'logType':
       case 'toast':

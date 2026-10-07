@@ -51,6 +51,19 @@ class LegacyJavaHostTest {
         ))
     }
 
+    @Test fun usesRealHmacChapterAndUuidContracts() {
+        val extensions = object : JsExtensions {
+            override fun getSource() = null
+            override fun getTag() = "fixture"
+        }
+        assertEquals("f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
+            LegacyJavaHost.call(extensions, "javaHost.HMacHex", listOf("The quick brown fox jumps over the lazy dog", "HmacSHA256", "key")))
+        assertEquals("第123章", LegacyJavaHost.call(extensions, "javaHost.toNumChapter", listOf("第一百二十三章")))
+        assertNull(LegacyJavaHost.call(extensions, "javaHost.toNumChapter", listOf(null)))
+        val uuid = LegacyJavaHost.call(extensions, "javaHost.randomUUID", emptyList()) as String
+        assertEquals(uuid, java.util.UUID.fromString(uuid).toString())
+    }
+
     @Test fun rejectsUnknownNamesInvalidArgumentsAndCancelledTasks() {
         val ext = Extensions()
         for ((name, args) in listOf("getClass" to emptyList(), "timeFormat" to listOf(1.5), "getCookie" to listOf("tag", 1))) {

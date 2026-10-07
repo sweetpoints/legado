@@ -49,6 +49,11 @@ class SourcePlatform implements ScriptHost {
       case 'browser.start':
       case 'browser.openUrl':
       case 'browser.video':
+      case 'javaHost.HMacHex':
+      case 'javaHost.HMacBase64':
+      case 'javaHost.androidId':
+      case 'javaHost.randomUUID':
+      case 'javaHost.toNumChapter':
       case 'javaHost.log':
       case 'javaHost.logType':
       case 'javaHost.toast':

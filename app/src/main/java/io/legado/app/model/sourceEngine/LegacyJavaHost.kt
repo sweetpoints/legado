@@ -9,6 +9,7 @@ object LegacyJavaHost {
         "javaHost.log", "javaHost.logType", "javaHost.toast", "javaHost.longToast",
         "javaHost.timeFormat", "javaHost.timeFormatUTC", "javaHost.t2s", "javaHost.s2t",
         "javaHost.getCookie",
+        "javaHost.HMacHex", "javaHost.HMacBase64", "javaHost.androidId", "javaHost.randomUUID", "javaHost.toNumChapter",
     )
 
     fun call(extensions: JsExtensions, method: String, args: List<Any?>): Any? {
@@ -25,6 +26,16 @@ object LegacyJavaHost {
             return value.toLong()
         }
         return when (method) {
+            "javaHost.HMacHex" -> { arity(3); extensions.HMacHex(text(0), text(1), text(2)) }
+            "javaHost.HMacBase64" -> { arity(3); extensions.HMacBase64(text(0), text(1), text(2)) }
+            "javaHost.androidId" -> { arity(0); extensions.androidId() }
+            "javaHost.randomUUID" -> { arity(0); extensions.randomUUID() }
+            "javaHost.toNumChapter" -> {
+                arity(1)
+                require(args[0] == null || args[0] is String) { "Legacy chapter must be string or null" }
+                extensions.toNumChapter(args[0] as String?)
+            }
+
             "javaHost.log" -> { arity(1); extensions.log(args[0]) }
             "javaHost.logType" -> { arity(1); extensions.logType(args[0]); null }
             "javaHost.toast" -> { arity(1); extensions.toast(args[0]); null }

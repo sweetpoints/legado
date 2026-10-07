@@ -46,6 +46,34 @@ void main() {
     expect(delegate.calls[7].$2, [1234, 'yyyy-MM-dd', 28800000]);
   });
   test(
+    'exact HMac spelling and chapter null delegate without reinterpretation',
+    () async {
+      final delegate = Delegate();
+      final host = LegacyScriptHost(delegate);
+      await host.call('java.HMacHex', ['data', 'HmacSHA256', 'key']);
+      await host.call('java.HMacBase64', ['data', 'HmacSHA1', 'key']);
+      await host.call('java.toNumChapter', [null]);
+      await host.call('java.androidId', []);
+      await host.call('java.randomUUID', []);
+      expect(delegate.calls.map((c) => c.$1), [
+        'javaHost.HMacHex',
+        'javaHost.HMacBase64',
+        'javaHost.toNumChapter',
+        'javaHost.androidId',
+        'javaHost.randomUUID',
+      ]);
+      expect(delegate.calls.first.$2, ['data', 'HmacSHA256', 'key']);
+      expect(delegate.calls[2].$2, [null]);
+      await expectLater(
+        host.call('java.HMacHex', ['data', 'algo']),
+        throwsA(anything),
+      );
+      await expectLater(host.call('java.androidId', ['x']), throwsA(anything));
+      await expectLater(host.call('java.deviceID', []), throwsA(anything));
+      expect(delegate.calls.length, 5);
+    },
+  );
+  test(
     'invalid overloads and unapproved Java names never reach native',
     () async {
       final delegate = Delegate();
