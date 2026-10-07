@@ -90,6 +90,7 @@ import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.RssImportViewModel
 import io.legado.app.ui.widget.dialog.CodeDialog
+import io.legado.app.ui.widget.dialog.CodePreviewInputMetrics
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
@@ -1368,11 +1369,21 @@ class CodeSelectionUiTest {
             compose
                 .onNodeWithTag("code-body")
                 .performTextInputSelection(androidx.compose.ui.text.TextRange(offset))
+            val previousInput = CodePreviewInputMetrics.last
             val inputStart = SystemClock.uptimeMillis()
             compose.onNodeWithTag("code-body").performTextInput("中")
             compose.waitForIdle()
             timings["inputAndFrameMs"] = SystemClock.uptimeMillis() - inputStart
             val expected = code.substring(0, offset) + "中" + code.substring(offset)
+            val actualInput = checkNotNull(CodePreviewInputMetrics.last) {
+                "The actual text input callback must report its timing"
+            }
+            assertTrue("The timing must belong to the new edit", actualInput != previousInput)
+            assertEquals(expected.length, actualInput.characters)
+            timings["inputModelMs"] = checkNotNull(actualInput.modelMs)
+            timings["inputToFirstLayoutMs"] = checkNotNull(actualInput.firstLayoutMs) {
+                "The edited document must produce a real text layout"
+            }
             instrumentation.runOnMainSync {
                 assertEquals(expected, dialog.currentOriginalCode())
                 assertEquals(offset + 1, dialog.model.state.value.selectionEnd)
@@ -1390,8 +1401,8 @@ class CodeSelectionUiTest {
                 }
             }
             assertTrue(
-                "Typing stalls the code preview: $timings",
-                timings.getValue("inputAndFrameMs") < 1_000,
+                "Actual editing stalls the code preview: $timings",
+                timings.getValue("inputToFirstLayoutMs") < 1_000,
             )
             compose.onNodeWithTag("code-body").performTextReplacement("prefix target")
             compose.onNodeWithTag("code-body").assertTextEquals("prefix target")
