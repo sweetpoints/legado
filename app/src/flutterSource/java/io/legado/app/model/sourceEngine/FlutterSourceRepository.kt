@@ -144,9 +144,11 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                                             }
                                         result.success(value)
                                     } catch (error: SourceScriptException) {
-                                        result.error(error.code, error.message, null)
+                                        val failure = SourceHostFailure.encode(error)
+                                        result.error(failure.code, failure.message, failure.details)
                                     } catch (error: Exception) {
-                                        result.error("HOST_CALL_FAILED", error.message, null)
+                                        val failure = SourceHostFailure.encode(error)
+                                        result.error(failure.code, failure.message, failure.details)
                                     } finally {
                                         if (taskId != null)
                                             browserJobs[taskId]?.remove(
@@ -256,9 +258,8 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
         }
 
-    private fun protocolFailure(code: String, message: String?): Exception =
-        if (code in setOf("script_error", "syntax_error", "nested_script_requires_migration")) SourceScriptException(code, message.orEmpty())
-        else IllegalStateException("$code: ${message.orEmpty()}")
+    private fun protocolFailure(code: String, message: String?, details: Any? = null): Exception =
+        SourceHostFailure.decode(code, message, details)
 
     private fun sourceIdentity(sourceJson: String): String {
         val source = GSON.fromJson(sourceJson, Map::class.java)
@@ -453,7 +454,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                protocolFailure(code, message)
+                                protocolFailure(code, message, details)
                             )
                         }
 
@@ -504,7 +505,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                protocolFailure(code, message)
+                                protocolFailure(code, message, details)
                             )
                         }
 
@@ -562,7 +563,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                     object : MethodChannel.Result {
                         override fun success(result: Any?) { response.complete(result) }
                         override fun error(code: String, message: String?, details: Any?) {
-                            response.completeExceptionally(protocolFailure(code, message))
+                            response.completeExceptionally(protocolFailure(code, message, details))
                         }
                         override fun notImplemented() {
                             response.completeExceptionally(IllegalStateException("V8 $method protocol unavailable"))
@@ -647,7 +648,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                protocolFailure(code, message)
+                                protocolFailure(code, message, details)
                             )
                         }
 
@@ -714,7 +715,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
                         override fun error(code: String, message: String?, details: Any?) {
                             response.completeExceptionally(
-                                protocolFailure(code, message)
+                                protocolFailure(code, message, details)
                             )
                         }
 
