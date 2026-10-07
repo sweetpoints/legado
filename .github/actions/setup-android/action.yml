@@ -77,4 +77,4 @@ runs:
         key: ${{ steps.native-x64.outputs.cache-primary-key }}
     - name: Prepare verified Debug and Release Flutter AARs for both ABIs
       shell: bash
-      run: bash flutter/tool/prepare-android-aar.sh all
+      run: bash .github/scripts/prepare-ci-android-aar.sh
