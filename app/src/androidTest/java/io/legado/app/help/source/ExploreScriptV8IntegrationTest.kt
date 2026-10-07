@@ -1,20 +1,21 @@
 package io.legado.app.help.source
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import io.legado.app.data.entities.BookSource
-import io.legado.app.model.sourceEngine.DartSourceEngine
-import io.legado.app.help.CacheManager
-import io.legado.app.utils.InfoMap
-import io.legado.app.utils.GSON
+import com.google.gson.JsonParser
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.BookSource
+import io.legado.app.help.CacheManager
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.utils.GSON
+import io.legado.app.utils.InfoMap
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -22,7 +23,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ExploreScriptV8IntegrationTest {
     @Test
-    fun oldExportedMenusExecuteThroughActualV8WithWhitespaceAfterClosingTag() =
+    fun oldExportedMenusExecuteThroughActualV8WithWhitespaceAfterClosingTag(): Unit =
         runBlocking(Dispatchers.IO) {
             withTimeout(30_000) {
                 for (suffix in listOf("", "\n", " \t\r\n", "\\n", " // menu")) {
@@ -46,7 +47,7 @@ class ExploreScriptV8IntegrationTest {
             }
         }
     @Test
-    fun infoMapMethodsAndPropertiesMutateLiveMapWithoutImplicitPersistence() = runBlocking(Dispatchers.IO) {
+    fun infoMapMethodsAndPropertiesMutateLiveMapWithoutImplicitPersistence(): Unit = runBlocking(Dispatchers.IO) {
         withTimeout(30_000) {
             val source = BookSource(bookSourceUrl = "https://info-${UUID.randomUUID()}.invalid")
             val key = "infoMap_${source.bookSourceUrl}"
@@ -73,7 +74,7 @@ class ExploreScriptV8IntegrationTest {
                 assertEquals(true, result["value"])
                 assertNull(result["missing"])
                 assertEquals(source.bookSourceUrl, result["source"])
-                assertEquals(GSON.toJson(info.get()), result["snapshot"])
+                assertJsonEquals(GSON.toJson(info.get()), result["snapshot"])
                 assertEquals(mapOf("direct" to "updated", "third" to "third"), info.get())
                 assertFalse(info.needSave)
                 assertNull(CacheManager.get(key))
@@ -83,7 +84,7 @@ class ExploreScriptV8IntegrationTest {
                 assertNull(CacheManager.get(key))
                 info.saveNow() // Existing ExploreHomeRepository flush policy.
                 assertFalse(info.needSave)
-                assertEquals(GSON.toJson(info.get()), CacheManager.get(key))
+                assertJsonEquals(GSON.toJson(info.get()), CacheManager.get(key))
                 evaluateExploreScript(source, "infoMap.clear(); infoMap.isEmpty();", info).also {
                     assertEquals(true, it)
                 }
@@ -95,7 +96,7 @@ class ExploreScriptV8IntegrationTest {
     }
 
     @Test
-    fun infoMapSaveNowRunsAtCallTimeAndRetainsTtlEvenWhenNeedIsFalse() = runBlocking(Dispatchers.IO) {
+    fun infoMapSaveNowRunsAtCallTimeAndRetainsTtlEvenWhenNeedIsFalse(): Unit = runBlocking(Dispatchers.IO) {
         withTimeout(30_000) {
             val source = BookSource(bookSourceUrl = "https://info-ttl-${UUID.randomUUID()}.invalid")
             val key = "infoMap_${source.bookSourceUrl}"
@@ -115,12 +116,12 @@ class ExploreScriptV8IntegrationTest {
                 assertEquals(false, result["need"])
                 assertFalse(info.needSave)
                 assertEquals("after-save", info["value"])
-                assertEquals("{\"value\":\"saved\"}", CacheManager.get(key))
+                assertJsonEquals("{\"value\":\"saved\"}", CacheManager.get(key))
                 val deadline = appDb.cacheDao.get(key)!!.deadline
                 assertTrue(deadline >= before + 60_000 && deadline <= System.currentTimeMillis() + 60_000)
                 evaluateExploreScript(source, "infoMap.needSave=true; infoMap.setNeedSave(false);", info)
                 assertFalse(info.needSave)
-                assertEquals("{\"value\":\"saved\"}", CacheManager.get(key))
+                assertJsonEquals("{\"value\":\"saved\"}", CacheManager.get(key))
                 evaluateExploreScript(source, "infoMap.save(-1, false); infoMap.saveNow();", info)
                 assertNull(CacheManager.get(key))
             } finally {
@@ -128,6 +129,10 @@ class ExploreScriptV8IntegrationTest {
                 DartSourceEngine.clearSourceState(source)
             }
         }
+    }
+    private fun assertJsonEquals(expected: String, actual: Any?) {
+        assertTrue("Expected a JSON string", actual is String)
+        assertEquals(JsonParser.parseString(expected), JsonParser.parseString(actual as String))
     }
 
 }
