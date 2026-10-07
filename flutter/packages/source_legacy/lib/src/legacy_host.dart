@@ -72,6 +72,80 @@ const legacyScriptPrelude =
   // A dedicated function keeps request-bridge locals out of the header's scope.
   // Its eval still uses this V8 context and the existing source globals/library.
   const __legacyHeaderEvaluator = new Function('__legacyHeaderCode', 'return eval(__legacyHeaderCode);');
+  const __legacyHttpFrames = [];
+  function __legacyRestoreHttpFrame(__legacyFrame) {
+    for (const [__legacyKey,__legacyDescriptor] of Array.from(__legacyFrame).reverse()) {
+      if (__legacyDescriptor === undefined) Reflect.deleteProperty(globalThis,__legacyKey);
+      else Object.defineProperty(globalThis,__legacyKey,__legacyDescriptor);
+    }
+    const __legacyPosition = __legacyHttpFrames.lastIndexOf(__legacyFrame);
+    if (__legacyPosition >= 0) __legacyHttpFrames.splice(__legacyPosition,1);
+  }
+  function __legacySetHttpBinding(__legacyFrame,__legacyKey,__legacyValue) {
+    __legacyFrame.set(__legacyKey,Object.getOwnPropertyDescriptor(globalThis,__legacyKey));
+    if (!Reflect.set(globalThis,__legacyKey,__legacyValue)) throw new Error('legacy.invalid_step_binding');
+  }
+  Object.defineProperty(globalThis,'__sourceBeforeEntry',{
+    value:() => {while (__legacyHttpFrames.length) __legacyRestoreHttpFrame(__legacyHttpFrames[__legacyHttpFrames.length-1]);},
+    writable:false,configurable:false,enumerable:false
+  });
+
+  function __legacyHttpStepOutcome(__legacyReply) {
+    const __legacySaved = new Map();
+    __legacyHttpFrames.push(__legacySaved);
+    const __legacyBindings = Object.assign(Object.create(null), __legacyReply.bindings, {
+      __legacyHttpStep: {token:__legacyReply.token, sequence:__legacyReply.sequence},
+      __legacyHeaderEvaluation:false,
+      __legacyExtractionPrefix:null
+    });
+    try {
+      for (const __legacyKey of Object.keys(__legacyBindings)) {
+        if (['java','source','sourceApi','cache','cookie','globalThis','global','taskId'].includes(__legacyKey)
+            || __legacyKey.startsWith('__source') || __legacyKey.startsWith('__sv8')) continue;
+        __legacySetHttpBinding(__legacySaved,__legacyKey,__legacyBindings[__legacyKey]);
+      }
+      const __legacyRaw = __legacyHeaderEvaluator(__legacyReply.script);
+      const __legacyValue = __legacyRaw && typeof __legacyRaw.then === 'function'
+        ? __sourceAwaitSync(__legacyRaw) : __legacyRaw;
+      return {ok:true,value:__legacyValue === undefined ? null : __legacyValue};
+    } catch (__legacyError) {
+      const __legacyCode = __legacyError && typeof __legacyError.__sourceErrorCode === 'string'
+        ? __legacyError.__sourceErrorCode : 'script_error';
+      return {ok:false,code:__legacyCode,message:String(__legacyError)};
+    } finally {
+      __legacyRestoreHttpFrame(__legacySaved);
+    }
+  }
+  function __legacyHttpRequest(__legacyMethod,__legacyArgs,__legacyHeaders) {
+    let __legacyToken = null;
+    let __legacySequence = 0;
+    try {
+      let __legacyReply = __sourceHostSync('javaHttp.begin',[__legacyMethod,__legacyArgs,__legacyHeaders]);
+      while (__legacyReply && __legacyReply.status === 'script') {
+        if (__legacyToken === null && typeof __legacyReply.token === 'string' && __legacyReply.token) __legacyToken = __legacyReply.token;
+        if (typeof __legacyReply.token !== 'string' || !__legacyReply.token
+            || (__legacyToken !== null && __legacyReply.token !== __legacyToken)
+            || !Number.isSafeInteger(__legacyReply.sequence) || __legacyReply.sequence !== __legacySequence + 1
+            || typeof __legacyReply.script !== 'string' || !__legacyReply.bindings
+            || typeof __legacyReply.bindings !== 'object' || Array.isArray(__legacyReply.bindings)) {
+          throw new Error('legacy.invalid_http_continuation');
+        }
+        __legacyToken = __legacyReply.token;
+        __legacySequence = __legacyReply.sequence;
+        const __legacyOutcome = __legacyHttpStepOutcome(__legacyReply);
+        __legacyReply = __sourceHostSync('javaHttp.continue',[__legacyToken,__legacySequence,__legacyOutcome]);
+      }
+      if (!__legacyReply || __legacyReply.status !== 'done' || typeof __legacyReply.token !== 'string'
+          || !__legacyReply.token || (__legacyToken !== null && __legacyReply.token !== __legacyToken)
+          || !Object.prototype.hasOwnProperty.call(__legacyReply,'value')) {
+        throw new Error('legacy.invalid_http_continuation');
+      }
+      __legacyToken = __legacyReply.token;
+      return response(__legacyReply.value);
+    } finally {
+      if (__legacyToken !== null) __sourceHostSync('javaHttp.abort',[__legacyToken]);
+    }
+  }
   function __legacyMarkedBytes(__legacyValue) {
     return typeof globalThis.__legacyCacheMarkBytes === 'function'
       ? globalThis.__legacyCacheMarkBytes(__legacyValue) : __legacyValue;
@@ -169,6 +243,10 @@ const legacyScriptPrelude =
               && !(String(name) === 'get' && args.length !== 1)) {
             return __sourceHostSync('javaHttp.header' + (String(name) === 'get' ? 'Get' : 'Put'), args);
           }
+          if (globalThis.__legacyHttpStep && ['get','put'].includes(String(name))
+              && !(String(name) === 'get' && args.length !== 1)) {
+            return __sourceHostSync('javaHttp.stepCall',[__legacyHttpStep.token,__legacyHttpStep.sequence,String(name),args]);
+          }
           if (['ajax','connect','ajaxAll'].includes(String(name))) {
             const plan = __sourceHostSync('javaHttp.prepareHeader', [String(name), args]);
             if (plan !== null) {
@@ -177,8 +255,9 @@ const legacyScriptPrelude =
               }
               const evaluations = [];
               for (let index = 0; index < plan.count; index++) {
-                const previous = globalThis.__legacyHeaderEvaluation;
-                globalThis.__legacyHeaderEvaluation = true;
+                const __legacyHeaderFrame = new Map();
+                __legacyHttpFrames.push(__legacyHeaderFrame);
+                __legacySetHttpBinding(__legacyHeaderFrame,'__legacyHeaderEvaluation',true);
                 try {
                   const __legacyHeaderValue = __legacyHeaderEvaluator(plan.script);
                   if (__legacyHeaderValue && typeof __legacyHeaderValue.then === 'function') {
@@ -190,11 +269,12 @@ const legacyScriptPrelude =
                   // BaseSource.getHeaderMap also retains default headers when its rule fails.
                   evaluations.push({value:null, failed:true});
                 } finally {
-                  globalThis.__legacyHeaderEvaluation = previous;
+                  __legacyRestoreHttpFrame(__legacyHeaderFrame);
                 }
               }
-              return response(__sourceHostSync('javaHttp.' + String(name) + 'Resolved', [args, evaluations]));
+              return __legacyHttpRequest(String(name), args, evaluations);
             }
+            return __legacyHttpRequest(String(name), args, null);
           }
         }
         const value = __sourceHostSync('java.' + String(name), args);

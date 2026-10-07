@@ -35,14 +35,21 @@ class _HeaderHost implements ScriptHost {
       case 'javaHttp.headerPut':
         sourceVariables[args.first as String] = args[1] as String;
         return args[1];
-      case 'javaHttp.ajaxResolved':
-        expect(args.first, ['https://fixture.invalid/header', 8000]);
-        final evaluations = args[1] as List;
+      case 'javaHttp.abort':
+        return null;
+      case 'javaHttp.begin':
+        expect(args.first, 'ajax');
+        expect(args[1], ['https://fixture.invalid/header', 8000]);
+        final evaluations = args[2] as List;
         expect(evaluations, hasLength(1));
         expect((evaluations.single as Map)['failed'], false);
         final header = (evaluations.single as Map)['value'] as Map;
         headers.add(header);
-        return header['X-Dynamic'];
+        return {
+          'status': 'done',
+          'token': 'header-token',
+          'value': header['X-Dynamic'],
+        };
       default:
         throw StateError('Unexpected header RPC $method');
     }

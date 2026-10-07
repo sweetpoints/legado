@@ -53,6 +53,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     ) {
         val legacyRequests by lazy { LegacyRequestHost(navigationSourceId, context) }
         private val legacyRuleDelegate = lazy { LegacyRuleHost(navigationSourceId, context) }
+        private val legacyHttpDelegate = lazy { NativeLegacyHttpContinuationHost(context) }
         @Volatile private var legacyRulesClosed = false
         val legacyRules: LegacyRuleHost
             get() {
@@ -64,9 +65,20 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 }
                 return host
             }
+        val legacyHttpContinuations: NativeLegacyHttpContinuationHost
+            get() {
+                check(!legacyRulesClosed) { "Legacy HTTP task is closed" }
+                val host = legacyHttpDelegate.value
+                if (legacyRulesClosed) {
+                    host.close()
+                    error("Legacy HTTP task is closed")
+                }
+                return host
+            }
         fun closeLegacyRules() {
             legacyRulesClosed = true
             if (legacyRuleDelegate.isInitialized()) legacyRuleDelegate.value.close()
+            if (legacyHttpDelegate.isInitialized()) legacyHttpDelegate.value.close()
         }
     }
 
@@ -114,6 +126,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         )
                     platform.setMethodCallHandler { call, result ->
                         if (call.method == "cancelBrowser") {
+                            hostTasks[call.argument<String>("taskId")]?.closeLegacyRules()
                             browserJobs.remove(call.argument<String>("taskId"))?.forEach {
                                 it.cancel()
                             }
@@ -341,7 +354,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             @Suppress("UNCHECKED_CAST")
             return LegacyDomHost.call(args[0] as Map<*, *>, args[1] as String, args[2] as List<Any?>)
         }
-        if (method in NativeLegacyHttpHost.methods) {
+        if (method in NativeLegacyHttpHost.methods || method in NativeLegacyHttpContinuationHost.methods) {
             // The caller facade owns this live source; script arguments cannot choose another.
             val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
                 else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
@@ -352,7 +365,9 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 override fun getSourceNavigationContext() = nativeCallContext
             }
             task.context[SourceTaskHttpObserver]?.onCall?.invoke(method)
-            return NativeLegacyHttpHost.call(method, args, extensions)
+            return if (method in NativeLegacyHttpContinuationHost.methods)
+                task.legacyHttpContinuations.call(method, args, extensions)
+            else NativeLegacyHttpHost.call(method, args, extensions)
         }
         if (method in LegacyJavaHost.methods) {
             val source: BaseSource? = when (task.sourceKind) {
