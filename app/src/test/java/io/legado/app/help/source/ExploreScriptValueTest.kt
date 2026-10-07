@@ -9,7 +9,7 @@ import org.junit.Test
 class ExploreScriptValueTest {
     @Test
     fun exportedScriptClosingTagsAllowTrailingWhitespaceLikeTheOldParser() {
-        for (suffix in listOf("", "\n", "\r\n", " \t\r\n")) {
+        for (suffix in listOf("", "\n", "\r\n", " \t\r\n", "\\n", " // menu")) {
             val value = "<js>JSON.stringify([{title:'Fixture',url:'/list'}])</js>$suffix"
             val originalBody = value.substring(4, value.lastIndexOf('<'))
             assertEquals(originalBody, legacyExploreScript(value))

@@ -114,14 +114,15 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
     }
 }
 
-/** Legacy exports may keep a newline after the closing tag. */
+/** The old parser extracted the tag body without requiring the tag to end the field. */
 internal fun legacyExploreScript(value: String): String? {
     val rule = value.trim()
     return when {
         rule.startsWith("@js:", true) -> rule.substring(4)
         rule.startsWith("<js>", true) -> {
-            require(rule.endsWith("</js>", true)) { "发现菜单缺少 </js> 结束标记" }
-            rule.substring(4, rule.length - 5)
+            val end = rule.lastIndexOf("</js>", ignoreCase = true)
+            require(end >= 4) { "发现菜单缺少 </js> 结束标记" }
+            rule.substring(4, end)
         }
         else -> null
     }

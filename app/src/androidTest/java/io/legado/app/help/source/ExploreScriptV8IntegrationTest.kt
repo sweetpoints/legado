@@ -18,7 +18,7 @@ class ExploreScriptV8IntegrationTest {
     fun oldExportedMenusExecuteThroughActualV8WithWhitespaceAfterClosingTag() =
         runBlocking(Dispatchers.IO) {
             withTimeout(30_000) {
-                for (suffix in listOf("", "\n", " \t\r\n")) {
+                for (suffix in listOf("", "\n", " \t\r\n", "\\n", " // menu")) {
                     val source =
                         BookSource(
                             bookSourceUrl = "https://explore-${UUID.randomUUID()}.invalid",
