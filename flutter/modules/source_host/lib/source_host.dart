@@ -486,9 +486,6 @@ class SourceHost {
             message: 'Auxiliary legacy scripts require an explicit HTTP(S) source identity',
           );
         }
-        if (legacyRuleHostEnabled) {
-          bindings.putIfAbsent('baseUrl', () => sourceId);
-        }
         if (raw['jsLib'] != null && raw['jsLib'].toString().trim().isNotEmpty) {
           throw PlatformException(
             code: 'legacy_requires_migration',

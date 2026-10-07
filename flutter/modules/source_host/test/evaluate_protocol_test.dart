@@ -251,10 +251,14 @@ void main() {
           true,
         );
         expect(runtimes.first.contexts.first.variables['taskId'], 'a1');
-        expect(runtimes.first.contexts.first.variables['baseUrl'], 'Local A');
+        expect(runtimes.first.contexts.first.variables['sourceId'], 'Local A');
+        expect(
+          runtimes.first.contexts.first.variables['baseUrl'],
+          'https://source.example',
+        );
         expect(
           created.first.baseUrl,
-          Uri.parse('https://source.example/search'),
+          Uri.parse('https://source.example'),
         );
         await expectLater(
           host.handle(
