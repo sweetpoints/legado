@@ -31,7 +31,7 @@ private fun BookSource.getExploreKindsKey(): String {
     return MD5Utils.md5Encode(
         GSON.toJson(
             listOf(
-                "flutter-v8-explore-v1:15.4.80.24",
+                "flutter-v8-explore-v2",
                 bookSourceUrl,
                 exploreUrl,
                 bookSourceComment,
@@ -54,7 +54,7 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
     exploreKindsMap[exploreKindsKey]?.let {
         return it
     }
-    val exploreUrl = exploreUrl
+    val exploreUrl = exploreUrl?.trim()
     if (exploreUrl.isNullOrBlank()) {
         return emptyList()
     }
@@ -73,15 +73,7 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                                 exploreUrl.startsWith("<js>", true) -> {
                                 aCache.getAsString(exploreKindsKey)?.takeIf { it.isNotBlank() }
                                     ?: run {
-                                        val script =
-                                            if (exploreUrl.startsWith("@js:", true)) {
-                                                exploreUrl.substring(4)
-                                            } else {
-                                                require(exploreUrl.endsWith("</js>", true)) {
-                                                    "发现菜单缺少 </js> 结束标记"
-                                                }
-                                                exploreUrl.substring(4, exploreUrl.length - 5)
-                                            }
+                                        val script = requireNotNull(legacyExploreScript(exploreUrl))
                                         val info =
                                             exploreInfoMapList[bookSourceUrl]
                                                 ?: InfoMap(bookSourceUrl).also {
@@ -119,6 +111,19 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
         }
         exploreKindsMap[exploreKindsKey] = kinds
         return kinds
+    }
+}
+
+/** Legacy exports may keep a newline after the closing tag. */
+internal fun legacyExploreScript(value: String): String? {
+    val rule = value.trim()
+    return when {
+        rule.startsWith("@js:", true) -> rule.substring(4)
+        rule.startsWith("<js>", true) -> {
+            require(rule.endsWith("</js>", true)) { "发现菜单缺少 </js> 结束标记" }
+            rule.substring(4, rule.length - 5)
+        }
+        else -> null
     }
 }
 
