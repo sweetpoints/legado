@@ -76,7 +76,7 @@ internal fun material3ColorRoles(
     }
     val roles = linkedMapOf<String, Int>("background" to bg, "surface" to bg)
     val offsets =
-        if (light) listOf(4.0, 0.0, -2.0, -4.0, -6.0) else listOf(-4.0, 2.0, 4.0, 6.0, 8.0)
+        if (light) listOf(4.0, -2.0, -4.0, -6.0, -8.0) else listOf(-4.0, 2.0, 4.0, 6.0, 8.0)
     listOf(
             "surfaceContainerLowest",
             "surfaceContainerLow",
