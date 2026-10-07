@@ -338,6 +338,18 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             @Suppress("UNCHECKED_CAST")
             return LegacyDomHost.call(args[0] as Map<*, *>, args[1] as String, args[2] as List<Any?>)
         }
+        if (method in NativeLegacyHttpHost.methods) {
+            // The caller facade owns this live source; script arguments cannot choose another.
+            val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
+                else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
+            val extensions = object : JsExtensions {
+                override fun getSource() = source
+                override fun getTag() = source?.getTag() ?: task.sourceId
+                override fun getSourceNavigationContext() = task.context
+            }
+            task.context[SourceTaskHttpObserver]?.onCall?.invoke(method)
+            return NativeLegacyHttpHost.call(method, args, extensions)
+        }
         if (method in LegacyJavaHost.methods) {
             val source: BaseSource? = when (task.sourceKind) {
                 "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)

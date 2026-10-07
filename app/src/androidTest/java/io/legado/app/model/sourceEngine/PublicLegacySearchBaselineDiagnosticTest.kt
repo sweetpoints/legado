@@ -16,6 +16,7 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,16 @@ import org.junit.runner.RunWith
 /** Diagnostic projection of fixed public source 1; never a live four-source acceptance claim. */
 @RunWith(AndroidJUnit4::class)
 class PublicLegacySearchBaselineDiagnosticTest {
+    private class HttpCounts {
+        private val values = ConcurrentHashMap<String, AtomicInteger>()
+
+        fun note(method: String) {
+            values.computeIfAbsent(method) { AtomicInteger() }.incrementAndGet()
+        }
+
+        fun snapshot(): Map<String, Int> = values.mapValues { it.value.get() }.toSortedMap()
+    }
+
     private class Replay(private val body: String, private val status: Int) :
         NanoHTTPD("127.0.0.1", 0) {
         val requests = AtomicInteger()
@@ -94,6 +105,7 @@ class PublicLegacySearchBaselineDiagnosticTest {
             var replay: Replay? = null
             try {
                 withContext(SuppressSourceNavigation) {
+                    report["primaryRemoteSearchFetchAttempts"] = 1
                     val response =
                         withTimeout(30_000) {
                             AnalyzeUrl(
@@ -154,22 +166,29 @@ class PublicLegacySearchBaselineDiagnosticTest {
                     }
                     val old = linkedMapOf<String, Any?>("status" to "running")
                     report["originalParser"] = old
+                    val oldHttp = HttpCounts()
+                    old["httpCountScope"] =
+                        "Observed javaHttp dispatcher attempts only; not all transport traffic"
                     try {
                         val rows =
-                            withTimeout(30_000) {
-                                AnalyzeRule(source = source)
-                                    .setCoroutineContext(currentCoroutineContext())
-                                    .setContent(body, response.url)
-                                    .getElements(listRule)
+                            withContext(SourceTaskHttpObserver(oldHttp::note)) {
+                                withTimeout(30_000) {
+                                    AnalyzeRule(source = source)
+                                        .setCoroutineContext(currentCoroutineContext())
+                                        .setContent(body, response.url)
+                                        .getElements(listRule)
+                                }
                             }
                         old["listCount"] = rows.size
                         val names =
-                            withTimeout(30_000) {
-                                rows.map { row ->
-                                    AnalyzeRule(SearchBook(), source)
-                                        .setCoroutineContext(currentCoroutineContext())
-                                        .setContent(row, response.url)
-                                        .getString(rules.name)
+                            withContext(SourceTaskHttpObserver(oldHttp::note)) {
+                                withTimeout(30_000) {
+                                    rows.map { row ->
+                                        AnalyzeRule(SearchBook(), source)
+                                            .setCoroutineContext(currentCoroutineContext())
+                                            .setContent(row, response.url)
+                                            .getString(rules.name)
+                                    }
                                 }
                             }
                         old["nameHashes"] = names.map {
@@ -178,6 +197,8 @@ class PublicLegacySearchBaselineDiagnosticTest {
                         old["status"] = "complete"
                     } catch (error: Exception) {
                         recordFailure(old, error)
+                    } finally {
+                        old["nativeHttpDispatchAttempts"] = oldHttp.snapshot()
                     }
                     replay =
                         Replay(body, response.raw.code).apply {
@@ -186,14 +207,23 @@ class PublicLegacySearchBaselineDiagnosticTest {
                     val replaySource = source.copy(searchUrl = replay!!.searchUrl)
                     val actual = linkedMapOf<String, Any?>("status" to "running")
                     report["actualWebBookReplay"] = actual
+                    val replayHttp = HttpCounts()
+                    actual["httpCountScope"] =
+                        "Observed javaHttp dispatcher attempts only; not all transport traffic"
                     try {
                         val rows =
-                            withTimeout(30_000) { WebBook.searchBookAwait(replaySource, "西游记", 1) }
+                            withContext(SourceTaskHttpObserver(replayHttp::note)) {
+                                withTimeout(30_000) {
+                                    WebBook.searchBookAwait(replaySource, "西游记", 1)
+                                }
+                            }
                         actual["listCount"] = rows.size
                         actual["nameHashes"] = rows.map { sha(it.name.toByteArray(Charsets.UTF_8)) }
                         actual["status"] = "complete"
                     } catch (error: Exception) {
                         recordFailure(actual, error)
+                    } finally {
+                        actual["nativeHttpDispatchAttempts"] = replayHttp.snapshot()
                     }
                     report["replaySearchRequests"] = replay!!.requests.get()
                     report["status"] =
