@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextRange
@@ -265,6 +266,7 @@ class LocalFilePickerScreenTest {
             CompositionLocalProvider(
                 LocalContext provides localized,
                 LocalConfiguration provides config,
+                LocalResources provides localized.resources,
             ) {
                 LegadoComposeTheme {
                     LocalFilePickerScreen(
@@ -319,6 +321,7 @@ class LocalFilePickerScreenTest {
             CompositionLocalProvider(
                 LocalContext provides localized,
                 LocalConfiguration provides config,
+                LocalResources provides localized.resources,
             ) {
                 LegadoComposeTheme {
                     LocalFilePickerScreen(

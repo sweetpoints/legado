@@ -37,16 +37,17 @@ fun BottomBarAssignmentScreen(
     state: BottomBarAssignmentState,
     editing: Boolean,
     actions: BottomBarAssignmentActions,
-    image: @Composable (String, Modifier) -> Unit =
-        { _, _ ->
-        },
+    image: @Composable (String, Modifier) -> Unit = { _, _ -> },
 ) {
     var name by remember {
         mutableStateOf(TextFieldValue(state.name, TextRange(state.start, state.end)))
     }
-    SideEffect {
-        if (name.text != state.name || name.selection != TextRange(state.start, state.end))
-            name = TextFieldValue(state.name, TextRange(state.start, state.end))
+    // Reconcile authoritative changes only; unrelated recompositions must not replay
+    // an older parent snapshot over an input/selection waiting for its callback echo.
+    LaunchedEffect(state.name, state.start, state.end) {
+        val selection = TextRange(state.start, state.end)
+        if (name.text != state.name) name = TextFieldValue(state.name, selection)
+        else if (name.selection != selection) name = name.copy(selection = selection)
     }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {

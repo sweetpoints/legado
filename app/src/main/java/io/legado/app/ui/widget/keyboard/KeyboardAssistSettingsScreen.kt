@@ -417,9 +417,10 @@ private fun AssistEditorField(
             remember(label) {
                 mutableStateOf(TextFieldValue(value.text, TextRange(value.start, value.end)))
             }
-        SideEffect {
-            if (local.text != value.text || local.selection != TextRange(value.start, value.end))
-                local = TextFieldValue(value.text, TextRange(value.start, value.end))
+        LaunchedEffect(value.text, value.start, value.end) {
+            val selection = TextRange(value.start, value.end)
+            if (local.text != value.text) local = TextFieldValue(value.text, selection)
+            else if (local.selection != selection) local = local.copy(selection = selection)
         }
         OutlinedTextField(
             local,

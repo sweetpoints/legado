@@ -1,6 +1,7 @@
 package io.legado.app.ui.config
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextRange
@@ -29,6 +30,19 @@ class BottomBarAssignmentScreenTest {
         compose.setContent {
             LegadoComposeTheme { BottomBarAssignmentScreen(state.value, false, actions) }
         }
+    }
+
+    @Test
+    fun pendingNameInputSurvivesBusyRecompositionBeforeItsParentEcho() {
+        var draft: String? = null
+        show(BottomBarAssignmentActions(name = { text, _, _ -> draft = text }))
+        compose.onNodeWithTag("bar-assignment-name").performTextReplacement("Pending name")
+        compose.runOnIdle { state.value = state.value.copy(busy = true) }
+        compose
+            .onNodeWithTag("bar-assignment-name")
+            .assertIsNotEnabled()
+            .assertTextContains("Pending name")
+        compose.runOnIdle { assertEquals("Pending name", draft) }
     }
 
     @Test
@@ -72,12 +86,31 @@ class BottomBarAssignmentScreenTest {
             )
         )
         compose.onNodeWithTag("bar-assignment-name").performTextReplacement(" New name ")
+        fun assertSelectedName(stage: String) {
+            val rendered =
+                compose
+                    .onNodeWithTag("bar-assignment-name")
+                    .fetchSemanticsNode()
+                    .config[SemanticsProperties.TextSelectionRange]
+            val saved = TextRange(state.value.start, state.value.end)
+            assertEquals("$stage rendered start", 2, rendered.min)
+            assertEquals("$stage rendered end", 7, rendered.max)
+            assertEquals("$stage saved start", 2, saved.min)
+            assertEquals("$stage saved end", 7, saved.max)
+            assertEquals(
+                "$stage selected characters",
+                "ew na",
+                state.value.name.substring(saved.min, saved.max),
+            )
+        }
+        // Compose 1.12's input helper dispatches selection.min/max to SetSelection.
         compose.onNodeWithTag("bar-assignment-name").performTextInputSelection(TextRange(7, 2))
+        assertSelectedName("after SetSelection")
         compose.onNodeWithTag("bar-assignment-save").performClick()
+        assertSelectedName("after Save")
         compose.onNodeWithTag("bar-assignment-back").performClick()
+        assertSelectedName("after Back")
         assertEquals(" New name ", state.value.name)
-        assertEquals(7, state.value.start)
-        assertEquals(2, state.value.end)
         assertEquals(1, saves)
         assertEquals(1, closes)
         compose.runOnIdle { state.value = state.value.copy(busy = true) }
