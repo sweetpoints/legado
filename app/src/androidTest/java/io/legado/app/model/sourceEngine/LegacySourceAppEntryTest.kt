@@ -35,7 +35,7 @@ class LegacySourceAppEntryTest {
             return newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", body)
         }
     }
-    private fun importSource(server: FixtureServer, unsupportedContent: Boolean = false): io.legado.app.data.entities.BookSource {
+    private fun importSource(server: FixtureServer, invalidContentScript: Boolean = false): io.legado.app.data.entities.BookSource {
         val raw = mapOf(
             "bookSourceUrl" to server.base,
             "bookSourceName" to "Imported complete legacy fixture",
@@ -47,7 +47,7 @@ class LegacySourceAppEntryTest {
             "ruleBookInfo" to mapOf("init" to "class.target", "name" to "tag.h2@text", "tocUrl" to "tag.a@href", "canReName" to "true"),
             "ruleToc" to mapOf("chapterList" to "tag.li@tag.a", "chapterName" to "text", "chapterUrl" to "href"),
             "ruleContent" to buildMap {
-                put("content", if (unsupportedContent) "@webjs:document.querySelector('.body').innerHTML" else "class.body@html")
+                put("content", if (invalidContentScript) "@js:java.__unsupportedCompatibilityProbe()" else "class.body@html")
                 put("replaceRegex", "##Beta##Replaced")
                 put("title", "tag.h3@text")
 
@@ -60,15 +60,15 @@ class LegacySourceAppEntryTest {
         // Omitted source flags must use the actual App DTO defaults, not a reduced test definition.
         assertEquals(true, imported.enabledCookieJar)
         assertEquals(
-            if (unsupportedContent) "@webjs:document.querySelector('.body').innerHTML" else "class.body@html",
+            if (invalidContentScript) "@js:java.__unsupportedCompatibilityProbe()" else "class.body@html",
             imported.getContentRule().content,
         )
         return candidate.source(false)
     }
 
-    @Test fun importingCompleteOldSourceDoesNotBlockSearchOnUnrelatedContentHooks(): Unit = runBlocking(Dispatchers.IO) {
+    @Test fun importingCompleteOldSourceDoesNotBlockSearchOnUnselectedInvalidContentScript(): Unit = runBlocking(Dispatchers.IO) {
         val server = FixtureServer().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
-        val source = importSource(server, unsupportedContent = true)
+        val source = importSource(server, invalidContentScript = true)
         try {
             val books = withTimeout(15_000) { WebBook.searchBookAwait(source, "Query", 1) }
             assertEquals("Imported Book", books.single().name)
@@ -111,9 +111,9 @@ class LegacySourceAppEntryTest {
         } finally { server.stop(); DartSourceEngine.clearSourceState(source) }
     }
 
-    @Test fun unsupportedHookInSelectedOperationStillFailsBeforeNetwork(): Unit = runBlocking(Dispatchers.IO) {
+    @Test fun selectedInvalidJavaScriptFailsAfterFetchWithoutBlockingSearch(): Unit = runBlocking(Dispatchers.IO) {
         val server = FixtureServer().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
-        val source = importSource(server, unsupportedContent = true)
+        val source = importSource(server, invalidContentScript = true)
         try {
             val book = WebBook.searchBookAwait(source, "Query", 1).single().toBook()
             val error = runCatching {
@@ -121,9 +121,9 @@ class LegacySourceAppEntryTest {
                     WebBook.getContentAwait(source, book, BookChapter(url = server.base + "/chapter", title = "Chapter"), needSave = false)
                 }
             }.exceptionOrNull()
-            assertTrue(error is SourceHostException)
-            assertEquals("legacy_requires_migration", (error as SourceHostException).code)
-            assertEquals(listOf("/search"), server.requests.toList())
+            assertTrue(error is SourceScriptException)
+            assertEquals("script_error", (error as SourceScriptException).code)
+            assertEquals(listOf("/search", "/chapter"), server.requests.toList())
         } finally { server.stop(); DartSourceEngine.clearSourceState(source) }
     }
 }
