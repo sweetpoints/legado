@@ -1,7 +1,11 @@
 package io.legado.app.model.sourceEngine
 
+import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.utils.HtmlFormatter
+import java.net.URL
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.Job
+import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -446,7 +450,22 @@ class LegacyRuleHostTest {
     fun infoInitPreservesXPathListAndRegexCapturesForLaterFields() {
         val task = host()
         val xpath = task.evaluate(request("@XPath://a", mode = "element"))["value"]!!
-        assertEquals("Two", task.evaluate(request("tag.a.1@text", xpath))["value"])
+        val original = AnalyzeRule().setContent(html).getElement("@XPath://a")!!
+        assertTrue(original is List<*>)
+        assertEquals(3, (original as List<*>).size)
+        // The original XPath list's toString is JSON-shaped. The original parser
+        // therefore treats a later unprefixed CSS field as JSON, not an Elements root.
+        val originalField = AnalyzeRule().setContent(original).getString("tag.a.1@text")
+        assertEquals("", originalField)
+        assertEquals(originalField, task.evaluate(request("tag.a.1@text", xpath))["value"])
+        val token = (xpath as Map<*, *>)[LegacyRuleHost.VALUE_REF]
+        val registry =
+            LegacyRuleHost::class.java.getDeclaredField("storedValues").apply {
+                isAccessible = true
+            }
+        val retained = (registry.get(task) as Map<*, *>)[token]!!
+        assertEquals(original.javaClass, retained.javaClass)
+        assertEquals(original.toString(), retained.toString())
         val regex = task.evaluate(request(":([0-9]+):([A-Za-z]+)", "12:Book", "element"))["value"]!!
         assertEquals("Book", task.evaluate(request("\$2", regex))["value"])
         assertEquals(
@@ -498,7 +517,17 @@ class LegacyRuleHostTest {
                         ),
                     )
                 )
-        assertEquals("Start\n　　&lt;C&gt;", doubleEncoded["value"])
+        val originalPage =
+            StringEscapeUtils.unescapeHtml4(
+                HtmlFormatter.formatKeepImg(
+                    "Start<p>&amp;lt;C&amp;gt;</p>",
+                    URL("https://fixture.invalid/books/"),
+                )
+            )
+        assertEquals("Start\n　　&lt;C&gt;\n　　", originalPage)
+        assertEquals(originalPage, doubleEncoded["value"])
+        // This mode returns a page before BookContent's subsequent join/replace stage.
+        assertEquals("Start\n　　&lt;C&gt;", (doubleEncoded["value"] as String).trim())
     }
 
     @Test
