@@ -22,6 +22,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.BatchContentContext
+import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.model.Debug
 import io.legado.app.model.jsSource.JsSourceMarshaller
 import io.legado.app.model.sourceEngine.DartSourceEngine
@@ -44,6 +45,10 @@ import splitties.init.appCtx
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
+
+    /** Export the live entity variables together with the immutable script snapshot. */
+    private fun scriptSnapshot(value: RuleDataInterface): Map<String, Any?> =
+        DartSourceEngine.jsonObject(value) + ("variable" to GSON.toJson(value.variableMap))
 
     private fun usesLegacyDartFields(source: BookSource): Boolean {
         val definition =
@@ -210,8 +215,8 @@ object WebBook {
                 DartSourceEngine.execute(
                         bookSource,
                         "info",
-                        DartSourceEngine.jsonObject(book) +
-                            mapOf("book" to DartSourceEngine.jsonObject(book)),
+                        scriptSnapshot(book) +
+                            mapOf("book" to scriptSnapshot(book)),
                     )
                     .single(),
             )
@@ -273,7 +278,7 @@ object WebBook {
             .runCatching {
                 val script = bookSource.ruleToc?.preUpdateJs
                 if (!script.isNullOrBlank()) {
-                    val before = DartSourceEngine.jsonObject(book)
+                    val before = scriptSnapshot(book)
                     val sourceInfo = DartSourceEngine.jsonObject(bookSource)
                     val result =
                         DartSourceEngine.evaluate(
@@ -390,8 +395,8 @@ object WebBook {
                     DartSourceEngine.execute(
                             bookSource,
                             "toc",
-                            DartSourceEngine.jsonObject(book) +
-                                mapOf("book" to DartSourceEngine.jsonObject(book)),
+                            scriptSnapshot(book) +
+                                mapOf("book" to scriptSnapshot(book)),
                         )
                         .mapIndexed { index, row ->
                             val normalized = row.toMutableMap()
@@ -490,10 +495,10 @@ object WebBook {
         }
 
         val input =
-            DartSourceEngine.jsonObject(book) +
+            scriptSnapshot(book) +
                 mapOf(
-                    "book" to DartSourceEngine.jsonObject(book),
-                    "chapter" to DartSourceEngine.jsonObject(bookChapter),
+                    "book" to scriptSnapshot(book),
+                    "chapter" to scriptSnapshot(bookChapter),
                     "chapterUrl" to bookChapter.getAbsoluteURL(),
                     "chapterTitle" to bookChapter.title,
                     "nextChapterUrl" to nextChapterUrl,
@@ -634,10 +639,10 @@ object WebBook {
                 bookSource,
                 code,
                 mapOf(
-                    "book" to DartSourceEngine.jsonObject(book),
+                    "book" to scriptSnapshot(book),
                     "chapters" to
                         chapters.map {
-                            DartSourceEngine.jsonObject(it) + ("absoluteUrl" to it.getAbsoluteURL())
+                            scriptSnapshot(it) + ("absoluteUrl" to it.getAbsoluteURL())
                         },
                 ),
             )

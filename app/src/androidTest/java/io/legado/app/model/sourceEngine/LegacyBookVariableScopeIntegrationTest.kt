@@ -2,6 +2,10 @@ package io.legado.app.model.sourceEngine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fi.iki.elonen.NanoHTTPD
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
+import io.legado.app.data.entities.SearchBook
+import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.BookInfoRule
 import io.legado.app.data.entities.rule.SearchRule
@@ -31,6 +35,33 @@ class LegacyBookVariableScopeIntegrationTest {
             }
             return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html)
         }
+    }
+
+    @Test
+    fun originalParserKeepsSearchBookVariablesThroughConversionAndSeparateStages() {
+        val firstResult = SearchBook(name = "Book A", bookUrl = "https://fixture.invalid/a")
+        val secondResult = SearchBook(name = "Book B", bookUrl = "https://fixture.invalid/b")
+        val rule = "@put:{\"saved\":\"tag.i@text\"}tag.h2@text"
+        assertEquals("Book A", AnalyzeRule(firstResult).setContent("<h2>Book A</h2><i>A-token</i>").getString(rule))
+        assertEquals("Book B", AnalyzeRule(secondResult).setContent("<h2>Book B</h2><i>B-token</i>").getString(rule))
+        val first = firstResult.toBook()
+        val second = secondResult.toBook()
+        AnalyzeRule(second).setContent("<b>B-detail</b>").getString("@put:{\"detail\":\"tag.b@text\"}@get:{saved}")
+        AnalyzeRule(first).setContent("<b>A-detail</b>").getString("@put:{\"detail\":\"tag.b@text\"}@get:{saved}")
+        assertEquals("B-token", AnalyzeRule(second).setContent("unused").getString("@get:{saved}"))
+        assertEquals("B-detail", second.getVariable("detail"))
+        assertEquals("A-token", AnalyzeRule(first).setContent("unused").getString("@get:{saved}"))
+        assertEquals("A-detail", first.getVariable("detail"))
+        val chapter = BookChapter(bookUrl = first.bookUrl, url = "/chapter")
+        val contentParser = AnalyzeRule(first).setChapter(chapter).setContent("<i>chapter-token</i>")
+        assertEquals("A-token", contentParser.getString("@get:{saved}"))
+        contentParser.getString("@put:{\"saved\":\"tag.i@text\"}tag.i@text")
+        assertEquals("chapter-token", chapter.getVariable("saved"))
+        assertEquals("A-token", first.getVariable("saved"))
+        assertEquals("chapter-token", contentParser.getString("@get:{saved}"))
+        chapter.putVariable("saved", "")
+        assertEquals("A-token", contentParser.getString("@get:{saved}"))
+
     }
 
     @Test
