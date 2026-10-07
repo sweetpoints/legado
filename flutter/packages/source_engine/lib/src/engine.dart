@@ -264,8 +264,17 @@ class SourceEngine {
     }
     final original = source.metadata['legacyOriginal'];
     String? legacyHook(String group, String name) {
-      if (original is! Map || original[group] is! Map) return null;
-      final value = (original[group] as Map)[name];
+      if (original is! Map) return null;
+      Object? container = original[group];
+      if (container is String) {
+        try {
+          container = jsonDecode(container);
+        } on FormatException {
+          return null;
+        }
+      }
+      if (container is! Map) return null;
+      final value = container[name];
       if (value == null) return null;
       if (value is! String) {
         throw EngineException(

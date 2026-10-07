@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:source_engine/source_engine.dart';
 import 'package:test/test.dart';
 
@@ -66,6 +68,35 @@ SourceEngine _engine(_Host host, _Pages pages) => SourceEngine(
   legacyRuleEvaluator: const HostLegacyRuleEvaluator(allowScripts: true),
 );
 void main() {
+  test('encoded legacy rule object keeps init execution rather than losing raw provenance', () async {
+    final host = _Host(
+      (request) => request['mode'] == 'element'
+          ? {'__legacyRuleValueRef': 'original-container'}
+          : 'Encoded title',
+    );
+    final engine = _engine(host, _Pages());
+    final definition = _source(
+      'info',
+      {'init': 'tag.section'},
+      {'name': '@legacy:tag.h2@text'},
+    );
+    final encoded = SourceDefinition.fromJson({
+      ...definition.toJson(),
+      'metadata': {
+        'legacyOriginal': {
+          'ruleBookInfo': jsonEncode({'init': 'tag.section'}),
+        },
+      },
+    });
+    try {
+      expect(await engine.execute(encoded, 'info', input: {'taskId': 'task'}), [
+        {'name': 'Encoded title'},
+      ]);
+      expect(host.calls.map((r) => r['mode']), ['element', 'scalar']);
+    } finally {
+      await engine.close();
+    }
+  });
   test('detail init is original getElement before fields and preserves its whole value', () async {
     const reference = {'__legacyRuleValueRef': 'task-owned-reference'};
     final host = _Host((r) {
