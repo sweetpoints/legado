@@ -570,7 +570,6 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
     override suspend fun clearSourceState(sourceId: String) {
         auxiliaryCall("clearSourceState", mapOf("sourceId" to sourceId), sourceId = sourceId)
-        LegacyJavaHost.clearOwner(sourceId)
     }
 
     override suspend fun execute(

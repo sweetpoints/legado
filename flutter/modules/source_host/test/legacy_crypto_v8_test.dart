@@ -23,12 +23,17 @@ void main() {
         final method = request['method'] as String;
         methods.add(method);
         if (method == 'javaHost.cryptoCreate') {
-          return {'__legacyCryptoHandle': 'opaque'};
+          return {
+            '__legacyCryptoState': {'generation': 1},
+          };
         }
         if (method == 'javaHost.cryptoCall') {
           final args = request['arguments'] as List;
-          expect(args[0], 'opaque');
-          return args[1] == 'setIv' ? null : 'encrypted';
+          expect(args[0], isA<Map>());
+          return {
+            'value': args[1] == 'setIv' ? null : 'encrypted',
+            'state': args[0],
+          };
         }
         return (request['arguments'] as List).single;
       });
@@ -60,6 +65,52 @@ void main() {
           'javaHost.cryptoCall',
           'javaHost.cryptoCall',
         ]);
+      } finally {
+        await runtime.close();
+      }
+    },
+  );
+  test(
+    '600 chapter entries do not expire jsLib retained crypto closure',
+    () async {
+      var created = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        final request = call.arguments as Map;
+        expect(request['sourceId'], 'book:fixture');
+        if (request['method'] == 'javaHost.cryptoCreate') {
+          return {
+            '__legacyCryptoState': {'generation': ++created},
+          };
+        }
+        final args = request['arguments'] as List;
+        return {'value': (args[0] as Map)['generation'], 'state': args[0]};
+      });
+      final runtime = V8Runtime(prelude: legacyScriptPrelude, persistent: true);
+      final host = LegacyScriptHost(
+        TaskScriptHost(
+          const SourcePlatform(sourceId: 'book:fixture'),
+          'chapter-task',
+        ),
+      );
+      try {
+        await runtime.evaluateAuxiliary(
+          'var savedCrypto=java.createSymmetricCrypto("AES",null);',
+          ScriptContext(host: host),
+        );
+        for (var chapter = 0; chapter < 600; chapter++) {
+          await runtime.evaluateAuxiliary(
+            '(()=>{java.createSymmetricCrypto("AES",null).encryptHex("chapter");})()',
+            ScriptContext(host: host),
+          );
+        }
+        expect(
+          await runtime.evaluateAuxiliary(
+            'savedCrypto.encryptHex("retained")',
+            ScriptContext(host: host),
+          ),
+          1,
+        );
+        expect(created, 601);
       } finally {
         await runtime.close();
       }

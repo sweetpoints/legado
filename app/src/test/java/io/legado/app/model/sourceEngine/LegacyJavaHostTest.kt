@@ -64,27 +64,59 @@ class LegacyJavaHostTest {
         assertEquals(uuid, java.util.UUID.fromString(uuid).toString())
     }
 
-    @Test fun symmetricCryptoUsesRealCipherAndKeepsOwnerAndRandomKeyState() {
+    @Test fun repeatedChapterCreationHasNoNativeRegistryAndRetainedStateStillWorks() {
         val ext = object : JsExtensions {
             override fun getSource() = null
             override fun getTag() = "fixture"
         }
-        fun create(owner: String, key: Any?): String = (LegacyJavaHost.call(ext,
-            "javaHost.cryptoCreate", listOf("AES/ECB/PKCS5Padding", key), owner) as Map<*, *>)["__legacyCryptoHandle"] as String
-        fun call(owner: String, handle: String, op: String, value: Any?) = LegacyJavaHost.call(ext,
-            "javaHost.cryptoCall", listOf(handle, op, listOf(value)), owner)
-        try {
-            val fixed = create("one", "0123456789abcdef")
-            val encrypted = call("one", fixed, "encryptHex", "hello") as String
-            assertEquals("hello", call("one", fixed, "decryptStr", encrypted))
-            val random = create("one", null)
-            val data = call("one", random, "encrypt", "random-key-roundtrip")
-            assertEquals("random-key-roundtrip", call("one", random, "decryptStr", data))
-            assertThrows(IllegalArgumentException::class.java) { call("two", fixed, "decryptStr", encrypted) }
-            assertThrows(IllegalStateException::class.java) { call("one", fixed, "getCipher", encrypted) }
-            LegacyJavaHost.clearOwner("one")
-            assertThrows(IllegalArgumentException::class.java) { call("one", fixed, "decryptStr", encrypted) }
-        } finally { LegacyJavaHost.clearOwner("one") }
+        fun create(): Map<*, *> = (LegacyJavaHost.call(ext, "javaHost.cryptoCreate",
+            listOf("AES/ECB/PKCS5Padding", null), "owner") as Map<*, *>)["__legacyCryptoState"] as Map<*, *>
+        val retained = create()
+        repeat(600) { create() }
+        fun invoke(state: Map<*, *>, operation: String, value: Any?, owner: String = "owner") =
+            LegacyJavaHost.call(ext, "javaHost.cryptoCall", listOf(state, operation, listOf(value)), owner) as Map<*, *>
+        val encrypted = invoke(retained, "encryptHex", "hello")
+        assertEquals("hello", invoke(encrypted["state"] as Map<*, *>, "decryptStr", encrypted["value"])["value"])
+        assertThrows(IllegalArgumentException::class.java) { invoke(retained, "encryptHex", "hello", "another") }
+    }
+
+    @Test fun jsonCryptoMatchesOriginalEcbCbcAndGcmOperationSequences() {
+        val ext = object : JsExtensions {
+            override fun getSource() = null
+            override fun getTag() = "fixture"
+        }
+        for (mode in listOf("AES/ECB/PKCS5Padding", "AES/CBC/PKCS5Padding", "AES/GCM/NoPadding")) {
+            val initialIv = if (mode.contains("CBC")) List(16) { 1 } else null
+            var state = (LegacyJavaHost.call(ext, "javaHost.cryptoCreate", listOf(mode, null, initialIv), "owner") as Map<*, *>)["__legacyCryptoState"] as Map<*, *>
+            val key = (state["key"] as List<*>).map { (it as Number).toByte() }.toByteArray()
+            val baseline = ext.createSymmetricCrypto(mode, key, initialIv?.map { it.toByte() }?.toByteArray())
+            fun invoke(op: String, value: Any?): Any? {
+                val response = LegacyJavaHost.call(ext, "javaHost.cryptoCall", listOf(state, op, listOf(value)), "owner") as Map<*, *>
+                state = response["state"] as Map<*, *>
+                return response["value"]
+            }
+            repeat(2) {
+                val expected = baseline.encryptHex("payload")
+                val actual = invoke("encryptHex", "payload") as String
+                if (!mode.contains("GCM")) assertTrue("Configured-parameter encryption must match", expected == actual)
+                else assertEquals(expected.length, actual.length)
+                val expectedDecryption = runCatching { baseline.decryptStr(actual) }
+                val actualDecryption = runCatching { invoke("decryptStr", actual) }
+                assertEquals(expectedDecryption.isSuccess, actualDecryption.isSuccess)
+                if (expectedDecryption.isSuccess) assertEquals(expectedDecryption.getOrNull(), actualDecryption.getOrNull())
+                else assertEquals(expectedDecryption.exceptionOrNull()!!.javaClass, actualDecryption.exceptionOrNull()!!.javaClass)
+            }
+            val nextIv = List(16) { 2 }
+            baseline.setIv(nextIv.map { it.toByte() }.toByteArray())
+            invoke("setIv", nextIv)
+            val oldOutcome = runCatching { baseline.encryptHex("after-setIv") }
+            val newOutcome = runCatching { invoke("encryptHex", "after-setIv") }
+            assertEquals(oldOutcome.isSuccess, newOutcome.isSuccess)
+            if (oldOutcome.isSuccess) {
+                assertTrue("setIv must remain per-object", oldOutcome.getOrNull() == newOutcome.getOrNull())
+                assertEquals("after-setIv", invoke("decryptStr", newOutcome.getOrNull()))
+            } else assertEquals(oldOutcome.exceptionOrNull()!!.javaClass, newOutcome.exceptionOrNull()!!.javaClass)
+        }
     }
 
     @Test fun rejectsUnknownNamesInvalidArgumentsAndCancelledTasks() {

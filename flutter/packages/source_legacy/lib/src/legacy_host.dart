@@ -149,13 +149,19 @@ const legacyScriptPrelude = r"""
         }
         const value = __sourceHostSync('java.' + String(name), args);
         if (String(name) === 'createSymmetricCrypto') {
-          if (!value || typeof value.__legacyCryptoHandle !== 'string') throw new Error('legacy.invalid_crypto_handle');
-          const handle = value.__legacyCryptoHandle;
+          if (!value || !value.__legacyCryptoState) throw new Error('legacy.invalid_crypto_state');
+          let state = value.__legacyCryptoState;
           const crypto = Object.create(null);
+          const invoke = (operation, values) => {
+            const result = __sourceHostSync('javaHost.cryptoCall', [state, operation, values]);
+            if (!result || !result.state) throw new Error('legacy.invalid_crypto_state');
+            state = result.state;
+            return result.value;
+          };
           for (const operation of ['encrypt','encryptHex','encryptBase64','decrypt','decryptStr']) {
-            crypto[operation] = (...values) => __sourceHostSync('javaHost.cryptoCall', [handle, operation, values]);
+            crypto[operation] = (...values) => invoke(operation, values);
           }
-          crypto.setIv = iv => {__sourceHostSync('javaHost.cryptoCall', [handle, 'setIv', [iv]]); return crypto;};
+          crypto.setIv = iv => {invoke('setIv', [iv]); return crypto;};
           return crypto;
         }
 

@@ -3,7 +3,6 @@ package io.legado.app.model.sourceEngine
 import io.legado.app.help.JsExtensions
 import cn.hutool.crypto.symmetric.SymmetricCrypto
 import java.nio.charset.Charset
-import java.util.UUID
 import kotlinx.coroutines.ensureActive
 
 /** Explicit JSON host boundary. Never resolves arbitrary Java names or objects. */
@@ -32,25 +31,43 @@ object LegacyJavaHost {
         return when (method) {
             "javaHost.cryptoCreate" -> {
                 arity(2, 3)
+                val transformation = text(0)
+                require(!transformation.startsWith("PBE", ignoreCase = true)) {
+                    "legacy.unsupported_crypto_parameter_snapshot"
+                }
                 val key = args[1]; val iv = args.getOrNull(2)
                 val crypto = if (key is String) {
                     require(iv == null || iv is String) { "Legacy string IV required" }
-                    extensions.createSymmetricCrypto(text(0), key, iv as String?)
-                } else extensions.createSymmetricCrypto(text(0), bytes(key), bytes(iv))
-                synchronized(cryptos) {
-                    require(cryptos.size < 256) { "Legacy crypto handle capacity exceeded" }
-                    val handle = UUID.randomUUID().toString()
-                    cryptos[handle] = ownerId to crypto
-                    mapOf("__legacyCryptoHandle" to handle)
-                }
+                    extensions.createSymmetricCrypto(transformation, key, iv as String?)
+                } else extensions.createSymmetricCrypto(transformation, bytes(key), bytes(iv))
+                val explicitIv = (if (iv is String) iv.toByteArray() else bytes(iv))?.takeIf { it.isNotEmpty() }
+                mapOf("__legacyCryptoState" to mapOf(
+                    "schemaVersion" to 1, "ownerId" to ownerId,
+                    "transformation" to transformation,
+                    "key" to (crypto.secretKey.encoded ?: error("Legacy exportable key required")).map { it.toInt() },
+                    "iv" to explicitIv?.map { it.toInt() },
+                ))
             }
             "javaHost.cryptoCall" -> {
                 arity(3)
-                val handle = text(0); val operation = text(1)
+                val state = args[0] as? Map<*, *> ?: error("Legacy crypto state required")
+                require((state["schemaVersion"] as? Number)?.toDouble() == 1.0 && state["ownerId"] == ownerId) { "Invalid legacy crypto state owner" }
+                val transformation = state["transformation"] as? String ?: error("Legacy transformation required")
+                require(!transformation.startsWith("PBE", ignoreCase = true)) { "legacy.unsupported_crypto_parameter_snapshot" }
+                val key = bytes(state["key"]) ?: error("Legacy key bytes required")
+                val iv = bytes(state["iv"])
+                val crypto = extensions.createSymmetricCrypto(transformation, key, null)
+                if (iv != null) crypto.setIv(iv)
+                val operation = text(1)
                 val values = args[2] as? List<*> ?: error("Legacy crypto argument list required")
-                val item = synchronized(cryptos) { cryptos[handle] }
-                require(item != null && item.first == ownerId) { "Unknown legacy crypto handle" }
-                synchronized(item.second) { cryptoCall(item.second, operation, values) }
+                val result = cryptoCall(crypto, operation, values)
+                // Hutool reinitializes each operation from configured params; a
+                // provider-generated IV is not promoted to configured setIv state.
+                val updatedIv = if (operation == "setIv") bytes(values.single()) else iv
+                mapOf("value" to result, "state" to mapOf(
+                    "schemaVersion" to 1, "ownerId" to ownerId, "transformation" to transformation,
+                    "key" to key.map { it.toInt() }, "iv" to updatedIv?.map { it.toInt() },
+                ))
             }
             "javaHost.aesBase64DecodeToString" -> { arity(4); extensions.aesBase64DecodeToString(text(0), text(1), text(2), text(3)) }
             "javaHost.desEncodeToBase64String" -> { arity(4); extensions.desEncodeToBase64String(text(0), text(1), text(2), text(3)) }
@@ -89,10 +106,6 @@ object LegacyJavaHost {
             }
             else -> error("Unsupported legacy host API")
         }
-    }
-    private val cryptos = mutableMapOf<String, Pair<String, SymmetricCrypto>>()
-    fun clearOwner(ownerId: String) = synchronized(cryptos) {
-        cryptos.entries.removeAll { it.value.first == ownerId }
     }
     private fun bytes(value: Any?): ByteArray? {
         if (value == null) return null
