@@ -51,6 +51,15 @@ class SourcePlatform implements ScriptHost {
       case 'browser.video':
       case 'javaHost.cryptoCreate':
       case 'javaHost.cryptoCall':
+      case 'cookieHost.setCookie':
+      case 'cookieHost.setWebCookie':
+      case 'cookieHost.replaceCookie':
+      case 'cookieHost.getCookie':
+      case 'cookieHost.getKey':
+      case 'cookieHost.removeCookie':
+      case 'cookieHost.cookieToMap':
+      case 'cookieHost.mapToCookie':
+      case 'cookieHost.clear':
       case 'javaHost.domCall':
       case 'javaHost.aesBase64DecodeToString':
       case 'javaHost.desEncodeToBase64String':

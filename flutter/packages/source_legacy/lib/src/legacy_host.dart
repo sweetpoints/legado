@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'legacy_dom.dart';
+import 'legacy_cookie.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
@@ -62,6 +63,7 @@ const legacySupportedMethods = {
 /// StrResponse and Jsoup response method facades. Dart only transports JSON;
 /// response methods are materialized in JS after the synchronous host returns.
 const legacyScriptPrelude =
+    legacyCookiePrelude +
     legacyDomPrelude +
     r"""
 (() => {
