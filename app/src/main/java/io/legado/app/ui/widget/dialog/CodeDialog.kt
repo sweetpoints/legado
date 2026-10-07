@@ -138,7 +138,19 @@ class CodeDialog() : BaseComposeDialogFragment() {
                 model.close()
                 callback()?.onCodeSave(code, requestId)
             }
-            CodeDialogAction.EditorSaved -> callback()?.onCodeSave(currentOriginalCode(), requestId)
+            CodeDialogAction.EditorSaved ->
+                callback()?.let { owner ->
+                    // The returned draft is not a settled source candidate until the host
+                    // has recomputed replacements and synchronized the alternate preview.
+                    model.refreshPending(true)
+                    try {
+                        owner.onCodeSave(currentOriginalCode(), requestId)
+                    } finally {
+                        // A generic callback has no replacement pipeline. Import hosts
+                        // expose their synchronously enqueued refresh through this flag.
+                        model.refreshPending(owner.isReplaceRuleRefreshPending())
+                    }
+                }
             CodeDialogAction.ReplaceRules -> callback()?.onOpenReplaceRules()
             CodeDialogAction.Effective,
             CodeDialogAction.Manual ->
