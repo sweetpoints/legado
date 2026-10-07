@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.jsoup.nodes.Element
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +33,11 @@ class LegacyDomV8IntegrationTest {
                         "https://dom.invalid/base",
                     )
             try {
+                // The original String parser has no DOM base URI; AnalyzeRule.baseUrl
+                // is used by URL rules, not Jsoup attr("abs:href"). Compare the native
+                // element with the V8 snapshot instead of inventing a different base.
+                val nativeLink = (parser.getElements("tag.a").single() as Element).attr("abs:href")
+                assertEquals("", nativeLink)
                 val result =
                     withTimeout(20_000) {
                         parser.evalJS(
@@ -49,7 +55,7 @@ class LegacyDomV8IntegrationTest {
                 assertEquals(1, (result["size"] as Number).toInt())
                 assertEquals("tbody", result["parent"])
                 assertEquals("First Second", result["names"])
-                assertEquals("https://dom.invalid/first", result["link"])
+                assertEquals(nativeLink, result["link"])
                 assertEquals("Second", result["text"])
             } finally {
                 DartSourceEngine.clearSourceState(source)
