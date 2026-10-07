@@ -36,6 +36,8 @@ class PublicSourceCorpusTest {
         var elapsedMs: Long = 0,
         var errorCode: String? = null,
         var errorType: String? = null,
+        var errorDiagnostic: String? = null,
+        var errorMessageSha256: String? = null,
         var classification: String? = null,
     )
 
@@ -220,13 +222,13 @@ class PublicSourceCorpusTest {
         } catch (error: TimeoutCancellationException) {
             stage.status = "blocked"
             stage.errorCode = "stage_deadline"
-            stage.errorType = error.javaClass.name
+            recordDiagnostic(stage, error)
             stage.classification = "deadlineUnclassified"
             null
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            stage.errorType = error.javaClass.name
+            recordDiagnostic(stage, error)
             val code = structuredCode(error)
             stage.errorCode = code
             when {
@@ -247,6 +249,76 @@ class PublicSourceCorpusTest {
         } finally {
             stage.elapsedMs = System.currentTimeMillis() - start
         }
+    }
+
+    private fun recordDiagnostic(stage: Stage, error: Throwable) {
+        stage.errorType = error.javaClass.name
+        val message = error.message.orEmpty()
+        stage.errorMessageSha256 = sha256(message.toByteArray(Charsets.UTF_8))
+        // Never persist the original message: it can include source code, URLs,
+        // request headers or book content. Only bounded identifier templates survive.
+        val bounded = message.take(4096)
+        val missing =
+            Regex("""ReferenceError:\s*([A-Za-z_$][A-Za-z0-9_$]{0,63})\s+is not defined\b""")
+                .find(bounded)
+        if (missing != null) {
+            stage.errorDiagnostic = "ReferenceError: ${missing.groupValues[1]} is not defined"
+            return
+        }
+        if (bounded.contains("TypeError:")) {
+            val absentMethod =
+                Regex("""\b([A-Za-z_$][A-Za-z0-9_$]{0,63})\s+is not a function\b""")
+                    .find(bounded)
+                    ?.groupValues
+                    ?.get(1)
+            if (
+                absentMethod in
+                    setOf(
+                        "toArray",
+                        "select",
+                        "attr",
+                        "text",
+                        "html",
+                        "outerHtml",
+                        "getString",
+                        "getElement",
+                        "getElements",
+                        "get",
+                        "put",
+                        "getKey",
+                        "getTag",
+                        "getVariable",
+                        "post",
+                        "headers",
+                        "ajax",
+                        "md5Encode",
+                    )
+            ) {
+                stage.errorDiagnostic = "TypeError: method $absentMethod is not a function"
+                return
+            }
+        }
+        val unsupported =
+            Regex(
+                    """legacy\.unsupported_api:\s*((?:java|source)\.[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,2})\b"""
+                )
+                .find(bounded)
+        if (unsupported != null) {
+            stage.errorDiagnostic = "legacy.unsupported_api: ${unsupported.groupValues[1]}"
+            return
+        }
+        stage.errorDiagnostic =
+            when {
+                bounded.contains("SyntaxError: Malformed arrow function parameter list") ->
+                    "SyntaxError: Malformed arrow function parameter list"
+                bounded.contains("SyntaxError: Unexpected token") ->
+                    "SyntaxError: Unexpected token (token omitted)"
+                bounded.contains("SyntaxError: Unexpected identifier") ->
+                    "SyntaxError: Unexpected identifier (value omitted)"
+                bounded.contains("nested_script_requires_migration") ->
+                    "nested_script_requires_migration"
+                else -> "Unclassified diagnostic; original message omitted"
+            }
     }
 
     private fun structuredCode(error: Throwable): String {
