@@ -1,6 +1,7 @@
 package io.legado.app.ui.menu
 
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,14 +50,43 @@ class MenuPopupStyleTest {
     }
 
     @Test
-    fun `system popup keeps the static fallback`() {
-        val background = readProjectFile("src/main/res/drawable/bg_popup_menu.xml")
-        val styles = readProjectFile("src/main/res/values/styles.xml")
-
-        assertContains(background, "<solid android:color=\"@color/background_menu\"")
-        assertContains(
-            styles,
-            "<item name=\"android:popupBackground\">@drawable/bg_popup_menu</item>",
+    fun `native hosts inherit Material 3 popup and dialog styles`() {
+        val document =
+            DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder()
+                .parse(readProjectFile("src/main/res/values/styles.xml").byteInputStream())
+        val nodes = document.getElementsByTagName("style")
+        val parents =
+            (0 until nodes.length).associate { index ->
+                val element = nodes.item(index) as org.w3c.dom.Element
+                element.getAttribute("name") to element.getAttribute("parent")
+            }
+        fun inheritsMaterial3(name: String, visited: Set<String> = emptySet()): Boolean {
+            if (name in visited) return false
+            val parent = parents[name].orEmpty().removePrefix("@style/")
+            return parent.startsWith("Theme.Material3.") ||
+                parent.startsWith("ThemeOverlay.Material3.") ||
+                inheritsMaterial3(parent, visited + name)
+        }
+        listOf(
+                "AppTheme.Light",
+                "AppTheme.Dark",
+                "Activity.Permission",
+                "dialog_style",
+                "ThemeOverlay.Legado.BottomWebViewDialog",
+            )
+            .forEach { name ->
+                assertTrue(
+                    "$name must inherit the complete Material3 style set",
+                    inheritsMaterial3(name),
+                )
+            }
+        assertFalse(
+            parents.values.any {
+                it.startsWith("Theme.Design.") ||
+                    it.startsWith("Theme.AppCompat.") ||
+                    it.startsWith("android:Theme.Holo")
+            }
         )
     }
 

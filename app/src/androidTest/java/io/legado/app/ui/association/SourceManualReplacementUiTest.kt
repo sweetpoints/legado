@@ -805,6 +805,7 @@ class SourceManualReplacementUiTest {
                     }
                 compose
                     .onNodeWithTag("rss-import-menu-${menu.name}")
+                    .performScrollTo()
                     .assertIsDisplayed()
                     .performClick()
                 return
@@ -819,7 +820,7 @@ class SourceManualReplacementUiTest {
                         else -> error("Unsupported book menu $id")
                     }
                 val item =
-                    compose.onNodeWithTag("book-import-menu-${menu.name}").assertIsDisplayed()
+                    compose.onNodeWithTag("book-import-menu-${menu.name}").performScrollTo().assertIsDisplayed()
                 if (waitForIdleAfterClick) item.performClick()
                 else {
                     val action =
