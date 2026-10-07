@@ -268,7 +268,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyCacheV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCacheV8IntegrationTest.kt",
-      "sourceSha256": "dceced913cb39d64ac95b740c94f72b9d197bbfb5c13780b8e847ec2615d5278",
+      "sourceSha256": "dfa5f573bdfefcd5954d3bc3c7bd5372be03f88f22928f68ab440657d6b8909a",
       "methods": [
         "actualCacheSurvivesVmClearAndSupportsMemoryDiskFileAndJavaBytes",
         "ttlUsesSecondsAndExpiredDiskCannotBeHiddenByStaleMemory"
