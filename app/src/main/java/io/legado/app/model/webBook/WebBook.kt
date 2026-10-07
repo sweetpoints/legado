@@ -535,6 +535,8 @@ object WebBook {
                     "chapterTitle" to bookChapter.title,
                     "nextChapterUrl" to nextChapterUrl,
                     "__legacyContentFormat" to (!book.isAudio && !book.isVideo),
+                    "__legacyIsAudio" to book.isAudio,
+                    "__legacyIsVideo" to book.isVideo,
                     "__legacyAdaptSpecialStyle" to AppConfig.adaptSpecialStyle,
                     "__legacyOnLineTxt" to book.isOnLineTxt,
                 )
