@@ -293,7 +293,7 @@ class SourceEngine {
         : null;
     final legacyHost = original is Map ? legacyRuleEvaluator : null;
     for (final hook in [
-      if (infoInit != null && infoInit.trim().isNotEmpty) infoInit,
+      if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) infoInit,
       if (contentReplace != null && contentReplace.isNotEmpty) contentReplace,
     ]) {
       if (legacyHost == null || !legacyHost.supportsRule(hook)) {
@@ -407,7 +407,7 @@ class SourceEngine {
               cancellation: cancellation,
             );
       Object? pageInput = response.body;
-      if (infoInit != null && infoInit.trim().isNotEmpty) {
+      if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) {
         final initialized = await evaluateRule(
           infoInit,
           pageInput,
@@ -542,7 +542,7 @@ class SourceEngine {
       // Original BookContent evaluates its title only after whole-text replacement,
       // against the first page parser. An optional title failure does not erase content.
       final titleRule = original is Map ? stage.fields['title'] : null;
-      if (titleRule != null && titleRule.trim().isNotEmpty) {
+      if (titleRule != null && _trimLegacyLine(titleRule).isNotEmpty) {
         try {
           final titles =
               legacyHost != null && legacyHost.supportsRule(titleRule)

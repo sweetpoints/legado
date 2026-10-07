@@ -68,6 +68,28 @@ SourceEngine _engine(_Host host, _Pages pages) => SourceEngine(
   legacyRuleEvaluator: const HostLegacyRuleEvaluator(allowScripts: true),
 );
 void main() {
+  test(
+    'Kotlin nonblank init does not silently drop BOM or NEL rule data',
+    () async {
+      for (final rule in ['\ufeff', '\u0085']) {
+        final host = _Host(
+          (r) => r['mode'] == 'element' ? 'initialized' : 'Title',
+        );
+        final engine = _engine(host, _Pages());
+        try {
+          await engine.execute(
+            _source('info', {'init': rule}, {'name': '@legacy:tag.h2@text'}),
+            'info',
+            input: {'taskId': 'task'},
+          );
+          expect(host.calls.first['mode'], 'element');
+          expect(host.calls.first['rule'], rule);
+        } finally {
+          await engine.close();
+        }
+      }
+    },
+  );
   test('encoded legacy rule object keeps init execution rather than losing raw provenance', () async {
     final host = _Host(
       (request) => request['mode'] == 'element'
