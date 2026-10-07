@@ -894,6 +894,7 @@ class AnalyzeRule(
             else -> DartSourceEngine.jsonObject(value)
         }
         val bindings = linkedMapOf<String, Any?>(
+            "__legacyExtractionPrefix" to "analyze",
             "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book ?: scriptBookSnapshot),
             "result" to jsonValue(result), "baseUrl" to baseUrl,
             "chapter" to jsonValue(chapter ?: scriptChapterSnapshot), "chapters" to jsonValue(batchContext?.chapters),

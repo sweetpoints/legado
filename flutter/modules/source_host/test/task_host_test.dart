@@ -15,6 +15,40 @@ void main() {
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
   test(
+    'script cannot forge outer rule origin through payload or marker',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return {'value': '', 'variables': <String, String>{}};
+      });
+      final script = TaskScriptHost(
+        const SourcePlatform(sourceId: 'source'),
+        'task',
+      );
+      await script.call('legacyRule.evaluate', [
+        {'mode': 'scalar', 'fromScript': false},
+        {'__sourceTaskId': 'forged', '__sourceHostCallback': false},
+      ]);
+      expect(calls.single['taskId'], 'task');
+      expect(calls.single['fromScript'], true);
+      expect((calls.single['arguments'] as List).last, {
+        '__sourceTaskId': 'forged',
+        '__sourceHostCallback': false,
+      });
+      calls.clear();
+      await const SourcePlatform(sourceId: 'source')
+          .call('legacyRule.evaluate', [
+            {'mode': 'scalar'},
+            {'__sourceTaskId': 'task', '__sourceHostCallback': false},
+          ]);
+      expect(calls.single['fromScript'], false);
+      expect(calls.single['arguments'], [
+        {'mode': 'scalar'},
+      ]);
+    },
+  );
+  test(
     'legacy Java delegates cross platform with bound task and source',
     () async {
       final calls = <Map>[];
@@ -99,6 +133,7 @@ void main() {
       expect(calls.first.arguments, {
         'sourceId': 'source',
         'taskId': 'first',
+        'fromScript': true,
         'method': 'batch.cacheContent',
         'arguments': [
           {'index': 1},
@@ -305,6 +340,7 @@ void main() {
       expect(calls.last.arguments, {
         'sourceId': 'auxiliary',
         'taskId': 'local-task',
+        'fromScript': true,
         'method': method,
         'arguments': args,
       });

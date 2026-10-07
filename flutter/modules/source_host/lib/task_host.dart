@@ -81,7 +81,7 @@ class TaskScriptHost implements ScriptHost {
       }
       return delegate.call(method, [
         ...arguments,
-        {'__sourceTaskId': taskId},
+        {'__sourceTaskId': taskId, '__sourceHostCallback': true},
       ]);
     }
     return delegate.call(method, arguments);

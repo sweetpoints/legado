@@ -31,6 +31,12 @@ object LegacySourceScriptRunner {
                 ? (...args) => name === 'get' && args.length !== 1
                     ? target[name](...args)
                     : __sourceHostSync('analyze.' + String(name), args)
+                : ['getString','getStringList','getElement','getElements'].includes(String(name))
+                    && globalThis.__legacyExtractionPrefix === 'analyze'
+                    ? (...args) => __sourceHostSync('analyze.' + String(name), args)
+                : ['getString','getStringList'].includes(String(name))
+                    && globalThis.__legacyExtractionPrefix === 'ui'
+                    ? (...args) => __sourceHostSync('ui.' + String(name), args)
                 : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                     ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                     : target[name]

@@ -121,4 +121,46 @@ void main() {
       }
     },
   );
+  test('outer script capability admits declaration-stage library and mixed JS only', () async {
+    final parser = _Parser();
+    final host = SourceHost(
+      (_) => SourceEngine(
+        runtime: _Runtime(),
+        network: _Network(),
+        platform: parser,
+        legacyRuleEvaluator: const HostLegacyRuleEvaluator(allowScripts: true),
+      ),
+      legacyRuleHostEnabled: true,
+      legacyScriptRuleHostEnabled: true,
+    );
+    try {
+      final scripted = {
+        ...raw,
+        'jsLib': 'var fixtureLibraryLoaded = true;',
+        'ruleSearch': {
+          'bookList': '//article',
+          'name': 'tag.h2@text@js:result.toUpperCase()',
+        },
+      };
+      expect((await host.handle(request(scripted)) as List).single, {
+        'name': '<h2>Fixture</h2>',
+      });
+      expect(
+        parser.requests.last['rule'],
+        'tag.h2@text@js:result.toUpperCase()',
+      );
+      await expectLater(
+        host.handle(request({...scripted, 'header': '@js:({})'})),
+        throwsA(
+          isA<PlatformException>().having(
+            (e) => e.code,
+            'code',
+            'legacy_requires_migration',
+          ),
+        ),
+      );
+    } finally {
+      await host.close();
+    }
+  });
 }

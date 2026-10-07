@@ -14,6 +14,7 @@ class _Host implements ScriptHost {
     }
     expect(method, 'legacyRule.evaluate');
     expect((args.last as Map)['__sourceTaskId'], 'task');
+    expect((args.last as Map)['__sourceHostCallback'], false);
     final request = Map<String, Object?>.from(args.first as Map);
     requests.add(request);
     return {
@@ -111,6 +112,26 @@ void main() {
     }
   });
   test(
+    'opaque node references pass to the same task without HTML reparsing',
+    () async {
+      final host = _Host();
+      const node = {'__legacyRuleNodeRef': 'task-scoped-node'};
+      await const HostLegacyRuleEvaluator().evaluate(
+        '@XPath:../@id',
+        node,
+        ScriptContext(
+          host: host,
+          variables: {'taskId': 'task', 'baseUrl': 'https://books.test/'},
+        ),
+        source: source,
+        operation: 'search',
+        scalar: true,
+      );
+      expect(host.requests.single['input'], node);
+      expect(host.requests.single['rule'], '@XPath:../@id');
+    },
+  );
+  test(
     'missing task and pre-cancelled evaluation do not invoke Android',
     () async {
       final host = _Host();
@@ -151,5 +172,15 @@ void main() {
     }
     expect(HostLegacyRuleEvaluator.canEvaluate('@legacy:@get:{token}'), isTrue);
     expect(HostLegacyRuleEvaluator.canEvaluate('//a/@href'), isTrue);
+    expect(
+      const HostLegacyRuleEvaluator(allowScripts: true)
+          .supportsRule('tag.h2@text@js:result.toUpperCase()'),
+      isTrue,
+    );
+    expect(
+      const HostLegacyRuleEvaluator(allowScripts: true)
+          .supportsRule('@webjs:document.body'),
+      isFalse,
+    );
   });
 }

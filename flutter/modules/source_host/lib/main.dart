@@ -16,6 +16,8 @@ Future<void> main() async {
     createSourceEngine,
     sessionStore: const PlatformSessionStore(),
     legacyRuleHostEnabled: defaultTargetPlatform == TargetPlatform.android,
+    legacyScriptRuleHostEnabled:
+        defaultTargetPlatform == TargetPlatform.android,
   );
   await host.attach(
     initialize: () async {
@@ -57,7 +59,7 @@ SourceEngine createSourceEngine(
   runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
   requestAdapter: adaptLegacyRequest,
   legacyRuleEvaluator: defaultTargetPlatform == TargetPlatform.android
-      ? const HostLegacyRuleEvaluator()
+      ? const HostLegacyRuleEvaluator(allowScripts: true)
       : null,
   platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
 );

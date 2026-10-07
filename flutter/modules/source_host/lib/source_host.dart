@@ -15,11 +15,13 @@ class SourceHost {
     MethodChannel? channel,
     this.sessionStore,
     this.legacyRuleHostEnabled = false,
+    this.legacyScriptRuleHostEnabled = false,
   }) : channel = channel ?? const MethodChannel('legado/source_engine');
   final SourceEngine Function(SourceDefinition) createEngine;
   final MethodChannel channel;
   final SourceSessionStore? sessionStore;
   final bool legacyRuleHostEnabled;
+  final bool legacyScriptRuleHostEnabled;
   final Map<String, CancellationToken> _tasks = {};
   final Map<String, _CachedEngine> _engines = {};
   final Map<String, Future<void>> _queues = {};
@@ -27,6 +29,13 @@ class SourceHost {
   bool _closed = false;
 
   bool _hostedRuleIssue(LegacyIssue issue, Map<String, Object?> original) {
+    if (legacyScriptRuleHostEnabled &&
+        issue.code == 'legacy.capability_requires_review' &&
+        issue.path == 'jsLib' &&
+        (original['mainJs'] is! String ||
+            (original['mainJs'] as String).trim().isEmpty)) {
+      return true;
+    }
     if (!{
       'legacy.rule_requires_review',
       'legacy.regex_mode',
@@ -38,7 +47,11 @@ class SourceHost {
     final group = original[issue.path.substring(0, dot)];
     if (group is! Map) return false;
     final rule = group[issue.path.substring(dot + 1)];
-    return rule is String && HostLegacyRuleEvaluator.canEvaluate(rule);
+    return rule is String &&
+        HostLegacyRuleEvaluator.canEvaluate(
+          rule,
+          allowScripts: legacyScriptRuleHostEnabled,
+        );
   }
 
   Future<void> attach({Future<void> Function()? initialize}) async {

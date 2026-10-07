@@ -116,10 +116,18 @@ class SourcePlatform implements ScriptHost {
           );
         }
         final taskId = (arguments.last as Map)['__sourceTaskId'] as String;
+        final fromScript = (arguments.last as Map)['__sourceHostCallback'];
+        if (fromScript != null && fromScript is! bool) {
+          throw const EngineException(
+            'invalid_request',
+            'Host callback origin must be boolean',
+          );
+        }
         final result = await const MethodChannel('legado/source_host_platform')
             .invokeMethod<Object?>('call', {
               'sourceId': sourceId,
               'taskId': taskId,
+              'fromScript': fromScript ?? true,
               'method': method,
               'arguments': arguments.sublist(0, arguments.length - 1),
             });

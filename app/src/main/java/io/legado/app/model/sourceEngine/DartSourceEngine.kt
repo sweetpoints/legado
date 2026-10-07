@@ -148,6 +148,7 @@ object DartSourceEngine {
                 put("sourceKind", when (it) { is BookSource -> "book"; is RssSource -> "rss"; is HttpTTS -> "tts"; else -> "auxiliary" })
             }
         }
+        globals.putIfAbsent("__legacyExtractionPrefix", null)
         original?.let { globals.putIfAbsent("baseUrl", descriptor?.get("baseUrl") ?: it.getKey()) }
         val networkDescriptor = (descriptor ?: emptyMap()).toMutableMap()
         networkDescriptor["baseUrl"] = auxiliaryNetworkBaseUrl(descriptor?.get("baseUrl") ?: globals["baseUrl"])

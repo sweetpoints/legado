@@ -22,13 +22,17 @@ abstract interface class LegacyRuleEvaluator {
 
 /// JSON-only transport to the Android parser; no JVM objects enter Dart/V8.
 class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
-  const HostLegacyRuleEvaluator();
+  const HostLegacyRuleEvaluator({this.allowScripts = false});
+  final bool allowScripts;
 
   /// JS-bearing rules stay on V8, rather than reentering it from a host RPC.
-  static bool canEvaluate(String rule) =>
-      !RegExp(r'@js:|<js>|@webjs:|\{\{', caseSensitive: false).hasMatch(rule);
+  static bool canEvaluate(String rule, {bool allowScripts = false}) =>
+      !RegExp(r'@webjs:', caseSensitive: false).hasMatch(rule) &&
+      (allowScripts ||
+          !RegExp(r'@js:|<js>|\{\{', caseSensitive: false).hasMatch(rule));
   @override
-  bool supportsRule(String rule) => canEvaluate(rule);
+  bool supportsRule(String rule) =>
+      canEvaluate(rule, allowScripts: allowScripts);
   @override
   Future<List<Object?>> evaluate(
     String rule,
@@ -78,7 +82,7 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
           ),
         },
       },
-      {'__sourceTaskId': taskId},
+      {'__sourceTaskId': taskId, '__sourceHostCallback': false},
     ]);
     cancellation?.throwIfCancelled();
     if (response is! Map ||
