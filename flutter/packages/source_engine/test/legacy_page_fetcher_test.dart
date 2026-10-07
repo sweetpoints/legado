@@ -19,6 +19,8 @@ class _NoHttp extends NetworkClient {
 }
 
 class _Native implements ScriptHost {
+  _Native({this.repeatNext = false});
+  final bool repeatNext;
   final calls = <Map>[];
   @override
   Future<Object?> call(String method, List<Object?> args) async {
@@ -34,7 +36,11 @@ class _Native implements ScriptHost {
         'headers': {
           'Set-Cookie': ['first=1', 'second=2'],
         },
-        'body': '<h2>Native page</h2>',
+        'body':
+            '<h2>Native page</h2>' +
+            (repeatNext
+                ? '<a class="next" href="https://response.test/book/">next</a>'
+                : ''),
       },
       'variables': {'requestSaved': 'value'},
     };
@@ -114,6 +120,49 @@ void main() {
       expect(response.url.toString(), 'https://response.test/book/');
       expect(response.multiHeaders['Set-Cookie'], ['first=1', 'second=2']);
       expect(response.body, '<h2>Native page</h2>');
+    },
+  );
+  test(
+    'original pagination stops before refetching the redirected first page',
+    () async {
+      final native = _Native(repeatNext: true);
+      final source = SourceDefinition(
+        id: 'loop',
+        name: 'Loop',
+        baseUrl: Uri.parse('https://base.test/'),
+        metadata: {
+          'legacyOriginal': {'bookSourceUrl': 'https://base.test/'},
+        },
+        stages: {
+          'toc': SourceStage(
+            url: '{{unused}}',
+            fields: {'title': '@css:h2@text'},
+            nextPage: '@css:a.next@href',
+            maxPages: 3,
+          ),
+        },
+      );
+      final engine = SourceEngine(
+        runtime: NoScripts(),
+        network: _NoHttp(),
+        platform: native,
+        legacyPageFetcher: const HostLegacyPageFetcher(),
+      );
+      try {
+        expect(
+          await engine.execute(
+            source,
+            'toc',
+            input: {'taskId': 'task', 'tocUrl': 'https://initial.test/toc'},
+          ),
+          [
+            {'title': 'Native page'},
+          ],
+        );
+        expect(native.calls, hasLength(1));
+      } finally {
+        await engine.close();
+      }
     },
   );
 }

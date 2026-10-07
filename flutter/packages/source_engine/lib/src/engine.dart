@@ -272,6 +272,9 @@ class SourceEngine {
           ? current.toString()
           : nativeNext ?? 'initial';
       if (!visited.add(requestKey)) {
+        // Original BookChapterList/BookContent stop on a repeated next URL.
+        // Modern sources retain their explicit cycle-error contract.
+        if (nativeFetcher != null) break;
         throw const EngineException(
           'pagination_cycle',
           'Next page repeats an already fetched URL',
@@ -302,6 +305,8 @@ class SourceEngine {
               charset: stage.charset,
               cancellation: cancellation,
             );
+      if (nativeFetcher != null && page == 0)
+        visited.add(response.url.toString());
       if (response.status >= 400) {
         throw EngineException('http_error', 'HTTP ${response.status}');
       }
