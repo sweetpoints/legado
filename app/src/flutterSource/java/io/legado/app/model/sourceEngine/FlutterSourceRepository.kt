@@ -51,6 +51,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         val sourceKind: String = "book",
         val navigationSourceId: String = sourceId,
     ) {
+        val legacyRequests by lazy { LegacyRequestHost(navigationSourceId, context) }
         private val legacyRuleDelegate = lazy { LegacyRuleHost(navigationSourceId, context) }
         @Volatile private var legacyRulesClosed = false
         val legacyRules: LegacyRuleHost
@@ -271,6 +272,15 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         args: List<Any?>,
         fromScript: Boolean = true,
     ): Any? {
+        if (method == "legacyRequest.resolve" || method == "legacyRequest.fetch") {
+            require(args.size == 1 && args[0] is Map<*, *>) { "Invalid legacy request callback" }
+            val payload = (args[0] as Map<*, *>).entries.associate { (key, value) ->
+                require(key is String) { "Legacy request keys must be strings" }
+                key to value
+            }
+            return if (method == "legacyRequest.fetch") task.legacyRequests.fetch(payload, fromScript)
+            else task.legacyRequests.resolve(payload, fromScript)
+        }
         if (method == "legacyRule.evaluate") {
             require(args.size == 1 && args[0] is Map<*, *>) { "Invalid legacy rule callback" }
             val payload = (args[0] as Map<*, *>).entries.associate { (key, value) ->
