@@ -9,7 +9,7 @@
 | 旧字段 | 新字段 |
 |---|---|
 | `bookSourceUrl` | 原样 `id`；HTTP(S) ID提供正常 `baseUrl`，非HTTP(S)需静态请求锚点 |
-| `bookSourceName` | `name`，缺失时使用 URL 主机名 |
+| `bookSourceName` | `name`，缺失或 trim 后为空时使用原样书源 ID |
 | `ruleSearch`、`searchUrl`、`bookList` | `stages.search` 的字段、URL、列表规则 |
 | `ruleExplore`、`exploreUrl`、`bookList` | `stages.explore`；URL固定为 `{{exploreUrl}}`，取调用方已选择的发现入口 |
 | `ruleBookInfo` | `stages.info`，URL 为 `{{bookUrl}}` |
@@ -90,4 +90,6 @@ search/explore/toc允许JSON字符串解析后必须为数组；info必须为对
 
 ## 当前接入边界
 
-新增 typed DOM 协议/宿主代码尚未生产接线，属于实验实现；当前生产元素合同仍是 [host.md](host.md) 的字符串序列化有限 facade。外层 CSS/JS checkpoint 四项原生测试通过只证明局部路径，完整 book stage 四项公开场景仍被兼容 gates 阻断。导入候选、方法白名单或局部回归不能标记整个来源 fully compatible/verified；未支持方法继续明确失败，不回退旧引擎。
+typed DOM 与共享列表 toArray 已生产接入；只读节点方法、task-local 引用、InfoMap 的原秒 TTL/save 标记、原生 init/subContent/replace 顺序及 source/book/chapter 变量层详见 [宿主 Reference](host.md)。Android 外层声明式 WebJS 使用独立后台能力和任务取消上下文，脚本提取回调仍禁止递归 JS/WebJS；独立 CLI 不由此获得 Android WebView。
+
+原生 parser 能力与导入审核/应用 pipeline gates 分开；接线不会自动清除全部 manualRequired，也不会恢复任意 Java 类。当前固定公开四源采样为一项成功、两项 HTTP/script 错误、一项 TLS 错误，新最终采样尚未执行。不能将局部 checkpoint 或生产方法接入写成全源 verified 或整体验收通过。Release 原生反射注册 keep 与 Flutter 注册入口仍需保留，具体见 host.md。

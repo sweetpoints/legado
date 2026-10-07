@@ -115,8 +115,26 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 空规则的旧约定：getString 返回空字符串、getStringList 返回 null、getElement 返回 null、getElements 返回空数组，与新版 getStringList 空数组不同。
 
-HTML 字符串在旧 JS 环境转为有限元素 facade：text()、attr(name)、outerHtml()、select(selector)、selectFirst(selector)、toString()、toJSON()。元素列表提供 size()、get(index)、first()、last()、text()、attr(name)、select(selector)。JSON 值保留其对象形态。序列化转换不保留原始 DOM 对象身份；元素不是完整 Java JSoup 对象，修改 DOM、父子关系与任意方法不保证支持。
+生产已接入 typed DOM：Android `LegacyDomHost` 将 Jsoup/JXNode 转为带节点表、类型、baseUri、属性、子节点和文档输出设置的 JSON 快照，V8 prelude 将其物化为只读方法 facade。共享 Elements 快照保留同一树中的节点索引，支持 text()/html()/attr(name)/select(selector)/toString()；列表另有 size()/get(index)/first()/last()/toArray()。toArray() 仅无参，返回数组副本；不会复制成可反射的 Java 数组。
 
-元素 facade 的 html() 明确报 `legacy.unsupported_element_api`。列表缺失 first/last 返回 null，attr 在空列表时为空字符串；get 越界返回 undefined。html 规则输出与 html() 方法不是同一能力。未知元素序列化报 `legacy.invalid_element_serialization`。
+节点提供 attr(name)、hasAttr(name)、text()、ownText()、html()、outerHtml()、data()、tagName()、id()、className()、select(selector)、selectFirst(selector)、getElementsByTag(name)、getElementsByClass(name)、getElementById(id)、parent()、children()、nextElementSibling()、previousElementSibling()。方法适用节点类型由 Jsoup 校验，例如 TextNode 没有 Element.text() 能力。未知方法、非法参数和无效快照明确失败；不支持 DOM 写操作、任意 Java 方法或进程级 Java 对象身份。旧字符串内容的有限 fallback facade 仍可存在，不能由 typed DOM 的 html() 支持推导字符串 fallback 全部重载也已实现。
 
-新增 typed DOM 宿主与对象协议仍属实验实现，尚未接入生产调用链；不能用相关文件或离线测试替代上面的字符串序列化 facade 合同。外层 CSS/JS checkpoint 的四项原生测试只证明其局部入口；完整 book stage 的四项公开场景仍受兼容 gates 阻断，不能据此标为 fully compatible。
+原生规则提取另有 task-local 节点/值引用：仅当前活动任务可恢复，任务关闭或取消即清理；不能跨任务传递这些 token。typed JSON 快照与这种受限任务引用是两种传输形式，均不开放 Java 反射。
+
+## 发现脚本 InfoMap
+
+Android 发现菜单/按钮脚本的 infoMap 已绑定原 InfoMap 宿主，不再只是任意 JSON 草稿。键和值必须为 String。支持 get() 返回映射 view、get(key)、put(key,value)、remove(key)、set(map)、putAll(map)、containsKey/containsValue、size()/isEmpty()/clear()、keySet()/values()/entrySet()，以及属性读取/写入/删除。get(key) 缺失返回 null，属性形式缺失为 undefined；put/remove 返回原值或 null。entrySet() 返回 key/value JSON 条目，不是任意 Java Entry 对象。
+
+save([timeSeconds[,need]]) 默认 0/true，time 必须为 Int 范围整数秒，need 必须为 Boolean；它只记录原 InfoMap 的 TTL 与 needSave，不立即持久化。saveNow() 按最后配置的秒 TTL 写入 CacheManager 后清除 needSave；needSave 属性及 getNeedSave()/setNeedSave(bool) 控制标记，sourceUrl/getSourceUrl() 只读。没有另设毫秒 saveTTL API，也不把 save() 改成无条件立即保存。任务回调绑定当前来源的 InfoMap。
+
+## 原生规则宿主与变量层
+
+Android 已接入原 AnalyzeRule 的 JSON RPC，由 Dart 编排请求、分页及阶段结果，JavaScript 仍由 V8 执行。info 的 ruleBookInfo.init 在字段提取之前执行，得到的新内容用于后续字段；null 结果报 legacy_init_empty。content 每页使用原正文提取/格式化，分页后合并；subContent 在分页后以第一页原内容与上下文求值，再执行原在线文本追加或音频 lyric/视频 danmaku 分支；普通文字来源不因此追加 subContent。最后对合并文本逐行 trim 后执行 replaceRegex，在线文本分支随后缩进，再求标题。可选 URL/media 处理失败沿原路径处理，取消仍传播；提取失败不会静默吞掉。
+
+变量作用域携带 source/book/chapter 三层字符串映射及固定 target。chapter 读取顺序 chapter→book→source，book 为 book→source，source 只读本层；空值允许继续回退。put 写入当前 target，null 删除当前层键；脏键不会被后续旧 snapshot 覆盖。book/chapter 脚本快照携带对应 variable 数据，任务返回更新层供 App 回写，不把所有变量混成单一来源 map，也不承诺跨来源共享。
+
+WebJS 是独立 Android 后台能力：仅外层声明式规则显式允许时执行 BackstageWebView，使用原 URL/HTML/headers/result、10秒超时和任务协程上下文；主线程调用拒绝。java 提取回调仍禁止递归 JS/WebJS，报 nested_script_requires_migration。任务取消和关闭传播并清理引用，不将 WebJS 作为独立 Dart/CLI 的默认能力。
+
+Release 的反射注册入口需要既有 keep 规则：JsoupXpath AxisSelector/NodeTest/Function 实现和 Jsoup 类，以及 Flutter GeneratedPluginRegistrant.registerWith。保留这些原生注册路径不等于 Java 反射对脚本开放。
+
+实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。当前固定公开四源采样仅一项成功，其余为两项 HTTP/script 错误及一项 TLS 错误；新的最终采样尚未执行。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。
