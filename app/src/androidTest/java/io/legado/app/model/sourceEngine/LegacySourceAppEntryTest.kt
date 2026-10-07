@@ -117,8 +117,8 @@ class LegacySourceAppEntryTest {
                     WebBook.getContentAwait(source, book, BookChapter(url = server.base + "/chapter", title = "Chapter"), needSave = false)
                 }
             }.exceptionOrNull()
-            assertTrue(error is SourceScriptException)
-            assertEquals("legacy_requires_migration", (error as SourceScriptException).code)
+            assertTrue(error is SourceHostException)
+            assertEquals("legacy_requires_migration", (error as SourceHostException).code)
             assertEquals(listOf("/search"), server.requests.toList())
         } finally { server.stop(); DartSourceEngine.clearSourceState(source) }
     }
