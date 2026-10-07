@@ -28,6 +28,7 @@ class LegacyRuleHost(
     private val context: CoroutineContext = EmptyCoroutineContext,
 ) {
     private val values = TaskVariables()
+    private val variableScopes = LegacyVariableScopes()
     private val nodeLock = Any()
     private val nodeTokens = IdentityHashMap<Node, String>()
     private val nodes = hashMapOf<String, Node>()
@@ -47,6 +48,7 @@ class LegacyRuleHost(
                     nodeTokens.clear()
                     storedValues.clear()
                     valueTokens.clear()
+                    variableScopes.clear()
                     true
                 }
             }
@@ -123,16 +125,28 @@ class LegacyRuleHost(
             if (payload.containsKey("variables")) {
                 payload["variables"] as? Map<*, *> ?: invalid("variables must be an object")
             } else emptyMap<String, Any?>()
-        bindings.forEach { (key, value) ->
-            require(key is String) { "Legacy variable names must be strings" }
-            values.seed(key, valueText(value))
-        }
+        val scoped = variableScopes.select(payload["variableScope"])
+        if (scoped == null)
+            bindings.forEach { (key, value) ->
+                require(key is String) { "Legacy variable names must be strings" }
+                values.seed(key, valueText(value))
+            }
         val parser =
-            AnalyzeRule(ruleData = values, source = source, isFromBookInfo = operation == "info")
+            AnalyzeRule(
+                    ruleData = scoped ?: values,
+                    source = source,
+                    isFromBookInfo = operation == "info",
+                )
                 .setCoroutineContext(context)
                 .setScriptContextSnapshots(
-                    snapshotObject(bindings["book"]),
-                    snapshotObject(bindings["chapter"]),
+                    snapshotObject(bindings["book"])?.let {
+                        if (scoped == null) it
+                        else it + ("variable" to GSON.toJson(scoped.layerVariables("book")))
+                    },
+                    snapshotObject(bindings["chapter"])?.let {
+                        if (scoped == null) it
+                        else it + ("variable" to GSON.toJson(scoped.layerVariables("chapter")))
+                    },
                 )
                 .setContent(input, baseUrl)
         if (baseUrl.isNotBlank()) parser.setRedirectUrl(baseUrl)
@@ -166,7 +180,8 @@ class LegacyRuleHost(
                 if (result == null) invalid("内容不可空（Content cannot be null）")
                 valueReference(result)
             } else jsonValue(result)
-        return mapOf("value" to transported, "variables" to values.writes())
+        return mapOf("value" to transported, "variables" to (scoped?.writes() ?: values.writes())) +
+            (scoped?.let { mapOf("variableScope" to it.snapshot()) } ?: emptyMap())
     }
 
     private fun formatContent(

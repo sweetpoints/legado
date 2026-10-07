@@ -14,16 +14,19 @@ class LegacyRequestHost(
     private val context: CoroutineContext = EmptyCoroutineContext,
 ) {
     private val values = TaskVariables()
+    private val variableScopes = LegacyVariableScopes()
 
     fun resolve(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
-        val analyzed = analyze(payload, fromScript)
+        val scoped = variableScopes.select(payload["variableScope"])
+        val analyzed = analyze(payload, fromScript, scoped)
         val descriptor = analyzed.resolveRequestDescriptor(boolean(payload, "includeCookies", true))
         context.ensureActive()
-        return envelope(descriptor)
+        return envelope(descriptor, scoped)
     }
 
     suspend fun fetch(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
-        val analyzed = analyze(payload, fromScript)
+        val scoped = variableScopes.select(payload["variableScope"])
+        val analyzed = analyze(payload, fromScript, scoped)
         // This is the sole HTTP/WebView path: no compile-then-send duplicate request.
         val response = analyzed.getStrResponseAwait()
         context.ensureActive()
@@ -33,14 +36,23 @@ class LegacyRequestHost(
                 "body" to response.body.orEmpty(),
                 "status" to response.raw.code,
                 "headers" to response.raw.headers.toMultimap(),
-            )
+            ),
+            scoped,
         )
     }
 
-    private fun envelope(value: Map<String, Any?>): Map<String, Any?> =
-        mapOf("value" to value, "variables" to values.writes())
+    private fun envelope(
+        value: Map<String, Any?>,
+        scoped: LegacyScopedVariables?,
+    ): Map<String, Any?> =
+        mapOf("value" to value, "variables" to (scoped?.writes() ?: values.writes())) +
+            (scoped?.let { mapOf("variableScope" to it.snapshot()) } ?: emptyMap())
 
-    private fun analyze(payload: Map<String, Any?>, fromScript: Boolean): AnalyzeUrl {
+    private fun analyze(
+        payload: Map<String, Any?>,
+        fromScript: Boolean,
+        scoped: LegacyScopedVariables?,
+    ): AnalyzeUrl {
         context.ensureActive()
         if (fromScript) {
             throw SourceScriptException(
@@ -54,7 +66,7 @@ class LegacyRequestHost(
         val source = GSON.fromJson(GSON.toJson(sourceData), BookSource::class.java)
         source.bookSourceUrl = trustedSourceId
         val variables = objectMap(payload["variables"]).orEmpty()
-        variables.forEach { (key, value) -> values.seed(key, valueText(value)) }
+        if (scoped == null) variables.forEach { (key, value) -> values.seed(key, valueText(value)) }
         val key = payload["key"] ?: variables["key"]
         require(key == null || key is String) { "Request key must be a string" }
         val infoMap = stringMap(variables["infoMap"])?.toMutableMap()
@@ -66,14 +78,22 @@ class LegacyRequestHost(
             speakSpeed = integer(variables["speakSpeed"]),
             baseUrl = payload["baseUrl"] as? String ?: trustedSourceId,
             source = source,
-            ruleData = values,
+            ruleData = scoped ?: values,
             coroutineContext = context,
             headerMapF = stringMap(payload["headers"]),
             hasLoginHeader = boolean(payload, "hasLoginHeader", true),
             infoMap = infoMap,
             extraParams = stringMap(payload["extraParams"]),
-            scriptBookSnapshot = objectMap(variables["book"]),
-            scriptChapterSnapshot = objectMap(variables["chapter"]),
+            scriptBookSnapshot =
+                objectMap(variables["book"])?.let {
+                    if (scoped == null) it
+                    else it + ("variable" to GSON.toJson(scoped.layerVariables("book")))
+                },
+            scriptChapterSnapshot =
+                objectMap(variables["chapter"])?.let {
+                    if (scoped == null) it
+                    else it + ("variable" to GSON.toJson(scoped.layerVariables("chapter")))
+                },
         )
     }
 

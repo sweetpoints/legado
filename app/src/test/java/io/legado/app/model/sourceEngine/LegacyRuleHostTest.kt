@@ -39,6 +39,58 @@ class LegacyRuleHostTest {
     private fun host() = LegacyRuleHost("https://fixture.invalid", EmptyCoroutineContext)
 
     @Test
+    fun typedBookScopesStaySeparateAndTravelBetweenRealParserTasks() {
+        fun scope(
+            id: String,
+            target: String = "book",
+            book: Map<String, String> = emptyMap(),
+            chapter: Map<String, String> = emptyMap(),
+        ) =
+            mapOf(
+                "id" to id,
+                "target" to target,
+                "source" to mapOf("fallback" to "source-value"),
+                "book" to book,
+                "chapter" to chapter,
+            )
+        fun scoped(rule: String, state: Map<String, Any?>) =
+            request(rule, extra = mapOf("variableScope" to state))
+        val task = host()
+        val first =
+            task.evaluate(scoped("@put:{\"saved\":\"tag.a.0@text\"}tag.a.0@text", scope("first")))
+        val second =
+            task.evaluate(scoped("@put:{\"saved\":\"tag.a.1@text\"}tag.a.1@text", scope("second")))
+        assertEquals(
+            "One",
+            task
+                .evaluate(scoped("@get:{saved}", scope("first", book = mapOf("saved" to "stale"))))[
+                    "value"],
+        )
+        assertEquals("Two", task.evaluate(scoped("@get:{saved}", scope("second")))["value"])
+        val firstState = first["variableScope"] as Map<String, Any?>
+        val nextTask = host()
+        assertEquals("One", nextTask.evaluate(scoped("@get:{saved}", firstState))["value"])
+        val chapter =
+            scope(
+                "chapter",
+                "chapter",
+                book = mapOf("saved" to "One"),
+                chapter = mapOf("saved" to ""),
+            )
+        assertEquals("One", nextTask.evaluate(scoped("@get:{saved}", chapter))["value"])
+        val changed =
+            nextTask
+                .evaluate(scoped("@put:{\"saved\":\"tag.a.2@text\"}tag.a.2@text", chapter))[
+                    "variableScope"]
+                as Map<*, *>
+        assertEquals(mapOf("saved" to "One"), changed["book"])
+        assertEquals(mapOf("saved" to "Three"), changed["chapter"])
+        assertEquals(mapOf("saved" to "Two"), (second["variableScope"] as Map<*, *>)["book"])
+        assertEquals("source-value", nextTask.evaluate(scoped("@get:{fallback}", chapter))["value"])
+        assertEquals(emptyMap<String, String>(), (first["variableScope"] as Map<*, *>)["chapter"])
+    }
+
+    @Test
     fun legacyCssNegativeIndexExclusionAndFallbackUseActualJsoupGrammar() {
         val host = host()
         assertEquals(

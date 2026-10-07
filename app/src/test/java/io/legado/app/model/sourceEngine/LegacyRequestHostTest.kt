@@ -34,6 +34,27 @@ class LegacyRequestHostTest {
         (result["bodyBytes"] as List<*>).map { (it as Number).toByte() }.toByteArray()
 
     @Test
+    fun requestScopeCarriesBookVariablesWithoutFlatteningThemIntoSource() {
+        val state =
+            mapOf(
+                "id" to "request-book",
+                "target" to "book",
+                "source" to mapOf("shared" to "source"),
+                "book" to mapOf("saved" to "A-token"),
+                "chapter" to emptyMap<String, String>(),
+            )
+        val result =
+            LegacyRequestHost("https://fixture.invalid")
+                .resolve(
+                    payload("https://fixture.invalid/info", mapOf("variableScope" to state)),
+                    fromScript = false,
+                )
+        assertEquals(state, result["variableScope"])
+        assertEquals(emptyMap<String, String>(), result["variables"])
+        assertEquals("https://fixture.invalid/info", (result["value"] as Map<*, *>)["url"])
+    }
+
+    @Test
     fun formBodyIsEncodedOnceAndDuplicateKeysSurvive() {
         val request =
             resolve(
