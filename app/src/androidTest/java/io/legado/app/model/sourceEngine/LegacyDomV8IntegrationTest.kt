@@ -38,9 +38,9 @@ class LegacyDomV8IntegrationTest {
                             """
                             const rows = java.getElements('tag.tr');
                             const first = rows.get(0);
-                            return {size:rows.size(), parent:first.parent().tagName(),
+                            ({size:rows.size(), parent:first.parent().tagName(),
                                 names:first.select('td').text(), link:first.select('a').get(0).attr('abs:href'),
-                                text:java.getString('tag.td.1@text', first)};
+                                text:java.getString('tag.td.1@text', first)});
                             """
                                 .trimIndent()
                         )
