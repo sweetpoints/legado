@@ -106,11 +106,12 @@ class ExploreScriptV8IntegrationTest {
                     infoMap.put('value', 'saved');
                     infoMap.save(60, false);
                     const pending = infoMap.needSave;
-                    infoMap.saveNow();
+                    const savedVoid = infoMap.saveNow() === undefined;
                     infoMap.value = 'after-save';
-                    ({pending, need:infoMap.getNeedSave()});
+                    ({pending, need:infoMap.getNeedSave(), savedVoid});
                 """.trimIndent(), info) as Map<*, *>
                 assertEquals(false, result["pending"])
+                assertEquals(true, result["savedVoid"])
                 assertEquals(false, result["need"])
                 assertFalse(info.needSave)
                 assertEquals("after-save", info["value"])

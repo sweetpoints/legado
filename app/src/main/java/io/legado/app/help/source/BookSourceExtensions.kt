@@ -156,22 +156,22 @@ internal fun exploreInfoMapScript(script: String): String =
             get: (...args) => args.length === 0 ? mapView : call('get', args),
             put: (key, value) => call('put', [key, value]),
             remove: key => call('remove', [key]),
-            putAll: value => call('putAll', [value]),
+            putAll: value => { call('putAll', [value]); },
             containsKey: key => call('containsKey', [key]),
             containsValue: value => call('containsValue', [value]),
             size: () => call('size'),
             isEmpty: () => call('isEmpty'),
-            clear: () => call('clear'),
+            clear: () => { call('clear'); },
             keySet: () => call('keys'),
             values: () => call('values'),
             entrySet: () => call('entries')
         };
         const ownerMethods = {
-            set: value => call('set', [value]),
-            save: (time = 0, need = true) => call('save', [time, need]),
-            saveNow: () => call('saveNow'),
+            set: value => { call('set', [value]); },
+            save: (time = 0, need = true) => { call('save', [time, need]); },
+            saveNow: () => { call('saveNow'); },
             getNeedSave: () => call('getNeedSave'),
-            setNeedSave: value => call('setNeedSave', [value]),
+            setNeedSave: value => { call('setNeedSave', [value]); },
             getSourceUrl: () => call('sourceUrl')
         };
         const makeView = owner => new Proxy(Object.create(null), {
