@@ -766,7 +766,7 @@ class FlutterSourceEngineTest {
             val requests = mutableListOf<String>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(3) {
+                    repeat(6) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             val reader = socket.getInputStream().bufferedReader()
@@ -830,26 +830,21 @@ class FlutterSourceEngineTest {
             assertEquals("Author", book.author)
             assertEquals("123字", book.wordCount)
             assertEquals("Fantasy,Adventure", book.kind)
-            serving.await()
-            assertEquals(listOf("/b?page=2", "/search", "/book"), requests)
-            for (unsupported in
-                listOf(
-                    "$origin/b/{{java.get('x')}}",
-                    "$origin/b,${Gson().toJson(mapOf("webJs" to "document.title"))}",
-                    "@js:java.ajax('$origin/b')",
-                )) {
-                val rejected =
-                    withTimeout(60_000) {
-                        runCatching { WebBook.exploreBookAwait(selected, unsupported) }
-                    }
-                assertTrue(
-                    rejected
-                        .exceptionOrNull()
-                        ?.message
-                        .orEmpty()
-                        .contains("legacy_request_requires_migration")
-                )
+            // These legacy URL capabilities are now executed by the Native adapter.
+            // The @js rule must return a URL, rather than an ajax HTML response.
+            for (category in listOf(
+                "$origin/b/{{java.get('x')}}",
+                "$origin/b,${Gson().toJson(mapOf("webJs" to "document.documentElement.outerHTML"))}",
+                "@js:'$origin/script?page=' + page",
+            )) {
+                val books = withTimeout(60_000) { WebBook.exploreBookAwait(selected, category, 2) }
+                assertEquals("Title", books.single().name)
+                assertEquals("Author", books.single().author)
+                assertEquals("123字", books.single().wordCount)
+                assertEquals("Fantasy,Adventure", books.single().kind)
             }
+            serving.await()
+            assertEquals(listOf("/b?page=2", "/search", "/book", "/b/", "/b", "/script?page=2"), requests)
         }
     }
 
@@ -1217,7 +1212,7 @@ class FlutterSourceEngineTest {
             val requests = mutableListOf<Map<String, String>>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(3) {
+                    repeat(4) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             // This fixture's request body is ASCII p=1, so character counts equal
@@ -1331,12 +1326,15 @@ class FlutterSourceEngineTest {
                 "Title",
                 withTimeout(60_000) { WebBook.searchBookAwait(selected, "Title", 2).single().name },
             )
-            serving.await()
+            assertEquals("Title", withTimeout(60_000) {
+                WebBook.exploreBookAwait(selected, "$origin/{{java.get('page')}}", 2).single().name
+            })
             assertEquals(
                 listOf(
                     "GET /first HTTP/1.1",
                     "POST /other HTTP/1.1",
                     "GET /search?page=3 HTTP/1.1",
+                    "GET /2 HTTP/1.1",
                 ),
                 requests.map { it["request"] },
             )
@@ -1346,20 +1344,8 @@ class FlutterSourceEngineTest {
             assertEquals("selected", requests[1]["x-shared"])
             assertEquals("B", requests[1]["x-category"])
             assertEquals("p=1", requests[1]["body"])
-            assertEquals("application/x-www-form-urlencoded", requests[1]["content-type"])
-            val rejected =
-                withTimeout(60_000) {
-                    runCatching {
-                        WebBook.exploreBookAwait(selected, "$origin/{{java.get('page')}}", 2)
-                    }
-                }
-            assertTrue(
-                rejected
-                    .exceptionOrNull()
-                    ?.message
-                    .orEmpty()
-                    .contains("legacy_request_requires_migration")
-            )
+            assertEquals("application/x-www-form-urlencoded; charset=utf-8", requests[1]["content-type"])
+            serving.await()
         }
     }
 
