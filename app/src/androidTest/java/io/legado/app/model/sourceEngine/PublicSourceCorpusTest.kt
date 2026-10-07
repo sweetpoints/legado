@@ -52,6 +52,7 @@ class PublicSourceCorpusTest {
         val wrapperKind: String?,
         val messageSha256: String,
         val origin: ErrorOrigin?,
+        val remoteExceptionTypes: List<String>,
     )
 
     private data class SourceResult(
@@ -390,10 +391,15 @@ class PublicSourceCorpusTest {
             result.add(
                 ExceptionDiagnostic(
                     current.javaClass.name,
-                    if (current is SourceScriptException) current.code else protocolCode,
+                    when (current) {
+                        is SourceScriptException -> current.code
+                        is SourceHostException -> current.code
+                        else -> protocolCode
+                    },
                     wrapper,
                     sha256(message.toByteArray(Charsets.UTF_8)),
                     origin,
+                    (current as? SourceHostException)?.exceptionTypes?.take(8).orEmpty(),
                 )
             )
             current = current.cause
@@ -403,6 +409,7 @@ class PublicSourceCorpusTest {
 
     private fun structuredCode(error: Throwable): String {
         if (error is SourceScriptException) return error.code
+        if (error is SourceHostException) return error.code
         if (error is TocEmptyException) return "empty_toc_results"
         if (error is ContentEmptyException) return "empty_content"
         return Regex("^([a-z][a-z0-9_]+):").find(error.message.orEmpty())?.groupValues?.get(1)
@@ -410,6 +417,11 @@ class PublicSourceCorpusTest {
     }
 
     private fun isNetworkUnavailable(error: Throwable, code: String): Boolean {
+        if (
+            error is SourceScriptException ||
+                code in setOf("script_error", "syntax_error", "nested_script_requires_migration")
+        )
+            return false
         if (
             code in
                 setOf(
