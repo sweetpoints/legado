@@ -2,6 +2,7 @@ package io.legado.app.model.webBook
 
 import com.google.gson.JsonObject
 import io.legado.app.R
+import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -561,6 +562,9 @@ object WebBook {
         ) {
             "Dart chapter variable values must be strings"
         }
+        require(!row.containsKey("title") || row["title"] == null || row["title"] is String) {
+            "Dart chapter title must be a string"
+        }
         require(!row.containsKey("imgUrl") || row["imgUrl"] == null || row["imgUrl"] is String) {
             "Dart chapter imgUrl must be a string"
         }
@@ -572,6 +576,18 @@ object WebBook {
             bookChapter.variable = GSON.toJson(bookChapter.variableMap)
         }
         applyBookVariables(book, bookVariables)
+        (row["title"] as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { title ->
+                val image = AppPattern.imgRegex.find(title)
+                bookChapter.title =
+                    if (image == null) title
+                    else {
+                        bookChapter.imgUrl = image.groupValues[2]
+                        image.groupValues[1].ifEmpty { bookChapter.title }
+                    }
+                bookChapter.titleMD5 = null
+            }
         if (row.containsKey("imgUrl")) bookChapter.imgUrl = row["imgUrl"] as String?
         if (saveToken != null) {
             val saved =
