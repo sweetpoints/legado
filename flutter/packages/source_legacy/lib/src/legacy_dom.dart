@@ -5,6 +5,10 @@ const legacyDomPrelude = r'''
     const result = values.map(materialize);
     Object.defineProperties(result, {
       size:{value:()=>result.length}, get:{value:index=>result[index]},
+      toArray:{value:(...args)=>{
+        if(args.length) throw new Error('legacy.unsupported_dom_overload: toArray');
+        return result.slice();
+      }},
       first:{value:()=>result[0] || null}, last:{value:()=>result[result.length-1] || null},
       text:{value:()=>shared ? __sourceHostSync('javaHost.domCall',[shared,'text',[]]) : result.map(node=>node.text()).join(' ')},
       attr:{value:name=>shared ? __sourceHostSync('javaHost.domCall',[shared,'attr',[name]]) : (result.find(node=>node.hasAttr(name))?.attr(name) || '')},

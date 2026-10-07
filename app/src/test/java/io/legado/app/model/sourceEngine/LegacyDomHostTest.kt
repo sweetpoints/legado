@@ -48,6 +48,20 @@ class LegacyDomHostTest {
         assertEquals("<a>First</a>\n<a>Second</a>", nodes.toString())
         assertEquals(nodes.toString(), LegacyDomHost.call(LegacyDomHost.serialize(nodes.toList()) as Map<*, *>, "toString", emptyList()))
     }
+    @Test fun elementsToArrayIsShallowOrderedCopyWithSharedOwnerDocument() {
+        val document = Jsoup.parse("<table><tr><td>First</td><td>Second</td></tr></table>")
+        val elements = document.select("td")
+        val copied = elements.toArray()
+        assertEquals(2, copied.size)
+        assertSame(elements[0], copied[0]); assertSame(elements[1], copied[1])
+        copied[0] = elements[1]
+        assertSame(document.selectFirst("td"), elements[0])
+        val restored = LegacyDomHost.restoreValue(LegacyDomHost.serialize(elements.toArray())) as org.jsoup.select.Elements
+        assertSame(restored[0].ownerDocument(), restored[1].ownerDocument())
+        assertEquals("tr", restored[0].parent()!!.tagName())
+        assertSame(restored[1], restored[0].nextElementSibling())
+    }
+
     @Test fun deepDomIsFlatAndDoesNotConsumeJsonRecursionDepth() {
         val document = Jsoup.parse("<body></body>")
         var child = document.body()

@@ -97,4 +97,64 @@ void main() {
       await runtime.close();
     }
   });
+  test(
+    'legacy DOM toArray supports book search DTOs as a shallow node copy',
+    () async {
+      final host = DomHost();
+      final runtime = V8Runtime(prelude: legacyDomPrelude);
+      try {
+        expect(
+          await runtime.evaluateAuxiliary(
+            'const elements=__legacyDomMaterialize(input);const array=elements.toArray();'
+            'const same=array[0]===elements.get(0);'
+            'const books=array.map(node=>({name:node.text(),bookUrl:node.attr("href"),'
+            'parentName:node.parent().text()}));'
+            'array[0]=null;let invalidOverload=false;try{elements.toArray([])}catch(e){invalidOverload=true;}'
+            '({books,same,array:Array.isArray(array),size:elements.size(),stillNode:elements.get(0)!==null,'
+            'ordinary:typeof [].toArray,empty:__legacyDomMaterialize([]).toArray().length,invalidOverload})',
+            ScriptContext(host: host, variables: {'input': DomHost.list}),
+          ),
+          {
+            'books': [
+              {'name': 'Text', 'bookUrl': '/fixture', 'parentName': 'Text'},
+            ],
+            'same': true,
+            'array': true,
+            'size': 1,
+            'stillNode': true,
+            'ordinary': 'undefined',
+            'empty': 0,
+            'invalidOverload': true,
+          },
+        );
+      } finally {
+        await runtime.close();
+      }
+    },
+  );
+  test('actual V8 source search toArray returns book DTO records', () async {
+    final engine = SourceEngine(
+      runtime: V8Runtime(prelude: legacyDomPrelude),
+      platform: DomHost(),
+    );
+    try {
+      final records = await engine.execute(
+        SourceDefinition(
+          id: 'dom-search-fixture',
+          name: 'DOM search fixture',
+          baseUrl: Uri.parse('https://fixture.invalid/'),
+          script:
+              'async function search(input){return __legacyDomMaterialize(input.nodes)'
+              '.toArray().map(node=>({name:node.text(),bookUrl:node.attr("href")}));}',
+        ),
+        'search',
+        input: {'nodes': DomHost.list},
+      );
+      expect(records, [
+        {'name': 'Text', 'bookUrl': '/fixture'},
+      ]);
+    } finally {
+      await engine.close();
+    }
+  });
 }
