@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 103,
+  "caseCount": 104,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -258,9 +258,10 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyNestedHttpScriptV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt",
-      "sourceSha256": "06fa87d8f456f3a8cfe578d11d16875303d0609ad0889d2d343b95ae1c4c0104",
+      "sourceSha256": "af065e3f9239f17118ae07a00ad5e570fd431eec76985344ea6750c2a352251e",
       "methods": [
         "dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables",
+        "promisedUrlInsideAjaxStillReturnsASynchronousStringForConcatenation",
         "responseBodyJsRunsAfterNativeFetchInTheSameOwnerAndReceivesTheRawBody",
         "urlOptionJsReceivesResolvedUrlAndPreservesTheSameLibraryAndGlobals"
       ]
