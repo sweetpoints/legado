@@ -11,6 +11,7 @@ import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceEngineBackend
 import io.legado.app.model.sourceEngine.SourceScriptException
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -998,14 +999,14 @@ class FlutterSourceEngineTest {
     }
 
     @Test
-    fun legacyPostTemplatesEncodeFormAndRejectUnsafeInputsBeforeHttp() = runBlocking {
+    fun nativeLegacyPostWireAndExplicitModernJsonTemplateKeepTheirOwnContracts() = runBlocking {
         assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
         java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
             val origin = "http://127.0.0.1:${server.localPort}"
             val requests = mutableListOf<Triple<String, String, String>>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(2) {
+                    repeat(5) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             val input = socket.getInputStream()
@@ -1074,7 +1075,7 @@ class FlutterSourceEngineTest {
                                     }
                                     decoded.toByteArray()
                                 } else {
-                                    readExactly(headers.getValue("content-length").toInt())
+                                    readExactly(headers["content-length"]?.toInt() ?: 0)
                                 }
                             requests.add(
                                 Triple(
@@ -1128,17 +1129,31 @@ class FlutterSourceEngineTest {
                     )
                 }
             assertEquals(1, result.size)
+            val legacyEdgeGoldens = listOf("quote\"", "slash\\", "line\ncontrol").map { edgeKey ->
+                val golden = withContext(Dispatchers.IO) {
+                    AnalyzeUrl(legacy.searchUrl!!, key = edgeKey, page = 1, source = legacy, baseUrl = origin)
+                        .resolveRequestDescriptor(includeCookies = false)
+                }
+                assertEquals("Title", withTimeout(60_000) {
+                    WebBook.searchBookAwait(legacy, edgeKey, filter = { name, author, _ -> name == "Title" && author == "Author" }).single().name
+                })
+                golden
+            }
+            // Input rejection belongs to this explicit portable JSON-template contract,
+            // not to the Native legacy URL parser's historical lenient/default-GET behavior.
+            val guardedDefinition = Gson().toJson(mapOf(
+                "schemaVersion" to 1, "id" to "$origin/guard", "name" to "Explicit JSON guard", "baseUrl" to origin,
+                "stages" to mapOf("search" to mapOf(
+                    "url" to "$origin/guard", "method" to "POST", "body" to "q={{key}}&page={{page}}",
+                    "bodyTemplateMode" to "legacyJsonString", "bodyEncoding" to "legacyFormUtf8",
+                    "list" to "@css:.row", "fields" to fields.mapValues { "@css:${it.value}" },
+                )),
+            ))
+            val guarded = BookSource(bookSourceUrl = "$origin/guard").apply { bookSourceComment = "@source:v1 $guardedDefinition" }
             for (unsafe in listOf("quote\"", "slash\\", "line\ncontrol")) {
-                val failure =
-                    withTimeout(60_000) { runCatching { WebBook.searchBookAwait(legacy, unsafe) } }
+                val failure = withTimeout(60_000) { runCatching { WebBook.searchBookAwait(guarded, unsafe) } }
                 assertTrue(failure.isFailure)
-                assertTrue(
-                    failure
-                        .exceptionOrNull()
-                        ?.message
-                        .orEmpty()
-                        .contains("legacy_body_template_requires_migration")
-                )
+                assertTrue(failure.exceptionOrNull()?.message.orEmpty().contains("legacy_body_template_requires_migration"))
             }
             val rawBody = "q=$key&page=3"
             val definition =
@@ -1176,13 +1191,21 @@ class FlutterSourceEngineTest {
                 withTimeout(60_000) { WebBook.searchBookAwait(modern, "ignored").single().name },
             )
             serving.await()
-            assertEquals(2, requests.size)
+            assertEquals(5, requests.size)
             assertEquals("POST /legacy HTTP/1.1", requests[0].first)
-            assertEquals("application/x-www-form-urlencoded", requests[0].second)
+            assertEquals("application/x-www-form-urlencoded; charset=utf-8", requests[0].second)
             assertEquals("q=${java.net.URLEncoder.encode(key, "UTF-8")}&page=3", requests[0].third)
-            assertEquals("POST /modern HTTP/1.1", requests[1].first)
-            assertEquals("application/x-www-form-urlencoded", requests[1].second)
-            assertEquals(rawBody, requests[1].third)
+            legacyEdgeGoldens.forEachIndexed { index, golden ->
+                val actual = requests[index + 1]
+                assertEquals("${golden["method"]} /legacy HTTP/1.1", actual.first)
+                assertEquals(golden["contentType"]?.toString().orEmpty(), actual.second)
+                val expectedBytes = (golden["bodyBytes"] as? List<*>)?.map { (it as Number).toByte() }?.toByteArray() ?: byteArrayOf()
+                assertEquals(expectedBytes.toString(Charsets.UTF_8), actual.third)
+            }
+            assertEquals("POST /modern HTTP/1.1", requests[4].first)
+            assertEquals("application/x-www-form-urlencoded", requests[4].second)
+            assertEquals(rawBody, requests[4].third)
+            assertTrue(requests.none { it.first.contains("/guard ") })
         }
     }
 
