@@ -20,6 +20,7 @@ import io.legado.app.utils.GSON
 import java.io.Closeable
 import java.io.File
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.SocketException
 import java.util.Collections
@@ -56,7 +57,34 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
             check(targetContext.packageName == "com.legado.app.sourceenginesmoke")
             runBlocking(Dispatchers.IO) {
                 withTimeout(120_000) {
-                    FixtureServer().use { server ->
+                    val fixture =
+                        targetContext.getSharedPreferences(
+                            "source-engine-runtime-fixture",
+                            Context.MODE_PRIVATE,
+                        )
+                    val requestedPort =
+                        if (phase == "restart") {
+                            fixture.getInt("port:$token", 0).also {
+                                check(it in 1..65535) {
+                                    "Restart fixture has no recorded cold port"
+                                }
+                            }
+                        } else 0
+                    FixtureServer(requestedPort).use { server ->
+                        if (phase == "cold") {
+                            check(
+                                fixture
+                                    .edit()
+                                    .putInt("port:$token", server.port)
+                                    .putString("origin:$token", server.origin)
+                                    .commit()
+                            )
+                        } else {
+                            check(server.port == requestedPort)
+                            check(fixture.getString("origin:$token", null) == server.origin) {
+                                "Restart must retain the exact source origin"
+                            }
+                        }
                         verifySessionStorage(server)
                         verifyLegacyPipeline(server)
                         check(
@@ -69,6 +97,9 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                             JSONObject()
                                 .put("phase", phase)
                                 .put("debuggable", false)
+                                .put("fixturePort", server.port)
+                                .put("fixtureOrigin", server.origin)
+                                .put("stableOriginVerified", true)
                                 .put("sessionReadWrite", true)
                                 .put("closeReopenRestore", true)
                                 .put("sessionCookieRestored", true)
@@ -217,11 +248,18 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
         )
     }
 
-    private class FixtureServer : Closeable {
-        private val server = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+    private class FixtureServer(requestedPort: Int) : Closeable {
+        private val server =
+            ServerSocket().apply {
+                reuseAddress = true
+                // Binding a recorded port is strict: a conflict fails acceptance rather
+                // than changing origin and falsely claiming session restoration.
+                bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), requestedPort), 16)
+            }
         private val worker = Executors.newSingleThreadExecutor()
         val requests: MutableList<String> = Collections.synchronizedList(mutableListOf())
-        val origin = "http://127.0.0.1:${server.localPort}"
+        val port = server.localPort
+        val origin = "http://127.0.0.1:$port"
 
         init {
             worker.submit {
