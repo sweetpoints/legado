@@ -948,8 +948,10 @@ class AnalyzeRule(
                 return await eval(__analyzeScript);
             }).call(globalThis)
         """.trimIndent()
-        return V8ScriptExecutor.evaluateBlocking(
-            script, bindings, coroutineContext + callbacks, source = source,
+        return LegacyDomHost.restoreValue(
+            V8ScriptExecutor.evaluateBlocking(
+                script, bindings, coroutineContext + callbacks, source = source,
+            )
         )
     }
 
