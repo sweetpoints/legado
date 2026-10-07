@@ -236,6 +236,131 @@ void main() {
       ),
     );
   });
+  for (final cancel in [false, true]) {
+    test(
+      'before-entry hook restores terminated host frames before fresh bindings (${cancel ? "cancel" : "timeout"})',
+      () async {
+        final session = V8Runtime(
+          persistent: true,
+          prelude: '''(() => {
+          const frames = [];
+          Object.defineProperty(globalThis, '__sourceBeforeEntry', {
+            value() {
+              while (frames.length) {
+                for (const [key, descriptor] of frames.pop()) {
+                  if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+                  else delete globalThis[key];
+                }
+              }
+            }
+          });
+          globalThis.installInterruptedFrame = function() {
+            frames.push(['book', '__legacyHttpStep'].map(key =>
+              [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+            globalThis.book = 'inner-book';
+            globalThis.__legacyHttpStep = {token: 'interrupted'};
+          };
+        })();''',
+        );
+        try {
+          await session.evaluate(
+            'globalThis.userCounter = 0; true',
+            ScriptContext(host: Host(), variables: {'book': 'initial-book'}),
+          );
+          final token = CancellationToken();
+          final pending = session.evaluate(
+            '''userCounter++; installInterruptedFrame();
+            __sourceAwaitSync(new Promise(() => {}));''',
+            ScriptContext(
+              host: Host(),
+              variables: {'book': 'old-caller-book'},
+              timeout: Duration(milliseconds: cancel ? 30000 : 80),
+            ),
+            cancellation: token,
+          );
+          if (cancel) Timer(const Duration(milliseconds: 60), token.cancel);
+          await expectLater(
+            pending,
+            throwsA(
+              isA<EngineException>().having(
+                (error) => error.code,
+                'code',
+                cancel ? 'cancelled' : 'script_timeout',
+              ),
+            ),
+          );
+          expect(
+            await session.evaluate(
+              '[book, typeof __legacyHttpStep, userCounter]',
+              ScriptContext(
+                host: Host(),
+                variables: {'book': 'fresh-caller-book'},
+              ),
+            ),
+            ['fresh-caller-book', 'undefined', 1],
+          );
+        } finally {
+          await session.close();
+        }
+      },
+    );
+  }
+  test(
+    'before-entry hook exception stops script and preserves context',
+    () async {
+      final session = V8Runtime(persistent: true);
+      try {
+        await session.evaluate('''globalThis.scriptRuns = 1;
+        globalThis.__sourceBeforeEntry = () => {
+          globalThis.__sourceBeforeEntry = undefined;
+          throw new Error('restore failed');
+        };''', ScriptContext(host: Host()));
+        await expectLater(
+          session.evaluate('scriptRuns++', ScriptContext(host: Host())),
+          throwsA(
+            isA<EngineException>().having(
+              (error) => error.message,
+              'message',
+              contains('restore failed'),
+            ),
+          ),
+        );
+        expect(
+          await session.evaluate('scriptRuns', ScriptContext(host: Host())),
+          1,
+        );
+      } finally {
+        await session.close();
+      }
+    },
+  );
+  test('before-entry hook uses execution watchdog', () async {
+    final session = V8Runtime(persistent: true);
+    try {
+      await session.evaluate(
+        'globalThis.__sourceBeforeEntry = () => {while(true) {}};',
+        ScriptContext(host: Host()),
+      );
+      await expectLater(
+        session.evaluate(
+          '42',
+          ScriptContext(
+            host: Host(),
+            timeout: const Duration(milliseconds: 80),
+          ),
+        ),
+        throwsA(
+          isA<EngineException>().having(
+            (error) => error.code,
+            'code',
+            'script_timeout',
+          ),
+        ),
+      );
+    } finally {
+      await session.close();
+    }
+  });
   test('watchdog terminates busy script', () async {
     await expectLater(
       runtime.evaluate(

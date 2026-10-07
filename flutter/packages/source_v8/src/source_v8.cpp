@@ -398,6 +398,32 @@ __attribute__((visibility("default"))) void sv8_start(Runtime *r,
     diagnostic->CreateDataProperty(c,str(i,"value"),value).FromMaybe(false);
     r->immediate_json = json(i,c,diagnostic); r->immediate = true; complete(r); return;
   }
+  // TerminateExecution skips JS finally blocks. A retained context's trusted
+  // prelude can restore interrupted host descriptor frames here, before old
+  // caller bindings are removed or fresh bindings installed. This hook runs
+  // under this entry's existing watchdog and never runs in compile-only mode.
+  Local<Value> before_entry;
+  if (stopped() ||
+      !c->Global()->Get(c, str(i, "__sourceBeforeEntry")).ToLocal(&before_entry)) {
+    r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
+    return;
+  }
+  if (!before_entry->IsUndefined()) {
+    if (!before_entry->IsFunction()) {
+      r->error = "invalid_before_entry_hook";
+      return;
+    }
+    Local<Value> restored;
+    if (!before_entry.As<Function>()->Call(c, c->Global(), 0, nullptr)
+             .ToLocal(&restored)) {
+      r->error = stopped() ? "execution_timeout" : error_text(r,i,c,tc.Exception());
+      return;
+    }
+    if (stopped() || restored->IsPromise()) {
+      r->error = stopped() ? "execution_timeout" : "invalid_before_entry_hook";
+      return;
+    }
+  }
   if (vars->IsObject()) {
     auto o = vars.As<Object>();
     for (const auto &key : r->binding_keys) {
