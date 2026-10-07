@@ -43,6 +43,27 @@ class LegacyRuleHostTest {
     private fun host() = LegacyRuleHost("https://fixture.invalid", EmptyCoroutineContext)
 
     @Test
+    fun backgroundWebScriptsRequireExplicitCapabilityAndStillRejectActiveScriptReentry() {
+        val rule = "@webjs:document.body.textContent"
+        assertFalse(LegacyRuleHost.supportsRule(rule, allowJs = true))
+        assertTrue(LegacyRuleHost.supportsRule(rule, allowJs = true, allowWebScripts = true))
+        assertEquals(
+            "nested_script_requires_migration",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(request(rule), fromScript = true, allowWebScripts = true)
+                }
+                .code,
+        )
+        assertEquals(
+            "legacy_requires_migration",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(request(rule), fromScript = false)
+                }
+                .code,
+        )
+    }
+
+    @Test
     fun typedBookScopesStaySeparateAndTravelBetweenRealParserTasks() {
         fun scope(
             id: String,

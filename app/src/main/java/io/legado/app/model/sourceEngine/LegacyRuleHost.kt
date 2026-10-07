@@ -96,12 +96,23 @@ class LegacyRuleHost(
         }
 
     @Synchronized
-    fun evaluate(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
+    fun evaluate(
+        payload: Map<String, Any?>,
+        fromScript: Boolean = true,
+        allowWebScripts: Boolean = false,
+    ): Map<String, Any?> {
         context.ensureActive()
         ensureOpen()
         BookSourceScriptBridge.jsonBindings(mapOf("payload" to payload))
         val rule = payload["rule"] as? String ?: invalid("rule must be a string")
-        if (rule.isNotBlank() && !supportsRule(rule, allowJs = !fromScript)) {
+        if (
+            rule.isNotBlank() &&
+                !supportsRule(
+                    rule,
+                    allowJs = !fromScript,
+                    allowWebScripts = allowWebScripts && !fromScript,
+                )
+        ) {
             throw SourceScriptException(
                 if (fromScript) "nested_script_requires_migration" else "legacy_requires_migration",
                 if (fromScript) "Legacy rule callbacks cannot recursively execute JavaScript"
@@ -281,15 +292,21 @@ class LegacyRuleHost(
         /**
          * Parser capability only; it does not enable contentBatch/callback/source pipeline hooks.
          */
-        fun supportsRule(rule: String, allowJs: Boolean = false): Boolean {
+        fun supportsRule(
+            rule: String,
+            allowJs: Boolean = false,
+            allowWebScripts: Boolean = false,
+        ): Boolean {
             if (rule.isBlank() || (!allowJs && rule.contains("{{"))) return false
             return runCatching {
                     val parts = AnalyzeRule().splitSourceRule(rule, allInOne = true)
                     parts.isNotEmpty() &&
                         parts.all {
                             (allowJs || it.mode != AnalyzeRule.Mode.Js) &&
-                                it.mode != AnalyzeRule.Mode.WebJs &&
-                                it.putMap.values.all { nested -> supportsRule(nested, allowJs) }
+                                (allowWebScripts || it.mode != AnalyzeRule.Mode.WebJs) &&
+                                it.putMap.values.all { nested ->
+                                    supportsRule(nested, allowJs, allowWebScripts)
+                                }
                         }
                 }
                 .getOrDefault(false)

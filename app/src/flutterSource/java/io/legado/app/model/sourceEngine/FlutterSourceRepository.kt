@@ -288,7 +288,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 require(key is String) { "Legacy rule payload keys must be strings" }
                 key to value
             }
-            return task.legacyRules.evaluate(payload, fromScript)
+            return task.legacyRules.evaluate(payload, fromScript, allowWebScripts = !fromScript)
         }
         val callbackMethods = setOf(
             "analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList",
