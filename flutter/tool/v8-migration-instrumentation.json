@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 98,
+  "caseCount": 101,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -253,6 +253,16 @@
         "ajaxSourceHeaderRunsInTheExistingOwnerAndPreservesLibraryAndGlobals",
         "dynamicHeaderUsesSourceVariablesAndRestoresTheCallerBookScope",
         "jsoupGetUsesItsExplicitDynamicHeaderAndDoesNotEvaluateSourceHeader"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyNestedHttpScriptV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt",
+      "sourceSha256": "6ca268a784c79e01a12a3c3cfef46ac7a873738d3f038645933b8e83b9052d7e",
+      "methods": [
+        "dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables",
+        "responseBodyJsRunsAfterNativeFetchInTheSameOwnerAndReceivesTheRawBody",
+        "urlOptionJsReceivesResolvedUrlAndPreservesTheSameLibraryAndGlobals"
       ]
     }
   ]
