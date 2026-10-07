@@ -2,6 +2,7 @@ package io.legado.app.model.sourceEngine
 
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.Job
+import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -62,9 +63,12 @@ class LegacyRuleHostTest {
                     )
                 )
         assertEquals(listOf("Three"), result["value"])
+        val task = host()
         val rows =
-            host().evaluate(request("@XPath://a[@id='b']", mode = "elements"))["value"] as List<*>
-        assertEquals(listOf("<a id=\"b\" href=\"/two\">Two</a>"), rows)
+            task.evaluate(request("@XPath://a[@id='b']", mode = "elements"))["value"] as List<*>
+        val row = rows.single() as Map<*, *>
+        assertEquals(setOf(LegacyRuleHost.NODE_REF), row.keys)
+        assertEquals("/two", task.evaluate(request("tag.a@href", row))["value"])
     }
 
     @Test
@@ -130,6 +134,12 @@ class LegacyRuleHostTest {
                 .evaluate(
                     request("@get:{saved}", extra = mapOf("variables" to mapOf("saved" to "stale")))
                 )["value"],
+        )
+        assertEquals(
+            "2",
+            first
+                .evaluate(request("@get:{page}", extra = mapOf("variables" to mapOf("page" to 2))))[
+                    "value"],
         )
         val second = host()
         assertEquals(
@@ -235,5 +245,129 @@ class LegacyRuleHostTest {
         assertEquals(emptyMap<String, String>(), title["variables"])
         assertEquals("Snapshot Book", book["name"])
         assertEquals("Snapshot Chapter", chapter["title"])
+    }
+
+    @Test
+    fun xpathListThenFieldRetainsAncestorParentAndBothSiblingAxes() {
+        val task = host()
+        val row =
+            (task.evaluate(request("@XPath://a[@id='b']", mode = "elements"))["value"] as List<*>)
+                .single()!!
+        val expected =
+            mapOf(
+                "@XPath:ancestor::section/@id" to listOf("books"),
+                "@XPath:../@id" to listOf("books"),
+                "@XPath:preceding-sibling::a/text()" to listOf("One"),
+                "@XPath:following-sibling::a/text()" to listOf("Three"),
+            )
+        for ((rule, value) in expected) {
+            assertEquals(rule, value, task.evaluate(request(rule, row, "list"))["value"])
+        }
+        // The old JSON outerHtml boundary demonstrably detaches the same row.
+        assertEquals("Two", task.evaluate(request("section > a#b@text", row))["value"])
+        val fragment = Jsoup.parse(html).getElementById("b")!!.outerHtml()
+        assertEquals(
+            emptyList<String>(),
+            host().evaluate(request("@XPath:ancestor::section/@id", fragment, "list"))["value"],
+        )
+        assertEquals(
+            emptyList<String>(),
+            host()
+                .evaluate(request("@XPath:preceding-sibling::a/text()", fragment, "list"))["value"],
+        )
+    }
+
+    @Test
+    fun cssTableListThenFieldRetainsTrTdAndNthChildContext() {
+        val table =
+            "<table id='rows'><tbody><tr><td>One</td><td>Author 1</td></tr><tr><td>Two</td><td>Author 2</td></tr></tbody></table>"
+        val task = host()
+        val rows = task.evaluate(request("tag.tr", table, "elements"))["value"] as List<*>
+        assertEquals(2, rows.size)
+        val row = rows[1]!!
+        assertEquals("Two", task.evaluate(request("tag.td.0@text", row))["value"])
+        assertEquals("Two Author 2", task.evaluate(request("tr:nth-child(2)@text", row))["value"])
+        assertEquals(
+            listOf("rows"),
+            task.evaluate(request("@XPath:ancestor::table/@id", row, "list"))["value"],
+        )
+        val fragment = Jsoup.parse(table).select("tr")[1].outerHtml()
+        assertEquals("", host().evaluate(request("tag.td.0@text", fragment))["value"])
+    }
+
+    @Test
+    fun nodeReferencesAreIdentityDeduplicatedAndCannotCrossTasksOrBeGuessed() {
+        val task = host()
+        val root =
+            (task.evaluate(request("tag.section", mode = "elements"))["value"] as List<*>)
+                .single()!!
+        val first = task.evaluate(request("tag.a", root, "elements"))["value"]
+        val repeated = task.evaluate(request("tag.a", root, "elements"))["value"]
+        assertEquals(first, repeated)
+        val ref = (first as List<*>).first() as Map<*, *>
+        assertTrue(ref[LegacyRuleHost.NODE_REF] is String)
+        for (input in
+            listOf(
+                ref,
+                mapOf(LegacyRuleHost.NODE_REF to "not-a-known-token"),
+                mapOf(LegacyRuleHost.NODE_REF to 7),
+            )) {
+            assertEquals(
+                "invalid_request",
+                assertThrows(SourceScriptException::class.java) {
+                        host().evaluate(request("tag.a@text", input))
+                    }
+                    .code,
+            )
+        }
+    }
+
+    @Test
+    fun ordinaryJsonRowsAreNeverConvertedToDomReferences() {
+        val record = mapOf("name" to "Record", "url" to "/record")
+        val task = host()
+        val rows =
+            task
+                .evaluate(
+                    request("@Json:\$.items[*]", mapOf("items" to listOf(record)), "elements")
+                )["value"]
+                as List<*>
+        assertEquals(listOf(record), rows)
+        assertEquals("Record", task.evaluate(request("name", rows.single()!!))["value"])
+    }
+
+    @Test
+    fun completingOrCancellingTaskReleasesItsRetainedNodes() {
+        for (cancel in listOf(false, true)) {
+            val job = Job()
+            val task = LegacyRuleHost("https://fixture.invalid", job)
+            task.evaluate(request("tag.a", mode = "elements"))
+            val registry =
+                LegacyRuleHost::class.java.getDeclaredField("nodes").apply { isAccessible = true }
+            assertEquals(3, (registry.get(task) as Map<*, *>).size)
+            if (cancel) job.cancel() else job.complete()
+            assertEquals(0, (registry.get(task) as Map<*, *>).size)
+        }
+    }
+
+    @Test
+    fun explicitTaskCloseInvalidatesRefsWithoutWaitingForLongLivedCallerJob() {
+        val job = Job()
+        val task = LegacyRuleHost("https://fixture.invalid", job)
+        val row = (task.evaluate(request("tag.a", mode = "elements"))["value"] as List<*>).first()!!
+        task.close()
+        assertTrue(job.isActive)
+        val registry =
+            LegacyRuleHost::class.java.getDeclaredField("nodes").apply { isAccessible = true }
+        assertEquals(0, (registry.get(task) as Map<*, *>).size)
+        assertEquals(
+            "invalid_request",
+            assertThrows(SourceScriptException::class.java) {
+                    task.evaluate(request("tag.a@text", row))
+                }
+                .code,
+        )
+        task.close()
+        job.complete()
     }
 }

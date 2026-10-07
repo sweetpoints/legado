@@ -51,7 +51,22 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         val sourceKind: String = "book",
         val navigationSourceId: String = sourceId,
     ) {
-        val legacyRules by lazy { LegacyRuleHost(navigationSourceId, context) }
+        private val legacyRuleDelegate = lazy { LegacyRuleHost(navigationSourceId, context) }
+        @Volatile private var legacyRulesClosed = false
+        val legacyRules: LegacyRuleHost
+            get() {
+                check(!legacyRulesClosed) { "Legacy rule task is closed" }
+                val host = legacyRuleDelegate.value
+                if (legacyRulesClosed) {
+                    host.close()
+                    error("Legacy rule task is closed")
+                }
+                return host
+            }
+        fun closeLegacyRules() {
+            legacyRulesClosed = true
+            if (legacyRuleDelegate.isInitialized()) legacyRuleDelegate.value.close()
+        }
     }
 
     private val hostTasks = mutableMapOf<String, HostTask>()
@@ -490,7 +505,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)
+                        hostTasks.remove(taskId)?.closeLegacyRules()
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
@@ -539,7 +554,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                     try { channel?.invokeMethod("cancel", mapOf("taskId" to taskId)) }
                     finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)
+                        hostTasks.remove(taskId)?.closeLegacyRules()
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value -= taskId
                     }
@@ -638,7 +653,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)
+                        hostTasks.remove(taskId)?.closeLegacyRules()
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
@@ -657,6 +672,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             // Callers own execute coroutines; cancelling our browser scope cannot wake them.
             val pending = responses.values.toList()
             responses.clear()
+            hostTasks.values.forEach { it.closeLegacyRules() }
             hostTasks.clear()
             pending.forEach {
                 it.completeExceptionally(

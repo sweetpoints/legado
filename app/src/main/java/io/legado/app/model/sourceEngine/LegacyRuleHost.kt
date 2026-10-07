@@ -6,8 +6,11 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.utils.GSON
 import java.util.IdentityHashMap
+import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import org.jsoup.nodes.Node
 import org.seimicrawler.xpath.JXNode
@@ -18,10 +21,54 @@ class LegacyRuleHost(
     private val context: CoroutineContext = EmptyCoroutineContext,
 ) {
     private val values = TaskVariables()
+    private val nodeLock = Any()
+    private val nodeTokens = IdentityHashMap<Node, String>()
+    private val nodes = hashMapOf<String, Node>()
+    @Volatile private var closed = false
+    private val completionHandle: DisposableHandle? = context[Job]?.invokeOnCompletion { close() }
+
+    /** Release task references immediately; never wait for an active parser/V8 evaluation lock. */
+    fun close() {
+        val dispose =
+            synchronized(nodeLock) {
+                if (closed) false
+                else {
+                    closed = true
+                    nodes.clear()
+                    nodeTokens.clear()
+                    true
+                }
+            }
+        if (dispose) completionHandle?.dispose()
+    }
+
+    private fun ensureOpen() {
+        if (closed) invalid("Legacy rule task is closed")
+    }
+
+    private fun restoreInput(input: Any): Any {
+        if (input !is Map<*, *> || input.size != 1 || !input.containsKey(NODE_REF)) return input
+        val token = input[NODE_REF] as? String ?: invalid("Legacy node reference must be a string")
+        return synchronized(nodeLock) {
+            ensureOpen()
+            nodes[token] ?: invalid("Legacy node reference does not belong to this active task")
+        }
+    }
+
+    private fun nodeReference(node: Node): Map<String, String> =
+        synchronized(nodeLock) {
+            ensureOpen()
+            val token =
+                nodeTokens.getOrPut(node) {
+                    UUID.randomUUID().toString().also { nodes[it] = node }
+                }
+            mapOf(NODE_REF to token)
+        }
 
     @Synchronized
     fun evaluate(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
         context.ensureActive()
+        ensureOpen()
         BookSourceScriptBridge.jsonBindings(mapOf("payload" to payload))
         val rule = payload["rule"] as? String ?: invalid("rule must be a string")
         if (rule.isNotBlank() && !supportsRule(rule, allowJs = !fromScript)) {
@@ -33,7 +80,7 @@ class LegacyRuleHost(
         }
         val mode = payload["mode"] as? String ?: invalid("mode is required")
         require(mode in setOf("elements", "scalar", "list")) { "Invalid legacy rule mode" }
-        val input = payload["input"] ?: invalid("input must not be null")
+        val input = restoreInput(payload["input"] ?: invalid("input must not be null"))
         val baseUrl = payload["baseUrl"] as? String ?: invalid("baseUrl must be a string")
         val isUrl = boolean(payload, "isUrl", false)
         val unescape = boolean(payload, "unescape", true)
@@ -48,7 +95,7 @@ class LegacyRuleHost(
             } else emptyMap<String, Any?>()
         bindings.forEach { (key, value) ->
             require(key is String) { "Legacy variable names must be strings" }
-            values.variableMap.putIfAbsent(key, valueText(value))
+            values.seed(key, valueText(value))
         }
         val parser =
             AnalyzeRule(ruleData = values, source = source, isFromBookInfo = operation == "info")
@@ -75,12 +122,17 @@ class LegacyRuleHost(
         // and must retain the original synchronous extraction re-entry guard.
         val result = if (fromScript) parser.withScriptCallback(extract) else extract()
         context.ensureActive()
+        ensureOpen()
         return mapOf("value" to jsonValue(result), "variables" to values.writes())
     }
 
     private class TaskVariables : RuleDataInterface {
         override val variableMap = hashMapOf<String, String>()
         private val changed = linkedSetOf<String>()
+
+        fun seed(key: String, value: String) {
+            if (key !in changed) variableMap[key] = value
+        }
 
         override fun putVariable(key: String, value: String?): Boolean {
             changed += key
@@ -97,7 +149,39 @@ class LegacyRuleHost(
         fun writes(): Map<String, String> = changed.associateWith { variableMap[it].orEmpty() }
     }
 
+    private fun jsonValue(value: Any?): Any? {
+        val visiting = IdentityHashMap<Any, Boolean>()
+        fun convert(item: Any?, depth: Int): Any? {
+            if (depth > 64) invalid("Legacy rule result is too deeply nested")
+            if (item == null || item is String || item is Boolean) return item
+            if (item is Number) {
+                require(item.toDouble().isFinite()) { "Non-finite legacy result" }
+                return item
+            }
+            if (item is Node) return nodeReference(item)
+            if (item is JXNode) return convert(item.value(), depth + 1)
+            if (visiting.put(item, true) != null) invalid("Cyclic legacy rule result")
+            try {
+                return when (item) {
+                    is List<*> -> item.map { convert(it, depth + 1) }
+                    is Array<*> -> item.map { convert(it, depth + 1) }
+                    is Map<*, *> ->
+                        item.entries.associate { (key, entry) ->
+                            require(key is String) { "Legacy result keys must be strings" }
+                            key to convert(entry, depth + 1)
+                        }
+                    else -> invalid("Unsupported legacy result type")
+                }
+            } finally {
+                visiting.remove(item)
+            }
+        }
+        return convert(value, 0)
+    }
+
     companion object {
+        const val NODE_REF = "__legacyRuleNodeRef"
+
         /**
          * Parser capability only; it does not enable contentBatch/callback/source pipeline hooks.
          */
@@ -139,35 +223,5 @@ class LegacyRuleHost(
 
         private fun invalid(message: String): Nothing =
             throw SourceScriptException("invalid_request", message)
-
-        private fun jsonValue(value: Any?): Any? {
-            val visiting = IdentityHashMap<Any, Boolean>()
-            fun convert(item: Any?, depth: Int): Any? {
-                if (depth > 64) invalid("Legacy rule result is too deeply nested")
-                if (item == null || item is String || item is Boolean) return item
-                if (item is Number) {
-                    require(item.toDouble().isFinite()) { "Non-finite legacy result" }
-                    return item
-                }
-                if (item is Node) return item.outerHtml()
-                if (item is JXNode) return convert(item.value(), depth + 1)
-                if (visiting.put(item, true) != null) invalid("Cyclic legacy rule result")
-                try {
-                    return when (item) {
-                        is List<*> -> item.map { convert(it, depth + 1) }
-                        is Array<*> -> item.map { convert(it, depth + 1) }
-                        is Map<*, *> ->
-                            item.entries.associate { (key, entry) ->
-                                require(key is String) { "Legacy result keys must be strings" }
-                                key to convert(entry, depth + 1)
-                            }
-                        else -> invalid("Unsupported legacy result type")
-                    }
-                } finally {
-                    visiting.remove(item)
-                }
-            }
-            return convert(value, 0)
-        }
     }
 }
