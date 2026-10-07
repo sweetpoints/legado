@@ -155,6 +155,39 @@ const legacyScriptPrelude =
           args = [args[0], content, args.length > 2 ? args[2] : false, globalThis.baseUrl];
           if (String(name) === 'getString') args.push(unescape);
         }
+        if (globalThis.__legacyUseNativeHttp === true) {
+          if (globalThis.__legacyHeaderEvaluation === true && ['get','put'].includes(String(name))
+              && !(String(name) === 'get' && args.length !== 1)) {
+            return __sourceHostSync('javaHttp.header' + (String(name) === 'get' ? 'Get' : 'Put'), args);
+          }
+          if (['ajax','connect','ajaxAll'].includes(String(name))) {
+            const plan = __sourceHostSync('javaHttp.prepareHeader', [String(name), args]);
+            if (plan !== null) {
+              if (!plan || typeof plan.script !== 'string' || !Number.isSafeInteger(plan.count) || plan.count < 0) {
+                throw new Error('legacy.invalid_header_plan');
+              }
+              const evaluations = [];
+              for (let index = 0; index < plan.count; index++) {
+                const previous = globalThis.__legacyHeaderEvaluation;
+                globalThis.__legacyHeaderEvaluation = true;
+                try {
+                  const value = eval(plan.script);
+                  if (value && typeof value.then === 'function') {
+                    throw new Error('legacy.async_header_requires_await');
+                  }
+                  evaluations.push({value, failed:false});
+                } catch (error) {
+                  if (String(error).includes('legacy.async_header_requires_await')) throw error;
+                  // BaseSource.getHeaderMap also retains default headers when its rule fails.
+                  evaluations.push({value:null, failed:true});
+                } finally {
+                  globalThis.__legacyHeaderEvaluation = previous;
+                }
+              }
+              return response(__sourceHostSync('javaHttp.' + String(name) + 'Resolved', [args, evaluations]));
+            }
+          }
+        }
         const value = __sourceHostSync('java.' + String(name), args);
         if (String(name) === 'createSymmetricCrypto') {
           if (!value || !value.__legacyCryptoState) throw new Error('legacy.invalid_crypto_state');

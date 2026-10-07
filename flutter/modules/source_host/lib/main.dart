@@ -80,7 +80,9 @@ SourceEngine createSourceEngine(
 class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
   _SourceRuntime({required this.legacy, this.useNativeHttp = false})
     : runtime = V8Runtime(
-        prelude: legacy ? legacyScriptPrelude : '',
+        prelude: legacy
+            ? '$legacyScriptPrelude\nglobalThis.__legacyUseNativeHttp = ${useNativeHttp ? 'true' : 'false'};\n'
+            : '',
         persistent: true,
       );
   final bool legacy;
