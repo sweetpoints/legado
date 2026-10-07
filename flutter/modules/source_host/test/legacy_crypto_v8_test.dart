@@ -22,8 +22,9 @@ void main() {
         expect(request['sourceId'], 'book:fixture');
         final method = request['method'] as String;
         methods.add(method);
-        if (method == 'javaHost.cryptoCreate')
+        if (method == 'javaHost.cryptoCreate') {
           return {'__legacyCryptoHandle': 'opaque'};
+        }
         if (method == 'javaHost.cryptoCall') {
           final args = request['arguments'] as List;
           expect(args[0], 'opaque');
