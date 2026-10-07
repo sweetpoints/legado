@@ -90,15 +90,26 @@ class SourceHost {
             (original['mainJs'] as String).trim().isEmpty)) {
       return true;
     }
-    if (!{
-      'legacy.rule_requires_review',
-      'legacy.regex_mode',
-    }.contains(issue.code)) {
+    final hostedPipeline =
+        issue.code == 'legacy.pipeline_requires_review' &&
+        {'ruleBookInfo.init', 'ruleContent.replaceRegex'}.contains(issue.path);
+    if (!hostedPipeline &&
+        !{
+          'legacy.rule_requires_review',
+          'legacy.regex_mode',
+        }.contains(issue.code)) {
       return false;
     }
     final dot = issue.path.indexOf('.');
     if (dot < 0) return false;
-    final group = original[issue.path.substring(0, dot)];
+    Object? group = original[issue.path.substring(0, dot)];
+    if (group is String) {
+      try {
+        group = jsonDecode(group);
+      } on FormatException {
+        return false;
+      }
+    }
     if (group is! Map) return false;
     final rule = group[issue.path.substring(dot + 1)];
     return rule is String &&
