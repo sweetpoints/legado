@@ -20,14 +20,15 @@ class LegacyRuleHost(
     private val values = TaskVariables()
 
     @Synchronized
-    fun evaluate(payload: Map<String, Any?>): Map<String, Any?> {
+    fun evaluate(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
         context.ensureActive()
         BookSourceScriptBridge.jsonBindings(mapOf("payload" to payload))
         val rule = payload["rule"] as? String ?: invalid("rule must be a string")
-        if (rule.isNotBlank() && !supportsRule(rule)) {
+        if (rule.isNotBlank() && !supportsRule(rule, allowJs = !fromScript)) {
             throw SourceScriptException(
-                "nested_script_requires_migration",
-                "Legacy rule callbacks cannot recursively execute JavaScript",
+                if (fromScript) "nested_script_requires_migration" else "legacy_requires_migration",
+                if (fromScript) "Legacy rule callbacks cannot recursively execute JavaScript"
+                else "WebView rules require a separate asynchronous platform capability",
             )
         }
         val mode = payload["mode"] as? String ?: invalid("mode is required")
@@ -52,10 +53,13 @@ class LegacyRuleHost(
         val parser =
             AnalyzeRule(ruleData = values, source = source, isFromBookInfo = operation == "info")
                 .setCoroutineContext(context)
+                .setScriptContextSnapshots(
+                    snapshotObject(bindings["book"]),
+                    snapshotObject(bindings["chapter"]),
+                )
                 .setContent(input, baseUrl)
         if (baseUrl.isNotBlank()) parser.setRedirectUrl(baseUrl)
-        // A synchronous Java extraction callback cannot re-enter its active V8 owner.
-        val result = parser.withScriptCallback {
+        val extract = {
             when (mode) {
                 "elements" -> parser.getElements(rule)
                 "scalar" ->
@@ -67,6 +71,9 @@ class LegacyRuleHost(
                 else -> parser.getStringList(rule, isUrl = isUrl).orEmpty()
             }
         }
+        // Outer declarative RPC has no active auxiliary VM. Script callbacks do,
+        // and must retain the original synchronous extraction re-entry guard.
+        val result = if (fromScript) parser.withScriptCallback(extract) else extract()
         context.ensureActive()
         return mapOf("value" to jsonValue(result), "variables" to values.writes())
     }
@@ -94,18 +101,27 @@ class LegacyRuleHost(
         /**
          * Parser capability only; it does not enable contentBatch/callback/source pipeline hooks.
          */
-        fun supportsRule(rule: String): Boolean {
-            if (rule.isBlank() || rule.contains("{{")) return false
+        fun supportsRule(rule: String, allowJs: Boolean = false): Boolean {
+            if (rule.isBlank() || (!allowJs && rule.contains("{{"))) return false
             return runCatching {
                     val parts = AnalyzeRule().splitSourceRule(rule, allInOne = true)
                     parts.isNotEmpty() &&
                         parts.all {
-                            it.mode != AnalyzeRule.Mode.Js &&
+                            (allowJs || it.mode != AnalyzeRule.Mode.Js) &&
                                 it.mode != AnalyzeRule.Mode.WebJs &&
-                                it.putMap.values.all(::supportsRule)
+                                it.putMap.values.all { nested -> supportsRule(nested, allowJs) }
                         }
                 }
                 .getOrDefault(false)
+        }
+
+        private fun snapshotObject(value: Any?): Map<String, Any?>? {
+            if (value == null) return null
+            val map = value as? Map<*, *> ?: invalid("Book/chapter snapshot must be an object")
+            return map.entries.associate { (key, entry) ->
+                require(key is String) { "Snapshot keys must be strings" }
+                key to entry
+            }
         }
 
         private fun boolean(payload: Map<String, Any?>, key: String, fallback: Boolean): Boolean =

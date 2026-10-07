@@ -119,9 +119,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                                         val method = requireNotNull(call.argument<String>("method"))
                                         val arguments =
                                             requireNotNull(call.argument<List<Any?>>("arguments"))
+                                        val origin = call.argument<Any?>("fromScript")
+                                        require(origin == null || origin is Boolean) { "Invalid rule callback origin" }
+                                        val fromScript = origin as? Boolean ?: true
                                         val value =
                                             withContext(task.context + Dispatchers.IO) {
-                                                callHost(task, method, arguments)
+                                                callHost(task, method, arguments, fromScript)
                                             }
                                         result.success(value)
                                     } catch (error: SourceScriptException) {
@@ -247,14 +250,19 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             ?: error("Source identity missing")
     }
 
-    private suspend fun callHost(task: HostTask, method: String, args: List<Any?>): Any? {
+    private suspend fun callHost(
+        task: HostTask,
+        method: String,
+        args: List<Any?>,
+        fromScript: Boolean = true,
+    ): Any? {
         if (method == "legacyRule.evaluate") {
             require(args.size == 1 && args[0] is Map<*, *>) { "Invalid legacy rule callback" }
             val payload = (args[0] as Map<*, *>).entries.associate { (key, value) ->
                 require(key is String) { "Legacy rule payload keys must be strings" }
                 key to value
             }
-            return task.legacyRules.evaluate(payload)
+            return task.legacyRules.evaluate(payload, fromScript)
         }
         val callbackMethods = setOf(
             "analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList",

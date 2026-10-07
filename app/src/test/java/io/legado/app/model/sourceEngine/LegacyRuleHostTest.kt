@@ -90,7 +90,8 @@ class LegacyRuleHostTest {
             )
         assertEquals(
             listOf("Two"),
-            host().evaluate(request("@Json:\$.items[?(@.rating > 1)].name", input, "list"))["value"],
+            host()
+                .evaluate(request("@Json:\$.items[?(@.rating > 1)].name", input, "list"))["value"],
         )
         assertEquals("Book", host().evaluate(request("name", mapOf("name" to "Book")))["value"])
     }
@@ -176,5 +177,63 @@ class LegacyRuleHostTest {
         assertThrows(BookSourceBindingsUnsupportedException::class.java) {
             host().evaluate(request("tag.a@text", extra = mapOf("input" to Any())))
         }
+    }
+
+    @Test
+    fun onlyExplicitOuterCapabilityAllowsJavascriptAndInlineExpressions() {
+        for (rule in
+            listOf(
+                "@js: result",
+                "<js>result</js>",
+                "tag.a@text<js>result.toUpperCase()</js>",
+                "{{result}}",
+            )) {
+            assertTrue(rule, LegacyRuleHost.supportsRule(rule, allowJs = true))
+            assertFalse(rule, LegacyRuleHost.supportsRule(rule))
+        }
+        assertFalse(LegacyRuleHost.supportsRule("@webjs:document.body", allowJs = true))
+        assertEquals(
+            "legacy_requires_migration",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(request("@webjs:document.body"), fromScript = false)
+                }
+                .code,
+        )
+    }
+
+    @Test
+    fun payloadCannotClaimToBeAnOuterRequestAndBypassDefaultNestedGuard() {
+        val payload = request("@js: result", extra = mapOf("fromScript" to false))
+        assertEquals(
+            "nested_script_requires_migration",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(payload)
+                }
+                .code,
+        )
+        assertEquals(
+            "nested_script_requires_migration",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(payload, fromScript = true)
+                }
+                .code,
+        )
+    }
+
+    @Test
+    fun bookAndChapterSnapshotNamesKeepLegacyGetSpecialCasesReadOnly() {
+        val book = mapOf("name" to "Snapshot Book", "bookUrl" to "https://fixture.invalid/book")
+        val chapter = mapOf("title" to "Snapshot Chapter", "index" to 7)
+        val variables = mapOf("book" to book, "chapter" to chapter)
+        val task = host()
+        val name =
+            task.evaluate(request("@get:{bookName}", extra = mapOf("variables" to variables)))
+        val title = task.evaluate(request("@get:{title}", extra = mapOf("variables" to variables)))
+        assertEquals("Snapshot Book", name["value"])
+        assertEquals("Snapshot Chapter", title["value"])
+        assertEquals(emptyMap<String, String>(), name["variables"])
+        assertEquals(emptyMap<String, String>(), title["variables"])
+        assertEquals("Snapshot Book", book["name"])
+        assertEquals("Snapshot Chapter", chapter["title"])
     }
 }
