@@ -185,8 +185,12 @@ const legacyScriptPrelude =
 
 /// Legacy host: known JVM operations implemented by Dart, not arbitrary Java.
 class LegacyScriptHost implements ScriptHost {
-  LegacyScriptHost(this.delegate, {Map<String, String>? variables})
-    : variables = variables ?? <String, String>{};
+  LegacyScriptHost(
+    this.delegate, {
+    Map<String, String>? variables,
+    this.useNativeHttp = false,
+  }) : variables = variables ?? <String, String>{};
+  final bool useNativeHttp;
   final ScriptHost delegate;
   final Map<String, String> variables;
 
@@ -194,6 +198,21 @@ class LegacyScriptHost implements ScriptHost {
   Future<Object?> call(String method, List<Object?> arguments) async {
     if (!method.startsWith('java.')) return delegate.call(method, arguments);
     final name = method.substring(5);
+    if (useNativeHttp &&
+        const {
+          'ajax',
+          'get',
+          'post',
+          'head',
+          'connect',
+          'ajaxAll',
+        }.contains(name) &&
+        !(name == 'get' && arguments.length == 1)) {
+      // Android owns the original overloads, URL options, headers and request
+      // compilation. Never retry a native failure through another transport.
+      return delegate.call('javaHttp.$name', arguments);
+    }
+
     void arity(int min, [int? max]) {
       if (arguments.length < min || arguments.length > (max ?? min)) {
         throw UnsupportedError('legacy.unsupported_overload: $method');
