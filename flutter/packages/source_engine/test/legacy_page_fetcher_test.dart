@@ -29,6 +29,9 @@ class _Native implements ScriptHost {
     expect((args.last as Map)['__sourceHostCallback'], false);
     final request = args.first as Map;
     calls.add(request);
+    final next = repeatNext
+        ? '<a class="next" href="https://response.test/book/">next</a>'
+        : '';
     return {
       'value': {
         'url': 'https://response.test/book/',
@@ -36,11 +39,7 @@ class _Native implements ScriptHost {
         'headers': {
           'Set-Cookie': ['first=1', 'second=2'],
         },
-        'body':
-            '<h2>Native page</h2>' +
-            (repeatNext
-                ? '<a class="next" href="https://response.test/book/">next</a>'
-                : ''),
+        'body': '<h2>Native page</h2>$next',
       },
       'variables': {'requestSaved': 'value'},
     };

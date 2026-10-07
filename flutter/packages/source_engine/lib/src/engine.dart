@@ -305,8 +305,9 @@ class SourceEngine {
               charset: stage.charset,
               cancellation: cancellation,
             );
-      if (nativeFetcher != null && page == 0)
+      if (nativeFetcher != null && page == 0) {
         visited.add(response.url.toString());
+      }
       if (response.status >= 400) {
         throw EngineException('http_error', 'HTTP ${response.status}');
       }
