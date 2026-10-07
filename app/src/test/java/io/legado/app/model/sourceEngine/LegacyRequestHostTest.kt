@@ -77,7 +77,16 @@ class LegacyRequestHostTest {
                 """https://fixture.invalid/search,{"method":"POST","body":{"q":"a\"b","n":2},"headers":{"X-Override":"after","X-New":"new"}}""",
                 mapOf("headers" to mapOf("X-Base" to "base", "X-Override" to "before")),
             )
-        assertEquals("""{"q":"a\"b","n":2}""", bytes(request).toString(Charsets.UTF_8))
+        // UrlOption.getBody uses the original pretty-printing GSON for object bodies.
+        val expectedBody =
+            """
+            {
+              "q": "a\"b",
+              "n": 2
+            }
+            """
+                .trimIndent()
+        assertEquals(expectedBody, bytes(request).toString(Charsets.UTF_8))
         val headers = request["headers"] as Map<*, *>
         assertEquals(listOf("base"), headers["X-Base"])
         assertEquals(listOf("after"), headers["X-Override"])
