@@ -19,6 +19,7 @@ import io.legado.app.data.repository.DictRuleImportItem
 internal fun dictRuleImportStatus(item: DictRuleImportItem): Int =
     if (item.existsLocally) R.string.import_status_exist else R.string.import_status_new
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ImportDictRuleScreen(
     state: ImportDictRuleState,
@@ -37,13 +38,11 @@ internal fun ImportDictRuleScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.import_dict_rule),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_dict_rule)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("dict-import-progress"))
             LazyColumn(

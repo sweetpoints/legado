@@ -19,6 +19,7 @@ import io.legado.app.data.repository.SharedLocalBookPreviewRow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SharedLocalBookPreviewScreen(
     state: SharedLocalBookPreviewState,
@@ -38,19 +39,15 @@ internal fun SharedLocalBookPreviewScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)
                 .testTag("shared-local-books")
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.local_book),
-                        Modifier.weight(1f).padding(vertical = 16.dp),
+                        Modifier,
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     Box {
                         IconButton(
                             onClick = { menu = true },
@@ -74,8 +71,9 @@ internal fun SharedLocalBookPreviewScreen(
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("shared-local-working"))
             state.error?.let {

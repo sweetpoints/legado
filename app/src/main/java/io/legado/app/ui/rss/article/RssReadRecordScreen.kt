@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RssReadRecordScreen(
     state: RssReadRecordState,
@@ -36,19 +37,15 @@ internal fun RssReadRecordScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)
                 .testTag("rss-read-record")
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.read_record),
-                        Modifier.weight(1f).padding(vertical = 16.dp).testTag("rss-history-title"),
+                        Modifier.testTag("rss-history-title"),
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     TextButton(
                         onClick = requestClear,
                         enabled = state.canAct,
@@ -59,8 +56,9 @@ internal fun RssReadRecordScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("rss-history-working"))
             state.error?.let {

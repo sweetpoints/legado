@@ -23,6 +23,7 @@ internal fun httpTtsImportStatus(item: HttpTtsImportItem): Int =
         else -> R.string.import_status_exist
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ImportHttpTtsScreen(
     state: ImportHttpTtsState,
@@ -41,13 +42,11 @@ internal fun ImportHttpTtsScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.import_tts),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_tts)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("tts-import-progress"))
             LazyColumn(

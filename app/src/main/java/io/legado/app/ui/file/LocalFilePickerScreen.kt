@@ -28,6 +28,7 @@ import io.legado.app.ui.file.utils.FilePickerIcon
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LocalFilePickerScreen(
     state: LocalFilePickerState,
@@ -47,19 +48,15 @@ internal fun LocalFilePickerScreen(
     val errorText = state.issue?.let { pickerIssueText(it) } ?: state.error
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().testTag("local-file-picker")) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
                     Text(
                         title,
-                        Modifier.weight(1f).padding(vertical = 16.dp).testTag("file-picker-title"),
+                        Modifier.testTag("file-picker-title"),
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     IconButton(
                         onClick = showCreate,
                         enabled = state.canAct,
@@ -70,8 +67,9 @@ internal fun LocalFilePickerScreen(
                             stringResource(R.string.create_folder),
                         )
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             Row(
                 Modifier.fillMaxWidth()
                     .horizontalScroll(rememberScrollState())

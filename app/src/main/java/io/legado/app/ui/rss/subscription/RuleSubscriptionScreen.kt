@@ -43,6 +43,7 @@ class RuleSubscriptionActions(
     val cancelDrag: () -> Unit = {},
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RuleSubscriptionScreen(
     state: RuleSubscriptionState,
@@ -57,14 +58,15 @@ fun RuleSubscriptionScreen(
     val down = stringResource(R.string.rule_subscription_move_down)
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().statusBarsPadding(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.rule_subscription),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     TextButton(
                         onClick = actions.close,
                         enabled = !state.busy,
@@ -75,11 +77,8 @@ fun RuleSubscriptionScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                    Text(
-                        stringResource(R.string.rule_subscription),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     TextButton(
                         onClick = actions.create,
                         enabled = enabled,
@@ -90,8 +89,8 @@ fun RuleSubscriptionScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                }
-            }
+                },
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("subscription-loading"))
             if (state.issue != null && state.editor == null) SubscriptionError(state, actions.retry)

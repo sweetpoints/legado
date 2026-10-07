@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EffectiveReplacementScreen(
     state: EffectiveReplacementState,
@@ -28,13 +29,11 @@ internal fun EffectiveReplacementScreen(
     val enabled = !state.loading && !state.busy && !state.finished
     Surface(modifier.fillMaxWidth()) {
         Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.effective_replaces),
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.effective_replaces)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let {
                 Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error)

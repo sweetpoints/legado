@@ -112,7 +112,7 @@ class RssSourceEditorActions(
     val keyboardConfig: () -> Unit = {},
 )
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun RssSourceEditorScreen(
     state: RssSourceEditorState,
@@ -131,11 +131,16 @@ fun RssSourceEditorScreen(
     val ime = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.rss_source_edit),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                    )
+                },
+                navigationIcon = {
                     IconButton(
                         actions.exit,
                         Modifier.testTag("rss-editor-back"),
@@ -146,12 +151,8 @@ fun RssSourceEditorScreen(
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(R.string.rss_source_edit),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                    )
+                },
+                actions = {
                     IconButton(
                         actions.editor,
                         Modifier.testTag("rss-editor-fullscreen"),
@@ -236,8 +237,8 @@ fun RssSourceEditorScreen(
                             )
                         }
                     }
-                }
-            }
+                },
+            )
             if (!ime) {
                 val expansion =
                     stringResource(

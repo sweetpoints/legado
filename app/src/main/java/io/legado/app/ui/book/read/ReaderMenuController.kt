@@ -33,6 +33,8 @@ import io.legado.app.model.browser.BrowserRequest
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.theme.LegadoComposeTheme
+import io.legado.app.ui.theme.contrastRatio
+import io.legado.app.ui.theme.contrastingForeground
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.getPrefBoolean
@@ -138,6 +140,9 @@ class ReaderMenuController(
     }
 
     fun reset() {
+        fun readable(preferred: Int, background: Int): Int =
+            if (contrastRatio(preferred, background) >= 4.5) preferred
+            else contrastingForeground(background)
         bgColor =
             if (immersiveMenu)
                 runCatching { ReadBookConfig.durConfig.curBgStr().toColorInt() }
@@ -146,6 +151,10 @@ class ReaderMenuController(
         textColor =
             if (immersiveMenu) ReadBookConfig.durConfig.curTextColor()
             else context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+        textColor = readable(textColor, bgColor)
+        val topBackground = if (immersiveMenu) bgColor else context.primaryColor
+        val topForeground =
+            readable(if (immersiveMenu) textColor else context.primaryTextColor, topBackground)
         bottomState =
             bottomState.copy(
                 background = Color(bgColor),
@@ -156,13 +165,16 @@ class ReaderMenuController(
             )
         topState =
             topState.copy(
-                background = Color(if (immersiveMenu) bgColor else context.primaryColor),
-                foreground = Color(if (immersiveMenu) textColor else context.primaryTextColor),
+                background = Color(topBackground),
+                foreground = Color(topForeground),
                 additionForeground =
                     Color(
-                        if (immersiveMenu)
-                            ColorUtils.withAlpha(ColorUtils.lightenColor(textColor), .75f)
-                        else context.primaryTextColor
+                        readable(
+                            if (immersiveMenu)
+                                ColorUtils.withAlpha(ColorUtils.lightenColor(textColor), .75f)
+                            else topForeground,
+                            topBackground,
+                        )
                     ),
                 showAddition = AppConfig.showReadTitleBarAddition,
                 chapterNameOnly = AppConfig.showReadTitleChapterNameOnly,

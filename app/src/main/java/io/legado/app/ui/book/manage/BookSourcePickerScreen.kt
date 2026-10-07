@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BookSourcePickerScreen(
     state: BookSourcePickerState,
@@ -35,20 +36,14 @@ internal fun BookSourcePickerScreen(
     var menu by remember { mutableStateOf(false) }
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = { Text(stringResource(R.string.book_source_picker_title)) },
+                navigationIcon = {
                     TextButton(onCancel, enabled = !state.busy) {
-                        Text(
-                            stringResource(R.string.cancel),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
+                        Text(stringResource(R.string.cancel))
                     }
-                    Text(
-                        stringResource(R.string.book_source_picker_title),
-                        Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     Box {
                         IconButton(
                             { menu = true },
@@ -58,7 +53,6 @@ internal fun BookSourcePickerScreen(
                             Icon(
                                 painterResource(R.drawable.ic_more_vert),
                                 stringResource(R.string.menu),
-                                tint = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                         DropdownMenu(menu, { menu = false }) {
@@ -72,8 +66,10 @@ internal fun BookSourcePickerScreen(
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             OutlinedTextField(
                 state.query,
                 onSearch,

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.repository.AutoTaskImportStatus
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AutoTaskImportScreen(
     state: AutoTaskImportState,
@@ -33,16 +34,16 @@ internal fun AutoTaskImportScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)
                 .testTag("auto-task-import")
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Text(
-                    stringResource(R.string.import_auto_task),
-                    Modifier.fillMaxWidth().padding(16.dp).testTag("auto-task-import-title"),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.import_auto_task),
+                        Modifier.testTag("auto-task-import-title"),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("auto-task-import-working"))
             state.error?.let { message ->

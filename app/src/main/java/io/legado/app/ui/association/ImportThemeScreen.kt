@@ -24,6 +24,7 @@ internal fun themeImportStatus(item: ThemeImportItem): Int =
         ThemeImportStatus.Existing -> R.string.import_status_exist
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ImportThemeScreen(
     state: ImportThemeState,
@@ -42,13 +43,11 @@ internal fun ImportThemeScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.import_theme),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_theme)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("theme-import-progress"))
             LazyColumn(

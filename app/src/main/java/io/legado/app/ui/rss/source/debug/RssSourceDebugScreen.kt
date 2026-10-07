@@ -42,7 +42,7 @@ class RssSourceDebugActions(
     val close: () -> Unit = {},
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RssSourceDebugScreen(state: RssSourceDebugState, actions: RssSourceDebugActions) {
     var menu by rememberSaveable { mutableStateOf(false) }
@@ -89,23 +89,24 @@ fun RssSourceDebugScreen(state: RssSourceDebugState, actions: RssSourceDebugActi
     val enabled = state.loaded && !state.closed
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.debug_source),
+                        Modifier,
+                        maxLines = 1,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(actions.close, Modifier.testTag("rss-debug-back")) {
                         Icon(
                             painterResource(R.drawable.ic_arrow_back),
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(R.string.debug_source),
-                        Modifier.weight(1f),
-                        maxLines = 1,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                },
+                actions = {
                     Box {
                         IconButton(
                             { menu = true },
@@ -136,8 +137,8 @@ fun RssSourceDebugScreen(state: RssSourceDebugState, actions: RssSourceDebugActi
                             )
                         }
                     }
-                }
-            }
+                },
+            )
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

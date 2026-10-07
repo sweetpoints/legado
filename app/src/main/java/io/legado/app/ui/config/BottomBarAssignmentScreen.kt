@@ -37,7 +37,9 @@ fun BottomBarAssignmentScreen(
     state: BottomBarAssignmentState,
     editing: Boolean,
     actions: BottomBarAssignmentActions,
-    image: @Composable (String, Modifier) -> Unit = { _, _ -> },
+    image: @Composable (String, Modifier) -> Unit =
+        { _, _ ->
+        },
 ) {
     var name by remember {
         mutableStateOf(TextFieldValue(state.name, TextRange(state.start, state.end)))
@@ -48,11 +50,17 @@ fun BottomBarAssignmentScreen(
     }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(
+                            if (editing) R.string.edit else R.string.bottom_bar_skin_assign
+                        ),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(
                         actions.close,
                         Modifier.testTag("bar-assignment-back"),
@@ -63,13 +71,8 @@ fun BottomBarAssignmentScreen(
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(
-                            if (editing) R.string.edit else R.string.bottom_bar_skin_assign
-                        ),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     TextButton(
                         actions.save,
                         Modifier.testTag("bar-assignment-save"),
@@ -84,8 +87,9 @@ fun BottomBarAssignmentScreen(
                             color = LocalContentColor.current,
                         )
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (!state.loaded || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             OutlinedTextField(
                 name,
