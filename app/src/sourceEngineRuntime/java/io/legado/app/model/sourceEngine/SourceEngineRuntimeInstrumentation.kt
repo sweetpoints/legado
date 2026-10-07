@@ -105,6 +105,9 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                                 .put("sessionCookieRestored", true)
                                 .put("legacySearchInfoTocContent", true)
                                 .put("trailingNewlineExplore", true)
+                                .put("legacyInfoInitDom", true)
+                                .put("legacyContentReplaceJs", true)
+                                .put("exploreInfoMapSaveGet", true)
                                 .put("requests", org.json.JSONArray(server.requests.toList()))
                         File(
                                 targetContext.getExternalFilesDir("source-engine-runtime"),
@@ -192,7 +195,16 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                 bookSourceUrl = "${server.origin}/source/$token",
                 bookSourceName = "Release legacy acceptance",
                 searchUrl = "${server.origin}/search?key={{key}}&page={{page}}",
-                exploreUrl = "分类A::${server.origin}/explore-a\n分类B::${server.origin}/explore-b\n",
+                exploreUrl =
+                    """
+                    @js:
+                    infoMap.put('releaseHook', 'checked');
+                    if (infoMap.get('releaseHook') !== 'checked') throw new Error('InfoMap read/write failed');
+                    infoMap.save(120, false);
+                    if (infoMap.getNeedSave() !== false) throw new Error('InfoMap.save lost its explicit flag');
+                    '分类A::${server.origin}/explore-a\n分类B::${server.origin}/explore-b\n';
+                """
+                        .trimIndent(),
                 ruleSearch =
                     SearchRule(
                         bookList = ".book",
@@ -209,6 +221,8 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                     ),
                 ruleBookInfo =
                     BookInfoRule(
+                        init = ".detail@js:result",
+                        canReName = "true",
                         name = ".name@text",
                         author = ".author@text",
                         tocUrl = ".toc@href",
@@ -219,7 +233,11 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                         chapterName = "a@text",
                         chapterUrl = "a@href",
                     ),
-                ruleContent = ContentRule(content = ".content@text"),
+                ruleContent =
+                    ContentRule(
+                        content = ".content@text",
+                        replaceRegex = "@js:String(result).replace('发行正文验收', '发行正文验收完成')",
+                    ),
             )
         // No migration annotation or reviewed modern candidate: exercise ordinary old-format rules.
         check(source.bookSourceComment == null && source.mainJs == null)
@@ -233,12 +251,16 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                 origin = source.bookSourceUrl,
             )
         WebBook.getBookInfoAwait(source, book)
-        check(book.tocUrl == "${server.origin}/toc")
+        check(book.tocUrl == "${server.origin}/toc" && book.author == "验收作者") {
+            "Info init must retain the selected DOM container, excluding the outer decoy"
+        }
         val chapters = WebBook.getChapterListAwait(source, book).getOrThrow()
         check(chapters.size == 1 && chapters.single().title == "第一章")
         check(chapters.single().url == "${server.origin}/chapter/1")
         val content = WebBook.getContentAwait(source, book, chapters.single(), needSave = false)
-        check(content.contains("发行正文验收") && !content.contains("<div"))
+        check(content == "　　发行正文验收完成") {
+            "Legacy whole-content script and ordinary online-text indentation must both apply"
+        }
         val categories = source.exploreKinds()
         check(categories.map { it.title } == listOf("分类A", "分类B"))
         check(categories.last().url == "${server.origin}/explore-b")
@@ -292,7 +314,8 @@ class SourceEngineRuntimeInstrumentation : Instrumentation() {
                                 "/explore-b" ->
                                     "<div class='book'><a class='name' href='/book'>${if (path == "/explore-b") "旧书B" else "旧书"}</a><span class='author'>作者</span></div>"
                                 "/book" ->
-                                    "<h1 class='name'>旧书</h1><p class='author'>作者</p><a class='toc' href='/toc'>目录</a>"
+                                    "<p class='author'>错误外层</p><a class='toc' href='/wrong-toc'>错误目录</a>" +
+                                        "<section class='detail'><h1 class='name'>旧书</h1><p class='author'>验收作者</p><a class='toc' href='/toc'>目录</a></section>"
                                 "/toc" -> "<div class='chapter'><a href='/chapter/1'>第一章</a></div>"
                                 "/chapter/1" -> "<div class='content'>发行正文验收</div>"
                                 else -> error("Unexpected fixture request: $path")
