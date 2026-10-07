@@ -95,6 +95,7 @@ class AnalyzeUrl(
     private val extraParams: Map<String, String>? = null,
     private val scriptBookSnapshot: Map<String, Any?>? = null,
     private val scriptChapterSnapshot: Map<String, Any?>? = null,
+    private val scriptEvaluator: ((String, Map<String, Any?>, SourceHostCallbacks) -> Any?)? = null,
 ) : JsExtensions {
     constructor(mUrl: String) : this(mUrl, null)
 
@@ -420,6 +421,9 @@ class AnalyzeUrl(
                     parentCallbacks.call(method, args)
                 }
             }
+        }
+        scriptEvaluator?.let {
+            return it(jsStr, io.legado.app.model.sourceEngine.BookSourceScriptBridge.jsonBindings(bindings), callbacks)
         }
         val script = """
             (async function() {
