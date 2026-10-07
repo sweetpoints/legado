@@ -437,7 +437,9 @@ class LegacySourceImporter {
       original,
       SourceDefinition(
         id: id,
-        name: input['bookSourceName']?.toString() ?? base.host,
+        name: input['bookSourceName']?.toString().trim().isNotEmpty == true
+            ? input['bookSourceName'].toString()
+            : id,
         baseUrl: base,
         stages: stages,
         script: hasMainJs ? wrapLegacyMainJs(mainJs, original) : null,

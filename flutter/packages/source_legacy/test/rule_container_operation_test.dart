@@ -38,6 +38,59 @@ class _RecordedPage extends NetworkClient {
 }
 
 void main() {
+  test('blank legacy labels fall back to identity without changing original UI data', () async {
+    for (final label in ['', '  \t\n']) {
+      final input = <String, Object?>{
+        'bookSourceUrl': 'https://recorded.test',
+        'bookSourceName': label,
+        'searchUrl': '/search',
+        'ruleSearch': {
+          'bookList': 'class.rank_booklist@li',
+          'name': 'tag.dt@text',
+        },
+      };
+      final imported = LegacySourceImporter().import(input);
+      expect(imported.source.name, input['bookSourceUrl']);
+      expect(imported.original['bookSourceName'], label);
+      expect(
+        (imported.source.metadata['legacyOriginal'] as Map)['bookSourceName'],
+        label,
+      );
+      final engine = SourceEngine(
+        runtime: _NoScripts(),
+        network: _RecordedPage(),
+      );
+      try {
+        expect(await engine.execute(imported.source, 'search'), [
+          {'name': 'Recorded title'},
+        ]);
+      } finally {
+        await engine.close();
+      }
+      final withLibrary = LegacySourceImporter().import({
+        ...input,
+        'jsLib': 'function preserved(){return 1;}',
+      });
+      expect(withLibrary.source.name, input['bookSourceUrl']);
+      expect(withLibrary.original['bookSourceName'], label);
+      expect(withLibrary.original['jsLib'], 'function preserved(){return 1;}');
+    }
+    expect(
+      () => SourceDefinition(
+        id: 'modern',
+        name: '',
+        baseUrl: Uri.parse('https://recorded.test'),
+      ),
+      throwsA(
+        isA<EngineException>().having(
+          (error) => error.code,
+          'code',
+          'invalid_source',
+        ),
+      ),
+    );
+  });
+
   test(
     'old Gson container golden distinguishes arrays from encoded arrays',
     () {
