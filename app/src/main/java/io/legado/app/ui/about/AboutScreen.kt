@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -22,10 +22,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.components.LegadoTopAppBar
 import io.legado.app.ui.components.SettingsCategoryHeader
@@ -48,7 +46,7 @@ fun AboutScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalLegadoColors.current
-    val accent = colors.accent
+    val accent = MaterialTheme.colorScheme.secondary
     val summary = stringResource(R.string.about_description)
     val gzh = stringResource(R.string.legado_gzh)
     // buildAnnotatedString 取代原来的 ForegroundColorSpan + View.post {}
@@ -68,15 +66,14 @@ fun AboutScreen(
                 Modifier.fillMaxWidth()
                     .padding(6.dp)
                     // 原实现用 filletBackground：圆角 3dp + 背景色
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(MaterialTheme.shapes.medium)
                     .background(colors.background)
                     .padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = stringResource(R.string.app_name),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 // 显式指定：不依赖 LocalContentColor 的默认值（MaterialTheme 并不设置它）
                 color = colors.textPrimary,
             )

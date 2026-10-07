@@ -48,8 +48,8 @@ internal fun LocalFilePickerScreen(
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().testTag("local-file-picker")) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp),

@@ -1,7 +1,11 @@
 package io.legado.app.ui.theme
 
 import android.content.Context
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -10,7 +14,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import io.legado.app.R
@@ -19,14 +23,9 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryColorDark
-import io.legado.app.utils.ColorUtils
 
 /**
- * 阅读现有主题体系（[io.legado.app.lib.theme.ThemeStore] + `lib/theme/MaterialValueHelper.kt`） 在 Compose
- * 世界的映射。
- *
- * 引入原因：旧页面通过 `Context.primaryColor` 之类的扩展属性取色，新 Compose 页面若直接用 Material3
- * 默认配色，两套皮肤会同时出现在一个界面里。这里把旧体系的取值收敛成 [LegadoColors]，再喂给 [MaterialTheme]，保证新老页面配色一致。
+ * User theme seeds retained for compatibility; Compose receives a complete accessible M3 scheme.
  */
 @Immutable
 data class LegadoColors(
@@ -72,46 +71,85 @@ fun LegadoComposeTheme(
     colors: LegadoColors = rememberLegadoColors(),
     content: @Composable () -> Unit,
 ) {
-    val colorScheme =
-        remember(colors) {
-            val onPrimary = colors.onPrimary
-            if (colors.isLight) {
-                lightColorScheme(
-                    primary = colors.primary,
-                    onPrimary = onPrimary,
-                    primaryContainer = colors.primaryDark,
-                    onPrimaryContainer = onPrimary,
-                    secondary = colors.accent,
-                    onSecondary = onPrimary,
-                    background = colors.background,
-                    onBackground = colors.textPrimary,
-                    surface = colors.background,
-                    onSurface = colors.textPrimary,
-                    surfaceVariant = colors.bottomBackground,
-                    onSurfaceVariant = colors.textSecondary,
-                )
-            } else {
-                darkColorScheme(
-                    primary = colors.primary,
-                    onPrimary = onPrimary,
-                    primaryContainer = colors.primaryDark,
-                    onPrimaryContainer = onPrimary,
-                    secondary = colors.accent,
-                    onSecondary = onPrimary,
-                    background = colors.background,
-                    onBackground = colors.textPrimary,
-                    surface = colors.background,
-                    onSurface = colors.textPrimary,
-                    surfaceVariant = colors.bottomBackground,
-                    onSurfaceVariant = colors.textSecondary,
-                )
-            }
+    val roles = remember(colors) { colors.material3Roles() }
+    val accessibleColors =
+        remember(colors, roles) {
+            colors.copy(
+                onPrimary = Color(contrastingForeground(colors.primary.toArgb())),
+                accent = Color(roles["accentForeground"]),
+                background = Color(roles["background"]),
+                bottomBackground = Color(roles["surfaceVariant"]),
+                textPrimary = Color(roles["onSurface"]),
+                textSecondary = Color(roles["onSurfaceVariant"]),
+                isLight = contrastingForeground(roles["background"]) == 0xFF000000.toInt(),
+            )
         }
-    CompositionLocalProvider(LocalLegadoColors provides colors) {
+    val colorScheme =
+        remember(roles) {
+            // Both factories are completely supplied: no baseline purple/error/container
+            // roles leak into a user-defined palette.
+            val base = if (accessibleColors.isLight) lightColorScheme() else darkColorScheme()
+            base.copy(
+                primary = Color(roles["primary"]),
+                onPrimary = Color(roles["onPrimary"]),
+                primaryContainer = Color(roles["primaryContainer"]),
+                onPrimaryContainer = Color(roles["onPrimaryContainer"]),
+                inversePrimary = Color(roles["inversePrimary"]),
+                secondary = Color(roles["secondary"]),
+                onSecondary = Color(roles["onSecondary"]),
+                secondaryContainer = Color(roles["secondaryContainer"]),
+                onSecondaryContainer = Color(roles["onSecondaryContainer"]),
+                tertiary = Color(roles["tertiary"]),
+                onTertiary = Color(roles["onTertiary"]),
+                tertiaryContainer = Color(roles["tertiaryContainer"]),
+                onTertiaryContainer = Color(roles["onTertiaryContainer"]),
+                background = Color(roles["background"]),
+                onBackground = Color(roles["onBackground"]),
+                surface = Color(roles["surface"]),
+                onSurface = Color(roles["onSurface"]),
+                surfaceVariant = Color(roles["surfaceVariant"]),
+                onSurfaceVariant = Color(roles["onSurfaceVariant"]),
+                surfaceTint = Color(roles["surfaceTint"]),
+                inverseSurface = Color(roles["inverseSurface"]),
+                inverseOnSurface = Color(roles["inverseOnSurface"]),
+                error = Color(roles["error"]),
+                onError = Color(roles["onError"]),
+                errorContainer = Color(roles["errorContainer"]),
+                onErrorContainer = Color(roles["onErrorContainer"]),
+                outline = Color(roles["outline"]),
+                outlineVariant = Color(roles["outlineVariant"]),
+                scrim = Color(roles["scrim"]),
+                surfaceBright = Color(roles["surfaceBright"]),
+                surfaceContainer = Color(roles["surfaceContainer"]),
+                surfaceContainerHigh = Color(roles["surfaceContainerHigh"]),
+                surfaceContainerHighest = Color(roles["surfaceContainerHighest"]),
+                surfaceContainerLow = Color(roles["surfaceContainerLow"]),
+                surfaceContainerLowest = Color(roles["surfaceContainerLowest"]),
+                surfaceDim = Color(roles["surfaceDim"]),
+                primaryFixed = Color(roles["primaryFixed"]),
+                primaryFixedDim = Color(roles["primaryFixedDim"]),
+                onPrimaryFixed = Color(roles["onPrimaryFixed"]),
+                onPrimaryFixedVariant = Color(roles["onPrimaryFixedVariant"]),
+                secondaryFixed = Color(roles["secondaryFixed"]),
+                secondaryFixedDim = Color(roles["secondaryFixedDim"]),
+                onSecondaryFixed = Color(roles["onSecondaryFixed"]),
+                onSecondaryFixedVariant = Color(roles["onSecondaryFixedVariant"]),
+                tertiaryFixed = Color(roles["tertiaryFixed"]),
+                tertiaryFixedDim = Color(roles["tertiaryFixedDim"]),
+                onTertiaryFixed = Color(roles["onTertiaryFixed"]),
+                onTertiaryFixedVariant = Color(roles["onTertiaryFixedVariant"]),
+            )
+        }
+    CompositionLocalProvider(LocalLegadoColors provides accessibleColors) {
         MaterialTheme(
             colorScheme = colorScheme,
-            content = content,
-        )
+            typography = Typography(),
+            shapes = Shapes(),
+        ) {
+            CompositionLocalProvider(LocalContentColor provides colorScheme.onSurface) {
+                ProvideTextStyle(MaterialTheme.typography.bodyLarge, content)
+            }
+        }
     }
 }
 
@@ -119,23 +157,17 @@ private fun Context.toLegadoColors(): LegadoColors {
     val primary = Color(primaryColor)
     val backgroundArgb = backgroundColor
     // 明暗看背景色，不看主色：ColorScheme 的 onBackground/onSurface 必须与 background 形成对比
-    val isLight = ColorUtils.isColorLight(backgroundArgb)
+    val isLight = contrastingForeground(backgroundArgb) == 0xFF000000.toInt()
     return LegadoColors(
         primary = primary,
         primaryDark = Color(primaryColorDark),
         // 主色之上的前景色取决于主色亮度，不能沿用页面文字色
-        onPrimary = if (primary.luminance() > 0.5f) Color.Black else Color.White,
+        onPrimary = Color(contrastingForeground(primary.toArgb())),
         accent = Color(accentColor),
         background = Color(backgroundArgb),
         bottomBackground = Color(bottomBackground),
-        // 文字色刻意走「资源限定符」，与 View 页面完全一致
-        // （view_preference.xml 用的是 @color/primaryText / @color/tv_text_summary，
-        //   它们随 AppConfig.isNightTheme 驱动的日夜模式切换）。
-        //
-        // ⚠️ 不要改用 getPrimaryTextColor(isDarkTheme) / primaryTextColor 这类 helper：
-        // 它们按「主色亮度」判定，而默认主色 md_light_blue_600 亮度仅 0.29（< 0.5），
-        // 会取出 md_dark_primary_text = #FFFFFFFF（白字），可背景是 md_grey_50（近白）
-        // —— 就是这个 bug 导致 About 页白字白底看不清。
+        // Resource colors are preferences, not trusted foregrounds: the M3 mapping
+        // validates both primary and secondary text against the actual surface family.
         textPrimary = Color(ContextCompat.getColor(this, R.color.primaryText)),
         textSecondary = Color(ContextCompat.getColor(this, R.color.tv_text_summary)),
         textPrimaryDisabled =
@@ -159,3 +191,14 @@ private fun Context.toLegadoColors(): LegadoColors {
         isLight = isLight,
     )
 }
+
+private fun LegadoColors.material3Roles(): Material3ColorRoles =
+    material3ColorRoles(
+        primary.toArgb(),
+        primaryDark.toArgb(),
+        accent.toArgb(),
+        background.toArgb(),
+        bottomBackground.toArgb(),
+        textPrimary.toArgb(),
+        textSecondary.toArgb(),
+    )

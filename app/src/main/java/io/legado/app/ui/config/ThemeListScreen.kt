@@ -31,8 +31,8 @@ internal fun ThemeListScreen(
     Surface(modifier) {
         Column(Modifier.fillMaxSize()) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(close, Modifier.testTag("theme-list-close")) {
@@ -54,7 +54,7 @@ internal fun ThemeListScreen(
                         enabled = !state.loading && !state.busy && state.event == null,
                         colors =
                             ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                     ) {
                         Text("剪贴板导入")

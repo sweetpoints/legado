@@ -63,8 +63,8 @@ internal fun BrowserScreen(
             ) {
                 if (!state.fullscreen)
                     Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        color = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),

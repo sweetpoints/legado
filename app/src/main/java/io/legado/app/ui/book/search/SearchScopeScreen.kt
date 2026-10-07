@@ -34,8 +34,8 @@ internal fun SearchScopeScreen(
     Surface(modifier) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp),

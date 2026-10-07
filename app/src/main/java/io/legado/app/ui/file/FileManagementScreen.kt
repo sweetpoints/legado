@@ -44,8 +44,8 @@ fun FileManagementScreen(
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().statusBarsPadding(),
@@ -60,7 +60,7 @@ fun FileManagementScreen(
                     ) {
                         Text(
                             stringResource(R.string.back),
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                     Text(

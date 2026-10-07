@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import io.legado.app.R
-import io.legado.app.ui.theme.LocalLegadoColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,7 +24,6 @@ fun LegadoTopAppBar(
     backLabel: String = stringResource(R.string.back),
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    val colors = LocalLegadoColors.current
     TopAppBar(
         title = { Text(title) },
         modifier = modifier,
@@ -36,12 +34,6 @@ fun LegadoTopAppBar(
         },
         actions = actions,
         windowInsets = windowInsets,
-        colors =
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = colors.primary,
-                titleContentColor = colors.onPrimary,
-                navigationIconContentColor = colors.onPrimary,
-                actionIconContentColor = colors.onPrimary,
-            ),
+        colors = TopAppBarDefaults.topAppBarColors(),
     )
 }

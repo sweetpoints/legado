@@ -35,8 +35,8 @@ internal fun ChangeCoverScreen(
     Surface(modifier) {
         Column(Modifier.fillMaxSize()) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp),

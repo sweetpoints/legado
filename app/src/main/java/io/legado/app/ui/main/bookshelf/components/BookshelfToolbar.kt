@@ -11,7 +11,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import io.legado.app.R
-import io.legado.app.ui.theme.LocalLegadoColors
 
 private val shelfMenu =
     listOf(
@@ -31,7 +30,6 @@ private val shelfMenu =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BookshelfToolbar(title: String, onMenu: (Int) -> Unit, onBack: (() -> Unit)? = null) {
-    val colors = LocalLegadoColors.current
     val menuLabel = stringResource(R.string.menu)
     var expanded by remember { mutableStateOf(false) }
     TopAppBar(
@@ -72,12 +70,6 @@ internal fun BookshelfToolbar(title: String, onMenu: (Int) -> Unit, onBack: (() 
             }
         },
         windowInsets = WindowInsets(0, 0, 0, 0),
-        colors =
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = colors.primary,
-                titleContentColor = colors.onPrimary,
-                actionIconContentColor = colors.onPrimary,
-                navigationIconContentColor = colors.onPrimary,
-            ),
+        colors = TopAppBarDefaults.topAppBarColors(),
     )
 }

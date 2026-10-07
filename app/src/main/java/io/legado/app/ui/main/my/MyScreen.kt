@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +40,6 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.ui.components.SettingsCategoryHeader
@@ -210,12 +210,12 @@ private fun MySettingsRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(row.item.iconRes), null, Modifier.size(24.dp), tint = colors.accent)
+        Icon(painterResource(row.item.iconRes), null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary)
         Column(Modifier.weight(1f).padding(start = 16.dp)) {
             Text(
                 row.title,
-                color = colors.textPrimary,
-                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -224,8 +224,8 @@ private fun MySettingsRow(
                 ?.let {
                     Text(
                         it,
-                        color = colors.textSecondary,
-                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
@@ -247,7 +247,6 @@ private fun MyTopBar(
     onCustomize: () -> Unit,
     onHelp: () -> Unit,
 ) {
-    val colors = LocalLegadoColors.current
     TopAppBar(
         title = { Text(stringResource(if (isMore) R.string.reader_menu_more else R.string.my)) },
         navigationIcon = {
@@ -267,13 +266,7 @@ private fun MyTopBar(
                 Icon(painterResource(R.drawable.ic_help), stringResource(R.string.help))
             }
         },
-        colors =
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = colors.primary,
-                titleContentColor = colors.onPrimary,
-                navigationIconContentColor = colors.onPrimary,
-                actionIconContentColor = colors.onPrimary,
-            ),
+        colors = TopAppBarDefaults.topAppBarColors(),
     )
 }
 

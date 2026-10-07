@@ -34,8 +34,8 @@ internal fun AutoTaskImportScreen(
                 .testTag("auto-task-import")
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Text(
                     stringResource(R.string.import_auto_task),
