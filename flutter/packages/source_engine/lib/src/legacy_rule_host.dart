@@ -13,6 +13,8 @@ abstract interface class LegacyRuleEvaluator {
     required SourceDefinition source,
     required String operation,
     bool elements = false,
+    bool element = false,
+    bool formatContent = false,
     bool scalar = false,
     bool isUrl = false,
     bool unescape = true,
@@ -41,6 +43,8 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
     required SourceDefinition source,
     required String operation,
     bool elements = false,
+    bool element = false,
+    bool formatContent = false,
     bool scalar = false,
     bool isUrl = false,
     bool unescape = true,
@@ -67,7 +71,11 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
         'input': input is Element ? input.outerHtml : input,
         'source': original,
         'operation': operation,
-        'mode': elements
+        'mode': element
+            ? 'element'
+            : formatContent
+            ? 'content'
+            : elements
             ? 'elements'
             : scalar
             ? 'scalar'
@@ -105,7 +113,7 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
     }
     final value = response['value'];
     if (value == null) return [];
-    if (scalar) return [value];
+    if (scalar || element || formatContent) return [value];
     if (value is! List) {
       throw const EngineException(
         'invalid_legacy_rule_result',

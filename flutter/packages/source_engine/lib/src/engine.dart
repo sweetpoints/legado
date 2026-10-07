@@ -262,11 +262,45 @@ class SourceEngine {
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
     }
+    final original = source.metadata['legacyOriginal'];
+    String? legacyHook(String group, String name) {
+      if (original is! Map || original[group] is! Map) return null;
+      final value = (original[group] as Map)[name];
+      if (value == null) return null;
+      if (value is! String) {
+        throw EngineException(
+          'invalid_legacy_hook',
+          '$group.$name must be a string',
+        );
+      }
+      return value;
+    }
+
+    final infoInit = operation == 'info'
+        ? legacyHook('ruleBookInfo', 'init')
+        : null;
+    final contentReplace = operation == 'content'
+        ? legacyHook('ruleContent', 'replaceRegex')
+        : null;
+    final legacyHost = original is Map ? legacyRuleEvaluator : null;
+    for (final hook in [
+      if (infoInit != null && infoInit.trim().isNotEmpty) infoInit,
+      if (contentReplace != null && contentReplace.isNotEmpty) contentReplace,
+    ]) {
+      if (legacyHost == null || !legacyHost.supportsRule(hook)) {
+        throw const EngineException(
+          'legacy_pipeline_host_required',
+          'Legacy initialization and replacement require the original rule host',
+        );
+      }
+    }
     final rules = RuleEvaluator(runtime);
     final results = <Map<String, Object?>>[];
     final visited = <String>{};
     var current = source.baseUrl.resolve(url);
     String? nativeNext;
+    ScriptContext? firstPageContext;
+    Object? firstPageBody;
     for (var page = 0; page < stage.maxPages; page++) {
       final requestKey = nativeFetcher == null
           ? current.toString()
@@ -330,13 +364,14 @@ class SourceEngine {
         host: hostAdapter?.call(pageHost) ?? pageHost,
         timeout: context.timeout,
       );
-      final legacyHost = source.metadata['legacyOriginal'] is Map
-          ? legacyRuleEvaluator
-          : null;
+      firstPageContext ??= pageContext;
+      firstPageBody ??= response.body;
       Future<List<Object?>> evaluateRule(
         String rule,
         Object? value, {
         bool elements = false,
+        bool element = false,
+        bool formatContent = false,
         bool scalar = false,
         bool isUrl = false,
         bool unescape = true,
@@ -355,19 +390,42 @@ class SourceEngine {
               source: source,
               operation: operation,
               elements: elements,
+              element: element,
+              formatContent: formatContent,
               scalar: scalar,
               isUrl: isUrl,
               unescape: unescape,
               cancellation: cancellation,
             );
+      Object? pageInput = response.body;
+      if (infoInit != null && infoInit.trim().isNotEmpty) {
+        final initialized = await evaluateRule(
+          infoInit,
+          pageInput,
+          element: true,
+        );
+        if (initialized.isEmpty || initialized.single == null) {
+          throw const EngineException(
+            'legacy_init_empty',
+            'Legacy detail initialization returned null content',
+          );
+        }
+        pageInput = initialized.single;
+      }
       final rows = stage.list == null
-          ? [response.body]
-          : await evaluateRule(stage.list!, response.body, elements: true);
+          ? [pageInput]
+          : await evaluateRule(stage.list!, pageInput, elements: true);
 
       for (final row in rows) {
         cancellation?.throwIfCancelled();
         final fields = <String, Object?>{};
         for (final entry in stage.fields.entries) {
+          if (original is Map &&
+              ((operation == 'info' && entry.key == 'init') ||
+                  (operation == 'content' &&
+                      (entry.key == 'replaceRegex' || entry.key == 'title')))) {
+            continue;
+          }
           final isLink = {
             'bookUrl',
             'tocUrl',
@@ -379,6 +437,10 @@ class SourceEngine {
             entry.value,
             row,
             scalar: !listField,
+            formatContent:
+                operation == 'content' &&
+                entry.key == 'content' &&
+                legacyHost != null,
             isUrl: isLink,
             unescape: operation != 'content' && !listField,
           );
@@ -424,7 +486,7 @@ class SourceEngine {
       if (stage.nextPage == null) break;
       final links = await evaluateRule(
         stage.nextPage!,
-        response.body,
+        pageInput,
         isUrl: true,
         unescape: false,
       );
@@ -446,15 +508,81 @@ class SourceEngine {
         );
       }
     }
-    if (operation == 'content' && results.length > 1) {
+    if (operation == 'content' && results.isNotEmpty) {
       final merged = Map<String, Object?>.from(results.first);
-      merged['content'] = results
+      var content = results
           .map((r) => r['content']?.toString() ?? '')
           .join('\n');
+      if (contentReplace != null && contentReplace.isNotEmpty) {
+        content = content.split('\n').map(_trimLegacyLine).join('\n');
+        final replaced = await legacyHost!.evaluate(
+          contentReplace,
+          content,
+          firstPageContext!,
+          source: source,
+          operation: operation,
+          scalar: true,
+          cancellation: cancellation,
+        );
+        content = replaced.map(RuleEvaluator.text).join('\n');
+        if (input['__legacyOnLineTxt'] == true) {
+          content = content.split('\n').map((line) => '　　$line').join('\n');
+        }
+      }
+      merged['content'] = content;
+      // Original BookContent evaluates its title only after whole-text replacement,
+      // against the first page parser. An optional title failure does not erase content.
+      final titleRule = original is Map ? stage.fields['title'] : null;
+      if (titleRule != null && titleRule.trim().isNotEmpty) {
+        try {
+          final titles =
+              legacyHost != null && legacyHost.supportsRule(titleRule)
+              ? await legacyHost.evaluate(
+                  titleRule,
+                  firstPageBody,
+                  firstPageContext!,
+                  source: source,
+                  operation: operation,
+                  scalar: true,
+                  cancellation: cancellation,
+                )
+              : await rules.evaluate(
+                  titleRule,
+                  firstPageBody,
+                  firstPageContext!,
+                  cancellation: cancellation,
+                );
+          merged['title'] = titles.map(RuleEvaluator.text).join('\n');
+        } catch (_) {
+          cancellation?.throwIfCancelled();
+        }
+      }
       return [merged];
     }
 
     return results;
+  }
+
+  static String _trimLegacyLine(String value) {
+    bool whitespace(int c) =>
+        (c >= 0x09 && c <= 0x0d) ||
+        (c >= 0x1c && c <= 0x20) ||
+        c == 0xa0 ||
+        c == 0x1680 ||
+        (c >= 0x2000 && c <= 0x200a) ||
+        c == 0x2028 ||
+        c == 0x2029 ||
+        c == 0x202f ||
+        c == 0x205f ||
+        c == 0x3000;
+    var start = 0, end = value.length;
+    while (start < end && whitespace(value.codeUnitAt(start))) {
+      start++;
+    }
+    while (end > start && whitespace(value.codeUnitAt(end - 1))) {
+      end--;
+    }
+    return value.substring(start, end);
   }
 
   List<Map<String, Object?>> _records(Object? result) {
