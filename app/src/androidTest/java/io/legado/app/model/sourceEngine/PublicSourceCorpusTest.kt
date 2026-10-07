@@ -177,6 +177,10 @@ class PublicSourceCorpusTest {
                 "Public-source compatibility errors occurred; inspect public-source-corpus-results.json (no response bodies are reported)",
                 report.compatibilityFailureCount == 0,
             )
+            assertTrue(
+                "All four fixed public sources must complete search, info, toc and content; blocked, empty and unexecuted stages are failures. Inspect public-source-corpus-results.json.",
+                report.liveAcceptancePassed,
+            )
         }
 
     private suspend fun runSource(source: BookSource, result: SourceResult) {
