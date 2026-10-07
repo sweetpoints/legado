@@ -78,6 +78,21 @@ object DartSourceEngine {
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
     ): Any? {
+        if (usesLegacyAuxiliary(source)) {
+            val original = source.getSource() ?: source
+            val caller = currentCoroutineContext()[SourceHostCallbacks]
+            return withContext(SourceHostCallbacks { method, args ->
+                if (caller != null) caller.call(method, args)
+                else when (method) {
+                    "analyze.get" -> original.get(args.firstOrNull()?.toString().orEmpty())
+                    "analyze.put" -> original.put(args.getOrNull(0)?.toString().orEmpty(),
+                        args.getOrNull(1)?.toString().orEmpty())
+                    else -> error("Unbound source callback: $method")
+                }
+            }) {
+                evaluateAuxiliary(script, jsonObject(bindings), source = source)
+            }
+        }
         val json = sourceJson(source)
         return withContext(
             SourceTaskSource(source.getSource() ?: source, engineIdentity(json)) +
@@ -254,14 +269,14 @@ object DartSourceEngine {
             ?: error("Source identity missing")
     }
 
+    internal fun usesLegacyAuxiliary(source: BookSource): Boolean = appliedDefinition(source) == null
+
+    private fun appliedDefinition(source: BookSource): String? =
+        source.bookSourceComment.orEmpty().lineSequence().map { it.trim() }
+            .firstOrNull { it.startsWith("@source:v1 ") }?.removePrefix("@source:v1 ")
+
     internal fun sourceJson(source: BookSource): String {
-        val candidate =
-            source.bookSourceComment
-                .orEmpty()
-                .lineSequence()
-                .map { it.trim() }
-                .firstOrNull { it.startsWith("@source:v1 ") }
-                ?.removePrefix("@source:v1 ")
+        val candidate = appliedDefinition(source)
         return candidate ?: GSON.toJson(source)
     }
 
