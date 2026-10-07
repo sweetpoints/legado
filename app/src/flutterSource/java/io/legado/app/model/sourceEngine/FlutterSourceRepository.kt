@@ -342,10 +342,11 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             // The caller facade owns this live source; script arguments cannot choose another.
             val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
                 else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
+            val nativeCallContext = currentCoroutineContext()
             val extensions = object : JsExtensions {
                 override fun getSource() = source
                 override fun getTag() = source?.getTag() ?: task.sourceId
-                override fun getSourceNavigationContext() = task.context
+                override fun getSourceNavigationContext() = nativeCallContext
             }
             task.context[SourceTaskHttpObserver]?.onCall?.invoke(method)
             return NativeLegacyHttpHost.call(method, args, extensions)
