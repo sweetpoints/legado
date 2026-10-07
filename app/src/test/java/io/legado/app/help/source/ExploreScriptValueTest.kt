@@ -56,4 +56,16 @@ class ExploreScriptValueTest {
             assertThrows(IllegalArgumentException::class.java) { validateExploreInfoMap(invalid) }
         }
     }
+    @Test
+    fun infoMapSaveUsesOriginalDefaultsAndKeepsDeferredTtlAndNeedFalse() {
+        assertEquals(0 to true, exploreInfoMapSaveArguments(emptyList()))
+        assertEquals(60 to true, exploreInfoMapSaveArguments(listOf(60)))
+        assertEquals(60 to false, exploreInfoMapSaveArguments(listOf(60, false)))
+        assertEquals(-1 to true, exploreInfoMapSaveArguments(listOf(-1, true)))
+        assertEquals(Int.MAX_VALUE to false, exploreInfoMapSaveArguments(listOf(Int.MAX_VALUE.toLong(), false)))
+        for (invalid in listOf(listOf(1.5), listOf(2147483648L), listOf("60"), listOf(1, "false"), listOf(1, true, false))) {
+            assertThrows(IllegalArgumentException::class.java) { exploreInfoMapSaveArguments(invalid) }
+        }
+    }
+
 }
