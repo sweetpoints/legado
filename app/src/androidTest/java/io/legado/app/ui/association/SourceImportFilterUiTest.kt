@@ -677,13 +677,17 @@ class SourceImportFilterUiTest {
             compose.onNodeWithTag("$prefix-menu").performClick()
             compose.onNodeWithTag("$prefix-menu-$menuName").performClick()
             // A focusable DropdownMenu owns a separate Window. Its dismissal and Android
-            // layout/draw must settle before checking the import controls, rather than
-            // polling the underlying dialog's transient window-focus flag.
+            // layout/draw and exit animation must settle before checking import controls.
+            // await advances frames until every menu item disappears; window focus alone
+            // does not establish that this transition has completed.
             compose.waitForIdle()
             val menuNames = if (rss) RssImportMenu.entries.map { it.name }
                 else BookImportMenu.entries.map { it.name }
-            menuNames.forEach { name ->
-                compose.onNodeWithTag("$prefix-menu-$name").assertDoesNotExist()
+            await("Import dropdown did not dismiss after $menuName: rss=$rss") {
+                menuNames.all { name ->
+                    compose.onAllNodes(androidx.compose.ui.test.hasTestTag("$prefix-menu-$name"))
+                        .fetchSemanticsNodes().isEmpty()
+                }
             }
             await("Import menu action did not return to an interactive dialog: rss=$rss") {
                 main {
