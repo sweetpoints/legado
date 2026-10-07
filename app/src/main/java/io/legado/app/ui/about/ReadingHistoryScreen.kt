@@ -28,7 +28,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -359,7 +358,10 @@ private fun ReadingHistorySummary(
         val start = label.indexOf(count)
         if (start >= 0)
             addStyle(
-                SpanStyle(color = MaterialTheme.colorScheme.secondary, fontSize = 25.sp),
+                SpanStyle(
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                ),
                 start,
                 start + count.length,
             )
@@ -374,13 +376,13 @@ private fun ReadingHistorySummary(
             Column(Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.read_record_achievement),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary,
                 )
                 Text(
                     countText,
                     Modifier.padding(top = 12.dp).testTag("history-count"),
-                    fontSize = 18.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
                     stringResource(
@@ -392,7 +394,7 @@ private fun ReadingHistorySummary(
                         ),
                     ),
                     Modifier.padding(top = 8.dp).testTag("history-total"),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary,
                 )
             }
@@ -456,15 +458,14 @@ private fun ReadingHistoryRow(
             Text(
                 row.identity.name,
                 Modifier.testTag("history-title-${row.key}"),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 if (prefs.simple) stringResource(R.string.author_show, author) else author,
                 Modifier.padding(top = 4.dp).testTag("history-author-${row.key}"),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = secondary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -473,7 +474,7 @@ private fun ReadingHistoryRow(
                 Text(
                     row.chapter ?: stringResource(R.string.read_record_no_chapter),
                     Modifier.padding(top = 4.dp).testTag("history-chapter-${row.key}"),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = secondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -481,13 +482,12 @@ private fun ReadingHistoryRow(
             Text(
                 formatDuring(row.readTime, prefs.days, prefs.seconds),
                 Modifier.padding(top = 4.dp).testTag("history-time-${row.key}"),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
             )
             Text(
                 date,
                 Modifier.padding(top = 4.dp).testTag("history-date-${row.key}"),
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = secondary,
             )
         }
