@@ -133,6 +133,26 @@ class LegacyBookVariableScopeIntegrationTest {
                 }
                 withTimeout(15_000) {
                     assertEquals(
+                        "Standalone Java proxy must read the seeded entity layer",
+                        "A-token",
+                        host
+                            .evaluate(payload("@js:java.get('saved')"), fromScript = false)[
+                                "value"],
+                    )
+                    assertEquals(
+                        "A put must preserve the seeded book variable for an explicit callback",
+                        "A-token",
+                        host
+                            .evaluate(
+                                payload(
+                                    "@put:{\"detail\":\"tag.b@text\"}@js:__sourceHostSync('analyze.get',['saved'])"
+                                ),
+                                fromScript = false,
+                            )["value"],
+                    )
+                }
+                withTimeout(15_000) {
+                    assertEquals(
                         "A-token",
                         host
                             .evaluate(
