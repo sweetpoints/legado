@@ -49,7 +49,7 @@ class ExploreScriptV8IntegrationTest {
     @Test
     fun infoMapMethodsAndPropertiesMutateLiveMapWithoutImplicitPersistence(): Unit = runBlocking(Dispatchers.IO) {
         withTimeout(30_000) {
-            val source = BookSource(bookSourceUrl = "https://info-${UUID.randomUUID()}.invalid")
+            val source = BookSource(bookSourceUrl = "https://info-${UUID.randomUUID()}.invalid", bookSourceName = "InfoMap fixture")
             val key = "infoMap_${source.bookSourceUrl}"
             val info = InfoMap(source.bookSourceUrl)
             try {
@@ -98,7 +98,7 @@ class ExploreScriptV8IntegrationTest {
     @Test
     fun infoMapSaveNowRunsAtCallTimeAndRetainsTtlEvenWhenNeedIsFalse(): Unit = runBlocking(Dispatchers.IO) {
         withTimeout(30_000) {
-            val source = BookSource(bookSourceUrl = "https://info-ttl-${UUID.randomUUID()}.invalid")
+            val source = BookSource(bookSourceUrl = "https://info-ttl-${UUID.randomUUID()}.invalid", bookSourceName = "InfoMap TTL fixture")
             val key = "infoMap_${source.bookSourceUrl}"
             val info = InfoMap(source.bookSourceUrl)
             try {
