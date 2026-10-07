@@ -50,7 +50,9 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         val context: CoroutineContext,
         val sourceKind: String = "book",
         val navigationSourceId: String = sourceId,
-    )
+    ) {
+        val legacyRules by lazy { LegacyRuleHost(navigationSourceId, context) }
+    }
 
     private val hostTasks = mutableMapOf<String, HostTask>()
     private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
@@ -246,6 +248,14 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     }
 
     private suspend fun callHost(task: HostTask, method: String, args: List<Any?>): Any? {
+        if (method == "legacyRule.evaluate") {
+            require(args.size == 1 && args[0] is Map<*, *>) { "Invalid legacy rule callback" }
+            val payload = (args[0] as Map<*, *>).entries.associate { (key, value) ->
+                require(key is String) { "Legacy rule payload keys must be strings" }
+                key to value
+            }
+            return task.legacyRules.evaluate(payload)
+        }
         val callbackMethods = setOf(
             "analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList",
             "analyze.getElements", "analyze.getElement", "crypto.randomInt32",
