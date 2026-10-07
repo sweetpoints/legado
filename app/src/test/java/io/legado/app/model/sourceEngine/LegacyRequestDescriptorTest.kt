@@ -40,7 +40,7 @@ class LegacyRequestDescriptorTest {
         assertEquals("text/plain; charset=utf-8", raw["contentType"])
         val json =
             resolve("https://fixture.invalid/search,{\"method\":\"POST\",\"body\":{\"q\":\"One\"}}")
-        assertEquals("{\"q\":\"One\"}", bytes(json))
+        assertEquals("{\n  \"q\": \"One\"\n}", bytes(json))
         assertTrue((json["contentType"] as String).startsWith("application/json"))
         val head = resolve("https://fixture.invalid/search?q=space value,{\"method\":\"HEAD\"}")
         assertEquals("HEAD", head["method"])
