@@ -1,3 +1,5 @@
+import 'legacy_variable_scope.dart';
+
 import 'dart:convert';
 import 'dart:io' show Cookie;
 
@@ -292,6 +294,91 @@ class SourceEngine {
         ? legacyHook('ruleContent', 'replaceRegex')
         : null;
     final legacyHost = original is Map ? legacyRuleEvaluator : null;
+    final scopedLegacy = legacyHost != null;
+    final bookSnapshot = input['book'] is Map
+        ? Map<String, Object?>.from(input['book'] as Map)
+        : <String, Object?>{
+            'bookUrl': input['bookUrl'],
+            'name': input['name'] ?? '',
+          };
+    final chapterSnapshot = input['chapter'] is Map
+        ? Map<String, Object?>.from(input['chapter'] as Map)
+        : <String, Object?>{
+            'url': input['chapterUrl'],
+            'title': input['chapterTitle'] ?? '',
+          };
+    final bookVariables = scopedLegacy
+        ? legacyEntityVariables(bookSnapshot['variable'] ?? input['variable'])
+        : <String, String>{};
+    final chapterVariables = scopedLegacy
+        ? legacyEntityVariables(chapterSnapshot['variable'])
+        : <String, String>{};
+    final sourceVariables = <String, String>{};
+    var rowSequence = 0;
+    final seededScopes = <String>{};
+    final bookWasSeeded = bookVariables.isNotEmpty;
+    Map<String, Object?> scope(
+      String id,
+      String target,
+      Map<String, String> book,
+      Map<String, String> chapter,
+    ) {
+      final identity = '${input['taskId'] ?? source.id}:$operation:$id';
+      if ((target == 'chapter' ? chapter : book).isNotEmpty) {
+        seededScopes.add(identity);
+      }
+      return {
+        'id': identity,
+        'target': target,
+        'source': sourceVariables,
+        'book': book,
+        'chapter': chapter,
+      };
+    }
+
+    final requestScope = scope(
+      'request',
+      'book',
+      bookVariables,
+      <String, String>{},
+    );
+    final entityScope = scope(
+      'entity',
+      operation == 'content' ? 'chapter' : 'book',
+      bookVariables,
+      operation == 'content' ? chapterVariables : <String, String>{},
+    );
+    ScriptContext scopedContext(
+      ScriptContext base,
+      Map<String, Object?> varsScope,
+      Map<String, Object?> book,
+      Map<String, Object?>? chapter,
+    ) => ScriptContext(
+      variables: {
+        ...base.variables,
+        'legacyVariableScope': varsScope,
+        'legacyVariables': legacyScopeReads(varsScope),
+        'book': {...book, 'variable': jsonEncode(varsScope['book'])},
+        if (chapter != null)
+          'chapter': {...chapter, 'variable': jsonEncode(varsScope['chapter'])},
+      },
+      host: base.host,
+      timeout: base.timeout,
+    );
+    void attachEntityVariables(
+      Map<String, Object?> record,
+      Map<String, Object?> varsScope,
+    ) {
+      final own = varsScope[varsScope['target']] as Map<String, String>;
+      if (own.isNotEmpty || seededScopes.contains(varsScope['id'])) {
+        record['variable'] = Map<String, String>.from(own);
+      }
+      if ((operation == 'toc' || operation == 'content') &&
+          (bookWasSeeded || bookVariables.isNotEmpty)) {
+        record['bookVariable'] = Map<String, String>.from(bookVariables);
+      }
+    }
+
     for (final hook in [
       if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) infoInit,
       if (contentReplace != null && contentReplace.isNotEmpty) contentReplace,
@@ -333,6 +420,7 @@ class SourceEngine {
                   ...context.variables,
                   'baseUrl': current.toString(),
                   'legacyVariables': vars,
+                  if (scopedLegacy) 'legacyVariableScope': requestScope,
                 },
                 host: context.host,
                 timeout: context.timeout,
@@ -364,7 +452,7 @@ class SourceEngine {
         runtime,
         source.headers,
       );
-      final pageContext = ScriptContext(
+      var pageContext = ScriptContext(
         variables: {
           ...context.variables,
           'baseUrl': response.url.toString(),
@@ -373,8 +461,17 @@ class SourceEngine {
         host: hostAdapter?.call(pageHost) ?? pageHost,
         timeout: context.timeout,
       );
+      if (scopedLegacy) {
+        pageContext = scopedContext(
+          pageContext,
+          entityScope,
+          bookSnapshot,
+          operation == 'content' ? chapterSnapshot : null,
+        );
+      }
       firstPageContext ??= pageContext;
       firstPageBody ??= response.body;
+      var ruleContext = pageContext;
       Future<List<Object?>> evaluateRule(
         String rule,
         Object? value, {
@@ -388,14 +485,14 @@ class SourceEngine {
           ? rules.evaluate(
               rule,
               value,
-              pageContext,
+              ruleContext,
               cancellation: cancellation,
               elements: elements,
             )
           : legacyHost.evaluate(
               rule,
               value,
-              pageContext,
+              ruleContext,
               source: source,
               operation: operation,
               elements: elements,
@@ -427,6 +524,42 @@ class SourceEngine {
 
       for (final row in rows) {
         cancellation?.throwIfCancelled();
+        Map<String, Object?>? rowScope;
+        var rowBook = bookSnapshot;
+        Map<String, Object?>? rowChapter = operation == 'content'
+            ? chapterSnapshot
+            : null;
+        if (scopedLegacy) {
+          if (operation == 'search' || operation == 'explore') {
+            rowScope = scope(
+              'row:${rowSequence++}',
+              'book',
+              Map<String, String>.from(bookVariables),
+              <String, String>{},
+            );
+            rowBook = {'name': '', 'author': '', 'bookUrl': ''};
+          } else if (operation == 'toc') {
+            rowScope = scope(
+              'row:${rowSequence++}',
+              'chapter',
+              bookVariables,
+              <String, String>{},
+            );
+            rowChapter = {
+              'title': '',
+              'url': '',
+              'bookUrl': bookSnapshot['bookUrl'],
+            };
+          } else {
+            rowScope = entityScope;
+          }
+          ruleContext = scopedContext(
+            pageContext,
+            rowScope,
+            rowBook,
+            rowChapter,
+          );
+        }
         final fields = <String, Object?>{};
         for (final entry in stage.fields.entries) {
           if (original is Map &&
@@ -489,10 +622,25 @@ class SourceEngine {
           } else {
             fields[entry.key] = value;
           }
+          if (scopedLegacy) {
+            if (operation == 'toc' || operation == 'content') {
+              rowChapter?[entry.key] = fields[entry.key];
+            } else {
+              rowBook[entry.key] = fields[entry.key];
+            }
+            ruleContext = scopedContext(
+              pageContext,
+              rowScope!,
+              rowBook,
+              rowChapter,
+            );
+          }
         }
+        if (rowScope != null) attachEntityVariables(fields, rowScope);
         results.add(fields);
       }
       if (stage.nextPage == null) break;
+      ruleContext = pageContext;
       final links = await evaluateRule(
         stage.nextPage!,
         pageInput,
@@ -566,9 +714,21 @@ class SourceEngine {
           cancellation?.throwIfCancelled();
         }
       }
+      if (scopedLegacy) attachEntityVariables(merged, entityScope);
       return [merged];
     }
 
+    if (scopedLegacy && (operation == 'info' || operation == 'toc')) {
+      for (final record in results) {
+        if (operation == 'info' &&
+            (bookWasSeeded || bookVariables.isNotEmpty)) {
+          record['variable'] = Map<String, String>.from(bookVariables);
+        } else if (operation == 'toc' &&
+            (bookWasSeeded || bookVariables.isNotEmpty)) {
+          record['bookVariable'] = Map<String, String>.from(bookVariables);
+        }
+      }
+    }
     return results;
   }
 

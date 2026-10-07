@@ -100,12 +100,13 @@ void main() {
           'name': 'A&amp;B',
           'kind': '/one,/two',
           'downloadUrls': ['/one', '/two'],
+          'variable': {'token': 'saved'},
         },
       );
       expect((host.requests[1]['variables'] as Map)['token'], 'saved');
       expect(
         (engine.exportSession(source.id)['variables'] as Map)['token'],
-        'saved',
+        isNull,
       );
     } finally {
       await engine.close();

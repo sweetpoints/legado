@@ -1,3 +1,4 @@
+import 'legacy_variable_scope.dart';
 import 'contracts.dart';
 import 'network.dart';
 
@@ -61,12 +62,9 @@ class HostLegacyPageFetcher implements LegacyPageFetcher {
         'source': original,
         'operation': operation,
         'baseUrl': context.variables['baseUrl'],
-        'variables': {
-          ...context.variables,
-          ...Map<String, Object?>.from(
-            context.variables['legacyVariables'] as Map? ?? {},
-          ),
-        },
+        'variables': legacyScopeBindings(context),
+        if (legacyVariableScope(context) != null)
+          'variableScope': legacyVariableScope(context),
         if (input['key'] != null) 'key': input['key'],
         if (input['page'] != null) 'page': input['page'],
       },
@@ -81,16 +79,7 @@ class HostLegacyPageFetcher implements LegacyPageFetcher {
         'Native request response requires value and variables',
       );
     }
-    final variables = response['variables'] as Map;
-    if (variables.entries.any((e) => e.key is! String || e.value is! String)) {
-      throw const EngineException(
-        'invalid_legacy_request_result',
-        'Native request variables must be strings',
-      );
-    }
-    for (final e in variables.entries) {
-      await context.host.call('variables.put', [e.key, e.value]);
-    }
+    await applyLegacyScopeReply(context, response);
     final value = response['value'] as Map;
     if (value['url'] is! String ||
         value['body'] is! String ||

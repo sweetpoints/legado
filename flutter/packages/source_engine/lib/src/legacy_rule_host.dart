@@ -1,3 +1,5 @@
+import 'legacy_variable_scope.dart';
+
 import 'package:html/dom.dart';
 
 import 'contracts.dart';
@@ -83,12 +85,9 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
         'isUrl': isUrl,
         'unescape': unescape,
         'baseUrl': context.variables['baseUrl'],
-        'variables': {
-          ...context.variables,
-          ...Map<String, Object?>.from(
-            context.variables['legacyVariables'] as Map? ?? {},
-          ),
-        },
+        'variables': legacyScopeBindings(context),
+        if (legacyVariableScope(context) != null)
+          'variableScope': legacyVariableScope(context),
       },
       {'__sourceTaskId': taskId, '__sourceHostCallback': false},
     ]);
@@ -101,16 +100,7 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
         'Legacy host result requires value and variables',
       );
     }
-    final written = response['variables'] as Map;
-    if (written.entries.any((e) => e.key is! String || e.value is! String)) {
-      throw const EngineException(
-        'invalid_legacy_rule_result',
-        'Legacy variables must be string values',
-      );
-    }
-    for (final entry in written.entries) {
-      await context.host.call('variables.put', [entry.key, entry.value]);
-    }
+    await applyLegacyScopeReply(context, response);
     final value = response['value'];
     if (value == null) return [];
     if (scalar || element || formatContent) return [value];
