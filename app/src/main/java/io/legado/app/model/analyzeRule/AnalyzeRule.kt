@@ -2,11 +2,6 @@ package io.legado.app.model.analyzeRule
 
 import android.text.TextUtils
 import androidx.annotation.Keep
-import com.google.gson.internal.LinkedTreeMap
-import com.script.CompiledScript
-import com.script.buildScriptBindings
-import com.script.rhino.RhinoScriptEngine
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppPattern.JS_PATTERN
 import io.legado.app.constant.AppPattern.WebJS_PATTERN
 import io.legado.app.data.entities.BaseBook
@@ -16,15 +11,14 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.CacheManager
 import io.legado.app.help.JsExtensions
 import io.legado.app.help.http.BackstageWebView
-import io.legado.app.help.http.CookieStore
-import io.legado.app.help.source.getShareScope
-import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
-import io.legado.app.model.SharedJsScope
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
+import io.legado.app.model.sourceEngine.SourceScriptException
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -43,11 +37,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.nodes.Node
-import org.htmlunit.corejs.javascript.NativeArray
-import org.htmlunit.corejs.javascript.NativeObject
-import org.htmlunit.corejs.javascript.Scriptable
-import org.htmlunit.corejs.javascript.TopLevel
-import java.lang.ref.WeakReference
 import java.net.URL
 import java.util.Locale
 import java.util.regex.Pattern
@@ -85,10 +74,8 @@ class AnalyzeRule(
 
     private val stringRuleCache = hashMapOf<String, List<SourceRule>>()
     private val regexCache = hashMapOf<String, Regex?>()
-    private val scriptCache = hashMapOf<String, CompiledScript>()
     private val localBindings = HashMap<String, String>()
-    private var topScopeRef: WeakReference<TopLevel>? = null
-    private var evalJSCallCount = 0
+    private val parsingHostCallback = ThreadLocal<Boolean>()
 
     private var coroutineContext: CoroutineContext = EmptyCoroutineContext
 
@@ -188,7 +175,7 @@ class AnalyzeRule(
                 url = baseUrl,
                 html = content.toString(),
                 javaScript = jsStr,
-                headerMap = runScriptWithContext(coroutineContext) { getSource()?.getHeaderMap(true) },
+                headerMap = getSource()?.getHeaderMap(true),
                 tag = getSource()?.getKey(),
                 cacheFirst = true,
                 timeout = 10000,
@@ -218,7 +205,7 @@ class AnalyzeRule(
         val content = mContent ?: this.content
         if (content != null && ruleList.isNotEmpty()) {
             result = content
-            if (result is NativeObject) {
+            if (result is Map<*, *>) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
                 sourceRule.makeUpRule(result)
@@ -242,9 +229,6 @@ class AnalyzeRule(
                         result = replaceRegex(result.toString(), sourceRule)
                     }
                 }
-            } else if (result is LinkedTreeMap<*, *>) {
-                // 键值直接访问
-                result = result[ruleList.first().rule]
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
@@ -322,7 +306,7 @@ class AnalyzeRule(
         val content = mContent ?: this.content
         if (content != null && ruleList.isNotEmpty()) {
             result = content
-            if (result is NativeObject) {
+            if (result is Map<*, *>) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
                 sourceRule.makeUpRule(result)
@@ -334,9 +318,6 @@ class AnalyzeRule(
                 }?.let {
                     replaceRegex(it.toString(), sourceRule)
                 }
-            } else if (result is LinkedTreeMap<*, *>) {
-                // 键值直接访问
-                result = result[ruleList.first().rule]?.toString()
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
@@ -474,31 +455,11 @@ class AnalyzeRule(
                 }
             }
         }
-        when (val value = result) {
-            is List<*> -> {
-                if (value.none { it == null || it === Scriptable.NOT_FOUND }) {
-                    @Suppress("UNCHECKED_CAST")
-                    return value as List<Any>
-                }
-                return value.mapNotNull { it?.takeUnless { item -> item === Scriptable.NOT_FOUND } }
-            }
-
-            is Array<*> -> {
-                return value.mapNotNull { it?.takeUnless { item -> item === Scriptable.NOT_FOUND } }
-            }
-
-            is NativeArray -> {
-                val values = ArrayList<Any>(value.length.toInt())
-                for (index in 0 until value.length.toInt()) {
-                    val item = value.get(index, value)
-                    if (item != null && item !== Scriptable.NOT_FOUND) {
-                        values.add(item)
-                    }
-                }
-                return values
-            }
+        return when (val value = result) {
+            is List<*> -> value.filterNotNull()
+            is Array<*> -> value.filterNotNull()
+            else -> emptyList()
         }
-        return ArrayList()
     }
 
     /**
@@ -893,52 +854,78 @@ class AnalyzeRule(
     /**
      * 执行JS
      */
-    fun evalJS(jsStr: String, result: Any? = null): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings["source"] = source
-            bindings["book"] = book
-            bindings["result"] = result
-            bindings["baseUrl"] = baseUrl
-            bindings["chapter"] = chapter
-            bindings["chapters"] = batchContext?.chapters
-            bindings["title"] = chapter?.title
-            bindings["src"] = content
-            bindings["nextChapterUrl"] = nextChapterUrl
-            bindings["rssArticle"] = rssArticle
-            bindings["fromBookInfo"] = isFromBookInfo
-            localBindings["paraIndex"]?.let { bindings["paraIndex"] = it }
-            localBindings["paraData"]?.let { bindings["paraData"] = it }
-            localBindings["page"]?.let { bindings["page"] = it.toIntOrNull() ?: it }
+    fun <T> withScriptCallback(block: () -> T): T {
+        val previous = parsingHostCallback.get()
+        parsingHostCallback.set(true)
+        return try { block() } finally {
+            if (previous == null) parsingHostCallback.remove() else parsingHostCallback.set(previous)
         }
-        val sharedGlobalStateKey = source?.getSharedGlobalStateKey()
-        val topScope: TopLevel? = source?.getShareScope(coroutineContext)
-            ?: topScopeRef?.get()
-            ?: SharedJsScope.getCryptoScope(source ?: this, coroutineContext)
-        val scope = if (topScope == null) {
-            val fresh = RhinoScriptEngine.newStandardTopLevel()
-            if (evalJSCallCount++ > 16) {
-                topScopeRef = WeakReference(fresh)
-            }
-            bindings.apply {
-                chainTo(fresh)
-            }
-        } else {
-            bindings.apply {
-                chainTo(topScope, sharedGlobalStateKey)
-            }
-        }
-        val script = compileScriptCache(jsStr)
-        val result = script.eval(scope, coroutineContext)
-        return result
     }
 
-    private fun compileScriptCache(jsStr: String): CompiledScript {
-        return scriptCache.getOrPutLimit(jsStr, 16) {
-            RhinoScriptEngine.compile(jsStr)
+    fun evalJS(jsStr: String, result: Any? = null): Any? {
+        if (parsingHostCallback.get() == true) {
+            throw SourceScriptException(
+                "nested_script_requires_migration",
+                "nested_script_requires_migration: Java extraction callbacks cannot recursively evaluate JavaScript in the active owner VM",
+            )
         }
+        fun jsonValue(value: Any?): Any? = when (value) {
+            null, is String, is Number, is Boolean -> value
+            is Node -> value.toString()
+            is List<*> -> value.map(::jsonValue)
+            is Array<*> -> value.map(::jsonValue)
+            else -> DartSourceEngine.jsonObject(value)
+        }
+        val bindings = linkedMapOf<String, Any?>(
+            "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book),
+            "result" to jsonValue(result), "baseUrl" to baseUrl,
+            "chapter" to jsonValue(chapter), "chapters" to jsonValue(batchContext?.chapters),
+            "title" to chapter?.title, "src" to jsonValue(content),
+            "nextChapterUrl" to nextChapterUrl, "rssArticle" to jsonValue(rssArticle),
+            "fromBookInfo" to isFromBookInfo,
+        )
+        localBindings["paraIndex"]?.let { bindings["paraIndex"] = it }
+        localBindings["paraData"]?.let { bindings["paraData"] = it }
+        localBindings["page"]?.let { bindings["page"] = it.toIntOrNull() ?: it }
+        bindings["__analyzeScript"] = jsStr
+        val parentCallbacks = coroutineContext[SourceHostCallbacks]
+        val callbacks = SourceHostCallbacks { method, args ->
+            fun text(index: Int): String = args.getOrNull(index)?.toString() ?: ""
+            if (method !in setOf("analyze.get", "analyze.put", "analyze.getString", "analyze.getStringList", "analyze.getElement", "analyze.getElements")) {
+                check(parentCallbacks != null) { "Unbound analyze callback: $method" }
+                return@SourceHostCallbacks parentCallbacks.call(method, args)
+            }
+            withScriptCallback {
+                when (method) {
+                    "analyze.get" -> get(text(0))
+                    "analyze.put" -> put(text(0), text(1))
+                    "analyze.getString" -> {
+                        if (args.getOrNull(1) is Boolean) getString(text(0), args[1] as Boolean)
+                        else getString(text(0), args.getOrNull(1), args.getOrNull(2) == true)
+                    }
+                    "analyze.getStringList" -> getStringList(text(0), args.getOrNull(1), args.getOrNull(2) == true)
+                    "analyze.getElement" -> jsonValue(getElement(text(0)))
+                    "analyze.getElements" -> jsonValue(getElements(text(0)))
+                    else -> error("Unsupported analyze callback: $method")
+                }
+            }
+        }
+        val script = """
+            (async function() {
+                var nativeJava = globalThis.java;
+                var java = new Proxy(Object.create(null), {
+                    get: (_, name) => ['get','put','getString','getStringList','getElement','getElements'].includes(String(name))
+                        ? (...args) => name === 'get' && args.length !== 1
+                            ? nativeJava[name](...args)
+                            : __sourceHostSync('analyze.' + String(name), args)
+                        : nativeJava && nativeJava[name]
+                });
+                return await eval(__analyzeScript);
+            }).call(globalThis)
+        """.trimIndent()
+        return V8ScriptExecutor.evaluateBlocking(
+            script, bindings, coroutineContext + callbacks, source = source,
+        )
     }
 
     override fun getSource(): BaseSource? {

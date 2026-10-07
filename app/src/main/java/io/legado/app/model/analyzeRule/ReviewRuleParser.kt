@@ -14,8 +14,6 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isDataUrl
-import org.htmlunit.corejs.javascript.NativeArray
-import org.htmlunit.corejs.javascript.Scriptable
 import kotlin.coroutines.CoroutineContext
 
 internal object ReviewRuleParser {
@@ -293,20 +291,8 @@ internal object ReviewRuleParser {
 
     private fun normalizeList(value: Any?): List<Any> {
         return when (value) {
-            is NativeArray -> buildList {
-                for (index in 0 until value.length.toInt()) {
-                    val item = value.get(index, value)
-                    if (item != null && item !== Scriptable.NOT_FOUND) add(item)
-                }
-            }
-
-            is List<*> -> value.mapNotNull { item ->
-                item?.takeUnless { it === Scriptable.NOT_FOUND }
-            }
-
-            is Array<*> -> value.mapNotNull { item ->
-                item?.takeUnless { it === Scriptable.NOT_FOUND }
-            }
+            is List<*> -> value.filterNotNull()
+            is Array<*> -> value.filterNotNull()
 
             is String -> GSON.fromJsonArray<Any>(value).getOrNull().orEmpty()
             else -> emptyList()

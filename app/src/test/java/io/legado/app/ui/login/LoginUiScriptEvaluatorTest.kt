@@ -1,6 +1,5 @@
 package io.legado.app.ui.login
 
-import com.script.rhino.RhinoInterruptError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -65,25 +64,6 @@ class LoginUiScriptEvaluatorTest {
             }
 
         assertSame(cancellation, thrown)
-    }
-
-    @Test
-    fun `Rhino interruption errors are not swallowed`() {
-        val interruption = RhinoInterruptError(CancellationException("cancel Rhino"))
-
-        val thrown =
-            assertThrows(RhinoInterruptError::class.java) {
-                runBlocking {
-                    evaluateLoginUiScript<Unit>(
-                        block = { throw interruption },
-                        onFailure = {
-                            fail("Rhino interruption must not be reported as a script error")
-                        },
-                    )
-                }
-            }
-
-        assertSame(interruption, thrown)
     }
 
     @Test

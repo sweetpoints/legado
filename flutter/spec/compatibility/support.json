@@ -1,0 +1,527 @@
+{
+  "specVersion": 1,
+  "meaning": "Implementation capability inventory, not proof of device acceptance or complete Legado compatibility",
+  "runtime": {
+    "engine": "V8",
+    "provider": "official source self-build",
+    "hookTargets": [
+      "macos-arm64",
+      "android-arm64",
+      "android-x64"
+    ],
+    "unsupportedTargets": [
+      "android-arm",
+      "ios",
+      "linux",
+      "windows"
+    ],
+    "asyncHost": true,
+    "legacySyncBridge": true,
+    "contextLifetime": "per-evaluation",
+    "defaultOldGenerationLimitMb": 64,
+    "intl": false,
+    "v8Version": "15.4.80.24",
+    "v8Revision": "e422f6ef0c7b877b04e4872fd0bd3a1cc2ec2eee",
+    "v8Repository": "https://chromium.googlesource.com/v8/v8.git",
+    "depotToolsRevision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9",
+    "depotToolsRepository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "releaseLine": "selected stable V8 version",
+    "precompiledDownloadDefault": false,
+    "temporal": false,
+    "externalStartupData": false,
+    "provenanceManifest": "source_v8/.cache/self-built/<V8 revision>/manifest.json",
+    "verifiedSnapshot": {
+      "date": "2026-10-05",
+      "v8Version": "15.4.80.24",
+      "platforms": [
+        "macos-arm64",
+        "android-arm64"
+      ],
+      "macosExample": [
+        "Debug build and UI",
+        "Release build and UI; local code signing only"
+      ],
+      "androidRelease": "local unsigned APK and AAR; 7 Flutter assets and native libraries match; V8 SHA-256 matches manifest",
+      "logs": [
+        "tmp/flutter-source-check-page-requests.log",
+        "tmp/flutter-android-test-page-requests-final.log",
+        "tmp/flutter-legacy-page-jvm-golden.log",
+        "tmp/flutter-android-release-page-requests.log"
+      ],
+      "fullHistoricalSourceAcceptance": false,
+      "signedDistributionAcceptance": false,
+      "ciAcceptance": false,
+      "acceptanceRound": "legacy page templates and selected request adapter acceptance",
+      "androidInstrumentationCases": 13,
+      "currentRoundReleaseR8": "passed locally; minifyAppReleaseWithR8 executed; build 4m1s",
+      "debugFlutterAssetConsistency": "final Debug AAR/APK rechecked: 10 Flutter assets with matching bytes and SHA-256",
+      "releaseFlutterAssetConsistency": "7 Flutter assets in AAR and APK have matching SHA-256",
+      "releaseNativeConsistency": {
+        "libapp.so": {
+          "bytes": 3277704,
+          "sha256MatchesBetweenAarAndApk": true,
+          "sha256": "dd95b81cdb3bd83feddbb39de938159a3889a2ceb757196ec0a860fe60b2ec91"
+        },
+        "libsource_v8.so": {
+          "bytes": 26306760,
+          "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593",
+          "sha256MatchesManifestAndPackagedArtifacts": true
+        }
+      },
+      "legacyJvmGolden": {
+        "tests": 4,
+        "fixedInputs": 16,
+        "fullJvmEngineCompared": false,
+        "validationRound": "previous legacy form request acceptance"
+      },
+      "currentRoundWorkspaceCheck": "passed",
+      "legacyJvmPageGolden": {
+        "tests": 7,
+        "fullJvmEngineCompared": false,
+        "validationRound": "current legacy page request acceptance"
+      },
+      "workspacePackageTests": [
+        51,
+        52,
+        12,
+        21,
+        22,
+        159,
+        1,
+        9
+      ],
+      "workspaceStaticAnalyses": 8,
+      "artifactProof": "tmp/flutter-page-requests-artifact-proof.json",
+      "finalAndroidRerun": {
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "macosExampleValidationRound": "earlier local validation, not rerun in this acceptance round",
+      "validationScope": "previous page/request acceptance before mandatory Dart-only routing",
+      "mandatoryDartOnlyAcceptance": "pending"
+    },
+    "historicalEvidence": "Older versions and earlier acceptance rounds do not establish the latest implementation snapshot",
+    "targetImplementationStatus": {
+      "android-x64": "official pinned source build completed; ELF machine62/three LOAD16KiB/ten exports verified; default dual-ABI App packaging and final artifact hashes passed; x86_64 runtime device acceptance pending",
+      "macos-arm64": "existing source-built target; ARM64 only",
+      "android-arm64": "official source-built target; mandatory routing full test-android.sh passed seven classes/65 unique tests on API36"
+    },
+    "currentReplacementSnapshot": {
+      "date": "2026-10-05",
+      "workspacePackageTests": [
+        64,
+        60,
+        15,
+        23,
+        22,
+        173,
+        1,
+        20
+      ],
+      "workspaceStaticAnalyses": 8,
+      "log": "tmp/flutter-source-check-legacy-scalars.log",
+      "androidJvmAcceptance": {
+        "tests": 3949,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "log": "tmp/flutter-legacy-scalars-release-final-8g.log"
+      },
+      "androidDeviceAcceptance": {
+        "arm64": {
+          "classes": 7,
+          "uniqueTests": 65,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "apiLevel": 36,
+          "defaultDualAbiBuild": true,
+          "strictSinceValidation": true,
+          "fullRunnerExitCode": 0,
+          "log": "tmp/flutter-legacy-scalars-device-final-65.log"
+        },
+        "x86_64": "pending"
+      },
+      "androidDualAbiPackaging": "Current default dual-ABI App Release assembled successfully; complete APK hash-chain verification passed",
+      "androidReleaseR8": {
+        "passed": true,
+        "lintAppReleasePassed": true,
+        "unsignedApk": true,
+        "gradleHeapGiB": 8,
+        "initial4GiBFullRelease": "terminated by GC thrashing protection; not passed",
+        "log": "tmp/flutter-legacy-scalars-release-final-8g.log"
+      },
+      "fullHistoricalSourceAcceptance": false,
+      "ciAcceptance": false,
+      "androidAarPreparationLog": "tmp/flutter-legacy-scalars-prepare-dual-2g.log",
+      "officialNativeArtifacts": {
+        "android-x64": {
+          "bytes": 28321712,
+          "sha256": "0fd5e7d637ed676d11573c68e9f7d5e2f33d3a7c213e3a5ca7e5ba9589f07ce4",
+          "elfMachine": 62,
+          "loadSegments16KiB": 3,
+          "sv8Exports": 10,
+          "runtimeDeviceAcceptance": false,
+          "dtNeeded": [
+            "log",
+            "dl",
+            "m",
+            "c"
+          ],
+          "producerRuntimeTested": false,
+          "producerSourceCompatibilityTested": false
+        },
+        "android-arm64": {
+          "bytes": 26306760,
+          "sha256": "0a2874dcf11c44213b10fe208bac6130bc00121b4433fdac1e19ac984053a593"
+        }
+      },
+      "pythonContractTests": 42,
+      "pythonContractPackageTests": {
+        "native": 12,
+        "tooling": 30
+      },
+      "ciConfigured": true,
+      "androidAarPreparationMemory": {
+        "gradleHeapGiB": 2,
+        "metaspaceGiB": 1,
+        "defaultDualAbi": true,
+        "debugReleasePassed": true,
+        "nativeHashesValidated": true
+      },
+      "unsignedReleaseApk": {
+        "bytes": 112607581,
+        "sha256": "eb76a5454a4f2baca369f5ba0413e31ecf7c46e783264a6a5520b58171666c1e"
+      },
+      "releaseArtifactProof": {
+        "log": "tmp/flutter-final-release-apk-evidence.json",
+        "producerHead": "2939b35555b3987ab487441df1ed5df0418db51f",
+        "sourceDigest": "380042cdc734ebfb5303fd3343e4362bae9d2761768c3f71997ff0fb4e877aa4",
+        "releaseAarBytes": 22595466,
+        "releaseAarSha256": "283857c85b48c9b5506f5ea78c91a4d4b5f53db18ba67810b14136b754a6ef77",
+        "sourceStampMatched": true,
+        "dualAbiV8ManifestAarMatched": true,
+        "currentAotAarMatched": true,
+        "nativeAssetsBothMappingsValidated": true,
+        "sdkMergedStrippedApkMatched": true
+      }
+    }
+  },
+  "engine": {
+    "operations": [
+      "search",
+      "explore",
+      "info",
+      "toc",
+      "content"
+    ],
+    "extractors": [
+      "css",
+      "jsonpath",
+      "xpath",
+      "regex",
+      "javascript",
+      "explicit @legacy JSoup subset"
+    ],
+    "automaticNextPage": true,
+    "rateLimit": true,
+    "cookiePersistence": "Core export/import; Android source_host persists via PlatformSessionStore",
+    "webViewCookieSynchronization": "browser.open result imported into HTTP jar; no continuous bidirectional synchronization",
+    "paginationContract": "Explicit nextPage rule; maxPages default20, allowed1..1000; cycle/limit errors",
+    "networkScheduling": {
+      "maxConcurrentRequests": {
+        "default": 4,
+        "minimum": 1
+      },
+      "requestIntervalMs": {
+        "default": 0,
+        "minimum": 0
+      },
+      "queueCancellation": true,
+      "redirects": "part of original request"
+    },
+    "browserCookieImport": {
+      "setCookieArray": "Preserves supplied attributes; validates domain",
+      "cookieHeader": "host-only, response directory path, HTTPS secure; original attributes unavailable"
+    },
+    "sessionExportImport": true,
+    "responseCharsetDetection": [
+      "Content-Type",
+      "UTF8 BOM",
+      "HTML meta",
+      "UTF8 default"
+    ],
+    "staticHeaders": true,
+    "parseHostMethods": [
+      "getString",
+      "getStringList",
+      "getElement",
+      "getElements"
+    ],
+    "parseNestedJavaScript": false,
+    "stageRequestOptions": [
+      "method",
+      "body string template",
+      "static headers replacement",
+      "charset",
+      "bodyEncoding raw or legacyFormUtf8",
+      "bodyTemplateMode raw or legacyJsonString",
+      "legacyPageTemplates boolean defaultfalse",
+      "legacyRequestInput null or exploreUrl"
+    ],
+    "redirects": "POST301/302 or303 rewrite GET and remove framing/request-body headers case-insensitively;307/308 preserve body/headers",
+    "html4Utility": "encoding.unescapeHtml4 via SourceUtilityHost;252 HTML4 entities, single pass,not HTML5",
+    "cssProjection": "last top-level unescaped @; quoted/bracketed/function/escaped @ retained",
+    "legacyMissingBaseGuard": {
+      "flag": "metadata.legacyBaseUrlUnavailable=true",
+      "ruleStageUrl": "expanded URL must contain explicit HTTP(S) scheme and host; fragments allowed",
+      "relativeOrSchemeRelativeError": "legacy_base_url_required",
+      "derivedLinksAndNextPage": "resolved against actual response URL",
+      "scriptBranchChanged": false
+    },
+    "legacyFormTemplateInputs": "string, bool, JS-safe int only; quote/backslash/control/DEL/double/unsafe int rejected; null missing_input",
+    "legacyBodyTemplateGuard": "when bodyEncoding legacyFormUtf8 or bodyTemplateMode legacyJsonString; strings, bools and JS-safe ints only; unsafe chars/types rejected before network; dynamic angle brackets rejected for old template provenance",
+    "legacyPageTemplateSubset": "canonical decimal page arithmetic with JS-safe checks; URL choices only; unknown expression legacy_page_requires_migration; static choices only, no placeholders inside choice; nested/incomplete angles rejected; dynamic URL angles error",
+    "legacyRequestAdapter": "synchronous SourceRequestAdapter before templating; Host/CLI register adaptLegacyRequest; direct consumer must register",
+    "legacyPageTemplateImportMarker": "any known input placeholder in legacy URL sets true; modern default false"
+  },
+  "legacy": {
+    "status": "partial",
+    "syncApis": [
+      "java.ajax",
+      "java.ajaxAll",
+      "java.connect",
+      "java.get(variable key or HTTP overload)",
+      "java.post",
+      "java.head",
+      "java.put",
+      "java.base64Encode",
+      "java.base64Decode",
+      "java.base64DecodeToByteArray",
+      "java.strToBytes",
+      "java.bytesToStr",
+      "java.hexDecodeToByteArray",
+      "java.hexDecodeToString",
+      "java.hexEncodeToString",
+      "java.md5Encode",
+      "java.md5Encode16",
+      "java.digestHex",
+      "java.digestBase64Str",
+      "java.encodeURI",
+      "java.getString",
+      "java.getStringList",
+      "java.getElement",
+      "java.getElements"
+    ],
+    "unsupportedApis": [
+      "arbitrary Java classes",
+      "unlisted methods and overloads",
+      "legacy comma URL options in Java host HTTP calls",
+      "skipRateLimit=true"
+    ],
+    "importStatuses": [
+      "unverified",
+      "manualRequired"
+    ],
+    "responseFacadeDifference": "body/url callable primitive facade is not strict-equality-equivalent to string properties",
+    "staticHeaders": true,
+    "dynamicHeaders": false,
+    "domFacade": "read-only subset; no JVM identity or arbitrary methods; html() explicitly unsupported",
+    "literalRequestOptions": {
+      "format": "URL,{strict JSON object}",
+      "keys": [
+        "method",
+        "body",
+        "headers",
+        "charset"
+      ],
+      "convertedFields": [
+        "method",
+        "body for POST",
+        "static headers overlaid on source headers",
+        "bodyEncoding=legacyFormUtf8 for implicit UTF8 raw form",
+        "bodyTemplateMode=legacyJsonString for templated legacy POST string body"
+      ],
+      "methodMapping": "POST/HEAD retained; other string maps GET",
+      "manual": [
+        "nonempty charset",
+        "dynamic JavaScript",
+        "unknown options",
+        "non-UTF8 Content-Type",
+        "noncanonical Content-Type case",
+        "unknown placeholder",
+        "method placeholders",
+        "header placeholders",
+        "body placeholders changing inferred Content-Type",
+        "templated form without fixed ASCII parameter name=prefix or unsafe/ambiguous inferred body type",
+        "templated object or array body: different outer JSON substitution layer"
+      ],
+      "stageCharsetFromLegacy": false
+    },
+    "importLiteralExtractionScripts": "getString/getStringList with one literal rule only; nested scripts, compound rules, templates, variables, extra arguments and element APIs require review",
+    "extractionText": "getString default HTML4 unescape with boolean override;getStringList no unescape;scalar URL empty text falls back base",
+    "htmlText": "per-node preserveWhitespace context and Java trim; no global whitespace compression",
+    "indexSpaces": "ASCII spaces inside matched numeric suffix only; selector spaces retained",
+    "exploreInput": "raw input.exploreUrl selected URL; adaptLegacyRequest parses per-category literal options before templates; metadata URLs retain options",
+    "manualFeatures": [
+      "declarative ruleReview HTTP/extraction protocol; distinct from supported mainJs review functions",
+      "coverDecodeJs and ruleContent.imageStyle/imageDecode/payAction/callBackJs, including sources with nonempty mainJs",
+      "complex or unbalanced URL templates",
+      "case-insensitive script markers",
+      "contentBatch",
+      "callBackJs",
+      "explore menu scripts or unknown options",
+      "legacy options body containing any angle bracket, including XML",
+      "any original placeholder inside URL choice",
+      "nested or incomplete angle choices"
+    ],
+    "sourceIdentityAndBase": {
+      "id": "nonempty string preserved verbatim without trim or URI normalization",
+      "httpId": "normal HTTP(S) base URL",
+      "nonHttpIdAnchor": "deterministic static absolute HTTP(S) searchUrl origin only; candidate still manualRequired",
+      "issue": "legacy.base_url_requires_review",
+      "metadataFlag": "legacyBaseUrlUnavailable=true",
+      "noAnchor": "FormatException; not evidence of invalid source ID",
+      "anchorRejected": [
+        "script",
+        "host/path templates",
+        "userinfo",
+        "fragment",
+        "whitespace"
+      ]
+    },
+    "staticExploreMenu": "JSON title/url array or title::URL lines split on newline/&& => metadata.legacyExploreItems; each URL reviewed separately; supported literal per-item options parsed by adapter; unknown options/dynamic require manual work; plain IPv6 URL supported; title::URL with extra :: retains full URL in metadata but manual issue due old split semantics; optional style null or JSON map deep-preserved for presentation only; unknown type/action and primitive/list style require review",
+    "mainJs": "V8 factory with old positional signatures and curated java host; legacyMainJs keeps legacy runtime mode; unsupported APIs runtime error; jsLib still manual",
+    "mainJsStringSemantics": "JSON DTO strings and java.ajax text are native JavaScript strings; no Java String wrapper or Java overload dispatch",
+    "mainJsSnapshotMethods": "source/sourceApi are JSON data, not Room entities; old entity/login/header methods require migration",
+    "appHookBoundaries": "mainJs replaces stage extraction, not application-consumed content hooks; imageStyle/imageDecode/payAction/callBackJs remain manual with original values preserved; coverDecodeJs and declarative ruleReview remain source-level manual capabilities; no legacy AnalyzeRule/AnalyzeUrl fallback",
+    "appAuthoringExamples": "templates and js-source-guide retain stage/file/downloadUrls/login/explore/review contracts; no arbitrary Java class imports, jsLib/CryptoJS requires migration"
+  },
+  "migration": {
+    "verifiedAutomatically": false,
+    "originalPreserved": true,
+    "javascript": "restricted straight-line direct calls",
+    "stageFieldScripts": true,
+    "scriptLibraries": false,
+    "urlScripts": false,
+    "stageListScripts": true,
+    "stageNextPageScripts": true,
+    "fullAsyncCallGraphTransform": false,
+    "finalCandidateMode": {
+      "noIssues": {
+        "legacy": false,
+        "compatibility": "unverified",
+        "exception": "legacyMainJs remains legacy=true"
+      },
+      "withIssues": {
+        "legacy": true,
+        "compatibility": "manualRequired"
+      }
+    },
+    "ajaxAutomaticConversion": "literal URL string only; direct arrays/Array constructors require review; other nonliteral arguments are ambiguous",
+    "hostNamespaceConflict": "bare source identifier requires review; member properties, comments and strings excluded",
+    "caseComparison": {
+      "baseline": "flutterLegacyCompatibility",
+      "stages": [
+        "search",
+        "explore",
+        "info",
+        "toc",
+        "content"
+      ],
+      "executionModesReported": true,
+      "jvmCompared": false,
+      "sourceVerified": false,
+      "network": "live",
+      "comparisonScope": "stageResult",
+      "stateCompared": false
+    },
+    "literalGetString": "parse result wrapped in awaited encoding.unescapeHtml4 except empty rule",
+    "privateCorpusOfflineAuditSnapshot": {
+      "round": 5,
+      "inputSources": 554,
+      "enabledSources": 546,
+      "disabledSources": 8,
+      "textSources": 473,
+      "nonTextSources": 81,
+      "enabledTextSources": 466,
+      "candidates": 529,
+      "unverified": 13,
+      "manualRequired": 516,
+      "noCandidate": 25,
+      "newCandidatesManualSinceRound3": 3,
+      "networkRequests": 0,
+      "actuallyExecuted": 0,
+      "verified": 0,
+      "issueCount": 8115,
+      "issueCountMeaning": "Per-entry review inventory; count changes alone do not prove behavioral compatibility",
+      "menuSources": 277,
+      "menuItems": 13162,
+      "stylesPreserved": 10029,
+      "legacyFormEncodingSources": 52,
+      "legacyJsonStringTemplateSources": 89,
+      "categoriesProveLegacyInvalid": false,
+      "privateOriginalsCommitted": false,
+      "fullHistoricalSourceAcceptance": false,
+      "date": "2026-10-05",
+      "legacyPageTemplateSources": 529,
+      "legacyPageTemplateStages": 2173,
+      "summarySnapshot": "private ignored round8/summary.json; original data not committed",
+      "issueDeltaFromPrevious": {
+        "rule_requires_review": -6
+      }
+    }
+  },
+  "androidBridge": {
+    "protocolVersion": 1,
+    "channel": "legado/source_engine",
+    "incrementalResults": false,
+    "silentFallback": false,
+    "startupSelfCheck": "Actual V8 1 + 1 before ready",
+    "startupError": "runtime_initialization_failed",
+    "isolatedDebugApplicationId": "com.legado.app.fluttertest",
+    "isolatedTestApplicationId": "com.legado.app.fluttertest.test",
+    "enabledApkAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "sessionPersistence": {
+      "formatVersion": 1,
+      "perSourceModeIsolation": true,
+      "sameSourceSerialExecution": true,
+      "reservedPrefix": "__engine.session.",
+      "errors": [
+        "session_restore_failed",
+        "session_write_failed"
+      ],
+      "commit": "finally after task, including error/cancel"
+    },
+    "emptyToc": "TocEmptyException; book metadata unchanged",
+    "successfulTocMetadata": "existing updateBookTocInfo",
+    "closePending": "pending responses and ready waits fail with IllegalStateException; no added channel error code",
+    "chapterFields": "legacyOriginal provenance preserves legacy string truthiness independently of runtime mode;modern Boolean or strict true/false strings;legacy updateTime maps tag;blank volume URL synthesized title+index",
+    "legacyBookFormatting": "search/explore/info format name/author, numeric wordCount, kind newlines; legacyOriginal provenance counts independently of runtime mode; modern values retained",
+    "legacyInfoRename": "legacyOriginal.ruleBookInfo.canReName nonempty, else BookSource rule nonempty; modern caller canReName",
+    "exploreInput": "raw url/exploreUrl/page sent to Dart; request adapter handles supported selected legacy request templates/options",
+    "manualIssueExecutionException": {
+      "requiredFlag": "legacyBaseUrlUnavailable=true",
+      "everyIssueCode": "legacy.base_url_requires_review",
+      "everyIssuePath": "bookSourceUrl",
+      "otherwise": "blocked",
+      "verificationStatusChanged": false
+    },
+    "bookSourceRouting": "Dart-only default for all five WebBook stages; no @engine selector or legacy fallback",
+    "legacyBookSourceEntrypoints": "AnalyzeRule/AnalyzeUrl/JsSourceEngine blocked with engine_migration_required; RSS/no-source shared scope retained",
+    "mandatoryBuild": "Flutter AAR/source digest/native provenance validation; false rejected",
+    "auxiliaryEvaluate": "JSON bindings; optional strictbool ephemeral fresh engine without persistence/cache",
+    "migrationPreview": "offline, unexecuted/unverified, memory-only report; manual/stale apply blocked; eligible candidate changes draft with undo, no automatic save",
+    "abiSelection": "default dual ABI; SOURCE_ENGINE_ANDROID_TARGETS maps flutterSourceAbis; explicit single ABI remains mandatory Dart engine",
+    "reviewScripts": "V8 async factory; positional chapter/book/paragraph/review arguments are JSON snapshots; missing optional function reported explicitly",
+    "loginUiV2": "V8 async scope; loginUi(state) and loginAction(action,state,form) awaited; book/chapter bindings are JSON snapshots",
+    "mcpBookSource": "V8 evaluate; JSON source metadata over protected modern host API prototype; RSS/no-source retain separate scope; BookSource failures never fallback",
+    "configurationCapabilityAnalysis": "Non-executing AST analysis plus modern declaration lexer fallback for async/arrow functions; skips comments, strings, regex and template literals",
+    "legacyJsSourceBook": "removed; JsSourceEngine retains public normalization for non-BookSource consumers only"
+  }
+}

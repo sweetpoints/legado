@@ -1,0 +1,13 @@
+// Loaded through the workspace-only Gradle user home's init.d directory.
+// Keep Flutter's generated .android project intact while configuring its public DSL.
+gradle.beforeProject { project ->
+    if (project.name == 'flutter' && project.projectDir.name == 'Flutter' &&
+        project.projectDir.parentFile.name == '.android' &&
+        project.projectDir.parentFile.parentFile.name == 'source_host') {
+        project.pluginManager.withPlugin('com.android.library') {
+            project.extensions.getByName('androidComponents').finalizeDsl { android ->
+                android.defaultConfig.minSdk = Math.max(26, android.defaultConfig.minSdk ?: 26)
+            }
+        }
+    }
+}

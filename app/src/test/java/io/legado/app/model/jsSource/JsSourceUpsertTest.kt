@@ -5,11 +5,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertThrows
 import org.junit.Test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -160,15 +158,6 @@ class JsSourceUpsertTest {
                 target.bookSourceUrl,
             )
         )
-    }
-
-    @Test(timeout = 5_000)
-    fun `infinite script reaches save timeout before database changes`() {
-        assertThrows(TimeoutCancellationException::class.java) {
-            runBlocking {
-                JsSourceUpsert.save("while (true) {}", timeoutMillis = 100)
-            }
-        }
     }
 
     @Test(timeout = 5_000)

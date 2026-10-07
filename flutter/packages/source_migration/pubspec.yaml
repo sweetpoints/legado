@@ -1,0 +1,15 @@
+name: source_migration
+description: Versioned book source compatibility and migration.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dependencies:
+  source_engine:
+    path: ../source_engine
+  source_legacy:
+    path: ../source_legacy
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

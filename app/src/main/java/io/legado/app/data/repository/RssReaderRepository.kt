@@ -1,7 +1,6 @@
 package io.legado.app.data.repository
 
 import androidx.room.withTransaction
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.*
@@ -68,7 +67,7 @@ class AppRssReaderRepository(
         withContext(Dispatchers.IO) {
             val origin = request.origin ?: return@withContext null
             val source = database.rssSourceDao.getByKey(origin)?.copy()
-            val headers = runScriptWithContext { source?.getHeaderMap() ?: emptyMap() }.toMap()
+            val headers = runInterruptible { source?.getHeaderMap() ?: emptyMap() }.toMap()
             val title = request.title ?: source?.sourceName ?: origin
             val favorite = request.link?.let { database.rssStarDao.get(origin, it)?.copy() }
             var article =
@@ -142,8 +141,7 @@ class AppRssReaderRepository(
                         current == null -> url(request.link, origin)
                         !current.description.isNullOrBlank() ->
                             html(current, current.description!!, source)
-                        !source?.ruleContent.isNullOrBlank() ->
-                            rule(current, source.ruleContent!!)
+                        !source?.ruleContent.isNullOrBlank() -> rule(current, source.ruleContent!!)
                         else -> url(current.link, current.origin)
                     }
                 } else

@@ -2,26 +2,31 @@ package io.legado.app.model
 
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.SourceVerificationHelp
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.widget.dialog.BottomWebViewDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.isTrue
+import java.util.Collections
+import kotlin.String
+import kotlin.onFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import java.util.Collections
-import kotlin.String
-import kotlin.onFailure
 
 object SourceCallBack {
     private data class CustomButtonRequest(
@@ -33,7 +38,8 @@ object SourceCallBack {
         val event: String,
     )
 
-    private val pendingCustomButtons = Collections.synchronizedSet(mutableSetOf<CustomButtonRequest>())
+    private val pendingCustomButtons =
+        Collections.synchronizedSet(mutableSetOf<CustomButtonRequest>())
 
     const val CLICK_AUTHOR = "clickAuthor"
     const val LONG_CLICK_AUTHOR = "longClickAuthor"
@@ -56,6 +62,7 @@ object SourceCallBack {
     const val END_READ = "endRead"
     const val START_SHELF_REFRESH = "startShelfRefresh"
     const val END_SHELF_REFRESH = "endShelfRefresh"
+
     fun callBackBtn(
         activity: AppCompatActivity,
         event: String,
@@ -64,57 +71,111 @@ object SourceCallBack {
         chapter: BookChapter?,
         bookType: Int = 0,
         result: String? = null,
-        noCall: (() -> Unit)? = null
-    ) {
+        noCall: (() -> Unit)? = null,
+    ): Job? {
         if (source == null || !source.eventListener) {
             noCall?.invoke()
-            return
+            return null
         }
         val jsStr = source.getContentRule().callBackJs
         if (jsStr.isNullOrEmpty()) {
             noCall?.invoke()
-            return
+            return null
         }
-        val request = if (event == CLICK_CUSTOM_BUTTON || event == LONG_CLICK_CUSTOM_BUTTON) {
-            CustomButtonRequest(activity, source.getKey(), book.bookUrl, chapter?.index, bookType, event)
-        } else null
-        if (request != null && !pendingCustomButtons.add(request)) return
+        val request =
+            if (event == CLICK_CUSTOM_BUTTON || event == LONG_CLICK_CUSTOM_BUTTON) {
+                CustomButtonRequest(
+                    activity,
+                    source.getKey(),
+                    book.bookUrl,
+                    chapter?.index,
+                    bookType,
+                    event,
+                )
+            } else null
+        if (request != null && !pendingCustomButtons.add(request)) return null
         val browserKey = request?.let {
             GSON.toJson(listOf(it.sourceKey, it.bookUrl, it.chapterIndex, it.bookType, it.event))
         }
         // Finish on Main after any showBrowser work posted by the script.
-        activity.lifecycleScope.launch(start = CoroutineStart.LAZY) {
-            if (browserKey != null && activity.supportFragmentManager.fragments.any {
-                it is BottomWebViewDialog && it.handlesCustomButton(browserKey)
-            }) return@launch
-            withContext(IO) {
-                val java = SourceLoginJsExtensions(activity, source, bookType).apply {
-                    customButtonKey = browserKey
-                }
-                kotlin.runCatching {
-                    val result = runScriptWithContext {
-                        source.evalJS(jsStr) {
-                            put("event", event)
-                            put("java", java)
-                            put("result", result)
-                            put("book", book)
-                            put("chapter", chapter)
-                        }.toString()
-                    }
-                    if (!result.isTrue()) {
-                        withContext(Dispatchers.Main) {
-                            noCall?.invoke()
+        return activity.lifecycleScope
+            .launch(start = CoroutineStart.LAZY) {
+                if (
+                    browserKey != null &&
+                        activity.supportFragmentManager.fragments.any {
+                            it is BottomWebViewDialog && it.handlesCustomButton(browserKey)
                         }
-                    }
-                }.onFailure {
-                    AppLog.put("${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}", it, true)
+                )
+                    return@launch
+                withContext(IO) {
+                    val java =
+                        SourceLoginJsExtensions(activity, source, bookType).apply {
+                            customButtonKey = browserKey
+                        }
+                    kotlin
+                        .runCatching {
+                            val result =
+                                withContext(
+                                    SourceHostCallbacks { method, arguments ->
+                                        withContext(Dispatchers.Main.immediate) {
+                                            when (method) {
+                                                "browser.show" ->
+                                                    java.showBrowser(
+                                                        arguments[0] as String,
+                                                        arguments.getOrNull(1) as? String,
+                                                        arguments.getOrNull(2) as? String,
+                                                        arguments.getOrNull(3) as? String,
+                                                    )
+                                                "browser.start" ->
+                                                    SourceVerificationHelp.startBrowser(
+                                                        source,
+                                                        arguments[0] as String,
+                                                        arguments[1] as String,
+                                                        html = arguments.getOrNull(2) as? String,
+                                                    )
+                                                "browser.openUrl" ->
+                                                    java.openUrl(
+                                                        arguments[0] as String,
+                                                        arguments.getOrNull(1) as? String,
+                                                    )
+                                                else ->
+                                                    error(
+                                                        "Unsupported source callback host API $method"
+                                                    )
+                                            }
+                                        }
+                                        null
+                                    }
+                                ) {
+                                    DartSourceEngine.evaluate(
+                                            source,
+                                            jsStr,
+                                            bindings(event, book, chapter, result),
+                                        )
+                                        .toString()
+                                }
+                            if (!result.isTrue()) {
+                                withContext(Dispatchers.Main) {
+                                    noCall?.invoke()
+                                }
+                            }
+                        }
+                        .onFailure {
+                            currentCoroutineContext().ensureActive()
+                            AppLog.put(
+                                "${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}",
+                                it,
+                                true,
+                            )
+                        }
                 }
             }
-        }.apply {
-            // Also releases the claim when a destroyed host cancels before the lazy block starts.
-            invokeOnCompletion { if (request != null) pendingCustomButtons.remove(request) }
-            start()
-        }
+            .apply {
+                // Also releases the claim when a destroyed host cancels before the lazy block
+                // starts.
+                invokeOnCompletion { if (request != null) pendingCustomButtons.remove(request) }
+                start()
+            }
     }
 
     fun callBackBook(
@@ -122,7 +183,7 @@ object SourceCallBack {
         source: BookSource?,
         book: Book?,
         chapter: BookChapter? = null,
-        result: String? = null
+        result: String? = null,
     ) {
         Coroutine.async {
             callBackBookInternal(event, source, book, chapter, result)
@@ -151,41 +212,48 @@ object SourceCallBack {
         if (source == null || book == null || !source.eventListener) return
         val jsStr = source.getContentRule().callBackJs
         if (jsStr.isNullOrEmpty()) return
-        kotlin.runCatching {
-            withTimeout(60000L) {
-                runScriptWithContext(kotlin.coroutines.coroutineContext) {
-                    source.evalJS(jsStr) {
-                        put("event", event)
-                        put("result", result)
-                        put("book", book)
-                        put("chapter", chapter)
-                    }
+        kotlin
+            .runCatching {
+                withTimeout(60000L) {
+                    DartSourceEngine.evaluate(source, jsStr, bindings(event, book, chapter, result))
                 }
             }
-        }.onFailure {
-            AppLog.put("${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}", it, true)
-        }
+            .onFailure {
+                currentCoroutineContext().ensureActive()
+                AppLog.put(
+                    "${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}",
+                    it,
+                    true,
+                )
+            }
     }
 
     fun callBackSource(scope: CoroutineScope, event: String, source: BookSource) {
         val jsStr = source.getContentRule().callBackJs
         if (jsStr.isNullOrEmpty()) return
         scope.launch(IO) {
-            kotlin.runCatching {
-                withTimeout(30000L) {
-                    runScriptWithContext {
-                        source.evalJS(jsStr) {
-                            put("event", event)
-                            put("result", null)
-                            put("book", null)
-                            put("chapter", null)
-                        }
+            kotlin
+                .runCatching {
+                    withTimeout(30000L) {
+                        DartSourceEngine.evaluate(source, jsStr, bindings(event, null, null, null))
                     }
                 }
-            }.onFailure {
-                AppLog.put("${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}", it, true)
-            }
+                .onFailure {
+                    currentCoroutineContext().ensureActive()
+                    AppLog.put(
+                        "${source.bookSourceName}\n书源执行回调事件${event}出错\n${it.localizedMessage}",
+                        it,
+                        true,
+                    )
+                }
         }
     }
 
+    private fun bindings(event: String, book: Book?, chapter: BookChapter?, result: String?) =
+        mapOf(
+            "event" to event,
+            "result" to result,
+            "book" to book?.let(DartSourceEngine::jsonObject),
+            "chapter" to chapter?.let(DartSourceEngine::jsonObject),
+        )
 }

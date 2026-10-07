@@ -33,7 +33,7 @@ class AutoTaskDebugRepositoryTest {
     private fun repo() = AppAutoTaskDebugRepository(context, database, {}, directory)
 
     @Test
-    fun immutableSnapshotRunsRealRhinoStreamsScopedLogsAndDoesNotPersistRuntime() = runBlocking {
+    fun immutableSnapshotRunsRealV8StreamsScopedLogsAndDoesNotPersistRuntime() = runBlocking {
         val repository = repo()
         val task =
             AutoTaskRule(
@@ -102,14 +102,15 @@ class AutoTaskDebugRepositoryTest {
         }
 
     @Test
-    fun realRunnerCancellationInterruptsRhinoAndScopedLeaseCleanupLeavesRuntimeUntouched() =
+    fun realRunnerCancellationInterruptsV8AndScopedLeaseCleanupLeavesRuntimeUntouched() =
         runBlocking {
             val repository = repo()
             val task =
                 AutoTaskRule(
                     "id",
                     "Loop",
-                    script = "while (true) {}",
+                    script =
+                        "let iterations=0; while(true){ if(++iterations===10000) java.log('native task loop entered'); }",
                     lastRunAt = 90,
                     lastLog = "retained",
                 )
@@ -118,7 +119,7 @@ class AutoTaskDebugRepositoryTest {
             val started = CompletableDeferred<Unit>()
             val lease =
                 repository.acquire(snapshot) {
-                    if (it.contains("Running")) started.complete(Unit)
+                    if (it.contains("native task loop entered")) started.complete(Unit)
                 }!!
             val job = launch(Dispatchers.Default) { lease.run() }
             try {

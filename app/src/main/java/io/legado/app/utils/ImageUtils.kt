@@ -1,16 +1,15 @@
 package io.legado.app.utils
 
+import android.util.Base64
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
-import java.io.ByteArrayInputStream
 import java.io.InputStream
+import kotlinx.coroutines.CancellationException
 
-/**
- * 加密图片解密工具
- */
+/** 加密图片解密工具 */
 object ImageUtils {
 
     /**
@@ -18,40 +17,73 @@ object ImageUtils {
      * @return 解密失败返回Null 解密规则为空不处理
      */
     fun decode(
-        src: String, bytes: ByteArray, isCover: Boolean,
-        source: BaseSource?, book: Book? = null
+        src: String,
+        bytes: ByteArray,
+        isCover: Boolean,
+        source: BaseSource?,
+        book: Book? = null,
     ): ByteArray? {
         val ruleJs = getRuleJs(source, isCover)
         if (ruleJs.isNullOrBlank()) return bytes
-        //解密库hutool.crypto ByteArray|InputStream -> ByteArray
-        return kotlin.runCatching {
-            source?.evalJS(ruleJs) {
-                put("book", book)
-                put("result", bytes)
-                put("src", src)
-            } as ByteArray
-        }.onFailure {
-            AppLog.putDebug("${src}解密错误", it)
-        }.getOrNull()
+        return kotlin
+            .runCatching {
+                decodedBytes(
+                    source?.evalJS(
+                        """
+                        (async () => {
+                            const decoded = await eval(imageDecodeRule);
+                            if (decoded instanceof ArrayBuffer) return Array.from(new Uint8Array(decoded));
+                            if (ArrayBuffer.isView(decoded)) {
+                                return Array.from(new Uint8Array(decoded.buffer, decoded.byteOffset, decoded.byteLength));
+                            }
+                            return decoded;
+                        })()
+                        """
+                            .trimIndent()
+                    ) {
+                        put("imageDecodeRule", ruleJs)
+                        put("book", book)
+                        put("result", bytes.map { it.toInt() and 255 })
+                        put("src", src)
+                    }
+                )
+            }
+            .onFailure {
+                if (it is CancellationException) throw it
+                AppLog.putDebug("${src}解密错误", it)
+            }
+            .getOrNull()
     }
 
     fun decode(
-        src: String, inputStream: InputStream, isCover: Boolean,
-        source: BaseSource?, book: Book? = null
+        src: String,
+        inputStream: InputStream,
+        isCover: Boolean,
+        source: BaseSource?,
+        book: Book? = null,
     ): InputStream? {
-        val ruleJs = getRuleJs(source, isCover)
-        if (ruleJs.isNullOrBlank()) return inputStream
-        //解密库hutool.crypto ByteArray|InputStream -> ByteArray
-        return kotlin.runCatching {
-            val bytes = source?.evalJS(ruleJs) {
-                put("book", book)
-                put("result", inputStream)
-                put("src", src)
-            } as ByteArray
-            ByteArrayInputStream(bytes)
-        }.onFailure {
-            AppLog.putDebug("${src}解密错误", it)
-        }.getOrNull()
+        if (getRuleJs(source, isCover).isNullOrBlank()) return inputStream
+        return decode(src, inputStream.readBytes(), isCover, source, book)?.inputStream()
+    }
+
+    /** Binary scripts cross the V8 boundary as JSON bytes or an explicit Base64 string. */
+    internal fun decodedBytes(value: Any?): ByteArray {
+        if (value is String) return Base64.decode(value, Base64.DEFAULT)
+        require(value is List<*>) { "Image decode must return a JSON byte array or Base64 string" }
+        return ByteArray(value.size) { index ->
+            val number =
+                value[index] as? Number
+                    ?: throw IllegalArgumentException("Image decode byte must be a number")
+            val integer = number.toInt()
+            require(
+                number.toDouble().isFinite() &&
+                    number.toDouble() == integer.toDouble() &&
+                    integer in 0..255
+            ) {
+                "Image decode byte must be an integer from 0 through 255"
+            }
+            integer.toByte()
+        }
     }
 
     fun skipDecode(source: BaseSource?, isCover: Boolean): Boolean {
@@ -59,16 +91,17 @@ object ImageUtils {
     }
 
     private fun getRuleJs(
-        source: BaseSource?, isCover: Boolean
+        source: BaseSource?,
+        isCover: Boolean,
     ): String? {
-        return when (source) {
+        val effectiveSource = source?.getSource() ?: source
+        return when (effectiveSource) {
             is BookSource ->
-                if (isCover) source.coverDecodeJs
-                else source.getContentRule().imageDecode
+                if (isCover) effectiveSource.coverDecodeJs
+                else effectiveSource.getContentRule().imageDecode
 
-            is RssSource -> source.coverDecodeJs
+            is RssSource -> effectiveSource.coverDecodeJs
             else -> null
         }
     }
-
 }

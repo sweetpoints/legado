@@ -1,6 +1,5 @@
 package io.legado.app.data.entities
 
-import com.script.ScriptBindings
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import org.junit.Assert.assertEquals
@@ -32,42 +31,32 @@ class LoginInfoMapInitializationTest {
         assertTrue(source.nestedLoginInfo?.isEmpty() == true)
         assertEquals("default-token", loginInfo["token"])
         assertNotNull(source.savedLoginInfo)
-        val savedLoginInfo = GSON.fromJsonObject<Map<String, String>>(source.savedLoginInfo)
-            .getOrThrow()
+        val savedLoginInfo =
+            GSON.fromJsonObject<Map<String, String>>(source.savedLoginInfo).getOrThrow()
         assertEquals("default-token", savedLoginInfo["token"])
-    }
-
-    @Test
-    fun `rhino bridge can read login info during default initialization`() {
-        val source = RhinoReentrantLoginSource()
-
-        val loginInfo = source.getLoginInfoMap()
-
-        assertEquals("rhino-default", loginInfo["token"])
-        val savedLoginInfo = GSON.fromJsonObject<Map<String, String>>(source.savedLoginInfo)
-            .getOrThrow()
-        assertEquals("rhino-default", savedLoginInfo["token"])
     }
 
     @Test
     fun `same source reentry uses fallback`() {
         var nestedInitializerRan = false
 
-        val result = LoginInfoMapInitialization.run(
-            sourceKey = "https://example.com",
-            onReentry = { error("outer call must initialize") },
-        ) {
-            val nested = LoginInfoMapInitialization.run(
+        val result =
+            LoginInfoMapInitialization.run(
                 sourceKey = "https://example.com",
-                onReentry = { mutableMapOf<String, String>() },
+                onReentry = { error("outer call must initialize") },
             ) {
-                nestedInitializerRan = true
-                mutableMapOf("unexpected" to "value")
-            }
+                val nested =
+                    LoginInfoMapInitialization.run(
+                        sourceKey = "https://example.com",
+                        onReentry = { mutableMapOf<String, String>() },
+                    ) {
+                        nestedInitializerRan = true
+                        mutableMapOf("unexpected" to "value")
+                    }
 
-            assertTrue(nested.isEmpty())
-            mutableMapOf("token" to "default")
-        }
+                assertTrue(nested.isEmpty())
+                mutableMapOf("token" to "default")
+            }
 
         assertFalse(nestedInitializerRan)
         assertEquals("default", result["token"])
@@ -75,17 +64,18 @@ class LoginInfoMapInitializationTest {
 
     @Test
     fun `different source can initialize during nested script call`() {
-        val nested = LoginInfoMapInitialization.run(
-            sourceKey = "https://first.example",
-            onReentry = { error("outer call must initialize") },
-        ) {
+        val nested =
             LoginInfoMapInitialization.run(
-                sourceKey = "https://second.example",
-                onReentry = { error("different source must not use fallback") },
+                sourceKey = "https://first.example",
+                onReentry = { error("outer call must initialize") },
             ) {
-                "initialized"
+                LoginInfoMapInitialization.run(
+                    sourceKey = "https://second.example",
+                    onReentry = { error("different source must not use fallback") },
+                ) {
+                    "initialized"
+                }
             }
-        }
 
         assertEquals("initialized", nested)
     }
@@ -101,12 +91,13 @@ class LoginInfoMapInitializationTest {
             }
         }
 
-        val retried = LoginInfoMapInitialization.run(
-            sourceKey = "https://example.com",
-            onReentry = { false },
-        ) {
-            true
-        }
+        val retried =
+            LoginInfoMapInitialization.run(
+                sourceKey = "https://example.com",
+                onReentry = { false },
+            ) {
+                true
+            }
 
         assertTrue(retried)
     }
@@ -136,41 +127,11 @@ class LoginInfoMapInitializationTest {
 
         override fun evalJS(
             jsStr: String,
-            bindingsConfig: ScriptBindings.() -> Unit,
+            bindingsConfig: MutableMap<String, Any?>.() -> Unit,
         ): Any? {
             evaluationCount++
             nestedLoginInfo = getLoginInfoMap()
             return """[{"name":"token","type":"text","default":"default-token"}]"""
-        }
-    }
-
-    private class RhinoReentrantLoginSource : BaseSource {
-        override var concurrentRate: String? = null
-        override var loginUrl: String? = null
-        override var loginUi: String? = """@js:
-            var nestedLoginInfo = source.getLoginInfoMap();
-            var suffix = "default";
-            [{
-                name: "token",
-                type: "text",
-                default: nestedLoginInfo.get("token") || "rhino-" + suffix
-            }];
-        """.trimIndent()
-        override var header: String? = null
-        override var enabledCookieJar: Boolean? = true
-        override var jsLib: String? = null
-
-        var savedLoginInfo: String? = null
-
-        override fun getTag() = "rhino-test"
-
-        override fun getKey() = "https://rhino.example"
-
-        override fun getLoginInfo(): String? = null
-
-        override fun putLoginInfo(info: String): Boolean {
-            savedLoginInfo = info
-            return true
         }
     }
 }

@@ -1,0 +1,6 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+
+// The official V8 artifact in this example supports Apple Silicon only.
+ARCHS = arm64
+EXCLUDED_ARCHS = $(inherited) x86_64

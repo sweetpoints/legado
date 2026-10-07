@@ -33,12 +33,6 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven {
-            url = uri("$rootDir/third_party/maven")
-            content {
-                includeModule("org.htmlunit", "htmlunit-core-js")
-            }
-        }
         //原仓库
         google {
             content {
@@ -54,6 +48,18 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        run {
+            maven {
+                url =
+                    uri(
+                        providers
+                            .gradleProperty("flutterSourceRepository")
+                            .orElse("$rootDir/flutter/modules/source_host/build/host/outputs/repo")
+                            .get()
+                    )
+            }
+            maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        }
 
         //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
         //maven("https://maven-central-asia.storage-download.googleapis.com/maven2/")
@@ -67,4 +73,3 @@ rootProject.name = "legado"
 
 include(":app")
 include(":modules:book")
-include(":modules:rhino")

@@ -51,6 +51,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.WebCacheManager
@@ -79,10 +80,14 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.Download
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import java.net.URI
+import kotlinx.coroutines.currentCoroutineContext
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
+import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.get
 import io.legado.app.utils.invisible
@@ -943,9 +948,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                         }
                         source = it
                     }
-                    val analyzeUrl =
-                        AnalyzeUrl(url, source = source, coroutineContext = coroutineContext)
-                    val html = args.getString("html") ?: analyzeUrl.getStrResponseAwait().body
+                    val page = preparePage(url, args.getString("html"))
+                    val html = page.html
                     if (html.isNullOrEmpty()) {
                         throw NoStackTraceException("html is NullOrEmpty")
                     }
@@ -970,7 +974,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                     val bookType = args.getInt("bookType", 0)
                     withContext(Dispatchers.Main) {
                         currentWebView.onResume() // 缓存库拿的需要激活
-                        initWebView(analyzeUrl.url, spliceHtml, analyzeUrl.headerMap, bookType)
+                        initWebView(page.url, spliceHtml, HashMap(page.headers), bookType)
                         currentWebView.clearHistory()
                     }
                 }
@@ -989,6 +993,58 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(), WebJsExtensions.Callb
                     }
                 }
         }
+    }
+
+    private data class BrowserPage(val url: String, val html: String?, val headers: Map<String, String>)
+
+    private suspend fun preparePage(url: String, suppliedHtml: String?): BrowserPage {
+        val bookSource = source as? BookSource
+        if (bookSource == null) {
+            val analyzed = AnalyzeUrl(url, source = source, coroutineContext = currentCoroutineContext())
+            return BrowserPage(analyzed.url, suppliedHtml ?: analyzed.getStrResponseAwait().body,
+                analyzed.headerMap)
+        }
+        // Browser URLs are concrete HTTP addresses. Legacy script/URL-option rules must be
+        // migrated explicitly; parsing only their address prefix would discard request semantics.
+        val definition = GSONStrict.fromJson(DartSourceEngine.sourceJson(bookSource), Map::class.java)
+        val base = definition["baseUrl"] as? String ?: bookSource.bookSourceUrl
+        val resolved = try {
+            URI(base).resolve(URI(url)).also {
+                require(it.scheme in listOf("http", "https") && !it.host.isNullOrEmpty())
+            }.toString()
+        } catch (error: Exception) {
+            throw NoStackTraceException("browser_url_requires_migration: Expected a concrete HTTP(S) URL")
+        }
+        val rawHeaders = definition["headers"] ?: definition["header"]
+        val decodedHeaders = if (rawHeaders is String && rawHeaders.isNotBlank()) {
+            GSONStrict.fromJson(rawHeaders, Map::class.java)
+        } else if (rawHeaders is String) null else rawHeaders
+        require(decodedHeaders == null || decodedHeaders is Map<*, *>) {
+            "browser_headers_requires_migration: Expected static headers"
+        }
+        val headers = (decodedHeaders as? Map<*, *>).orEmpty().entries.associate { (key, value) ->
+            require(key is String && value is String &&
+                key.matches(Regex("[!#\$%&'*+.^_`|~0-9A-Za-z-]+")) &&
+                !value.contains('\r') && !value.contains('\n')) {
+                "browser_headers_requires_migration: Expected valid static string headers"
+            }
+            key to value
+        }
+        if (suppliedHtml != null) return BrowserPage(resolved, suppliedHtml, headers)
+        val response = DartSourceEngine.evaluate(bookSource,
+            "source.net.request({url:browserUrl})", mapOf("browserUrl" to resolved))
+        require(response is Map<*, *>) { "Browser request did not return a response" }
+        val responseUrl = response["url"] as? String ?: error("Browser response URL missing")
+        // Keep final redirect origin filtering: sensitive request headers cannot be replayed
+        // to another origin when WebView follows links from the fetched document.
+        val original = URI(resolved)
+        val finalUri = URI(responseUrl)
+        val sameOrigin = original.scheme == finalUri.scheme && original.host == finalUri.host &&
+            original.port == finalUri.port
+        val webHeaders = if (sameOrigin) headers else headers.filterKeys {
+            !it.equals("Authorization", true) && !it.equals("Cookie", true)
+        }
+        return BrowserPage(responseUrl, response["body"] as? String, webHeaders)
     }
 
     private fun navigateBack() {

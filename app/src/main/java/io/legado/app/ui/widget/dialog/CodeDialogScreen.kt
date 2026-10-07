@@ -377,6 +377,20 @@ private fun CodeDialogPositionBar(scroll: ScrollState, onProgress: (Float) -> Un
     )
 }
 
+/** Debug-only timings begin in the actual input callback, excluding test/IME synchronization. */
+internal data class CodePreviewInputTiming(
+    val session: String,
+    val edit: Int,
+    val characters: Int,
+    val modelMs: Long? = null,
+    val firstLayoutMs: Long? = null,
+)
+
+internal object CodePreviewInputMetrics {
+    @Volatile var last: CodePreviewInputTiming? = null
+        internal set
+}
+
 /** Debug-only metadata; never records code, and bounds logging for each long-document edit. */
 private class CodePreviewPerformance {
     private val session = System.identityHashCode(this).toString(16)
@@ -390,12 +404,18 @@ private class CodePreviewPerformance {
     fun input(length: Int) {
         edit++
         editStart = start()
+        CodePreviewInputMetrics.last = CodePreviewInputTiming(session, edit, length)
         layouts = 0
         samples = 0
         record("input", length, "")
     }
 
     fun layout(result: TextLayoutResult) {
+        val input = CodePreviewInputMetrics.last
+        if (input?.session == session && input.edit == edit &&
+            input.characters == result.layoutInput.text.length && input.firstLayoutMs == null) {
+            CodePreviewInputMetrics.last = input.copy(firstLayoutMs = start() - editStart)
+        }
         layouts++
         record("layout", result.layoutInput.text.length,
             "count=$layouts lines=${result.lineCount} spans=${result.layoutInput.text.spanStyles.size} " +
@@ -403,6 +423,12 @@ private class CodePreviewPerformance {
     }
 
     fun record(phase: String, length: Int, details: String, started: Long? = null) {
+        if (phase == "input-model" && started != null) {
+            val input = CodePreviewInputMetrics.last
+            if (input?.session == session && input.edit == edit) {
+                CodePreviewInputMetrics.last = input.copy(modelMs = start() - started)
+            }
+        }
         if (length < 100_000 || samples >= 120) return
         samples++
         val now = start()

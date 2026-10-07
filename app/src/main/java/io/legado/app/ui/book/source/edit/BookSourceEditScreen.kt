@@ -61,6 +61,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.ui.widget.code.EditSafety
 import io.legado.app.ui.widget.dialog.CodeSyntaxColors
@@ -92,6 +93,7 @@ internal data class BookSourceScreenActions(
     val discard: () -> Unit,
     val keepEditing: () -> Unit,
     val retry: () -> Unit,
+    val migration: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,7 +188,11 @@ internal fun BookSourceEditScreen(
             }
             if (document != null && !document.finished) {
                 BookSourceOptions(document, enabled, actions)
-                PrimaryScrollableTabRow(selectedTabIndex = selectedTab, containerColor = background) {
+                BookSourceEngineStatus(state, enabled, actions.migration)
+                PrimaryScrollableTabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = background,
+                ) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
                             selected = index == selectedTab,
@@ -407,6 +413,36 @@ private fun BookSourceMenu(
                 action()
             },
         )
+    }
+}
+
+@Composable
+private fun BookSourceEngineStatus(
+    state: BookSourceComposeState,
+    enabled: Boolean,
+    onMigration: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("source-engine-status")) {
+        Text("书源引擎：Flutter/V8", style = MaterialTheme.typography.labelLarge)
+        Text(
+            "旧格式书源由新引擎兼容解析。需要调整的规则可先预览迁移结果。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TextButton(
+            onClick = onMigration,
+            enabled = enabled && state.migrationAvailable && !state.migrationRunning,
+            modifier = Modifier.testTag("sourceMigrationPreview"),
+        ) {
+            Text("预览迁移")
+        }
+        if (!BuildConfig.FLUTTER_SOURCE_ENGINE) {
+            Text(
+                "当前安装包未包含 Flutter/V8 引擎，请安装支持此引擎的版本。",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("source-engine-unavailable"),
+            )
+        }
     }
 }
 

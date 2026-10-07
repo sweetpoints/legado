@@ -5,7 +5,14 @@ import android.os.Looper
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.legado.app.data.AppDatabase
+import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.RssSource
+import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceUiScriptRunner
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.ui.rss.read.RssJsExtensions
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -154,11 +161,81 @@ class MainRssRepositoryTest {
     }
 
     @Test
-    fun realRhinoStartHtmlEvaluationRetainsRuleContextAndLegacyNavigationChoice() = runBlocking {
+    fun realV8StartHtmlEvaluationRetainsRuleContextAndLegacyNavigationChoice() = runBlocking {
         val scripted = first.copy(startHtml = "@js:'<html>' + source.getTag() + '</html>'")
         withContext(Dispatchers.IO) { database.rssSourceDao.update(scripted) }
         val result = repo.prepare(id(first))!!
         assertEquals(MainRssDestination.ReaderHtml, result.destination)
         assertEquals("<html>${first.getTag()}</html>", result.value)
+    }
+
+    @Test
+    fun legacyMetadataLibraryKeepsOwnerStateAndRefreshesCurrentSourceSnapshot() = runBlocking {
+        val source =
+            first.copy(
+                sourceUrl = "https://metadata-state-main.invalid",
+                jsLib =
+                    "var metadataCalls = 0; function nextMetadata() { metadataCalls++; java.put('libProbe', String(metadataCalls)); return source.getTag() + ':' + source.getKey() + ':' + metadataCalls; }",
+            )
+        try {
+            withContext(Dispatchers.IO) {
+                assertEquals(
+                    "First:${source.sourceUrl}:1:1",
+                    source.evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+                val renamed = source.copy(sourceName = "Updated")
+                assertEquals(
+                    "Updated:${source.sourceUrl}:2:2",
+                    renamed.evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:3:3",
+                    AnalyzeRule(source = renamed)
+                        .evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:4:4",
+                    AnalyzeUrl(
+                            mUrl = "https://metadata-state-main.invalid/no-network",
+                            source = renamed,
+                            ruleData = Book(bookUrl = "https://metadata-state-main.invalid/book"),
+                            coroutineContext = coroutineContext,
+                        )
+                        .evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:5:5",
+                    SourceUiScriptRunner.evaluate(
+                        renamed,
+                        "nextMetadata() + ':' + java.get('libProbe')",
+                        extensions = RssJsExtensions(null, renamed),
+                    ),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:6:6",
+                    renamed.evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+                assertEquals("Updated", renamed.evalJS("sourceApi.getTag()"))
+                assertEquals(
+                    "stored",
+                    renamed.evalJS(
+                        "source.put('metadata-test','stored'); source.get('metadata-test')"
+                    ),
+                )
+                assertEquals(
+                    "function:function",
+                    V8ScriptExecutor.evaluate(
+                        "[typeof source.variables.get('metadata-test').then, typeof source.crypto.md5('abc').then].join(':')",
+                        source = renamed,
+                    ),
+                )
+                assertEquals(
+                    "Updated:${source.sourceUrl}:7:7",
+                    renamed.evalJS("nextMetadata() + ':' + java.get('libProbe')"),
+                )
+            }
+        } finally {
+            DartSourceEngine.clearSourceState(source)
+        }
     }
 }

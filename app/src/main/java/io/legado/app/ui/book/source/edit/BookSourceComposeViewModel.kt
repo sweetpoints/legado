@@ -3,7 +3,11 @@ package io.legado.app.ui.book.source.edit
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.legado.app.BuildConfig
 import io.legado.app.data.entities.BookSource
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
+import io.legado.app.model.sourceEngine.SourceMigrationPreview
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -13,6 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+internal data class BookSourceMigrationReport(
+    val revision: Long,
+    val preview: SourceMigrationPreview,
+)
 
 internal data class BookSourceComposeState(
     val document: BookSourceEditDocument? = null,
@@ -24,20 +33,29 @@ internal data class BookSourceComposeState(
     val variableComment: String? = null,
     val assists: List<BookSourceKeyboardAssist> = emptyList(),
     val keyboardRows: Int? = null,
+    val migrationAvailable: Boolean = BuildConfig.FLUTTER_SOURCE_ENGINE,
+    val migrationRunning: Boolean = false,
+    val migrationReport: BookSourceMigrationReport? = null,
+    val migrationError: String? = null,
 )
 
 internal class BookSourceComposeViewModel(
     private val repository: BookSourceEditorRepository,
     savedState: SavedStateHandle,
     private val sourceUrl: String?,
+    private val migrationAvailable: Boolean = BuildConfig.FLUTTER_SOURCE_ENGINE,
+    private val migrateSource: suspend (BookSource) -> SourceMigrationPreview =
+        DartSourceEngine::migrate,
 ) : ViewModel() {
     private val sessionId =
         savedState.get<String>("bookSourceDraftId")
             ?: UUID.randomUUID().toString().also { savedState["bookSourceDraftId"] = it }
     private val operationMutex = Mutex()
     private val writeMutex = Mutex()
-    private val mutableState = MutableStateFlow(BookSourceComposeState())
+    private val mutableState =
+        MutableStateFlow(BookSourceComposeState(migrationAvailable = migrationAvailable))
     val state = mutableState.asStateFlow()
+    private var migrationRequest = 0L
     private var draft: BookSourceEditDocument? = null
     private var pendingSave = false
     private var pendingNativeRollback: BookSourceEditDocument? = null
@@ -99,6 +117,7 @@ internal class BookSourceComposeViewModel(
     }
 
     private fun invalidateCachedDraft() {
+        dismissMigration()
         draft = null
         pendingNativeRollback = null
         pendingNativeReceipt = null
@@ -143,6 +162,104 @@ internal class BookSourceComposeViewModel(
                 }
             }
         }
+
+    fun previewMigration() {
+        val current = draft ?: return
+        if (
+            !migrationAvailable ||
+                state.value.busy ||
+                current.finished ||
+                current.nativeRequest != null
+        )
+            return
+        val request = ++migrationRequest
+        val snapshot =
+            try {
+                current.source()
+            } catch (error: Exception) {
+                mutableState.value =
+                    mutableState.value.copy(
+                        migrationRunning = false,
+                        migrationReport = null,
+                        migrationError = error.localizedMessage ?: "无法读取当前草稿",
+                    )
+                return
+            }
+        if (SourceEngineSourcePolicy.hasVersionedDefinition(snapshot.bookSourceComment)) {
+            mutableState.value =
+                mutableState.value.copy(
+                    migrationRunning = false,
+                    migrationReport = null,
+                    migrationError = "已使用新版配置，无需再次从旧字段迁移",
+                )
+            return
+        }
+        val revision = current.revision
+        mutableState.value =
+            mutableState.value.copy(
+                migrationRunning = true,
+                migrationReport = null,
+                migrationError = null,
+            )
+        viewModelScope.launch {
+            try {
+                val preview = migrateSource(snapshot)
+                if (request != migrationRequest || draft == null || draft?.finished == true)
+                    return@launch
+                mutableState.value =
+                    mutableState.value.copy(
+                        migrationRunning = false,
+                        migrationReport = BookSourceMigrationReport(revision, preview),
+                    )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (request == migrationRequest) {
+                    mutableState.value =
+                        mutableState.value.copy(
+                            migrationRunning = false,
+                            migrationError = error.localizedMessage ?: "迁移预览失败",
+                        )
+                }
+            }
+        }
+    }
+
+    fun dismissMigration() {
+        migrationRequest++
+        mutableState.value =
+            mutableState.value.copy(
+                migrationRunning = false,
+                migrationReport = null,
+                migrationError = null,
+            )
+    }
+
+    fun applyMigration() {
+        val current = draft ?: return
+        val report = state.value.migrationReport ?: return
+        val preview = report.preview
+        if (
+            !migrationAvailable ||
+                state.value.busy ||
+                current.finished ||
+                current.nativeRequest != null ||
+                report.revision != current.revision ||
+                preview.requiresManualWork ||
+                preview.issues.isNotEmpty() ||
+                preview.status != "unverified" ||
+                preview.candidateJson.isNullOrBlank()
+        )
+            return
+        try {
+            val updated = current.withMigrationCandidate(preview.candidateJson)
+            edit(updated)
+            dismissMigration()
+        } catch (error: Exception) {
+            mutableState.value =
+                mutableState.value.copy(migrationError = error.localizedMessage ?: "无法应用迁移候选")
+        }
+    }
 
     fun retry() = retryInternal(manual = true)
 
@@ -644,6 +761,7 @@ internal class BookSourceComposeViewModel(
     }
 
     private suspend fun close(current: BookSourceEditDocument) {
+        dismissMigration()
         val empty = BookSourceEditDocument.from(BookSource(), originalKey = null)
         resultCheckpoint(
             current.copy(

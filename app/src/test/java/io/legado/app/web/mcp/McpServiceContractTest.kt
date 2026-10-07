@@ -1,15 +1,11 @@
 package io.legado.app.web.mcp
 
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BookSource
-import io.legado.app.model.jsSource.JsSourceEngine
 import java.io.File
 import java.net.URI
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -161,12 +157,75 @@ class McpServiceContractTest {
         val evalTool =
             tools.substringAfter("name = \"eval_js\"").substringBefore("name = \"check_source\"")
         assertTrue(evalTool.contains("JsSourceUpsert.validatePayload(js)"))
-        assertTrue(evalTool.contains("Debug.startSimpleDebug(collector, source.getKey())"))
+        assertTrue(
+            evalTool
+                .compact()
+                .contains("Debug.startSimpleDebug(collector,source?.getKey().orEmpty())")
+        )
         assertTrue(evalTool.contains("Debug.cancelDebug(collector)"))
         assertTrue(evalTool.contains("withTimeoutOrNull"))
-        assertTrue(evalTool.contains("withContext(Dispatchers.IO)"))
-        assertTrue(evalTool.contains("runScriptWithContext"))
-        assertTrue(evalTool.contains("JsSourceEngine.normalizeJsResult(raw, context)"))
+        assertTrue(evalTool.compact().contains("McpSourceScriptEvaluator.evaluate(source,js)"))
+        assertFalse(evalTool.contains("runScriptWithContext"))
+        assertFalse(evalTool.contains("source.evalJS"))
+        val executor =
+            projectFile("app/src/main/java/io/legado/app/web/mcp/McpSourceScriptEvaluator.kt")
+        val compactExecutor = executor.compact()
+        assertTrue(compactExecutor.contains("DartSourceEngine::evaluate"))
+        assertTrue(compactExecutor.contains("withContext(Dispatchers.IO)"))
+        assertTrue(
+            compactExecutor.contains("sourceas?BookSource?:source?.getSource()as?BookSource")
+        )
+        val bookBranch =
+            compactExecutor.substringAfter("if(bookSource!=null){").substringBefore("}else{")
+        assertTrue(bookBranch.contains("BookSourceScriptBridge.jsonBindings("))
+        assertTrue(bookBranch.contains("valvalue=evaluator(bookSource,wrapped,values)"))
+        assertTrue(bookBranch.contains("isString->value"))
+        assertTrue(bookBranch.contains("else->json.toJson(value)"))
+        assertFalse(bookBranch.contains("runScriptWithContext"))
+        assertFalse(bookBranch.contains("catch("))
+        assertFalse(bookBranch.contains("mainJs"))
+        val generalBranch = compactExecutor.substringAfter("}else{")
+        assertTrue(generalBranch.contains("V8ScriptExecutor.evaluate(script,values)"))
+        // Source-backed RSS calls retain their library, headers and persistent owner;
+        // metadata-only auxiliary evaluation cannot replace that source context.
+        assertTrue(generalBranch.contains("runInterruptible{"))
+        assertTrue(generalBranch.contains("source.evalJS(script){"))
+        assertTrue(generalBranch.contains("values.forEach{(key,value)->put(key,value)}"))
+        val baseSource =
+            projectFile("app/src/main/java/io/legado/app/data/entities/BaseSource.kt").compact()
+        assertTrue(baseSource.contains("getSourceNavigationContext()"))
+        assertTrue(baseSource.contains("LegacySourceScriptRunner.evaluateBlocking("))
+        assertTrue(baseSource.contains("source=this"))
+        val sourceRunner =
+            projectFile(
+                    "app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt"
+                )
+                .compact()
+        assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(sourceRunner.contains("context,source=source"))
+        val auxiliary =
+            projectFile("app/src/main/java/io/legado/app/model/sourceEngine/DartSourceEngine.kt")
+                .substringAfter("object DartSourceEngine")
+                .substringAfter("suspend fun evaluateAuxiliary(")
+                .substringBefore("suspend fun checkAuxiliarySyntax(")
+                .compact()
+        assertTrue(auxiliary.contains("valoriginal=source?.let{it.getSource()?:it}"))
+        assertTrue(auxiliary.contains("valowner=original?.let(::ownerId)?:sourceId"))
+        assertTrue(
+            auxiliary.contains(
+                "SharedJsScope.resolveLibrary(original?.jsLib,currentCoroutineContext())"
+            )
+        )
+        assertTrue(auxiliary.contains("LegacySourceScriptRunner.prelude(library.orEmpty())"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceTag\"]=it.getTag()"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceKey\"]=it.getKey()"))
+        assertTrue(auxiliary.contains("backend.evaluateAuxiliary("))
+        assertTrue(auxiliary.contains("ownerPrelude,timeoutMs"))
+        val auxiliaryExecutor =
+            projectFile("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
+        assertTrue(auxiliaryExecutor.contains("DartSourceEngine.evaluateAuxiliary("))
+        assertTrue(generalBranch.contains("JsSourceEngine.normalizeJsResult(raw)"))
+        assertFalse(compactExecutor.contains("catch("))
         assertTrue(evalTool.contains("catch (error: CancellationException)"))
         assertFalse(evalTool.contains("debugScope.async"))
 
@@ -234,10 +293,13 @@ class McpServiceContractTest {
 
         fun hints(profile: String): Set<String> {
             val definition =
-                tools.substringAfter("private val $profile = ToolAnnotations(").substringBefore(')')
-            return Regex("""[a-zA-Z]+Hint = (?:true|false)""")
+                tools
+                    .compact()
+                    .substringAfter("privateval$profile=ToolAnnotations(")
+                    .substringBefore(')')
+            return Regex("""([a-zA-Z]+Hint)=(true|false)""")
                 .findAll(definition)
-                .map { it.value }
+                .map { "${it.groupValues[1]} = ${it.groupValues[2]}" }
                 .toSet()
         }
         assertEquals(
@@ -265,34 +327,46 @@ class McpServiceContractTest {
     }
 
     @Test
-    fun `request context evaluates and normalizes source javascript`() = runBlocking {
+    fun `request context forwards json source bindings and normalizes results`() = runBlocking {
         val source =
-            BookSource(
-                bookSourceUrl = "https://example.com",
-                mainJs = "var mainLoaded = true",
-            )
-
-        val objectResult = evaluate(source, "({message: 'ok', items: [1, 2]})").orEmpty()
+            BookSource(bookSourceUrl = "https://example.com", mainJs = "var mainLoaded = true")
+        val objectResult =
+            McpSourceScriptEvaluator.evaluate(
+                    source,
+                    "({message:'ok',items:[1,2]})",
+                    mapOf(
+                        "request" to mapOf("id" to "abc"),
+                        "source" to mapOf("variables" to "invalid"),
+                    ),
+                ) { forwardedSource, _, bindings ->
+                    assertTrue(source === forwardedSource)
+                    val dto = bindings["__mcpSource"] as Map<*, *>
+                    assertEquals("https://example.com", dto["bookSourceUrl"])
+                    assertEquals("var mainLoaded = true", dto["mainJs"])
+                    assertEquals(mapOf("id" to "abc"), bindings["request"])
+                    assertTrue(bindings.values.none { it is BookSource })
+                    assertFalse(bindings.containsKey("source"))
+                    assertFalse(dto.containsKey("variables"))
+                    mapOf("message" to "ok", "items" to listOf(1, 2))
+                }
+                .orEmpty()
         assertTrue(objectResult.contains("\"message\":\"ok\""))
         assertTrue(objectResult.contains("\"items\":[1,2]"))
-        assertEquals("plain", evaluate(source, "'plain'"))
-        assertNull(evaluate(source, "null"))
         assertEquals(
-            "https://example.com|https://example.com|https://example.com|undefined",
-            evaluate(
-                source,
-                "baseUrl + '|' + source.bookSourceUrl + '|' + " +
-                    "sourceApi.bookSourceUrl + '|' + typeof mainLoaded",
-            ),
+            "plain",
+            McpSourceScriptEvaluator.evaluate(source, "'plain'") { _, _, _ -> "plain" },
         )
+        assertNull(McpSourceScriptEvaluator.evaluate(source, "null") { _, _, _ -> null })
     }
 
     @Test(timeout = 5_000)
-    fun `request cancellation interrupts source javascript`() {
+    fun `request cancellation reaches the suspending source executor`() {
         assertThrows(TimeoutCancellationException::class.java) {
             runBlocking {
                 withTimeout(250) {
-                    evaluate(BookSource(), "while (true) {}")
+                    McpSourceScriptEvaluator.evaluate(BookSource(), "while (true) {}") { _, _, _ ->
+                        awaitCancellation()
+                    }
                 }
             }
         }
@@ -306,13 +380,13 @@ class McpServiceContractTest {
         assertTrue(server.contains("val assetDir = \"web/help/md\""))
         assertTrue(server.contains("catch (error: IOException)"))
         assertTrue(server.contains("error.printOnDebug()"))
-        assertTrue(server.contains(".filter { it.endsWith(\".md\") }"))
+        assertTrue(server.compact().contains(".filter{it.endsWith(\".md\")}"))
         assertTrue(server.contains(".sorted()"))
         assertTrue(server.contains("val uri = \"legado://help/\$name\""))
         assertTrue(server.contains("server.addResource("))
-        assertTrue(server.contains("appCtx.assets.open(\"\$assetDir/\$fileName\")"))
+        assertTrue(server.compact().contains("appCtx.assets.open(\"\$assetDir/\$fileName\")"))
         assertTrue(server.contains("bufferedReader(Charsets.UTF_8)"))
-        assertTrue(server.contains(".use { it.readText() }"))
+        assertTrue(server.compact().contains(".use{it.readText()}"))
         assertTrue(server.contains("mimeType = \"text/markdown\""))
     }
 
@@ -366,14 +440,6 @@ class McpServiceContractTest {
         assertFalse(proguard.contains("-keep class kotlinx.coroutines.**"))
     }
 
-    private suspend fun evaluate(source: BookSource, js: String): String? {
-        return withContext(Dispatchers.IO) {
-            val context = currentCoroutineContext()
-            val raw = runScriptWithContext { source.evalJS(js) }
-            JsSourceEngine.normalizeJsResult(raw, context)
-        }
-    }
-
     private fun projectFile(path: String): String = projectPath(path).readText()
 
     private fun projectPath(path: String): File {
@@ -385,4 +451,6 @@ class McpServiceContractTest {
         }
         error("Project path not found: $path")
     }
+
+    private fun String.compact(): String = replace(Regex("\\s+"), "")
 }

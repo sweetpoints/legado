@@ -1,0 +1,15 @@
+name: source_engine
+description: Independent versioned Dart book-source engine.
+version: 0.1.0
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dependencies:
+  enough_convert: ^1.7.1
+  html: ^0.15.6
+  json_path: ^0.9.0
+  xpath_selector: ^3.0.2
+  xpath_selector_html_parser: ^3.0.1
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

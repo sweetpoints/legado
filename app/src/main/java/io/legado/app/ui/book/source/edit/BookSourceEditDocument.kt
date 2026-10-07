@@ -2,6 +2,7 @@ package io.legado.app.ui.book.source.edit
 
 import androidx.annotation.Keep
 import io.legado.app.data.entities.BookSource
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 
@@ -92,6 +93,20 @@ internal data class BookSourceEditDocument(
     fun original(): BookSource = GSON.fromJsonObject<BookSource>(originalJson).getOrThrow()
 
     fun source(): BookSource = materializeBookSourceEditForm(original(), form, autoComplete)
+
+    fun withMigrationCandidate(candidateJson: String): BookSourceEditDocument {
+        val key = "bookSourceComment"
+        val field = requireNotNull(form.field(0, key))
+        val comment = SourceEngineSourcePolicy.withCandidate(field.value, candidateJson)
+        val history =
+            histories.find { it.tab == 0 && it.key == key } ?: BookSourceFieldHistory(0, key)
+        return copy(
+            form = form.updateField(0, key, comment, comment.length, comment.length),
+            histories =
+                histories.filterNot { it.tab == 0 && it.key == key } +
+                    history.copy(undo = history.undo + field, redo = emptyList()),
+        )
+    }
 
     fun dirty(): Boolean {
         return form.options != baseline.options ||

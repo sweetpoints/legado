@@ -80,7 +80,7 @@ class JsSourceEditAcceptedIoTest {
     }
 
     @Test
-    fun originalRhinoParsingRemainsCancelableBeforeRoomAccept() = runBlocking {
+    fun originalV8ParsingRemainsCancelableBeforeRoomAccept() = runBlocking {
         val sourceUrl = sourceUrl()
         var receipts = 0
         val failure = runCatching {

@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
@@ -43,7 +42,6 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.script.rhino.runScriptWithContext
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.AppLog
@@ -74,6 +72,7 @@ import io.legado.app.help.webView.toWebViewRequestConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.model.Download
 import io.legado.app.model.rss.rssReaderImageOwner
+import io.legado.app.model.sourceEngine.SourceUiScriptRunner
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.file.HandleFileContract
@@ -168,6 +167,8 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     private var imageOwnerHash by mutableStateOf<String?>(null)
     private var imageBinding: Job? = null
     private var imageGeneration = 0L
+    private val navigationGate = RssNavigationDecisionGate()
+    private var navigationJob: Job? = null
     private val launchRequests by lazy { FileRssReaderLaunchRepository() }
     private val selectImageDir =
         registerForActivityResult(HandleFileContract()) {
@@ -351,6 +352,7 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
         if (duplicate) return
         imageChoice = null
         dismissedImageError = null
+        cancelNavigationDecision()
         currentWebView.stopLoading()
         readerSnapshot = null
         if (ticket != null) bindPreparedReader(ticket)
@@ -361,6 +363,7 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     }
 
     private fun refresh() {
+        cancelNavigationDecision()
         if (readerSnapshot?.source?.singleUrl == true) {
             currentWebView.reload()
             return
@@ -476,6 +479,7 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     }
 
     private fun loadDocument(snapshot: RssReaderSnapshot) {
+        cancelNavigationDecision()
         readerSnapshot = snapshot
         bindImages(snapshot.request)
         val document = snapshot.document ?: return
@@ -549,6 +553,7 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
     }
 
     override fun onDestroy() {
+        cancelNavigationDecision()
         imageChoice = null
         if (::customWebView.isInitialized) customWebView.removeAllViews()
         customWebViewCallback = null
@@ -557,7 +562,14 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
         super.onDestroy()
     }
 
+    private fun cancelNavigationDecision() {
+        navigationGate.invalidate()
+        navigationJob?.cancel()
+        navigationJob = null
+    }
+
     private fun browserBack() {
+        cancelNavigationDecision()
         if (customWebView.size > 0) { // 关闭全屏
             customWebViewCallback?.onCustomViewHidden()
             if (isFullscreen) currentWebView.webChromeClient?.onHideCustomView()
@@ -723,15 +735,31 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
             view: WebView,
             request: WebResourceRequest,
         ): Boolean {
-            return shouldOverrideUrlLoading(request.url)
+            if (!request.isForMainFrame) {
+                readerSnapshot?.source?.let { source ->
+                    if (!source.shouldOverrideUrlLoading.isNullOrBlank()) {
+                        AppLog.put("${source.getTag()}: unsupported_subframe_interception")
+                    }
+                }
+                // A deferred subframe load cannot be replayed with main-frame loadUrl.
+                // Keep native HTTP frame loading and the existing external-scheme routing.
+                return handleCommonSchemes(request.url)
+            }
+            return shouldOverrideUrlLoading(
+                view,
+                request.url,
+                request.requestHeaders.toMap(),
+                !request.hasGesture(),
+            )
         }
 
         @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION", "KotlinRedundantDiagnosticSuppress")
         override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-            return shouldOverrideUrlLoading(url.toUri())
+            return shouldOverrideUrlLoading(view, url.toUri(), emptyMap())
         }
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            cancelNavigationDecision()
             currentPageUrl = url
             if (needClearHistory) {
                 needClearHistory = false
@@ -1004,31 +1032,56 @@ class ReadRssActivity : BaseComposeActivity(showOpenMenuIcon = false), RssFavori
             )
         }
 
-        private fun shouldOverrideUrlLoading(url: Uri): Boolean {
-            readerSnapshot?.source?.let { source ->
-                source.shouldOverrideUrlLoading?.takeUnless(String::isNullOrBlank)?.let { js ->
-                    val startTime = SystemClock.uptimeMillis()
-                    val result = runCatching {
-                        runScriptWithContext(lifecycleScope.coroutineContext) {
-                            source
-                                .evalJS(js) {
-                                    put("java", rssJsExtensions)
-                                    put("url", url.toString())
-                                }
-                                .toString()
-                        }
+        private fun shouldOverrideUrlLoading(
+            view: WebView,
+            url: Uri,
+            headers: Map<String, String>,
+            allowBypass: Boolean = true,
+        ): Boolean {
+            if (allowBypass && navigationGate.consumeBypass(url.toString())) return false
+            navigationJob?.cancel()
+            navigationJob = null
+            val token = navigationGate.begin()
+            val source = readerSnapshot?.source
+            val script = source?.shouldOverrideUrlLoading?.takeIf { it.isNotBlank() }
+            if (source == null || script == null) return handleCommonSchemes(url)
+            // WebView needs an immediate decision. Cancel this load and await V8 off the
+            // synchronous callback; only the newest decision may replay the navigation.
+            navigationJob = lifecycleScope.launch {
+                val blocked =
+                    try {
+                        SourceUiScriptRunner.evaluate(
+                                source,
+                                script,
+                                mapOf("url" to url.toString()),
+                                RssJsExtensions(this@ReadRssActivity, source),
+                            )
+                            .toString()
+                            .isTrue()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        AppLog.put("${source.getTag()}: url跳转拦截js出错", error)
+                        false
                     }
-                        .onFailure {
-                            AppLog.put("${source.getTag()}: url跳转拦截js出错", it)
-                        }
-                        .getOrNull()
-                    if (SystemClock.uptimeMillis() - startTime > 99) {
-                        AppLog.put("${source.getTag()}: url跳转拦截js执行耗时过长")
-                    }
-                    if (result.isTrue()) return true
+                currentCoroutineContext().ensureActive()
+                if (
+                    !navigationGate.isCurrent(token) ||
+                        isFinishing ||
+                        isDestroyed ||
+                        readerSnapshot?.source !== source ||
+                        view !== currentWebView
+                )
+                    return@launch
+                if (
+                    !blocked &&
+                        !handleCommonSchemes(url) &&
+                        navigationGate.approve(token, url.toString())
+                ) {
+                    view.loadUrl(url.toString(), headers)
                 }
             }
-            return handleCommonSchemes(url)
+            return true
         }
 
         private fun handleCommonSchemes(url: Uri): Boolean {

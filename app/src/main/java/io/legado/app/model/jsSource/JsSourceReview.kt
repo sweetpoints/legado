@@ -8,10 +8,10 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.ReviewRuleParser
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.NetworkUtils
 import java.util.ArrayDeque
-import kotlin.coroutines.coroutineContext
 
 internal object JsSourceReview {
 
@@ -24,7 +24,9 @@ internal object JsSourceReview {
 
     fun hasReviewCapability(source: BookSource): Boolean {
         val key = capabilityKey(source)
-        capabilityCache[key]?.let { return it }
+        capabilityCache[key]?.let {
+            return it
+        }
         return JsSourceConfig.declaresReviewFunctions(source.mainJs.orEmpty()).also {
             capabilityCache.put(key, it)
         }
@@ -36,7 +38,9 @@ internal object JsSourceReview {
 
     fun hasReviewRepliesCapability(source: BookSource): Boolean {
         val key = capabilityKey(source)
-        replyCapabilityCache[key]?.let { return it }
+        replyCapabilityCache[key]?.let {
+            return it
+        }
         return JsSourceConfig.declaresReviewRepliesFunction(source.mainJs.orEmpty()).also {
             replyCapabilityCache.put(key, it)
         }
@@ -49,18 +53,21 @@ internal object JsSourceReview {
     ): ReviewRuleParser.SummaryResult? {
         val capabilityKey = capabilityKey(source)
         if (capabilityCache[capabilityKey] == false) return null
-        val call = JsSourceEngine(source, coroutineContext).callOptionalFunction(
-            "getReviewSummary",
-            listOf("chapter" to chapter, "book" to book),
-        )
+        val call =
+            callOptionalFunction(
+                source,
+                "getReviewSummary",
+                listOf("chapter" to chapter, "book" to book),
+            )
         if (!call.exists) {
             capabilityCache.put(capabilityKey, false)
             return null
         }
         capabilityCache.put(capabilityKey, true)
         val json = call.value ?: return emptySummary()
-        val array = runCatching { GSON.fromJson(json, JsonArray::class.java) }.getOrNull()
-            ?: return emptySummary()
+        val array =
+            runCatching { GSON.fromJson(json, JsonArray::class.java) }.getOrNull()
+                ?: return emptySummary()
 
         val counts = HashMap<Int, Int>()
         val keys = HashMap<Int, String>()
@@ -84,18 +91,20 @@ internal object JsSourceReview {
         paragraphData: String,
         page: Int,
     ): ReviewRuleParser.DetailPage? {
-        val json = JsSourceEngine(source, coroutineContext).callFunction(
-            "getReviewDetail",
-            listOf(
-                "chapter" to chapter,
-                "book" to book,
-                "paraIndex" to paragraphIndex,
-                "paraData" to paragraphData,
-                "page" to page,
-            ),
-        ) ?: return null
-        val result = runCatching { GSON.fromJson(json, JsonObject::class.java) }.getOrNull()
-            ?: return null
+        val json =
+            callFunction(
+                source,
+                "getReviewDetail",
+                listOf(
+                    "chapter" to chapter,
+                    "book" to book,
+                    "paraIndex" to paragraphIndex,
+                    "paraData" to paragraphData,
+                    "page" to page,
+                ),
+            ) ?: return null
+        val result =
+            runCatching { GSON.fromJson(json, JsonObject::class.java) }.getOrNull() ?: return null
         return parseDetailObject(result, chapter.url)
     }
 
@@ -108,24 +117,93 @@ internal object JsSourceReview {
         reviewId: String,
         page: Int,
     ): List<ReviewRuleParser.DetailItem>? {
-        val call = JsSourceEngine(source, coroutineContext).callOptionalFunction(
-            "getReviewReplies",
-            listOf(
-                "chapter" to chapter,
-                "book" to book,
-                "paraIndex" to paragraphIndex,
-                "paraData" to paragraphData,
-                "reviewId" to reviewId,
-                "page" to page,
-            ),
-        )
+        val call =
+            callOptionalFunction(
+                source,
+                "getReviewReplies",
+                listOf(
+                    "chapter" to chapter,
+                    "book" to book,
+                    "paraIndex" to paragraphIndex,
+                    "paraData" to paragraphData,
+                    "reviewId" to reviewId,
+                    "page" to page,
+                ),
+            )
         rememberReviewRepliesCapability(source, call.exists)
         if (!call.exists) return null
         val json = call.value ?: return emptyList()
-        val result = runCatching { GSON.fromJson(json, JsonObject::class.java) }.getOrNull()
-            ?: throw NoStackTraceException("JS源 getReviewReplies 返回格式错误")
+        val result =
+            runCatching { GSON.fromJson(json, JsonObject::class.java) }.getOrNull()
+                ?: throw NoStackTraceException("JS源 getReviewReplies 返回格式错误")
         return parseReplyObject(result, chapter.url)
             ?: throw NoStackTraceException("JS源 getReviewReplies 返回格式错误,缺少 items 数组")
+    }
+
+    private data class OptionalCallResult(val exists: Boolean, val value: String?)
+
+    private suspend fun callFunction(
+        source: BookSource,
+        name: String,
+        args: List<Pair<String, Any?>>,
+    ): String? {
+        val result = callOptionalFunction(source, name, args)
+        if (!result.exists) throw NoStackTraceException("JS源缺少函数 $name")
+        return result.value
+    }
+
+    private suspend fun callOptionalFunction(
+        source: BookSource,
+        name: String,
+        args: List<Pair<String, Any?>>,
+    ): OptionalCallResult {
+        val mainJs = source.mainJs
+        if (mainJs.isNullOrBlank()) throw NoStackTraceException("mainJs 为空,不是JS源")
+        val factoryBody =
+            """
+            return (function() {
+            $mainJs
+            return typeof $name === 'function' ? $name : null;
+            })();
+        """
+                .trimIndent()
+        // Isolate mainJs declarations (including `const source`) from the modern host namespace.
+        // The factory parameters expose JSON snapshots in the historical positional environment.
+        val parameters = args.map { it.first } + listOf("source", "sourceApi")
+        val script =
+            """
+            (async () => {
+                const factory = new Function(...${GSON.toJson(parameters)}, ${GSON.toJson(factoryBody)});
+                const fn = factory(...__reviewArguments, __reviewSource, __reviewSource);
+                if (typeof fn !== 'function') return {exists: false, value: null};
+                const result = await fn(...__reviewArguments);
+                return {exists: true, value: result == null ? null :
+                    typeof result === 'string' ? result : JSON.stringify(result)};
+            })()
+        """
+                .trimIndent()
+        val values = args.map { (_, value) ->
+            when (value) {
+                is Book,
+                is BookChapter -> DartSourceEngine.jsonObject(value)
+                else -> value
+            }
+        }
+        val result =
+            DartSourceEngine.evaluate(
+                source,
+                script,
+                mapOf(
+                    "__reviewArguments" to values,
+                    "__reviewSource" to DartSourceEngine.jsonObject(source),
+                    "baseUrl" to source.getKey(),
+                ),
+            ) as? Map<*, *> ?: throw NoStackTraceException("JS源 $name 返回调用格式错误")
+        val exists =
+            result["exists"] as? Boolean ?: throw NoStackTraceException("JS源 $name 返回调用格式错误")
+        val value = result["value"]
+        if (value != null && value !is String) throw NoStackTraceException("JS源 $name 返回调用格式错误")
+        return OptionalCallResult(exists, value as? String)
     }
 
     internal fun parseDetailObject(
@@ -170,9 +248,11 @@ internal object JsSourceReview {
             avatar = item.optString("avatar")?.let { NetworkUtils.getAbsoluteURL(baseUrl, it) },
             name = item.optString("name"),
             replyToName = protocol?.replyToName,
-            badges = item.optStrings("badge")
-                .flatMap { ReviewRuleParser.splitBadgeValue(it) }
-                .distinct(),
+            badges =
+                item
+                    .optStrings("badge")
+                    .flatMap { ReviewRuleParser.splitBadgeValue(it) }
+                    .distinct(),
             content = content,
             imageUrl = protocol?.imageUrl,
             audioUrl = protocol?.audioUrl,

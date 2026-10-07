@@ -1,6 +1,5 @@
 package io.legado.app.ui.book.read
 
-import io.legado.app.ci.lazyItem
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -13,7 +12,6 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
@@ -26,6 +24,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
+import io.legado.app.ci.lazyItem
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
@@ -92,7 +91,11 @@ class HighlightTriggerUiTest {
         listOf("readHelpVersion", "readMenuHelpVersion").associateWith { LocalConfig.all[it] }
     private val savedRules = appDb.highlightRuleDao.all
     private val id = UUID.randomUUID().toString()
-    private val source = BookSource(bookSourceUrl = "https://example.invalid/highlight-source/$id")
+    private val source =
+        BookSource(
+            bookSourceUrl = "https://example.invalid/highlight-source/$id",
+            bookSourceName = "Highlight image actions",
+        )
     private val book =
         Book(
                 bookUrl = "https://example.invalid/highlight/$id",
@@ -219,7 +222,11 @@ class HighlightTriggerUiTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
-        compose.lazyItem("more-reader-settings-list", "more-reader-setting-${PreferKey.highlightActionTrigger}")
+        compose
+            .lazyItem(
+                "more-reader-settings-list",
+                "more-reader-setting-${PreferKey.highlightActionTrigger}",
+            )
             .performClick()
         compose
             .onNodeWithTag("more-reader-option-${PreferKey.highlightActionTrigger}-doubleTap")

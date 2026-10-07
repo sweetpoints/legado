@@ -4,37 +4,30 @@ import androidx.annotation.Keep
 import androidx.collection.LruCache
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
-import com.script.rhino.runScriptWithContext
 import io.legado.app.api.ReturnData
-import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.ReviewRuleParser
+import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.jsSource.JsSourceReview
-import io.legado.app.ui.rss.read.RssJsExtensions
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.runBlocking
 import java.net.URLEncoder
 import java.util.UUID
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 
-private val legacyReviewClickPattern = Regex(
-    """^(?:getDP\(\s*\d+\s*,\s*\d+\s*\)|getZP\(\s*\d+\s*\))$"""
-)
+private val legacyReviewClickPattern =
+    Regex("""^(?:getDP\(\s*\d+\s*,\s*\d+\s*\)|getZP\(\s*\d+\s*\))$""")
 private val legacyHeifUrlPattern = Regex("""(?i)^https?://.*\.(?:heic|heif)(?:[?#].*|$)""")
 private val legacyReviewImageTagPattern = Regex("""(?is)<img\b[^>]*>""")
-private val legacyReviewImageAttributePattern = Regex(
-    """(?i)(\b(?:src|data-src|data-original)\s*=\s*)([\"'])(.*?)\2"""
-)
+private val legacyReviewImageAttributePattern =
+    Regex("""(?i)(\b(?:src|data-src|data-original)\s*=\s*)([\"'])(.*?)\2""")
 
 internal fun rewriteLegacyReviewImages(html: String, bookUrl: String): String =
     legacyReviewImageTagPattern.replace(html) { tag ->
@@ -43,10 +36,13 @@ internal fun rewriteLegacyReviewImages(html: String, bookUrl: String): String =
             if (!legacyHeifUrlPattern.matches(raw)) {
                 attribute.value
             } else {
-                val proxy = "/image?path=${encodeLegacyReviewQuery(raw)}" +
-                    "&url=${encodeLegacyReviewQuery(bookUrl)}&width=2048"
-                attribute.groupValues[1] + attribute.groupValues[2] +
-                    escapeHtmlAttribute(proxy) + attribute.groupValues[2]
+                val proxy =
+                    "/image?path=${encodeLegacyReviewQuery(raw)}" +
+                        "&url=${encodeLegacyReviewQuery(bookUrl)}&width=2048"
+                attribute.groupValues[1] +
+                    attribute.groupValues[2] +
+                    escapeHtmlAttribute(proxy) +
+                    attribute.groupValues[2]
             }
         }
     }
@@ -55,9 +51,8 @@ internal fun rewriteLegacyReviewResult(result: String, bookUrl: String): String 
     val parsed = runCatching { JsonParser.parseString(result) }.getOrNull()
     if (parsed?.isJsonObject == true) {
         val json = parsed.asJsonObject
-        val html = json.get("html")
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-            ?.asString
+        val html =
+            json.get("html")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
         if (html != null) {
             json.addProperty("html", rewriteLegacyReviewImages(html, bookUrl))
             return GSON.toJson(json)
@@ -69,20 +64,17 @@ internal fun rewriteLegacyReviewResult(result: String, bookUrl: String): String 
 private fun encodeLegacyReviewQuery(value: String): String =
     URLEncoder.encode(value, Charsets.UTF_8.name())
 
-private fun escapeHtmlAttribute(value: String): String = value
-    .replace("&", "&amp;")
-    .replace("\"", "&quot;")
-    .replace("<", "&lt;")
-    .replace(">", "&gt;")
+private fun escapeHtmlAttribute(value: String): String =
+    value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
 internal fun parseLegacyReviewClickScript(src: String): String? {
     val matcher = AnalyzeUrl.paramPattern.matcher(src)
     if (!matcher.find()) return null
-    val click = GSON.fromJsonObject<Map<String, String>>(src.substring(matcher.end()))
-        .getOrNull()
-        ?.get("click")
-        ?.trim()
-        ?: return null
+    val click =
+        GSON.fromJsonObject<Map<String, String>>(src.substring(matcher.end()))
+            .getOrNull()
+            ?.get("click")
+            ?.trim() ?: return null
     return click.takeIf(legacyReviewClickPattern::matches)
 }
 
@@ -117,19 +109,14 @@ object ReviewController {
     )
 
     private data class LegacyReviewOpenRequest(
-        @SerializedName("url")
-        val url: String = "",
-        @SerializedName("index")
-        val index: Int = -1,
-        @SerializedName("src")
-        val src: String = "",
+        @SerializedName("url") val url: String = "",
+        @SerializedName("index") val index: Int = -1,
+        @SerializedName("src") val src: String = "",
     )
 
     private data class LegacyReviewRunRequest(
-        @SerializedName("id")
-        val id: String = "",
-        @SerializedName("script")
-        val script: String = "",
+        @SerializedName("id") val id: String = "",
+        @SerializedName("script") val script: String = "",
     )
 
     private data class LegacyReviewBrowserPage(
@@ -154,34 +141,17 @@ object ReviewController {
     )
 
     private data class LegacyReviewSessionId(
-        @SerializedName("id")
-        val id: String,
-        @SerializedName("nonce")
-        val nonce: String,
+        @SerializedName("id") val id: String,
+        @SerializedName("nonce") val nonce: String,
     )
-
-    private class LegacyReviewJsExtensions(
-        source: BaseSource,
-        private val onShowBrowser: (LegacyReviewBrowserPage) -> Unit = {},
-    ) : RssJsExtensions(null, source, BookType.text) {
-
-        override fun showBrowser(
-            url: String,
-            html: String?,
-            preloadJs: String?,
-            config: String?,
-        ) {
-            onShowBrowser(LegacyReviewBrowserPage(url, html, preloadJs))
-        }
-    }
 
     private val detailCursors = LruCache<String, DetailCursor>(64)
     private val legacyReviewSessions = LruCache<String, LegacyReviewSession>(16)
 
     fun getSummary(parameters: Map<String, List<String>>): ReturnData = respond {
         val context = requireContext(parameters)
-        val source = context.source
-            ?: return@respond ReviewRuleParser.SummaryResult(emptyMap(), emptyMap())
+        val source =
+            context.source ?: return@respond ReviewRuleParser.SummaryResult(emptyMap(), emptyMap())
         if (source.isJsSource()) {
             return@respond JsSourceReview.getReviewSummaryAwait(
                 source,
@@ -192,21 +162,25 @@ object ReviewController {
 
         val rule = source.ruleReview
         val summaryUrl = rule?.reviewSummaryUrl?.takeIf { it.isNotBlank() }
-        if (rule == null || !rule.enabled || summaryUrl == null ||
-            rule.summaryListRule.isNullOrBlank() ||
-            rule.summaryParagraphIndexRule.isNullOrBlank() ||
-            rule.summaryCountRule.isNullOrBlank()
+        if (
+            rule == null ||
+                !rule.enabled ||
+                summaryUrl == null ||
+                rule.summaryListRule.isNullOrBlank() ||
+                rule.summaryParagraphIndexRule.isNullOrBlank() ||
+                rule.summaryCountRule.isNullOrBlank()
         ) {
             return@respond ReviewRuleParser.SummaryResult(emptyMap(), emptyMap())
         }
-        val analyzeUrl = AnalyzeUrl(
-            summaryUrl,
-            baseUrl = context.chapter.url,
-            source = source,
-            ruleData = context.book,
-            chapter = context.chapter,
-            coroutineContext = coroutineContext,
-        )
+        val analyzeUrl =
+            AnalyzeUrl(
+                summaryUrl,
+                baseUrl = context.chapter.url,
+                source = source,
+                ruleData = context.book,
+                chapter = context.chapter,
+                coroutineContext = coroutineContext,
+            )
         val body = analyzeUrl.getStrResponseAwait(useWebView = false).body.orEmpty()
         ReviewRuleParser.parseSummary(
             body,
@@ -230,14 +204,15 @@ object ReviewController {
             require(parameters["cursor"]?.firstOrNull().isNullOrBlank()) {
                 "JavaScript 段评不使用分页游标"
             }
-            val result = JsSourceReview.getReviewDetailAwait(
-                source = source,
-                book = context.book,
-                chapter = context.chapter,
-                paragraphIndex = paragraphIndex,
-                paragraphData = paragraphData,
-                page = page,
-            ) ?: return@respond ReviewPage(emptyList())
+            val result =
+                JsSourceReview.getReviewDetailAwait(
+                    source = source,
+                    book = context.book,
+                    chapter = context.chapter,
+                    paragraphIndex = paragraphIndex,
+                    paragraphData = paragraphData,
+                    page = page,
+                ) ?: return@respond ReviewPage(emptyList())
             return@respond ReviewPage(
                 items = result.items,
                 hasMore = result.items.isNotEmpty() && !result.nextPageUrl.isNullOrBlank(),
@@ -249,78 +224,88 @@ object ReviewController {
         require(!rule.detailListRule.isNullOrBlank() && !rule.detailContentRule.isNullOrBlank()) {
             "段评详情规则不完整"
         }
-        val firstPageUrl = requireNotNull(rule.reviewDetailUrl?.takeIf { it.isNotBlank() }) {
-            "段评详情地址未配置"
-        }
+        val firstPageUrl =
+            requireNotNull(rule.reviewDetailUrl?.takeIf { it.isNotBlank() }) {
+                "段评详情地址未配置"
+            }
         val nextPageRule = rule.reviewDetailNextPageUrl?.takeIf { it.isNotBlank() }
-        val cursorContext = CursorContext(
-            bookUrl = context.book.bookUrl,
-            chapterIndex = context.chapter.index,
-            sourceKey = source.getKey(),
-            ruleHash = rule.hashCode(),
-            paragraphIndex = paragraphIndex,
-            paragraphData = paragraphData,
-        )
+        val cursorContext =
+            CursorContext(
+                bookUrl = context.book.bookUrl,
+                chapterIndex = context.chapter.index,
+                sourceKey = source.getKey(),
+                ruleHash = rule.hashCode(),
+                paragraphIndex = paragraphIndex,
+                paragraphData = paragraphData,
+            )
         val cursor = parameters["cursor"]?.firstOrNull()?.takeIf { it.isNotBlank() }
-        val detailUrl = when {
-            page == 1 -> {
-                require(cursor == null) { "首段评页不能使用分页游标" }
-                firstPageUrl
-            }
-
-            nextPageRule == null -> {
-                error("当前段评规则没有更多页")
-            }
-
-            else -> {
-                val state = requireNotNull(cursor?.let {
-                    synchronized(detailCursors) { detailCursors[it] }
-                }) {
-                    "段评分页面游标无效或已过期"
+        val detailUrl =
+            when {
+                page == 1 -> {
+                    require(cursor == null) { "首段评页不能使用分页游标" }
+                    firstPageUrl
                 }
-                require(state.context == cursorContext && state.page == page) {
-                    "段评分页面游标无效或已过期"
+
+                nextPageRule == null -> {
+                    error("当前段评规则没有更多页")
                 }
-                state.url
+
+                else -> {
+                    val state =
+                        requireNotNull(
+                            cursor?.let {
+                                synchronized(detailCursors) { detailCursors[it] }
+                            }
+                        ) {
+                            "段评分页面游标无效或已过期"
+                        }
+                    require(state.context == cursorContext && state.page == page) {
+                        "段评分页面游标无效或已过期"
+                    }
+                    state.url
+                }
             }
-        }
-        val analyzeUrl = AnalyzeUrl(
-            detailUrl,
-            page = page,
-            extraParams = mapOf(
-                "paraIndex" to paragraphIndex.toString(),
-                "paraData" to paragraphData,
-                "page" to page.toString(),
-            ),
-            baseUrl = context.chapter.url,
-            source = source,
-            ruleData = context.book,
-            chapter = context.chapter,
-            coroutineContext = coroutineContext,
-        )
+        val analyzeUrl =
+            AnalyzeUrl(
+                detailUrl,
+                page = page,
+                extraParams =
+                    mapOf(
+                        "paraIndex" to paragraphIndex.toString(),
+                        "paraData" to paragraphData,
+                        "page" to page.toString(),
+                    ),
+                baseUrl = context.chapter.url,
+                source = source,
+                ruleData = context.book,
+                chapter = context.chapter,
+                coroutineContext = coroutineContext,
+            )
         val body = analyzeUrl.getStrResponseAwait(useWebView = false).body.orEmpty()
-        val result = ReviewRuleParser.parseDetailPage(
-            body = body,
-            rule = rule,
-            nextPageRule = nextPageRule,
-            baseUrl = analyzeUrl.url,
-            source = source,
-            book = context.book,
-            chapter = context.chapter,
-            context = coroutineContext,
-            paraIndex = paragraphIndex.toString(),
-            paraData = paragraphData,
-            page = page.toString(),
-        )
-        val nextCursor = result.nextPageUrl
-            ?.takeIf { result.items.isNotEmpty() && it.isNotBlank() }
-            ?.let { nextUrl ->
-                UUID.randomUUID().toString().also {
-                    synchronized(detailCursors) {
-                        detailCursors.put(it, DetailCursor(cursorContext, page + 1, nextUrl))
+        val result =
+            ReviewRuleParser.parseDetailPage(
+                body = body,
+                rule = rule,
+                nextPageRule = nextPageRule,
+                baseUrl = analyzeUrl.url,
+                source = source,
+                book = context.book,
+                chapter = context.chapter,
+                context = coroutineContext,
+                paraIndex = paragraphIndex.toString(),
+                paraData = paragraphData,
+                page = page.toString(),
+            )
+        val nextCursor =
+            result.nextPageUrl
+                ?.takeIf { result.items.isNotEmpty() && it.isNotBlank() }
+                ?.let { nextUrl ->
+                    UUID.randomUUID().toString().also {
+                        synchronized(detailCursors) {
+                            detailCursors.put(it, DetailCursor(cursorContext, page + 1, nextUrl))
+                        }
                     }
                 }
-            }
         ReviewPage(
             items = result.items,
             nextCursor = nextCursor,
@@ -334,66 +319,76 @@ object ReviewController {
         if (source.isJsSource()) {
             val paragraphIndex = requireParagraphIndex(parameters)
             val paragraphData = parameters["paraData"]?.firstOrNull() ?: paragraphIndex.toString()
-            val reviewId = requireParameter(parameters, "reviewId").also {
-                require(it.isNotBlank()) { "参数 reviewId 不能为空" }
-            }
+            val reviewId =
+                requireParameter(parameters, "reviewId").also {
+                    require(it.isNotBlank()) { "参数 reviewId 不能为空" }
+                }
             val page = requireInt(parameters, "page", 1)
-            val items = JsSourceReview.getReviewRepliesAwait(
-                source = source,
-                book = context.book,
-                chapter = context.chapter,
-                paragraphIndex = paragraphIndex,
-                paragraphData = paragraphData,
-                reviewId = reviewId,
-                page = page,
-            ).orEmpty()
+            val items =
+                JsSourceReview.getReviewRepliesAwait(
+                        source = source,
+                        book = context.book,
+                        chapter = context.chapter,
+                        paragraphIndex = paragraphIndex,
+                        paragraphData = paragraphData,
+                        reviewId = reviewId,
+                        page = page,
+                    )
+                    .orEmpty()
             return@respond ReviewPage(items = items, hasMore = items.isNotEmpty())
         }
 
         val rule = source.ruleReview ?: return@respond ReviewPage(emptyList())
-        val replyUrl = rule.reviewQuoteUrl?.takeIf { it.isNotBlank() }
-            ?: return@respond ReviewPage(emptyList())
-        if (!rule.enabled || rule.replyListRule.isNullOrBlank() ||
-            rule.replyContentRule.isNullOrBlank()
+        val replyUrl =
+            rule.reviewQuoteUrl?.takeIf { it.isNotBlank() }
+                ?: return@respond ReviewPage(emptyList())
+        if (
+            !rule.enabled ||
+                rule.replyListRule.isNullOrBlank() ||
+                rule.replyContentRule.isNullOrBlank()
         ) {
             return@respond ReviewPage(emptyList())
         }
         val paragraphIndex = requireParagraphIndex(parameters)
         val paragraphData = parameters["paraData"]?.firstOrNull() ?: paragraphIndex.toString()
-        val reviewId = requireParameter(parameters, "reviewId").also {
-            require(it.isNotBlank()) { "参数 reviewId 不能为空" }
-        }
+        val reviewId =
+            requireParameter(parameters, "reviewId").also {
+                require(it.isNotBlank()) { "参数 reviewId 不能为空" }
+            }
         val page = requireInt(parameters, "page", 1)
-        val analyzeUrl = AnalyzeUrl(
-            replyUrl,
-            page = page,
-            extraParams = mapOf(
-                "paraIndex" to paragraphIndex.toString(),
-                "paraData" to paragraphData,
-                "reviewId" to reviewId,
-                "page" to page.toString(),
-            ),
-            baseUrl = context.chapter.url,
-            source = source,
-            ruleData = context.book,
-            chapter = context.chapter,
-            coroutineContext = coroutineContext,
-        )
-        val body = analyzeUrl.getStrResponseAwait(useWebView = false).body
-            ?.takeIf { it.isNotBlank() }
-            ?: error("段评回复内容为空")
-        val items = ReviewRuleParser.parseReplyPage(
-            body = body,
-            rule = rule,
-            baseUrl = analyzeUrl.url,
-            source = source,
-            book = context.book,
-            chapter = context.chapter,
-            context = coroutineContext,
-            paraIndex = paragraphIndex.toString(),
-            paraData = paragraphData,
-            page = page.toString(),
-        )
+        val analyzeUrl =
+            AnalyzeUrl(
+                replyUrl,
+                page = page,
+                extraParams =
+                    mapOf(
+                        "paraIndex" to paragraphIndex.toString(),
+                        "paraData" to paragraphData,
+                        "reviewId" to reviewId,
+                        "page" to page.toString(),
+                    ),
+                baseUrl = context.chapter.url,
+                source = source,
+                ruleData = context.book,
+                chapter = context.chapter,
+                coroutineContext = coroutineContext,
+            )
+        val body =
+            analyzeUrl.getStrResponseAwait(useWebView = false).body?.takeIf { it.isNotBlank() }
+                ?: error("段评回复内容为空")
+        val items =
+            ReviewRuleParser.parseReplyPage(
+                body = body,
+                rule = rule,
+                baseUrl = analyzeUrl.url,
+                source = source,
+                book = context.book,
+                chapter = context.chapter,
+                context = coroutineContext,
+                paraIndex = paragraphIndex.toString(),
+                paraData = paragraphData,
+                page = page.toString(),
+            )
         ReviewPage(items = items, hasMore = items.isNotEmpty())
     }
 
@@ -401,20 +396,21 @@ object ReviewController {
         val request = GSON.fromJsonObject<LegacyReviewOpenRequest>(postData).getOrThrow()
         val context = requireContext(request.url, request.index)
         val source = requireNotNull(context.source) { "未找到书源" }
-        val click = requireNotNull(parseLegacyReviewClickScript(request.src)) {
-            "不是受支持的旧段评或章评链接"
-        }
+        val click =
+            requireNotNull(parseLegacyReviewClickScript(request.src)) {
+                "不是受支持的旧段评或章评链接"
+            }
         var browserPage: LegacyReviewBrowserPage? = null
         executeLegacyReviewScript(context, click, request.src) {
             browserPage = it
         }
         val page = requireNotNull(browserPage) { "旧评论脚本未返回页面" }
-        val pageHtml = requireNotNull(page.html?.takeIf { it.isNotBlank() }) {
-            "旧评论页面内容为空"
-        }
-        val normalizedPage = page.copy(
-            html = rewriteLegacyReviewImages(pageHtml, context.book.bookUrl)
-        )
+        val pageHtml =
+            requireNotNull(page.html?.takeIf { it.isNotBlank() }) {
+                "旧评论页面内容为空"
+            }
+        val normalizedPage =
+            page.copy(html = rewriteLegacyReviewImages(pageHtml, context.book.bookUrl))
 
         val id = UUID.randomUUID().toString()
         val nonce = UUID.randomUUID().toString()
@@ -429,7 +425,7 @@ object ReviewController {
                     page = normalizedPage,
                     frameOrigin = frameOrigin,
                     expiresAt = System.currentTimeMillis() + LEGACY_REVIEW_SESSION_TTL,
-                )
+                ),
             )
         }
         LegacyReviewSessionId(id, nonce)
@@ -440,24 +436,34 @@ object ReviewController {
         require(request.script.isNotBlank() && request.script.length <= MAX_LEGACY_REVIEW_SCRIPT) {
             "旧评论脚本为空或过长"
         }
-        val session = requireNotNull(getLegacyReviewSession(request.id)) {
-            "旧评论会话无效或已过期"
-        }
+        val session =
+            requireNotNull(getLegacyReviewSession(request.id)) {
+                "旧评论会话无效或已过期"
+            }
         val context = requireContext(session.bookUrl, session.chapterIndex)
         require(context.source?.getKey() == session.sourceKey) { "书源已变更，请重新打开评论" }
         val source = requireNotNull(context.source) { "未找到书源" }
-        val result = requireNotNull(runScriptWithContext {
-            AnalyzeRule(context.book, source)
-                .setChapter(context.chapter)
-                .setCoroutineContext(coroutineContext)
-                .evalJS(request.script)
-        }) { "旧评论脚本未返回结果" }.toString()
+        val result =
+            requireNotNull(
+                JsSourceEngine.normalizeJsResult(
+                    DartSourceEngine.evaluate(
+                        source,
+                        request.script,
+                        mapOf(
+                            "book" to DartSourceEngine.jsonObject(context.book),
+                            "chapter" to DartSourceEngine.jsonObject(context.chapter),
+                            "baseUrl" to context.chapter.url,
+                        ),
+                    ),
+                    coroutineContext,
+                )
+            ) {
+                "旧评论脚本未返回结果"
+            }
         rewriteLegacyReviewResult(result, session.bookUrl)
     }
 
-    internal fun getLegacyReviewPage(
-        parameters: Map<String, List<String>>,
-    ): LegacyReviewWebPage? {
+    internal fun getLegacyReviewPage(parameters: Map<String, List<String>>): LegacyReviewWebPage? {
         val id = parameters["id"]?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
         val nonce = parameters["nonce"]?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
         val session = getLegacyReviewSession(id) ?: return null
@@ -475,16 +481,49 @@ object ReviewController {
         onShowBrowser: (LegacyReviewBrowserPage) -> Unit = {},
     ): Any? {
         val source = requireNotNull(context.source) { "未找到书源" }
-        val java = LegacyReviewJsExtensions(source, onShowBrowser)
-        return runScriptWithContext {
-            source.evalJS(script) {
-                put("java", java)
-                put("book", context.book)
-                put("chapter", context.chapter)
-                put("result", result)
-            }
+        val wrapped = legacyReviewScript(script)
+        val envelope =
+            DartSourceEngine.evaluate(
+                source,
+                wrapped,
+                mapOf(
+                    "book" to DartSourceEngine.jsonObject(context.book),
+                    "chapter" to DartSourceEngine.jsonObject(context.chapter),
+                    "baseUrl" to context.chapter.url,
+                    "result" to result,
+                ),
+            ) as? Map<*, *> ?: error("旧评论脚本返回格式错误")
+        val pages = envelope["pages"] as? List<*> ?: error("旧评论页面格式错误")
+        pages.forEach { value ->
+            val page = value as? Map<*, *> ?: error("旧评论页面格式错误")
+            val url = page["url"] as? String ?: error("旧评论页面地址格式错误")
+            fun optionalString(name: String): String? =
+                page[name]?.let { it as? String ?: error("旧评论页面字段格式错误") }
+            onShowBrowser(
+                LegacyReviewBrowserPage(url, optionalString("html"), optionalString("preloadJs"))
+            )
         }
+        return envelope["value"]
     }
+
+    internal fun legacyReviewScript(script: String): String =
+        """
+        (async(__reviewJava)=>{
+          const __reviewPages=[];
+          const __reviewFacade=Object.create(__reviewJava);
+          __reviewFacade.showBrowser=function(url,html,preloadJs,config){
+            __reviewPages.push({url:String(url),html:html==null?null:String(html),preloadJs:preloadJs==null?null:String(preloadJs)});
+          };
+          globalThis.java=__reviewFacade;
+          try {
+            const value=await eval(${GSON.toJson(script)});
+            return {value:value,pages:__reviewPages};
+          } finally {
+            globalThis.java=__reviewJava;
+          }
+        })(java)
+    """
+            .trimIndent()
 
     private fun getLegacyReviewSession(id: String): LegacyReviewSession? {
         return synchronized(legacyReviewSessions) {
@@ -503,7 +542,8 @@ object ReviewController {
         bookUrl: String,
         page: LegacyReviewBrowserPage,
     ): String {
-        val bridge = """
+        val bridge =
+            """
             <script>
             (() => {
               const nativeSetInterval = window.setInterval.bind(window);
@@ -629,17 +669,23 @@ object ReviewController {
               if (preload) (0, eval)(preload);
             })();
             </script>
-        """.trimIndent()
-        val base = page.url.takeIf { it.isNotBlank() }?.let {
-            "<base href=\"${escapeHtmlAttribute(it)}\">"
-        }.orEmpty()
+        """
+                .trimIndent()
+        val base =
+            page.url
+                .takeIf { it.isNotBlank() }
+                ?.let {
+                    "<base href=\"${escapeHtmlAttribute(it)}\">"
+                }
+                .orEmpty()
         val injection = base + bridge
         val headIndex = page.html!!.indexOf("<head", ignoreCase = true)
         if (headIndex >= 0) {
             val headEnd = page.html.indexOf('>', headIndex)
             if (headEnd >= 0) {
-                return page.html.substring(0, headEnd + 1) + injection +
-                        page.html.substring(headEnd + 1)
+                return page.html.substring(0, headEnd + 1) +
+                    injection +
+                    page.html.substring(headEnd + 1)
             }
         }
         return injection + page.html
@@ -656,9 +702,10 @@ object ReviewController {
     }
 
     private fun requireContext(parameters: Map<String, List<String>>): ReviewContext {
-        val bookUrl = requireParameter(parameters, "url").also {
-            require(it.isNotBlank()) { "参数 url 不能为空" }
-        }
+        val bookUrl =
+            requireParameter(parameters, "url").also {
+                require(it.isNotBlank()) { "参数 url 不能为空" }
+            }
         val chapterIndex = requireInt(parameters, "index", 0)
         return requireContext(bookUrl, chapterIndex)
     }
@@ -667,9 +714,10 @@ object ReviewController {
         require(bookUrl.isNotBlank()) { "参数 url 不能为空" }
         require(chapterIndex >= 0) { "参数 index 无效" }
         val book = requireNotNull(appDb.bookDao.getBook(bookUrl)) { "未找到书籍" }
-        val chapter = requireNotNull(appDb.bookChapterDao.getChapter(bookUrl, chapterIndex)) {
-            "未找到章节"
-        }
+        val chapter =
+            requireNotNull(appDb.bookChapterDao.getChapter(bookUrl, chapterIndex)) {
+                "未找到章节"
+            }
         return ReviewContext(
             book = book,
             chapter = chapter,
@@ -683,9 +731,10 @@ object ReviewController {
     ): String = requireNotNull(parameters[name]?.firstOrNull()) { "参数 $name 不能为空" }
 
     private fun requireParagraphIndex(parameters: Map<String, List<String>>): Int {
-        val value = requireNotNull(requireParameter(parameters, "paraIndex").toIntOrNull()) {
-            "参数 paraIndex 无效"
-        }
+        val value =
+            requireNotNull(requireParameter(parameters, "paraIndex").toIntOrNull()) {
+                "参数 paraIndex 无效"
+            }
         require(value == -1 || value > 0) { "参数 paraIndex 无效" }
         return value
     }
@@ -695,9 +744,10 @@ object ReviewController {
         name: String,
         minimum: Int,
     ): Int {
-        val value = requireNotNull(requireParameter(parameters, name).toIntOrNull()) {
-            "参数 $name 无效"
-        }
+        val value =
+            requireNotNull(requireParameter(parameters, name).toIntOrNull()) {
+                "参数 $name 无效"
+            }
         require(value >= minimum) { "参数 $name 无效" }
         return value
     }

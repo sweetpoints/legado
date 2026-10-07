@@ -1,6 +1,5 @@
 package io.legado.app.data.repository
 
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.BookType
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
@@ -86,7 +85,7 @@ class AppSourceLoginRepository(private val database: AppDatabase = appDb) : Sour
                     }
                 }
             currentCoroutineContext().ensureActive()
-            val headers = runScriptWithContext { source?.getHeaderMap(true) ?: emptyMap() }
+            val headers = runInterruptible { source?.getHeaderMap(true) ?: emptyMap() }
             val values = source?.getStoredLoginInfoMap() ?: mutableMapOf()
             currentCoroutineContext().ensureActive()
             SourceLoginSnapshot(

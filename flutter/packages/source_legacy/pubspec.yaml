@@ -1,0 +1,15 @@
+name: source_legacy
+description: Versioned book source compatibility and migration.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dependencies:
+  crypto: ^3.0.6
+  enough_convert: ^1.6.0
+  source_engine:
+    path: ../source_engine
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

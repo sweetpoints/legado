@@ -7,7 +7,6 @@ import com.bumptech.glide.load.Options
 import com.bumptech.glide.load.data.DataFetcher
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.util.ContentLengthInputStream
-import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
@@ -15,28 +14,28 @@ import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.okHttpClientManga
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.withSourceNavigationContext
 import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.ImageUtils
 import io.legado.app.utils.isWifiConnect
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
 import splitties.init.appCtx
-import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.io.InputStream
-
 
 class OkHttpStreamFetcher(
     private val url: GlideUrl,
     private val options: Options,
-) :
-    DataFetcher<InputStream>, okhttp3.Callback {
+) : DataFetcher<InputStream>, okhttp3.Callback {
     private var stream: InputStream? = null
     private var responseBody: ResponseBody? = null
     private var callback: DataFetcher.DataCallback<in InputStream>? = null
@@ -46,8 +45,7 @@ class OkHttpStreamFetcher(
     private val coroutineScope = CoroutineScope(coroutineContext)
     private lateinit var analyzedUrl: GlideUrl
 
-    @Volatile
-    private var call: Call? = null
+    @Volatile private var call: Call? = null
 
     companion object {
         private val failUrl = hashSetOf<String>()
@@ -68,21 +66,24 @@ class OkHttpStreamFetcher(
             source = SourceHelp.getSource(sourceUrl)
         }
 
-        analyzedUrl = AnalyzeUrl(
-            url.toString(),
-            source = source,
-            coroutineContext = coroutineContext
-        ).getGlideUrl()
+        analyzedUrl =
+            AnalyzeUrl(
+                    url.toString(),
+                    source = source,
+                    coroutineContext = coroutineContext,
+                )
+                .getGlideUrl()
 
         val requestBuilder = Request.Builder().url(analyzedUrl.toStringUrl())
         requestBuilder.addHeaders(analyzedUrl.headers)
         val request: Request = requestBuilder.build()
         this.callback = callback
-        call = if (manga) {
-            okHttpClientManga.newCall(request)
-        } else {
-            okHttpClient.newCall(request)
-        }
+        call =
+            if (manga) {
+                okHttpClientManga.newCall(request)
+            } else {
+                okHttpClient.newCall(request)
+            }
         call?.enqueue(this)
     }
 
@@ -126,22 +127,26 @@ class OkHttpStreamFetcher(
             return
         }
         Coroutine.async(coroutineScope, executeContext = IO) {
-            val decodeResult = runScriptWithContext(coroutineContext) {
-                if (manga) {
-                    ImageUtils.decode(
-                        url.toString(),
-                        responseBody!!.bytes(),
-                        isCover = false,
-                        source,
-                        ReadManga.book
-                    )?.inputStream()
-                } else {
-                    ImageUtils.decode(
-                        analyzedUrl.toStringUrl(), responseBody!!.byteStream(),
-                        isCover = true, source
-                    )
+            val decodeResult =
+                runBlocking(coroutineContext + IO) {
+                    if (manga) {
+                        ImageUtils.decode(
+                                url.toString(),
+                                responseBody!!.bytes(),
+                                isCover = false,
+                                source?.withSourceNavigationContext(coroutineContext),
+                                ReadManga.book,
+                            )
+                            ?.inputStream()
+                    } else {
+                        ImageUtils.decode(
+                            analyzedUrl.toStringUrl(),
+                            responseBody!!.byteStream(),
+                            isCover = true,
+                            source?.withSourceNavigationContext(coroutineContext),
+                        )
+                    }
                 }
-            }
             onStreamReady(decodeResult)
         }
     }
@@ -160,5 +165,4 @@ class OkHttpStreamFetcher(
             callback?.onDataReady(stream)
         }
     }
-
 }

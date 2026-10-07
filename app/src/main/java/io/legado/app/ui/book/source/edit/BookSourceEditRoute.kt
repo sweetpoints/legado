@@ -89,6 +89,7 @@ internal fun BookSourceEditRoute(
             discard = model::discard,
             keepEditing = model::keepEditing,
             retry = model::retry,
+            migration = model::previewMigration,
         )
     BookSourceEditScreen(
         state,
@@ -97,5 +98,11 @@ internal fun BookSourceEditRoute(
         state.keyboardRows ?: keyboardRows,
         keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0,
         transparentBackground = transparentBackground,
+    )
+    BookSourceMigrationDialog(
+        state = state,
+        onDismiss = model::dismissMigration,
+        onApply = model::applyMigration,
+        onRetry = model::previewMigration,
     )
 }

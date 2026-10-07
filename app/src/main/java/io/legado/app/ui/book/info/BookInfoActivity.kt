@@ -27,7 +27,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.withResumed
-import com.script.rhino.runScriptWithContext
 import io.legado.app.R
 import io.legado.app.base.BaseComposeActivity
 import io.legado.app.constant.AppLog
@@ -65,6 +64,7 @@ import io.legado.app.data.repository.materializeBook
 import io.legado.app.data.repository.materializeSource
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.model.sourceEngine.SourceUiScriptRunner
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
@@ -615,14 +615,12 @@ class BookInfoActivity :
                 withContext(Dispatchers.IO) {
                     ensureActive()
                     val (source, book) = prepared
-                    val java = SourceLoginJsExtensions(this@BookInfoActivity, source)
-                    runScriptWithContext {
-                        source.evalJS(action.script) {
-                            put("result", null)
-                            put("java", java)
-                            put("book", book)
-                        }
-                    }
+                    SourceUiScriptRunner.evaluate(
+                        source,
+                        action.script,
+                        mapOf("result" to null, "book" to book),
+                        SourceLoginJsExtensions(this@BookInfoActivity, source),
+                    )
                 }
             } catch (error: Exception) {
                 ensureActive()

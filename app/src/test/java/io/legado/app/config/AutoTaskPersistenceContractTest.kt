@@ -184,9 +184,51 @@ class AutoTaskPersistenceContractTest {
         assertTrue(protocol.contains("WebBook.getBookInfoAwait"))
         assertTrue(protocol.contains("WebBook.getChapterListAwait"))
         assertTrue(protocol.contains("appDb.runInTransaction"))
-        assertTrue(runner.contains("runScriptWithContext {"))
+        val compactRunner = runner.replace(Regex("\\s+"), "")
+        // Task IDs are opaque owners, not HTTP book-source execution identities.
+        assertTrue(
+            compactRunner.contains(
+                "source.withSourceNavigationContext(callerContext+taskCallbacks)"
+            )
+        )
+        assertTrue(compactRunner.contains("valrawResult=runInterruptible{"))
+        assertTrue(compactRunner.contains("taskSource.evalJS(taskScriptWrapper)"))
+        assertTrue(compactRunner.contains("put(\"__autoTaskScript\",script)"))
+        assertTrue(compactRunner.contains("source.log(arguments.firstOrNull())"))
+        assertFalse(compactRunner.contains("DartSourceEngine.evaluate(source,script)"))
+        val baseSource =
+            file("app/src/main/java/io/legado/app/data/entities/BaseSource.kt").readText()
+        val sourceRunner =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt")
+                .readText()
+        val executor =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/V8ScriptExecutor.kt")
+                .readText()
+        assertTrue(baseSource.contains("LegacySourceScriptRunner.evaluateBlocking("))
+        assertTrue(sourceRunner.contains("V8ScriptExecutor.evaluateBlocking("))
+        assertTrue(sourceRunner.replace(Regex("\\s+"), "").contains("context,source=source"))
+        assertTrue(executor.contains("DartSourceEngine.evaluateAuxiliary("))
+        // Shared library preload is centralized across source callers, not owned by the runner.
+        val auxiliary =
+            file("app/src/main/java/io/legado/app/model/sourceEngine/DartSourceEngine.kt")
+                .readText()
+                .substringAfter("object DartSourceEngine")
+                .substringAfter("suspend fun evaluateAuxiliary(")
+                .substringBefore("suspend fun checkAuxiliarySyntax(")
+                .replace(Regex("\\s+"), "")
+        assertTrue(auxiliary.contains("valowner=original?.let(::ownerId)?:sourceId"))
+        assertTrue(
+            auxiliary.contains(
+                "SharedJsScope.resolveLibrary(original?.jsLib,currentCoroutineContext())"
+            )
+        )
+        assertTrue(auxiliary.contains("LegacySourceScriptRunner.prelude(library.orEmpty())"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceTag\"]=it.getTag()"))
+        assertTrue(auxiliary.contains("globals[\"__legacySourceKey\"]=it.getKey()"))
+        assertTrue(auxiliary.contains("backend.evaluateAuxiliary("))
+        assertTrue(auxiliary.contains("ownerPrelude,timeoutMs"))
         assertTrue(runner.contains("error.autoTaskCancellation()?.let { throw it }"))
-        assertTrue(runner.contains("is RhinoInterruptError -> cause as? CancellationException"))
+        assertTrue(runner.contains("else -> cause as? CancellationException"))
     }
 
     @Test

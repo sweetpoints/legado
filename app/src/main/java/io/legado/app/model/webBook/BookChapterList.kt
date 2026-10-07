@@ -1,8 +1,6 @@
 package io.legado.app.model.webBook
 
 import android.text.TextUtils
-import com.script.ScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -15,6 +13,8 @@ import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.Debug
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -23,7 +23,6 @@ import io.legado.app.utils.isTrue
 import io.legado.app.utils.mapAsync
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
-import org.htmlunit.corejs.javascript.Context
 import splitties.init.appCtx
 import io.legado.app.constant.AppPattern
 import kotlinx.coroutines.currentCoroutineContext
@@ -138,21 +137,33 @@ object BookChapterList {
         }
         val formatJs = tocRule.formatJs
         if (!formatJs.isNullOrBlank()) {
-            Context.enter().use {
-                val bindings = ScriptBindings()
-                bindings["gInt"] = 0
-                list.forEachIndexed { index, bookChapter ->
-                    bindings["index"] = index + 1
-                    bindings["chapter"] = bookChapter
-                    bindings["title"] = bookChapter.title
-                    RhinoScriptEngine.runCatching {
-                        eval(formatJs, bindings)?.toString()?.let {
-                            bookChapter.title = it
+            val formatted = V8ScriptExecutor.evaluate(
+                """
+                    (async function() {
+                        var gInt = 0;
+                        var values = [];
+                        for (var i = 0; i < chapters.length; i++) {
+                            var index = i + 1;
+                            var chapter = chapters[i];
+                            var title = chapter.title;
+                            try {
+                                var value = await eval(formatScript);
+                                values.push({title: value == null ? title : String(value)});
+                            } catch (error) {
+                                values.push({title: title, error: String(error)});
+                            }
                         }
-                    }.onFailure {
-                        Debug.log(book.origin, "格式化标题出错, ${it.localizedMessage}")
-                    }
-                }
+                        return values;
+                    })()
+                """.trimIndent(),
+                mapOf("formatScript" to formatJs, "chapters" to list.map { DartSourceEngine.jsonObject(it) }),
+                source = bookSource,
+            )
+            require(formatted is List<*> && formatted.size == list.size) { "Invalid V8 chapter-format result" }
+            formatted.forEachIndexed { index, value ->
+                require(value is Map<*, *> && value["title"] is String) { "Invalid V8 chapter title" }
+                list[index].title = value["title"] as String
+                value["error"]?.let { Debug.log(book.origin, "格式化标题出错, $it") }
             }
         }
         updateBookTocInfo(book, list)

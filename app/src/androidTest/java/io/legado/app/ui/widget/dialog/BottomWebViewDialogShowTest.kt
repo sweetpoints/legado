@@ -28,6 +28,9 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.model.SourceCallBack
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.utils.defaultSharedPreferences
 import org.junit.After
@@ -74,6 +77,42 @@ class BottomWebViewDialogShowTest {
     }
 
     @Test
+    fun browserWithoutSuppliedHtmlFetchesThroughTheDartSourceSession() {
+        val received = CountDownLatch(1)
+        var fixtureHeader: String? = null
+        val server = object : NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response {
+                fixtureHeader = session.headers["x-browser-fixture"]
+                received.countDown()
+                return newFixedLengthResponse(Response.Status.OK, "text/html",
+                    "<html><head><title>Dart browser request</title></head><body>Fetched page</body></html>")
+            }
+        }
+        server.start()
+        try {
+            source.header = """{"X-Browser-Fixture":"source-header"}"""
+            appDb.bookSourceDao.insert(source)
+            lateinit var browser: BottomWebViewDialog
+            scenario!!.onActivity { activity ->
+                browser = BottomWebViewDialog(source.bookSourceUrl, 0,
+                    "http://127.0.0.1:${server.listeningPort}/page")
+                browser.show(activity.supportFragmentManager, "dart-request")
+            }
+            assertTrue("The Dart HTTP request must reach the local server",
+                received.await(10, TimeUnit.SECONDS))
+            assertEquals("source-header", fixtureHeader)
+            assertTrue("The fetched document must render in the browser", awaitCondition {
+                val container = browser.view?.findViewById<View>(io.legado.app.R.id.web_view_container)
+                    as? android.view.ViewGroup
+                val web = container?.getChildAt(0) as? WebView
+                web?.title == "Dart browser request" && web.progress == 100
+            })
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun repeatedCustomCallbacksFetchOneDynamicPageAndCanReopen() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -103,10 +142,10 @@ class BottomWebViewDialogShowTest {
                 java.showBrowser('${source.bookSourceUrl}/dialog', html);
                 true;
             """.trimIndent()
+            var firstCallback: Job? = null
             scenario!!.onActivity { activity ->
-                repeat(2) {
-                    SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null)
-                }
+                firstCallback = SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null)
+                assertEquals(null, SourceCallBack.callBackBtn(activity, SourceCallBack.CLICK_CUSTOM_BUTTON, source, book, null))
             }
             assertTrue("The real source callback must reach HTTP", entered.await(5, TimeUnit.SECONDS))
             assertFalse("A second click must not launch another pending callback",
@@ -116,6 +155,9 @@ class BottomWebViewDialogShowTest {
                 visibleDialogs(manager) == 1
             })
             assertEquals(1, requests.get())
+            // A displayed dialog can precede the Dart task's completion. Await the
+            // actual callback claim cleanup before dismissing and starting a new one.
+            runBlocking { withTimeout(5_000) { checkNotNull(firstCallback).join() } }
             scenario!!.onActivity { activity ->
                 val dialog = activity.supportFragmentManager.fragments.filterIsInstance<BottomWebViewDialog>()
                     .single { it.dialog?.isShowing == true }

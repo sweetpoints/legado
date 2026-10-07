@@ -1,8 +1,6 @@
 package io.legado.app.ui.code
 
 import android.content.Context
-import com.script.ScriptException
-import com.script.rhino.RhinoScriptEngine
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
 import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
@@ -14,8 +12,7 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.help.http.BackstageWebView
-import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +27,7 @@ import org.eclipse.tm4e.core.registry.IThemeSource
 import org.jsoup.Jsoup
 import splitties.init.appCtx
 
-/** The original TextMate, rule formatter and Rhino syntax algorithms without Activity state. */
+/** TextMate, rule formatting and V8 syntax checks without Activity state. */
 internal class CodeEditorLanguageEngine(context: Context) {
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -192,20 +189,29 @@ internal class CodeEditorLanguageEngine(context: Context) {
         val source = editor.text.toString()
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { RhinoScriptEngine.compile(source) }
+                val diagnostic =
+                    withContext(Dispatchers.IO) { V8ScriptExecutor.checkSyntax(source) }
+                if (diagnostic != null) {
+                    if (!active() || editor.text.toString() != source) return@launch
+                    if (diagnostic.lineNumber > 0) {
+                        val index =
+                            scriptSourceIndex(
+                                source,
+                                diagnostic.lineNumber,
+                                diagnostic.columnNumber,
+                            )
+                        val position = editor.cursor.indexer.getCharPosition(index)
+                        editor.setSelection(position.line, position.column, true)
+                        editor.requestFocus()
+                    }
+                    AppLog.put(diagnostic.message, toast = true)
+                    return@launch
+                }
                 if (active() && editor.text.toString() == source)
                     context.toastOnUi(R.string.javascript_syntax_correct)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 if (!active() || editor.text.toString() != source) return@launch
-                (error as? ScriptException)
-                    ?.takeIf { it.lineNumber > 0 }
-                    ?.let {
-                        val index = scriptSourceIndex(source, it.lineNumber, it.columnNumber)
-                        val position = editor.cursor.indexer.getCharPosition(index)
-                        editor.setSelection(position.line, position.column, true)
-                        editor.requestFocus()
-                    }
                 AppLog.put(
                     error.localizedMessage ?: context.getString(R.string.javascript_syntax_error),
                     error,
@@ -221,35 +227,23 @@ internal class CodeEditorLanguageEngine(context: Context) {
         language = null
     }
 
-    private suspend fun webFormatCode(jsCode: String): String? =
-        withCodeEditorFormatterInput(jsCode) { cacheKey ->
-            BackstageWebView(
-                    url = null,
-                    html =
-                        """<html><body><script>
+    private suspend fun webFormatCode(jsCode: String): String =
+        V8ScriptExecutor.evaluateString(
+            """
+                var window = globalThis;
                 $beautifyJs
-                window.re = js_beautify($nameCache.getFromMemory('$cacheKey'), {
-                indent_size: 4,
-                indent_char: ' ',
-                preserve_newlines: true,
-                max_preserve_newlines: 5,
-                brace_style: 'collapse',
-                space_before_conditional: true,
-                unescape_strings: false,
-                jslint_happy: false,
-                end_with_newline: false,
-                wrap_line_length: 0,
-                comma_first: false
+                js_beautify(formatterInput, {
+                    indent_size: 4, indent_char: ' ', preserve_newlines: true,
+                    max_preserve_newlines: 5, brace_style: 'collapse',
+                    space_before_conditional: true, unescape_strings: false,
+                    jslint_happy: false, end_with_newline: false,
+                    wrap_line_length: 0, comma_first: false
                 });
-                </script></body></html>"""
-                            .trimIndent(),
-                    javaScript = "window.re",
-                    timeout = 5000,
-                    isRule = true,
-                )
-                .getStrResponse()
-                .body
-        }
+            """
+                .trimIndent(),
+            mapOf("formatterInput" to jsCode),
+            timeoutMillis = 5_000,
+        )
 
     private fun formatCodeHtml(html: String): String? {
         val doc = Jsoup.parse(html)

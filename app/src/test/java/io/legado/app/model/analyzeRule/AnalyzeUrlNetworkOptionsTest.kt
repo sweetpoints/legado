@@ -2,8 +2,12 @@ package io.legado.app.model.analyzeRule
 
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.HttpTTS
+import io.legado.app.data.entities.RssSource
 import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.NetworkUtils
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -14,43 +18,60 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.net.Inet6Address
-import java.net.InetAddress
-import java.util.concurrent.TimeUnit
 
 class AnalyzeUrlNetworkOptionsTest {
 
     @Test
-    fun cookieDomainFollowsResolvedRequestUrl() {
+    fun bookSourceStaticUrlOptionsCanBeParsedWithoutNetworkOrJavaScript() {
+        val source = BookSource(bookSourceUrl = "https://fixture.invalid")
+        val analyzed =
+            AnalyzeUrl(
+                "https://fixture.invalid/request?page=2",
+                source = source,
+                headerMapF = mapOf("X-Fixture" to "pure-parser"),
+            )
+        assertEquals("https://fixture.invalid/request?page=2", analyzed.url)
+        assertEquals("pure-parser", analyzed.headerMap["X-Fixture"])
+        assertEquals(NetworkUtils.getSubDomain(analyzed.url), cookieDomain(analyzed))
+    }
+
+    @Test
+    fun rssCookieDomainFollowsResolvedRequestUrl() {
         val requestUrl = "https://images.assets.net/cover.jpg"
-        val source = BookSource(bookSourceUrl = "https://source.example.com")
-        val analyzedUrl = AnalyzeUrl(
-            requestUrl,
-            source = source,
-            headerMapF = emptyMap(),
-        )
+        val source = RssSource(sourceUrl = "https://source.example.com")
+        val analyzedUrl =
+            AnalyzeUrl(
+                requestUrl,
+                source = source,
+                headerMapF = emptyMap(),
+            )
         val domain = cookieDomain(analyzedUrl)
 
         assertEquals(NetworkUtils.getSubDomain(requestUrl), domain)
-        assertFalse(domain == NetworkUtils.getSubDomain(source.bookSourceUrl))
+        assertFalse(domain == NetworkUtils.getSubDomain(source.sourceUrl))
     }
 
     @Test
     fun cookieDomainKeepsSyntheticSourceNamespace() {
         val source = HttpTTS(id = 42)
-        val analyzedUrl = AnalyzeUrl(
-            "https://speech.example.com/audio",
-            source = source,
-            headerMapF = emptyMap(),
-        )
+        val analyzedUrl =
+            AnalyzeUrl(
+                "https://speech.example.com/audio",
+                source = source,
+                headerMapF = emptyMap(),
+            )
 
         assertEquals(source.getKey(), cookieDomain(analyzedUrl))
     }
 
     private fun cookieDomain(analyzedUrl: AnalyzeUrl): String {
-        return AnalyzeUrl::class.java.getDeclaredField("domain").apply {
-            isAccessible = true
-        }.get(analyzedUrl) as String
+        return AnalyzeUrl::class
+            .java
+            .getDeclaredField("domain")
+            .apply {
+                isAccessible = true
+            }
+            .get(analyzedUrl) as String
     }
 
     @Test
@@ -83,19 +104,21 @@ class AnalyzeUrlNetworkOptionsTest {
         assertEquals(false, option.getFollowRedirects())
         assertEquals("1.1.1.1", option.getDnsIp())
 
-        val legacyOption = GSONStrict.fromJson(
-            """{"resolveIp":"8.8.8.8"}""",
-            AnalyzeUrl.UrlOption::class.java,
-        )
+        val legacyOption =
+            GSONStrict.fromJson(
+                """{"resolveIp":"8.8.8.8"}""",
+                AnalyzeUrl.UrlOption::class.java,
+            )
         assertEquals("8.8.8.8", legacyOption.getDnsIp())
     }
 
     @Test
     fun urlOptionDeserializesNetworkSettingsFromJson() {
-        val option = GSONStrict.fromJson(
-            """{"timeout":5000,"followRedirects":false,"dnsIp":"1.1.1.1"}""",
-            AnalyzeUrl.UrlOption::class.java,
-        )
+        val option =
+            GSONStrict.fromJson(
+                """{"timeout":5000,"followRedirects":false,"dnsIp":"1.1.1.1"}""",
+                AnalyzeUrl.UrlOption::class.java,
+            )
 
         assertEquals(5_000L, option.getTimeout())
         assertEquals(false, option.getFollowRedirects())
@@ -152,22 +175,24 @@ class AnalyzeUrlNetworkOptionsTest {
     fun buildsClientWithBoundedTimeoutsAndRedirectPolicy() {
         val marker = Interceptor { chain -> chain.proceed(chain.request()) }
         val fallback = Dns { listOf(address(8, 8, 8, 8)) }
-        val baseClient = OkHttpClient.Builder()
-            .dns(fallback)
-            .addInterceptor(marker)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .build()
+        val baseClient =
+            OkHttpClient.Builder()
+                .dns(fallback)
+                .addInterceptor(marker)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .callTimeout(60, TimeUnit.SECONDS)
+                .build()
 
-        val configured = buildRequestClient(
-            baseClient = baseClient,
-            readTimeoutMillis = 5_000,
-            callTimeoutMillis = null,
-            followRedirects = false,
-            targetHost = "target.example",
-            dnsAddresses = listOf(address(1, 1, 1, 1)),
-            interceptorToRemove = marker,
-        )
+        val configured =
+            buildRequestClient(
+                baseClient = baseClient,
+                readTimeoutMillis = 5_000,
+                callTimeoutMillis = null,
+                followRedirects = false,
+                targetHost = "target.example",
+                dnsAddresses = listOf(address(1, 1, 1, 1)),
+                interceptorToRemove = marker,
+            )
 
         assertEquals(5_000, configured.readTimeoutMillis)
         assertEquals(60_000, configured.callTimeoutMillis)
@@ -181,28 +206,30 @@ class AnalyzeUrlNetworkOptionsTest {
         val marker = Interceptor { chain -> chain.proceed(chain.request()) }
         val baseClient = OkHttpClient.Builder().addInterceptor(marker).build()
 
-        val configured = buildRequestClient(
-            baseClient = baseClient,
-            readTimeoutMillis = 40_000,
-            callTimeoutMillis = 10_000,
-            followRedirects = null,
-            targetHost = null,
-            dnsAddresses = null,
-            interceptorToRemove = marker,
-        )
+        val configured =
+            buildRequestClient(
+                baseClient = baseClient,
+                readTimeoutMillis = 40_000,
+                callTimeoutMillis = 10_000,
+                followRedirects = null,
+                targetHost = null,
+                dnsAddresses = null,
+                interceptorToRemove = marker,
+            )
 
         assertEquals(40_000, configured.readTimeoutMillis)
         assertEquals(10_000, configured.callTimeoutMillis)
         assertFalse(configured.interceptors.contains(marker))
-        val constructorConfigured = buildRequestClient(
-            baseClient = baseClient,
-            readTimeoutMillis = 40_000,
-            callTimeoutMillis = 10_000,
-            followRedirects = null,
-            targetHost = null,
-            dnsAddresses = null,
-            interceptorToRemove = null,
-        )
+        val constructorConfigured =
+            buildRequestClient(
+                baseClient = baseClient,
+                readTimeoutMillis = 40_000,
+                callTimeoutMillis = 10_000,
+                followRedirects = null,
+                targetHost = null,
+                dnsAddresses = null,
+                interceptorToRemove = null,
+            )
         assertTrue(constructorConfigured.interceptors.contains(marker))
         assertSame(baseClient, buildRequestClient(baseClient, null, null, null, null, null))
         assertEquals(80_000L, derivedCallTimeoutMillis(40_000))

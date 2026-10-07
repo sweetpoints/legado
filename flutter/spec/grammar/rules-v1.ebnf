@@ -1,0 +1,22 @@
+(* Reference grammar for the implemented delimiter scanner, not an AST parser.
+   JS at the beginning is opaque; delimiters in quotes/brackets are ignored.
+   Atom payloads are delegated to CSS, JSONPath, XPath, Dart RegExp or V8. *)
+rule = opaque_js | fallback ;
+opaque_js = "@js:", js_payload ;
+fallback = concatenation, { "||", concatenation } ;
+concatenation = replacement, { "&&", replacement } ;
+replacement = atom, [ "##", regex_payload, "##", replacement_payload ] ;
+atom = css | json | xpath | regex | nested_js | legacy | bare_css ;
+legacy = "@legacy:", legacy_html_payload ;
+css = "@css:", css_selector, [ "@", output_name ] ;
+json = "@json:", jsonpath_payload | "$", jsonpath_tail ;
+xpath = "@xpath:", xpath_payload ;
+regex = "@regex:", regex_payload ;
+nested_js = "@js:", js_payload ;
+bare_css = css_selector, [ "@", output_name ] ;
+(* CSS projection uses the last top-level unescaped @; @ in quotes,
+   attribute brackets, function parentheses or escaped form is selector text.
+   Prefix matching is case-insensitive. output_name is case-sensitive.
+   Empty css_selector selects the current root. Rule parentheses do not add
+   grouping syntax; they belong to a selector/payload. Whitespace trim occurs
+   on an atom after combination parsing, not before initial JS dispatch. *)

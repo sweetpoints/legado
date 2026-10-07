@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -675,7 +676,29 @@ class SourceImportFilterUiTest {
             val menuName = if (rss) RssImportMenu.valueOf(option.name).name else option.name
             compose.onNodeWithTag("$prefix-menu").performClick()
             compose.onNodeWithTag("$prefix-menu-$menuName").performClick()
-            awaitReady()
+            // A focusable DropdownMenu owns a separate Window. Its dismissal and Android
+            // layout/draw and exit animation must settle before checking import controls.
+            // await advances frames until every menu item disappears; window focus alone
+            // does not establish that this transition has completed.
+            compose.waitForIdle()
+            val menuNames = if (rss) RssImportMenu.entries.map { it.name }
+                else BookImportMenu.entries.map { it.name }
+            await("Import dropdown did not dismiss after $menuName: rss=$rss") {
+                menuNames.all { name ->
+                    compose.onAllNodes(androidx.compose.ui.test.hasTestTag("$prefix-menu-$name"))
+                        .fetchSemanticsNodes().isEmpty()
+                }
+            }
+            await("Import menu action did not return to an interactive dialog: rss=$rss") {
+                main {
+                    parent.dialog?.isShowing == true &&
+                        parent.view?.isShown == true &&
+                        parent.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        (if (rss) feed.state.value.interactive else book.state.value.interactive)
+                }
+            }
+            compose.onNodeWithTag("$prefix-menu").assertIsDisplayed().assertIsEnabled()
+            compose.onNodeWithTag("$prefix-search").assertIsDisplayed().assertIsEnabled()
         }
 
         fun open(position: Int, originalIndex: Int): CodeDialog {

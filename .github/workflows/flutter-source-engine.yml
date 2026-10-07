@@ -1,0 +1,171 @@
+name: Flutter source engine
+
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-source-engine.yml'
+      - '.github/actions/setup-android/**'
+      - '.github/scripts/prepare-pdf-zoom-fixture.py'
+      - '.github/scripts/prepare-reported-rss-fixture.py'
+      - 'app/src/flutterSource/**'
+      - 'app/src/main/java/io/legado/app/model/webBook/**'
+      - 'app/src/main/java/io/legado/app/model/sourceEngine/**'
+      - 'app/src/main/java/io/legado/app/ui/book/source/**'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/assets/**'
+      - 'app/src/main/java/io/legado/app/model/analyzeRule/**'
+      - 'app/src/main/java/io/legado/app/model/SharedJsScope.kt'
+      - 'app/src/main/java/io/legado/app/help/**'
+      - 'app/src/main/java/io/legado/app/ui/replace/**'
+      - 'app/src/main/java/io/legado/app/service/HttpReadAloudService.kt'
+      - 'app/src/main/java/io/legado/app/service/CheckSourceService.kt'
+      - 'app/src/main/java/io/legado/app/web/mcp/**'
+      - 'app/src/main/java/io/legado/app/model/jsSource/**'
+      - 'app/src/main/java/io/legado/app/model/login/**'
+      - 'app/src/main/java/io/legado/app/data/entities/**'
+      - 'app/proguard-rules.pro'
+      - 'app/build.gradle.kts'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-v8:
+    runs-on: ubuntu-24.04
+    # Download the fixed SDKs and compile only the application bridge.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify official build contracts
+        run: python3 -m unittest discover -s flutter/tool/v8 -p 'test_*.py'
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install pinned Android NDK sysroot
+        run: sdkmanager "ndk;30.0.15729638"
+      - name: Link both Android application bridges against pinned released SDKs
+        run: |
+          python3 flutter/tool/v8/prepare_sdk.py --target android-arm64
+          python3 flutter/tool/v8/prepare_sdk.py --target android-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-v8-android
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  conformance:
+    needs: android-v8
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: official-v8-android
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
+      - name: Link macOS ARM64 application bridge against pinned released SDK
+        run: python3 flutter/tool/v8/prepare_sdk.py --target macos-arm64
+      - name: Verify Dart, native V8, and bridge contracts
+        run: bash flutter/tool/check.sh
+      - name: Verify AAR preparation contracts
+        run: python3 -m unittest discover -s flutter/tool -p 'test_*android*.py'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Prepare verified Flutter Android AAR repository
+        run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Prepare pinned UI regression test assets
+        run: |
+          python3 .github/scripts/prepare-pdf-zoom-fixture.py
+          python3 .github/scripts/prepare-reported-rss-fixture.py
+      - name: Compile Android integration with mandatory default engine
+        run: ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest --console=plain --max-workers=2
+
+  android-runtime:
+    needs: android-v8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      # The generated Flutter module otherwise requests 8 GiB heap / 4 GiB metaspace.
+      SOURCE_ENGINE_AAR_GRADLE_JVMARGS: '-Xmx2g -Xms256m -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: official-v8-android
+          path: flutter/packages/source_v8/.cache/self-built/c45871fec706a6e7b715e607065bb4578b23ce9f
+      - name: Bound App Gradle memory while leaving room for the emulator
+        run: |
+          set -euo pipefail
+          memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+          heap=2g
+          if (( memory_kib >= 14 * 1024 * 1024 )); then heap=4g; fi
+          echo "GRADLE_OPTS=-Dorg.gradle.jvmargs=\"-XX:+UseParallelGC -Xmx${heap} -Xms256m -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\" -Dorg.gradle.workers.max=2" >> "$GITHUB_ENV"
+          echo "CI App Gradle heap: $heap; AAR heap: 2g; max workers: 2"
+      - name: Verify AAR CI memory override contract
+        run: python3 -m unittest discover -s flutter/tool -p 'test_prepare_android_memory.py'
+      - name: Verify downloaded official Android native provenance
+        run: python3 flutter/tool/verify-android-aar.py --native-only
+      - name: Verify strict instrumentation report contracts
+        run: python3 -m unittest discover -s flutter/tool -p 'test_*instrumentation*.py'
+      - name: Prepare verified Flutter Android AARs
+        run: bash flutter/tool/prepare-android-aar.sh all
+      - name: Prepare pinned UI regression test assets
+        run: |
+          python3 .github/scripts/prepare-pdf-zoom-fixture.py
+          python3 .github/scripts/prepare-reported-rss-fixture.py
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run all Flutter/V8 contracts on Android 16 x86_64
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 36
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ANDROID_SERIAL=emulator-5554 bash flutter/tool/test-android.sh
+      - name: Upload Flutter/V8 device evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: flutter-v8-android-api36-x64
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn

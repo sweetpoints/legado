@@ -1,8 +1,9 @@
 package io.legado.app.model.localBook
 
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
+
 import androidx.annotation.Keep
-import com.script.ScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -576,17 +577,33 @@ class TextFile(private var book: Book) {
     }
 
     private fun evalJs(content: String, jsStr: String, index: Int, prevTitle: String?, prevLength: Int = -1, toc: ArrayList<BookChapter>? = null):String {
-        return RhinoScriptEngine.run {
-            val bindings = ScriptBindings()
-            bindings["result"] = content
-            bindings["book"] = replaceBook
-            bindings["index"] = index
-            bindings["prevTitle"] = prevTitle
-            bindings["prevLength"] = prevLength
-            bindings["lastVolumeTitle"] = lastVolumeTitle.value
-            bindings["java"] = JsExtensions(lastVolumeTitle, toc)
-            eval(jsStr, bindings)
-        }.toString()
+        val extensions = JsExtensions(lastVolumeTitle, toc)
+        val callbacks = SourceHostCallbacks { method, arguments ->
+            require(method == "localBook.putVolume" && arguments.size == 1 && arguments[0] is String) {
+                "Unsupported local-book script callback: $method"
+            }
+            extensions.putVolume(arguments[0] as String)
+            null
+        }
+        val script = """
+            var java = Object.assign(Object.create(null), globalThis.java || {}, {
+                putVolume: title => __sourceHostSync('localBook.putVolume', [String(title)])
+            });
+            String(eval(localBookScript));
+        """.trimIndent()
+        return V8ScriptExecutor.evaluateBlocking(
+            script,
+            mapOf(
+                "localBookScript" to jsStr,
+                "result" to content,
+                "book" to io.legado.app.model.sourceEngine.DartSourceEngine.jsonObject(replaceBook),
+                "index" to index,
+                "prevTitle" to prevTitle,
+                "prevLength" to prevLength,
+                "lastVolumeTitle" to lastVolumeTitle.value,
+            ),
+            coroutineContext = callbacks,
+        ).toString()
     }
 
 

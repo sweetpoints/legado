@@ -1,14 +1,10 @@
 package io.legado.app
 
-import com.script.rhino.RhinoScriptEngine
-import com.script.rhino.RhinoWrapFactory
 import io.legado.app.data.entities.HttpTTS
-import io.legado.app.data.entities.RssSource
 import io.legado.app.help.http.TRANSPARENT_ACCEPT_ENCODING
 import io.legado.app.help.http.canUseTransparentDecompression
 import io.legado.app.help.http.decompressResponse
 import io.legado.app.help.parseJsRequestHeaders
-import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.ui.book.read.config.hasLoginCapability
 import io.legado.app.ui.book.read.config.shouldOpenLoginOnSelection
@@ -29,8 +25,6 @@ import okio.BufferedSource
 import okio.ByteString.Companion.decodeHex
 import okio.ForwardingSource
 import okio.buffer
-import org.htmlunit.corejs.javascript.NativeObject
-import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,146 +35,25 @@ import org.junit.Test
 class SourceCompatibilityTest {
 
     @Test
-    fun nativeObjectUsesJsonPathRules() {
+    fun decodedJsonObjectUsesJsonPathRules() {
         val content =
-            RhinoScriptEngine.eval(
-                "({book:{title:'Nested'},items:[{name:'First'},{name:'Second'}]})"
+            mapOf(
+                "book" to mapOf("title" to "Nested"),
+                "items" to listOf(mapOf("name" to "First"), mapOf("name" to "Second")),
             )
-        assertTrue(content is NativeObject)
-        val analyzeRule = AnalyzeRule().setContent(content)
-
-        assertEquals(
-            "Nested",
-            analyzeRule.getString(analyzeRule.splitSourceRule("$.book.title")),
-        )
+        val rule = AnalyzeRule().setContent(content)
+        assertEquals("Nested", rule.getString(rule.splitSourceRule("$.book.title")))
         assertEquals(
             listOf("First", "Second"),
-            analyzeRule.getStringList(analyzeRule.splitSourceRule("$.items[*].name")),
+            rule.getStringList(rule.splitSourceRule("$.items[*].name")),
         )
-        assertEquals(
-            emptyList<String>(),
-            analyzeRule.getStringList(analyzeRule.splitSourceRule("$.missing[*]")),
-        )
+        assertEquals(emptyList<String>(), rule.getStringList(rule.splitSourceRule("$.missing[*]")))
     }
 
     @Test
     fun escapedJsonPathLikeKeyKeepsDirectAccess() {
-        val content = RhinoScriptEngine.eval("({'$.literal':'plain'})")
-        val analyzeRule = AnalyzeRule().setContent(content)
-
-        assertEquals(
-            "plain",
-            analyzeRule.getString(analyzeRule.splitSourceRule("@@$.literal")),
-        )
-    }
-
-    @Test
-    fun jsoupElementsKeepLegacyAttributeAccessFromJavaBindings() {
-        val value =
-            RhinoScriptEngine.eval(
-                """
-                const elements = java.getElements('#video-artist-name');
-                const summary = [
-                    elements.attr('href'),
-                    elements.text(),
-                    elements.html(),
-                    elements.length,
-                    elements[0].tagName()
-                ];
-                elements[0] = 'replacement';
-                summary.push(String(elements[0]));
-                summary.join('|');
-                """
-                    .trimIndent(),
-                com.script.ScriptBindings().apply {
-                    this["java"] = JsoupElementsBridge()
-                },
-            )
-
-        assertEquals("/artist/1|Artist|Artist|1|a|replacement", value)
-    }
-
-    @Test
-    fun ordinaryListSubclassesKeepExistingRuntimeMethods() {
-        val value =
-            RhinoScriptEngine.eval(
-                "java.getValues().legacyValue()",
-                com.script.ScriptBindings().apply {
-                    this["java"] = DeclaredListBridge()
-                },
-            )
-
-        assertEquals("legacy", value)
-    }
-
-    @Test
-    fun jsEncodeOverloadsRemainCallableInsideWithAndEvalScopes() {
-        val value =
-            RhinoScriptEngine.eval(
-                """
-                const directType = typeof java.createSymmetricCrypto;
-                const directCall = java.createSymmetricCrypto(
-                    'AES/CBC/PKCS5Padding',
-                    '0123456789abcdef',
-                    'abcdef0123456789'
-                ) != null;
-                const evalType = (function() {
-                    with (java) {
-                        return eval('typeof createSymmetricCrypto');
-                    }
-                })();
-                const evalCall = (function() {
-                    with (java) {
-                        return eval("createSymmetricCrypto('AES/CBC/PKCS5Padding', " +
-                            "'0123456789abcdef', 'abcdef0123456789') != null");
-                    }
-                })();
-                [directType, directCall, evalType, evalCall].join(':');
-                """
-                    .trimIndent(),
-                com.script.ScriptBindings().apply {
-                    this["java"] = AnalyzeRule()
-                },
-            )
-
-        assertEquals("function:true:function:true", value)
-    }
-
-    @Test
-    fun rssSourceCryptoMethodsRemainCallableThroughNestedEval() {
-        RhinoWrapFactory.register(RssSource::class.java, NativeBaseSource.factory)
-        val source =
-            RssSource(
-                sourceUrl = "https://example.com",
-                sourceName = "compatibility-test",
-            )
-        val value =
-            RhinoScriptEngine.eval(
-                """
-                const nested = (function() {
-                    with (java) {
-                        return eval("eval(\"var crypto = createSymmetricCrypto; " +
-                            "[typeof createSymmetricCrypto, typeof crypto, " +
-                            "crypto('AES/CBC/PKCS5Padding', '0123456789abcdef', " +
-                            "'abcdef0123456789') != null].join(':')\")");
-                    }
-                })();
-                const method = java['create' + 'SymmetricCrypto'];
-                const dynamic = [typeof method, method.call(
-                    java,
-                    'AES/CBC/PKCS5Padding',
-                    '0123456789abcdef',
-                    'abcdef0123456789'
-                ) != null].join(':');
-                nested + '|' + dynamic;
-                """
-                    .trimIndent(),
-                com.script.ScriptBindings().apply {
-                    this["java"] = source
-                },
-            )
-
-        assertEquals("function:function:true|function:true", value)
+        val rule = AnalyzeRule().setContent(mapOf("$.literal" to "plain"))
+        assertEquals("plain", rule.getString(rule.splitSourceRule("@@$.literal")))
     }
 
     @Test
@@ -192,10 +65,6 @@ class SourceCompatibilityTest {
         assertEquals(
             mapOf("X-Map" to "value"),
             parseJsRequestHeaders(mapOf("X-Map" to "value")),
-        )
-        assertEquals(
-            mapOf("X-Rhino" to "value"),
-            parseJsRequestHeaders(RhinoScriptEngine.eval("({'X-Rhino':'value'})")),
         )
         assertTrue(parseJsRequestHeaders(null).isEmpty())
         assertThrows(IllegalArgumentException::class.java) {
@@ -338,26 +207,5 @@ class SourceCompatibilityTest {
         override fun contentLength(): Long = length
 
         override fun source(): BufferedSource = bufferedSource
-    }
-
-    class JsoupElementsBridge {
-        @Suppress("UNCHECKED_CAST")
-        fun getElements(rule: String): List<Any> {
-            return Jsoup.parse("<a id='video-artist-name' href='/artist/1'>Artist</a>").select(rule)
-                as List<Any>
-        }
-    }
-
-    class DeclaredListBridge {
-        fun getValues(): List<String> = LegacyList()
-    }
-
-    class LegacyList : ArrayList<String>() {
-        init {
-            add("first")
-            add("second")
-        }
-
-        fun legacyValue(): String = "legacy"
     }
 }

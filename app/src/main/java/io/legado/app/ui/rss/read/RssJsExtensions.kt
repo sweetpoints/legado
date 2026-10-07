@@ -3,7 +3,6 @@ package io.legado.app.ui.rss.read
 import android.webkit.JavascriptInterface
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
@@ -15,6 +14,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.help.JsExtensions
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ReadBook
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.model.VideoPlay
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
@@ -170,19 +170,30 @@ open class RssJsExtensions(
                             }
                             return@launch
                         }
-                        val startHtml = toSource.startHtml?.let {
-                            when {
-                                it.startsWith("@js:") -> runScriptWithContext {
-                                    toSource.evalJS(it.substring(4)).toString()
-                                }
+                        val startHtml =
+                            toSource.startHtml?.let {
+                                when {
+                                    it.startsWith("@js:", true) ->
+                                        V8ScriptExecutor.evaluate(
+                                                it.substring(4),
+                                                source = toSource,
+                                            )
+                                            .toString()
 
-                                it.startsWith("<js>") -> runScriptWithContext {
-                                    toSource.evalJS(it.substring(4, it.lastIndexOf("<"))).toString()
-                                }
+                                    it.startsWith("<js>", true) -> {
+                                        require(it.endsWith("</js>", true)) {
+                                            "RSS startHtml is missing </js>"
+                                        }
+                                        V8ScriptExecutor.evaluate(
+                                                it.substring(4, it.length - 5),
+                                                source = toSource,
+                                            )
+                                            .toString()
+                                    }
 
-                                else -> it
+                                    else -> it
+                                }
                             }
-                        }
                         if (startHtml.isNullOrBlank()) {
                             RssSortActivity.start(activity, null, sourceUrl)
                         } else {

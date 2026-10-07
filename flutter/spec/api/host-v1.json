@@ -1,0 +1,370 @@
+{
+  "specVersion": 1,
+  "namespace": "source",
+  "dispatchPrefix": "",
+  "promiseBased": true,
+  "methods": [
+    {
+      "name": "net.get",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "net.request",
+      "arguments": [
+        {
+          "name": "options",
+          "type": "RequestOptions"
+        }
+      ],
+      "returns": "Promise<NetworkResponse>"
+    },
+    {
+      "name": "cookies.get",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "variables.get",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<JsonValue|null>"
+    },
+    {
+      "name": "variables.put",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "JsonValue"
+        }
+      ],
+      "returns": "Promise<JsonValue>"
+    },
+    {
+      "name": "encoding.base64Encode",
+      "arguments": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "encoding.base64Decode",
+      "arguments": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string>"
+    },
+    {
+      "name": "parse.getString",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getStringList",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string[]>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getElement",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<string|JsonValue|null>",
+      "nestedJavaScript": false
+    },
+    {
+      "name": "parse.getElements",
+      "arguments": [
+        {
+          "name": "rule",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "JsonValue"
+        },
+        {
+          "name": "isUrl",
+          "type": "boolean = false"
+        },
+        {
+          "name": "baseUrl",
+          "type": "absolute URL?"
+        }
+      ],
+      "returns": "Promise<Array<string|JsonValue>>",
+      "nestedJavaScript": false
+    }
+  ],
+  "types": {
+    "RequestOptions": {
+      "url": "string",
+      "method": "string = GET",
+      "headers": "Record<string,string>?; explicit replaces defaults",
+      "body": "string?",
+      "timeoutMs": "integer = 30000",
+      "followRedirects": "boolean = true",
+      "inheritHeaders": "boolean = true; only used when headers absent",
+      "charset": "string?; override request-body encoding and response decoding"
+    },
+    "NetworkResponse": {
+      "url": "string",
+      "status": "integer",
+      "headers": "Record<string,string>",
+      "body": "string",
+      "message": "string",
+      "bytes": "integer[0..255][]",
+      "multiHeaders": "Record<string,string[]>",
+      "cookies": "string[] Set-Cookie"
+    },
+    "JsonValue": "null | boolean | number | string | JsonValue[] | Record<string,JsonValue>"
+  },
+  "scriptEntries": {
+    "search": "search",
+    "explore": "explore",
+    "info": "getBookInfo",
+    "toc": "getChapters",
+    "content": "getContent"
+  },
+  "platformMethods": [
+    {
+      "name": "storage.read",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<string|null>",
+      "requires": "SourcePlatform"
+    },
+    {
+      "name": "storage.write",
+      "arguments": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string|null"
+        }
+      ],
+      "returns": "Promise<null>",
+      "requires": "SourcePlatform"
+    },
+    {
+      "name": "browser.open",
+      "arguments": [
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "type": "string?"
+        }
+      ],
+      "returns": "Promise<{url:string,body:string,cookie?:string,cookies?:string[]}|null>",
+      "requires": "Android Activity browser adapter",
+      "taskBinding": "source_host injects current task ID",
+      "cookieImport": "Set-Cookie values preferred; Cookie-header fallback scoped to host/response directory/HTTPS"
+    }
+  ],
+  "sourceMetadata": {
+    "maxConcurrentRequests": {
+      "type": "integer",
+      "default": 4,
+      "minimum": 1
+    },
+    "requestIntervalMs": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0
+    }
+  },
+  "session": {
+    "export": "exportSession(sourceId)",
+    "import": "importSession(sourceId,{variables,cookies})",
+    "automaticCorePersistence": false
+  },
+  "sourceHeaders": {
+    "default": {},
+    "inheritFor": [
+      "stage HTTP",
+      "net.get",
+      "net.request without explicit headers"
+    ],
+    "explicitHeaders": "replace entire mapping",
+    "reject": "Invalid header name or CR/LF value"
+  },
+  "utilityMethods": {
+    "requires": "SourceUtilityHost adapter",
+    "methods": {
+      "encoding.base64EncodeWithFlags": "text, flags? -> string",
+      "encoding.base64DecodeWithCharset": "text, charset? -> string|null",
+      "encoding.base64DecodeWithFlags": "text, flags? -> string|null",
+      "encoding.base64DecodeBytes": "text, flags? -> integer[]|null",
+      "encoding.strToBytes": "text, charset? -> integer[]",
+      "encoding.bytesToStr": "bytes, charset? -> string",
+      "encoding.hexEncode": "text -> string",
+      "encoding.hexDecode": "hex -> string",
+      "encoding.hexDecodeBytes": "hex -> integer[]",
+      "encoding.formEncode": "text, charset? -> string",
+      "encoding.formDecode": "text, charset? -> string",
+      "crypto.md5": "text -> string",
+      "crypto.md5Short": "text -> string",
+      "crypto.digestHex": "text, algorithm -> string",
+      "crypto.digestBase64": "text, algorithm -> string",
+      "encoding.unescapeHtml4": "text string -> string; single-pass semicolon-required HTML4 252 entities; not HTML5"
+    },
+    "allReturns": "Promise"
+  },
+  "httpRedirects": {
+    "rewriteToGet": "POST on 301/302; any method on303",
+    "removeHeadersCaseInsensitive": [
+      "Content-Length",
+      "Transfer-Encoding",
+      "Content-Type",
+      "Content-Encoding",
+      "Content-Language",
+      "Content-Location"
+    ],
+    "preserveBodyAndHeadersOn": [
+      307,
+      308
+    ],
+    "crossOriginRemoveHeaders": [
+      "Authorization",
+      "Cookie"
+    ]
+  },
+  "stageBodyEncoding": {
+    "default": "raw",
+    "allowed": [
+      "raw",
+      "legacyFormUtf8"
+    ],
+    "legacyFormUtf8": "expand known placeholders before Java UTF8 per-component form encoding; input guard when this encoding or bodyTemplateMode legacyJsonString; only strings, booleans and JS-safe integers; unsafe chars/types fail before request",
+    "invalidMode": "invalid_source",
+    "unsafeTemplateInput": "legacy_body_template_requires_migration",
+    "nullInput": "missing_input",
+    "dartHelper": "encodeLegacyFormUtf8Body"
+  },
+  "stageBodyTemplateMode": {
+    "default": "raw",
+    "allowed": [
+      "raw",
+      "legacyJsonString"
+    ],
+    "legacyJsonString": "legacy JSON options string-body template input guard even with bodyEncoding raw; no implicit form encoding",
+    "invalidMode": "invalid_source"
+  },
+  "legacyPageTemplates": {
+    "default": false,
+    "arithmetic": "page +/- canonical decimal integer with ASCII spaces; positive JS-safe page, safe offset/result; result may be zero or negative",
+    "urlChoices": "comma alternatives;page-1 index;overflow page uses last;Java trim",
+    "bodyChoices": false,
+    "error": "legacy_page_requires_migration",
+    "dartHelper": "expandLegacyPageTemplate(String,Map<String,Object?>,{bool urlChoices=false})",
+    "choiceTemplateInput": "any original {{...}} inside choices requires manual migration",
+    "malformedChoices": "nested or incomplete angles rejected",
+    "dynamicAngleInput": "flagged URL placeholder: legacy_page_requires_migration; legacy body provenance: legacy_body_template_requires_migration",
+    "importMarker": "all legacy URLs with known input placeholders, arithmetic or choices; modern default remains false"
+  },
+  "legacyRequestAdapter": {
+    "stageField": "legacyRequestInput: null|exploreUrl",
+    "constructor": "SourceEngine(requestAdapter:...)",
+    "type": "SourceStage Function(SourceDefinition,SourceStage,Map<String,Object?>)",
+    "publicImplementation": "source_legacy.adaptLegacyRequest",
+    "registeredByDefault": [
+      "source_host",
+      "source_tools"
+    ],
+    "runs": "synchronously before stage templating; returned stage must clear legacyRequestInput",
+    "missingOrUnresolved": "legacy_request_adapter_required",
+    "unsupportedSelectedRequest": "legacy_request_requires_migration"
+  },
+  "androidAuxiliaryProtocol": {
+    "evaluate": "protocolVersion1/taskId/sourceJson/script/JSON bindings/ephemeral strict boolean defaultfalse => {value}",
+    "ephemeral": "fresh engine, finally close, zero sessionStore reads/writes, no cache entry",
+    "migrate": "offline legacy source preview; executed=false verified=false; no engine created",
+    "bookSourceLegacyEntryError": "engine_migration_required",
+    "bindingConversionError": "engine_bindings_requires_migration"
+  }
+}

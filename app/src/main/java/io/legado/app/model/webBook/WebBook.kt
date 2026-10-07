@@ -1,27 +1,35 @@
 package io.legado.app.model.webBook
 
-import io.legado.app.constant.AppLog
+import com.google.gson.JsonObject
+import io.legado.app.R
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.exception.ContentEmptyException
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
+import io.legado.app.help.book.isOnLineTxt
+import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.http.StrResponse
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.help.source.getBookType
+import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
-import io.legado.app.model.ExploreInfoMapStore.exploreInfoMapList
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
-import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.model.analyzeRule.RuleData
-import io.legado.app.model.jsSource.JsSourceBook
+import io.legado.app.model.jsSource.JsSourceMarshaller
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.utils.GSON
+import io.legado.app.utils.StringUtils.wordCountFormat
+import io.legado.app.utils.isTrue
+import java.math.BigDecimal
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -29,9 +37,64 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import splitties.init.appCtx
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
+
+    private fun usesLegacyDartFields(source: BookSource): Boolean {
+        val definition =
+            source.bookSourceComment
+                .orEmpty()
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("@source:v1 ") }
+                ?.removePrefix("@source:v1 ") ?: return true
+        val metadata = GSON.fromJson(definition, JsonObject::class.java).getAsJsonObject("metadata")
+        if (metadata?.get("legacyOriginal")?.isJsonObject == true) return true
+        val legacy = metadata?.get("legacy")
+        return legacy != null &&
+            legacy.isJsonPrimitive &&
+            legacy.asJsonPrimitive.isBoolean &&
+            legacy.asBoolean
+    }
+
+    private fun canRenameDartBook(source: BookSource): Boolean {
+        if (source.isJsSource()) return true
+        if (!usesLegacyDartFields(source)) return true
+        val definition =
+            source.bookSourceComment
+                .orEmpty()
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("@source:v1 ") }
+                ?.removePrefix("@source:v1 ")
+        if (definition != null) {
+            val original =
+                GSON.fromJson(definition, JsonObject::class.java)
+                    .getAsJsonObject("metadata")
+                    ?.get("legacyOriginal")
+            if (original?.isJsonObject == true) {
+                val permission =
+                    original.asJsonObject.getAsJsonObject("ruleBookInfo")?.get("canReName")
+                return permission?.isJsonPrimitive == true && !permission.asString.isBlank()
+            }
+        }
+        return !source.getBookInfoRule().canReName.isNullOrBlank()
+    }
+
+    private fun normalizeDartBookFields(
+        source: BookSource,
+        row: Map<String, Any?>,
+    ): Map<String, Any?> {
+        if (!usesLegacyDartFields(source)) return row
+        return row.toMutableMap().apply {
+            (row["name"] as? String)?.let { this["name"] = BookHelp.formatBookName(it) }
+            (row["author"] as? String)?.let { this["author"] = BookHelp.formatBookAuthor(it) }
+            (row["wordCount"] as? String)?.let { this["wordCount"] = wordCountFormat(it) }
+            (row["kind"] as? String)?.let { this["kind"] = it.replace("\n", ",") }
+        }
+    }
 
     /** 搜索 */
     fun searchBook(
@@ -56,63 +119,26 @@ object WebBook {
         shouldBreak: ((size: Int) -> Boolean)? = null,
     ): ArrayList<SearchBook> =
         withContext(SuppressSourceNavigation) {
-            if (bookSource.isJsSource()) {
-                return@withContext JsSourceBook.searchAwait(bookSource, key, page, filter)
-            }
-            val searchUrl = bookSource.searchUrl
-            if (searchUrl.isNullOrBlank()) {
-                throw NoStackTraceException("搜索url不能为空")
-            }
-            val ruleData = RuleData()
-            val analyzeUrl =
-                AnalyzeUrl(
-                    mUrl = searchUrl,
-                    key = key,
-                    page = page,
-                    baseUrl = bookSource.bookSourceUrl,
-                    source = bookSource,
-                    ruleData = ruleData,
-                    coroutineContext = currentCoroutineContext(),
+            val rows =
+                DartSourceEngine.execute(
+                    bookSource,
+                    "search",
+                    mapOf("key" to key, "page" to (page ?: 1)),
                 )
-            val checkJs = bookSource.loginCheckJs
-            val res =
-                kotlin
-                    .runCatching {
-                        analyzeUrl.getStrResponseAwait().let {
-                            if (!checkJs.isNullOrBlank()) { // 检测书源是否已登录
-                                analyzeUrl.evalJS(checkJs, it) as StrResponse
-                            } else {
-                                it
+            return@withContext ArrayList(
+                rows
+                    .map { row ->
+                        GSON.fromJson(
+                                GSON.toJson(normalizeDartBookFields(bookSource, row)),
+                                SearchBook::class.java,
+                            )
+                            .apply {
+                                origin = bookSource.bookSourceUrl
+                                originName = bookSource.bookSourceName
+                                type = bookSource.getBookType()
                             }
-                        }
                     }
-                    .getOrElse { throwable ->
-                        if (!checkJs.isNullOrBlank()) {
-                            val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                            try {
-                                (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                                    if (it.code() == 500) {
-                                        throw throwable
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                throw throwable
-                            }
-                        } else {
-                            throw throwable
-                        }
-                    }
-            checkRedirect(bookSource, res)
-            BookList.analyzeBookList(
-                bookSource = bookSource,
-                ruleData = ruleData,
-                analyzeUrl = analyzeUrl,
-                baseUrl = res.url,
-                body = res.body,
-                isSearch = true,
-                isRedirect = res.raw.priorResponse?.isRedirect == true,
-                filter = filter,
-                shouldBreak = shouldBreak,
+                    .filter { filter?.invoke(it.name, it.author, it.kind) != false }
             )
         }
 
@@ -134,58 +160,23 @@ object WebBook {
         url: String,
         page: Int? = 1,
     ): ArrayList<SearchBook> {
-        if (bookSource.isJsSource()) {
-            return JsSourceBook.exploreAwait(bookSource, url, page)
-        }
-        val ruleData = RuleData()
-        val sourceUrl = bookSource.bookSourceUrl
-        val exploreInfoMap = exploreInfoMapList[sourceUrl]
-        val analyzeUrl =
-            AnalyzeUrl(
-                mUrl = url,
-                page = page,
-                baseUrl = sourceUrl,
-                source = bookSource,
-                ruleData = ruleData,
-                coroutineContext = currentCoroutineContext(),
-                infoMap = exploreInfoMap,
-            )
-        val checkJs = bookSource.loginCheckJs
-        val res =
-            kotlin
-                .runCatching {
-                    analyzeUrl.getStrResponseAwait().let {
-                        if (!checkJs.isNullOrBlank()) { // 检测书源是否已登录
-                            analyzeUrl.evalJS(checkJs, it) as StrResponse
-                        } else {
-                            it
+        return ArrayList(
+            DartSourceEngine.execute(
+                    bookSource,
+                    "explore",
+                    mapOf("url" to url, "exploreUrl" to url, "page" to (page ?: 1)),
+                )
+                .map {
+                    GSON.fromJson(
+                            GSON.toJson(normalizeDartBookFields(bookSource, it)),
+                            SearchBook::class.java,
+                        )
+                        .apply {
+                            origin = bookSource.bookSourceUrl
+                            originName = bookSource.bookSourceName
+                            type = bookSource.getBookType()
                         }
-                    }
                 }
-                .getOrElse { throwable ->
-                    if (!checkJs.isNullOrBlank()) {
-                        val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                        try {
-                            (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                                if (it.code() == 500) {
-                                    throw throwable
-                                }
-                            }
-                        } catch (_: Throwable) {
-                            throw throwable
-                        }
-                    } else {
-                        throw throwable
-                    }
-                }
-        checkRedirect(bookSource, res)
-        return BookList.analyzeBookList(
-            bookSource = bookSource,
-            ruleData = ruleData,
-            analyzeUrl = analyzeUrl,
-            baseUrl = res.url,
-            body = res.body,
-            isSearch = false,
         )
     }
 
@@ -207,66 +198,51 @@ object WebBook {
         book: Book,
         canReName: Boolean = true,
     ): Book {
-        if (bookSource.isJsSource()) {
-            return JsSourceBook.getBookInfoAwait(bookSource, book, canReName)
-        }
         book.removeAllBookType()
         book.addType(bookSource.getBookType())
-        if (!book.infoHtml.isNullOrEmpty()) {
-            BookInfo.analyzeBookInfo(
-                bookSource = bookSource,
-                book = book,
-                baseUrl = book.bookUrl,
-                redirectUrl = book.bookUrl,
-                body = book.infoHtml,
-                canReName = canReName,
+
+        val fields =
+            normalizeDartBookFields(
+                bookSource,
+                DartSourceEngine.execute(
+                        bookSource,
+                        "info",
+                        DartSourceEngine.jsonObject(book) +
+                            mapOf("book" to DartSourceEngine.jsonObject(book)),
+                    )
+                    .single(),
             )
-        } else {
-            val analyzeUrl =
-                AnalyzeUrl(
-                    mUrl = book.bookUrl,
-                    baseUrl = bookSource.bookSourceUrl,
-                    source = bookSource,
-                    ruleData = book,
-                    coroutineContext = currentCoroutineContext(),
-                )
-            val checkJs = bookSource.loginCheckJs
-            val res =
-                kotlin
-                    .runCatching {
-                        analyzeUrl.getStrResponseAwait().let {
-                            if (!checkJs.isNullOrBlank()) { // 检测书源是否已登录
-                                analyzeUrl.evalJS(checkJs, it) as StrResponse
-                            } else {
-                                it
-                            }
-                        }
-                    }
-                    .getOrElse { throwable ->
-                        if (!checkJs.isNullOrBlank()) {
-                            val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                            try {
-                                (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                                    if (it.code() == 500) {
-                                        throw throwable
-                                    }
-                                }
-                            } catch (_: Throwable) {
-                                throw throwable
-                            }
-                        } else {
-                            throw throwable
-                        }
-                    }
-            checkRedirect(bookSource, res)
-            BookInfo.analyzeBookInfo(
-                bookSource = bookSource,
-                book = book,
-                baseUrl = book.bookUrl,
-                redirectUrl = res.url,
-                body = res.body,
-                canReName = canReName,
-            )
+        val allowRename = canReName && canRenameDartBook(bookSource)
+        (fields["name"] as? String)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let {
+                if (allowRename || book.name.isEmpty()) book.name = it
+            }
+        (fields["author"] as? String)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let {
+                if (allowRename || book.author.isEmpty()) book.author = it
+            }
+        (fields["tocUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.tocUrl = it }
+        (fields["coverUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.coverUrl = it }
+        (fields["intro"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.intro = it }
+        (fields["kind"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.kind = it }
+        (fields["wordCount"] as? String)?.takeIf { it.isNotEmpty() }?.let { book.wordCount = it }
+        (fields["latestChapterTitle"] as? String)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { book.latestChapterTitle = it }
+        JsSourceMarshaller.mergeBookInfo(
+            book,
+            GSON.toJson(fields.filterKeys { it in setOf("type", "downloadUrls", "variable") }),
+            bookSource,
+            canReName = false,
+        )
+        if (bookSource.bookSourceType == io.legado.app.constant.BookSourceType.file) {
+            book.addType(bookSource.getBookType())
+        }
+        if (!book.isWebFile && book.tocUrl.isBlank()) book.tocUrl = book.bookUrl
+        if (book.isWebFile && book.downloadUrls.isNullOrEmpty()) {
+            throw NoStackTraceException("下载链接为空")
         }
         return book
     }
@@ -292,17 +268,109 @@ object WebBook {
     ): Result<Unit> {
         return kotlin
             .runCatching {
-                val preUpdateJs = bookSource.ruleToc?.preUpdateJs
-                if (!preUpdateJs.isNullOrBlank()) {
-                    AnalyzeRule(book, bookSource, true, isFromBookInfo)
-                        .setCoroutineContext(currentCoroutineContext())
-                        .evalJS(preUpdateJs)
+                val script = bookSource.ruleToc?.preUpdateJs
+                if (!script.isNullOrBlank()) {
+                    val before = DartSourceEngine.jsonObject(book)
+                    val sourceInfo = DartSourceEngine.jsonObject(bookSource)
+                    val result =
+                        DartSourceEngine.evaluate(
+                            bookSource,
+                            """
+                    (async () => {
+                        await (async function() {
+                        $script
+                        }).call(globalThis);
+                        return {book: globalThis.book, sourceInfo: globalThis.sourceInfo};
+                    })()
+                    """
+                                .trimIndent(),
+                            before +
+                                mapOf(
+                                    "book" to before,
+                                    "sourceInfo" to sourceInfo,
+                                    "fromBookInfo" to isFromBookInfo,
+                                    "baseUrl" to book.bookUrl,
+                                ),
+                        )
+                    val returned =
+                        result as? Map<*, *>
+                            ?: throw UnsupportedOperationException(
+                                "preUpdateJs requires migration: invalid result"
+                            )
+                    val returnedSource =
+                        returned["sourceInfo"] as? Map<*, *>
+                            ?: throw UnsupportedOperationException(
+                                "preUpdateJs requires migration: sourceInfo must remain read-only"
+                            )
+                    if (normalizeHookJson(returnedSource) != normalizeHookJson(sourceInfo)) {
+                        throw UnsupportedOperationException(
+                            "preUpdateJs requires migration: sourceInfo must remain read-only"
+                        )
+                    }
+                    applyDartPreUpdatePatch(book, before, returned["book"])
                 }
+                Unit
             }
-            .onFailure {
-                currentCoroutineContext().ensureActive()
-                AppLog.put("执行preUpdateJs规则失败 书源:${bookSource.bookSourceName}", it)
+            .onFailure { currentCoroutineContext().ensureActive() }
+    }
+
+    private fun normalizeHookJson(value: Any?): Any? =
+        when (value) {
+            // Gson and the V8 transport can represent the same JSON number with different JVM
+            // types.
+            // Decimal comparison also avoids rounding distinct large integer values to the same
+            // Double.
+            is Number -> BigDecimal(value.toString()).stripTrailingZeros()
+            is Map<*, *> ->
+                value.entries.associate { (key, item) ->
+                    require(key is String) { "preUpdateJs requires migration: invalid JSON key" }
+                    key to normalizeHookJson(item)
+                }
+            is List<*> -> value.map { normalizeHookJson(it) }
+            else -> value
+        }
+
+    /** Validates the whole JSON mutation before changing any Android entity field. */
+    @Suppress("UNCHECKED_CAST")
+    internal fun applyDartPreUpdatePatch(book: Book, before: Map<String, Any?>, value: Any?) {
+        val returned =
+            value as? Map<*, *>
+                ?: throw UnsupportedOperationException(
+                    "preUpdateJs requires migration: book must remain an object"
+                )
+        val baseline = normalizeHookJson(before) as Map<String, Any?>
+        val after = normalizeHookJson(returned) as Map<String, Any?>
+        val changed =
+            (baseline.keys + after.keys).filter {
+                baseline[it] != after[it] || baseline.containsKey(it) != after.containsKey(it)
             }
+        val requiredStrings = setOf("bookUrl", "tocUrl", "name", "author")
+        val nullableStrings = setOf("coverUrl", "intro", "kind", "wordCount", "latestChapterTitle")
+        for (key in changed) {
+            if (
+                !after.containsKey(key) ||
+                    key !in requiredStrings + nullableStrings ||
+                    (after[key] !is String && !(key in nullableStrings && after[key] == null))
+            ) {
+                throw UnsupportedOperationException(
+                    "preUpdateJs requires migration: unsupported book mutation"
+                )
+            }
+        }
+        for (key in changed) {
+            val text = after[key] as? String
+            when (key) {
+                "bookUrl" -> book.bookUrl = requireNotNull(text)
+                "tocUrl" -> book.tocUrl = requireNotNull(text)
+                "name" -> book.name = requireNotNull(text)
+                "author" -> book.author = requireNotNull(text)
+                "coverUrl" -> book.coverUrl = text
+                "intro" -> book.intro = text
+                "kind" -> book.kind = text
+                "wordCount" -> book.wordCount = text
+                "latestChapterTitle" -> book.latestChapterTitle = text
+            }
+        }
     }
 
     suspend fun getChapterListAwait(
@@ -311,77 +379,52 @@ object WebBook {
         runPerJs: Boolean = false,
         isFromBookInfo: Boolean = false,
     ): Result<List<BookChapter>> {
-        if (bookSource.isJsSource()) {
-            return JsSourceBook.getChapterListAwait(bookSource, book)
-        }
-        book.removeAllBookType()
-        book.addType(bookSource.getBookType())
         return kotlin
             .runCatching {
-                if (runPerJs) {
-                    runPreUpdateJs(bookSource, book, isFromBookInfo).getOrThrow()
-                }
-                if (book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()) {
-                    BookChapterList.analyzeChapterList(
-                        bookSource = bookSource,
-                        book = book,
-                        baseUrl = book.tocUrl,
-                        redirectUrl = book.tocUrl,
-                        body = book.tocHtml,
-                        isFromBookInfo = isFromBookInfo,
-                    )
-                } else {
-                    val analyzeUrl =
-                        AnalyzeUrl(
-                            mUrl = book.tocUrl,
-                            baseUrl = book.bookUrl,
-                            source = bookSource,
-                            ruleData = book,
-                            coroutineContext = currentCoroutineContext(),
+                if (runPerJs) runPreUpdateJs(bookSource, book, isFromBookInfo).getOrThrow()
+                val legacy = usesLegacyDartFields(bookSource)
+                val chapters =
+                    DartSourceEngine.execute(
+                            bookSource,
+                            "toc",
+                            DartSourceEngine.jsonObject(book) +
+                                mapOf("book" to DartSourceEngine.jsonObject(book)),
                         )
-                    val checkJs = bookSource.loginCheckJs
-                    val res =
-                        kotlin
-                            .runCatching {
-                                analyzeUrl.getStrResponseAwait().let {
-                                    if (!checkJs.isNullOrBlank()) { // 检测书源是否已登录
-                                        analyzeUrl.evalJS(checkJs, it) as StrResponse
-                                    } else {
-                                        it
-                                    }
-                                }
-                            }
-                            .getOrElse { throwable ->
-                                if (!checkJs.isNullOrBlank()) {
-                                    val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                                    try {
-                                        (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse)
-                                            .also {
-                                                if (it.code() == 500) {
-                                                    throw throwable
-                                                }
-                                            }
-                                    } catch (_: Throwable) {
-                                        throw throwable
-                                    }
+                        .mapIndexed { index, row ->
+                            val normalized = row.toMutableMap()
+                            for (field in listOf("isVip", "isPay", "isVolume")) {
+                                val value = row[field]
+                                if (legacy && value is String) {
+                                    normalized[field] = value.isTrue()
+                                } else if (value == "true" || value == "false") {
+                                    normalized[field] = value == "true"
                                 } else {
-                                    throw throwable
+                                    require(value == null || value is Boolean) {
+                                        "Dart TOC $field must be a Boolean or true/false string"
+                                    }
                                 }
                             }
-                    checkRedirect(bookSource, res)
-                    BookChapterList.analyzeChapterList(
-                        bookSource = bookSource,
-                        book = book,
-                        baseUrl = book.tocUrl,
-                        redirectUrl = res.url,
-                        body = res.body,
-                        isFromBookInfo = isFromBookInfo,
-                    )
+                            if (legacy && row["updateTime"] is String) {
+                                normalized["tag"] = row["updateTime"]
+                            }
+                            GSON.fromJson(GSON.toJson(normalized), BookChapter::class.java).apply {
+                                url = (row["chapterUrl"] as? String) ?: url
+                                if (isVolume && url.isBlank()) url = title + index
+                                bookUrl = book.bookUrl
+                                baseUrl = book.tocUrl
+                                this.index = index
+                            }
+                        }
+                if (chapters.isEmpty()) {
+                    throw TocEmptyException(appCtx.getString(R.string.chapter_list_empty))
                 }
-            }
-            .onFailure {
                 currentCoroutineContext().ensureActive()
+                book.removeAllBookType()
+                book.addType(bookSource.getBookType())
+                BookChapterList.updateBookTocInfo(book, ArrayList(chapters))
+                chapters
             }
+            .onFailure { currentCoroutineContext().ensureActive() }
     }
 
     /** 章节内容 */
@@ -426,107 +469,66 @@ object WebBook {
                 return it
             }
         }
-        if (bookSource.isJsSource()) {
-            val content =
-                JsSourceBook.getContentAwait(
-                    bookSource,
-                    book,
-                    bookChapter,
-                    nextChapterUrl,
-                    false,
-                )
-            if (saveToken != null) {
-                val saved =
-                    BookHelp.saveContent(
-                        bookSource,
-                        book,
-                        bookChapter,
-                        content,
-                        saveToken,
-                    )
-                BookHelp.getContent(book, bookChapter, saveToken)?.let {
-                    return it
-                }
-                if (!saved) throw NoStackTraceException("正文缓存已更新,请重试")
-            }
-            return content
-        }
         if (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title)) {
             Debug.log(bookSource.bookSourceUrl, "⇒一级目录正文不解析规则")
             return ""
         }
-        val contentRule = bookSource.getContentRule()
-        if (contentRule.content.isNullOrEmpty()) {
-            Debug.log(bookSource.bookSourceUrl, "⇒正文规则为空,使用章节链接:${bookChapter.url}")
+        // A missing rule is a chapter-link fallback, not an engine execution.
+        val hasExplicitDartDefinition =
+            bookSource.bookSourceComment.orEmpty().lineSequence().any {
+                it.trim().startsWith("@source:v1 ")
+            }
+        if (
+            !hasExplicitDartDefinition &&
+                !bookSource.isJsSource() &&
+                bookSource.getContentRule().content.isNullOrEmpty()
+        ) {
             return bookChapter.url
         }
+
+        val input =
+            DartSourceEngine.jsonObject(book) +
+                mapOf(
+                    "book" to DartSourceEngine.jsonObject(book),
+                    "chapter" to DartSourceEngine.jsonObject(bookChapter),
+                    "chapterUrl" to bookChapter.getAbsoluteURL(),
+                    "chapterTitle" to bookChapter.title,
+                    "nextChapterUrl" to nextChapterUrl,
+                )
+        val row = DartSourceEngine.execute(bookSource, "content", input).single()
         val content =
-            if (bookChapter.url == book.bookUrl && !book.tocHtml.isNullOrEmpty()) {
-                BookContent.analyzeContent(
-                    bookSource = bookSource,
-                    book = book,
-                    bookChapter = bookChapter,
-                    baseUrl = bookChapter.getAbsoluteURL(),
-                    redirectUrl = bookChapter.getAbsoluteURL(),
-                    body = book.tocHtml,
-                    nextChapterUrl = nextChapterUrl,
-                    needSave = false,
-                )
-            } else {
-                val analyzeUrl =
-                    AnalyzeUrl(
-                        mUrl = bookChapter.getAbsoluteURL(),
-                        baseUrl = book.tocUrl,
-                        source = bookSource,
-                        ruleData = book,
-                        chapter = bookChapter,
-                        coroutineContext = currentCoroutineContext(),
-                    )
-                val checkJs = bookSource.loginCheckJs
-                val res =
-                    kotlin
-                        .runCatching {
-                            analyzeUrl
-                                .getStrResponseAwait(
-                                    jsStr = contentRule.webJs,
-                                    sourceRegex = contentRule.sourceRegex,
-                                )
-                                .let {
-                                    if (!checkJs.isNullOrBlank()) { // 检测书源是否已登录
-                                        analyzeUrl.evalJS(checkJs, it) as StrResponse
-                                    } else {
-                                        it
-                                    }
-                                }
-                        }
-                        .getOrElse { throwable ->
-                            if (!checkJs.isNullOrBlank()) {
-                                val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                                try {
-                                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                                        if (it.code() == 500) {
-                                            throw throwable
-                                        }
-                                    }
-                                } catch (_: Throwable) {
-                                    throw throwable
-                                }
-                            } else {
-                                throw throwable
-                            }
-                        }
-                checkRedirect(bookSource, res)
-                BookContent.analyzeContent(
-                    bookSource = bookSource,
-                    book = book,
-                    bookChapter = bookChapter,
-                    baseUrl = bookChapter.getAbsoluteURL(),
-                    redirectUrl = res.url,
-                    body = res.body,
-                    nextChapterUrl = nextChapterUrl,
-                    needSave = false,
-                )
+            row["content"] as? String
+                ?: throw IllegalStateException("Dart content stage did not return content")
+        if (!bookChapter.isVolume && content.isBlank()) throw ContentEmptyException("内容为空")
+        // Stage fields are JSON transport values, never live Java chapter objects.
+        // Validate the entire patch before touching metadata or publishing the cache.
+        val variable = row["variable"]
+        val variables =
+            when (variable) {
+                null -> null
+                is String -> GSON.fromJson(variable, JsonObject::class.java)
+                is Map<*, *> -> GSON.toJsonTree(variable).asJsonObject
+                else -> throw IllegalStateException("Dart chapter variable must be a JSON object")
             }
+        require(
+            variables == null ||
+                variables.entrySet().all {
+                    it.value.isJsonPrimitive && it.value.asJsonPrimitive.isString
+                }
+        ) {
+            "Dart chapter variable values must be strings"
+        }
+        require(!row.containsKey("imgUrl") || row["imgUrl"] == null || row["imgUrl"] is String) {
+            "Dart chapter imgUrl must be a string"
+        }
+        variables?.let {
+            bookChapter.variableMap.clear()
+            it.entrySet().forEach { entry ->
+                bookChapter.variableMap[entry.key] = entry.value.asString
+            }
+            bookChapter.variable = GSON.toJson(bookChapter.variableMap)
+        }
+        if (row.containsKey("imgUrl")) bookChapter.imgUrl = row["imgUrl"] as String?
         if (saveToken != null) {
             val saved =
                 BookHelp.saveContent(
@@ -545,25 +547,104 @@ object WebBook {
         return content
     }
 
-    /**
-     * 批量章节内容。
-     *
-     * 常规源走 contentBatch 规则,JS源走 getContentBatch 函数, 两者都通过 java.cacheContent 回存。
-     * 返回书源未回存的章节,调用方按普通单章流程兜底。
-     */
+    private val dartBatches = ConcurrentHashMap<String, BatchContentContext>()
+
+    /** Native storage callback for the scoped Dart batch host capability. */
+    fun saveDartBatchContent(batchId: String, identifier: Any?, content: String): Boolean {
+        val batch = dartBatches[batchId] ?: return false
+        val chapter =
+            when (identifier) {
+                is Map<*, *> -> {
+                    val index =
+                        identifier["index"] as? Number
+                            ?: throw IllegalArgumentException("Batch chapter requires an index")
+                    require(index.toDouble() == index.toInt().toDouble()) {
+                        "Invalid chapter index"
+                    }
+                    batch.chapters.firstOrNull { it.index == index.toInt() }
+                        ?: throw IllegalArgumentException("Chapter does not belong to this batch")
+                }
+                else ->
+                    batch.resolveChapter(identifier)
+                        ?: throw IllegalArgumentException("Batch chapter URL must be unique")
+            }
+        return batch.savePreparedContent(chapter, content)
+    }
+
+    /** V8 executes the hook; each callback publishes under its original cache version. */
     suspend fun getContentBatchAwait(
         bookSource: BookSource,
         book: Book,
         chapters: List<BookChapter>,
     ): List<BookChapter> {
-        if (bookSource.isJsSource()) {
-            return JsSourceBook.getContentBatchAwait(bookSource, book, chapters)
+        val script = bookSource.getContentRule().contentBatch.orEmpty()
+        if (script.isBlank() && !bookSource.isJsSource()) return chapters
+        val context = currentCoroutineContext()
+        val batch =
+            BatchContentContext(
+                bookSource,
+                book,
+                chapters,
+                context,
+                chapters.associate { it.index to BookHelp.contentSaveToken(book, it) },
+            )
+        val batchId = UUID.randomUUID().toString()
+        dartBatches[batchId] = batch
+        try {
+            val wrapped =
+                Regex("(?is)<js>(.*?)</js>").findAll(script).map { it.groupValues[1] }.toList()
+            val body =
+                if (wrapped.isNotEmpty()) wrapped.joinToString("\n")
+                else script.removePrefix("@js:")
+            val replace = bookSource.getContentRule().replaceRegex.orEmpty()
+            val replacement =
+                if (replace.startsWith("@js:", ignoreCase = true))
+                    "eval(" + GSON.toJson(replace.substring(4)) + ")"
+                else "java.getString(" + GSON.toJson(replace) + ", result)"
+            val code =
+                """
+                (async () => {
+                    const previousJava = globalThis.java;
+                    const save = (identifier, content) => {
+                        const chapter = typeof identifier === 'object' && identifier !== null ? identifier :
+                            chapters.filter(c => c.url === identifier || c.absoluteUrl === identifier).reduce((a,c) => a === null ? c : false, null);
+                        if (!chapter) throw new Error('Batch chapter URL must be unique');
+                        const baseUrl = chapter.absoluteUrl;
+                        let result = String(content);
+                        ${if (replace.isBlank()) "" else "result = result.split('\\n').map(s => s.trim()).join('\\n'); result = String($replacement);"}
+                        ${if (replace.isNotBlank() && book.isOnLineTxt) "result = result.split('\\n').map(s => '　　' + s).join('\\n');" else ""}
+                        return __sourceHostSync('batch.cacheContent', [${GSON.toJson(batchId)}, identifier, result]);
+                    };
+                    globalThis.java = new Proxy(previousJava || {}, {get(target,key) {
+                        return key === 'cacheContent' ? save : Reflect.get(target,key);
+                    }});
+                    try {
+                        ${if (bookSource.isJsSource()) bookSource.mainJs + "\nreturn await getContentBatch(chapters, book);" else body}
+                    } finally { globalThis.java = previousJava; }
+                })()
+            """
+                    .trimIndent()
+            DartSourceEngine.evaluate(
+                bookSource,
+                code,
+                mapOf(
+                    "book" to DartSourceEngine.jsonObject(book),
+                    "chapters" to
+                        chapters.map {
+                            DartSourceEngine.jsonObject(it) + ("absoluteUrl" to it.getAbsoluteURL())
+                        },
+                ),
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            context.ensureActive()
+            Debug.log(bookSource.bookSourceUrl, "批量正文: ${error.localizedMessage}")
+        } finally {
+            batch.close()
+            dartBatches.remove(batchId, batch)
         }
-        return BookContent.analyzeContentBatch(
-            bookSource = bookSource,
-            book = book,
-            chapters = chapters,
-        )
+        return batch.missingChapters()
     }
 
     /** 精准搜索 */
@@ -611,16 +692,5 @@ object WebBook {
             .onFailure {
                 currentCoroutineContext().ensureActive()
             }
-    }
-
-    /** 检测重定向 */
-    private fun checkRedirect(bookSource: BookSource, response: StrResponse) {
-        response.raw.priorResponse?.let {
-            if (it.isRedirect) {
-                Debug.log(bookSource.bookSourceUrl, "≡检测到重定向(${it.code})")
-                Debug.log(bookSource.bookSourceUrl, "┌重定向后地址")
-                Debug.log(bookSource.bookSourceUrl, "└${response.url}")
-            }
-        }
     }
 }

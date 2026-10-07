@@ -1,43 +1,130 @@
 #!/usr/bin/env python3
-"""Sample Linux host memory/pressure and aggregate JVM/emulator RSS during UI tests.
+"""Safe Linux resource counters for builds and UI tests, without process args/env.
 
-Read host counters only: never process arguments, environments, application content,
-credentials, or private configuration. These observations distinguish resource pressure
-from functional failures without changing test assertions or retrying failed tests.
+Only kernel counters and recognized Java/emulator process numeric metadata are read.
+The positional output interface used by run-ui-regression.sh remains compatible.
 """
+import argparse
 import json
+import os
 from pathlib import Path
 import re
 import signal
-import sys
 import threading
 import time
 
-stop = threading.Event()
-signal.signal(signal.SIGTERM, lambda *_: stop.set())
-signal.signal(signal.SIGINT, lambda *_: stop.set())
-path = Path(sys.argv[1])
-path.parent.mkdir(parents=True, exist_ok=True)
-with path.open('w', encoding='utf-8') as output:
-    while not stop.is_set():
-        sample = {'time': time.time()}
-        for source in ('/proc/meminfo', '/proc/pressure/cpu', '/proc/pressure/memory', '/proc/pressure/io'):
-            file = Path(source)
-            if file.is_file():
-                sample[source] = file.read_text()
-        java_rss = emulator_rss = 0
-        for process in Path('/proc').glob('[0-9]*'):
-            try:
-                name = (process / 'comm').read_text().strip()
-                rss = re.search(r'^VmRSS:\s*(\d+)', (process / 'status').read_text(), re.M)
-                if rss and name == 'java':
-                    java_rss += int(rss[1])
-                elif rss and (name.startswith('qemu') or name.startswith('emulator')):
-                    emulator_rss += int(rss[1])
-            except OSError:
-                pass
-        sample['javaRssKiB'] = java_rss
-        sample['emulatorRssKiB'] = emulator_rss
-        output.write(json.dumps(sample) + '\n')
-        output.flush()
-        stop.wait(10)
+
+def read(path):
+    try:
+        return path.read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeError):
+        return None
+
+
+def numeric_status(text):
+    return {key: int(value) for key, value in re.findall(
+        r'^(VmRSS|VmHWM|VmSwap|Threads):\s*(\d+)', text or '', re.M)}
+
+
+def start_ticks(proc, pid):
+    text = read(proc / str(pid) / 'stat')
+    # comm can contain spaces and parentheses; fields after its final ')' are numeric.
+    try:
+        return int(text.rsplit(')', 1)[1].split()[19])
+    except (AttributeError, IndexError, ValueError):
+        return None
+
+
+def snapshot(proc=Path('/proc'), cgroup=Path('/sys/fs/cgroup'), disk_paths=None):
+    sample = {'time': time.time(), 'cpuCount': os.cpu_count()}
+    for name in ('meminfo', 'loadavg', 'pressure/cpu', 'pressure/memory', 'pressure/io'):
+        value = read(proc / name)
+        if value is not None:
+            sample['/proc/' + name] = value
+    vmstat = read(proc / 'vmstat') or ''
+    sample['vmCounters'] = {name: int(value) for name, value in re.findall(
+        r'^(oom_kill|pgmajfault|pswpin|pswpout) (\d+)$', vmstat, re.M)}
+    java = []
+    emulator_rss = 0
+    for process in proc.glob('[0-9]*'):
+        name = read(process / 'comm')
+        if name != 'java' and not (name or '').startswith(('qemu', 'emulator')):
+            continue
+        status = numeric_status(read(process / 'status'))
+        if name == 'java':
+            java.append({'pid': int(process.name), **status,
+                         'startTicks': start_ticks(proc, process.name)})
+        else:
+            emulator_rss += status.get('VmRSS', 0)
+    sample['javaProcesses'] = sorted(java, key=lambda item: item['pid'])
+    sample['javaRssKiB'] = sum(item.get('VmRSS', 0) for item in java)
+    sample['emulatorRssKiB'] = emulator_rss
+    # Read the sampler's own cgroup when available, without exposing its path/name.
+    relative = next((line[3:] for line in (read(proc / 'self/cgroup') or '').splitlines()
+                     if line.startswith('0::')), '/')
+    own_cgroup = (cgroup / relative.lstrip('/')).resolve()
+    root = cgroup.resolve()
+    if own_cgroup.is_relative_to(root):
+        counters = {}
+        for name in ('memory.current', 'memory.peak', 'memory.max', 'memory.events',
+                     'memory.swap.current', 'memory.swap.max', 'cpu.stat', 'io.stat'):
+            value = read(own_cgroup / name)
+            if value is not None:
+                counters[name] = value
+        sample['cgroupCounters'] = counters
+    sample['disk'] = {}
+    for label, path in (disk_paths or {'workspace': Path.cwd()}).items():
+        try:
+            stats = os.statvfs(path)
+            sample['disk'][label] = {
+                'totalBytes': stats.f_blocks * stats.f_frsize,
+                'availableBytes': stats.f_bavail * stats.f_frsize,
+                'availableInodes': stats.f_favail,
+            }
+        except OSError:
+            pass
+    return sample
+
+
+def stop_sampler(pid_file, proc=Path('/proc')):
+    try:
+        identity = json.loads(pid_file.read_text())
+        pid = int(identity['pid'])
+        expected = identity['startTicks']
+        if pid > 1 and expected is not None and start_ticks(proc, pid) == expected:
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('output', type=Path, nargs='?')
+    parser.add_argument('--interval', type=float, default=10)
+    parser.add_argument('--pid-file', type=Path)
+    parser.add_argument('--stop', type=Path)
+    parser.add_argument('--once', action='store_true')
+    args = parser.parse_args()
+    if args.stop:
+        stop_sampler(args.stop)
+        return
+    if args.output is None or args.interval <= 0:
+        parser.error('output and positive interval required')
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.pid_file:
+        args.pid_file.write_text(json.dumps({'pid': os.getpid(),
+                                             'startTicks': start_ticks(Path('/proc'), os.getpid())}))
+    disk_paths = {'workspace': Path.cwd(), 'output': args.output.parent}
+    with args.output.open('w', encoding='utf-8') as output:
+        while True:
+            output.write(json.dumps(snapshot(disk_paths=disk_paths)) + '\n')
+            output.flush()
+            if args.once or stop.wait(args.interval):
+                break
+
+
+if __name__ == '__main__':
+    main()

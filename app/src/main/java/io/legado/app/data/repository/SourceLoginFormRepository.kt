@@ -1,17 +1,22 @@
 package io.legado.app.data.repository
 
-import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.FlexChildStyle
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
+import io.legado.app.model.login.LoginUiV2Script
+import io.legado.app.model.sourceEngine.BookSourceScriptBridge
+import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 data class SourceLoginRow(
@@ -74,11 +79,32 @@ interface SourceLoginFormRepository {
     suspend fun clear()
 }
 
+private fun loginBookSource(source: BaseSource): BookSource? =
+    source as? BookSource ?: source.getSource() as? BookSource
+
+private suspend fun evaluateLoginScript(
+    source: BaseSource,
+    script: String,
+    bindings: Map<String, Any?>,
+): Any? {
+    val bookSource = loginBookSource(source)
+    if (bookSource != null)
+        return DartSourceEngine.evaluate(
+            bookSource,
+            script,
+            BookSourceScriptBridge.jsonBindings(bindings),
+        )
+    // RSS has its own script runtime; no book source takes this branch.
+    return source.evalJS(script) { bindings.forEach { (key, value) -> put(key, value) } }
+}
+
 class AppSourceLoginFormRepository(
     private val source: BaseSource,
     private val book: Book?,
     private val chapter: BookChapter?,
     values: Map<String, String>,
+    private val evaluator: suspend (BaseSource, String, Map<String, Any?>) -> Any? =
+        ::evaluateLoginScript,
 ) : SourceLoginFormRepository {
     override val definition =
         SourceLoginDefinition(source.getTag(), source.isLoginUiV2(), values.toMap())
@@ -116,33 +142,46 @@ class AppSourceLoginFormRepository(
         values: Map<String, String>,
         java: Any? = null,
         long: Boolean = false,
-    ): String? = runScriptWithContext {
-        JsSourceEngine.normalizeJsResult(
-            source.evalJS("${source.getLoginJs().orEmpty()}\n$script") {
-                put("result", values.toMutableMap())
-                put("book", book)
-                put("chapter", chapter)
-                if (java != null) {
-                    put("java", java)
-                    put("isLongClick", long)
-                }
-            }
-        )
+    ): String? {
+        val dart = loginBookSource(source) != null
+        val wrapped =
+            if (dart)
+                "(async()=>{${source.getLoginJs().orEmpty()}\nreturn await eval(${GSON.toJson(script)});})()"
+            else "${source.getLoginJs().orEmpty()}\n$script"
+        val bindings =
+            mutableMapOf<String, Any?>(
+                "result" to values.toMap(),
+                "book" to book,
+                "chapter" to chapter,
+                "isLongClick" to long,
+            )
+        if (!dart && java != null) bindings["java"] = java
+        val result = evaluator(source, wrapped, bindings)
+        return if (dart) LoginUiV2Script.jsonResult(result)
+        else JsSourceEngine.normalizeJsResult(result)
     }
 
     override suspend fun render(values: Map<String, String>, stateJson: String) =
         withContext(Dispatchers.IO) {
-            runScriptWithContext {
-                if (definition.v2) {
-                    val rows =
-                        LoginUiV2.parseRender(source.evalLoginUiV2(stateJson, book, chapter))
-                            ?: error("登录UI v2 渲染结果格式错误")
-                    SourceLoginRendered(rows.map(::uiRow), source.getLoginInfoMap().toMap())
-                } else {
-                    val text = source.getLoginUiJs()?.let { eval(it, values) } ?: source.loginUi
-                    val rows = GSON.fromJsonArray<RowUi>(text).getOrThrow()
-                    SourceLoginRendered(rows.map(::uiRow))
-                }
+            if (definition.v2) {
+                val loginJs = source.getLoginJs() ?: error("登录UI v2 缺少 loginUi/loginAction 脚本")
+                val json =
+                    if (loginBookSource(source) == null)
+                        source.evalLoginUiV2(stateJson, book, chapter)
+                    else
+                        LoginUiV2Script.jsonResult(
+                            evaluator(
+                                source,
+                                LoginUiV2Script.render(loginJs),
+                                LoginUiV2Script.bindings(stateJson, book, chapter),
+                            )
+                        )
+                val rows = LoginUiV2.parseRender(json) ?: error("登录UI v2 渲染结果格式错误")
+                SourceLoginRendered(rows.map(::uiRow), source.getLoginInfoMap().toMap())
+            } else {
+                val text = source.getLoginUiJs()?.let { eval(it, values) } ?: source.loginUi
+                val rows = GSON.fromJsonArray<RowUi>(text).getOrThrow()
+                SourceLoginRendered(rows.map(::uiRow))
             }
         }
 
@@ -160,6 +199,7 @@ class AppSourceLoginFormRepository(
                 eval(script, values, java, long)
                 Unit
             } catch (error: Exception) {
+                currentCoroutineContext().ensureActive()
                 AppLog.put("LoginUI Button JavaScript error", error)
                 throw error
             }
@@ -184,21 +224,28 @@ class AppSourceLoginFormRepository(
 
     override suspend fun action(action: String, stateJson: String, values: Map<String, String>) =
         withContext(Dispatchers.IO) {
-            runScriptWithContext {
-                LoginUiV2.parseActionResult(
-                        source.evalLoginActionV2(
-                            action,
-                            stateJson,
-                            GSON.toJson(values),
-                            book,
-                            chapter,
+            val loginJs = source.getLoginJs() ?: error("登录UI v2 缺少 loginUi/loginAction 脚本")
+            val json =
+                if (loginBookSource(source) == null)
+                    source.evalLoginActionV2(action, stateJson, GSON.toJson(values), book, chapter)
+                else
+                    LoginUiV2Script.jsonResult(
+                        evaluator(
+                            source,
+                            LoginUiV2Script.action(loginJs),
+                            LoginUiV2Script.bindings(
+                                stateJson,
+                                book,
+                                chapter,
+                                action,
+                                GSON.toJson(values),
+                            ),
                         )
                     )
-                    .also { result ->
-                        result.unknownKeys.forEach {
-                            AppLog.put("登录UI v2 动作 $action 返回未知命令 $it,已忽略")
-                        }
-                    }
+            LoginUiV2.parseActionResult(json).also { result ->
+                result.unknownKeys.forEach {
+                    AppLog.put("登录UI v2 动作 $action 返回未知命令 $it,已忽略")
+                }
             }
         }
 

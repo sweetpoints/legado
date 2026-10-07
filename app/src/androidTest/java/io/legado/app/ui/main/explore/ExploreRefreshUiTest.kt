@@ -30,12 +30,18 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.model.ExploreInfoMapStore.exploreInfoMapList
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
+import io.legado.app.utils.GSON
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.utils.defaultSharedPreferences
+import fi.iki.elonen.NanoHTTPD
+import java.lang.ref.ReferenceQueue
+import java.lang.ref.WeakReference
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -62,40 +68,17 @@ class ExploreRefreshUiTest {
             bookSourceName = "Expandable source",
             bookSourceGroup = group,
             customOrder = -100,
-            jsLib =
-                """
-                function changeKind(key, value) {
-                    var source = this.source, java = this.java;
-                    var state = JSON.parse(String(source.getLoginHeader() || '{}'));
-                    state[key] = String(value);
-                    if (state.forceGc) {
-                        function marker() { return new Packages.java.lang.ref.WeakReference(new Packages.java.lang.Object()); }
-                        var weak = marker();
-                        for (var attempt = 0; weak.get() != null && attempt < 20; attempt++) {
-                            Packages.java.lang.System.gc();
-                            Packages.java.lang.System.runFinalization();
-                            Packages.java.lang.Thread.sleep(10);
-                        }
-                        if (weak.get() != null) throw new Error('GC did not collect the control probe');
-                        state.gcObserved = true;
-                    }
-                    source.putLoginHeader(JSON.stringify(state));
-                    source.refreshExplore();
-                    java.refreshExplore();
-                }
-                """
-                    .trimIndent(),
             exploreUrl =
                 """
                 <js>
-                var state = JSON.parse(String(source.getLoginHeader() || '{}'));
+                var state = {expanded: infoMap['More categories'], mode: infoMap['Category mode']};
                 var kinds = [], row = {layout_flexBasisPercent: 1};
                 function label(title) { kinds.push({title: title, style: row}); }
                 for (var i = 0; i < 36; i++) label('Category before controls ' + i);
                 kinds.push({title:'More categories', type:'toggle', chars:['+ ', '- '],
-                    action:"changeKind('expanded', infoMap['More categories'])", style:row});
+                    action:"Promise.resolve(true)", style:row});
                 kinds.push({title:'Category mode', type:'select', chars:['Short list', 'Long list'],
-                    action:"changeKind('mode', infoMap['Category mode'])", style:row});
+                    action:"(async()=>{if(infoMap.gcUrl) await source.net.get(infoMap.gcUrl); return true;})()", style:row});
                 kinds.push({title:'Search categories', type:'text', style:row});
                 label('Rendered ' + (state.expanded || '+ ') + (state.mode || 'Short list'));
                 var count = state.expanded == '- ' || state.mode == 'Long list' ? 42 : 12;
@@ -135,6 +118,9 @@ class ExploreRefreshUiTest {
             .putLong("appVersionCode", appInfo.versionCode)
             .putString("password", "")
             .commit()
+        source.bookSourceComment = SourceEngineSourcePolicy.withCandidate(null,
+            GSON.toJson(mapOf("schemaVersion" to 1, "id" to source.bookSourceUrl,
+                "name" to source.bookSourceName, "baseUrl" to "https://explore-refresh.invalid/")))
         appDb.bookSourceDao.insert(*sources.toTypedArray())
         scenario = ActivityScenario.launch(MainActivity::class.java)
         await("main destination migration") { it.hostMigration.value.ready }
@@ -213,23 +199,67 @@ class ExploreRefreshUiTest {
 
     @Test
     fun discoveryControlsKeepTheirRefreshCallbackThroughGarbageCollection() {
-        source.putLoginHeader("""{"forceGc":true}""")
         positionControls()
         for (mode in listOf("Long list", "Short list")) {
-            verifyRefresh(
-                "explore-select-gc-${mode.substringBefore(' ')}",
-                "Category mode",
-                "Category mode",
-                "Rendered + $mode",
-            ) {
-                compose.onNodeWithTag("explore-home-control:37")
-                    .onChildren().filter(hasClickAction()).onFirst().performClick()
-                compose.onNodeWithText(mode).performClick()
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val server =
+                object : NanoHTTPD("127.0.0.1", 0) {
+                    override fun serve(session: IHTTPSession): Response {
+                        entered.countDown()
+                        check(release.await(10, TimeUnit.SECONDS))
+                        return newFixedLengthResponse("ready")
+                    }
+                }
+            server.start()
+            try {
+                exploreInfoMapList[source.bookSourceUrl]!!.putAll(
+                    mapOf("gcUrl" to "http://127.0.0.1:${server.listeningPort}/gc")
+                )
+                verifyRefresh(
+                    "explore-select-gc-${mode.substringBefore(' ')}",
+                    "Category mode",
+                    "Category mode",
+                    "Rendered + $mode",
+                ) {
+                    compose
+                        .onNodeWithTag("explore-home-control:37")
+                        .onChildren()
+                        .filter(hasClickAction())
+                        .onFirst()
+                        .performClick()
+                    compose.onNodeWithText(mode).performClick()
+                    // Keep advancing Compose frames so its LaunchedEffect can dispatch the
+                    // clicked action. A blocking latch wait here stalls the test frame clock.
+                    compose.waitUntil(timeoutMillis = 5_000) { entered.count == 0L }
+                    assertTrue("Async V8 action must be in flight", entered.count == 0L)
+                    // Collect an unrelated JVM control while the actual action owns its callback.
+                    // The source no longer has reflective access to Packages.java.*.
+                    val queue = ReferenceQueue<Any>()
+                    val holder = AtomicReference<WeakReference<Any>>()
+                    // Create the referent on a separate stack and wait for that thread to exit.
+                    // Reading weak.get() before GC can retain the object in an ART stack slot.
+                    val creator =
+                        Thread({ holder.set(WeakReference(Any(), queue)) }, "explore-gc-probe")
+                    creator.start()
+                    creator.join()
+                    val weak = checkNotNull(holder.get())
+                    var collected = false
+                    repeat(30) {
+                        if (!collected) {
+                            System.gc()
+                            System.runFinalization()
+                            collected = queue.remove(10) === weak
+                        }
+                    }
+                    assertTrue("Actual JVM GC must collect the control probe", collected)
+                    assertTrue("Collected control probe must be cleared", weak.get() == null)
+                    release.countDown()
+                }
+            } finally {
+                release.countDown()
+                server.stop()
             }
-            assertTrue(
-                "Actual JS must observe GC before refresh",
-                source.getLoginHeader().orEmpty().contains("\"gcObserved\":true"),
-            )
         }
     }
 

@@ -5,7 +5,6 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -18,33 +17,30 @@ import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.rule.BookInfoRule
-import io.legado.app.data.entities.rule.ExploreRule
-import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.repository.AppBrowserNavigationStore
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebViewPool
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.browser.BrowserRequest
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceEngineSourcePolicy
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.about.AboutActivity
+import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.browser.BrowserNavigation
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.Assert.*
@@ -57,99 +53,146 @@ class SourceNavigationUiTest {
     private val context = instrumentation.targetContext
 
     @Test
-    fun backgroundRequestsDoNotBorrowOrReturnAnInteractiveWebViewAndCancellationReleasesTheirLease() = runBlocking {
-        val loaded = CountDownLatch(1)
-        val recycled = CountDownLatch(1)
-        var interactive: PooledWebView? = null
-        var background: PooledWebView? = null
-        val entered = CountDownLatch(1)
-        val unblock = CountDownLatch(1)
-        val server = object : NanoHTTPD("127.0.0.1", 0) {
-            override fun serve(session: IHTTPSession): Response {
-                entered.countDown()
-                unblock.await(5, TimeUnit.SECONDS)
-                return newFixedLengthResponse("<p>Cancellation fixture</p>")
-            }
-        }
-        ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
-            try {
-                scenario.onActivity { activity ->
-                    val lease = WebViewPool.acquire(activity)
-                    interactive = lease
-                    (activity.findViewById<ViewGroup>(android.R.id.content)).addView(lease.realWebView)
-                    lease.realWebView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            loaded.countDown()
-                        }
-                    }
-                    // Pool recycling pauses the instance; attachment does not resume it.
-                    // Match interactive callers before loading an acquired UI lease.
-                    lease.realWebView.onResume()
-                    lease.realWebView.loadDataWithBaseURL("https://interactive.invalid/", "<button>UI fixture</button>",
-                        "text/html", "utf-8", null)
-                }
-                assertTrue("The attached interactive page really loads", loaded.await(5, TimeUnit.SECONDS))
-                instrumentation.runOnMainSync {
-                    val lease = checkNotNull(interactive)
-                    assertTrue(lease.realWebView.isAttachedToWindow)
-                    WebViewPool.release(lease)
-                    // Observe the original pool recycle completion rather than guessing its delay.
-                    val recycleClient = lease.realWebView.webViewClient
-                    lease.realWebView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            recycleClient.onPageFinished(view, url)
-                            if (!lease.isInUse) recycled.countDown()
-                        }
+    fun backgroundRequestsDoNotBorrowOrReturnAnInteractiveWebViewAndCancellationReleasesTheirLease() =
+        runBlocking {
+            val loaded = CountDownLatch(1)
+            val recycled = CountDownLatch(1)
+            var interactive: PooledWebView? = null
+            var background: PooledWebView? = null
+            val entered = CountDownLatch(1)
+            val unblock = CountDownLatch(1)
+            val server =
+                object : NanoHTTPD("127.0.0.1", 0) {
+                    override fun serve(session: IHTTPSession): Response {
+                        entered.countDown()
+                        unblock.await(5, TimeUnit.SECONDS)
+                        return newFixedLengthResponse("<p>Cancellation fixture</p>")
                     }
                 }
-                assertTrue("The interactive instance returns to the pool", recycled.await(5, TimeUnit.SECONDS))
-                instrumentation.runOnMainSync {
-                    background = WebViewPool.acquire(context, recyclable = false)
-                    assertNotSame(interactive, background)
-                    assertNotSame(checkNotNull(interactive).realWebView, checkNotNull(background).realWebView)
-                    WebViewPool.release(checkNotNull(background))
-                    assertFalse("The dedicated lease is invalid after disposal", checkNotNull(background).isInUse)
-                    val nextUi = WebViewPool.acquire(context)
-                    assertSame("Background disposal retains the existing UI instance", interactive, nextUi)
-                    assertNotSame(background, nextUi)
-                    WebViewPool.release(nextUi)
-                }
-                assertEquals("owned-background", BackstageWebView(
-                    url = "https://background.invalid/", html = "<p>Background fixture</p>",
-                    javaScript = "'owned-background'",
-                ).getStrResponse().body)
-                server.start()
-                val request = BackstageWebView(url = "http://127.0.0.1:${server.listeningPort}/cancel")
-                val pending = launch(Dispatchers.IO) { request.getStrResponse() }
+            ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
                 try {
-                    assertTrue("Cancellation occurs during an actual submitted request", entered.await(5, TimeUnit.SECONDS))
-                    val leaseSlot = BackstageWebView::class.java.getDeclaredField("pooledWebView")
-                        .apply { isAccessible = true }
-                    var cancellationLease: PooledWebView? = null
-                    instrumentation.runOnMainSync {
-                        cancellationLease = leaseSlot.get(request) as? PooledWebView
-                        assertNotNull(cancellationLease)
-                        assertNotSame(interactive, cancellationLease)
+                    scenario.onActivity { activity ->
+                        val lease = WebViewPool.acquire(activity)
+                        interactive = lease
+                        (activity.findViewById<ViewGroup>(android.R.id.content)).addView(
+                            lease.realWebView
+                        )
+                        lease.realWebView.webViewClient =
+                            object : WebViewClient() {
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    loaded.countDown()
+                                }
+                            }
+                        // Pool recycling pauses the instance; attachment does not resume it.
+                        // Match interactive callers before loading an acquired UI lease.
+                        lease.realWebView.onResume()
+                        lease.realWebView.loadDataWithBaseURL(
+                            "https://interactive.invalid/",
+                            "<button>UI fixture</button>",
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
                     }
-                    pending.cancelAndJoin()
-                    assertTrue(pending.isCancelled)
-                    // No calls on a destroyed WebView: validate the request's ownership slot only.
-                    assertNull("Cancellation finishes Main-thread disposal before returning", leaseSlot.get(request))
-                    assertFalse("Cancellation invalidates its dedicated lease", checkNotNull(cancellationLease).isInUse)
+                    assertTrue(
+                        "The attached interactive page really loads",
+                        loaded.await(5, TimeUnit.SECONDS),
+                    )
+                    instrumentation.runOnMainSync {
+                        val lease = checkNotNull(interactive)
+                        assertTrue(lease.realWebView.isAttachedToWindow)
+                        WebViewPool.release(lease)
+                        // Observe the original pool recycle completion rather than guessing its
+                        // delay.
+                        val recycleClient = lease.realWebView.webViewClient
+                        lease.realWebView.webViewClient =
+                            object : WebViewClient() {
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    recycleClient.onPageFinished(view, url)
+                                    if (!lease.isInUse) recycled.countDown()
+                                }
+                            }
+                    }
+                    assertTrue(
+                        "The interactive instance returns to the pool",
+                        recycled.await(5, TimeUnit.SECONDS),
+                    )
+                    instrumentation.runOnMainSync {
+                        background = WebViewPool.acquire(context, recyclable = false)
+                        assertNotSame(interactive, background)
+                        assertNotSame(
+                            checkNotNull(interactive).realWebView,
+                            checkNotNull(background).realWebView,
+                        )
+                        WebViewPool.release(checkNotNull(background))
+                        assertFalse(
+                            "The dedicated lease is invalid after disposal",
+                            checkNotNull(background).isInUse,
+                        )
+                        val nextUi = WebViewPool.acquire(context)
+                        assertSame(
+                            "Background disposal retains the existing UI instance",
+                            interactive,
+                            nextUi,
+                        )
+                        assertNotSame(background, nextUi)
+                        WebViewPool.release(nextUi)
+                    }
+                    assertEquals(
+                        "owned-background",
+                        BackstageWebView(
+                                url = "https://background.invalid/",
+                                html = "<p>Background fixture</p>",
+                                javaScript = "'owned-background'",
+                            )
+                            .getStrResponse()
+                            .body,
+                    )
+                    server.start()
+                    val request =
+                        BackstageWebView(url = "http://127.0.0.1:${server.listeningPort}/cancel")
+                    val pending = launch(Dispatchers.IO) { request.getStrResponse() }
+                    try {
+                        assertTrue(
+                            "Cancellation occurs during an actual submitted request",
+                            entered.await(5, TimeUnit.SECONDS),
+                        )
+                        val leaseSlot =
+                            BackstageWebView::class.java.getDeclaredField("pooledWebView").apply {
+                                isAccessible = true
+                            }
+                        var cancellationLease: PooledWebView? = null
+                        instrumentation.runOnMainSync {
+                            cancellationLease = leaseSlot.get(request) as? PooledWebView
+                            assertNotNull(cancellationLease)
+                            assertNotSame(interactive, cancellationLease)
+                        }
+                        pending.cancelAndJoin()
+                        assertTrue(pending.isCancelled)
+                        // No calls on a destroyed WebView: validate the request's ownership slot
+                        // only.
+                        assertNull(
+                            "Cancellation finishes Main-thread disposal before returning",
+                            leaseSlot.get(request),
+                        )
+                        assertFalse(
+                            "Cancellation invalidates its dedicated lease",
+                            checkNotNull(cancellationLease).isInUse,
+                        )
+                    } finally {
+                        unblock.countDown()
+                        pending.cancelAndJoin()
+                    }
                 } finally {
                     unblock.countDown()
-                    pending.cancelAndJoin()
-                }
-            } finally {
-                unblock.countDown()
-                server.stop()
-                instrumentation.runOnMainSync {
-                    interactive?.takeIf { it.isInUse }?.let(WebViewPool::release)
-                    background?.takeIf { it.isInUse }?.let(WebViewPool::release)
+                    server.stop()
+                    instrumentation.runOnMainSync {
+                        interactive?.takeIf { it.isInUse }?.let(WebViewPool::release)
+                        background?.takeIf { it.isInUse }?.let(WebViewPool::release)
+                    }
                 }
             }
         }
-    }
 
     @Test
     fun verificationBrowserHandoffCarriesOnlyTicketAndKeepsTheRegisteredAttemptPayload() {
@@ -327,7 +370,11 @@ class SourceNavigationUiTest {
         val preferences = context.defaultSharedPreferences
         val saved = preferences.all[PreferKey.blockSourceNavigation] as? Boolean
         val savedHelp = LocalConfig.all["bookSourceHelpVersion"] as? Int
-        val source = BookSource(bookSourceUrl = "https://navigation.invalid/${UUID.randomUUID()}")
+        val source =
+            BookSource(
+                bookSourceUrl = "https://navigation.invalid/${UUID.randomUUID()}",
+                bookSourceName = "Navigation fixture",
+            )
         val starts = CopyOnWriteArrayList<Intent>()
         val monitor =
             object : Instrumentation.ActivityMonitor() {
@@ -349,18 +396,43 @@ class SourceNavigationUiTest {
             assertFalse(AppConfig.blockSourceNavigation)
             LocalConfig.edit().putInt("bookSourceHelpVersion", 1).commit()
             scenario = ActivityScenario.launch(BookSourceActivity::class.java)
-            source.loginUrl =
-                "@js:function login() { java.openUrl('https://navigation.invalid/nested'); source.put('navigationLogin', 'ok'); }"
-            appDb.bookSourceDao.insert(source)
-            instrumentation.addMonitor(monitor)
             server.start()
             val pageUrl = "http://127.0.0.1:${server.listeningPort}/search"
-            val open = "java.openUrl('https://navigation.invalid/login');"
-            source.searchUrl = "@js:$open'$pageUrl'"
-            source.ruleSearch =
-                SearchRule(bookList = "article", name = "h2@text", bookUrl = "a@href")
-            source.ruleExplore =
-                ExploreRule(bookList = "article", name = "h2@text", bookUrl = "a@href")
+            source.bookSourceComment =
+                SourceEngineSourcePolicy.withCandidate(
+                    source.bookSourceComment,
+                    GSON.toJson(
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "id" to source.bookSourceUrl,
+                            "name" to source.bookSourceName,
+                            "baseUrl" to pageUrl,
+                            "script" to
+                                """
+                    async function load() {
+                        await source.browser.openUrl('https://navigation.invalid/login');
+                        const response = await source.net.get('$pageUrl');
+                        return {name:await source.parse.getString('@legacy:h2@text',response),bookUrl:'$pageUrl'};
+                    }
+                    async function search() {return [await load()];}
+                    async function explore() {return [await load()];}
+                    async function getBookInfo() {return await load();}
+                """
+                                    .trimIndent(),
+                        )
+                    ),
+                )
+            appDb.bookSourceDao.insert(source)
+            instrumentation.addMonitor(monitor)
+
+            val malformed = source.copy(bookSourceComment = "@source:v1 {")
+            assertTrue(
+                runCatching { DartSourceEngine.execute(malformed, "search", emptyMap()) }.isFailure
+            )
+            assertTrue(
+                "Rejected source JSON must not leave a pending task",
+                DartSourceEngine.tasks.value.isEmpty(),
+            )
 
             // The real search entry marks its operation even when the caller does not.
             assertEquals(1, WebBook.searchBookAwait(source, "fixture").size)
@@ -374,87 +446,62 @@ class SourceNavigationUiTest {
             assertTrue(starts.isEmpty())
 
             withContext(SuppressSourceNavigation) {
-                val rule =
-                    AnalyzeRule(source = source).setCoroutineContext(currentCoroutineContext())
                 val result =
-                    rule.evalJS(
+                    DartSourceEngine.evaluate(
+                        source,
                         """
-                        java.openUrl('https://navigation.invalid/login');
-                        source.openUrl('https://navigation.invalid/login');
-                        java.startBrowser('https://navigation.invalid/login', 'Login');
-                        java.showBrowser('https://navigation.invalid/login');
-                        java.openVideoPlayer('https://navigation.invalid/video.mp4', 'Video', false);
-                        var blocked = false;
-                        try { java.startBrowserAwait('https://navigation.invalid/login', 'Login'); }
-                        catch (e) { blocked = true; }
-                        blocked;
+                        (async()=>{
+                            await source.browser.openUrl('https://navigation.invalid/login');
+                            await source.browser.start('https://navigation.invalid/login','Login');
+                            await source.browser.show('https://navigation.invalid/login');
+                            await source.browser.video('https://navigation.invalid/video.mp4','Video',false);
+                            let blocked=false;
+                            try { await source.browser.open('https://navigation.invalid/login','Login'); }
+                            catch(e) { blocked=true; }
+                            return blocked;
+                        })()
                         """
-                            .trimIndent()
+                            .trimIndent(),
                     )
                 assertEquals(true, result)
                 assertTrue(starts.isEmpty())
                 scenario!!.onActivity { assertTrue(it.supportFragmentManager.fragments.isEmpty()) }
-
-                // Rule WebViews call both bridges on a separate Java thread; storage remains
-                // usable.
-                rule.setContent("<p>Background</p>", pageUrl)
-                source.header =
-                    "@js:java.openUrl('https://navigation.invalid/header'); '{\"X-Navigation\":\"ok\"}'"
                 for (blocked in listOf(true, false)) {
                     AppConfig.blockSourceNavigation = blocked
-                    Log.i("SourceNavigationTest", "webjs start blocked=$blocked")
                     val response =
-                        try {
-                            rule.getString(
-                                """
-                                @webjs:
-                                                        console.info('navigation webjs: started');
-                                                        java.openUrl('https://navigation.invalid/java');
-                                                        source.openUrl('https://navigation.invalid/source');
-                                                        console.info('navigation webjs: before login');
-                                                        source.login();
-                                                        console.info('navigation webjs: after login');
-                                                        source.put('navigationTest', 'stored');
-                                                        console.info('navigation webjs: stored');
-                                                        source.get('navigationTest') + ':' + document.querySelector('p').textContent + ':' + source.get('navigationLogin');
-                                """
-                                    .trimIndent()
-                            )
-                        } catch (error: Throwable) {
-                            File(
-                                    context.getExternalFilesDir("ui-regression"),
-                                    "source-navigation-timeout-threads.txt",
-                                )
-                                .writeText(
-                                    "blocked=$blocked; starts=${starts.size}\n" +
-                                        Thread.getAllStackTraces().entries.joinToString("\n\n") {
-                                            (thread, stack) ->
-                                            "${thread.name}: ${thread.state}\n${stack.joinToString("\n")}"
-                                        }
-                                )
-                            throw error
-                        }
-                    Log.i(
-                        "SourceNavigationTest",
-                        "webjs completed blocked=$blocked response=$response",
-                    )
-                    assertEquals("stored:Background:ok", response)
+                        DartSourceEngine.evaluate(
+                            source,
+                            """
+                        (async()=>{
+                            await source.browser.openUrl('https://navigation.invalid/java');
+                            await source.browser.openUrl('https://navigation.invalid/source');
+                            await source.storage.write('navigationLogin','ok');
+                            await source.browser.openUrl('https://navigation.invalid/nested');
+                            await source.browser.openUrl('https://navigation.invalid/header');
+                            await source.storage.write('navigationTest','stored');
+                            const html=await source.net.get('$pageUrl');
+                            return (await source.storage.read('navigationTest')) + ':' +
+                                (await source.parse.getString('@legacy:h2@text',html)) + ':' +
+                                (await source.storage.read('navigationLogin'));
+                        })()
+                    """
+                                .trimIndent(),
+                        )
+                    assertEquals("stored:Navigation fixture:ok", response)
                     awaitIntentCount(starts, if (blocked) 0 else 4)
                     assertEquals(if (blocked) 0 else 4, starts.size)
                     assertStartedRequests(starts, source)
                     starts.clear()
                 }
-                source.header = null
                 AppConfig.blockSourceNavigation = true
             }
 
             // A normal detail request still runs its required login after a blocked search.
-            source.ruleBookInfo = BookInfoRule(init = "@js:${open}result", name = "h2@text")
             val book = Book(bookUrl = pageUrl, origin = source.bookSourceUrl)
             assertEquals("Navigation fixture", WebBook.getBookInfoAwait(source, book).name)
             assertEquals(1, starts.size)
             starts.clear()
-            assertEquals(1, WebBook.exploreBookAwait(source, "@js:$open'$pageUrl'").size)
+            assertEquals(1, WebBook.exploreBookAwait(source, pageUrl).size)
             assertEquals(1, starts.size)
         } finally {
             instrumentation.removeMonitor(monitor)

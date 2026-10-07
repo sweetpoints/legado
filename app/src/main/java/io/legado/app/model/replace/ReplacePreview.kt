@@ -1,12 +1,10 @@
 package io.legado.app.model.replace
 
-import com.script.ScriptBindings
-import com.script.rhino.RhinoInterruptError
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.RegexJsExtensions
 import io.legado.app.help.config.ReplacePreviewConfig
+import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.utils.quoteReplacementJs
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
@@ -80,7 +78,6 @@ object ReplacePreview {
                         replacement,
                         matcher.group(),
                         jsExtensions,
-                        coroutineContext,
                     )
                 matcher.appendReplacement(output, jsResult.quoteReplacementJs())
             } else {
@@ -91,11 +88,10 @@ object ReplacePreview {
         return output.toString()
     }
 
-    private fun evaluateJsReplacement(
+    private suspend fun evaluateJsReplacement(
         script: String,
         result: String,
         jsExtensions: RegexJsExtensions,
-        coroutineContext: kotlin.coroutines.CoroutineContext,
     ): String {
         // The editor has no real book/chapter object; reject direct property access rather than
         // silently evaluating it against null. String literals such as "book" remain valid.
@@ -103,19 +99,12 @@ object ReplacePreview {
             throw ReplacePreviewException(ReplacePreviewException.Reason.CONTEXT_UNAVAILABLE)
         }
         return try {
-            val bindings =
-                ScriptBindings().apply {
-                    this["result"] = result
-                    this["chapter"] = null
-                    this["book"] = null
-                    this["java"] = jsExtensions
-                }
-            RhinoScriptEngine.eval(script, bindings, coroutineContext).toString()
+            V8ScriptExecutor.evaluateReplacement(
+                script,
+                mapOf("result" to result, "chapter" to null, "book" to null),
+                jsExtensions,
+            )
         } catch (error: CancellationException) {
-            throw error
-        } catch (error: RhinoInterruptError) {
-            val cancellation = error.cause as? CancellationException
-            if (cancellation != null) throw cancellation
             throw error
         } catch (_: Exception) {
             throw ReplacePreviewException(ReplacePreviewException.Reason.JS_EVALUATION)

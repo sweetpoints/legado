@@ -15,6 +15,7 @@ on:
       - '.github/scripts/verify-ui-test-coverage.py'
       - '.github/scripts/sample-ci-resources.py'
       - '.github/scripts/prepare-pdf-zoom-fixture.py'
+      - '.github/scripts/prepare-reported-rss-fixture.py'
       - 'app/build.gradle.kts'
       - 'app/src/main/java/io/legado/app/ui/**'
       - 'app/src/main/java/io/legado/app/base/**'
@@ -151,7 +152,7 @@ jobs:
   dialog:
     runs-on: ubuntu-latest
     # Build/setup and the complete device suite exceeded 60 minutes in the previous run.
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -163,6 +164,7 @@ jobs:
       - name: Build instrumented test APKs
         run: |
           python3 .github/scripts/prepare-pdf-zoom-fixture.py
+          python3 .github/scripts/prepare-reported-rss-fixture.py
           chmod +x gradlew
           ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest \
             --init-script .github/scripts/source-browser-test.init.gradle \

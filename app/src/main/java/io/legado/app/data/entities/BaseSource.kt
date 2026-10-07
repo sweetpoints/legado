@@ -2,9 +2,6 @@ package io.legado.app.data.entities
 
 import android.webkit.JavascriptInterface
 import cn.hutool.crypto.symmetric.AES
-import com.script.ScriptBindings
-import com.script.buildScriptBindings
-import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern.JS_PATTERN
@@ -17,12 +14,14 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.crypto.SymmetricCryptoAndroid
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.clearExploreKindsCache
-import io.legado.app.help.source.getShareScope
-import io.legado.app.help.source.getSharedGlobalStateKey
 import io.legado.app.model.SharedJsScope
 import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
+import io.legado.app.model.sourceEngine.BookSourceScriptBridge
+import io.legado.app.model.sourceEngine.LegacySourceScriptRunner
+import io.legado.app.model.sourceEngine.DartSourceEngine
+import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -262,7 +261,7 @@ interface BaseSource : JsExtensions {
         }
     }
 
-    private fun configureScriptBindings(): ScriptBindings.() -> Unit = {
+    private fun configureEvalBindings(): MutableMap<String, Any?>.() -> Unit = {
         put("result", mutableMapOf<String, String>())
         put("book", null)
         put("chapter", null)
@@ -282,7 +281,7 @@ interface BaseSource : JsExtensions {
                 JsSourceEngine.normalizeJsResult(
                     evalJS(
                         "${getLoginJs() ?: ""}\n$loginUiJs",
-                        configureScriptBindings()
+                        configureEvalBindings()
                     )
                 ).orEmpty()
             } else {
@@ -392,6 +391,7 @@ interface BaseSource : JsExtensions {
         }
         runBlocking {
             remove(jsLib)
+            DartSourceEngine.clearSourceState(this@BaseSource)
         }
     }
 
@@ -406,25 +406,32 @@ interface BaseSource : JsExtensions {
      * 执行JS
      */
     @Throws(Exception::class)
-    fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["source"] = this
-            bindings["sourceApi"] = this
-            bindings["baseUrl"] = getKey()
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings.apply(bindingsConfig)
-        }
-        val sharedGlobalStateKey = getSharedGlobalStateKey()
-        val sharedScope = getShareScope() ?: SharedJsScope.getCryptoScope(this, null)
-        val scope = if (sharedScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings)
-        } else {
-            bindings.apply {
-                chainTo(sharedScope, sharedGlobalStateKey)
+    fun evalJS(jsStr: String, bindingsConfig: MutableMap<String, Any?>.() -> Unit = {}): Any? {
+        val original = getSource() ?: this
+        val values = BookSourceScriptBridge.bindings(bindingsConfig).toMutableMap()
+        values["__baseSourceScript"] = jsStr
+        val context = getSourceNavigationContext()
+        val caller = context[SourceHostCallbacks]
+        val callbacks = SourceHostCallbacks { method, args ->
+            fun text(index: Int): String = args.getOrNull(index)?.toString() ?: ""
+            when (method) {
+                "analyze.get" -> original.get(text(0))
+                "analyze.put" -> original.put(text(0), text(1))
+                "sourceState.getLoginInfo" -> original.getLoginInfo()
+                "sourceState.putLoginInfo" -> original.putLoginInfo(text(0))
+                "sourceState.getLoginHeader" -> original.getLoginHeader()
+                "sourceState.putLoginHeader" -> { original.putLoginHeader(text(0)); null }
+                "sourceState.getVariable" -> original.getVariable()
+                "sourceState.putVariable" -> { original.putVariable(args.firstOrNull()?.toString()); null }
+                "sourceState.removeLoginInfo" -> { original.removeLoginInfo(); null }
+                else -> {
+                    check(caller != null) { "Unbound source callback: $method" }
+                    caller.call(method, args)
+                }
             }
         }
-        return RhinoScriptEngine.eval(jsStr, scope)
+        return LegacySourceScriptRunner.evaluateBlocking(
+            jsStr, values, context + callbacks, source = this,
+        )
     }
 }
