@@ -4,6 +4,53 @@
 
 旧 `java` Proxy 通过 V8 同步桥取得返回值；脚本工作 isolate 等待，父 isolate 执行异步 Dart 宿主能力。直接调用 Dart 的 `LegacyScriptHost.call` 仍返回 Future，不能替代脚本同步桥。
 
+## Android 任务宿主
+
+下表方法已通过 `LegacyScriptHost` → `TaskScriptHost` → Android `LegacyJavaHost` 接入生产。它们需要 Android App 宿主；独立 Dart/CLI 消费者必须注入对应宿主，不能把转发能力当成跨平台实现。脚本中的调用使用同步 V8 桥，直接返回值而非 Promise；Dart 分派仍是异步 Future。现代 `source.*` API 的异步合同独立，不由这些旧方法推导。
+
+任务 ID 由调用方绑定，`TaskScriptHost` 添加受信回调标记；Android 按活动任务选择 source、tag 和协程上下文，进入方法前检查取消。脚本参数不能替换任务所有者。对象经 JSON 传输，`logType` 输出的是宿主接收到的对象类型，不提供原 Java 对象身份。
+
+| 旧方法签名 | 返回值及语义 |
+|---|---|
+| `log(value)` | 返回原 JS 参数，同时向当前来源调试日志输出；value 可为 null 或可传输 JSON 值 |
+| `logType(value)` | null；记录宿主值的类型，null 记录 `null` |
+| `toast(value)`、`longToast(value)` | null；通过 Android UI 显示带来源 tag 的提示 |
+| `timeFormat(timeMs)` | String；按 App 的 `AppConst.dateFormat` 格式化毫秒时间戳 |
+| `timeFormatUTC(timeMs,format,offsetMs)` | 格式化字符串；format 使用 Java SimpleDateFormat，offset 是时区偏移毫秒，**不是小时** |
+| `t2s(text)`、`s2t(text)` | String；分别调用 App 简繁转换，参数必须为 String |
+| `getCookie(tag)`、`getCookie(tag,key)` | String；读取 Android CookieStore 的完整 Cookie 或指定项；key=null 等同完整 Cookie |
+| `getWebViewUA()` | String；Android WebSettings 默认 User-Agent |
+| `HMacHex(data,algorithm,key)` | String；使用旧 Hutool/JCA HMAC，输出十六进制；data/key 为 UTF-8 String |
+| `HMacBase64(data,algorithm,key)` | String；同上，输出不换行的 Base64 |
+| `androidId()` | String；AppConst.androidId；不是随机 UUID，也不是跨设备固定值 |
+| `randomUUID()` | String；Java UUID.randomUUID().toString() |
+| `toNumChapter(text)` | String 或 null；按 App 章节标题模式将匹配的中文数字转数字，未匹配保留原文，null 返回 null |
+
+时间参数要求有符号整数毫秒：timeMs 在 Java Long 范围内，offsetMs 在 Java Int 范围内；非有限、小数和越界值拒绝。HMAC algorithm 交由现有 Android Hutool/JCA 支持并校验，例如 `HmacSHA256`，不保证所有提供者算法可用。CookieStore 是 Android 旧宿主存储，不等同于独立引擎 HTTP jar 的读取 API，也不由此承诺两者自动同步。
+
+## 对称加密对象
+
+`java.createSymmetricCrypto(transformation,key[,iv])` 返回有限 JS facade。transformation 为 String；key 为 String、整数数组或 null。String key 的 IV 只能为 String/null，按 UTF-8 转字节；数组/null key 的 IV 只能为数组/null。数组元素接受整数 -128..255，转 Java byte；返回字节为 signed -128..127。key=null 由原实现生成随机密钥，之后保留同一生成密钥；空/省略 IV 不成为显式参数。
+
+| facade 方法 | 支持重载与返回值 |
+|---|---|
+| `encrypt(text[,charset])`、`encrypt(bytes)` | signed 字节数组 |
+| `encryptHex(text[,charset])`、`encryptHex(bytes)` | 十六进制字符串 |
+| `encryptBase64(text[,charset])`、`encryptBase64(bytes)` | Base64 字符串 |
+| `decrypt(ciphertext)`、`decrypt(bytes)` | signed 字节数组；仅单参，ciphertext 按旧实现先识别 hex，否则 Base64 |
+| `decryptStr(ciphertext[,charset])`、`decryptStr(bytes[,charset])` | 明文字符串 |
+| `setIv(bytes)` | 返回当前 facade，可链式调用；只接受单个非null字节数组 |
+
+字符集省略时 UTF-8，显式字符集由 Android Charset.forName 校验。encrypt 系列的字节数组重载不接受额外 charset。对象不支持 InputStream、任意 Hutool 方法或 Java 参数对象。
+
+facade 保存 `{schemaVersion,ownerId,transformation,key,iv}` JSON 状态，每次调用重建 SymmetricCrypto，再恢复配置的 IV；没有按句柄增长的原生对象注册表。生产 ownerId 为受信任务的 sourceId；跨 source 的状态调用拒绝。新密钥只在 create 时生成；后续操作不重新生成密钥。只有显式 create IV 或 setIv 更新配置，提供者在一次操作中生成的 IV 不自动提升为下一次配置；这保留旧对象按配置重新初始化的行为，也不保证随机参数模式可解密或每次密文相同。状态包含密钥，不能作为安全加密存储或跨来源令牌使用。
+
+`PBE*` transformation 在这个 JSON 状态对象入口明确拒绝为 `legacy.unsupported_crypto_parameter_snapshot`：尚未复刻 PBE 参数/盐等完整状态。其他 transformation 仍取决于 Android 提供者，非法密钥、IV、padding 或操作原样失败，不自动降级。
+
+两个旧快捷入口也已接入：`aesBase64DecodeToString(text,key,transformation,iv)` 返回解密文本；`desEncodeToBase64String(data,key,transformation,iv)` 返回加密 Base64。两者恰好四个 String 参数，调用原 JsEncodeUtils 的对应方法，并不意味着其他 AES/DES/3DES、非对称、签名或流重载已覆盖。
+
+实现与回归入口：[LegacyScriptHost](../../../packages/source_legacy/lib/src/legacy_host.dart)、[Dart 参数/分派测试](../../../packages/source_legacy/test/legacy_java_host_test.dart)、[Android 分派与密钥/IV 序列测试](../../../../app/src/test/java/io/legado/app/model/sourceEngine/LegacyJavaHostTest.kt)。这些测试分别验证调用链子合同，不替代真实书源或完整阶段验收。
+
 ## 网络与响应
 
 | 方法 | 支持的参数 | 结果与限制 |
@@ -58,7 +105,7 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 ## 错误与范围
 
-不支持的参数数量报 `legacy.unsupported_overload`；不支持的方法报 `legacy.unsupported_api`。非法类型、非法 Base64/hex 等还会产生 ArgumentError/FormatException。网络错误、取消和超时由下层传播。未列出的文件、加解密、浏览器、Cookie、任意 Java 类、脚本库与应用控制接口不因这些方法存在而自动兼容。
+不支持的参数数量报 `legacy.unsupported_overload`；不支持的方法报 `legacy.unsupported_api`。非法类型、非法 Base64/hex 等还会产生 ArgumentError/FormatException。网络错误、取消和超时由下层传播。未列出的文件、加解密重载、浏览器、Cookie 操作、任意 Java 类、脚本库与应用控制接口不因这些方法存在而自动兼容。
 
 测试依据：`packages/source_legacy/test`；真实 V8 同步桥需要 `source_v8` 测试或 Android 验收另行证明。
 
@@ -71,3 +118,5 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 HTML 字符串在旧 JS 环境转为有限元素 facade：text()、attr(name)、outerHtml()、select(selector)、selectFirst(selector)、toString()、toJSON()。元素列表提供 size()、get(index)、first()、last()、text()、attr(name)、select(selector)。JSON 值保留其对象形态。序列化转换不保留原始 DOM 对象身份；元素不是完整 Java JSoup 对象，修改 DOM、父子关系与任意方法不保证支持。
 
 元素 facade 的 html() 明确报 `legacy.unsupported_element_api`。列表缺失 first/last 返回 null，attr 在空列表时为空字符串；get 越界返回 undefined。html 规则输出与 html() 方法不是同一能力。未知元素序列化报 `legacy.invalid_element_serialization`。
+
+新增 typed DOM 宿主与对象协议仍属实验实现，尚未接入生产调用链；不能用相关文件或离线测试替代上面的字符串序列化 facade 合同。外层 CSS/JS checkpoint 的四项原生测试只证明其局部入口；完整 book stage 的四项公开场景仍受兼容 gates 阻断，不能据此标为 fully compatible。

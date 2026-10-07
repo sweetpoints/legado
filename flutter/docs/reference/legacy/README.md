@@ -44,7 +44,7 @@ POST没有明确非空 Content-Type 时：形似JSON对象或数组的body按旧
 
 ## `java.*` 宿主分派
 
-完整参数、返回值与差异见 [`java.*` 宿主 API Reference](host.md)。目前覆盖部分 HTTP、变量、Base64、字符集、字节、hex 和摘要能力，通过同步桥运行。
+完整参数、返回值与差异见 [`java.*` 宿主 API Reference](host.md)。目前覆盖部分 HTTP、变量、Base64、字符集、字节、hex、摘要，以及生产接入的 Android 日志/提示、时间、简繁、Cookie、HMAC、章节数字、设备 ID、UUID 和有限对称加密 facade，通过同步桥运行。精确重载、平台要求和 PBE 参数快照缺口见 host.md；这不等同于任意 java.* 方法或 Java 反射支持。
 
 这不是任意 Java 类互操作，也没有完整旧 API 覆盖。新版只使用 `source.*`；迁移器能转换的调用仍少于兼容层支持的调用。
 
@@ -87,3 +87,7 @@ search/explore/toc允许JSON字符串解析后必须为数组；info必须为对
 内置JS模板和App帮助示例按当前V8更新：不导入org/Packages或任意Java类；source/sourceApi为JSON snapshot，不能调用Room/登录信息/登录头对象方法。book/chapter及java.ajax返回文本为原生JS String，length是属性、严格相等与空字符串真值均遵JS，不提供Java String包装重载。jsLib/CryptoJS等库仍需迁移，已覆盖的摘要接口为java.md5Encode/java.digestHex。模板保留五阶段、文件源downloadUrls、发现/登录配置及评论位置参数，但保留配置形状不代表所有平台宿主能力已经支持。
 
 即使非空mainJs替代了普通stage提取，ruleContent的imageStyle/imageDecode/payAction/callBackJs仍按App消费能力检查：非空值产生 `legacy.pipeline_requires_review`，非法值产生 `legacy.invalid_rule`，非Map的ruleContent产生 `legacy.invalid_rule_object`。null或空Map不因此产生issue；普通mainJs的stage字段不会被误判为这四个hooks。上述检查不意味着hooks已迁移或可通过旧引擎执行。
+
+## 当前接入边界
+
+新增 typed DOM 协议/宿主代码尚未生产接线，属于实验实现；当前生产元素合同仍是 [host.md](host.md) 的字符串序列化有限 facade。外层 CSS/JS checkpoint 四项原生测试通过只证明局部路径，完整 book stage 四项公开场景仍被兼容 gates 阻断。导入候选、方法白名单或局部回归不能标记整个来源 fully compatible/verified；未支持方法继续明确失败，不回退旧引擎。
