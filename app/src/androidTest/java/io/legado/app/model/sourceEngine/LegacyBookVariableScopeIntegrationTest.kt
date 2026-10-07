@@ -2,6 +2,7 @@ package io.legado.app.model.sourceEngine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fi.iki.elonen.NanoHTTPD
+import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
@@ -10,6 +11,7 @@ import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -93,6 +95,30 @@ class LegacyBookVariableScopeIntegrationTest {
                     bookSourceName = "Scoped callback fixture",
                 )
             val host = LegacyRuleHost(source.bookSourceUrl, currentCoroutineContext())
+            val originalBook =
+                Book(bookUrl = source.bookSourceUrl, name = "Book A").apply {
+                    putVariable("saved", "A-token")
+                }
+            val originalParser =
+                AnalyzeRule(originalBook, source)
+                    .setCoroutineContext(currentCoroutineContext())
+                    .setContent("<b>A-detail</b>")
+            // Scalar getString runs the empty extraction left by a put-only prefix;
+            // it gets null and skips the subsequent JS. Do not change that old behavior.
+            assertEquals(
+                "",
+                originalParser.getString(
+                    "@put:{\"detail\":\"tag.b@text\"}@js:throw new Error('Must not execute')"
+                ),
+            )
+            assertEquals("A-detail", originalBook.getVariable("detail"))
+            assertEquals(
+                "A-token",
+                originalParser.getString(
+                    "@put:{\"detail\":\"tag.b@text\"}tag.b@text@js:java.get('saved')"
+                ),
+            )
+
             fun payload(rule: String, mode: String = "scalar") =
                 mapOf<String, Any?>(
                     "rule" to rule,
@@ -145,7 +171,7 @@ class LegacyBookVariableScopeIntegrationTest {
                         host
                             .evaluate(
                                 payload(
-                                    "@put:{\"detail\":\"tag.b@text\"}@js:__sourceHostSync('analyze.get',['saved'])"
+                                    "@put:{\"detail\":\"tag.b@text\"}tag.b@text@js:__sourceHostSync('analyze.get',['saved'])"
                                 ),
                                 fromScript = false,
                             )["value"],
@@ -156,7 +182,9 @@ class LegacyBookVariableScopeIntegrationTest {
                         "A-token",
                         host
                             .evaluate(
-                                payload("@put:{\"detail\":\"tag.b@text\"}@js:java.get('saved')"),
+                                payload(
+                                    "@put:{\"detail\":\"tag.b@text\"}tag.b@text@js:java.get('saved')"
+                                ),
                                 fromScript = false,
                             )["value"],
                     )
@@ -201,7 +229,8 @@ class LegacyBookVariableScopeIntegrationTest {
                         ),
                     ruleBookInfo =
                         BookInfoRule(
-                            author = "@put:{\"detail\":\"tag.b@text\"}@js:java.get('saved')",
+                            author =
+                                "@put:{\"detail\":\"tag.b@text\"}tag.b@text@js:java.get('saved')",
                             tocUrl = "tag.a@href",
                         ),
                     ruleToc =
