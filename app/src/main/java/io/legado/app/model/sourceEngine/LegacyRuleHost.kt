@@ -1,10 +1,16 @@
 package io.legado.app.model.sourceEngine
 
+import io.legado.app.constant.AppPattern
+import io.legado.app.constant.BookSourceType
+import io.legado.app.constant.BookType
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.utils.GSON
+import io.legado.app.utils.HtmlFormatter
+import java.net.URL
 import java.util.IdentityHashMap
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
@@ -12,6 +18,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
+import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.nodes.Node
 import org.seimicrawler.xpath.JXNode
 
@@ -24,6 +31,8 @@ class LegacyRuleHost(
     private val nodeLock = Any()
     private val nodeTokens = IdentityHashMap<Node, String>()
     private val nodes = hashMapOf<String, Node>()
+    private val valueTokens = IdentityHashMap<Any, String>()
+    private val storedValues = hashMapOf<String, Any>()
     @Volatile private var closed = false
     private val completionHandle: DisposableHandle? = context[Job]?.invokeOnCompletion { close() }
 
@@ -36,6 +45,8 @@ class LegacyRuleHost(
                     closed = true
                     nodes.clear()
                     nodeTokens.clear()
+                    storedValues.clear()
+                    valueTokens.clear()
                     true
                 }
             }
@@ -47,13 +58,30 @@ class LegacyRuleHost(
     }
 
     private fun restoreInput(input: Any): Any {
-        if (input !is Map<*, *> || input.size != 1 || !input.containsKey(NODE_REF)) return input
-        val token = input[NODE_REF] as? String ?: invalid("Legacy node reference must be a string")
+        if (input !is Map<*, *> || input.size != 1) return input
+        val key =
+            when {
+                input.containsKey(NODE_REF) -> NODE_REF
+                input.containsKey(VALUE_REF) -> VALUE_REF
+                else -> return input
+            }
+        val token = input[key] as? String ?: invalid("Legacy reference must be a string")
         return synchronized(nodeLock) {
             ensureOpen()
-            nodes[token] ?: invalid("Legacy node reference does not belong to this active task")
+            (if (key == NODE_REF) nodes[token] else storedValues[token])
+                ?: invalid("Legacy reference does not belong to this active task")
         }
     }
+
+    private fun valueReference(value: Any): Map<String, String> =
+        synchronized(nodeLock) {
+            ensureOpen()
+            val token =
+                valueTokens.getOrPut(value) {
+                    UUID.randomUUID().toString().also { storedValues[it] = value }
+                }
+            mapOf(VALUE_REF to token)
+        }
 
     private fun nodeReference(node: Node): Map<String, String> =
         synchronized(nodeLock) {
@@ -79,7 +107,9 @@ class LegacyRuleHost(
             )
         }
         val mode = payload["mode"] as? String ?: invalid("mode is required")
-        require(mode in setOf("elements", "scalar", "list")) { "Invalid legacy rule mode" }
+        require(mode in setOf("elements", "element", "content", "scalar", "list")) {
+            "Invalid legacy rule mode"
+        }
         val input = restoreInput(payload["input"] ?: invalid("input must not be null"))
         val baseUrl = payload["baseUrl"] as? String ?: invalid("baseUrl must be a string")
         val isUrl = boolean(payload, "isUrl", false)
@@ -109,6 +139,14 @@ class LegacyRuleHost(
         val extract = {
             when (mode) {
                 "elements" -> parser.getElements(rule)
+                "element" -> parser.getElement(rule)
+                "content" ->
+                    formatContent(
+                        parser.getString(parser.splitSourceRule(rule), unescape = false),
+                        bindings,
+                        source,
+                        baseUrl,
+                    )
                 "scalar" ->
                     parser.getString(
                         parser.splitSourceRule(rule),
@@ -123,7 +161,49 @@ class LegacyRuleHost(
         val result = if (fromScript) parser.withScriptCallback(extract) else extract()
         context.ensureActive()
         ensureOpen()
-        return mapOf("value" to jsonValue(result), "variables" to values.writes())
+        val transported =
+            if (mode == "element") {
+                if (result == null) invalid("内容不可空（Content cannot be null）")
+                valueReference(result)
+            } else jsonValue(result)
+        return mapOf("value" to transported, "variables" to values.writes())
+    }
+
+    private fun formatContent(
+        raw: String,
+        bindings: Map<*, *>,
+        source: BookSource,
+        baseUrl: String,
+    ): String {
+        val explicit = bindings["__legacyContentFormat"]
+        require(explicit == null || explicit is Boolean) { "Invalid content formatting flag" }
+        val bookType = (bindings["book"] as? Map<*, *>)?.get("type") as? Number
+        val shouldFormat =
+            explicit as? Boolean
+                ?: if (bookType != null) {
+                    bookType.toInt() and (BookType.audio or BookType.video) == 0
+                } else
+                    source.bookSourceType != BookSourceType.audio &&
+                        source.bookSourceType != BookSourceType.video
+        if (!shouldFormat) return raw
+        val adapt = bindings["__legacyAdaptSpecialStyle"]
+        require(adapt == null || adapt is Boolean) { "Invalid special-style formatting flag" }
+        val useHtml = linkedMapOf<String, String>()
+        var content = raw
+        if (adapt as? Boolean ?: AppConfig.adaptSpecialStyle) {
+            content =
+                AppPattern.useHtmlRegex.replace(content) {
+                    val placeholder = "{usehtml_${useHtml.size}}"
+                    useHtml[placeholder] = it.value
+                    placeholder
+                }
+        }
+        content = HtmlFormatter.formatKeepImg(content, URL(baseUrl))
+        if ('&' in content) content = StringEscapeUtils.unescapeHtml4(content)
+        useHtml.forEach { (placeholder, original) ->
+            content = content.replace(placeholder, original)
+        }
+        return content
     }
 
     private class TaskVariables : RuleDataInterface {
@@ -181,6 +261,7 @@ class LegacyRuleHost(
 
     companion object {
         const val NODE_REF = "__legacyRuleNodeRef"
+        const val VALUE_REF = "__legacyRuleValueRef"
 
         /**
          * Parser capability only; it does not enable contentBatch/callback/source pipeline hooks.

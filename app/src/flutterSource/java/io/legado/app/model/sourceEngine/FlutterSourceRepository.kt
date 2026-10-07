@@ -301,7 +301,14 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             "sourceState.getLoginInfo", "sourceState.putLoginInfo", "sourceState.getLoginHeader",
             "sourceState.putLoginHeader", "sourceState.getVariable", "sourceState.putVariable", "sourceState.removeLoginInfo",
         )
-        if (method in callbackMethods) {
+        val exploreInfoMapMethods = setOf(
+            "exploreInfoMap.get", "exploreInfoMap.put", "exploreInfoMap.remove", "exploreInfoMap.set",
+            "exploreInfoMap.save", "exploreInfoMap.saveNow", "exploreInfoMap.getNeedSave", "exploreInfoMap.setNeedSave",
+            "exploreInfoMap.putAll", "exploreInfoMap.containsKey", "exploreInfoMap.containsValue", "exploreInfoMap.size",
+            "exploreInfoMap.isEmpty", "exploreInfoMap.clear", "exploreInfoMap.keys", "exploreInfoMap.values",
+            "exploreInfoMap.entries", "exploreInfoMap.sourceUrl",
+        )
+        if (method in callbackMethods || method in exploreInfoMapMethods) {
             val caller = task.context[SourceHostCallbacks]
                 ?: error("Source task has no bound callback for $method")
             return caller.call(method, args)

@@ -13,6 +13,9 @@ import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isOnLineTxt
+import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.isVideo
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
@@ -494,6 +497,9 @@ object WebBook {
                     "chapterUrl" to bookChapter.getAbsoluteURL(),
                     "chapterTitle" to bookChapter.title,
                     "nextChapterUrl" to nextChapterUrl,
+                    "__legacyContentFormat" to (!book.isAudio && !book.isVideo),
+                    "__legacyAdaptSpecialStyle" to AppConfig.adaptSpecialStyle,
+                    "__legacyOnLineTxt" to book.isOnLineTxt,
                 )
         val row = DartSourceEngine.execute(bookSource, "content", input).single()
         val content =

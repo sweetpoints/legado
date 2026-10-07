@@ -373,4 +373,136 @@ class LegacyRuleHostTest {
         task.close()
         job.complete()
     }
+
+    @Test
+    fun infoInitPreservesWholeCssElementsContainerRatherThanFirstNode() {
+        val task = host()
+        val initial = task.evaluate(request("tag.a", mode = "element"))["value"]!!
+        assertEquals(setOf(LegacyRuleHost.VALUE_REF), (initial as Map<*, *>).keys)
+        assertEquals("Two", task.evaluate(request("tag.a.1@text", initial))["value"])
+        assertEquals("Three", task.evaluate(request("tag.a.-1@text", initial))["value"])
+        assertEquals(
+            "invalid_request",
+            assertThrows(SourceScriptException::class.java) {
+                    host().evaluate(request("tag.a@text", initial))
+                }
+                .code,
+        )
+    }
+
+    @Test
+    fun infoInitPreservesXPathListAndRegexCapturesForLaterFields() {
+        val task = host()
+        val xpath = task.evaluate(request("@XPath://a", mode = "element"))["value"]!!
+        assertEquals("Two", task.evaluate(request("tag.a.1@text", xpath))["value"])
+        val regex = task.evaluate(request(":([0-9]+):([A-Za-z]+)", "12:Book", "element"))["value"]!!
+        assertEquals("Book", task.evaluate(request("\$2", regex))["value"])
+        assertEquals(
+            "invalid_request",
+            assertThrows(SourceScriptException::class.java) {
+                    task.evaluate(request(":([0-9]+)", "nothing", "element"))
+                }
+                .code,
+        )
+    }
+
+    @Test
+    fun legacyContentFormattingKeepsImagesIndentationAndExactlyOneHtmlDecode() {
+        val raw = "Start<p>A&nbsp;B</p><p>&lt;C&gt;</p><img src='../images/x.png'>"
+        val result =
+            host()
+                .evaluate(
+                    request(
+                        "raw",
+                        mapOf("raw" to raw),
+                        "content",
+                        mapOf(
+                            "baseUrl" to "https://fixture.invalid/books/chapter.html",
+                            "variables" to
+                                mapOf(
+                                    "__legacyContentFormat" to true,
+                                    "__legacyAdaptSpecialStyle" to false,
+                                ),
+                        ),
+                    )
+                )
+        assertEquals(
+            "Start\n　　A B\n　　<C>\n　　<img src=\"https://fixture.invalid/images/x.png\">",
+            result["value"],
+        )
+        val doubleEncoded =
+            host()
+                .evaluate(
+                    request(
+                        "raw",
+                        mapOf("raw" to "Start<p>&amp;lt;C&amp;gt;</p>"),
+                        "content",
+                        mapOf(
+                            "variables" to
+                                mapOf(
+                                    "__legacyContentFormat" to true,
+                                    "__legacyAdaptSpecialStyle" to false,
+                                )
+                        ),
+                    )
+                )
+        assertEquals("Start\n　　&lt;C&gt;", doubleEncoded["value"])
+    }
+
+    @Test
+    fun mediaContentBypassesHtmlFormattingAndSpecialStyleUsesOriginalPlaceholderRule() {
+        val raw = "https://fixture.invalid/audio?a=1&amp;b=2"
+        for (type in listOf(32, 4)) {
+            assertEquals(
+                raw,
+                host()
+                    .evaluate(
+                        request(
+                            "raw",
+                            mapOf("raw" to raw),
+                            "content",
+                            mapOf("variables" to mapOf("book" to mapOf("type" to type))),
+                        )
+                    )["value"],
+            )
+        }
+        val protected = "<usehtml><b>A&amp;B</b></usehtml>"
+        val result =
+            host()
+                .evaluate(
+                    request(
+                        "raw",
+                        mapOf("raw" to protected),
+                        "content",
+                        mapOf(
+                            "variables" to
+                                mapOf(
+                                    "__legacyContentFormat" to true,
+                                    "__legacyAdaptSpecialStyle" to true,
+                                )
+                        ),
+                    )
+                )
+        assertEquals(protected, result["value"])
+    }
+
+    @Test
+    fun explicitTaskCloseAlsoReleasesWholeInitContainers() {
+        val task = host()
+        val initial = task.evaluate(request("tag.a", mode = "element"))["value"]!!
+        val registry =
+            LegacyRuleHost::class.java.getDeclaredField("storedValues").apply {
+                isAccessible = true
+            }
+        assertEquals(1, (registry.get(task) as Map<*, *>).size)
+        task.close()
+        assertEquals(0, (registry.get(task) as Map<*, *>).size)
+        assertEquals(
+            "invalid_request",
+            assertThrows(SourceScriptException::class.java) {
+                    task.evaluate(request("tag.a@text", initial))
+                }
+                .code,
+        )
+    }
 }
