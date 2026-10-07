@@ -30,7 +30,7 @@ class LegacyAuxiliaryFacadeV8IntegrationTest {
                     withTimeout(15_000) {
                         DartSourceEngine.evaluate(
                             source,
-                            "({value:auxLibrary('first'),key:source.getKey(),header:java.get('headerRan'),put:java.put('saved','value')})",
+                            "(globalThis.auxSticky='retained-sentinel', {value:auxLibrary('first'),key:source.getKey(),header:java.get('headerRan'),put:java.put('saved','value')})",
                         )
                     }
                         as Map<*, *>
@@ -42,11 +42,12 @@ class LegacyAuxiliaryFacadeV8IntegrationTest {
                     withTimeout(15_000) {
                         DartSourceEngine.evaluate(
                             source,
-                            "({value:auxLibrary('second'),saved:java.get('saved'),loads:auxLibraryLoads})",
+                            "({value:auxLibrary('second'),saved:java.get('saved'),loads:auxLibraryLoads,sticky:globalThis.auxSticky})",
                         )
                     }
                         as Map<*, *>
                 assertEquals("second:1", second["value"])
+                assertEquals("retained-sentinel", second["sticky"])
                 assertEquals("value", second["saved"])
                 assertEquals(1, (second["loads"] as Number).toInt())
                 assertEquals("", source.get("headerRan"))
@@ -108,7 +109,8 @@ class LegacyAuxiliaryFacadeV8IntegrationTest {
                 )
             val failure = runCatching {
                 withTimeout(15_000) { DartSourceEngine.evaluate(source, "1") }
-            }.exceptionOrNull()
+            }
+                .exceptionOrNull()
             assertTrue(failure is SourceHostException)
             assertEquals("invalid_source", (failure as SourceHostException).code)
         }
