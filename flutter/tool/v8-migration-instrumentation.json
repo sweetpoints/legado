@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 97,
+  "caseCount": 98,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -238,7 +238,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyAuxiliaryFacadeV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyAuxiliaryFacadeV8IntegrationTest.kt",
-      "sourceSha256": "559588ad06e6233d26c024aff36a3504263cb9104c11ff5acb90860732c75da3",
+      "sourceSha256": "8843daad5e68523692cbe2e9a9e96e9e662d9d4aacac8d2ab916f15de5ac4e8e",
       "methods": [
         "existingEntityCallbacksRemainTheVariableOwnerInsteadOfSourceGlobalState",
         "invalidModernCarrierStaysStrictAndDoesNotLoadTheLegacyLibrary",
@@ -248,9 +248,10 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyDynamicHttpHeaderV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyDynamicHttpHeaderV8IntegrationTest.kt",
-      "sourceSha256": "081706ebadb3b02910fe27f5721225a828da1379a033090783741f9f89ea0097",
+      "sourceSha256": "45f879553535e98fb46010c1dcd8d95fb6a5029e00e9268a7ae5f497db4e28e9",
       "methods": [
         "ajaxSourceHeaderRunsInTheExistingOwnerAndPreservesLibraryAndGlobals",
+        "dynamicHeaderUsesSourceVariablesAndRestoresTheCallerBookScope",
         "jsoupGetUsesItsExplicitDynamicHeaderAndDoesNotEvaluateSourceHeader"
       ]
     }
