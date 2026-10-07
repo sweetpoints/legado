@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:source_engine/source_engine.dart';
 import 'package:source_legacy/source_legacy.dart';
 import 'package:source_platform/source_platform.dart';
@@ -14,6 +15,7 @@ Future<void> main() async {
   final host = SourceHost(
     createSourceEngine,
     sessionStore: const PlatformSessionStore(),
+    legacyRuleHostEnabled: defaultTargetPlatform == TargetPlatform.android,
   );
   await host.attach(
     initialize: () async {
@@ -54,6 +56,9 @@ SourceEngine createSourceEngine(
 }) => SourceEngine(
   runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
   requestAdapter: adaptLegacyRequest,
+  legacyRuleEvaluator: defaultTargetPlatform == TargetPlatform.android
+      ? const HostLegacyRuleEvaluator()
+      : null,
   platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
 );
 

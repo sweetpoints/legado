@@ -10,16 +10,36 @@ import 'session_store.dart';
 
 /// Protocol v1. Long requests are cancellable by task ID; failures never fall back.
 class SourceHost {
-  SourceHost(this.createEngine, {MethodChannel? channel, this.sessionStore})
-    : channel = channel ?? const MethodChannel('legado/source_engine');
+  SourceHost(
+    this.createEngine, {
+    MethodChannel? channel,
+    this.sessionStore,
+    this.legacyRuleHostEnabled = false,
+  }) : channel = channel ?? const MethodChannel('legado/source_engine');
   final SourceEngine Function(SourceDefinition) createEngine;
   final MethodChannel channel;
   final SourceSessionStore? sessionStore;
+  final bool legacyRuleHostEnabled;
   final Map<String, CancellationToken> _tasks = {};
   final Map<String, _CachedEngine> _engines = {};
   final Map<String, Future<void>> _queues = {};
   final Set<String> _active = {};
   bool _closed = false;
+
+  bool _hostedRuleIssue(LegacyIssue issue, Map<String, Object?> original) {
+    if (!{
+      'legacy.rule_requires_review',
+      'legacy.regex_mode',
+    }.contains(issue.code)) {
+      return false;
+    }
+    final dot = issue.path.indexOf('.');
+    if (dot < 0) return false;
+    final group = original[issue.path.substring(0, dot)];
+    if (group is! Map) return false;
+    final rule = group[issue.path.substring(dot + 1)];
+    return rule is String && HostLegacyRuleEvaluator.canEvaluate(rule);
+  }
 
   Future<void> attach({Future<void> Function()? initialize}) async {
     channel.setMethodCallHandler(handle);
@@ -88,7 +108,8 @@ class SourceHost {
                   !(legacy.source.metadata['legacyBaseUrlUnavailable'] ==
                           true &&
                       issue.code == 'legacy.base_url_requires_review' &&
-                      issue.path == 'bookSourceUrl'),
+                      issue.path == 'bookSourceUrl') &&
+                  !(legacyRuleHostEnabled && _hostedRuleIssue(issue, raw)),
             )
             .toList();
         // This one reviewed identity risk is enforced by the engine's absolute

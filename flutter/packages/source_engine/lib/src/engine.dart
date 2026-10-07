@@ -9,6 +9,7 @@ import 'rules.dart';
 import 'form_encoding.dart';
 import 'page_templates.dart';
 import 'html4.dart';
+import 'legacy_rule_host.dart';
 
 typedef SourceRequestAdapter = SourceStage Function(
   SourceDefinition source,
@@ -23,11 +24,13 @@ class SourceEngine {
     this.platform,
     this.hostAdapter,
     this.requestAdapter,
+    this.legacyRuleEvaluator,
   }) : _providedNetwork = network;
   final ScriptRuntime runtime;
   final ScriptHost? platform;
   final ScriptHost Function(ScriptHost)? hostAdapter;
   final SourceRequestAdapter? requestAdapter;
+  final LegacyRuleEvaluator? legacyRuleEvaluator;
   final NetworkClient? _providedNetwork;
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
@@ -283,35 +286,84 @@ class SourceEngine {
         source.headers,
       );
       final pageContext = ScriptContext(
-        variables: {...context.variables, 'baseUrl': response.url.toString()},
+        variables: {
+          ...context.variables,
+          'baseUrl': response.url.toString(),
+          if (source.metadata['legacyOriginal'] is Map) 'legacyVariables': vars,
+        },
         host: hostAdapter?.call(pageHost) ?? pageHost,
         timeout: context.timeout,
       );
-      final rows = stage.list == null
-          ? [response.body]
-          : await rules.evaluate(
-              stage.list!,
-              response.body,
+      final legacyHost = source.metadata['legacyOriginal'] is Map
+          ? legacyRuleEvaluator
+          : null;
+      Future<List<Object?>> evaluateRule(
+        String rule,
+        Object? value, {
+        bool elements = false,
+        bool scalar = false,
+        bool isUrl = false,
+        bool unescape = true,
+      }) => legacyHost == null || !legacyHost.supportsRule(rule)
+          ? rules.evaluate(
+              rule,
+              value,
               pageContext,
               cancellation: cancellation,
-              elements: true,
+              elements: elements,
+            )
+          : legacyHost.evaluate(
+              rule,
+              value,
+              pageContext,
+              source: source,
+              operation: operation,
+              elements: elements,
+              scalar: scalar,
+              isUrl: isUrl,
+              unescape: unescape,
+              cancellation: cancellation,
             );
+      final rows = stage.list == null
+          ? [response.body]
+          : await evaluateRule(stage.list!, response.body, elements: true);
 
       for (final row in rows) {
         cancellation?.throwIfCancelled();
         final fields = <String, Object?>{};
         for (final entry in stage.fields.entries) {
-          final values = await rules.evaluate(
+          final isLink = {
+            'bookUrl',
+            'tocUrl',
+            'url',
+            'chapterUrl',
+          }.contains(entry.key);
+          final listField = {'kind', 'downloadUrls'}.contains(entry.key);
+          final values = await evaluateRule(
             entry.value,
             row,
-            pageContext,
-            cancellation: cancellation,
+            scalar: !listField,
+            isUrl: isLink,
+            unescape: operation != 'content' && !listField,
           );
-          var value = values.map(RuleEvaluator.text).join('\n');
+          final legacyScalar =
+              (source.metadata['legacy'] == true ||
+                  source.metadata['legacyOriginal'] is Map) &&
+              entry.value.trimLeft().toLowerCase().startsWith('@legacy:');
+          // AnalyzeRule.getString(isUrl=true) uses JSoup.getString0.
+          // Joining selected links would create a different URI.
+          final firstLegacyLink =
+              row is! Map &&
+              legacyScalar &&
+              {'bookUrl', 'tocUrl', 'url', 'chapterUrl'}.contains(entry.key);
+          var value = (firstLegacyLink ? values.take(1) : values)
+              .map(RuleEvaluator.text)
+              .join('\n');
           // Old getString unescapes once after joining/replacement. Content
           // formatting and kind/downloadUrls/nextPage use different old paths.
           // Keep this provenance-bound; modern rules and string lists are raw.
-          if ((source.metadata['legacy'] == true ||
+          if ((legacyHost == null || !legacyHost.supportsRule(entry.value)) &&
+              (source.metadata['legacy'] == true ||
                   source.metadata['legacyOriginal'] is Map) &&
               operation != 'content' &&
               entry.key != 'kind' &&
@@ -323,16 +375,22 @@ class SourceEngine {
               value.isNotEmpty) {
             value = response.url.resolve(value).toString();
           }
-          fields[entry.key] = value;
+          if (legacyHost?.supportsRule(entry.value) == true && listField) {
+            fields[entry.key] = entry.key == 'downloadUrls'
+                ? values
+                : values.map(RuleEvaluator.text).join(',');
+          } else {
+            fields[entry.key] = value;
+          }
         }
         results.add(fields);
       }
       if (stage.nextPage == null) break;
-      final links = await rules.evaluate(
+      final links = await evaluateRule(
         stage.nextPage!,
         response.body,
-        pageContext,
-        cancellation: cancellation,
+        isUrl: true,
+        unescape: false,
       );
       final next = links
           .map(RuleEvaluator.text)
