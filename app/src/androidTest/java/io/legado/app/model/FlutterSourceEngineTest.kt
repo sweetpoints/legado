@@ -12,6 +12,9 @@ import io.legado.app.model.sourceEngine.SourceEngineBackend
 import io.legado.app.model.sourceEngine.SourceScriptException
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.help.http.CookieStore
+import io.legado.app.help.CacheManager
+import io.legado.app.utils.NetworkUtils
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -918,7 +921,7 @@ class FlutterSourceEngineTest {
     }
 
     @Test
-    fun nonUrlLegacySourceIdsSearchAbsoluteEndpointAndKeepSessionsIsolated() = runBlocking {
+    fun nonUrlLegacySourceIdsKeepVariablesIsolatedButNativeCookiesKeepDomainScope() = runBlocking {
         assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
         val unique = java.util.UUID.randomUUID().toString()
         java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
@@ -987,9 +990,63 @@ class FlutterSourceEngineTest {
                 assertEquals("$origin/catalog/book", result.bookUrl)
                 assertEquals(source.bookSourceUrl, result.origin)
             }
+            assertEquals("A", withTimeout(60_000) { DartSourceEngine.evaluate(first, "java.put('fixtureOwner','A'); java.get('fixtureOwner')") })
+            assertEquals("B", withTimeout(60_000) { DartSourceEngine.evaluate(second, "java.put('fixtureOwner','B'); java.get('fixtureOwner')") })
+            assertEquals("A", withTimeout(60_000) { DartSourceEngine.evaluate(first, "java.get('fixtureOwner')") })
             serving.await()
             assertEquals(listOf("/catalog/search", "/catalog/search", "/catalog/search"), paths)
-            assertEquals(listOf("", "", "owner=A"), cookies)
+            // The independent Native golden below verifies the historical domain cookie jar.
+            assertEquals(listOf("", "owner=A", "owner=B"), cookies)
+        }
+    }
+
+    @Test
+    fun originalNativeCookieJarUsesDomainScopeAcrossDistinctSourceLabels(): Unit = runBlocking(Dispatchers.IO) {
+        val unique = java.util.UUID.randomUUID().toString()
+        java.net.ServerSocket(0, 3, java.net.InetAddress.getByName("127.0.0.7")).use { server ->
+            val origin = "http://127.0.0.7:${server.localPort}"
+            val domain = NetworkUtils.getSubDomain(origin)
+            val cookies = mutableListOf<String>()
+            val requests = mutableListOf<String>()
+            CookieStore.removeCookie(origin)
+            CacheManager.deleteMemory("${domain}_session_cookie")
+            val serving = async(Dispatchers.IO) {
+                repeat(3) { index ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10_000
+                        val reader = socket.getInputStream().bufferedReader()
+                        requests += reader.readLine()
+                        var cookie = ""
+                        while (true) {
+                            val header = reader.readLine()
+                            if (header.isNullOrEmpty()) break
+                            if (header.startsWith("Cookie:", true)) cookie = header.substringAfter(':').trim()
+                        }
+                        cookies += cookie
+                        val owner = if (index == 1) "B" else "A"
+                        socket.getOutputStream().apply {
+                            write("HTTP/1.1 200 OK\r\nSet-Cookie: owner=$owner; Path=/; HttpOnly\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK".toByteArray())
+                            flush()
+                        }
+                    }
+                }
+            }
+            try {
+                val first = BookSource(bookSourceUrl = "Native golden A $unique", bookSourceName = "A", enabledCookieJar = true)
+                val second = BookSource(bookSourceUrl = "Native golden B $unique", bookSourceName = "B", enabledCookieJar = true)
+                for (owner in listOf(first, second, first)) {
+                    val response = withTimeout(60_000) {
+                        AnalyzeUrl("$origin/golden", source = owner).getStrResponseAwait()
+                    }
+                    assertEquals("OK", response.body)
+                }
+                serving.await()
+                assertEquals(listOf("GET /golden HTTP/1.1", "GET /golden HTTP/1.1", "GET /golden HTTP/1.1"), requests)
+                assertEquals(listOf("", "owner=A", "owner=B"), cookies)
+            } finally {
+                CookieStore.removeCookie(origin)
+                CacheManager.deleteMemory("${domain}_session_cookie")
+            }
         }
     }
 
