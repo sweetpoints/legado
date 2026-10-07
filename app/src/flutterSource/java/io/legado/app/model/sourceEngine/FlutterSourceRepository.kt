@@ -276,6 +276,20 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             check(method != "browser.open") { "Source navigation is suppressed for this operation" }
             return null
         }
+        if (method in LegacyJavaHost.methods) {
+            val source: BaseSource? = when (task.sourceKind) {
+                "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
+                "tts" -> task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
+                "book" -> appDb.bookSourceDao.getBookSource(task.navigationSourceId)
+                else -> null
+            }
+            val extensions = object : JsExtensions {
+                override fun getSource() = source
+                override fun getTag() = source?.getTag() ?: task.sourceId
+                override fun getSourceNavigationContext() = task.context
+            }
+            return LegacyJavaHost.call(extensions, method, args)
+        }
         val source: BaseSource = when (task.sourceKind) {
             "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
             "tts" -> task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let { appDb.httpTTSDao.get(it) }

@@ -49,6 +49,15 @@ class SourcePlatform implements ScriptHost {
       case 'browser.start':
       case 'browser.openUrl':
       case 'browser.video':
+      case 'javaHost.log':
+      case 'javaHost.logType':
+      case 'javaHost.toast':
+      case 'javaHost.longToast':
+      case 'javaHost.timeFormat':
+      case 'javaHost.timeFormatUTC':
+      case 'javaHost.t2s':
+      case 'javaHost.s2t':
+      case 'javaHost.getCookie':
       case 'replacement.log':
       case 'replacement.logType':
       case 'replacement.t2s':

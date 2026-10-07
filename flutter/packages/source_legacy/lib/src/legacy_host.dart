@@ -7,6 +7,15 @@ import 'package:source_engine/source_engine.dart';
 
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
+  'log',
+  'logType',
+  'toast',
+  'longToast',
+  'timeFormat',
+  'timeFormatUTC',
+  't2s',
+  's2t',
+  'getCookie',
   'ajax',
   'ajaxAll',
   'connect',
@@ -130,6 +139,7 @@ const legacyScriptPrelude = r"""
           if (String(name) === 'getString') args.push(unescape);
         }
         const value = __sourceHostSync('java.' + String(name), args);
+        if (String(name) === 'log') return args[0];
         if (String(name) === 'getElement') return element(value);
         if (String(name) === 'getElements') return elementList(value);
         return response(value);
@@ -165,6 +175,47 @@ class LegacyScriptHost implements ScriptHost {
 
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
+      case 'log':
+      case 'logType':
+      case 'toast':
+      case 'longToast':
+        arity(1);
+        return delegate.call('javaHost.$name', arguments);
+      case 't2s':
+      case 's2t':
+        arity(1);
+        str(0);
+        return delegate.call('javaHost.$name', arguments);
+      case 'getCookie':
+        arity(1, 2);
+        str(0);
+        if (arguments.length == 2 && arguments[1] != null) str(1);
+        return delegate.call('javaHost.getCookie', arguments);
+      case 'timeFormat':
+      case 'timeFormatUTC':
+        arity(name == 'timeFormat' ? 1 : 3);
+        final time = arguments[0];
+        if (time is! num ||
+            !time.isFinite ||
+            (time is! int && time != time.truncateToDouble()) ||
+            time < -9223372036854775808 ||
+            time > 9223372036854775807) {
+          throw ArgumentError('Time must be signed integer milliseconds');
+        }
+        if (name == 'timeFormatUTC') {
+          str(1);
+          final offset = arguments[2];
+          if (offset is! num ||
+              !offset.isFinite ||
+              offset != offset.truncateToDouble() ||
+              offset < -2147483648 ||
+              offset > 2147483647) {
+            throw ArgumentError(
+              'UTC offset must be signed integer milliseconds',
+            );
+          }
+        }
+        return delegate.call('javaHost.$name', arguments);
       case 'cacheContent':
         arity(2, 3);
         // Native callbacks accept both implicit batch context and explicit ID.

@@ -15,6 +15,57 @@ void main() {
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
   test(
+    'legacy Java delegates cross platform with bound task and source',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        final request = call.arguments as Map;
+        calls.add(request);
+        return request['method'] == 'javaHost.log'
+            ? (request['arguments'] as List).single
+            : 'native';
+      });
+      final host = LegacyScriptHost(
+        TaskScriptHost(
+          const SourcePlatform(sourceId: 'book:fixture'),
+          'bound-task',
+        ),
+      );
+      expect(
+        await host.call('java.log', [
+          {'value': 7},
+        ]),
+        {'value': 7},
+      );
+      expect(await host.call('java.timeFormat', [1234]), 'native');
+      expect(
+        await host.call('java.getCookie', ['cookie-tag', 'key']),
+        'native',
+      );
+      expect(await host.call('java.t2s', ['繁體']), 'native');
+      expect(await host.call('java.toast', [null]), 'native');
+      for (final request in calls) {
+        expect(request['taskId'], 'bound-task');
+        expect(request['sourceId'], 'book:fixture');
+      }
+      expect(calls[2]['arguments'], ['cookie-tag', 'key']);
+      await expectLater(
+        LegacyScriptHost(
+          TaskScriptHost(const SourcePlatform(sourceId: 'book:fixture'), null),
+        ).call('java.log', ['x']),
+        throwsA(
+          isA<EngineException>().having(
+            (e) => e.code,
+            'code',
+            'invalid_request',
+          ),
+        ),
+      );
+      expect(calls.length, 5);
+    },
+  );
+
+  test(
     'concurrent cache callbacks carry caller task and preserve boolean results',
     () async {
       final entered = Completer<void>();
