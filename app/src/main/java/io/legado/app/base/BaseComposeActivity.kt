@@ -12,13 +12,11 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import io.legado.app.constant.Theme
 import io.legado.app.ui.theme.LegadoComposeTheme
-import io.legado.app.ui.theme.LocalLegadoColors
-import io.legado.app.utils.setLightStatusBar
+import io.legado.app.ui.theme.Material3SystemBars
 
 /** Compose host retaining the app's locale, window, background and back behavior. */
 abstract class BaseComposeActivity(
@@ -43,13 +41,21 @@ abstract class BaseComposeActivity(
                 if (handlesWindowInsets) {
                     Content(savedInstanceState)
                 } else {
-                    val lightBackground = LocalLegadoColors.current.isLight
-                    SideEffect { setLightStatusBar(lightBackground) }
+                    Material3SystemBars(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.background,
+                    )
                     Box(
                         Modifier.fillMaxSize()
                             .background(MaterialTheme.colorScheme.background)
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                    ) { Content(savedInstanceState) }
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                                )
+                            )
+                    ) {
+                        Content(savedInstanceState)
+                    }
                 }
             }
         }

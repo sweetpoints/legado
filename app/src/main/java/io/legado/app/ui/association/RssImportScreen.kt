@@ -32,6 +32,7 @@ internal enum class RssImportMenu(val label: Int) {
     ReplaceRules(R.string.menu_replace_rule),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RssImportScreen(
     state: RssImportUiState,
@@ -66,16 +67,9 @@ internal fun RssImportScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(R.string.import_rss_source),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_rss_source)) },
+                actions = {
                     Box {
                         IconButton(
                             { menuOpen = true },
@@ -85,7 +79,6 @@ internal fun RssImportScreen(
                             Icon(
                                 painterResource(R.drawable.ic_more_vert),
                                 stringResource(R.string.menu),
-                                tint = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                         DropdownMenu(menuOpen, { menuOpen = false }) {
@@ -114,8 +107,10 @@ internal fun RssImportScreen(
                             }
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             TextButton(
                 onGroup,
                 enabled = state.interactive,

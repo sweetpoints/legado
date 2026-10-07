@@ -37,6 +37,7 @@ class DirectLinkConfigActions(
     val copyResult: () -> Unit = {},
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DirectLinkConfigScreen(state: DirectLinkConfigState, actions: DirectLinkConfigActions) {
     var menu by rememberSaveable { mutableStateOf(false) }
@@ -49,16 +50,15 @@ fun DirectLinkConfigScreen(state: DirectLinkConfigState, actions: DirectLinkConf
                 .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * .85f)
                 .imePadding()
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.direct_link_upload_config),
-                        Modifier.weight(1f).padding(16.dp),
-                        style = MaterialTheme.typography.titleMedium,
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     Box {
                         IconButton(
                             { menu = true },
@@ -97,8 +97,9 @@ fun DirectLinkConfigScreen(state: DirectLinkConfigState, actions: DirectLinkConf
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             Column(
                 Modifier.weight(1f, fill = false)

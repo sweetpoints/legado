@@ -34,6 +34,7 @@ internal enum class BookImportMenu(val label: Int) {
     SelectUpdate(R.string.select_update_source),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BookImportScreen(
     state: BookImportUiState,
@@ -70,17 +71,9 @@ internal fun BookImportScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(R.string.import_book_source),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_book_source)) },
+                actions = {
                     Box {
                         IconButton(
                             { menuOpen = true },
@@ -90,7 +83,6 @@ internal fun BookImportScreen(
                             Icon(
                                 painterResource(R.drawable.ic_more_vert),
                                 stringResource(R.string.menu),
-                                tint = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                         DropdownMenu(menuOpen, { menuOpen = false }) {
@@ -119,8 +111,10 @@ internal fun BookImportScreen(
                             }
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             TextButton(
                 onGroup,
                 enabled = state.interactive,

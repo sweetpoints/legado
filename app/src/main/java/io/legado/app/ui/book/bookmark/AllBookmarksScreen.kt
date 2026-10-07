@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -24,7 +23,7 @@ class AllBookmarksActions(
     val retry: () -> Unit = {},
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AllBookmarksScreen(state: AllBookmarksState, actions: AllBookmarksActions) {
     val list = rememberLazyListState()
@@ -50,22 +49,23 @@ fun AllBookmarksScreen(state: AllBookmarksState, actions: AllBookmarksActions) {
     }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.all_bookmark),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(actions.close, Modifier.testTag("all-bookmarks-back")) {
                         Icon(
                             painterResource(R.drawable.ic_arrow_back),
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(R.string.all_bookmark),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     Box {
                         IconButton(
                             { menu = true },
@@ -93,8 +93,9 @@ fun AllBookmarksScreen(state: AllBookmarksState, actions: AllBookmarksActions) {
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (!state.loaded || state.exporting) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (!state.loaded)
                 TextButton(actions.retry, Modifier.testTag("all-bookmarks-retry")) {
