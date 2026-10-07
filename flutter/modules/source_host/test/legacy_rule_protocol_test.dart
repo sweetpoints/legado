@@ -163,4 +163,55 @@ void main() {
       await host.close();
     }
   });
+  test(
+    'normal search ignores unrequested explore and reader UI capabilities',
+    () async {
+      final parser = _Parser();
+      final host = SourceHost(
+        (_) => SourceEngine(
+          runtime: _Runtime(),
+          network: _Network(),
+          platform: parser,
+          legacyRuleEvaluator: const HostLegacyRuleEvaluator(
+            allowScripts: true,
+          ),
+        ),
+        legacyRuleHostEnabled: true,
+        legacyScriptRuleHostEnabled: true,
+      );
+      final configured = {
+        ...raw,
+        'ruleExplore': [],
+        'loginUrl': 'https://books.test/login',
+        'ruleReview': {'review': '@js:unimplementedReviewHook()'},
+        'bookSourceType': 2,
+        'ruleContent': {'webJs': 'unimplementedBrowserHook()'},
+      };
+      try {
+        expect((await host.handle(request(configured)) as List).single, {
+          'name': '<h2>Fixture</h2>',
+        });
+        await expectLater(
+          host.handle(
+            MethodCall('execute', {
+              'protocolVersion': 1,
+              'taskId': 'content',
+              'sourceJson': jsonEncode(configured),
+              'operation': 'content',
+              'input': <String, Object?>{},
+            }),
+          ),
+          throwsA(
+            isA<PlatformException>().having(
+              (e) => e.code,
+              'code',
+              'legacy_requires_migration',
+            ),
+          ),
+        );
+      } finally {
+        await host.close();
+      }
+    },
+  );
 }
