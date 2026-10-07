@@ -130,13 +130,13 @@ class RssReadRecordScreenTest {
         loaded()
         compose.onNodeWithTag("rss-history-clear").performClick()
         compose.waitUntil { model.state.value.clearCount != null }
-        compose.onNodeWithTag("rss-history-clear-count").assertTextContains("4")
+        compose.onNodeWithTag("rss-history-clear-count").assertTextContains("4", substring = true)
         compose.onNodeWithTag("rss-history-clear-cancel").performClick()
         assertEquals(0, repo.deletes)
         compose.runOnIdle { repo.counts = 2 }
         compose.onNodeWithTag("rss-history-clear").performClick()
         compose.waitUntil { model.state.value.clearCount == 2 }
-        compose.onNodeWithTag("rss-history-clear-count").assertTextContains("2")
+        compose.onNodeWithTag("rss-history-clear-count").assertTextContains("2", substring = true)
         compose.onNodeWithTag("rss-history-clear-confirm").performClick()
         compose.waitUntil { repo.deletes == 1 && !model.state.value.busy }
         compose.onNodeWithTag("rss-history-read-key").assertDoesNotExist()

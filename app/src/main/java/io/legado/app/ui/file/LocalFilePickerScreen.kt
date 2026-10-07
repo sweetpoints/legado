@@ -187,14 +187,15 @@ internal fun LocalFilePickerScreen(
                             if (value.text == state.folderName) value.composition else null,
                     )
         }
-        LaunchedEffect(Unit) {
-            focus.requestFocus()
-            keyboard?.show()
-        }
         AlertDialog(
             onDismissRequest = cancelCreate,
             title = { Text(stringResource(R.string.create_folder)) },
             text = {
+                // Request within the dialog composition, after its focus owner exists.
+                LaunchedEffect(Unit) {
+                    focus.requestFocus()
+                    keyboard?.show()
+                }
                 Column {
                     OutlinedTextField(
                         value,

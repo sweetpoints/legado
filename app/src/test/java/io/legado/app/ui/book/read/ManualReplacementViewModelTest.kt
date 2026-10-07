@@ -142,6 +142,31 @@ class ManualReplacementViewModelTest {
     }
 
     @Test
+    fun terminalCompletionClaimsSelectionAndCloseTogetherBeforeReentryAndRestore() = test {
+        val saved = SavedStateHandle()
+        val first = model(Fake(), listOf(1, 2), saved)
+        runCurrent()
+        first.confirm()
+        val completion = first.consumeCompletion()!!
+        assertEquals(listOf(2L, 1L), completion.selection)
+        // A callback may synchronously reenter, or Compose may collect the
+        // pending=false state before the host dismisses the dialog.
+        assertNull(first.consumeCompletion())
+        assertNull(first.consumeConfirmation())
+        assertNull(model(Fake(), saved = copy(saved)).consumeCompletion())
+    }
+
+    @Test
+    fun cancellationHasOneDismissalWithoutASelection() = test {
+        val first = model(Fake())
+        runCurrent()
+        first.cancel()
+        val completion = first.consumeCompletion()!!
+        assertNull(completion.selection)
+        assertNull(first.consumeCompletion())
+    }
+
+    @Test
     fun rangeDirectionReversalRestoresBaselineAndCancelDoesNotPersistGesture() = test {
         val repo = Fake()
         val saved = SavedStateHandle()

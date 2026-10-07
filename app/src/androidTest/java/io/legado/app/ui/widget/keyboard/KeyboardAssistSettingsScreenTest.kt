@@ -3,6 +3,7 @@ package io.legado.app.ui.widget.keyboard
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextRange
@@ -80,8 +81,16 @@ class KeyboardAssistSettingsScreenTest {
             )
         )
         val list = compose.onNodeWithTag("keyboard-settings-list").fetchSemanticsNode().boundsInRoot
-        val a = compose.onNodeWithTag("keyboard-settings-drag-a").fetchSemanticsNode().boundsInRoot
-        val c = compose.onNodeWithTag("keyboard-settings-drag-c").fetchSemanticsNode().boundsInRoot
+        val a =
+            compose
+                .onNodeWithTag("keyboard-settings-drag-a", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val c =
+            compose
+                .onNodeWithTag("keyboard-settings-drag-c", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot
         compose.onNodeWithTag("keyboard-settings-list").performTouchInput {
             down(Offset(a.center.x - list.left, a.center.y - list.top))
             moveTo(Offset(c.center.x - list.left, c.center.y - list.top))
@@ -89,11 +98,26 @@ class KeyboardAssistSettingsScreenTest {
         }
         assertEquals(1, commits)
         assertEquals(0, edits)
+        // Reordering changes the handle's position; cancel an actual handle gesture.
+        val movedHandle =
+            compose
+                .onNodeWithTag("keyboard-settings-drag-a", useUnmergedTree = true)
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val currentList =
+            compose.onNodeWithTag("keyboard-settings-list").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("keyboard-settings-list").performTouchInput {
-            down(Offset(10f, 10f))
-            moveTo(Offset(10f, 80f))
+            down(
+                Offset(
+                    movedHandle.center.x - currentList.left,
+                    movedHandle.center.y - currentList.top,
+                )
+            )
             cancel()
         }
+        assertEquals(0, edits)
+        assertEquals(initial, state.value.rows)
         assertEquals(1, cancels)
         assertEquals(1, commits)
     }
@@ -145,14 +169,34 @@ class KeyboardAssistSettingsScreenTest {
         )
         compose.onNodeWithTag("keyboard-settings-editor-key").performTextReplacement(" Key ")
         compose.onNodeWithTag("keyboard-settings-editor-value").performTextReplacement(" Value ")
+        fun assertSelectedValue(stage: String) {
+            val rendered =
+                compose
+                    .onNodeWithTag("keyboard-settings-editor-value")
+                    .fetchSemanticsNode()
+                    .config[SemanticsProperties.TextSelectionRange]
+            val value = state.value.editor!!.value
+            val saved = TextRange(value.start, value.end)
+            assertEquals("$stage rendered start", 1, rendered.min)
+            assertEquals("$stage rendered end", 4, rendered.max)
+            assertEquals("$stage saved start", 1, saved.min)
+            assertEquals("$stage saved end", 4, saved.max)
+            assertEquals(
+                "$stage selected characters",
+                "Val",
+                value.text.substring(saved.min, saved.max),
+            )
+        }
+        // Compose 1.12's input helper dispatches selection.min/max to SetSelection.
         compose
             .onNodeWithTag("keyboard-settings-editor-value")
             .performTextInputSelection(TextRange(4, 1))
+        assertSelectedValue("after SetSelection")
         compose.onNodeWithTag("keyboard-settings-editor-save").performClick()
+        assertSelectedValue("after Save")
         compose.onNodeWithTag("keyboard-settings-editor-cancel").performClick()
+        assertSelectedValue("after Cancel")
         assertEquals(" Key ", state.value.editor!!.key.text)
-        assertEquals(4, state.value.editor!!.value.start)
-        assertEquals(1, state.value.editor!!.value.end)
         assertEquals(1, saves)
         assertEquals(1, cancels)
     }

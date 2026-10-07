@@ -36,10 +36,17 @@ class AllBookmarksScreenTest {
         show()
         compose.onNodeWithTag("all-bookmarks-header-1").assertTextEquals("A(One)")
         compose.onNodeWithTag("all-bookmarks-header-2").assertTextEquals("A(Two)")
-        compose.onNodeWithTag("all-bookmarks-original-1").assertTextEquals("Original")
-        compose.onNodeWithTag("all-bookmarks-content-1").assertTextEquals("Note")
-        compose.onNodeWithTag("all-bookmarks-original-2").assertDoesNotExist()
-        compose.onNodeWithTag("all-bookmarks-content-2").assertDoesNotExist()
+        compose.onNodeWithTag("all-bookmarks-row-1")
+            .assertTextContains("Original")
+            .assertTextContains("Note")
+        compose.onNodeWithTag("all-bookmarks-original-1", useUnmergedTree = true)
+            .assertTextEquals("Original")
+            .assertIsDisplayed()
+        compose.onNodeWithTag("all-bookmarks-content-1", useUnmergedTree = true)
+            .assertTextEquals("Note")
+            .assertIsDisplayed()
+        compose.onNodeWithTag("all-bookmarks-original-2", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("all-bookmarks-content-2", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

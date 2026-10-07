@@ -28,8 +28,10 @@ class BookSourcePickerViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun model(repo: Fake, saved: SavedStateHandle = SavedStateHandle()) =
-        BookSourcePickerViewModel(repo, saved).also { models += it }
+    private fun model(
+        repo: BookSourcePickerRepository,
+        saved: SavedStateHandle = SavedStateHandle(),
+    ) = BookSourcePickerViewModel(repo, saved).also { models += it }
 
     private fun restored(saved: SavedStateHandle) =
         SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
@@ -52,6 +54,72 @@ class BookSourcePickerViewModelTest {
             runCurrent()
             assertEquals("Beta", next.state.value.query)
             assertEquals("b", next.state.value.items.single().url)
+        }
+
+    @OptIn(InternalCoroutinesApi::class)
+    @Test
+    fun anOldCollectorCannotOverwriteARevisitedQueryOrReportItsLateFailure() =
+        runTest(dispatcher) {
+            val gates = mutableListOf<CompletableDeferred<Unit>>()
+            val queries = mutableListOf<String>()
+            val repo =
+                object : BookSourcePickerRepository {
+                    override fun observe(query: String): Flow<List<BookSourcePickerItem>> =
+                        object : Flow<List<BookSourcePickerItem>> {
+                            override suspend fun collect(
+                                collector: FlowCollector<List<BookSourcePickerItem>>
+                            ) {
+                                val index = gates.size
+                                queries += query
+                                val gate = CompletableDeferred<Unit>().also { gates += it }
+                                // An external database/network callback can outlive
+                                // cancellation; generation, not query equality, owns it.
+                                withContext(NonCancellable) {
+                                    gate.await()
+                                    collector.emit(
+                                        listOf(BookSourcePickerItem("$index", query, null))
+                                    )
+                                }
+                            }
+                        }
+
+                    override suspend fun source(url: String): String? = null
+
+                    override suspend fun delay() = 0
+
+                    override suspend fun saveDelay(value: Int) = Unit
+                }
+            val vm = model(repo)
+            runCurrent()
+            vm.search("A")
+            runCurrent()
+            vm.search("B")
+            runCurrent()
+            vm.search("A")
+            runCurrent()
+            gates[3].complete(Unit)
+            runCurrent()
+            assertEquals("3", vm.state.value.items.single().url)
+            gates[1].complete(Unit)
+            runCurrent()
+            assertEquals("3", vm.state.value.items.single().url)
+            gates[0].complete(Unit)
+            gates[2].complete(Unit)
+            runCurrent()
+            assertEquals(listOf("", "A", "B", "A"), queries)
+            assertNull(vm.state.value.error)
+        }
+
+    @Test
+    fun newSearchRemovesSelectableRowsFromThePreviousQueryImmediately() =
+        runTest(dispatcher) {
+            val vm = model(Fake())
+            runCurrent()
+            assertTrue(vm.state.value.items.isNotEmpty())
+            vm.search("Beta")
+            assertEquals("Beta", vm.state.value.query)
+            assertTrue(vm.state.value.items.isEmpty())
+            assertTrue(vm.state.value.loading)
         }
 
     @Test
