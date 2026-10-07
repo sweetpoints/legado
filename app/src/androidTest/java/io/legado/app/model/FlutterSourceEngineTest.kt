@@ -1278,7 +1278,7 @@ class FlutterSourceEngineTest {
             val requests = mutableListOf<Map<String, String>>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(4) {
+                    repeat(5) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             // This fixture's request body is ASCII p=1, so character counts equal
@@ -1392,14 +1392,32 @@ class FlutterSourceEngineTest {
                 "Title",
                 withTimeout(60_000) { WebBook.searchBookAwait(selected, "Title", 2).single().name },
             )
-            assertEquals("Title", withTimeout(60_000) {
-                WebBook.exploreBookAwait(selected, "$origin/{{java.get('page')}}", 2).single().name
-            })
+            // Native java.get reads a variable, not the AnalyzeUrl page argument.
+            // The old getter has no implicit "page" alias; the bare JS binding does.
+            val variablePageRule = "$origin/{{java.get('page')}}"
+            val bindingPageRule = "$origin/{{page}}"
+            val variableGolden = withContext(Dispatchers.IO) {
+                AnalyzeUrl(variablePageRule, page = 2, source = selected, baseUrl = origin)
+                    .resolveRequestDescriptor(includeCookies = false)
+            }
+            val bindingGolden = withContext(Dispatchers.IO) {
+                AnalyzeUrl(bindingPageRule, page = 2, source = selected, baseUrl = origin)
+                    .resolveRequestDescriptor(includeCookies = false)
+            }
+            assertEquals("$origin/", variableGolden["url"])
+            assertEquals("$origin/2", bindingGolden["url"])
+            for (rule in listOf(variablePageRule, bindingPageRule)) {
+                assertEquals("Title", withTimeout(60_000) {
+                    WebBook.exploreBookAwait(selected, rule, 2).single().name
+                })
+            }
+
             assertEquals(
                 listOf(
                     "GET /first HTTP/1.1",
                     "POST /other HTTP/1.1",
                     "GET /search?page=3 HTTP/1.1",
+                    "GET / HTTP/1.1",
                     "GET /2 HTTP/1.1",
                 ),
                 requests.map { it["request"] },
