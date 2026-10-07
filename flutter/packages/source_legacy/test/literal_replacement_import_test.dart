@@ -128,7 +128,7 @@ void main() {
   });
 
   test('configuration names are scoped and genuine hooks stay manual', () {
-    for (final stage in ['ruleExplore', 'ruleBookInfo']) {
+    for (final stage in ['ruleBookInfo']) {
       final imported = LegacySourceImporter().import({
         'bookSourceUrl': 'https://books.test',
         stage: {'checkKeyWord': 'keyword'},
@@ -296,7 +296,7 @@ void main() {
     },
   );
   test('mainJs content hook containers and values must still be valid', () {
-    for (final content in ['not a rule object', 42, []]) {
+    for (final content in ['not a rule object', 42]) {
       final imported = LegacySourceImporter().import({
         'bookSourceUrl': 'https://books.test',
         'mainJs': 'function getContent() { return "text"; }',

@@ -29,6 +29,70 @@ class LegacyImport {
   bool get requiresManualWork => issues.isNotEmpty;
 }
 
+/// Resolve rule containers using the old Gson adapters, without mutating the
+/// original source. Raw arrays are null rules; an encoded array is an invalid
+/// reflective object. Explore's empty bookList uses BookList's search fallback.
+Map<String, Object?>? legacyRuleObject(
+  Map<String, Object?> source,
+  String key,
+) {
+  Map<String, Object?>? decode(Object? value) {
+    if (value == null || value is List) return null;
+    if (value is String) {
+      value = jsonDecode(value);
+      if (value == null) return null;
+    }
+    if (value is! Map || value.keys.any((key) => key is! String)) {
+      throw const FormatException('Expected a legacy rule object');
+    }
+    return Map<String, Object?>.from(value);
+  }
+
+  final result = decode(source[key]);
+  if (key != 'ruleExplore') return result;
+  final list = result?['bookList'];
+  if (list != null && (list is! String || list.trim().isNotEmpty)) {
+    return result; // StringJsonDeserializer turns other JSON values into nonblank text.
+  }
+  return decode(source['ruleSearch'])?..remove('checkKeyWord');
+}
+
+/// Operation gating only: the complete migration report keeps every issue.
+/// UI capabilities do not block reading; actual request and script capabilities
+/// still apply globally unless their concrete host has implemented them.
+bool legacyIssueAffectsOperation(LegacyIssue issue, String operation) {
+  const scopes = {
+    'ruleSearch': 'search',
+    'searchUrl': 'search',
+    'ruleExplore': 'explore',
+    'exploreUrl': 'explore',
+    'ruleBookInfo': 'info',
+    'ruleToc': 'toc',
+    'ruleContent': 'content',
+  };
+  for (final entry in scopes.entries) {
+    if (issue.path == entry.key ||
+        issue.path.startsWith('${entry.key}.') ||
+        issue.path.startsWith('${entry.key}[')) {
+      return operation == entry.value;
+    }
+  }
+  if (issue.code == 'legacy.capability_requires_review' &&
+      const {
+        'loginUrl',
+        'loginUi',
+        'ruleReview',
+        'exploreScreen',
+      }.contains(issue.path)) {
+    return false;
+  }
+  if (issue.code == 'legacy.non_text_source' &&
+      const {'search', 'explore', 'info', 'toc'}.contains(operation)) {
+    return false;
+  }
+  return true;
+}
+
 /// Imports the structural format without claiming every legacy semantic works.
 class LegacySourceImporter {
   LegacyImport import(Map<String, Object?> input) {
@@ -103,9 +167,10 @@ class LegacySourceImporter {
             ? <MapEntry<String, (String, String?, String?)>>[]
             : mapping.entries) {
       final (ruleKey, urlKey, listKey) = entry.value;
-      final raw = input[ruleKey];
-      if (raw == null) continue;
-      if (raw is! Map) {
+      Map<String, Object?>? raw;
+      try {
+        raw = legacyRuleObject(input, ruleKey);
+      } on FormatException {
         issues.add(
           LegacyIssue(
             ruleKey,
@@ -115,6 +180,8 @@ class LegacySourceImporter {
         );
         continue;
       }
+      if (raw == null) continue;
+      if (raw.isEmpty) continue;
       final fields = <String, String>{};
       String? list;
       String? nextPage;
@@ -293,17 +360,21 @@ class LegacySourceImporter {
     }
     // mainJs owns stage extraction, but Android still consumes these content
     // hooks outside that execution path. Keep their migration boundary explicit.
-    final contentRules = input['ruleContent'];
-    if (hasMainJs && contentRules != null && contentRules is! Map) {
-      issues.add(
-        const LegacyIssue(
-          'ruleContent',
-          'legacy.invalid_rule_object',
-          'Expected a rule object.',
-        ),
-      );
+    Map<String, Object?>? contentRules;
+    if (hasMainJs) {
+      try {
+        contentRules = legacyRuleObject(input, 'ruleContent');
+      } on FormatException {
+        issues.add(
+          const LegacyIssue(
+            'ruleContent',
+            'legacy.invalid_rule_object',
+            'Expected a rule object.',
+          ),
+        );
+      }
     }
-    if (hasMainJs && contentRules is Map) {
+    if (hasMainJs && contentRules != null) {
       for (final hook in ['imageDecode', 'payAction', 'callBackJs']) {
         final value = contentRules[hook];
         if (value == null || value == '') continue;
@@ -352,7 +423,10 @@ class LegacySourceImporter {
         ),
       );
     }
-    final sourceType = input['bookSourceType'] ?? 0;
+    final rawSourceType = input['bookSourceType'];
+    // The original IntJsonDeserializer accepts only numbers; other JSON
+    // shapes return null and leave the primitive BookSource default (text).
+    final sourceType = rawSourceType is num ? rawSourceType.toInt() : 0;
     // File download fields are handled by the positional mainJs adapter and
     // Android's file-book pipeline. Other media and declarative files remain
     // outside the supported legacy stage contract.
