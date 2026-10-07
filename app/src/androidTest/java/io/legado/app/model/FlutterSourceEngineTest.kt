@@ -211,7 +211,7 @@ class FlutterSourceEngineTest {
     }
 
     @Test
-    fun mixedMainJsAppHooksRequireManualMigrationThroughActualHost() = runBlocking {
+    fun mixedMainJsContentHookReviewDoesNotBlockUnrelatedSearch() = runBlocking {
         val bridge = backend()
         try {
             for (hook in listOf("imageStyle", "imageDecode", "payAction", "callBackJs")) {
@@ -227,9 +227,18 @@ class FlutterSourceEngineTest {
                             )
                         )
                 val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
-                assertTrue(preview.requiresManualWork)
-                assertTrue(!preview.canApply)
-                assertEquals("manualRequired", preview.status)
+                if (hook == "imageStyle") {
+                    assertTrue(preview.canApply)
+                    assertTrue(!preview.requiresManualWork)
+                    assertEquals("unverified", preview.status)
+                } else {
+                    assertTrue(preview.requiresManualWork)
+                    assertTrue(!preview.canApply)
+                    assertEquals("manualRequired", preview.status)
+                }
+                assertTrue(withTimeout(60_000) {
+                    bridge.execute("search", snapshot, mapOf("key" to "fixture"))
+                }.isEmpty())
                 val candidate =
                     Gson().fromJson(preview.candidateJson, com.google.gson.JsonObject::class.java)
                 assertEquals(
