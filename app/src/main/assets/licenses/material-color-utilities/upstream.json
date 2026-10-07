@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/material-foundation/material-color-utilities",
+  "revision": "5b3618b16fdc3825e21d5679bafd144662088ea1",
+  "license": "Apache-2.0",
+  "licenseSha256": "e662e6c2fc7ba7bc613c7e4ddf852d4ad3fcc05faead7cbe16b1dac67b55f426",
+  "namespace": "io.legado.app.ui.theme.mcu",
+  "modifications": "Only package and import namespace relocation; upstream algorithms and copyright headers retained.",
+  "files": [
+    {
+      "upstreamPath": "java/hct/Cam16.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/hct/Cam16.java",
+      "upstreamSha256": "93a2d8ccc8c33683757cce66c488ecce8d7f87d87c195f99869ea9e4c6bca23f",
+      "vendoredSha256": "363fe54d7a9e4a7ae05f59abb93e58e5f71f2dc661fd4735df56f3ffe220e25d"
+    },
+    {
+      "upstreamPath": "java/hct/Hct.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/hct/Hct.java",
+      "upstreamSha256": "a283abb9ecbe2a4841fb92d029e5914e3666d18b31410890b49c354a11fe1817",
+      "vendoredSha256": "6b763ff370916d472b3f1f421c9a2098b7ac515a8b9d4d4b6dc0b02bc3ff922c"
+    },
+    {
+      "upstreamPath": "java/hct/HctSolver.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/hct/HctSolver.java",
+      "upstreamSha256": "a4ef14b5ea069096f5d889ba0b2cfe0d4a943d8a6cd27ec8a916f48612b29360",
+      "vendoredSha256": "2c6f20b30414e5490d38d4ecb09b128341424e5cf5f3c0ef0ba4643bdfcf85d9"
+    },
+    {
+      "upstreamPath": "java/hct/ViewingConditions.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/hct/ViewingConditions.java",
+      "upstreamSha256": "0735ea836f6b356058666993400dff528df2012c57c4791eaab35da586bf376c",
+      "vendoredSha256": "63196fbf4704026d76804ea80e2dc24d5571232e4b865eee64ebce2abc319ea0"
+    },
+    {
+      "upstreamPath": "java/palettes/TonalPalette.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/palettes/TonalPalette.java",
+      "upstreamSha256": "cf59220afd694c90b838cab7986c850c4907e513a7f9fc0c3e35385c77e3dbe9",
+      "vendoredSha256": "fa9ae1786d2c22107d71fd53e2da6f2c8b5a5d3b04c5f82b421a063a15fbc532"
+    },
+    {
+      "upstreamPath": "java/utils/ColorUtils.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/utils/ColorUtils.java",
+      "upstreamSha256": "05b0578148bb809b6864bcc1b5db19f8c2a69bf195eb9d69f378bb9064103e10",
+      "vendoredSha256": "b3f0709f3d0a2cb2ccc83130985cb462114060021aafd5ed5a2230706bd17300"
+    },
+    {
+      "upstreamPath": "java/utils/MathUtils.java",
+      "sourcePath": "java/io/legado/app/ui/theme/mcu/utils/MathUtils.java",
+      "upstreamSha256": "c9475232e693f8608b594518423100365ca9212f43a9a880e9a1d00104b2ef45",
+      "vendoredSha256": "a1a034e46316740985f26bb5c3ef6003173b2fa57a75d68d9dbb858c0d5177c3"
+    }
+  ]
+}

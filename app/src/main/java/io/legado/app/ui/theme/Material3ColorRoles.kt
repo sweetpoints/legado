@@ -1,7 +1,7 @@
 package io.legado.app.ui.theme
 
-import com.google.android.material.color.utilities.Hct
-import com.google.android.material.color.utilities.TonalPalette
+import io.legado.app.ui.theme.mcu.hct.Hct
+import io.legado.app.ui.theme.mcu.palettes.TonalPalette
 import kotlin.math.pow
 
 /** Opaque ARGB roles; no Android Context or Compose state is needed to validate a palette. */

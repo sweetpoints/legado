@@ -1,5 +1,6 @@
 package io.legado.app.ui.theme
 
+import java.security.MessageDigest
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -77,12 +78,37 @@ class Material3ColorRolesTest {
     fun customHueAndGrayBackgroundsKeepEveryTextAndContainerPairReadable() {
         val primaries =
             listOf(0xFF039BE5.toInt(), 0xFFFFEB3B.toInt(), 0xFF9C27B0.toInt(), 0xFF00C853.toInt())
+        val golden = StringBuilder()
+        fun appendGolden(primary: Int, background: Int, roles: Material3ColorRoles) {
+            golden
+                .append(primary.toUInt().toString(16))
+                .append(':')
+                .append(background.toUInt().toString(16))
+                .append('\n')
+            roles.values.toSortedMap().forEach { (role, color) ->
+                golden.append(role).append('=').append(color.toUInt().toString(16)).append('\n')
+            }
+        }
         for (gray in 0..255 step 17) {
             val background = black or (gray shl 16) or (gray shl 8) or gray
             primaries.forEach { primary ->
-                assertReadable(scheme(primary, 0xFFFFC107.toInt(), background))
+                val roles = scheme(primary, 0xFFFFC107.toInt(), background)
+                assertReadable(roles)
+                appendGolden(primary, background, roles)
             }
         }
+        appendGolden(
+            0xFF039BE5.toInt(),
+            0xFFFAFAFA.toInt(),
+            scheme(0xFF039BE5.toInt(), 0xFFFFC107.toInt(), 0xFFFAFAFA.toInt()),
+        )
+        // Captured by executing these 65 palettes against MDC-Android 1.14.0 before
+        // relocating the official Java subset: all 49 ARGB roles must stay identical.
+        val digest =
+            MessageDigest.getInstance("SHA-256")
+                .digest(golden.toString().toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+        assertEquals("0aa4c94cd7b06863e29a6f257b9d644cd898f5fb7197a5919487b2a5e68ac763", digest)
     }
 
     @Test
