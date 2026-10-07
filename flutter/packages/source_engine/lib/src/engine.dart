@@ -616,7 +616,13 @@ class SourceEngine {
                 operation == 'content' &&
                 entry.key == 'content' &&
                 legacyHost != null,
-            isUrl: isLink,
+            // Original chapter-list URL extraction is scalar, not isUrl=true:
+            // a blank volume href must reach the App's title/index fallback.
+            isUrl:
+                isLink &&
+                !(legacyHost != null &&
+                    operation == 'toc' &&
+                    (entry.key == 'url' || entry.key == 'chapterUrl')),
             unescape: operation != 'content' && !listField,
           );
           final legacyScalar =
