@@ -15,6 +15,7 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.MessageDigest
+import java.util.IdentityHashMap
 import javax.net.ssl.SSLException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +39,19 @@ class PublicSourceCorpusTest {
         var errorType: String? = null,
         var errorDiagnostic: String? = null,
         var errorMessageSha256: String? = null,
+        var errorWrapperKind: String? = null,
+        var errorChain: List<ExceptionDiagnostic> = emptyList(),
         var classification: String? = null,
+    )
+
+    private data class ErrorOrigin(val className: String, val method: String, val line: Int)
+
+    private data class ExceptionDiagnostic(
+        val exceptionClass: String,
+        val code: String?,
+        val wrapperKind: String?,
+        val messageSha256: String,
+        val origin: ErrorOrigin?,
     )
 
     private data class SourceResult(
@@ -253,6 +266,8 @@ class PublicSourceCorpusTest {
 
     private fun recordDiagnostic(stage: Stage, error: Throwable) {
         stage.errorType = error.javaClass.name
+        stage.errorWrapperKind = wrapperKind(error.message.orEmpty())
+        stage.errorChain = exceptionDiagnostics(error)
         val message = error.message.orEmpty()
         stage.errorMessageSha256 = sha256(message.toByteArray(Charsets.UTF_8))
         // Never persist the original message: it can include source code, URLs,
@@ -319,6 +334,71 @@ class PublicSourceCorpusTest {
                     "nested_script_requires_migration"
                 else -> "Unclassified diagnostic; original message omitted"
             }
+    }
+
+    private fun wrapperKind(message: String): String? {
+        // Names are fixed framework/runtime types, never arbitrary message fragments.
+        return listOf(
+                "ReferenceError",
+                "TypeError",
+                "SyntaxError",
+                "RangeError",
+                "EvalError",
+                "FormatException",
+                "StateError",
+                "UnsupportedError",
+                "ArgumentError",
+                "NoSuchMethodError",
+                "SocketException",
+                "HandshakeException",
+                "HttpException",
+                "ClientException",
+                "PlatformException",
+                "EngineException",
+                "SourceScriptException",
+                "IllegalStateException",
+                "java.lang.IllegalStateException",
+                "java.lang.IllegalArgumentException",
+            )
+            .firstOrNull { message.startsWith("$it:") || message.startsWith("$it(") }
+    }
+
+    private fun exceptionDiagnostics(error: Throwable): List<ExceptionDiagnostic> {
+        val seen = IdentityHashMap<Throwable, Boolean>()
+        val result = mutableListOf<ExceptionDiagnostic>()
+        var current: Throwable? = error
+        while (current != null && result.size < 8 && seen.put(current, true) == null) {
+            val message = current.message.orEmpty()
+            val wrapper = wrapperKind(message)
+            val codeText =
+                if (wrapper != null && message.startsWith("$wrapper:"))
+                    message.substring(wrapper.length + 1).trimStart()
+                else message
+            val protocolCode =
+                Regex("^([a-z][a-z0-9_.]{0,63}):").find(codeText)?.groupValues?.get(1)?.takeUnless {
+                    it in setOf("http", "https", "file", "content", "data")
+                }
+            val origin =
+                current.stackTrace
+                    .firstOrNull { frame ->
+                        (frame.className.startsWith("io.legado.app.") ||
+                            frame.className.startsWith("io.flutter.")) &&
+                            frame.className.matches(Regex("[A-Za-z0-9_.$]+")) &&
+                            frame.methodName.matches(Regex("[A-Za-z0-9_$]+"))
+                    }
+                    ?.let { ErrorOrigin(it.className, it.methodName, it.lineNumber) }
+            result.add(
+                ExceptionDiagnostic(
+                    current.javaClass.name,
+                    if (current is SourceScriptException) current.code else protocolCode,
+                    wrapper,
+                    sha256(message.toByteArray(Charsets.UTF_8)),
+                    origin,
+                )
+            )
+            current = current.cause
+        }
+        return result
     }
 
     private fun structuredCode(error: Throwable): String {
