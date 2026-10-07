@@ -30,7 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Diagnostic projection of fixed public source 1; never a live four-source acceptance claim. */
+/** Diagnostic projection of one fixed public source; never a live four-source acceptance claim. */
 @RunWith(AndroidJUnit4::class)
 class PublicLegacySearchBaselineDiagnosticTest {
     private class HttpCounts {
@@ -83,14 +83,21 @@ class PublicLegacySearchBaselineDiagnosticTest {
             )
             val array = JsonParser.parseString(bytes.toString(Charsets.UTF_8)).asJsonArray
             assertEquals(4, array.size())
-            val original = array[1]
+            val sourceIndex =
+                InstrumentationRegistry.getArguments().getString("sourceIndex")?.let {
+                    it.toIntOrNull() ?: error("sourceIndex must be an integer")
+                } ?: 1
+            require(sourceIndex in 0..3) {
+                "sourceIndex must be within the fixed four-source asset"
+            }
+            val original = array[sourceIndex]
             val source = GSON.fromJson(original, BookSource::class.java)
             val report =
                 linkedMapOf<String, Any?>(
                     "schemaVersion" to 1,
                     "diagnosticOnly" to true,
                     "liveAcceptancePassed" to false,
-                    "sourceIndex" to 1,
+                    "sourceIndex" to sourceIndex,
                     "assetSha256" to assetSha,
                     "originalJsonSha256" to sha(original.toString().toByteArray(Charsets.UTF_8)),
                     "originalJsonRepresentation" to "parsed JSON object serialization",
