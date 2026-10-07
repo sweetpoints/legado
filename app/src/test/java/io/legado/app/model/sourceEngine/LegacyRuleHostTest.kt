@@ -263,8 +263,11 @@ class LegacyRuleHostTest {
         for ((rule, value) in expected) {
             assertEquals(rule, value, task.evaluate(request(rule, row, "list"))["value"])
         }
+        // Legacy Jsoup selection stays inside the selected row's query root, even
+        // while XPath axes retain the original DOM parent and sibling context.
+        assertEquals("", task.evaluate(request("section > a#b@text", row))["value"])
+        assertEquals("Two", task.evaluate(request("a#b@text", row))["value"])
         // The old JSON outerHtml boundary demonstrably detaches the same row.
-        assertEquals("Two", task.evaluate(request("section > a#b@text", row))["value"])
         val fragment = Jsoup.parse(html).getElementById("b")!!.outerHtml()
         assertEquals(
             emptyList<String>(),
