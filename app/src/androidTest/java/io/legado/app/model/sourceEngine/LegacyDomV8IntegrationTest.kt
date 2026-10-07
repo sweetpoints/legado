@@ -33,6 +33,7 @@ class LegacyDomV8IntegrationTest {
                         "<section id='scope'><table><tr><td><a href='/first'>First</a></td><td><b>Second</b></td></tr></table></section>",
                         "https://dom.invalid/base",
                     )
+            parser.setRedirectUrl("https://dom.invalid/base")
             try {
                 // The original String parser has no DOM base URI; AnalyzeRule.baseUrl
                 // is used by URL rules, not Jsoup attr("abs:href"). Compare the native
