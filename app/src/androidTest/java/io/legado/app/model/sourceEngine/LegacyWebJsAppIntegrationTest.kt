@@ -75,13 +75,13 @@ class LegacyWebJsAppIntegrationTest {
     fun cancellingAnActiveWebJsRendererReleasesTaskAndAllowsNextExtraction(): Unit =
         runBlocking(Dispatchers.IO) {
             val server = FixtureServer().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
-            // null keeps the original background evaluator waiting/retrying. The image request
+            // null keeps the original background evaluator waiting/retrying. The same-origin XHR
             // proves execution reached the real renderer before cancellation, not just the HTTP
             // stage.
             val source =
                 source(
                     server,
-                    "@webjs:var marker=new Image();marker.src='${server.base}/renderer-started';null",
+                    "@webjs:var marker=new XMLHttpRequest();marker.open('GET','${server.base}/renderer-started');marker.send();null",
                 )
             try {
                 val pending = async {
