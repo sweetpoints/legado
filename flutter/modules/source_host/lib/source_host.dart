@@ -466,7 +466,18 @@ class SourceHost {
         identity = SourceDefinition.fromJson(raw);
       } else {
         final sourceId = raw['bookSourceUrl'];
-        final base = sourceId is String ? Uri.tryParse(sourceId) : null;
+        var base = sourceId is String ? Uri.tryParse(sourceId) : null;
+        Map<String, Object?> legacyMetadata = const {'legacy': true};
+        if (legacyRuleHostEnabled &&
+            sourceId is String &&
+            sourceId.isNotEmpty &&
+            (base == null ||
+                !['http', 'https'].contains(base.scheme) ||
+                base.host.isEmpty)) {
+          final imported = LegacySourceImporter().import(raw);
+          base = imported.source.baseUrl;
+          legacyMetadata = imported.source.metadata;
+        }
         if (base == null ||
             !['http', 'https'].contains(base.scheme) ||
             base.host.isEmpty) {
@@ -475,6 +486,8 @@ class SourceHost {
             message: 'Auxiliary legacy scripts require an explicit HTTP(S) source identity',
           );
         }
+        if (legacyRuleHostEnabled)
+          bindings.putIfAbsent('baseUrl', () => sourceId);
         if (raw['jsLib'] != null && raw['jsLib'].toString().trim().isNotEmpty) {
           throw PlatformException(
             code: 'legacy_requires_migration',
@@ -511,7 +524,7 @@ class SourceHost {
               ? raw['bookSourceName'].toString()
               : sourceId,
           baseUrl: base,
-          metadata: const {'legacy': true},
+          metadata: legacyMetadata,
           headers: staticHeaders,
         );
       }
