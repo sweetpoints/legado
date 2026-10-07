@@ -77,11 +77,20 @@ object DartSourceEngine {
         source: BookSource,
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
-    ): Any? = backend.evaluate(sourceJson(source), script, jsonObject(bindings))
+    ): Any? {
+        val json = sourceJson(source)
+        return withContext(
+            SourceTaskSource(source.getSource() ?: source, engineIdentity(json)) +
+                SourceTaskSourceSuppression(false),
+        ) {
+            backend.evaluate(json, script, jsonObject(bindings))
+        }
+    }
 
     suspend fun evaluateConfiguration(script: String): Any? =
-        backend.evaluate(
-            GSON.toJson(
+        withContext(SourceTaskSourceSuppression(true)) {
+            backend.evaluate(
+                GSON.toJson(
                 mapOf(
                     "bookSourceUrl" to
                         "https://source-import.invalid/${java.util.UUID.randomUUID()}",
@@ -90,8 +99,9 @@ object DartSourceEngine {
             ),
             script,
             emptyMap(),
-            ephemeral = true,
-        )
+                ephemeral = true,
+            )
+        }
 
     private val secureRandom by lazy { SecureRandom() }
 
@@ -181,10 +191,17 @@ object DartSourceEngine {
                 caller.call(method, arguments)
             }
         }) {
-            backend.evaluateAuxiliary(
-                script, BookSourceScriptBridge.jsonBindings(globals), owner, networkDescriptor,
-                ownerPrelude, timeoutMs,
-            )
+            if (original != null && owner != null) {
+                withContext(SourceTaskSource(original, owner) + SourceTaskSourceSuppression(false)) {
+                    backend.evaluateAuxiliary(script, BookSourceScriptBridge.jsonBindings(globals),
+                        owner, networkDescriptor, ownerPrelude, timeoutMs)
+                }
+            } else {
+                withContext(SourceTaskSourceSuppression(true)) {
+                    backend.evaluateAuxiliary(script, BookSourceScriptBridge.jsonBindings(globals),
+                        owner, networkDescriptor, ownerPrelude, timeoutMs)
+                }
+            }
         }
     }
 
@@ -222,7 +239,19 @@ object DartSourceEngine {
         operation: String,
         input: Map<String, Any?>,
     ): List<Map<String, Any?>> {
-        return backend.execute(operation, sourceJson(source), input)
+        val json = sourceJson(source)
+        return withContext(
+            SourceTaskSource(source.getSource() ?: source, engineIdentity(json)) +
+                SourceTaskSourceSuppression(false),
+        ) {
+            backend.execute(operation, json, input)
+        }
+    }
+
+    internal fun engineIdentity(sourceJson: String): String {
+        val value = GSON.fromJson(sourceJson, Map::class.java)
+        return (value["id"] ?: value["bookSourceUrl"]) as? String
+            ?: error("Source identity missing")
     }
 
     internal fun sourceJson(source: BookSource): String {

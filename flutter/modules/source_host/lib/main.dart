@@ -57,8 +57,16 @@ SourceEngine createSourceEngine(
   SourceDefinition source, {
   ScriptRuntime? runtime,
   ScriptHost? platform,
+  bool? useNativeLegacyHttp,
 }) => SourceEngine(
-  runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
+  runtime:
+      runtime ??
+      _SourceRuntime(
+        legacy: source.metadata['legacy'] == true,
+        useNativeHttp:
+            useNativeLegacyHttp ??
+            defaultTargetPlatform == TargetPlatform.android,
+      ),
   requestAdapter: adaptLegacyRequest,
   legacyPageFetcher: defaultTargetPlatform == TargetPlatform.android
       ? const HostLegacyPageFetcher()
@@ -70,12 +78,13 @@ SourceEngine createSourceEngine(
 );
 
 class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
-  _SourceRuntime({required this.legacy})
+  _SourceRuntime({required this.legacy, this.useNativeHttp = false})
     : runtime = V8Runtime(
         prelude: legacy ? legacyScriptPrelude : '',
         persistent: true,
       );
   final bool legacy;
+  final bool useNativeHttp;
   final V8Runtime runtime;
   final variables = <String, String>{};
   ScriptContext _context(ScriptContext context) => ScriptContext(
@@ -84,6 +93,7 @@ class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
         ? LegacyScriptHost(
             TaskScriptHost(context.host, context.variables['taskId']),
             variables: variables,
+            useNativeHttp: useNativeHttp,
           )
         : TaskScriptHost(context.host, context.variables['taskId']),
     timeout: context.timeout,
@@ -118,6 +128,7 @@ class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
           ? LegacyScriptHost(
               TaskScriptHost(context.host, context.variables['taskId']),
               variables: variables,
+              useNativeHttp: useNativeHttp,
             )
           : TaskScriptHost(context.host, context.variables['taskId']),
       timeout: context.timeout,

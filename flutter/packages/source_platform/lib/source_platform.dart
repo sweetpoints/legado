@@ -133,6 +133,12 @@ class SourcePlatform implements ScriptHost {
       case 'exploreInfoMap.values':
       case 'exploreInfoMap.entries':
       case 'exploreInfoMap.sourceUrl':
+      case 'javaHttp.ajax':
+      case 'javaHttp.get':
+      case 'javaHttp.post':
+      case 'javaHttp.head':
+      case 'javaHttp.connect':
+      case 'javaHttp.ajaxAll':
       case 'legacyRule.evaluate':
       case 'legacyRequest.fetch':
       case 'legacyRequest.resolve':
