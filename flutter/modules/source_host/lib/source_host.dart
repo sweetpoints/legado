@@ -30,43 +30,8 @@ class SourceHost {
   final Set<String> _active = {};
   bool _closed = false;
 
-  bool _issueAffectsOperation(LegacyIssue issue, String operation) {
-    if (!legacyRuleHostEnabled) return true;
-    const scopes = {
-      'ruleSearch': 'search',
-      'searchUrl': 'search',
-      'ruleExplore': 'explore',
-      'exploreUrl': 'explore',
-      'ruleBookInfo': 'info',
-      'ruleToc': 'toc',
-      'ruleContent': 'content',
-    };
-    for (final entry in scopes.entries) {
-      if (issue.path == entry.key ||
-          issue.path.startsWith('${entry.key}.') ||
-          issue.path.startsWith('${entry.key}[')) {
-        return operation == entry.value;
-      }
-    }
-    // These are separate Android UI/comment entry points, not request headers
-    // or reading-stage hooks. Their original configuration remains available.
-    if (issue.code == 'legacy.capability_requires_review' &&
-        {
-          'loginUrl',
-          'loginUi',
-          'ruleReview',
-          'exploreScreen',
-        }.contains(issue.path)) {
-      return false;
-    }
-    // Metadata extraction is shared by all media types; the actual source type
-    // is preserved for the Android reader, rather than rejecting its search.
-    if (issue.code == 'legacy.non_text_source' &&
-        {'search', 'explore', 'info', 'toc'}.contains(operation)) {
-      return false;
-    }
-    return true;
-  }
+  bool _issueAffectsOperation(LegacyIssue issue, String operation) =>
+      !legacyRuleHostEnabled || legacyIssueAffectsOperation(issue, operation);
 
   bool _hostedRequestIssue(LegacyIssue issue, String operation, Map input) {
     if (!legacyPageFetchEnabled) return false;
@@ -102,15 +67,13 @@ class SourceHost {
     }
     final dot = issue.path.indexOf('.');
     if (dot < 0) return false;
-    Object? group = original[issue.path.substring(0, dot)];
-    if (group is String) {
-      try {
-        group = jsonDecode(group);
-      } on FormatException {
-        return false;
-      }
+    Map<String, Object?>? group;
+    try {
+      group = legacyRuleObject(original, issue.path.substring(0, dot));
+    } on FormatException {
+      return false;
     }
-    if (group is! Map) return false;
+    if (group == null) return false;
     final rule = group[issue.path.substring(dot + 1)];
     return rule is String &&
         HostLegacyRuleEvaluator.canEvaluate(
