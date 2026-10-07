@@ -93,11 +93,11 @@ class LegacyBookVariableScopeIntegrationTest {
                     bookSourceName = "Scoped callback fixture",
                 )
             val host = LegacyRuleHost(source.bookSourceUrl, currentCoroutineContext())
-            fun payload(rule: String) =
+            fun payload(rule: String, mode: String = "scalar") =
                 mapOf<String, Any?>(
                     "rule" to rule,
                     "input" to "<b>A-detail</b>",
-                    "mode" to "scalar",
+                    "mode" to mode,
                     "source" to DartSourceEngine.jsonObject(source),
                     "operation" to "info",
                     "baseUrl" to source.bookSourceUrl,
@@ -126,6 +126,19 @@ class LegacyBookVariableScopeIntegrationTest {
                         host
                             .evaluate(
                                 payload("@put:{\"detail\":\"tag.b@text\"}@js:java.get('saved')"),
+                                fromScript = false,
+                            )["value"],
+                    )
+                }
+                withTimeout(15_000) {
+                    assertEquals(
+                        listOf("A-token"),
+                        host
+                            .evaluate(
+                                payload(
+                                    "@put:{\"detail\":\"tag.b@text\"}@js:java.get('saved')",
+                                    "list",
+                                ),
                                 fromScript = false,
                             )["value"],
                     )
