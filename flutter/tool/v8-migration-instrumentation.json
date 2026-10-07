@@ -258,7 +258,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyNestedHttpScriptV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt",
-      "sourceSha256": "af065e3f9239f17118ae07a00ad5e570fd431eec76985344ea6750c2a352251e",
+      "sourceSha256": "8d1b0358cb077400e3c3048f29c53356e057c67ec13244e552521919dd8e8bc6",
       "methods": [
         "dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables",
         "promisedUrlInsideAjaxStillReturnsASynchronousStringForConcatenation",
