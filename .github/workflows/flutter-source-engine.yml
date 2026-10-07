@@ -96,6 +96,8 @@ jobs:
         run: |
           python3 .github/scripts/prepare-pdf-zoom-fixture.py
           python3 .github/scripts/prepare-reported-rss-fixture.py
+      - name: Build actually shrunk Release source engine acceptance APK
+        run: ./gradlew --no-daemon -I .github/scripts/source-engine-runtime-test.init.gradle :app:assembleAppRelease --console=plain
       - name: Compile Android integration with mandatory default engine
         run: ./gradlew :app:assembleAppDebug :app:assembleAppDebugAndroidTest --console=plain --max-workers=2
 
@@ -159,7 +161,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: ANDROID_SERIAL=emulator-5554 bash flutter/tool/test-android.sh
+          script: |
+            ANDROID_SERIAL=emulator-5554 bash flutter/tool/test-android.sh
+            python3 .github/scripts/run-source-engine-runtime.py app/build/outputs/apk/app/release/app-app-release.apk --serial emulator-5554
       - name: Upload Flutter/V8 device evidence
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -168,4 +172,5 @@ jobs:
           path: |
             app/build/reports/androidTests/connected/
             app/build/outputs/androidTest-results/connected/
+            app/build/source-engine-runtime/
           if-no-files-found: warn
