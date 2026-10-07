@@ -54,7 +54,7 @@ EXPECTED_CASE_COUNTS = {
     'model/sourceEngine/LegacyCookieV8IntegrationTest.kt': 2,
     'model/sourceEngine/LegacyDomV8IntegrationTest.kt': 2,
     'model/sourceEngine/LegacyHostFailureV8IntegrationTest.kt': 1,
-    'model/FlutterSourceEngineTest.kt': 20,
+    'model/FlutterSourceEngineTest.kt': 21,
     'ui/book/source/edit/BookSourceMigrationUiTest.kt': 5,
     'model/jsSource/JsSourceReviewV8Test.kt': 13,
     'model/login/FlutterLoginUiV2Test.kt': 6,
