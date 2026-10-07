@@ -64,6 +64,29 @@ class LegacyJavaHostTest {
         assertEquals(uuid, java.util.UUID.fromString(uuid).toString())
     }
 
+    @Test fun symmetricCryptoUsesRealCipherAndKeepsOwnerAndRandomKeyState() {
+        val ext = object : JsExtensions {
+            override fun getSource() = null
+            override fun getTag() = "fixture"
+        }
+        fun create(owner: String, key: Any?): String = (LegacyJavaHost.call(ext,
+            "javaHost.cryptoCreate", listOf("AES/ECB/PKCS5Padding", key), owner) as Map<*, *>)["__legacyCryptoHandle"] as String
+        fun call(owner: String, handle: String, op: String, value: Any?) = LegacyJavaHost.call(ext,
+            "javaHost.cryptoCall", listOf(handle, op, listOf(value)), owner)
+        try {
+            val fixed = create("one", "0123456789abcdef")
+            val encrypted = call("one", fixed, "encryptHex", "hello") as String
+            assertEquals("hello", call("one", fixed, "decryptStr", encrypted))
+            val random = create("one", null)
+            val data = call("one", random, "encrypt", "random-key-roundtrip")
+            assertEquals("random-key-roundtrip", call("one", random, "decryptStr", data))
+            assertThrows(IllegalArgumentException::class.java) { call("two", fixed, "decryptStr", encrypted) }
+            assertThrows(IllegalStateException::class.java) { call("one", fixed, "getCipher", encrypted) }
+            LegacyJavaHost.clearOwner("one")
+            assertThrows(IllegalArgumentException::class.java) { call("one", fixed, "decryptStr", encrypted) }
+        } finally { LegacyJavaHost.clearOwner("one") }
+    }
+
     @Test fun rejectsUnknownNamesInvalidArgumentsAndCancelledTasks() {
         val ext = Extensions()
         for ((name, args) in listOf("getClass" to emptyList(), "timeFormat" to listOf(1.5), "getCookie" to listOf("tag", 1))) {

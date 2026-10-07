@@ -49,6 +49,11 @@ class SourcePlatform implements ScriptHost {
       case 'browser.start':
       case 'browser.openUrl':
       case 'browser.video':
+      case 'javaHost.cryptoCreate':
+      case 'javaHost.cryptoCall':
+      case 'javaHost.aesBase64DecodeToString':
+      case 'javaHost.desEncodeToBase64String':
+      case 'javaHost.getWebViewUA':
       case 'javaHost.HMacHex':
       case 'javaHost.HMacBase64':
       case 'javaHost.androidId':
@@ -100,6 +105,7 @@ class SourcePlatform implements ScriptHost {
       case 'sourceState.getVariable':
       case 'sourceState.putVariable':
       case 'sourceState.removeLoginInfo':
+      case 'legacyRule.evaluate':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||

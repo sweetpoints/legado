@@ -288,7 +288,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                 override fun getTag() = source?.getTag() ?: task.sourceId
                 override fun getSourceNavigationContext() = task.context
             }
-            return LegacyJavaHost.call(extensions, method, args)
+            return LegacyJavaHost.call(extensions, method, args, task.sourceId)
         }
         val source: BaseSource = when (task.sourceKind) {
             "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
@@ -560,6 +560,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
 
     override suspend fun clearSourceState(sourceId: String) {
         auxiliaryCall("clearSourceState", mapOf("sourceId" to sourceId), sourceId = sourceId)
+        LegacyJavaHost.clearOwner(sourceId)
     }
 
     override suspend fun execute(

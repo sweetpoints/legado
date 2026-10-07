@@ -7,6 +7,10 @@ import 'package:source_engine/source_engine.dart';
 
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
+  'createSymmetricCrypto',
+  'aesBase64DecodeToString',
+  'desEncodeToBase64String',
+  'getWebViewUA',
   'HMacHex',
   'HMacBase64',
   'androidId',
@@ -144,6 +148,17 @@ const legacyScriptPrelude = r"""
           if (String(name) === 'getString') args.push(unescape);
         }
         const value = __sourceHostSync('java.' + String(name), args);
+        if (String(name) === 'createSymmetricCrypto') {
+          if (!value || typeof value.__legacyCryptoHandle !== 'string') throw new Error('legacy.invalid_crypto_handle');
+          const handle = value.__legacyCryptoHandle;
+          const crypto = Object.create(null);
+          for (const operation of ['encrypt','encryptHex','encryptBase64','decrypt','decryptStr']) {
+            crypto[operation] = (...values) => __sourceHostSync('javaHost.cryptoCall', [handle, operation, values]);
+          }
+          crypto.setIv = iv => {__sourceHostSync('javaHost.cryptoCall', [handle, 'setIv', [iv]]); return crypto;};
+          return crypto;
+        }
+
         if (String(name) === 'log') return args[0];
         if (String(name) === 'getElement') return element(value);
         if (String(name) === 'getElements') return elementList(value);
@@ -180,6 +195,38 @@ class LegacyScriptHost implements ScriptHost {
 
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
+      case 'createSymmetricCrypto':
+        arity(2, 3);
+        str(0);
+        final key = arguments[1];
+        final iv = arguments.length == 3 ? arguments[2] : null;
+        void bytes(Object? value) {
+          if (value == null) return;
+          if (value is! List ||
+              value.any((b) => b is! int || b < -128 || b > 255)) {
+            throw ArgumentError('Legacy crypto bytes required');
+          }
+        }
+        if (key is String) {
+          if (iv != null && iv is! String) {
+            throw ArgumentError('Legacy string IV required');
+          }
+        } else {
+          bytes(key);
+          bytes(iv);
+        }
+        return delegate.call('javaHost.cryptoCreate', arguments);
+      case 'aesBase64DecodeToString':
+      case 'desEncodeToBase64String':
+        arity(4);
+        for (var i = 0; i < 4; i++) {
+          str(i);
+        }
+        return delegate.call('javaHost.$name', arguments);
+      case 'getWebViewUA':
+        arity(0);
+        return delegate.call('javaHost.getWebViewUA', arguments);
+
       case 'HMacHex':
       case 'HMacBase64':
         arity(3);

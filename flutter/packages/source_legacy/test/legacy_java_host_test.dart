@@ -73,6 +73,51 @@ void main() {
       expect(delegate.calls.length, 5);
     },
   );
+  test('crypto creation preserves string and signed bytes overloads', () async {
+    final delegate = Delegate();
+    final host = LegacyScriptHost(delegate);
+    await host.call('java.createSymmetricCrypto', ['AES', '0123456789abcdef']);
+    await host.call('java.createSymmetricCrypto', ['AES', null, null]);
+    await host.call('java.createSymmetricCrypto', [
+      'AES',
+      [-1, 0, 127],
+      [1, 2],
+    ]);
+    await host.call('java.aesBase64DecodeToString', [
+      'data',
+      'key',
+      'mode',
+      'iv',
+    ]);
+    await host.call('java.desEncodeToBase64String', [
+      'data',
+      'key',
+      'mode',
+      'iv',
+    ]);
+    expect(delegate.calls.first.$1, 'javaHost.cryptoCreate');
+    expect(delegate.calls[2].$2, [
+      'AES',
+      [-1, 0, 127],
+      [1, 2],
+    ]);
+    await expectLater(
+      host.call('java.createSymmetricCrypto', [
+        'AES',
+        'key',
+        [1],
+      ]),
+      throwsArgumentError,
+    );
+    await expectLater(
+      host.call('java.createSymmetricCrypto', [
+        'AES',
+        [256],
+      ]),
+      throwsArgumentError,
+    );
+    expect(delegate.calls.length, 5);
+  });
   test(
     'invalid overloads and unapproved Java names never reach native',
     () async {

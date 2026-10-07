@@ -6,12 +6,18 @@ class TaskScriptHost implements ScriptHost {
   final ScriptHost delegate;
   final Object? taskId;
   static const taskMethods = {
+    'legacyRule.evaluate',
     'batch.cacheContent',
     'browser.open',
     'browser.show',
     'browser.start',
     'browser.openUrl',
     'browser.video',
+    'javaHost.cryptoCreate',
+    'javaHost.cryptoCall',
+    'javaHost.aesBase64DecodeToString',
+    'javaHost.desEncodeToBase64String',
+    'javaHost.getWebViewUA',
     'javaHost.HMacHex',
     'javaHost.HMacBase64',
     'javaHost.androidId',
