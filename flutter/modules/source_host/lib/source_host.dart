@@ -639,6 +639,51 @@ class SourceHost {
     return result.future;
   }
 
+  PlatformException _sessionFailure(
+    Object error,
+    String phase, {
+    required bool writing,
+  }) {
+    final causeType = error.runtimeType.toString();
+    if (error is MissingPluginException) {
+      return PlatformException(
+        code: 'session_storage_unavailable',
+        message: 'Session storage plugin is not registered',
+        details: {'phase': phase, 'causeType': causeType},
+      );
+    }
+    if (error is PlatformException) {
+      return PlatformException(
+        code: writing
+            ? 'session_storage_write_failed'
+            : 'session_storage_read_failed',
+        message: 'Session storage operation failed ($phase)',
+        details: {
+          'phase': phase,
+          'causeType': causeType,
+          'causeCode': error.code,
+        },
+      );
+    }
+    final invalid =
+        error is FormatException ||
+        error is TypeError ||
+        (error is EngineException && error.code == 'invalid_session');
+    return PlatformException(
+      code: invalid
+          ? 'session_state_invalid'
+          : (writing ? 'session_write_failed' : 'session_restore_failed'),
+      message: invalid
+          ? 'Saved source session has invalid fields ($phase)'
+          : 'Source session failed ($phase: $causeType)',
+      details: {
+        'phase': phase,
+        'causeType': causeType,
+        if (error is EngineException) 'causeCode': error.code,
+      },
+    );
+  }
+
   Future<List<Map<String, Object?>>> _execute(
     SourceDefinition source,
     String key,
@@ -662,31 +707,68 @@ class SourceHost {
     }
     if (entry == null) {
       final engine = createEngine(source);
+      var restorePhase = 'storage_read';
       try {
+        token.throwIfCancelled();
         final stored = await sessionStore?.read(
           source.id,
           source.metadata['legacy'] == true,
         );
-        if (stored != null &&
-            stored['formatVersion'] == 1 &&
-            stored['origin'] == source.baseUrl.origin) {
-          engine.importSession(
-            source.id,
-            Map<String, Object?>.from(stored['engine'] as Map),
-          );
-          final runtime = engine.runtime;
-          if (runtime is SourceRuntimeState && stored['runtime'] is Map) {
-            (runtime as SourceRuntimeState).importRuntimeState(
-              Map<String, Object?>.from(stored['runtime'] as Map),
+        token.throwIfCancelled();
+        if (stored != null) {
+          restorePhase = 'session_format';
+          if (stored['formatVersion'] != 1) {
+            throw const EngineException(
+              'session_format_unsupported',
+              'Unsupported saved session format',
             );
           }
+          final origin = stored['origin'];
+          if (origin is! String) {
+            throw const FormatException('Session origin required');
+          }
+          final uri = Uri.tryParse(origin);
+          if (uri == null ||
+              !{'http', 'https'}.contains(uri.scheme) ||
+              uri.host.isEmpty ||
+              uri.userInfo.isNotEmpty ||
+              uri.hasFragment) {
+            throw const FormatException('Invalid session origin');
+          }
+          // Older v1 writers could store the base URL rather than URI.origin.
+          // Canonicalizing its origin preserves matching source sessions while
+          // cookie domain/path/security fields remain untouched.
+          if (uri.origin == source.baseUrl.origin) {
+            final engineState = stored['engine'];
+            if (engineState is! Map) {
+              throw const FormatException('Session engine state required');
+            }
+            final runtimeState = stored['runtime'];
+            if (runtimeState != null && runtimeState is! Map) {
+              throw const FormatException('Invalid runtime session state');
+            }
+            restorePhase = 'engine_state';
+            engine.importSession(
+              source.id,
+              Map<String, Object?>.from(engineState),
+            );
+            final runtime = engine.runtime;
+            if (runtime is SourceRuntimeState && runtimeState is Map) {
+              restorePhase = 'runtime_state';
+              (runtime as SourceRuntimeState).importRuntimeState(
+                Map<String, Object?>.from(runtimeState),
+              );
+            }
+          }
         }
-      } catch (_) {
+      } catch (error) {
         await engine.close();
-        throw const EngineException(
-          'session_restore_failed',
-          'Persisted source session could not be restored',
-        );
+        if (error is EngineException && error.code == 'cancelled') rethrow;
+        if (error is EngineException &&
+            error.code == 'session_format_unsupported') {
+          rethrow;
+        }
+        throw _sessionFailure(error, restorePhase, writing: false);
       }
       entry = _CachedEngine(fingerprint, engine);
       _engines[key] = entry;
@@ -715,11 +797,8 @@ class SourceHost {
               'runtime': (runtime as SourceRuntimeState).exportRuntimeState(),
           },
         );
-      } catch (_) {
-        throw const EngineException(
-          'session_write_failed',
-          'Source session could not be committed',
-        );
+      } catch (error) {
+        throw _sessionFailure(error, 'storage_write', writing: true);
       } finally {
         _active.remove(key);
         while (_engines.length > 32) {
