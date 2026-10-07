@@ -10,6 +10,7 @@ import 'form_encoding.dart';
 import 'page_templates.dart';
 import 'html4.dart';
 import 'legacy_rule_host.dart';
+import 'legacy_page_fetcher.dart';
 
 typedef SourceRequestAdapter = SourceStage Function(
   SourceDefinition source,
@@ -25,12 +26,14 @@ class SourceEngine {
     this.hostAdapter,
     this.requestAdapter,
     this.legacyRuleEvaluator,
+    this.legacyPageFetcher,
   }) : _providedNetwork = network;
   final ScriptRuntime runtime;
   final ScriptHost? platform;
   final ScriptHost Function(ScriptHost)? hostAdapter;
   final SourceRequestAdapter? requestAdapter;
   final LegacyRuleEvaluator? legacyRuleEvaluator;
+  final LegacyPageFetcher? legacyPageFetcher;
   final NetworkClient? _providedNetwork;
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
@@ -163,7 +166,10 @@ class SourceEngine {
     if (selectedStage == null) {
       throw EngineException('missing_stage', 'Source has no $operation stage');
     }
-    if (selectedStage.legacyRequestInput != null) {
+    final nativeFetcher = source.metadata['legacyOriginal'] is Map
+        ? legacyPageFetcher
+        : null;
+    if (nativeFetcher == null && selectedStage.legacyRequestInput != null) {
       final adapter = requestAdapter;
       if (adapter == null) {
         throw const EngineException(
@@ -180,76 +186,79 @@ class SourceEngine {
       }
     }
     final stage = selectedStage;
-    final urlTemplate = stage.legacyPageTemplates
-        ? expandLegacyPageTemplate(stage.url, input, urlChoices: true)
-        : stage.url;
-    final url = urlTemplate.replaceAllMapped(
-      RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
-      (m) {
-        final value = input[m[1]];
-        if (value == null) {
-          throw EngineException('missing_input', 'Missing ${m[1]}');
-        }
-        if (stage.legacyPageTemplates &&
-            RegExp(r'[<>]').hasMatch(value.toString())) {
+    var url = source.baseUrl.toString();
+    String? body;
+    if (nativeFetcher == null) {
+      final urlTemplate = stage.legacyPageTemplates
+          ? expandLegacyPageTemplate(stage.url, input, urlChoices: true)
+          : stage.url;
+      url = urlTemplate.replaceAllMapped(
+        RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
+        (m) {
+          final value = input[m[1]];
+          if (value == null) {
+            throw EngineException('missing_input', 'Missing ${m[1]}');
+          }
+          if (stage.legacyPageTemplates &&
+              RegExp(r'[<>]').hasMatch(value.toString())) {
+            throw const EngineException(
+              'legacy_page_requires_migration',
+              'Legacy URL input must not introduce page choice syntax',
+            );
+          }
+          // URL-valued inputs are full URLs; other values are encoded components.
+          return m[1]!.endsWith('Url')
+              ? value.toString()
+              : Uri.encodeComponent(value.toString());
+        },
+      );
+      if (source.metadata['legacyBaseUrlUnavailable'] == true) {
+        final explicit = Uri.tryParse(url);
+        // Uri.isAbsolute excludes URLs containing fragments; an HTTP request
+        // target is usable when it has an explicit HTTP(S) scheme and host.
+        if (explicit == null ||
+            !['http', 'https'].contains(explicit.scheme) ||
+            explicit.host.isEmpty) {
           throw const EngineException(
-            'legacy_page_requires_migration',
-            'Legacy URL input must not introduce page choice syntax',
+            'legacy_base_url_required',
+            'Legacy source ID has no HTTP base; the stage must provide an absolute HTTP(S) URL',
           );
         }
-        // URL-valued inputs are full URLs; other values are encoded components.
-        return m[1]!.endsWith('Url')
-            ? value.toString()
-            : Uri.encodeComponent(value.toString());
-      },
-    );
-    if (source.metadata['legacyBaseUrlUnavailable'] == true) {
-      final explicit = Uri.tryParse(url);
-      // Uri.isAbsolute excludes URLs containing fragments; an HTTP request
-      // target is usable when it has an explicit HTTP(S) scheme and host.
-      if (explicit == null ||
-          !['http', 'https'].contains(explicit.scheme) ||
-          explicit.host.isEmpty) {
-        throw const EngineException(
-          'legacy_base_url_required',
-          'Legacy source ID has no HTTP base; the stage must provide an absolute HTTP(S) URL',
-        );
       }
+      final bodyTemplate = stage.body != null && stage.legacyPageTemplates
+          ? expandLegacyPageTemplate(stage.body!, input)
+          : stage.body;
+      final substitutedBody = bodyTemplate?.replaceAllMapped(
+        RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
+        (m) {
+          final value = input[m[1]];
+          if (value == null) {
+            throw EngineException('missing_input', 'Missing ${m[1]}');
+          }
+          if (stage.bodyEncoding == 'legacyFormUtf8' ||
+              stage.bodyTemplateMode == 'legacyJsonString') {
+            if (value is! String && value is! bool && value is! int ||
+                value is int &&
+                    (value < -9007199254740991 || value > 9007199254740991)) {
+              throw const EngineException(
+                'legacy_body_template_requires_migration',
+                'Legacy body placeholders require strings, booleans or JS-safe integers',
+              );
+            }
+            if (RegExp(r'["\\<>\x00-\x1f\x7f]').hasMatch(value.toString())) {
+              throw const EngineException(
+                'legacy_body_template_requires_migration',
+                'Legacy body placeholder would change the old JSON request options',
+              );
+            }
+          }
+          return value.toString();
+        },
+      );
+      body = substitutedBody != null && stage.bodyEncoding == 'legacyFormUtf8'
+          ? encodeLegacyFormUtf8Body(substitutedBody)
+          : substitutedBody;
     }
-    final bodyTemplate = stage.body != null && stage.legacyPageTemplates
-        ? expandLegacyPageTemplate(stage.body!, input)
-        : stage.body;
-    final substitutedBody = bodyTemplate?.replaceAllMapped(
-      RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
-      (m) {
-        final value = input[m[1]];
-        if (value == null) {
-          throw EngineException('missing_input', 'Missing ${m[1]}');
-        }
-        if (stage.bodyEncoding == 'legacyFormUtf8' ||
-            stage.bodyTemplateMode == 'legacyJsonString') {
-          if (value is! String && value is! bool && value is! int ||
-              value is int &&
-                  (value < -9007199254740991 || value > 9007199254740991)) {
-            throw const EngineException(
-              'legacy_body_template_requires_migration',
-              'Legacy body placeholders require strings, booleans or JS-safe integers',
-            );
-          }
-          if (RegExp(r'["\\<>\x00-\x1f\x7f]').hasMatch(value.toString())) {
-            throw const EngineException(
-              'legacy_body_template_requires_migration',
-              'Legacy body placeholder would change the old JSON request options',
-            );
-          }
-        }
-        return value.toString();
-      },
-    );
-    final body =
-        substitutedBody != null && stage.bodyEncoding == 'legacyFormUtf8'
-        ? encodeLegacyFormUtf8Body(substitutedBody)
-        : substitutedBody;
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
     }
@@ -257,21 +266,42 @@ class SourceEngine {
     final results = <Map<String, Object?>>[];
     final visited = <String>{};
     var current = source.baseUrl.resolve(url);
+    String? nativeNext;
     for (var page = 0; page < stage.maxPages; page++) {
-      if (!visited.add(current.toString())) {
+      final requestKey = nativeFetcher == null
+          ? current.toString()
+          : nativeNext ?? 'initial';
+      if (!visited.add(requestKey)) {
         throw const EngineException(
           'pagination_cycle',
           'Next page repeats an already fetched URL',
         );
       }
-      final response = await network.request(
-        current,
-        headers: stage.headers ?? source.headers,
-        method: stage.method,
-        body: body,
-        charset: stage.charset,
-        cancellation: cancellation,
-      );
+      final response = nativeFetcher != null
+          ? await nativeFetcher.fetch(
+              source,
+              operation,
+              input,
+              ScriptContext(
+                variables: {
+                  ...context.variables,
+                  'baseUrl': current.toString(),
+                  'legacyVariables': vars,
+                },
+                host: context.host,
+                timeout: context.timeout,
+              ),
+              nextUrl: nativeNext,
+              cancellation: cancellation,
+            )
+          : await network.request(
+              current,
+              headers: stage.headers ?? source.headers,
+              method: stage.method,
+              body: body,
+              charset: stage.charset,
+              cancellation: cancellation,
+            );
       if (response.status >= 400) {
         throw EngineException('http_error', 'HTTP ${response.status}');
       }
@@ -397,7 +427,12 @@ class SourceEngine {
           .where((x) => x.isNotEmpty)
           .firstOrNull;
       if (next == null) break;
-      current = response.url.resolve(next);
+      if (nativeFetcher != null) {
+        nativeNext = next;
+        current = response.url;
+      } else {
+        current = response.url.resolve(next);
+      }
       if (page == stage.maxPages - 1) {
         throw const EngineException(
           'pagination_limit',

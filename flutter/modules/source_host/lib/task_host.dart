@@ -7,6 +7,8 @@ class TaskScriptHost implements ScriptHost {
   final Object? taskId;
   static const taskMethods = {
     'legacyRule.evaluate',
+    'legacyRequest.fetch',
+    'legacyRequest.resolve',
     'batch.cacheContent',
     'browser.open',
     'browser.show',

@@ -106,6 +106,8 @@ class SourcePlatform implements ScriptHost {
       case 'sourceState.putVariable':
       case 'sourceState.removeLoginInfo':
       case 'legacyRule.evaluate':
+      case 'legacyRequest.fetch':
+      case 'legacyRequest.resolve':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||

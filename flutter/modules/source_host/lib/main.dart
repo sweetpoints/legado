@@ -18,6 +18,7 @@ Future<void> main() async {
     legacyRuleHostEnabled: defaultTargetPlatform == TargetPlatform.android,
     legacyScriptRuleHostEnabled:
         defaultTargetPlatform == TargetPlatform.android,
+    legacyPageFetchEnabled: defaultTargetPlatform == TargetPlatform.android,
   );
   await host.attach(
     initialize: () async {
@@ -58,6 +59,9 @@ SourceEngine createSourceEngine(
 }) => SourceEngine(
   runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
   requestAdapter: adaptLegacyRequest,
+  legacyPageFetcher: defaultTargetPlatform == TargetPlatform.android
+      ? const HostLegacyPageFetcher()
+      : null,
   legacyRuleEvaluator: defaultTargetPlatform == TargetPlatform.android
       ? const HostLegacyRuleEvaluator(allowScripts: true)
       : null,

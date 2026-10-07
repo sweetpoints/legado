@@ -16,12 +16,14 @@ class SourceHost {
     this.sessionStore,
     this.legacyRuleHostEnabled = false,
     this.legacyScriptRuleHostEnabled = false,
+    this.legacyPageFetchEnabled = false,
   }) : channel = channel ?? const MethodChannel('legado/source_engine');
   final SourceEngine Function(SourceDefinition) createEngine;
   final MethodChannel channel;
   final SourceSessionStore? sessionStore;
   final bool legacyRuleHostEnabled;
   final bool legacyScriptRuleHostEnabled;
+  final bool legacyPageFetchEnabled;
   final Map<String, CancellationToken> _tasks = {};
   final Map<String, _CachedEngine> _engines = {};
   final Map<String, Future<void>> _queues = {};
@@ -64,6 +66,20 @@ class SourceHost {
       return false;
     }
     return true;
+  }
+
+  bool _hostedRequestIssue(LegacyIssue issue, String operation, Map input) {
+    if (!legacyPageFetchEnabled) return false;
+    if ({
+      'legacy.request_options',
+      'legacy.dynamic_header',
+      'legacy.cookie_policy_requires_review',
+    }.contains(issue.code)) {
+      return true;
+    }
+    return issue.code == 'legacy.explore_menu_requires_review' &&
+        operation == 'explore' &&
+        input['exploreUrl'] is String;
   }
 
   bool _hostedRuleIssue(LegacyIssue issue, Map<String, Object?> original) {
@@ -161,7 +177,12 @@ class SourceHost {
                           true &&
                       issue.code == 'legacy.base_url_requires_review' &&
                       issue.path == 'bookSourceUrl') &&
-                  !(legacyRuleHostEnabled && _hostedRuleIssue(issue, raw)),
+                  !(legacyRuleHostEnabled && _hostedRuleIssue(issue, raw)) &&
+                  !_hostedRequestIssue(
+                    issue,
+                    args['operation'] as String,
+                    args['input'] as Map? ?? {},
+                  ),
             )
             .toList();
         // This one reviewed identity risk is enforced by the engine's absolute
