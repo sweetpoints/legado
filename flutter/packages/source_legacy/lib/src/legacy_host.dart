@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'legacy_dom.dart';
+
 import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
 import 'package:source_engine/source_engine.dart';
@@ -59,7 +61,9 @@ const legacySupportedMethods = {
 
 /// StrResponse and Jsoup response method facades. Dart only transports JSON;
 /// response methods are materialized in JS after the synchronous host returns.
-const legacyScriptPrelude = r"""
+const legacyScriptPrelude =
+    legacyDomPrelude +
+    r"""
 (() => {
   function response(value) {
     if (Array.isArray(value)) return value.map(response);
@@ -107,6 +111,7 @@ const legacyScriptPrelude = r"""
     return out;
   }
   function element(value) {
+    if (value && (value.__legacyDom || value.__legacyDomList)) return __legacyDomMaterialize(value);
     if (typeof value !== 'string') return value;
     const rootTag = /^<([A-Za-z][A-Za-z0-9:_-]*)/.exec(value);
     if (!rootTag) throw new Error('legacy.invalid_element_serialization');
@@ -123,6 +128,7 @@ const legacyScriptPrelude = r"""
     return out;
   }
   function elementList(values) {
+    if (values && values.__legacyDomList) return __legacyDomMaterialize(values);
     const list = (values || []).map(element);
     Object.defineProperties(list, {
       size: {value: () => list.length}, get: {value: index => list[index]},

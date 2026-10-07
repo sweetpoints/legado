@@ -37,6 +37,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.apache.commons.text.StringEscapeUtils
+import io.legado.app.model.sourceEngine.LegacyDomHost
+import org.seimicrawler.xpath.JXNode
 import org.jsoup.nodes.Node
 import java.net.URL
 import java.util.Locale
@@ -888,8 +890,9 @@ class AnalyzeRule(
         }
         fun jsonValue(value: Any?): Any? = when (value) {
             null, is String, is Number, is Boolean -> value
-            is Node -> value.toString()
-            is List<*> -> value.map(::jsonValue)
+            is Node -> LegacyDomHost.serialize(value)
+            is JXNode -> jsonValue(value.value())
+            is List<*> -> if (value.all { it is Node }) LegacyDomHost.serialize(value) else value.map(::jsonValue)
             is Array<*> -> value.map(::jsonValue)
             else -> DartSourceEngine.jsonObject(value)
         }
@@ -919,11 +922,11 @@ class AnalyzeRule(
                     "analyze.put" -> put(text(0), text(1))
                     "analyze.getString" -> {
                         if (args.getOrNull(1) is Boolean) getString(text(0), args[1] as Boolean)
-                        else getString(text(0), args.getOrNull(1), args.getOrNull(2) == true)
+                        else getString(text(0), LegacyDomHost.restoreValue(args.getOrNull(1)), args.getOrNull(2) == true)
                     }
-                    "analyze.getStringList" -> getStringList(text(0), args.getOrNull(1), args.getOrNull(2) == true)
-                    "analyze.getElement" -> jsonValue(getElement(text(0)))
-                    "analyze.getElements" -> jsonValue(getElements(text(0)))
+                    "analyze.getStringList" -> getStringList(text(0), LegacyDomHost.restoreValue(args.getOrNull(1)), args.getOrNull(2) == true)
+                    "analyze.getElement" -> LegacyDomHost.serialize(getElement(text(0)))
+                    "analyze.getElements" -> LegacyDomHost.serialize(getElements(text(0)))
                     else -> error("Unsupported analyze callback: $method")
                 }
             }
@@ -931,11 +934,15 @@ class AnalyzeRule(
         val script = """
             (async function() {
                 var nativeJava = globalThis.java;
+                globalThis.result = __legacyDomMaterialize(globalThis.result);
+                globalThis.src = __legacyDomMaterialize(globalThis.src);
                 var java = new Proxy(Object.create(null), {
                     get: (_, name) => ['get','put','getString','getStringList','getElement','getElements'].includes(String(name))
-                        ? (...args) => name === 'get' && args.length !== 1
-                            ? nativeJava[name](...args)
-                            : __sourceHostSync('analyze.' + String(name), args)
+                        ? (...args) => {
+                            if (name === 'get' && args.length !== 1) return nativeJava[name](...args);
+                            const value = __sourceHostSync('analyze.' + String(name), args);
+                            return ['getElement','getElements'].includes(String(name)) ? __legacyDomMaterialize(value) : value;
+                        }
                         : nativeJava && nativeJava[name]
                 });
                 return await eval(__analyzeScript);

@@ -51,6 +51,7 @@ class SourcePlatform implements ScriptHost {
       case 'browser.video':
       case 'javaHost.cryptoCreate':
       case 'javaHost.cryptoCall':
+      case 'javaHost.domCall':
       case 'javaHost.aesBase64DecodeToString':
       case 'javaHost.desEncodeToBase64String':
       case 'javaHost.getWebViewUA':

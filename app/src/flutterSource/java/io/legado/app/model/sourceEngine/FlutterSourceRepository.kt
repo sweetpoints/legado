@@ -319,6 +319,14 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             check(method != "browser.open") { "Source navigation is suppressed for this operation" }
             return null
         }
+        if (method == "javaHost.domCall") {
+            require(args.size == 3 && args[0] is Map<*, *> && args[1] is String && args[2] is List<*>) {
+                "Invalid legacy DOM callback"
+            }
+            task.context.ensureActive()
+            @Suppress("UNCHECKED_CAST")
+            return LegacyDomHost.call(args[0] as Map<*, *>, args[1] as String, args[2] as List<Any?>)
+        }
         if (method in LegacyJavaHost.methods) {
             val source: BaseSource? = when (task.sourceKind) {
                 "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)

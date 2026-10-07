@@ -17,6 +17,7 @@ class TaskScriptHost implements ScriptHost {
     'browser.video',
     'javaHost.cryptoCreate',
     'javaHost.cryptoCall',
+    'javaHost.domCall',
     'javaHost.aesBase64DecodeToString',
     'javaHost.desEncodeToBase64String',
     'javaHost.getWebViewUA',

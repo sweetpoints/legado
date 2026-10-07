@@ -33,7 +33,10 @@ object LegacySourceScriptRunner {
                     : __sourceHostSync('analyze.' + String(name), args)
                 : ['getString','getStringList','getElement','getElements'].includes(String(name))
                     && globalThis.__legacyExtractionPrefix === 'analyze'
-                    ? (...args) => __sourceHostSync('analyze.' + String(name), args)
+                    ? (...args) => {
+                        const value = __sourceHostSync('analyze.' + String(name), args);
+                        return ['getElement','getElements'].includes(String(name)) ? __legacyDomMaterialize(value) : value;
+                    }
                 : ['getString','getStringList'].includes(String(name))
                     && globalThis.__legacyExtractionPrefix === 'ui'
                     ? (...args) => __sourceHostSync('ui.' + String(name), args)
