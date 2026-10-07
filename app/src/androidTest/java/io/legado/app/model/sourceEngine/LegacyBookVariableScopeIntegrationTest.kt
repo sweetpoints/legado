@@ -122,6 +122,17 @@ class LegacyBookVariableScopeIntegrationTest {
                 )
                 withTimeout(15_000) {
                     assertEquals(
+                        "Explicit task callback must read the seeded entity layer",
+                        "A-token",
+                        host
+                            .evaluate(
+                                payload("@js:__sourceHostSync('analyze.get',['saved'])"),
+                                fromScript = false,
+                            )["value"],
+                    )
+                }
+                withTimeout(15_000) {
+                    assertEquals(
                         "A-token",
                         host
                             .evaluate(
