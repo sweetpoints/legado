@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.junit.Assert.*
 import org.junit.Test
@@ -46,7 +47,8 @@ class LegacyDomV8IntegrationTest {
                             const first = rows.get(0);
                             ({size:rows.size(), parent:first.parent().tagName(),
                                 names:first.select('td').text(), link:first.select('a').get(0).attr('abs:href'),
-                                text:java.getString('tag.td.1@text', first)});
+                                text:java.getString('tag.td.1@text', first),
+                                resolved:java.getString('tag.a.0@href', first, true)});
                             """
                                 .trimIndent()
                         )
@@ -57,6 +59,17 @@ class LegacyDomV8IntegrationTest {
                 assertEquals("First Second", result["names"])
                 assertEquals(nativeLink, result["link"])
                 assertEquals("Second", result["text"])
+                assertEquals("https://dom.invalid/first", result["resolved"])
+                parser.setContent(
+                    Jsoup.parse("<a href='/first'>First</a>", "https://dom.invalid/base"),
+                    "https://dom.invalid/base",
+                )
+                assertEquals(
+                    "https://dom.invalid/first",
+                    withTimeout(20_000) {
+                        parser.evalJS("java.getElements('tag.a').get(0).attr('abs:href')")
+                    },
+                )
             } finally {
                 DartSourceEngine.clearSourceState(source)
             }
