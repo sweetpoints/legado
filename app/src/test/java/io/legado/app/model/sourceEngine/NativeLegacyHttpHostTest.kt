@@ -24,9 +24,9 @@ class NativeLegacyHttpHostTest {
         override fun get(key: String) = values[key].orEmpty()
         override fun put(key: String, value: String): String { values[key] = value; return value }
     }
-    private class Extensions(val source: BaseSource? = null) : JsExtensions {
+    private class Extensions(private val boundSource: BaseSource? = null) : JsExtensions {
         val job = Job()
-        override fun getSource() = source
+        override fun getSource() = boundSource
         override fun getTag() = "fixture"
         override fun getSourceNavigationContext() = job
         override fun get(urlStr: String, headers: Any?, timeout: Int?): Connection.Response = throw Invocation("get", listOf(urlStr, headers, timeout))
