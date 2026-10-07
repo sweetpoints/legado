@@ -181,6 +181,8 @@ class LegacyNestedHttpScriptV8IntegrationTest {
                         object : JsExtensions {
                             override fun getSource() = source
 
+                            override fun getTag() = source.getTag()
+
                             override fun getSourceNavigationContext() = context
                         }
                     val batch = arrayOf("@js:resolvedUrl()", "{{resolvedUrl()}}")
