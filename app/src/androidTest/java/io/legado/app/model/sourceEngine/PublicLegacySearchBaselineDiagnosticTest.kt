@@ -7,6 +7,7 @@ import fi.iki.elonen.NanoHTTPD
 import io.legado.app.BuildConfig
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -82,6 +83,8 @@ class PublicLegacySearchBaselineDiagnosticTest {
                     "assetSha256" to assetSha,
                     "originalJsonSha256" to sha(original.toString().toByteArray(Charsets.UTF_8)),
                     "originalJsonRepresentation" to "parsed JSON object serialization",
+                    "sourceCommit" to
+                        InstrumentationRegistry.getArguments().getString("sourceCommit"),
                     "searchKey" to "西游记",
                     "page" to 1,
                     "cloneTransport" to
@@ -103,15 +106,20 @@ class PublicLegacySearchBaselineDiagnosticTest {
                                 )
                                 .getStrResponseAwait()
                         }
+                    report["nativeHttpStatus"] = response.raw.code
+                    report["primaryRequestTransport"] = "AnalyzeUrl.getStrResponseAwait"
+                    report["primaryRemoteSearchFetches"] = 1
                     val body = response.body ?: error("Native search response has no body")
                     val bodyBytes = body.toByteArray(Charsets.UTF_8)
-                    report["nativeHttpStatus"] = response.raw.code
                     report["bodyRepresentation"] =
                         "decoded response body encoded as UTF-8; not raw wire bytes"
                     report["bodySha256"] = sha(bodyBytes)
                     report["bodyBytes"] = bodyBytes.size
                     if (response.raw.code !in 200..299)
-                        error("Native search returned an unsuccessful HTTP status")
+                        throw SourceHostException(
+                            "http_status_error",
+                            "Native search returned an unsuccessful HTTP status",
+                        )
                     val document = Jsoup.parse(body, response.url)
                     report["loginFormPresent"] =
                         document
@@ -164,7 +172,9 @@ class PublicLegacySearchBaselineDiagnosticTest {
                                         .getString(rules.name)
                                 }
                             }
-                        old["nameHashes"] = names.map { sha(it.toByteArray(Charsets.UTF_8)) }
+                        old["nameHashes"] = names.map {
+                            sha(BookHelp.formatBookName(it).toByteArray(Charsets.UTF_8))
+                        }
                         old["status"] = "complete"
                     } catch (error: Exception) {
                         recordFailure(old, error)
@@ -216,6 +226,12 @@ class PublicLegacySearchBaselineDiagnosticTest {
             throw error
         target["status"] = "failed"
         target["errorType"] = error.javaClass.name
+        target["exceptionTypes"] =
+            generateSequence<Throwable>(error) { it.cause }
+                .take(8)
+                .map { it.javaClass.name }
+                .toList()
+        if (error is SourceHostException) target["remoteExceptionTypes"] = error.exceptionTypes
         target["errorCode"] =
             when (error) {
                 is SourceScriptException -> error.code
