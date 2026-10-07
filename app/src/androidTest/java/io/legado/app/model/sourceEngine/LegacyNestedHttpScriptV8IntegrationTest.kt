@@ -1,6 +1,8 @@
 package io.legado.app.model.sourceEngine
 
+import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.data.entities.BookSource
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -19,6 +21,43 @@ import org.junit.runner.RunWith
 /** Original native URL-script phases compared with the same-owner java.ajax entry. */
 @RunWith(AndroidJUnit4::class)
 class LegacyNestedHttpScriptV8IntegrationTest {
+    private var caseLabel = "unassigned"
+
+    private suspend fun <T> phase(label: String, block: suspend () -> T): T {
+        fun emit(status: String, error: Throwable? = null) {
+            val values =
+                Bundle().apply {
+                    putString("legacyHttpCase", caseLabel)
+                    putString("legacyHttpPhase", label)
+                    putString("legacyHttpPhaseStatus", status)
+                    if (error != null) {
+                        putString("legacyHttpErrorType", error.javaClass.name)
+                        putString(
+                            "legacyHttpErrorCode",
+                            when (error) {
+                                is SourceScriptException -> error.code
+                                is SourceHostException -> error.code
+                                else -> "fixture_failed"
+                            },
+                        )
+                    }
+                    putString(
+                        "stream",
+                        "[legacy-http-phase] case=$caseLabel phase=$label status=$status\n",
+                    )
+                }
+            // In-progress status: this must not impersonate a JUnit test completion.
+            InstrumentationRegistry.getInstrumentation().sendStatus(2, values)
+        }
+        emit("started")
+        try {
+            return block().also { emit("completed") }
+        } catch (error: Throwable) {
+            emit("failed", error)
+            throw error
+        }
+    }
+
     private class Server : NanoHTTPD("127.0.0.1", 0) {
         val paths = CopyOnWriteArrayList<String>()
         val base
@@ -69,24 +108,28 @@ class LegacyNestedHttpScriptV8IntegrationTest {
     }
 
     private suspend fun native(source: BookSource, rule: String, base: String): String? =
-        withTimeout(15_000) {
-            AnalyzeUrl(
-                    rule,
-                    source = source,
-                    baseUrl = base,
-                    coroutineContext = currentCoroutineContext(),
-                )
-                .getStrResponseAwait()
-                .body
+        phase("native-golden") {
+            withTimeout(15_000) {
+                AnalyzeUrl(
+                        rule,
+                        source = source,
+                        baseUrl = base,
+                        coroutineContext = currentCoroutineContext(),
+                    )
+                    .getStrResponseAwait()
+                    .body
+            }
         }
 
     private suspend fun ajax(source: BookSource, rule: String): String? {
         val value =
-            withTimeout(15_000) {
-                DartSourceEngine.evaluate(
-                    source,
-                    "({before:java.get('token'),body:java.ajax(${GSON.toJson(rule)},8000),after:java.get('token')})",
-                )
+            phase("same-owner.ajax") {
+                withTimeout(15_000) {
+                    DartSourceEngine.evaluate(
+                        source,
+                        "({before:java.get('token'),body:java.ajax(${GSON.toJson(rule)},8000),after:java.get('token')})",
+                    )
+                }
             }
                 as Map<*, *>
         assertEquals("outer", value["before"])
@@ -96,11 +139,13 @@ class LegacyNestedHttpScriptV8IntegrationTest {
 
     private suspend fun state(source: BookSource, runs: Int) {
         val value =
-            withTimeout(15_000) {
-                DartSourceEngine.evaluate(
-                    source,
-                    "({loads:stageLibraryLoads,runs:stageRuns,scope:stageScope,sourceValue:stageSourceValue})",
-                )
+            phase("owner-state") {
+                withTimeout(15_000) {
+                    DartSourceEngine.evaluate(
+                        source,
+                        "({loads:stageLibraryLoads,runs:stageRuns,scope:stageScope,sourceValue:stageSourceValue})",
+                    )
+                }
             }
                 as Map<*, *>
         assertEquals(1, (value["loads"] as Number).toInt())
@@ -114,6 +159,7 @@ class LegacyNestedHttpScriptV8IntegrationTest {
     @Test
     fun dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables(): Unit =
         runBlocking(Dispatchers.IO) {
+            caseLabel = "dynamic-url"
             val server = Server().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
             val source =
                 source("function resolvedUrl(){$observePhase return '${server.base}/resolved';}")
@@ -141,6 +187,7 @@ class LegacyNestedHttpScriptV8IntegrationTest {
     @Test
     fun urlOptionJsReceivesResolvedUrlAndPreservesTheSameLibraryAndGlobals(): Unit =
         runBlocking(Dispatchers.IO) {
+            caseLabel = "url-options"
             val server = Server().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
             val source =
                 source(
@@ -166,6 +213,7 @@ class LegacyNestedHttpScriptV8IntegrationTest {
     @Test
     fun responseBodyJsRunsAfterNativeFetchInTheSameOwnerAndReceivesTheRawBody(): Unit =
         runBlocking(Dispatchers.IO) {
+            caseLabel = "response-body"
             val server = Server().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
             val source =
                 source(
