@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 101,
+  "caseCount": 103,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -258,11 +258,20 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyNestedHttpScriptV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt",
-      "sourceSha256": "6ca268a784c79e01a12a3c3cfef46ac7a873738d3f038645933b8e83b9052d7e",
+      "sourceSha256": "06fa87d8f456f3a8cfe578d11d16875303d0609ad0889d2d343b95ae1c4c0104",
       "methods": [
         "dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables",
         "responseBodyJsRunsAfterNativeFetchInTheSameOwnerAndReceivesTheRawBody",
         "urlOptionJsReceivesResolvedUrlAndPreservesTheSameLibraryAndGlobals"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyCacheV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCacheV8IntegrationTest.kt",
+      "sourceSha256": "dceced913cb39d64ac95b740c94f72b9d197bbfb5c13780b8e847ec2615d5278",
+      "methods": [
+        "actualCacheSurvivesVmClearAndSupportsMemoryDiskFileAndJavaBytes",
+        "ttlUsesSecondsAndExpiredDiskCannotBeHiddenByStaleMemory"
       ]
     }
   ]
