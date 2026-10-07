@@ -45,6 +45,7 @@ import io.legado.app.help.storage.Restore
 import io.legado.app.help.storage.writePreferenceSnapshot
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.ThemeStorePrefKeys
+import io.legado.app.ui.theme.contrastRatio
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
@@ -620,13 +621,12 @@ class ReadRecordHistoryTest {
                 awaitColor("history-cover-${key(book.name, book.author)}", Color.rgb(35, 148, 115))
                 val image = compose.onNodeWithTag("history-summary").captureToImage().toPixelMap()
                 val card = image[8, image.height / 2].toArgb()
-                if (dark)
-                    for (channel in
-                        listOf<(Int) -> Int>(Color::red, Color::green, Color::blue)) assertTrue(
-                        "Dark card has visible boundary",
-                        channel(card) - channel(background) in 12..21,
-                    )
-                else assertEquals(background, card)
+                assertNotEquals("The Material3 card must be distinguishable from the page", background, card)
+                val layouts = mutableListOf<TextLayoutResult>()
+                compose.onNodeWithTag("history-total")
+                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                val textColor = layouts.single().layoutInput.style.color.toArgb()
+                assertTrue("Rendered summary text must remain readable on its actual card", contrastRatio(textColor, card) >= 4.5)
                 screenshot("reading-history-covers-$name")
                 scenario!!.close()
                 scenario = null

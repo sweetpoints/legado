@@ -20,6 +20,7 @@ import io.legado.app.data.repository.TxtTocRuleImportItem
 internal fun txtTocRuleImportStatus(item: TxtTocRuleImportItem): Int =
     if (item.existsLocally) R.string.import_status_exist else R.string.import_status_new
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ImportTxtTocRuleScreen(
     state: ImportTxtTocRuleState,
@@ -39,13 +40,11 @@ internal fun ImportTxtTocRuleScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.import_txt_toc_rule),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_txt_toc_rule)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("toc-import-progress"))
             LazyColumn(

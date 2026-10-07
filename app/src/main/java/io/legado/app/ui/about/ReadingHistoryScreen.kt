@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -18,7 +19,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -28,7 +28,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -40,7 +39,6 @@ import io.legado.app.data.image.CoverImage
 import io.legado.app.data.repository.*
 import io.legado.app.ui.components.image.LifecycleDrawablePainter
 import io.legado.app.ui.theme.LocalLegadoColors
-import io.legado.app.utils.ColorUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlinx.coroutines.*
@@ -352,10 +350,7 @@ private fun ReadingHistorySummary(
     covers: ReadingHistoryCoverRepository,
 ) {
     val colors = LocalLegadoColors.current
-    val background = colors.background
-    val color =
-        if (colors.isLight) background
-        else Color(ColorUtils.blendColors(background.toArgb(), android.graphics.Color.WHITE, .08f))
+    val color = MaterialTheme.colorScheme.surfaceContainerLow
     val count = state.snapshot.count.toString()
     val label = stringResource(R.string.read_record_book_count, state.snapshot.count)
     val countText = buildAnnotatedString {
@@ -363,7 +358,10 @@ private fun ReadingHistorySummary(
         val start = label.indexOf(count)
         if (start >= 0)
             addStyle(
-                SpanStyle(color = colors.accent, fontSize = 25.sp),
+                SpanStyle(
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                ),
                 start,
                 start + count.length,
             )
@@ -371,20 +369,20 @@ private fun ReadingHistorySummary(
     Surface(
         Modifier.fillMaxWidth().padding(16.dp).testTag("history-summary"),
         color = color,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         shadowElevation = 2.dp,
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.read_record_achievement),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary,
                 )
                 Text(
                     countText,
                     Modifier.padding(top = 12.dp).testTag("history-count"),
-                    fontSize = 18.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
                     stringResource(
@@ -396,7 +394,7 @@ private fun ReadingHistorySummary(
                         ),
                     ),
                     Modifier.padding(top = 8.dp).testTag("history-total"),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary,
                 )
             }
@@ -437,8 +435,7 @@ private fun ReadingHistoryRow(
     val locale = LocalConfiguration.current.locales[0]
     val date =
         remember(row.lastRead, locale) {
-            if (row.lastRead > 0)
-                SimpleDateFormat("yyyy-MM-dd", locale).format(Date(row.lastRead))
+            if (row.lastRead > 0) SimpleDateFormat("yyyy-MM-dd", locale).format(Date(row.lastRead))
             else ""
         }
     Row(
@@ -461,15 +458,14 @@ private fun ReadingHistoryRow(
             Text(
                 row.identity.name,
                 Modifier.testTag("history-title-${row.key}"),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 if (prefs.simple) stringResource(R.string.author_show, author) else author,
                 Modifier.padding(top = 4.dp).testTag("history-author-${row.key}"),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = secondary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -478,7 +474,7 @@ private fun ReadingHistoryRow(
                 Text(
                     row.chapter ?: stringResource(R.string.read_record_no_chapter),
                     Modifier.padding(top = 4.dp).testTag("history-chapter-${row.key}"),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = secondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -486,13 +482,12 @@ private fun ReadingHistoryRow(
             Text(
                 formatDuring(row.readTime, prefs.days, prefs.seconds),
                 Modifier.padding(top = 4.dp).testTag("history-time-${row.key}"),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
             )
             Text(
                 date,
                 Modifier.padding(top = 4.dp).testTag("history-date-${row.key}"),
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = secondary,
             )
         }

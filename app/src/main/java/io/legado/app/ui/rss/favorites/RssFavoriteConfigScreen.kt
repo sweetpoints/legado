@@ -27,7 +27,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun RssFavoriteConfigScreen(
     state: RssFavoriteConfigState,
@@ -68,16 +68,16 @@ internal fun RssFavoriteConfigScreen(
             shape = MaterialTheme.shapes.large,
         ) {
             Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Text(
-                        stringResource(R.string.favorite),
-                        Modifier.fillMaxWidth().padding(16.dp).testTag("favorite-config-heading"),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                }
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(R.string.favorite),
+                            Modifier.fillMaxWidth().testTag("favorite-config-heading"),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    },
+                    windowInsets = WindowInsets(0),
+                )
                 if (state.loading || state.busy)
                     LinearProgressIndicator(
                         Modifier.fillMaxWidth().testTag("favorite-config-working")

@@ -36,6 +36,7 @@ internal data class BrowserScreenActions(
     val selectImageFolder: () -> Unit,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BrowserScreen(
     state: BrowserState,
@@ -62,21 +63,9 @@ internal fun BrowserScreen(
                     .testTag("browser-page")
             ) {
                 if (!state.fullscreen)
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(actions.back, Modifier.size(48.dp).testTag("browser-back")) {
-                                Icon(
-                                    painterResource(R.drawable.ic_back),
-                                    stringResource(R.string.back),
-                                )
-                            }
-                            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    TopAppBar(
+                        title = {
+                            Column(Modifier) {
                                 Text(
                                     state.title.ifEmpty {
                                         if (state.progress == 0) stringResource(R.string.loading)
@@ -98,6 +87,16 @@ internal fun BrowserScreen(
                                         )
                                     }
                             }
+                        },
+                        navigationIcon = {
+                            IconButton(actions.back, Modifier.size(48.dp).testTag("browser-back")) {
+                                Icon(
+                                    painterResource(R.drawable.ic_back),
+                                    stringResource(R.string.back),
+                                )
+                            }
+                        },
+                        actions = {
                             IconButton(
                                 { actions.menu(BrowserMenu.Refresh) },
                                 Modifier.size(48.dp).testTag("browser-refresh"),
@@ -155,8 +154,9 @@ internal fun BrowserScreen(
                                         }
                                 }
                             }
-                        }
-                    }
+                        },
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                    )
                 if (state.loading || state.busy)
                     LinearProgressIndicator(
                         Modifier.fillMaxWidth().height(1.dp).testTag("browser-progress")

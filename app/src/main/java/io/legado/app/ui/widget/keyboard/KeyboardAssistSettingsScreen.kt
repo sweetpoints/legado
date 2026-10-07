@@ -47,6 +47,7 @@ class KeyboardAssistSettingsActions(
     val scroll: (Int, Int) -> Unit = { _, _ -> },
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KeyboardAssistSettingsScreen(
     state: KeyboardAssistSettingsState,
@@ -106,32 +107,32 @@ fun KeyboardAssistSettingsScreen(
     }
     Surface {
         Column(Modifier.fillMaxSize()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(actions.close, enabled = !state.busy && !state.editorLoading) {
-                        Icon(
-                            painterResource(R.drawable.ic_arrow_back),
-                            stringResource(R.string.back),
-                        )
-                    }
+            TopAppBar(
+                title = {
                     Column(
-                        Modifier.weight(1f)
-                            .heightIn(min = 48.dp)
+                        Modifier.heightIn(min = 48.dp)
                             .clickable(enabled = state.loaded && !state.busy) { actions.lines() }
                             .testTag("keyboard-settings-lines")
                     ) {
                         Text(
                             stringResource(R.string.assists_key_config),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
                             stringResource(R.string.show_line_number, state.lineCount),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
+                },
+                navigationIcon = {
+                    IconButton(actions.close, enabled = !state.busy && !state.editorLoading) {
+                        Icon(
+                            painterResource(R.drawable.ic_arrow_back),
+                            stringResource(R.string.back),
+                        )
+                    }
+                },
+                actions = {
                     IconButton(
                         actions.add,
                         Modifier.testTag("keyboard-settings-add"),
@@ -140,8 +141,8 @@ fun KeyboardAssistSettingsScreen(
                     ) {
                         Icon(painterResource(R.drawable.ic_add), stringResource(R.string.add))
                     }
-                }
-            }
+                },
+            )
             if (!state.loaded || state.busy || state.editorLoading)
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let { error ->
@@ -416,9 +417,10 @@ private fun AssistEditorField(
             remember(label) {
                 mutableStateOf(TextFieldValue(value.text, TextRange(value.start, value.end)))
             }
-        SideEffect {
-            if (local.text != value.text || local.selection != TextRange(value.start, value.end))
-                local = TextFieldValue(value.text, TextRange(value.start, value.end))
+        LaunchedEffect(value.text, value.start, value.end) {
+            val selection = TextRange(value.start, value.end)
+            if (local.text != value.text) local = TextFieldValue(value.text, selection)
+            else if (local.selection != selection) local = local.copy(selection = selection)
         }
         OutlinedTextField(
             local,

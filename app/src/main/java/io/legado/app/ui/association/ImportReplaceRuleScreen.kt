@@ -26,6 +26,7 @@ internal fun replaceRuleImportStatus(item: ReplaceRuleImportItem): Int =
         ReplaceRuleImportStatus.Existing -> R.string.import_status_exist
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ImportReplaceRuleScreen(
     state: ImportReplaceRuleState,
@@ -49,13 +50,11 @@ internal fun ImportReplaceRuleScreen(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp)
                 .imePadding()
         ) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.import_replace_rule),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.import_replace_rule)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             TextButton(
                 onGroup,
                 enabled = !state.busy && !state.finished,

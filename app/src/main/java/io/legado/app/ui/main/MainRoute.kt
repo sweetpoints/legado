@@ -1,24 +1,24 @@
 package io.legado.app.ui.main
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.help.BottomBarSkinManager
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.navigation.MainDestination
+import io.legado.app.ui.theme.LocalLegadoColors
+import io.legado.app.ui.theme.Material3SystemBars
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -71,12 +71,17 @@ fun MainRoute(
                     }
                 }
         }
+    Material3SystemBars(
+        MaterialTheme.colorScheme.surface,
+        if (transparentNavigation) MaterialTheme.colorScheme.background
+        else LocalLegadoColors.current.bottomBackground,
+    )
     MainScreen(
         state = state,
         updatingBooks = updatingBooks,
         skinIcons = icons,
         transparentNavigation = transparentNavigation,
-        statusBarColor = Color(ThemeStore.statusBarColor(context, AppConfig.isTransparentStatusBar)),
+        statusBarColor = MaterialTheme.colorScheme.surface,
         onDestinationClick = { destination ->
             if (destination == state.selectedDestination) onDestinationReselected(destination)
             else {

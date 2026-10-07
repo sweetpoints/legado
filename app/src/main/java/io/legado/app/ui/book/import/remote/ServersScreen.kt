@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ServersScreen(
     state: ServersUiState,
@@ -32,16 +33,21 @@ internal fun ServersScreen(
     BackHandler(onBack = onClose)
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(R.string.server_config),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                IconButton(onAdd, Modifier.testTag("servers-add")) {
-                    Icon(painterResource(R.drawable.ic_add), stringResource(R.string.add))
-                }
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.server_config),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                actions = {
+                    IconButton(onAdd, Modifier.testTag("servers-add")) {
+                        Icon(painterResource(R.drawable.ic_add), stringResource(R.string.add))
+                    }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.deleting) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)

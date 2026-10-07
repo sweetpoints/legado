@@ -16,6 +16,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourceCheckSettingsScreen(
     state: SourceCheckSettingsState,
@@ -27,16 +28,16 @@ fun SourceCheckSettingsScreen(
 ) {
     Surface {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Text(
-                    stringResource(R.string.check_source_config),
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.check_source_config),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             Column(
                 Modifier.weight(1f, fill = false)
                     .verticalScroll(rememberScrollState())

@@ -44,6 +44,7 @@ class BookSourcePickerViewModel(
         )
     val state = mutable.asStateFlow()
     private var observation: Job? = null
+    private var observationGeneration = 0
     private var selection: Job? = null
     private var delayJob: Job? = null
     private var generation = 0
@@ -59,9 +60,9 @@ class BookSourcePickerViewModel(
     }
 
     fun search(query: String) {
-        if (state.value.busy || state.value.finished) return
+        if (state.value.busy || state.value.finished || state.value.query == query) return
         saved["picker.query"] = query
-        mutable.update { it.copy(query = query) }
+        mutable.update { it.copy(query = query, items = emptyList(), loading = true) }
         observe()
     }
 
@@ -70,17 +71,24 @@ class BookSourcePickerViewModel(
     }
 
     private fun observe() {
+        val ticket = ++observationGeneration
         observation?.cancel()
         val query = state.value.query
         mutable.update { it.copy(loading = true, error = null) }
         observation = viewModelScope.launch {
             try {
                 repository.observe(query).collect { rows ->
-                    if (state.value.query == query)
+                    if (
+                        ticket == observationGeneration &&
+                            state.value.query == query &&
+                            !state.value.finished
+                    )
                         mutable.update { it.copy(items = rows, loading = false) }
                 }
             } catch (error: Exception) {
-                failure(error) { it.copy(loading = false) }
+                if (ticket == observationGeneration && !state.value.finished) {
+                    failure(error) { it.copy(loading = false) }
+                } else if (error is CancellationException) throw error
             }
         }
     }
@@ -121,6 +129,8 @@ class BookSourcePickerViewModel(
     }
 
     fun cancel() {
+        ++observationGeneration
+        observation?.cancel()
         ++generation
         selection?.cancel()
         payload = null

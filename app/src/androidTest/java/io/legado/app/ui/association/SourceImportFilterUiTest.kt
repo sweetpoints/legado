@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -675,7 +676,7 @@ class SourceImportFilterUiTest {
             // Both actual menu enums share these options; RSS deliberately omits Book-only actions.
             val menuName = if (rss) RssImportMenu.valueOf(option.name).name else option.name
             compose.onNodeWithTag("$prefix-menu").performClick()
-            compose.onNodeWithTag("$prefix-menu-$menuName").performClick()
+            compose.onNodeWithTag("$prefix-menu-$menuName").performScrollTo().assertIsDisplayed().performClick()
             // A focusable DropdownMenu owns a separate Window. Its dismissal and Android
             // layout/draw and exit animation must settle before checking import controls.
             // await advances frames until every menu item disappears; window focus alone

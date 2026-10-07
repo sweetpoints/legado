@@ -26,6 +26,7 @@ import io.legado.app.R
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.data.repository.SourceLoginRow
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SourceLoginFormScreen(
     state: SourceLoginFormUiState,
@@ -49,64 +50,76 @@ internal fun SourceLoginFormScreen(
     BackHandler(onBack = onClose)
     Surface(modifier, color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().imePadding()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClose, Modifier.testTag("source-login-close")) {
-                    Text(stringResource(R.string.cancel))
-                }
-                Text(
-                    stringResource(R.string.login_source, state.title),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (!state.v2)
-                    TextButton(
-                        onSubmit,
-                        enabled =
-                            state.rendered && !state.rendering && !state.loading && !state.busy,
-                        modifier = Modifier.testTag("source-login-submit"),
-                    ) {
-                        Text(stringResource(R.string.ok))
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.login_source, state.title),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClose, Modifier.testTag("source-login-close")) {
+                        Icon(
+                            painterResource(R.drawable.ic_baseline_close),
+                            stringResource(R.string.cancel),
+                        )
                     }
-                Box {
-                    TextButton({ menu = true }, Modifier.testTag("source-login-menu")) { Text("⋮") }
-                    DropdownMenu(menu, { menu = false }) {
-                        listOf(
-                                Triple(
-                                    R.string.show_login_header,
-                                    R.drawable.ic_add_online,
-                                    onHeader,
-                                ),
-                                Triple(
-                                    R.string.del_login_header,
-                                    R.drawable.ic_clear,
-                                    onDeleteHeader,
-                                ),
-                                Triple(
-                                    R.string.clear_login_info,
-                                    R.drawable.ic_clear_all,
-                                    { onClearRequest(true) },
-                                ),
-                                Triple(R.string.log, R.drawable.ic_history, onLog),
-                            )
-                            .forEach { (label, icon, action) ->
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(label)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            painterResource(icon),
-                                            null,
-                                            Modifier.testTag("source-login-menu-icon:$label"),
-                                        )
-                                    },
-                                    onClick = {
-                                        menu = false
-                                        action()
-                                    },
+                },
+                actions = {
+                    if (!state.v2)
+                        TextButton(
+                            onSubmit,
+                            enabled =
+                                state.rendered && !state.rendering && !state.loading && !state.busy,
+                            modifier = Modifier.testTag("source-login-submit"),
+                        ) {
+                            Text(stringResource(R.string.ok))
+                        }
+                    Box {
+                        TextButton({ menu = true }, Modifier.testTag("source-login-menu")) {
+                            Text("⋮")
+                        }
+                        DropdownMenu(menu, { menu = false }) {
+                            listOf(
+                                    Triple(
+                                        R.string.show_login_header,
+                                        R.drawable.ic_add_online,
+                                        onHeader,
+                                    ),
+                                    Triple(
+                                        R.string.del_login_header,
+                                        R.drawable.ic_clear,
+                                        onDeleteHeader,
+                                    ),
+                                    Triple(
+                                        R.string.clear_login_info,
+                                        R.drawable.ic_clear_all,
+                                        { onClearRequest(true) },
+                                    ),
+                                    Triple(R.string.log, R.drawable.ic_history, onLog),
                                 )
-                            }
+                                .forEach { (label, icon, action) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(label)) },
+                                        leadingIcon = {
+                                            Icon(
+                                                painterResource(icon),
+                                                null,
+                                                Modifier.testTag("source-login-menu-icon:$label"),
+                                            )
+                                        },
+                                        onClick = {
+                                            menu = false
+                                            action()
+                                        },
+                                    )
+                                }
+                        }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp)) {
                 if (state.loading)
                     LinearProgressIndicator(Modifier.fillMaxWidth().testTag("source-login-loading"))

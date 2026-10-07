@@ -24,6 +24,7 @@ import io.legado.app.data.repository.MarkdownImageRepository
 import io.legado.app.ui.components.markdown.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TextDialogScreen(
     state: TextDialogState,
@@ -146,13 +147,14 @@ internal fun TextDialogScreen(
             CompositionLocalProvider(LocalLayoutDirection provides direction) {
                 Surface(modifier.fillMaxSize()) {
                     Column {
-                        Surface(color = MaterialTheme.colorScheme.primary) {
-                            Row(Modifier.fillMaxWidth()) {
+                        TopAppBar(
+                            title = {
                                 Text(
                                     state.request?.title.orEmpty(),
-                                    Modifier.weight(1f).padding(16.dp).testTag("text-title"),
-                                    style = MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.testTag("text-title"),
                                 )
+                            },
+                            actions = {
                                 if (state.remaining > 0)
                                     Text(
                                         (state.remaining / 1000).toString(),
@@ -206,8 +208,10 @@ internal fun TextDialogScreen(
                                         )
                                     }
                                 }
-                            }
-                        }
+                            },
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            colors = TopAppBarDefaults.topAppBarColors(),
+                        )
                         if (state.searchVisible && state.help)
                             Row(Modifier.fillMaxWidth()) {
                                 OutlinedTextField(

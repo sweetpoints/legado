@@ -1,7 +1,9 @@
 package io.legado.app.ui.widget.dialog
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.SavedStateHandle
 import io.legado.app.data.repository.*
 import io.legado.app.ui.theme.LegadoComposeTheme
@@ -46,7 +48,12 @@ class TextDialogScreenTest {
 
     private fun loaded() {
         compose.waitUntil(5000) { !model.state.value.loading && !model.state.value.searching }
+        // Rendering can finish before the navigation drawer's close animation.
+        compose.waitForIdle()
     }
+
+    private fun bodyText(text: String) =
+        compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("text-body")))
 
     private fun menu(tag: String) {
         compose.onNodeWithTag("text-menu").performClick()
@@ -65,18 +72,22 @@ class TextDialogScreenTest {
         menu("toc")
         compose.onNodeWithTag("text-toc-2").performClick()
         loaded()
-        compose.onNodeWithText("Beta").assertIsDisplayed()
-        compose.onNodeWithText("Alpha").assertDoesNotExist()
+        bodyText("Beta").assertIsDisplayed()
+        bodyText("Alpha").assertDoesNotExist()
         menu("search")
         compose.onNodeWithTag("text-search-input").performTextReplacement("Alpha")
         loaded()
         compose.onNodeWithTag("text-search-count").assertTextEquals("1/1")
-        compose.onNodeWithText("Alpha").assertIsDisplayed()
+        bodyText("Alpha").assertIsDisplayed()
         menu("toc")
         compose.onNodeWithTag("text-toc-2").performClick()
         loaded()
-        compose.onNodeWithTag("text-search-input").assertTextEquals("")
-        compose.onNodeWithText("Beta").assertIsDisplayed()
+        compose
+            .onNodeWithTag("text-search-input")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
+            )
+        bodyText("Beta").assertIsDisplayed()
     }
 
     @Test

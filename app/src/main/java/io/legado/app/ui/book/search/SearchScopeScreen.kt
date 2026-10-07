@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SearchScopeScreen(
     state: SearchScopeState,
@@ -33,19 +34,15 @@ internal fun SearchScopeScreen(
 ) {
     Surface(modifier) {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.search_scope),
-                        Modifier.weight(1f),
+                        Modifier,
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     if (state.tab == SearchScopeTab.Sources)
                         IconButton(
                             onExpand,
@@ -57,8 +54,9 @@ internal fun SearchScopeScreen(
                                 stringResource(R.string.screen),
                             )
                         }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0),
+            )
             Row(Modifier.fillMaxWidth().selectableGroup()) {
                 SearchScopeTab.entries.forEach { tab ->
                     Row(

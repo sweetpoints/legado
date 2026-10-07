@@ -42,17 +42,26 @@ fun BottomBarAssignmentScreen(
     var name by remember {
         mutableStateOf(TextFieldValue(state.name, TextRange(state.start, state.end)))
     }
-    SideEffect {
-        if (name.text != state.name || name.selection != TextRange(state.start, state.end))
-            name = TextFieldValue(state.name, TextRange(state.start, state.end))
+    // Reconcile authoritative changes only; unrelated recompositions must not replay
+    // an older parent snapshot over an input/selection waiting for its callback echo.
+    LaunchedEffect(state.name, state.start, state.end) {
+        val selection = TextRange(state.start, state.end)
+        if (name.text != state.name) name = TextFieldValue(state.name, selection)
+        else if (name.selection != selection) name = name.copy(selection = selection)
     }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(
+                            if (editing) R.string.edit else R.string.bottom_bar_skin_assign
+                        ),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(
                         actions.close,
                         Modifier.testTag("bar-assignment-back"),
@@ -63,20 +72,15 @@ fun BottomBarAssignmentScreen(
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(
-                            if (editing) R.string.edit else R.string.bottom_bar_skin_assign
-                        ),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     TextButton(
                         actions.save,
                         Modifier.testTag("bar-assignment-save"),
                         enabled = state.loaded && !state.busy && !state.finished,
                         colors =
                             ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                     ) {
                         Text(
@@ -84,8 +88,9 @@ fun BottomBarAssignmentScreen(
                             color = LocalContentColor.current,
                         )
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (!state.loaded || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             OutlinedTextField(
                 name,

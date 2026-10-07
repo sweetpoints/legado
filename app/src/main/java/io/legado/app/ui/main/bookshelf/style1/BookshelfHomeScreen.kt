@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.main.bookshelf.components.BookshelfHeader
 import io.legado.app.ui.main.bookshelf.components.BookshelfToolbar
-import io.legado.app.ui.theme.LocalLegadoColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,7 +32,7 @@ internal fun BookshelfHomeScreen(
     page: @Composable (BookshelfHomeGroup, Int, Boolean, Modifier) -> Unit,
 ) {
     val pages = rememberSaveableStateHolder()
-    val colors = LocalLegadoColors.current
+    val colors = MaterialTheme.colorScheme
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize()) {
             BookshelfToolbar(stringResource(R.string.bookshelf), onMenu)
@@ -63,12 +62,12 @@ internal fun BookshelfHomeScreen(
             SecondaryScrollableTabRow(
                 selectedTabIndex = state.selectedIndex,
                 edgePadding = 0.dp,
-                containerColor = colors.primary,
-                contentColor = colors.onPrimary,
+                containerColor = colors.surface,
+                contentColor = colors.onSurface,
                 indicator = {
                     TabRowDefaults.SecondaryIndicator(
                         Modifier.tabIndicatorOffset(state.selectedIndex, matchContentSize = false),
-                        color = colors.accent,
+                        color = colors.primary,
                     )
                 },
             ) {
@@ -93,7 +92,7 @@ internal fun BookshelfHomeScreen(
                     ) {
                         Text(
                             group.name,
-                            color = colors.onPrimary,
+                            color = if (state.selectedId == group.id) colors.onSurface else colors.onSurfaceVariant,
                             fontWeight =
                                 if (state.selectedId == group.id) FontWeight.Bold
                                 else FontWeight.Normal,

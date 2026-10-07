@@ -27,7 +27,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun BookmarkEditorScreen(
     state: BookmarkEditorState,
@@ -69,16 +69,16 @@ internal fun BookmarkEditorScreen(
             shape = MaterialTheme.shapes.large,
         ) {
             Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Text(
-                        stringResource(R.string.bookmark),
-                        Modifier.fillMaxWidth().padding(16.dp).testTag("bookmark-editor-heading"),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                }
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(R.string.bookmark),
+                            Modifier.fillMaxWidth().testTag("bookmark-editor-heading"),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    },
+                    windowInsets = WindowInsets(0),
+                )
                 Text(
                     state.chapter,
                     Modifier.fillMaxWidth()

@@ -48,7 +48,7 @@ class BookCacheActions(
     val cancelTransfer: () -> Unit = {},
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookCacheScreen(state: BookCacheState, actions: BookCacheActions) {
     var menu by rememberSaveable { mutableStateOf(false) }
@@ -72,22 +72,13 @@ fun BookCacheScreen(state: BookCacheState, actions: BookCacheActions) {
     }
     Surface {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(actions.back, Modifier.testTag("book-cache-back")) {
-                        Icon(
-                            painterResource(R.drawable.ic_arrow_back),
-                            stringResource(R.string.back),
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
+            TopAppBar(
+                title = {
+                    Column(Modifier) {
                         Text(
                             stringResource(R.string.offline_cache),
                             maxLines = 1,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
                             state.groups.firstOrNull { it.id == state.group }?.name
@@ -96,6 +87,16 @@ fun BookCacheScreen(state: BookCacheState, actions: BookCacheActions) {
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
+                },
+                navigationIcon = {
+                    IconButton(actions.back, Modifier.testTag("book-cache-back")) {
+                        Icon(
+                            painterResource(R.drawable.ic_arrow_back),
+                            stringResource(R.string.back),
+                        )
+                    }
+                },
+                actions = {
                     Box {
                         val title =
                             stringResource(
@@ -269,8 +270,9 @@ fun BookCacheScreen(state: BookCacheState, actions: BookCacheActions) {
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             message?.let { error ->
                 Row(

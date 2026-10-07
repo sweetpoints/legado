@@ -63,6 +63,7 @@ class AutoTaskEditorActions(
     val discardEditor: () -> Unit = {},
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutoTaskEditorScreen(state: AutoTaskEditorState, actions: AutoTaskEditorActions) {
     var menu by rememberSaveable { mutableStateOf(false) }
@@ -71,11 +72,15 @@ fun AutoTaskEditorScreen(state: AutoTaskEditorState, actions: AutoTaskEditorActi
     val scope = rememberCoroutineScope()
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.auto_task_edit),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(
                         actions.exit,
                         Modifier.testTag("task-editor-back"),
@@ -86,11 +91,8 @@ fun AutoTaskEditorScreen(state: AutoTaskEditorState, actions: AutoTaskEditorActi
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(R.string.auto_task_edit),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                },
+                actions = {
                     IconButton(
                         actions.editor,
                         Modifier.testTag("task-editor-fullscreen"),
@@ -153,8 +155,8 @@ fun AutoTaskEditorScreen(state: AutoTaskEditorState, actions: AutoTaskEditorActi
                             )
                         }
                     }
-                }
-            }
+                },
+            )
             Box(Modifier.fillMaxWidth()) {
                 TextButton(
                     { navigation = true },

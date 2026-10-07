@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.*
 import androidx.compose.ui.semantics.Role
@@ -27,6 +28,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.preferences.*
+import io.legado.app.ui.theme.contrastRatio
+import io.legado.app.ui.theme.contrastingForeground
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -48,7 +51,13 @@ internal fun ReadStyleSettingsScreen(
     preview: @Composable (ReadStylePreset, Modifier) -> Unit,
 ) {
     val settings = state.settings
-    val accent = MaterialTheme.colorScheme.secondary
+    val themeAccent = MaterialTheme.colorScheme.secondary
+    val accent =
+        if (contrastRatio(themeAccent.toArgb(), background.toArgb()) >= 4.5) {
+            themeAccent
+        } else {
+            Color(contrastingForeground(background.toArgb()))
+        }
     val weightLabels = stringArrayResource(R.array.text_font_weight)
     val chineseLabels = stringArrayResource(R.array.chinese_mode)
     val indentLabels = stringArrayResource(R.array.indent)

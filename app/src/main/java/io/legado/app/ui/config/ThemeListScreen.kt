@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ThemeListScreen(
     state: ThemeListState,
@@ -30,37 +31,39 @@ internal fun ThemeListScreen(
 ) {
     Surface(modifier) {
         Column(Modifier.fillMaxSize()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.theme_list),
+                        Modifier,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(close, Modifier.testTag("theme-list-close")) {
                         Icon(
                             painterResource(R.drawable.ic_baseline_close),
                             stringResource(R.string.close),
                         )
                     }
-                    Text(
-                        stringResource(R.string.theme_list),
-                        Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     TextButton(
                         import,
                         Modifier.testTag("theme-list-import"),
                         enabled = !state.loading && !state.busy && state.event == null,
                         colors =
                             ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                     ) {
                         Text("剪贴板导入")
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("theme-list-progress"))
             state.error?.let { message ->

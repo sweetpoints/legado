@@ -66,7 +66,7 @@ class ReplaceEditorActions(
     val discardEditor: () -> Unit = {},
 )
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ReplaceEditorScreen(
     state: ReplaceEditorState,
@@ -97,11 +97,15 @@ fun ReplaceEditorScreen(
     }
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.replace_rule_edit),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(
                         actions.close,
                         Modifier.testTag("replace-editor-back"),
@@ -112,11 +116,8 @@ fun ReplaceEditorScreen(
                             stringResource(R.string.back),
                         )
                     }
-                    Text(
-                        stringResource(R.string.replace_rule_edit),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                },
+                actions = {
                     IconButton(
                         { actions.editor(focused) },
                         Modifier.testTag("replace-editor-fullscreen"),
@@ -167,8 +168,8 @@ fun ReplaceEditorScreen(
                             )
                         }
                     }
-                }
-            }
+                },
+            )
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.editorReturning && !state.busy)
                 Row {

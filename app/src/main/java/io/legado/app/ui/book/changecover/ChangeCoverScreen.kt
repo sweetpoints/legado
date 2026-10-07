@@ -20,6 +20,7 @@ import io.legado.app.data.repository.ChangeCoverStatus
 import io.legado.app.data.repository.CoverRequest
 import io.legado.app.ui.components.cover.ComposeCover
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ChangeCoverScreen(
     state: ChangeCoverState,
@@ -34,25 +35,23 @@ internal fun ChangeCoverScreen(
 ) {
     Surface(modifier) {
         Column(Modifier.fillMaxSize()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.change_cover_source),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
                     IconButton(onClose, Modifier.testTag("change-cover-close")) {
                         Icon(
                             painterResource(R.drawable.ic_baseline_close),
                             stringResource(R.string.close),
                         )
                     }
-                    Text(
-                        stringResource(R.string.change_cover_source),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     val status = state.snapshot?.status ?: ChangeCoverStatus.Idle
                     val label =
                         when (status) {
@@ -73,8 +72,9 @@ internal fun ChangeCoverScreen(
                     ) {
                         Icon(painterResource(icon), stringResource(label))
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.snapshot?.status == ChangeCoverStatus.Running)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("change-cover-progress"))
             state.error?.let { error ->

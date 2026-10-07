@@ -8,7 +8,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -21,6 +20,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ServerConfigScreen(
     state: ServerConfigUiState,
@@ -33,28 +33,35 @@ internal fun ServerConfigScreen(
     BackHandler { if (!state.saving) onClose() }
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(R.string.server_config),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                TextButton(
-                    onClose,
-                    enabled = !state.saving,
-                    modifier = Modifier.testTag("server-close"),
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-                TextButton(
-                    onSave,
-                    enabled =
-                        !state.loading && !state.loadFailed && !state.saving && !state.finished,
-                    modifier = Modifier.testTag("server-save"),
-                ) {
-                    Text(stringResource(R.string.action_save))
-                }
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.server_config),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
+                    TextButton(
+                        onClose,
+                        enabled = !state.saving,
+                        modifier = Modifier.testTag("server-close"),
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onSave,
+                        enabled =
+                            !state.loading && !state.loadFailed && !state.saving && !state.finished,
+                        modifier = Modifier.testTag("server-save"),
+                    ) {
+                        Text(stringResource(R.string.action_save))
+                    }
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (state.loadFailed)

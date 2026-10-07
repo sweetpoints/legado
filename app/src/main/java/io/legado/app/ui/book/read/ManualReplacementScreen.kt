@@ -23,6 +23,7 @@ import io.legado.app.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ManualReplacementScreen(
     state: ManualReplacementState,
@@ -74,13 +75,11 @@ internal fun ManualReplacementScreen(
     DisposableEffect(Unit) { onDispose { abort() } }
     Surface(modifier.fillMaxWidth()) {
         Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * .85f).dp)) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    stringResource(R.string.manual_replace_rule),
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            TopAppBar(
+                title = { Text(stringResource(R.string.manual_replace_rule)) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let {
                 Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error)

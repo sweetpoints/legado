@@ -5,7 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -14,6 +13,7 @@ import io.legado.app.R
 import io.legado.app.data.repository.MarkdownImageRepository
 import io.legado.app.ui.components.markdown.SearchableRichText
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun UpdateDialogScreen(
     state: UpdateDialogState,
@@ -29,15 +29,9 @@ internal fun UpdateDialogScreen(
     var menu by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().testTag("update-dialog")) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
+            TopAppBar(
+                title = {
+                    Column(Modifier) {
                         Text(
                             state.request?.version.orEmpty(),
                             Modifier.testTag("update-title"),
@@ -50,6 +44,8 @@ internal fun UpdateDialogScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                     }
+                },
+                actions = {
                     Box {
                         TextButton(
                             onClick = { menu = true },
@@ -58,7 +54,7 @@ internal fun UpdateDialogScreen(
                         ) {
                             Text(
                                 stringResource(R.string.more_menu),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                         DropdownMenu(menu, { menu = false }) {
@@ -106,8 +102,9 @@ internal fun UpdateDialogScreen(
                                 )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("update-working"))
             // Instantiate the saveable scroll only once the disk-backed document is available.

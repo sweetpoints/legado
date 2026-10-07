@@ -45,6 +45,7 @@ internal fun NamedGroupRoute(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NamedGroupScreen(
     state: NamedGroupState,
@@ -60,32 +61,29 @@ internal fun NamedGroupScreen(
 ) {
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.group_manage),
-                        Modifier.weight(1f),
+                        Modifier,
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     TextButton(
                         add,
                         enabled = !state.loading && !state.busy,
                         modifier = Modifier.testTag("named-group-add"),
                         colors =
                             ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                     ) {
                         Text(stringResource(R.string.add_group))
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let { error ->
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

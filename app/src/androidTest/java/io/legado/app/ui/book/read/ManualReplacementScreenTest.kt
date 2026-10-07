@@ -180,7 +180,10 @@ class ManualReplacementScreenTest {
             registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
             registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         }
-        compose.runOnIdle { assertEquals(1, deliveries) }
+        compose.runOnIdle {
+            assertEquals(1, deliveries)
+            assertEquals(1, closes)
+        }
     }
 
     @Test

@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.TextRange
@@ -30,7 +31,7 @@ class FileManagementActions(
     val close: () -> Unit = {},
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagementScreen(
     state: FileManagementState,
@@ -43,34 +44,29 @@ fun FileManagementScreen(
     LaunchedEffect(state.directory) { menu = null }
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().statusBarsPadding(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.file_manage),
+                        Modifier,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(
                         onClick = {
                             if (state.canAct) actions.back() else if (!state.busy) actions.close()
                         },
                         enabled = !state.busy,
                         modifier = Modifier.testTag("file-management-back"),
                     ) {
-                        Text(
+                        Icon(
+                            painterResource(R.drawable.ic_arrow_back),
                             stringResource(R.string.back),
-                            color = MaterialTheme.colorScheme.onPrimary,
                         )
                     }
-                    Text(
-                        stringResource(R.string.file_manage),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Spacer(Modifier.width(16.dp))
-                }
-            }
+                },
+            )
             OutlinedTextField(
                 TextFieldValue(state.query, TextRange(state.queryStart, state.queryEnd)),
                 { actions.query(it.text, it.selection.start, it.selection.end) },

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HighlightGroupScreen(
     state: HighlightGroupState,
@@ -40,16 +41,15 @@ internal fun HighlightGroupScreen(
     }
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = {
                     Text(
                         stringResource(R.string.highlight_rule_group_manage),
-                        Modifier.weight(1f).padding(start = 12.dp),
+                        Modifier,
                         style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
                     IconButton(
                         close,
                         Modifier.testTag("highlight-group-close"),
@@ -60,8 +60,9 @@ internal fun HighlightGroupScreen(
                             stringResource(R.string.close),
                         )
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
             if (state.loading || state.busy)
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag("highlight-group-progress"))
             state.error?.let { error ->

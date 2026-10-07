@@ -18,11 +18,14 @@ data class ManualReplacementState(
     val error: String? = null,
     val finished: Boolean = false,
     val confirmationPending: Boolean = false,
+    val completionPending: Boolean = false,
     val result: List<Long> = emptyList(),
 ) {
     val allSelected: Boolean
         get() = selected.size == rows.size
 }
+
+data class ManualReplacementCompletion(val selection: List<Long>?)
 
 /** Selection is a draft; only the resumed host applies a confirmed result. */
 class ManualReplacementViewModel(
@@ -38,6 +41,8 @@ class ManualReplacementViewModel(
                     (saved.get<LongArray>("manual.selected")?.toList() ?: initialIds).toSet(),
                 finished = saved["manual.finished"] ?: false,
                 confirmationPending = saved["manual.pending"] ?: false,
+                completionPending =
+                    saved["manual.completionPending"] ?: (saved["manual.finished"] ?: false),
                 result = saved.get<LongArray>("manual.result")?.toList().orEmpty(),
             )
         )
@@ -55,6 +60,7 @@ class ManualReplacementViewModel(
         saved["manual.selected"] = (baseline ?: state.value.selected).toLongArray()
         saved["manual.finished"] = state.value.finished
         saved["manual.pending"] = state.value.confirmationPending
+        saved["manual.completionPending"] = state.value.completionPending
         saved["manual.result"] = state.value.result.toLongArray()
     }
 
@@ -150,6 +156,7 @@ class ManualReplacementViewModel(
             state.value.copy(
                 finished = true,
                 confirmationPending = true,
+                completionPending = true,
                 result = state.value.rows.filter { it.id in state.value.selected }.map { it.id },
             )
         persist()
@@ -160,8 +167,28 @@ class ManualReplacementViewModel(
         cancelRange()
         loading?.cancel()
         mutable.value =
-            state.value.copy(loading = false, finished = true, confirmationPending = false)
+            state.value.copy(
+                loading = false,
+                finished = true,
+                confirmationPending = false,
+                completionPending = true,
+            )
         persist()
+    }
+
+    /** Claim selection and dismissal together before calling an external host. */
+    fun consumeCompletion(): ManualReplacementCompletion? {
+        while (true) {
+            val current = mutable.value
+            if (!current.finished || !current.completionPending) return null
+            val consumed = current.copy(confirmationPending = false, completionPending = false)
+            if (mutable.compareAndSet(current, consumed)) {
+                persist()
+                return ManualReplacementCompletion(
+                    if (current.confirmationPending) current.result.toList() else null
+                )
+            }
+        }
     }
 
     fun consumeConfirmation(): List<Long>? {

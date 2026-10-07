@@ -9,15 +9,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BookSourcePickerScreen(
     state: BookSourcePickerState,
@@ -33,22 +37,23 @@ internal fun BookSourcePickerScreen(
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var query by
+        rememberSaveable(stateSaver = TextFieldValue.Saver) {
+            mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length)))
+        }
+    LaunchedEffect(state.query) {
+        if (query.text != state.query) query = TextFieldValue(state.query, query.selection)
+    }
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(color = MaterialTheme.colorScheme.primary) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TopAppBar(
+                title = { Text(stringResource(R.string.book_source_picker_title)) },
+                navigationIcon = {
                     TextButton(onCancel, enabled = !state.busy) {
-                        Text(
-                            stringResource(R.string.cancel),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
+                        Text(stringResource(R.string.cancel))
                     }
-                    Text(
-                        stringResource(R.string.book_source_picker_title),
-                        Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                },
+                actions = {
                     Box {
                         IconButton(
                             { menu = true },
@@ -58,7 +63,6 @@ internal fun BookSourcePickerScreen(
                             Icon(
                                 painterResource(R.drawable.ic_more_vert),
                                 stringResource(R.string.menu),
-                                tint = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                         DropdownMenu(menu, { menu = false }) {
@@ -72,11 +76,17 @@ internal fun BookSourcePickerScreen(
                             )
                         }
                     }
-                }
-            }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                colors = TopAppBarDefaults.topAppBarColors(),
+            )
             OutlinedTextField(
-                state.query,
-                onSearch,
+                query,
+                {
+                    val textChanged = it.text != query.text
+                    query = it
+                    if (textChanged) onSearch(it.text)
+                },
                 singleLine = true,
                 enabled = !state.busy && !state.finished,
                 label = { Text(stringResource(R.string.search_book_source)) },
@@ -110,15 +120,29 @@ internal fun BookSourcePickerScreen(
             }
         }
     }
-    if (state.delayOpen)
+    if (state.delayOpen) {
+        var delay by
+            rememberSaveable(stateSaver = TextFieldValue.Saver) {
+                mutableStateOf(TextFieldValue(state.delayDraft, TextRange(state.delayDraft.length)))
+            }
+        LaunchedEffect(state.delayDraft) {
+            if (delay.text != state.delayDraft) {
+                delay = TextFieldValue(state.delayDraft, delay.selection)
+            }
+        }
         AlertDialog(
             onDismissRequest = onCloseDelay,
             title = { Text(stringResource(R.string.change_source_delay)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     OutlinedTextField(
-                        state.delayDraft,
-                        onDelayDraft,
+                        delay,
+                        {
+                            val textChanged = it.text != delay.text
+                            delay = it
+                            // Selection/IME echoes do not constitute a new numeric draft.
+                            if (textChanged) onDelayDraft(it.text)
+                        },
                         singleLine = true,
                         enabled = !state.busy,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -164,4 +188,5 @@ internal fun BookSourcePickerScreen(
                 }
             },
         )
+    }
 }

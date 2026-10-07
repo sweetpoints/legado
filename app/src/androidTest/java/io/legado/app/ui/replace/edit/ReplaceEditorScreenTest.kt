@@ -85,11 +85,13 @@ class ReplaceEditorScreenTest {
             )
         show()
         compose.onNodeWithTag("replace-editor-output").performScrollTo()
+        compose.onNodeWithTag("replace-editor-output").assertTextContains("Output")
         compose
-            .onNodeWithTag("replace-editor-output-text")
+            .onNodeWithTag("replace-editor-output-text", useUnmergedTree = true)
             .assertTextEquals("Output")
+            .assertIsDisplayed()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.SetText))
-        compose.onNodeWithTag("replace-editor-preview-error").assertExists()
+        compose.onNodeWithTag("replace-editor-preview-error", useUnmergedTree = true).assertExists()
     }
 
     @Test

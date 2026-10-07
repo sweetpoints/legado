@@ -26,6 +26,7 @@ import io.legado.app.data.repository.HighlightRuleDraft
 import io.legado.app.help.HighlightStyle
 import io.legado.app.ui.book.read.HighlightFillPreviewDrawable
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HighlightRuleEditorScreen(
     state: HighlightRuleEditorState,
@@ -40,16 +41,16 @@ internal fun HighlightRuleEditorScreen(
     val enabled = rule != null && !state.loading && !state.saving && !state.finished
     Surface(modifier.padding(16.dp), shape = MaterialTheme.shapes.medium) {
         Column(Modifier.fillMaxSize().imePadding()) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Text(
-                    stringResource(R.string.highlight_rule_edit_title),
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(R.string.highlight_rule_edit_title),
+                        Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
+                windowInsets = WindowInsets(0),
+            )
             if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
             Column(
                 Modifier.weight(1f)
