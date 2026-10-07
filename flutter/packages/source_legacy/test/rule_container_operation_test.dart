@@ -62,36 +62,66 @@ void main() {
     },
   );
   test(
-    'BookList explore fallback preserves original and drops search-only config',
+    'container decoding preserves explore structure independently of search',
     () {
-      for (final value in [
-        null,
-        [],
+      for (final explore in <Object?>[
         {},
+        {'name': 'tag.dt@text'},
         {'bookList': '  '},
       ]) {
         final original = <String, Object?>{
-          'ruleExplore': value,
-          'ruleSearch': {
-            'bookList': 'class.row',
-            'name': 'tag.dt@text',
-            'checkKeyWord': 'reader',
-          },
+          'ruleExplore': explore,
+          'ruleSearch': {'bookList': 'class.search', 'checkKeyWord': 'reader'},
         };
         final before = jsonEncode(original);
-        expect(legacyRuleObject(original, 'ruleExplore'), {
-          'bookList': 'class.row',
-          'name': 'tag.dt@text',
-        });
+        expect(legacyRuleObject(original, 'ruleExplore'), explore);
         expect(jsonEncode(original), before);
       }
       expect(
         legacyRuleObject({
-          'ruleExplore': {'bookList': 'class.custom'},
-          'ruleSearch': {'bookList': 'class.row'},
+          'ruleExplore': [],
+          'ruleSearch': {'bookList': 'class.search'},
         }, 'ruleExplore'),
-        {'bookList': 'class.custom'},
+        isNull,
       );
+    },
+  );
+  test(
+    'explore menu and scalar fields survive without a search rule',
+    () async {
+      final input = <String, Object?>{
+        'bookSourceUrl': 'https://recorded.test',
+        'exploreUrl': 'First::/a\nSecond::/b',
+        'ruleExplore': {'name': 'tag.dt@text'},
+      };
+      final imported = LegacySourceImporter().import(input);
+      expect(imported.issues, isEmpty);
+      expect(imported.source.stages['explore']!.fields, {
+        'name': '@legacy:tag.dt@text',
+      });
+      expect(
+        (imported.source.metadata['legacyExploreItems'] as List).length,
+        2,
+      );
+      final engine = SourceEngine(
+        runtime: _NoScripts(),
+        network: _RecordedPage(),
+        requestAdapter: adaptLegacyRequest,
+      );
+      try {
+        expect(
+          await engine.execute(
+            imported.source,
+            'explore',
+            input: {'exploreUrl': '/b'},
+          ),
+          [
+            {'name': 'Recorded title'},
+          ],
+        );
+      } finally {
+        await engine.close();
+      }
     },
   );
   test('non-string explore lists never falsely fall back to search', () {

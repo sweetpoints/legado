@@ -31,7 +31,8 @@ class LegacyImport {
 
 /// Resolve rule containers using the old Gson adapters, without mutating the
 /// original source. Raw arrays are null rules; an encoded array is an invalid
-/// reflective object. Explore's empty bookList uses BookList's search fallback.
+/// reflective object. BookList's execution fallback must not replace imported
+/// menu/field structure or delete an explore stage.
 Map<String, Object?>? legacyRuleObject(
   Map<String, Object?> source,
   String key,
@@ -48,13 +49,7 @@ Map<String, Object?>? legacyRuleObject(
     return Map<String, Object?>.from(value);
   }
 
-  final result = decode(source[key]);
-  if (key != 'ruleExplore') return result;
-  final list = result?['bookList'];
-  if (list != null && (list is! String || list.trim().isNotEmpty)) {
-    return result; // StringJsonDeserializer turns other JSON values into nonblank text.
-  }
-  return decode(source['ruleSearch'])?..remove('checkKeyWord');
+  return decode(source[key]);
 }
 
 /// Operation gating only: the complete migration report keeps every issue.
@@ -181,7 +176,6 @@ class LegacySourceImporter {
         continue;
       }
       if (raw == null) continue;
-      if (raw.isEmpty) continue;
       final fields = <String, String>{};
       String? list;
       String? nextPage;
