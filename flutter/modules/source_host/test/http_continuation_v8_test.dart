@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,13 +10,17 @@ class _Steps implements ScriptHost {
   final outcomes = <Map>[];
   final callbacks = <List<Object?>>[];
   final bool failScript;
-  _Steps({this.failScript = false});
+  final bool busyScript;
+  final started = Completer<void>();
+  _Steps({this.failScript = false, this.busyScript = false});
 
   Map<String, Object?> script(int sequence) => {
     'status': 'script',
     'token': 'step-token',
     'sequence': sequence,
-    'script': failScript
+    'script': busyScript
+        ? "globalThis.phaseRuns=(globalThis.phaseRuns||0)+1;java.get('started');while(true){}"
+        : failScript
         ? "throw new Error('controlled-step-failure')"
         : sequence == 1
         ? "globalThis.phaseRuns=(globalThis.phaseRuns||0)+1; "
@@ -63,6 +68,7 @@ class _Steps implements ScriptHost {
         expect(args[0], 'step-token');
         expect(args[1], anyOf(1, 2));
         callbacks.add(args);
+        if (busyScript && !started.isCompleted) started.complete();
         return args[2] == 'get' ? '' : (args[3] as List)[1];
       case 'javaHttp.continue':
         expect(args[0], 'step-token');
@@ -98,6 +104,66 @@ String _ownerPrelude() {
             "var capturedGet=java.get; var capturedSourceGet=source.get; "
             "function libraryPhase(){return phaseLoads+':'+capturedGet('token')+':'+capturedSourceGet('token');}",
       );
+}
+
+class _NestedHeaders implements ScriptHost {
+  final headers = <Map>[];
+  final aborted = <String>[];
+  Map? outerResult;
+  @override
+  Future<Object?> call(String method, List<Object?> arguments) async {
+    expect(arguments.last, {
+      '__sourceTaskId': 'step-task',
+      '__sourceHostCallback': true,
+    });
+    final args = arguments.sublist(0, arguments.length - 1);
+    switch (method) {
+      case 'analyze.get':
+        return 'outer-book';
+      case 'javaHttp.headerGet':
+        return 'source-token';
+      case 'javaHttp.prepareHeader':
+        return {
+          'script': "({'X-Token':capturedGet('token')+'/'+capturedSourceGet('token')})",
+          'count': 1,
+        };
+      case 'javaHttp.begin':
+        final evaluations = args[2] as List;
+        expect((evaluations.single as Map)['failed'], false);
+        headers.add((evaluations.single as Map)['value'] as Map);
+        if (((args[1] as List).first as String).endsWith('/inner')) {
+          return {
+            'status': 'done',
+            'token': 'inner-token',
+            'value': 'inner-body',
+          };
+        }
+        return {
+          'status': 'script',
+          'token': 'outer-token',
+          'sequence': 1,
+          'script': "var before=java.get('token');var inner=java.ajax('https://fixture.invalid/inner');({before,inner,after:java.get('token'),alias:capturedGet('token')})",
+          'bindings': {'result': 'outer-step'},
+        };
+      case 'javaHttp.stepCall':
+        expect(args.take(3).toList(), ['outer-token', 1, 'get']);
+        return 'url-scope';
+      case 'javaHttp.continue':
+        expect(args.take(2).toList(), ['outer-token', 1]);
+        expect((args[2] as Map)['ok'], true);
+        outerResult = (args[2] as Map)['value'] as Map;
+        return {
+          'status': 'done',
+          'token': 'outer-token',
+          'value': 'outer-body',
+        };
+      case 'javaHttp.abort':
+        aborted.add(args.single as String);
+        return null;
+      default:
+        throw StateError('Unexpected nested HTTP callback $method');
+    }
+  }
 }
 
 void main() {
@@ -207,4 +273,100 @@ void main() {
       }
     },
   );
+  test('hard cancellation restores host frames before the next caller bindings without resetting globals', () async {
+    final host = _Steps(busyScript: true);
+    final engine = createSourceEngine(
+      source,
+      platform: host,
+      useNativeLegacyHttp: true,
+    );
+    final token = CancellationToken();
+    try {
+      final pending = engine.evaluateAuxiliary(
+        source,
+        "globalThis.result='outer-result';java.ajax('https://fixture.invalid/raw',8000)",
+        bindings: bindings,
+        prelude: _ownerPrelude(),
+        cancellation: token,
+      );
+      await host.started.future.timeout(const Duration(seconds: 5));
+      final timer = Timer(const Duration(milliseconds: 30), token.cancel);
+      try {
+        await expectLater(
+          pending,
+          throwsA(
+            isA<EngineException>().having(
+              (error) => error.code,
+              'code',
+              'cancelled',
+            ),
+          ),
+        );
+      } finally {
+        timer.cancel();
+      }
+      expect(
+        await engine.evaluateAuxiliary(
+          source,
+          "({result,book:book.name,baseUrl,phaseRuns,phaseLoads,scope:typeof __legacyHttpStep,header:globalThis.__legacyHeaderEvaluation===true,token:java.get('token')})",
+          bindings: {
+            ...bindings,
+            'book': {'name': 'fresh-book'},
+            'result': 'fresh-result',
+            'baseUrl': 'https://fresh.invalid/',
+          },
+          prelude: _ownerPrelude(),
+        ),
+        {
+          'result': 'fresh-result',
+          'book': 'fresh-book',
+          'baseUrl': 'https://fresh.invalid/',
+          'phaseRuns': 1,
+          'phaseLoads': 1,
+          'scope': 'undefined',
+          'header': false,
+          'token': 'outer-book',
+        },
+      );
+    } finally {
+      await engine.close();
+    }
+  });
+  test('nested dynamic header overrides URL-step scope only until its own request completes', () async {
+    final host = _NestedHeaders();
+    final engine = createSourceEngine(
+      source,
+      platform: host,
+      useNativeLegacyHttp: true,
+    );
+    try {
+      expect(
+        await engine.evaluateAuxiliary(
+          source,
+          "({before:java.get('token'),body:java.ajax('https://fixture.invalid/outer'),after:java.get('token'),scope:typeof __legacyHttpStep})",
+          bindings: bindings,
+          prelude: _ownerPrelude(),
+        ),
+        {
+          'before': 'outer-book',
+          'body': 'outer-body',
+          'after': 'outer-book',
+          'scope': 'undefined',
+        },
+      );
+      expect(host.headers, [
+        {'X-Token': 'source-token/source-token'},
+        {'X-Token': 'source-token/source-token'},
+      ]);
+      expect(host.outerResult, {
+        'before': 'url-scope',
+        'inner': 'inner-body',
+        'after': 'url-scope',
+        'alias': 'url-scope',
+      });
+      expect(host.aborted, ['inner-token', 'outer-token']);
+    } finally {
+      await engine.close();
+    }
+  });
 }
