@@ -39,8 +39,8 @@ internal fun SharedLocalBookPreviewScreen(
                 .testTag("shared-local-books")
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp),

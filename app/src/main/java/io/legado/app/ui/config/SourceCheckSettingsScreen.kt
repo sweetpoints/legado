@@ -28,8 +28,8 @@ fun SourceCheckSettingsScreen(
     Surface {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).imePadding()) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Text(
                     stringResource(R.string.check_source_config),

@@ -1,36 +1,41 @@
 package io.legado.app.ui.main
 
+import android.content.ContextWrapper
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.filters.SdkSuppress
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalView
-import android.content.ContextWrapper
-import androidx.activity.ComponentActivity
+import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.R
 import io.legado.app.ui.navigation.MainDestination
 import io.legado.app.ui.theme.LegadoComposeTheme
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -49,9 +54,11 @@ class MainScreenTest {
                 MainScreen(MainUiState(), 0, emptyMap(), false, {}) {
                     Box(
                         Modifier.fillMaxSize()
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(
-                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
-                            ))
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                                )
+                            )
                             .testTag("main-content")
                     )
                 }
@@ -65,15 +72,27 @@ class MainScreenTest {
             (activityContext as ComponentActivity).enableEdgeToEdge()
         }
         compose.waitForIdle()
-        val safe = view.rootWindowInsets.getInsets(
-            android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout()
-        )
+        val safe =
+            view.rootWindowInsets.getInsets(
+                android.view.WindowInsets.Type.systemBars() or
+                    android.view.WindowInsets.Type.displayCutout()
+            )
         val top = safe.top
         assertTrue("The fixture must expose a real status bar inset", top > 0)
         val bounds = compose.onNodeWithTag("main-content").fetchSemanticsNode().boundsInRoot
-        assertEquals("Content must consume the current safe top inset exactly once", top.toFloat(), bounds.top, 1f)
+        assertEquals(
+            "Content must consume the current safe top inset exactly once",
+            top.toFloat(),
+            bounds.top,
+            1f,
+        )
         assertEquals("Respect the current left safe inset", safe.left.toFloat(), bounds.left, 1f)
-        assertEquals("Respect the current right safe inset", (view.width - safe.right).toFloat(), bounds.right, 1f)
+        assertEquals(
+            "Respect the current right safe inset",
+            (view.width - safe.right).toFloat(),
+            bounds.right,
+            1f,
+        )
     }
 
     @Test
@@ -82,19 +101,36 @@ class MainScreenTest {
         val state = mutableStateOf(MainUiState())
         compose.setContent {
             LegadoComposeTheme {
-                MainScreen(state.value, 0, emptyMap(), false, {
-                    clicked = it
-                    state.value = state.value.copy(selectedDestination = it)
-                }) { Box {} }
+                MainScreen(
+                    state.value,
+                    0,
+                    emptyMap(),
+                    false,
+                    {
+                        clicked = it
+                        state.value = state.value.copy(selectedDestination = it)
+                    },
+                ) {
+                    Box {}
+                }
             }
         }
-        for ((destination, title) in listOf(
-            MainDestination.My to R.string.my,
-            MainDestination.Rss to R.string.rss,
-            MainDestination.Explore to R.string.discovery,
-            MainDestination.Bookshelf to R.string.bookshelf,
-        )) {
-            compose.onNodeWithContentDescription(context.getString(title)).performClick().assertIsSelected()
+        for (title in listOf(R.string.bookshelf, R.string.discovery, R.string.rss, R.string.my)) {
+            compose.onNodeWithText(context.getString(title)).assertIsDisplayed()
+        }
+        for ((destination, title) in
+            listOf(
+                MainDestination.My to R.string.my,
+                MainDestination.Rss to R.string.rss,
+                MainDestination.Explore to R.string.discovery,
+                MainDestination.Bookshelf to R.string.bookshelf,
+            )) {
+            compose
+                .onNodeWithContentDescription(context.getString(title))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+                .performClick()
+                .assertIsSelected()
+            compose.onNodeWithText(context.getString(title)).assertIsDisplayed()
             compose.runOnIdle { assertEquals(destination, clicked) }
         }
     }
@@ -140,7 +176,9 @@ class MainScreenTest {
                 MainScreen(state.value, badge.value, emptyMap(), false, {}) { Box {} }
             }
         }
-        compose.onNodeWithText("3").assertExists()
+        compose
+            .onNodeWithContentDescription(context.getString(R.string.bookshelf))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "3"))
         compose.runOnIdle {
             state.value = state.value.withVisibleDestinations(false, false)
             badge.value = 0
@@ -150,6 +188,8 @@ class MainScreenTest {
             .assertDoesNotExist()
         compose.onNodeWithContentDescription(context.getString(R.string.rss)).assertDoesNotExist()
         compose.onNodeWithContentDescription(context.getString(R.string.my)).assertIsSelected()
-        compose.onNodeWithText("3").assertDoesNotExist()
+        compose
+            .onNodeWithContentDescription(context.getString(R.string.bookshelf))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
     }
 }

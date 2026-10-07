@@ -61,8 +61,8 @@ internal fun NamedGroupScreen(
     Surface {
         Column(Modifier.fillMaxSize().imePadding()) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -79,7 +79,7 @@ internal fun NamedGroupScreen(
                         modifier = Modifier.testTag("named-group-add"),
                         colors =
                             ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                     ) {
                         Text(stringResource(R.string.add_group))

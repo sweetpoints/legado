@@ -30,8 +30,8 @@ internal fun UpdateDialogScreen(
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().testTag("update-dialog")) {
             Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
@@ -58,7 +58,7 @@ internal fun UpdateDialogScreen(
                         ) {
                             Text(
                                 stringResource(R.string.more_menu),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                         DropdownMenu(menu, { menu = false }) {
