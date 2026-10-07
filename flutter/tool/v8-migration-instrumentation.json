@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 90,
+  "caseCount": 92,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -224,6 +224,15 @@
       "sourceSha256": "9501950ffdd53cd05e4b670bf4a8824217a05043bf8f21f3afe917b8b6efd89d",
       "methods": [
         "refusedLocalConnectionPreservesNativeFailureCodeAndTypes"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyHttpDispatcherContextIntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyHttpDispatcherContextIntegrationTest.kt",
+      "sourceSha256": "1c0ce1302f87b4cd2818af7f78e55a34ca0d3deeb1e07dab56ec55975198afec",
+      "methods": [
+        "cancellationWhileNativeRequestWaitsForHeadersReleasesTaskAndPermitsNextCall",
+        "slowResponseBodyLeavesMainResponsiveAndCompletesAfterExplicitRelease"
       ]
     }
   ]
