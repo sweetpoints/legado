@@ -115,6 +115,24 @@ class SourcePlatform implements ScriptHost {
       case 'sourceState.getVariable':
       case 'sourceState.putVariable':
       case 'sourceState.removeLoginInfo':
+      case 'exploreInfoMap.get':
+      case 'exploreInfoMap.put':
+      case 'exploreInfoMap.remove':
+      case 'exploreInfoMap.set':
+      case 'exploreInfoMap.save':
+      case 'exploreInfoMap.saveNow':
+      case 'exploreInfoMap.getNeedSave':
+      case 'exploreInfoMap.setNeedSave':
+      case 'exploreInfoMap.putAll':
+      case 'exploreInfoMap.containsKey':
+      case 'exploreInfoMap.containsValue':
+      case 'exploreInfoMap.size':
+      case 'exploreInfoMap.isEmpty':
+      case 'exploreInfoMap.clear':
+      case 'exploreInfoMap.keys':
+      case 'exploreInfoMap.values':
+      case 'exploreInfoMap.entries':
+      case 'exploreInfoMap.sourceUrl':
       case 'legacyRule.evaluate':
       case 'legacyRequest.fetch':
       case 'legacyRequest.resolve':

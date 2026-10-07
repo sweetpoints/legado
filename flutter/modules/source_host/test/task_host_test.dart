@@ -15,6 +15,56 @@ void main() {
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
   test(
+    'all explicit explore InfoMap methods retain trusted task/source origin',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return 'native';
+      });
+      final host = TaskScriptHost(
+        const SourcePlatform(sourceId: 'book:fixture'),
+        'bound-task',
+      );
+      for (final operation in [
+        'get',
+        'put',
+        'remove',
+        'set',
+        'save',
+        'saveNow',
+        'getNeedSave',
+        'setNeedSave',
+        'putAll',
+        'containsKey',
+        'containsValue',
+        'size',
+        'isEmpty',
+        'clear',
+        'keys',
+        'values',
+        'entries',
+        'sourceUrl',
+      ]) {
+        expect(
+          await host.call('exploreInfoMap.$operation', ['key', 'value']),
+          'native',
+        );
+      }
+      expect(calls, hasLength(18));
+      for (final request in calls) {
+        expect(request['sourceId'], 'book:fixture');
+        expect(request['taskId'], 'bound-task');
+        expect(request['fromScript'], true);
+        expect(request['arguments'], ['key', 'value']);
+      }
+      await expectLater(
+        host.call('exploreInfoMap.unknown', []),
+        throwsA(isA<EngineException>()),
+      );
+    },
+  );
+  test(
     'script cannot forge outer rule origin through payload or marker',
     () async {
       final calls = <Map>[];
