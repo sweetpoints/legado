@@ -26,7 +26,7 @@ class CryptoMigrationContractTest {
         )
 
     @Test
-    fun blankLibraryUsesSupportedHashHelpersOnActualV8() = runBlocking {
+    fun blankLibraryUsesSupportedHashHelpersOnActualV8(): Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
         val result =
             withTimeout(60_000) {
@@ -42,49 +42,54 @@ class CryptoMigrationContractTest {
         assertEquals("900150983cd24fb0d6963f7d28e17f72", result["md5"])
     }
 
-    private suspend fun requiresLibraryMigration(library: String, suffix: String) {
+    private suspend fun assertModernLibraryMigrationRequiresReview(library: String, suffix: String): BookSource {
         val original = source(suffix).copy(jsLib = library)
         val preview = withTimeout(60_000) { DartSourceEngine.migrate(original) }
         assertTrue(preview.requiresManualWork)
         assertFalse(preview.canApply)
         assertEquals("manualRequired", preview.status)
-        assertTrue(
-            preview.issues.any {
-                it.path == "jsLib" && it.code == "legacy.capability_requires_review"
-            }
-        )
+        assertTrue(preview.issues.any {
+            it.path == "jsLib" && it.code == "legacy.capability_requires_review"
+        })
         assertEquals(library, original.jsLib)
-        val failure =
-            withTimeout(60_000) {
-                runCatching {
-                    DartSourceEngine.evaluate(original, "'must not run unsupported library'")
-                }
-            }
-        assertTrue(failure.isFailure)
-        assertTrue(
-            failure.exceptionOrNull()?.message.orEmpty().contains("legacy_requires_migration")
-        )
+        return original
     }
 
     @Test
-    fun explicitJavaHostLibraryRequiresMigrationInsteadOfV8Fallback() = runBlocking {
+    fun explicitHostLibraryExecutesWithOriginalRuntimeBindingsWhileModernMigrationNeedsReview(): Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
-        requiresLibraryMigration(
+        val original = assertModernLibraryMigrationRequiresReview(
             """
             function requestApiUrl(path,data,runtime) {
               return [typeof runtime.java,typeof runtime.java.log,
                 typeof runtime.source,typeof runtime.cache].join('|');
             }
-            """
-                .trimIndent(),
+            """.trimIndent(),
             "java-host",
         )
+        try {
+            val result = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "requestApiUrl('/fixture',{},this)")
+            }
+            assertEquals("Actual explicit runtime bindings: $result", "object|function|object|object", result)
+            val reflection = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "({packages:typeof Packages,getClass:typeof getClass,bookReflection:typeof book.getClass})",
+                    mapOf("book" to mapOf("name" to "JSON book")))
+            }
+            assertTrue("Actual JSON runtime boundary: $reflection", reflection is Map<*, *>)
+            reflection as Map<*, *>
+            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["packages"])
+            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["getClass"])
+            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["bookReflection"])
+        } finally {
+            DartSourceEngine.clearSourceState(original)
+        }
     }
 
     @Test
-    fun sharedGlobalsAndDescriptorsRemainExplicitMigrationInputs() = runBlocking {
+    fun sharedLibraryDescriptorsAndFrozenGlobalsKeepTheirOriginalRuntimeContract(): Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
-        requiresLibraryMigration(
+        val original = assertModernLibraryMigrationRequiresReview(
             """
             var pixivLibraryMarker='ready';
             globalThis.environment={IS_LEGADO:true};
@@ -97,23 +102,93 @@ class CryptoMigrationContractTest {
             });
             globalThis.__defineGetter__(0,function(){return 10;});
             Object.preventExtensions(globalThis);
-            """
-                .trimIndent(),
+            """.trimIndent(),
             "descriptors",
         )
+        try {
+            val first = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, """
+                    (function(){
+                      const getter=Object.getOwnPropertyDescriptor(globalThis,'accessorValue');
+                      const setter=Object.getOwnPropertyDescriptor(globalThis,'setterValue');
+                      let blockedError='';
+                      try { Object.defineProperty(globalThis,'afterPreventExtensions',{value:true}); }
+                      catch(error) { blockedError=error.name; }
+                      globalThis.setterValue=11;
+                      return {marker:pixivLibraryMarker,environment:globalThis.environment.IS_LEGADO,
+                        language:globalThis.settings.language,getter:globalThis.accessorValue,index:globalThis[0],
+                        getterType:typeof getter.get,setterType:typeof setter.set,
+                        extensible:Object.isExtensible(globalThis),blockedError,
+                        added:typeof globalThis.afterPreventExtensions,
+                        setterStored:typeof globalThis.setterStored};
+                    })()
+                """.trimIndent())
+            }
+            assertTrue("Actual library descriptor probe: $first", first is Map<*, *>)
+            first as Map<*, *>
+            val detail = "Actual library descriptor probe: $first"
+            assertEquals(detail, "ready", first["marker"])
+            assertEquals(detail, true, first["environment"])
+            assertEquals(detail, "zh-CN", first["language"])
+            assertEquals(detail, 7, (first["getter"] as? Number)?.toInt())
+            assertEquals(detail, 10, (first["index"] as? Number)?.toInt())
+            assertEquals(detail, "function", first["getterType"])
+            assertEquals(detail, "function", first["setterType"])
+            assertEquals(detail, false, first["extensible"])
+            assertEquals(detail, "TypeError", first["blockedError"])
+            assertEquals(detail, "undefined", first["added"])
+            // The setter cannot create a new property after preventExtensions.
+            assertEquals(detail, "undefined", first["setterStored"])
+            val second = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "({getter:globalThis.accessorValue,index:globalThis[0],extensible:Object.isExtensible(globalThis)})")
+            }
+            assertTrue("Actual second retained library call: $second", second is Map<*, *>)
+            second as Map<*, *>
+            assertEquals("Actual second retained library call: $second", 7, (second["getter"] as? Number)?.toInt())
+            assertEquals("Actual second retained library call: $second", 10, (second["index"] as? Number)?.toInt())
+            assertEquals("Actual second retained library call: $second", false, second["extensible"])
+        } finally {
+            DartSourceEngine.clearSourceState(original)
+        }
     }
 
     @Test
-    fun oldLibraryRefreshStateRequiresMigration() = runBlocking {
+    fun retainedLibraryStateRefreshAndClearStayOwnerScopedWhileModernMigrationNeedsReview(): Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
-        requiresLibraryMigration(
+        val original = assertModernLibraryMigrationRequiresReview(
             "var cleanupLibraryMarker=true;globalThis.sourceKind='book';",
             "library-refresh",
         )
+        val other = source("other-library-owner").copy(jsLib = original.jsLib)
+        try {
+            assertEquals(true, withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "globalThis.refreshMarker='first';cleanupLibraryMarker && globalThis.sourceKind==='book'")
+            })
+            assertEquals(true, withTimeout(60_000) {
+                DartSourceEngine.evaluate(other, "globalThis.refreshMarker='second';cleanupLibraryMarker && globalThis.sourceKind==='book'")
+            })
+            assertEquals("first", withTimeout(60_000) { DartSourceEngine.evaluate(original, "globalThis.refreshMarker") })
+            SharedJsScope.remove(original.jsLib)
+            assertEquals("first", withTimeout(60_000) { DartSourceEngine.evaluate(original, "globalThis.refreshMarker") })
+            assertEquals("second", withTimeout(60_000) { DartSourceEngine.evaluate(other, "globalThis.refreshMarker") })
+            DartSourceEngine.clearSourceState(original)
+            val refreshed = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "({marker:typeof globalThis.refreshMarker,library:cleanupLibraryMarker,kind:globalThis.sourceKind})")
+            }
+            assertTrue("Actual cleared owner state: $refreshed", refreshed is Map<*, *>)
+            refreshed as Map<*, *>
+            assertEquals("undefined", refreshed["marker"])
+            assertEquals(true, refreshed["library"])
+            assertEquals("book", refreshed["kind"])
+            assertEquals("second", withTimeout(60_000) { DartSourceEngine.evaluate(other, "globalThis.refreshMarker") })
+        } finally {
+            DartSourceEngine.clearSourceState(original)
+            DartSourceEngine.clearSourceState(other)
+        }
     }
 
     @Test
-    fun configurationUsesHashHelperAndJsonRuntimeWithoutJavaReflection() = runBlocking {
+    fun configurationUsesHashHelperAndJsonRuntimeWithoutJavaReflection(): Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
         val text =
             """
