@@ -47,10 +47,10 @@ class LegacySourceAppEntryTest {
             "ruleBookInfo" to mapOf("init" to "class.target", "name" to "tag.h2@text", "tocUrl" to "tag.a@href", "canReName" to "true"),
             "ruleToc" to mapOf("chapterList" to "tag.li@tag.a", "chapterName" to "text", "chapterUrl" to "href"),
             "ruleContent" to buildMap {
-                put("content", "class.body@html")
+                put("content", if (unsupportedContent) "@webjs:document.querySelector('.body').innerHTML" else "class.body@html")
                 put("replaceRegex", "##Beta##Replaced")
                 put("title", "tag.h3@text")
-                if (unsupportedContent) put("subContent", "class.unsupported@text")
+
             },
         )
         val imported = (parseBookSourceJson(GSON.toJson(raw)) as BookSourceImportJson.Sources).items.single()
@@ -59,6 +59,10 @@ class LegacySourceAppEntryTest {
         assertFalse(SourceEngineSourcePolicy.hasVersionedDefinition(imported.bookSourceComment))
         // Omitted source flags must use the actual App DTO defaults, not a reduced test definition.
         assertEquals(true, imported.enabledCookieJar)
+        assertEquals(
+            if (unsupportedContent) "@webjs:document.querySelector('.body').innerHTML" else "class.body@html",
+            imported.getContentRule().content,
+        )
         return candidate.source(false)
     }
 
