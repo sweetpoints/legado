@@ -53,6 +53,30 @@ facade 保存 `{schemaVersion,ownerId,transformation,key,iv}` JSON 状态，每�
 
 ## 网络与响应
 
+### Android 原生旧 HTTP
+
+Android source_host 已启用 useNativeHttp：六个旧 HTTP 方法转发到 NativeLegacyHttpHost。ajax/connect/ajaxAll 使用原 AnalyzeUrl 请求管线，get/post/head 使用原 JsExtensions 的 Jsoup 管线；成功请求的 URL options、来源默认头、charset、限流及 Cookie 行为沿对应原管线执行，不重写成现代 net.request。get(key) 单参数变量读取不进入 HTTP。
+
+| 方法 | Android 参数与结果 |
+|---|---|
+| `ajax(url[,timeoutMs])` | URL 或数组首项；返回正文，使用 AnalyzeUrl |
+| `connect(url[,headersJson[,timeoutMs]])` | headers 为 String/null；返回 StrResponse facade |
+| `ajaxAll(urls[,skipRateLimit])` | String URL 数组、可选 Boolean（默认 false，原生路径支持 true）；按原并发管线返回响应列表 |
+| `get(url,headers[,timeoutMs])`、`head(url,headers[,timeoutMs])` | 原 Jsoup 请求，不跟随重定向；返回 Response facade |
+| `post(url,body,headers[,timeoutMs])` | String body；原 Jsoup POST，不跟随重定向；返回 Response facade |
+
+可选 timeout 允许 null，否则必须为整数毫秒；ajax/connect 接收 Long 范围，Jsoup 三方法接收 Int 范围，其有效值与默认值由原客户端解释。旧 URL options 只由支持它们的 AnalyzeUrl 路径解析，不表示 Jsoup get/post/head 也解释逗号 options。
+
+任务上下文 SourceTaskSource 保存调用方的真实 BaseSource 和 engineSourceId；取源时必须与已注册 task.sourceId 一致，不从脚本 JSON 重建来源，也无需先保存到 DAO。未保存的编辑源可使用其真实默认头和来源配置。显式无源/guest 调用通过 SourceTaskSourceSuppression 屏蔽继承来源，不虚构来源，也不让脚本指定另一来源对象。
+
+Android 旧路径使用原按域共享的 CookieStore/客户端 Cookie 合同，受原 enabledCookieJar 等配置控制；这是旧兼容存储，不是现代每 source 隔离的 HTTP Cookie jar。现代 `source.net` 和其他平台的旧 Dart portable 分派保持各自原合同，不能从 Android 接线推导全平台 Cookie 共享或自动同步。
+
+错误处理有明确变化：IO 失败返回 typed `network_error`，Jsoup HttpStatusException 返回 `legacy.http_error`，取消继续传播；不会把 ajax/connect 的失败堆栈变为正文或合成成功200，也不会失败后静默改走 Dart HTTP。因此成功请求沿原语义，不等于所有旧错误行为完全兼容。
+
+### 非 Android 的 Dart portable 子集
+
+下表描述未启用 useNativeHttp 的 LegacyScriptHost，不能用它覆盖上面的 Android 行为。
+
 | 方法 | 支持的参数 | 结果与限制 |
 |---|---|---|
 | `ajax(url[,timeoutMs])` | URL 或取首项的 URL 数组，可选正整数毫秒 | 正文字符串，跟随重定向 |
@@ -66,7 +90,7 @@ URL 中逗号形式的旧请求选项报 `legacy.url_options_require_migration`�
 
 当前 headers 对象的键和值不可为 null，转换成字符串。connect 特别限制 headers 为 JSON 字符串或 null。JSoup get/post/head 在响应>=400时报 legacy.http_error；POST 未明确 Content-Type 时设为 application/x-www-form-urlencoded; charset=UTF-8。相对 URL 由当前规则上下文或源脚本基础地址解析；不表示已复刻旧 AnalyzeUrl 的动态 URL、请求选项与登录能力。
 
-响应由 Dart JSON 传输，再由 JS prelude 建立方法：`body()`、`url()`、`code()`、`statusCode()`、`headers()`、`header(name)`、`hasHeader(name)`、`message()`、`statusMessage()`、`isSuccessful()`、`callTime()`、`toString()`。header 查找不区分大小写，缺失返回 null；headers() 返回带 get(name) 的头对象；isSuccessful 对 2xx 为 true。callTime 是包括宿主等待的耗时毫秒，message 未提供时为空字符串。StrResponse header 使用重复头的最后一个值，JSoup header 使用合并值。bodyAsBytes() 返回 signed 原始响应字节，multiHeaders() 返回多值头对象，cookies()/cookie(name)/hasCookie(name) 读取本响应 Cookie 映射。raw()/errorBody() 明确报 legacy.unsupported_response_api。
+响应由 Dart JSON 传输，再由 JS prelude 建立方法：`body()`、`url()`、`code()`、`statusCode()`、`headers()`、`header(name)`、`hasHeader(name)`、`message()`、`statusMessage()`、`isSuccessful()`、`callTime()`、`toString()`。header 查找不区分大小写，缺失返回 null；headers() 返回带 get(name) 的头对象；isSuccessful 对 2xx 为 true。callTime 是包括宿主等待的耗时毫秒，message 未提供时为空字符串。StrResponse header 使用重复头的最后一个值，JSoup header 使用合并值。bodyAsBytes() 返回 signed 字节；Android Jsoup 返回原响应字节，Android StrResponse 当前由已解码 body 重新编码，不能据此承诺原始 wire bytes。multiHeaders() 返回多值头对象，cookies()/cookie(name)/hasCookie(name) 读取本响应 Cookie 映射。raw()/errorBody() 明确报 legacy.unsupported_response_api。
 
 body 和 url 为可调用对象，支持字符串强制转换以兼容属性形式，但 `response.body === "text"` 不会等价于字符串属性；需要 `response.body()` 或明确字符串转换。这是已知差异，不能宣称完整 StrResponse/JSoup 类型兼容。
 
@@ -137,4 +161,4 @@ WebJS 是独立 Android 后台能力：仅外层声明式规则显式允许时�
 
 Release 的反射注册入口需要既有 keep 规则：JsoupXpath AxisSelector/NodeTest/Function 实现和 Jsoup 类，以及 Flutter GeneratedPluginRegistrant.registerWith。保留这些原生注册路径不等于 Java 反射对脚本开放。
 
-实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。当前固定公开四源采样仅一项成功，其余为两项 HTTP/script 错误及一项 TLS 错误；新的最终采样尚未执行。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。
+实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。当前固定公开四源采样仍为一项成功、三项失败：index1 空结果、index2 HttpException、index3 TLS 错误；第三次采样尚未执行，不能据本次 HTTP 接线宣称网络失败已修复。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。
