@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 92,
+  "caseCount": 95,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -233,6 +233,16 @@
       "methods": [
         "cancellationWhileNativeRequestWaitsForHeadersReleasesTaskAndPermitsNextCall",
         "slowResponseBodyLeavesMainResponsiveAndCompletesAfterExplicitRelease"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyAuxiliaryFacadeV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyAuxiliaryFacadeV8IntegrationTest.kt",
+      "sourceSha256": "559588ad06e6233d26c024aff36a3504263cb9104c11ff5acb90860732c75da3",
+      "methods": [
+        "existingEntityCallbacksRemainTheVariableOwnerInsteadOfSourceGlobalState",
+        "invalidModernCarrierStaysStrictAndDoesNotLoadTheLegacyLibrary",
+        "opaqueSourceLoadsItsLibraryOnceAndDefersDynamicHeadersUntilNetworking"
       ]
     }
   ]
