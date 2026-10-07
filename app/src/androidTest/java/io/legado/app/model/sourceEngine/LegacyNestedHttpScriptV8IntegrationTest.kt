@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.JsExtensions
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.GSON
 import java.util.UUID
@@ -174,10 +175,70 @@ class LegacyNestedHttpScriptV8IntegrationTest {
                         state(source, ++runs)
                     }
                 }
-                assertEquals(
-                    listOf("/resolved", "/resolved", "/resolved", "/resolved"),
-                    server.paths.toList(),
+                withContext(outerScope()) {
+                    val context = currentCoroutineContext()
+                    val extensions =
+                        object : JsExtensions {
+                            override fun getSource() = source
+
+                            override fun getSourceNavigationContext() = context
+                        }
+                    val batch = arrayOf("@js:resolvedUrl()", "{{resolvedUrl()}}")
+                    assertEquals(
+                        listOf("raw-body", "raw-body"),
+                        phase("native-batch-golden") {
+                            withTimeout(15_000) { extensions.ajaxAll(batch, false).map { it.body } }
+                        },
+                    )
+                    state(source, 6)
+                    assertEquals(
+                        listOf("raw-body", "raw-body"),
+                        phase("same-owner.ajaxAll") {
+                            withTimeout(15_000) {
+                                DartSourceEngine.evaluate(
+                                    source,
+                                    "java.ajaxAll(${GSON.toJson(batch)},false).map(function(response){return response.body();})",
+                                )
+                            }
+                        },
+                    )
+                    state(source, 8)
+                }
+                assertEquals(List(8) { "/resolved" }, server.paths.toList())
+            } finally {
+                server.stop()
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+
+    @Test
+    fun promisedUrlInsideAjaxStillReturnsASynchronousStringForConcatenation(): Unit =
+        runBlocking(Dispatchers.IO) {
+            caseLabel = "promise-url"
+            val server = Server().apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
+            val source =
+                source(
+                    "function promisedUrl(){$observePhase return Promise.resolve('${server.base}/resolved');}"
                 )
+            val rule = "@js:promisedUrl()"
+            try {
+                withContext(outerScope()) {
+                    assertEquals("raw-body", native(source, rule, server.base))
+                    state(source, 1)
+                    assertEquals(
+                        "prefix:raw-body:suffix",
+                        phase("same-owner.ajax") {
+                            withTimeout(15_000) {
+                                DartSourceEngine.evaluate(
+                                    source,
+                                    "'prefix:'+java.ajax(${GSON.toJson(rule)},8000)+':suffix'",
+                                )
+                            }
+                        },
+                    )
+                    state(source, 2)
+                }
+                assertEquals(listOf("/resolved", "/resolved"), server.paths.toList())
             } finally {
                 server.stop()
                 DartSourceEngine.clearSourceState(source)
