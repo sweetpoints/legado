@@ -59,6 +59,10 @@ def main():
                str(destination))
         proof = json.loads(destination.read_text())
         assert proof["phase"] == phase and proof["debuggable"] is False
+        assert proof["stableOriginVerified"] is True
+        if phase == "restart":
+            assert proof["fixtureOrigin"] == report["cold"]["fixtureOrigin"]
+            assert proof["fixturePort"] == report["cold"]["fixturePort"]
         for key in ("sessionReadWrite", "closeReopenRestore", "sessionCookieRestored",
                     "legacySearchInfoTocContent", "trailingNewlineExplore"):
             assert proof[key] is True, (phase, key)
