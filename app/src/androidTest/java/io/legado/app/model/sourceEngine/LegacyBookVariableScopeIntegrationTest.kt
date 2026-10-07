@@ -12,6 +12,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -82,6 +83,62 @@ class LegacyBookVariableScopeIntegrationTest {
         chapter.putVariable("saved", "")
         assertEquals("A-token", contentParser.getString("@get:{saved}"))
     }
+
+    @Test
+    fun nativeScopedParserCallbackReadsTheSameBookLayerAsPureRule(): Unit =
+        runBlocking(Dispatchers.IO) {
+            val source =
+                BookSource(
+                    bookSourceUrl = "https://fixture.invalid/scoped-callback",
+                    bookSourceName = "Scoped callback fixture",
+                )
+            val host = LegacyRuleHost(source.bookSourceUrl, currentCoroutineContext())
+            fun payload(rule: String) =
+                mapOf<String, Any?>(
+                    "rule" to rule,
+                    "input" to "<b>A-detail</b>",
+                    "mode" to "scalar",
+                    "source" to DartSourceEngine.jsonObject(source),
+                    "operation" to "info",
+                    "baseUrl" to source.bookSourceUrl,
+                    "variables" to
+                        mapOf(
+                            "book" to
+                                mapOf("name" to "Book A", "variable" to "{\"saved\":\"A-token\"}")
+                        ),
+                    "variableScope" to
+                        mapOf(
+                            "id" to "book-a",
+                            "target" to "book",
+                            "source" to emptyMap<String, String>(),
+                            "book" to mapOf("saved" to "A-token"),
+                            "chapter" to emptyMap<String, String>(),
+                        ),
+                )
+            try {
+                assertEquals(
+                    "A-token",
+                    host.evaluate(payload("@get:{saved}"), fromScript = false)["value"],
+                )
+                withTimeout(15_000) {
+                    assertEquals(
+                        "A-token",
+                        host
+                            .evaluate(
+                                payload("@put:{\"detail\":\"tag.b@text\"}@js:java.get('saved')"),
+                                fromScript = false,
+                            )["value"],
+                    )
+                }
+                assertEquals(
+                    "A-detail",
+                    host.evaluate(payload("@get:{detail}"), fromScript = false)["value"],
+                )
+            } finally {
+                host.close()
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
 
     @Test
     fun searchPutFollowsEachBookIntoInterleavedInfoAndTocCalls(): Unit =
