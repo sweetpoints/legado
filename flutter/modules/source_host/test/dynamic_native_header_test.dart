@@ -28,7 +28,7 @@ class _HeaderHost implements ScriptHost {
           'script':
               "globalThis.headerRuns=(globalThis.headerRuns||0)+1; "
               "({'X-Dynamic':libraryHeader(),saved:capturedRead('saved'),"
-              "put:java.put('header-write','source-written')})",
+              "put:java.put('header-write','source-written'),globals:[value,name,args,index,evaluations,plan,previous]})",
         };
       case 'javaHttp.headerGet':
         return sourceVariables[args.first] ?? '';
@@ -67,7 +67,10 @@ void main() {
     const library =
         "globalThis.libraryLoads=(globalThis.libraryLoads||0)+1; "
         "var capturedRead=java.get; "
-        "function libraryHeader(){return libraryLoads+':'+headerRuns;}";
+        "function libraryHeader(){return libraryLoads+':'+headerRuns;}"
+        "globalThis.value='global-value';globalThis.name='global-name';globalThis.args='global-args';"
+        "globalThis.index='global-index';globalThis.evaluations='global-evaluations';"
+        "globalThis.plan='global-plan';globalThis.previous='global-previous';";
     final kotlin = File(
       '../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacySourceScriptRunner.kt',
     ).readAsStringSync();
@@ -80,7 +83,7 @@ void main() {
           source,
           "java.put('saved','entity-value'); "
           "({body:java.ajax('https://fixture.invalid/header',8000),"
-          "normal:java.get('saved'),flag:globalThis.__legacyHeaderEvaluation===true})",
+          "normal:java.get('saved'),flag:globalThis.__legacyHeaderEvaluation===true,sourceType:typeof source,asyncRequest:typeof source.net.request})",
           bindings: {
             'taskId': 'header-task',
             'sourceData': <String, Object?>{},
@@ -93,6 +96,8 @@ void main() {
           'body': '1:$index',
           'normal': 'entity-value',
           'flag': false,
+          'sourceType': 'object',
+          'asyncRequest': 'function',
         });
       }
       expect(host.headers.map((header) => header['X-Dynamic']), ['1:1', '1:2']);
@@ -104,6 +109,17 @@ void main() {
         host.headers.every((header) => header['put'] == 'source-written'),
         true,
       );
+      for (final header in host.headers) {
+        expect(header['globals'], [
+          'global-value',
+          'global-name',
+          'global-args',
+          'global-index',
+          'global-evaluations',
+          'global-plan',
+          'global-previous',
+        ]);
+      }
       expect(host.sourceVariables['header-write'], 'source-written');
       expect(host.sourceVariables['saved'], 'source-value');
     } finally {

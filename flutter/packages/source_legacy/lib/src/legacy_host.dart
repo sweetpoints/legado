@@ -67,6 +67,9 @@ const legacyScriptPrelude =
     legacyDomPrelude +
     r"""
 (() => {
+  // A dedicated function keeps request-bridge locals out of the header's scope.
+  // Its eval still uses this V8 context and the existing source globals/library.
+  const __legacyHeaderEvaluator = new Function('__legacyHeaderCode', 'return eval(__legacyHeaderCode);');
   function response(value) {
     if (Array.isArray(value)) return value.map(response);
     if (!value || typeof value !== 'object' || !value.__legacyResponseKind) return value;
@@ -171,11 +174,11 @@ const legacyScriptPrelude =
                 const previous = globalThis.__legacyHeaderEvaluation;
                 globalThis.__legacyHeaderEvaluation = true;
                 try {
-                  const value = eval(plan.script);
-                  if (value && typeof value.then === 'function') {
+                  const __legacyHeaderValue = __legacyHeaderEvaluator(plan.script);
+                  if (__legacyHeaderValue && typeof __legacyHeaderValue.then === 'function') {
                     throw new Error('legacy.async_header_requires_await');
                   }
-                  evaluations.push({value, failed:false});
+                  evaluations.push({value:__legacyHeaderValue, failed:false});
                 } catch (error) {
                   if (String(error).includes('legacy.async_header_requires_await')) throw error;
                   // BaseSource.getHeaderMap also retains default headers when its rule fails.

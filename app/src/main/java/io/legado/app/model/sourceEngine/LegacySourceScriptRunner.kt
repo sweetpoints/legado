@@ -47,7 +47,7 @@ object LegacySourceScriptRunner {
                     : target[name]
         });
         globalThis.__legacyAsyncSource = globalThis.__legacyAsyncSource || globalThis.source;
-        globalThis.source = new Proxy(globalThis.__legacyAsyncSource, {
+        globalThis.source = new Proxy(Object.create(null), {
             get: (target, name) => name === 'getTag' ? () => __legacySourceTag
                 : name === 'getKey' ? () => __legacySourceKey
                 : ['get','put'].includes(String(name))
@@ -58,7 +58,7 @@ object LegacySourceScriptRunner {
                     : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                         ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                         : Object.prototype.hasOwnProperty.call(sourceData, name)
-                            ? sourceData[name] : target[name]
+                            ? sourceData[name] : globalThis.__legacyAsyncSource[name]
         });
         globalThis.sourceApi = globalThis.source;
         $library

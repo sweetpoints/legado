@@ -138,10 +138,10 @@ void main() {
       expect(
         await modernEngine.evaluateAuxiliary(
           modern,
-          'typeof java',
+          '({java:typeof java,source:typeof source})',
           bindings: {'taskId': 'modern-task'},
         ),
-        'undefined',
+        {'java': 'undefined', 'source': 'function'},
       );
       expect(native.calls, hasLength(2));
     } finally {
