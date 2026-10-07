@@ -118,7 +118,16 @@ class LegacySourceImporter {
       final fields = <String, String>{};
       String? list;
       String? nextPage;
+      var hasAppConfiguration = false;
       for (final rule in raw.entries) {
+        // These are App configuration, not extraction or executable hooks.
+        // The original Gson StringJsonDeserializer accepts every JSON value;
+        // preserve it verbatim in legacyOriginal instead of creating a field.
+        if ((entry.key == 'search' && rule.key == 'checkKeyWord') ||
+            (entry.key == 'content' && rule.key == 'imageStyle')) {
+          hasAppConfiguration = true;
+          continue;
+        }
         if (rule.value == null || rule.value == '') continue;
         if (rule.value is! String) {
           issues.add(
@@ -229,6 +238,12 @@ class LegacySourceImporter {
           fields[fieldName] = text;
         }
       }
+      if (hasAppConfiguration &&
+          fields.isEmpty &&
+          list == null &&
+          nextPage == null) {
+        continue;
+      }
       var url = urlKey == null
           ? switch (entry.key) {
               'info' => '{{bookUrl}}',
@@ -289,12 +304,7 @@ class LegacySourceImporter {
       );
     }
     if (hasMainJs && contentRules is Map) {
-      for (final hook in [
-        'imageStyle',
-        'imageDecode',
-        'payAction',
-        'callBackJs',
-      ]) {
+      for (final hook in ['imageDecode', 'payAction', 'callBackJs']) {
         final value = contentRules[hook];
         if (value == null || value == '') continue;
         issues.add(
