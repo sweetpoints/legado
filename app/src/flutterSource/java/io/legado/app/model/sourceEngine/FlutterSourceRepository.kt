@@ -82,6 +82,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         }
     }
 
+    private val orgJsoup = NativeOrgJsoupHost()
     private val hostTasks = mutableMapOf<String, HostTask>()
     private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
     private val ready = CompletableDeferred<Unit>()
@@ -353,6 +354,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             task.context.ensureActive()
             @Suppress("UNCHECKED_CAST")
             return LegacyDomHost.call(args[0] as Map<*, *>, args[1] as String, args[2] as List<Any?>)
+        }
+        if (method in NativeOrgJsoupHost.methods) {
+            val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
+                else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
+            val owner = source?.let(DartSourceEngine::ownerId) ?: task.sourceId
+            return orgJsoup.call(owner, method, args, currentCoroutineContext())
         }
         if (method in NativeLegacyHttpHost.methods || method in NativeLegacyHttpContinuationHost.methods) {
             // The caller facade owns this live source; script arguments cannot choose another.
