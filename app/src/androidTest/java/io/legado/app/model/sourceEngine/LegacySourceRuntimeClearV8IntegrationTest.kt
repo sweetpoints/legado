@@ -18,7 +18,7 @@ class LegacySourceRuntimeClearV8IntegrationTest {
             bookSourceUrl = id,
             bookSourceName = "Main clear fixture",
             mainJs =
-                "var retainedCounter=0;function search(key,page){retainedCounter++;return [{name:'Fixture',bookUrl:'https://clear.invalid/book',counter:retainedCounter}];}",
+                "globalThis.retainedCounter ??= 0;function search(key,page){retainedCounter++;return [{name:'Fixture',bookUrl:'https://clear.invalid/book',counter:retainedCounter}];}",
         )
 
     private suspend fun count(source: BookSource): Int =

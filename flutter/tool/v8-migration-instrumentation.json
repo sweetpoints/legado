@@ -292,7 +292,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyOrgConnectionV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt",
-      "sourceSha256": "0af65315ecb167444458b472bfade1d21c926b7d98e7f0d2b302a0ac8e412fd2",
+      "sourceSha256": "53aa3664b140351d9a09f9421b582fec8b5a987b4773ca6a91f75f92333b4062",
       "methods": [
         "canonicalAndRawSourceClearRejectOldTokensButFreshConnectionsWork",
         "clearingSourceCancelsInflightConnectionAndPermitsFreshEntry",
@@ -308,7 +308,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacySourceRuntimeClearV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt",
-      "sourceSha256": "178c725d2e8ae64563114d7d3a2f83794d3e77941fe1eaabf1f7f8351dcbe056",
+      "sourceSha256": "027b4f56eeaf6e77dd20f66d677d3c979c744ff21898fdb9bb4f3c4f28108fe9",
       "methods": [
         "canonicalClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor",
         "rawEngineIdClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor"

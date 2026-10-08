@@ -5,6 +5,7 @@ import fi.iki.elonen.NanoHTTPD
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.CacheManager
 import io.legado.app.help.http.CookieStore
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
@@ -41,7 +42,9 @@ class LegacyOrgConnectionV8IntegrationTest {
             seen.add(
                 Seen(
                     session.method.name,
-                    files["postData"].orEmpty(),
+                    if (session.method == Method.PUT)
+                        files["content"]?.let { File(it).readText(Charsets.UTF_8) }.orEmpty()
+                    else files["postData"].orEmpty(),
                     session.headers["x-fixture"],
                     session.headers["cookie"],
                 )
@@ -76,7 +79,11 @@ class LegacyOrgConnectionV8IntegrationTest {
             V8ScriptExecutor.evaluate(script, bindings = bindings, source = source)
         }
 
-    private suspend fun rejected(source: BookSource, token: String) {
+    private suspend fun rejected(
+        source: BookSource,
+        token: String,
+        reason: String = "object was released",
+    ) {
         val failure = runCatching {
             evaluate(
                 source,
@@ -86,13 +93,21 @@ class LegacyOrgConnectionV8IntegrationTest {
         }
             .exceptionOrNull()
         assertNotNull("A released or foreign token must fail", failure)
-        val code =
-            when (failure) {
-                is SourceScriptException -> failure.code
-                is SourceHostException -> failure.code
-                else -> null
-            }
-        assertEquals("invalid_request", code)
+        // Native invalid_request crosses the existing synchronous JS bridge as
+        // an uncaught JS error; assert both transport layers, not any exception.
+        assertTrue(
+            "The outer V8 boundary must be a script exception",
+            failure is SourceScriptException,
+        )
+        assertEquals("script_error", (failure as SourceScriptException).code)
+        assertTrue(
+            "The inner native code must remain visible",
+            failure.message.orEmpty().contains("invalid_request"),
+        )
+        assertTrue(
+            "The precise native ownership/lifetime reason must remain visible",
+            failure.message.orEmpty().contains(reason),
+        )
     }
 
     @Test
@@ -209,7 +224,7 @@ class LegacyOrgConnectionV8IntegrationTest {
                         mapOf("url" to server.url()),
                     )
                         as String
-                rejected(second, token)
+                rejected(second, token, "belongs to another source owner")
                 assertEquals(
                     BODY,
                     evaluate(
