@@ -117,6 +117,177 @@ class NativeOrgConnectionHostTest {
                 .get(host) as Map<*, *>)
             .size
 
+    private fun nativeResponse(
+        host: NativeOrgConnectionHost,
+        token: String,
+    ): org.jsoup.Connection.Response {
+        val table =
+            NativeOrgConnectionHost::class
+                .java
+                .getDeclaredField("leases")
+                .apply { isAccessible = true }
+                .get(host) as Map<*, *>
+        val lease = checkNotNull(table[token])
+        return lease.javaClass.getDeclaredField("value").apply { isAccessible = true }.get(lease)
+            as org.jsoup.Connection.Response
+    }
+
+    private fun resources(host: NativeOrgConnectionHost): Int =
+        (NativeOrgConnectionHost::class
+                .java
+                .getDeclaredField("responses")
+                .apply { isAccessible = true }
+                .get(host) as Map<*, *>)
+            .size
+
+    private suspend fun release(host: NativeOrgConnectionHost, owner: String, token: String) {
+        host.call(owner, "orgJsoup.release", listOf(token), currentCoroutineContext())
+    }
+
+    @Test
+    fun releasedConnectionLeavesIndependentLazyResponseReadable(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val original = Jsoup.connect(server.base + "/cookie").execute()
+                val host = NativeOrgConnectionHost()
+                try {
+                    val c = connect(host, "owner", server.base + "/cookie")
+                    val r = responseToken(conn(host, "owner", c, "execute"))
+                    release(host, "owner", c)
+                    assertEquals(1, resources(host))
+                    assertEquals(original.body(), resp(host, "owner", r, "body"))
+                    assertEquals(
+                        original.bodyAsBytes().map { it.toInt() },
+                        resp(host, "owner", r, "bodyAsBytes"),
+                    )
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
+    @Test
+    fun releasedResponseLeavesConnectionCurrentResponseReadable(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val originalConnection = Jsoup.connect(server.base + "/cookie")
+                val original = originalConnection.execute()
+                assertSame(original, originalConnection.response())
+                val host = NativeOrgConnectionHost()
+                try {
+                    val c = connect(host, "owner", server.base + "/cookie")
+                    val r = responseToken(conn(host, "owner", c, "execute"))
+                    release(host, "owner", r)
+                    assertEquals(1, resources(host))
+                    val again = responseToken(conn(host, "owner", c, "response"))
+                    assertNotEquals(r, again)
+                    assertEquals(again, responseToken(conn(host, "owner", c, "response")))
+                    assertEquals(
+                        originalConnection.response().body(),
+                        resp(host, "owner", again, "body"),
+                    )
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
+    @Test
+    fun nextExecutionKeepsOlderIndependentResponseReadable(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val original = Jsoup.connect(server.base + "/cookie")
+                val firstOriginal = original.execute()
+                original.url(server.base + "/put")
+                val secondOriginal = original.execute()
+                val host = NativeOrgConnectionHost()
+                try {
+                    val c = connect(host, "owner", server.base + "/cookie")
+                    val first = responseToken(conn(host, "owner", c, "execute"))
+                    conn(host, "owner", c, "url", server.base + "/put")
+                    val second = responseToken(conn(host, "owner", c, "execute"))
+                    assertNotEquals(first, second)
+                    assertEquals(2, resources(host))
+                    release(host, "owner", c)
+                    assertEquals(firstOriginal.body(), resp(host, "owner", first, "body"))
+                    assertEquals(secondOriginal.body(), resp(host, "owner", second, "body"))
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
+    @Test
+    fun nextExecutionClosesReplacedResponseAfterItsLastLeaseWasReleased(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val host = NativeOrgConnectionHost()
+                try {
+                    val c = connect(host, "owner", server.base + "/cookie")
+                    val first = responseToken(conn(host, "owner", c, "execute"))
+                    val actualFirst = nativeResponse(host, first)
+                    release(host, "owner", first)
+                    assertEquals(1, resources(host))
+                    conn(host, "owner", c, "url", server.base + "/put")
+                    val second = responseToken(conn(host, "owner", c, "execute"))
+                    assertEquals(1, resources(host))
+                    assertTrue(runCatching { actualFirst.body() }.isFailure)
+                    assertTrue((resp(host, "owner", second, "body") as String).contains("payload"))
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
+    @Test
+    fun lastConnectionAndResponseReleaseCloseStreamsInBothOrders(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val host = NativeOrgConnectionHost()
+                try {
+                    for (connectionFirst in listOf(true, false)) {
+                        val c = connect(host, "owner", server.base + "/cookie")
+                        val r = responseToken(conn(host, "owner", c, "execute"))
+                        val actual = nativeResponse(host, r)
+                        release(host, "owner", if (connectionFirst) c else r)
+                        assertEquals(1, resources(host))
+                        release(host, "owner", if (connectionFirst) r else c)
+                        assertEquals(0, resources(host))
+                        assertEquals(0, leases(host))
+                        assertTrue(runCatching { actual.body() }.isFailure)
+                    }
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
+    @Test
+    fun ownerClearAndShutdownCloseLastStreamsWithoutAffectingOtherOwner(): Unit =
+        runBlocking(Dispatchers.IO) {
+            Server().use { server ->
+                val host = NativeOrgConnectionHost()
+                try {
+                    val a = connect(host, "a", server.base + "/cookie")
+                    val ar = responseToken(conn(host, "a", a, "execute"))
+                    val actualA = nativeResponse(host, ar)
+                    val b = connect(host, "b", server.base + "/put")
+                    val br = responseToken(conn(host, "b", b, "execute"))
+                    val actualB = nativeResponse(host, br)
+                    host.releaseOwner("a")
+                    assertEquals(1, resources(host))
+                    assertTrue(runCatching { actualA.body() }.isFailure)
+                    assertEquals(200, resp(host, "b", br, "statusCode"))
+                    host.close()
+                    assertEquals(0, resources(host))
+                    assertEquals(0, leases(host))
+                    assertTrue(runCatching { actualB.body() }.isFailure)
+                } finally {
+                    host.close()
+                }
+            }
+        }
+
     @Test
     fun putFluentHeadersBodyAndLazyResponseParsingUseTheRealConnection(): Unit =
         runBlocking(Dispatchers.IO) {

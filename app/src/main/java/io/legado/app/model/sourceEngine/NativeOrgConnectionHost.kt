@@ -18,7 +18,12 @@ import org.jsoup.Jsoup
 
 /** Repository-instance leases retain actual Jsoup request/cookie state across one owner's tasks. */
 internal class NativeOrgConnectionHost {
+    private class ResponseResource(val response: Connection.Response) {
+        var references = 0
+    }
+
     private class Lease(val owner: String, val value: Any) {
+        var resource: ResponseResource? = null
         var closed = false
         var busy = false
         val jobs = hashSetOf<Job>()
@@ -28,6 +33,7 @@ internal class NativeOrgConnectionHost {
     private val leases = hashMapOf<String, Lease>()
     private val identities = hashMapOf<String, IdentityHashMap<Any, String>>()
     private val configurations = hashMapOf<String, String>()
+    private val responses = IdentityHashMap<Connection.Response, ResponseResource>()
     private var closed = false
 
     suspend fun call(
@@ -193,20 +199,60 @@ internal class NativeOrgConnectionHost {
     }
 
     private suspend fun dispose(values: List<Lease>) {
-        val jobs = synchronized(lock) { values.flatMap { it.jobs }.distinct() }
-        jobs.forEach { it.cancel() }
-        withContext(NonCancellable + Dispatchers.IO) {
-            values.forEach { lease ->
-                val value = lease.value
-                val response =
-                    when (value) {
-                        is Connection.Response -> value
-                        is Connection -> runCatching { value.response() }.getOrNull()
-                        else -> null
-                    }
-                response?.let { runCatching { it.bodyStream().close() } }
+        val (jobs, orphaned) =
+            synchronized(lock) {
+                values.flatMap { it.jobs }.distinct() to values.mapNotNull(::detachResponseLocked)
             }
+        jobs.forEach { it.cancel() }
+        withContext(NonCancellable + Dispatchers.IO) { orphaned.forEach(::closeResponse) }
+    }
+
+    /** Connection and its independently published Response lease each retain the real stream. */
+    private fun retainResponseLocked(
+        lease: Lease,
+        response: Connection.Response,
+    ): Connection.Response? {
+        if (lease.resource?.response === response) return null
+        val orphaned = detachResponseLocked(lease)
+        val resource = responses.getOrPut(response) { ResponseResource(response) }
+        resource.references++
+        lease.resource = resource
+        return orphaned
+    }
+
+    private fun detachResponseLocked(lease: Lease): Connection.Response? {
+        val resource = lease.resource ?: return null
+        lease.resource = null
+        resource.references--
+        if (resource.references != 0) return null
+        responses.remove(resource.response)
+        return resource.response
+    }
+
+    private fun closeResponse(response: Connection.Response) {
+        runCatching { response.bodyStream().close() }
+    }
+
+    private fun trackResponse(
+        lease: Lease,
+        response: Connection.Response,
+        context: CoroutineContext,
+    ) {
+        var orphaned: Connection.Response? = null
+        try {
+            synchronized(lock) {
+                context.ensureActive()
+                if (closed || lease.closed) invalid("Connection was released during its request")
+                orphaned = retainResponseLocked(lease, response)
+            }
+        } catch (error: Throwable) {
+            // A cancelled HTTP operation can finish after owner clear. It must neither publish
+            // nor retain a new stream; an already held Response still belongs to its live lease.
+            val unowned = synchronized(lock) { !responses.containsKey(response) }
+            if (unowned) closeResponse(response)
+            throw error
         }
+        orphaned?.let(::closeResponse)
     }
 
     private fun connection(
@@ -303,11 +349,15 @@ internal class NativeOrgConnectionHost {
                 }
             "get" -> {
                 count(0)
-                return LegacyDomHost.snapshot(value.get())
+                val document = value.get()
+                trackResponse(lease, value.response(), context)
+                return LegacyDomHost.snapshot(document)
             }
             "post" -> {
                 count(0)
-                return LegacyDomHost.snapshot(value.post())
+                val document = value.post()
+                trackResponse(lease, value.response(), context)
+                return LegacyDomHost.snapshot(document)
             }
             "execute" -> {
                 count(0)
@@ -411,6 +461,7 @@ internal class NativeOrgConnectionHost {
     ): Map<String, Any?> {
         // Execute publishes headers without consuming the real response stream. The caller
         // selects body(), bodyAsBytes() or parse(); post/get may already have parsed that stream.
+        trackResponse(parent, value, context)
         val encoded = mapOf("__legacyResponseKind" to "jsoup")
         val token = register(owner, value, parent, context, created)
         return encoded + mapOf("__legacyOrgResponse" to token)
@@ -433,7 +484,9 @@ internal class NativeOrgConnectionHost {
                 return@synchronized it
             }
             UUID.randomUUID().toString().also {
-                leases[it] = Lease(owner, value)
+                val lease = Lease(owner, value)
+                if (value is Connection.Response) retainResponseLocked(lease, value)
+                leases[it] = lease
                 owned[value] = it
                 created.add(it)
             }
