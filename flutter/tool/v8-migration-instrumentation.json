@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 120,
+  "caseCount": 122,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -303,6 +303,15 @@
         "putEnumHeadersBodyAndNativeResponseBytesKeepIdentityAndCacheBrand",
         "retainedConnectionUsesItsCookieStoreAcrossAuxiliaryExecutions",
         "serializedConnectionTokenCannotBeInvokedByAnotherSourceOwner"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacySourceRuntimeClearV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt",
+      "sourceSha256": "178c725d2e8ae64563114d7d3a2f83794d3e77941fe1eaabf1f7f8351dcbe056",
+      "methods": [
+        "canonicalClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor",
+        "rawEngineIdClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor"
       ]
     }
   ]

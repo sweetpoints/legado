@@ -39,6 +39,7 @@ TEST_FILES = (
     'model/sourceEngine/LegacyCacheV8IntegrationTest.kt',
     'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt',
     'model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt',
+    'model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt',
 )
 # Deliberately reviewed cardinalities: regeneration must not silently bless lost cases.
 EXPECTED_CASE_COUNTS = {
@@ -68,6 +69,7 @@ EXPECTED_CASE_COUNTS = {
     'model/sourceEngine/LegacyCacheV8IntegrationTest.kt': 2,
     'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt': 7,
     'model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt': 9,
+    'model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt': 2,
     'model/FlutterSourceEngineTest.kt': 21,
     'ui/book/source/edit/BookSourceMigrationUiTest.kt': 5,
     'model/jsSource/JsSourceReviewV8Test.kt': 13,
