@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 125,
+  "caseCount": 130,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -322,6 +322,25 @@
         "nativeConnectionDiscoveryParsesRealLocalNavigationAndCachesStyledMenus",
         "packagesJsoupAliasInitializesInSourceLibraryBeforeDiscoveryScript",
         "taggedOrgParserDiscoveryReturnsExactStyledMenusWithTrailingComment"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyCoverImageV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCoverImageV8IntegrationTest.kt",
+      "sourceSha256": "2d5eb9de0451f702f285016855cc5237efc1d3d19f61bd9cf9a9baba27598a47",
+      "methods": [
+        "aSearchWithoutACoverRuleDoesNotInventAnImageOrFetchBookInfo",
+        "legacyCoverOptionsAndSourceHeaderReachActualGlidePixels",
+        "signedJavaDecodeBytesRetainTheActualPngAndRejectOutOfRangeBytes"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyTocPaginationV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt",
+      "sourceSha256": "3f6d96ead10e793dbb697152c597cc27687cd0d00a80617e6dd240f564ade7ea",
+      "methods": [
+        "blankTocUrlLoadsBookUrlAndPreservesItsRequestOptionsHeader",
+        "selfLinksAndMultipleNextPagesKeepOriginalChapterOrderWithoutDuplicateFetches"
       ]
     }
   ]
