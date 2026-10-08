@@ -229,6 +229,8 @@ const legacyScriptPrelude =
   }
   globalThis.java = new Proxy(Object.create(null), {
     get(_target, name) {
+      // No JVM reflection is exposed by the bounded JSON helper bridge.
+      if (['getClass','forName','class'].includes(String(name))) return undefined;
       return (...args) => {
         if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
           const unescape = String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean' ? args[1] : true;

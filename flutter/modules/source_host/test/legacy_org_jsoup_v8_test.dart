@@ -276,6 +276,47 @@ void main() {
     }
   });
 
+  test('legacy reflection names are absent while real helpers and org remain usable', () async {
+    final host = OrgJsoupHost();
+    final runtime = V8Runtime(prelude: legacyScriptPrelude);
+    try {
+      expect(
+        await runtime.evaluateAuxiliary(
+          '({getClass:typeof java.getClass,forName:typeof java.forName,className:typeof java.class,'
+          'org:typeof org.jsoup.Jsoup.parse,base64:java.base64Encode("AB"),'
+          r'digest:java.md5Encode("AB"),text:org.jsoup.Jsoup.parse("<a href=\"/book\">Book</a>").select("a").get(0).text()})',
+          ScriptContext(host: LegacyScriptHost(host)),
+        ),
+        {
+          'getClass': 'undefined',
+          'forName': 'undefined',
+          'className': 'undefined',
+          'org': 'function',
+          'base64': 'QUI=',
+          'digest': 'b86fc6b051f63d73de262d4c34e3a0a9',
+          'text': 'Book',
+        },
+      );
+      for (final name in ['getClass', 'forName', 'class']) {
+        await expectLater(
+          runtime.evaluateAuxiliary(
+            'java.$name()',
+            ScriptContext(host: LegacyScriptHost(host)),
+          ),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'script_error',
+            ),
+          ),
+        );
+      }
+    } finally {
+      await runtime.close();
+    }
+  });
+
   test('modern V8 does not acquire org or Packages namespaces', () async {
     final runtime = V8Runtime();
     try {
