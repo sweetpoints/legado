@@ -190,4 +190,79 @@ class LegacyOrgJsoupV8IntegrationTest {
             }
         }
     }
+
+    @Test
+    fun originalOrgParseSelectAndPackagesConstructorsUseNativeDom(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source =
+                BookSource(
+                    bookSourceUrl = "https://org-${UUID.randomUUID()}.invalid/",
+                    bookSourceName = "Org fixture",
+                )
+            val html = "<table><tr><td><a href='/book'>Book</a></td><td>Other</td></tr></table>"
+            try {
+                val value =
+                    V8ScriptExecutor.evaluate(
+                        """
+                        const doc=org.jsoup.Jsoup.parse(html,base);
+                        const a=doc.select('a').get(0);
+                        const Doc=Packages.org.jsoup.nodes.Document;
+                        const shell=Doc.createShell(base);
+                        const element=new Packages.org.jsoup.nodes.Element('section',base);
+                        return {name:a.text(),href:a.attr('abs:href'),parent:a.parent().tagName(),
+                            shell:shell.body().tagName(),element:element.tagName(),same:Packages.org===org};
+                        """
+                            .trimIndent(),
+                        mapOf("html" to html, "base" to source.bookSourceUrl),
+                        source = source,
+                    ) as Map<*, *>
+                assertEquals("Book", value["name"])
+                assertEquals(source.bookSourceUrl.trimEnd('/') + "/book", value["href"])
+                assertEquals("td", value["parent"])
+                assertEquals("body", value["shell"])
+                assertEquals("section", value["element"])
+                assertEquals(true, value["same"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+
+    @Test
+    fun originalXmlParserOverloadsPreserveDeclarationAndMixedCase(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source =
+                BookSource(
+                    bookSourceUrl = "https://org-${UUID.randomUUID()}.invalid/",
+                    bookSourceName = "XML fixture",
+                )
+            val xml = "<?xml version='1.0'?><Root><Item>Upper</Item></Root>"
+            try {
+                val value =
+                    V8ScriptExecutor.evaluate(
+                        """
+                        const parser=org.jsoup.parser.Parser.xmlParser();
+                        const first=org.jsoup.Jsoup.parse(xml,parser);
+                        const second=org.jsoup.Jsoup.parse(xml,base,parser);
+                        const root=second.selectFirst('Root');
+                        root.appendChild(second.createElement('MixedCase'));
+                        return {first:first.outerHtml(),firstText:first.select('Root > Item').text(),
+                            second:second.outerHtml(),tag:root.children().last().tagName()};
+                        """
+                            .trimIndent(),
+                        mapOf("xml" to xml, "base" to source.bookSourceUrl),
+                        source = source,
+                    ) as Map<*, *>
+                val first = Jsoup.parse(xml, Parser.xmlParser())
+                val second = Jsoup.parse(xml, source.bookSourceUrl, Parser.xmlParser())
+                second.selectFirst("Root")!!.appendChild(second.createElement("MixedCase"))
+                assertEquals(first.outerHtml(), value["first"])
+                assertEquals("Upper", value["firstText"])
+                assertEquals(second.outerHtml(), value["second"])
+                assertEquals("MixedCase", value["tag"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
 }

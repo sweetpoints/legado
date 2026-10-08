@@ -65,7 +65,7 @@ EXPECTED_CASE_COUNTS = {
     'model/sourceEngine/LegacyDynamicHttpHeaderV8IntegrationTest.kt': 3,
     'model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt': 4,
     'model/sourceEngine/LegacyCacheV8IntegrationTest.kt': 2,
-    'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt': 5,
+    'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt': 7,
     'model/FlutterSourceEngineTest.kt': 21,
     'ui/book/source/edit/BookSourceMigrationUiTest.kt': 5,
     'model/jsSource/JsSourceReviewV8Test.kt': 13,
