@@ -15,6 +15,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.jsoup.Jsoup
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -140,6 +141,18 @@ class LegacyOrgConnectionV8IntegrationTest {
             val source = source(server)
             try {
                 CookieStore.setCookie(server.url(), "native-fixture=seed")
+                // Jsoup.connect has its own cookie store; Legado's global seed is
+                // only background state. Capture the original API's exact wire contract.
+                val native = Jsoup.connect(server.url("/cookie"))
+                assertEquals(BODY, native.execute().body())
+                val nativeFirst = server.seen.poll(5, TimeUnit.SECONDS)!!
+                native.url(server.url())
+                assertEquals(BODY, native.execute().body())
+                val nativeSecond = server.seen.poll(5, TimeUnit.SECONDS)!!
+                assertTrue(
+                    "Original Jsoup must retain its response cookie",
+                    nativeSecond.cookie.orEmpty().contains("org-fixture=kept"),
+                )
                 assertEquals(
                     BODY,
                     evaluate(
@@ -149,9 +162,10 @@ class LegacyOrgConnectionV8IntegrationTest {
                     ),
                 )
                 val first = server.seen.poll(5, TimeUnit.SECONDS)!!
-                assertTrue(
-                    "Native CookieStore must be loaded",
-                    first.cookie.orEmpty().contains("native-fixture=seed"),
+                assertEquals(
+                    "The first V8 request must match original Jsoup, including global seed isolation",
+                    nativeFirst.cookie,
+                    first.cookie,
                 )
                 assertEquals(
                     BODY,
@@ -162,6 +176,11 @@ class LegacyOrgConnectionV8IntegrationTest {
                     ),
                 )
                 val second = server.seen.poll(5, TimeUnit.SECONDS)!!
+                assertEquals(
+                    "The second V8 request must match the original retained connection",
+                    nativeSecond.cookie,
+                    second.cookie,
+                )
                 assertTrue(
                     "The retained Jsoup cookie store must send response cookies",
                     second.cookie.orEmpty().contains("org-fixture=kept"),
