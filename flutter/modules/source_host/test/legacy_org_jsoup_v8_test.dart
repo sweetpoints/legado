@@ -207,8 +207,7 @@ void main() {
   test('existing bounded Packages members are preserved', () async {
     final runtime = V8Runtime(
       prelude:
-          'globalThis.Packages={preserved:42,org:{otherPackage:"existing"}};' +
-          legacyScriptPrelude,
+          'globalThis.Packages={preserved:42,org:{otherPackage:"existing"}};$legacyScriptPrelude',
     );
     try {
       expect(
