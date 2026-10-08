@@ -426,6 +426,8 @@ class SourceEngine {
     final visited = <String>{};
     var current = source.baseUrl.resolve(url);
     String? nativeNext;
+    final legacyTocPages = <String>[];
+    var legacyTocFanOut = false;
     ScriptContext? firstPageContext;
     Object? firstPageBody;
     for (var page = 0; page < stage.maxPages; page++) {
@@ -467,7 +469,7 @@ class SourceEngine {
               charset: stage.charset,
               cancellation: cancellation,
             );
-      if (nativeFetcher != null && page == 0) {
+      if (nativeFetcher != null && (page == 0 || operation == 'toc')) {
         visited.add(response.url.toString());
       }
       if (response.status >= 400) {
@@ -680,16 +682,40 @@ class SourceEngine {
       }
       if (stage.nextPage == null) break;
       ruleContext = pageContext;
-      final links = await evaluateRule(
-        stage.nextPage!,
-        pageInput,
-        isUrl: true,
-        unescape: false,
-      );
-      final next = links
+      final nativeToc = nativeFetcher != null && operation == 'toc';
+      // Original BookChapterList excludes the current page before deciding
+      // between a single next-page chain and a list of independent pages.
+      // The latter are parsed once, without following each child's pagination.
+      final links = nativeToc && legacyTocFanOut
+          ? const <Object?>[]
+          : await evaluateRule(
+              stage.nextPage!,
+              pageInput,
+              isUrl: true,
+              unescape: false,
+            );
+      final candidates = links
           .map(RuleEvaluator.text)
           .where((x) => x.isNotEmpty)
-          .firstOrNull;
+          .where((x) => !nativeToc || x != response.url.toString())
+          .toList();
+      String? next;
+      if (nativeToc) {
+        if (page == 0 && candidates.length > 1) {
+          legacyTocFanOut = true;
+          legacyTocPages.addAll(candidates);
+        }
+        if (legacyTocFanOut) {
+          while (legacyTocPages.isNotEmpty && next == null) {
+            final candidate = legacyTocPages.removeAt(0);
+            if (!visited.contains(candidate)) next = candidate;
+          }
+        } else {
+          next = candidates.firstOrNull;
+        }
+      } else {
+        next = candidates.firstOrNull;
+      }
       if (next == null) break;
       if (nativeFetcher != null) {
         nativeNext = next;
