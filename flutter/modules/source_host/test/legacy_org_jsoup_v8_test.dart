@@ -99,6 +99,60 @@ class OrgJsoupHost implements ScriptHost {
   }
 }
 
+class OrgConnectionHost extends OrgJsoupHost {
+  var sequence = 0;
+  final configurations = <(String, List<Object?>)>[];
+  final bodies = <String, String>{};
+  final released = <String>[];
+  final cacheValues = <String, Object?>{};
+  @override
+  Future<Object?> call(String method, List<Object?> args) async {
+    if (method == 'cacheHost.put') {
+      cacheValues[args[0] as String] = args[1];
+      return null;
+    }
+    if (method == 'cacheHost.getByteArray') return cacheValues[args[0]];
+    if (method == 'orgJsoup.connect') {
+      expect(args, ['https://fixture.invalid/request']);
+      return {'__legacyOrgConnection': 'connection-fixture'};
+    }
+    if (method == 'orgJsoup.release') {
+      released.add(args.single as String);
+      return null;
+    }
+    if (method == 'orgJsoup.connectionCall') {
+      expect(args[0], 'connection-fixture');
+      final operation = args[1] as String;
+      final values = (args[2] as List).cast<Object?>();
+      if (operation == 'execute') {
+        final token = 'response-${++sequence}';
+        bodies[token] = 'body-$sequence';
+        return {'__legacyOrgResponse': token, '__legacyResponseKind': 'jsoup'};
+      }
+      if (operation == 'get') return OrgJsoupHost.node(0);
+      if (operation == 'response') {
+        return {
+          '__legacyOrgResponse': 'response-$sequence',
+          '__legacyResponseKind': 'jsoup',
+        };
+      }
+      configurations.add((operation, values));
+      return {'__legacyOrgConnection': 'connection-fixture'};
+    }
+    if (method == 'orgJsoup.responseCall') {
+      final token = args[0] as String;
+      final operation = args[1];
+      if (operation == 'body') return bodies[token];
+      if (operation == 'headers') return {'X-Fixture': 'value'};
+      if (operation == 'bodyAsBytes') return [65, -1];
+      if (operation == 'parse') return OrgJsoupHost.node(0);
+      if (operation == 'statusCode') return 200;
+      if (operation == 'charset') return {'__legacyOrgResponse': token};
+    }
+    return super.call(method, args);
+  }
+}
+
 void main() {
   test(
     'actual V8 org parse yields typed selected nodes and book DTOs',
@@ -231,6 +285,80 @@ void main() {
           ScriptContext(host: OrgJsoupHost()),
         ),
         {'org': 'undefined', 'packages': 'undefined'},
+      );
+    } finally {
+      await runtime.close();
+    }
+  });
+  test('actual V8 Jsoup fluent calls preserve connection and independent responses', () async {
+    final host = OrgConnectionHost();
+    final runtime = V8Runtime(prelude: legacyScriptPrelude, persistent: true);
+    try {
+      expect(
+        await runtime.evaluateAuxiliary(
+          'var retainedConnection=org.jsoup.Jsoup.connect("https://fixture.invalid/request");'
+          'const same=retainedConnection.method(org.jsoup.Connection.Method.PUT).header("X-Fixture","value")'
+          '.requestBody("payload").ignoreContentType(true).ignoreHttpErrors(true)===retainedConnection;'
+          'var retainedResponse=retainedConnection.execute();const later=retainedConnection.execute();'
+          'cache.put("org-bytes-fixture",retainedResponse.bodyAsBytes());'
+          'cache.put("org-bytes-copy",cache.getByteArray("org-bytes-fixture"));'
+          '({same,old:retainedResponse.body(),later:later.body(),header:retainedResponse.headers().get("X-Fixture"),'
+          'bytes:retainedResponse.bodyAsBytes(),parsed:retainedResponse.parse().select("a").get(0).text(),'
+          'charsetSame:retainedResponse.charset("utf-8")===retainedResponse,responseSame:retainedConnection.response()===later})',
+          ScriptContext(host: host),
+        ),
+        {
+          'same': true,
+          'old': 'body-1',
+          'later': 'body-2',
+          'header': 'value',
+          'bytes': [65, -1],
+          'parsed': 'Book',
+          'charsetSame': true,
+          'responseSame': true,
+        },
+      );
+      expect(host.configurations.map((c) => c.$1), [
+        'method',
+        'header',
+        'requestBody',
+        'ignoreContentType',
+        'ignoreHttpErrors',
+      ]);
+      expect(host.configurations.first.$2, ['PUT']);
+      expect(host.cacheValues['org-bytes-fixture'], {
+        'kind': 'bytes',
+        'value': [65, -1],
+      });
+      expect(
+        host.cacheValues['org-bytes-copy'],
+        host.cacheValues['org-bytes-fixture'],
+      );
+      expect(
+        await runtime.evaluateAuxiliary(
+          'retainedResponse.body()',
+          ScriptContext(host: host),
+        ),
+        'body-1',
+      );
+      expect(
+        await runtime.evaluateAuxiliary(
+          'retainedConnection.get().select("a").get(0).text()',
+          ScriptContext(host: host),
+        ),
+        'Book',
+      );
+      await runtime.evaluateAuxiliary(
+        'retainedConnection.dispose();retainedResponse.dispose();',
+        ScriptContext(host: host),
+      );
+      expect(host.released, ['connection-fixture', 'response-1']);
+      await expectLater(
+        runtime.evaluateAuxiliary(
+          'retainedConnection.get()',
+          ScriptContext(host: host),
+        ),
+        throwsA(isA<EngineException>()),
       );
     } finally {
       await runtime.close();
