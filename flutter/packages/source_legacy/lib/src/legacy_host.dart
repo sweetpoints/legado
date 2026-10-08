@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'legacy_dom.dart';
+import 'legacy_org_jsoup.dart';
 import 'legacy_cookie.dart';
 import 'legacy_cache.dart';
 
@@ -67,6 +68,7 @@ const legacyScriptPrelude =
     legacyCookiePrelude +
     legacyCachePrelude +
     legacyDomPrelude +
+    legacyOrgJsoupPrelude +
     r"""
 (() => {
   // A dedicated function keeps request-bridge locals out of the header's scope.
