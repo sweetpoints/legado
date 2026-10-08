@@ -9,6 +9,8 @@ import org.jsoup.parser.Parser
 
 /** Explicit Jsoup entry points; JVM objects are returned only through the native DOM codec. */
 class NativeOrgJsoupHost {
+    private val connections = NativeOrgConnectionHost()
+
     suspend fun call(
         owner: String,
         method: String,
@@ -17,6 +19,8 @@ class NativeOrgJsoupHost {
     ): Any? {
         require(owner.isNotBlank()) { "Registered Jsoup owner required" }
         context.ensureActive()
+        if (method in NativeOrgConnectionHost.methods)
+            return connections.call(owner, method, args, context)
         fun arity(min: Int, max: Int = min) {
             if (args.size !in min..max) invalid("Invalid org.jsoup overload")
         }
@@ -60,6 +64,13 @@ class NativeOrgJsoupHost {
         context.ensureActive()
         return LegacyDomHost.snapshot(node)
     }
+
+    suspend fun updateConfiguration(owner: String, fingerprint: String) =
+        connections.updateConfiguration(owner, fingerprint)
+
+    suspend fun releaseOwner(owner: String) = connections.releaseOwner(owner)
+
+    suspend fun close() = connections.close()
 
     companion object {
         val methods =

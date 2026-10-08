@@ -338,15 +338,5 @@ object NativeLegacyHttpHost {
     }
 
     private fun jsoupResponse(response: Connection.Response): Map<String, Any?> =
-        mapOf(
-            "__legacyResponseKind" to "jsoup",
-            "url" to response.url().toString(),
-            "status" to response.statusCode(),
-            "message" to response.statusMessage(),
-            "body" to response.body(),
-            "headers" to response.headers(),
-            "multiHeaders" to response.multiHeaders(),
-            "cookieMap" to response.cookies(),
-            "bytes" to response.bodyAsBytes().map { it.toInt() },
-        )
+        LegacyJsoupResponseCodec.encode(response)
 }
