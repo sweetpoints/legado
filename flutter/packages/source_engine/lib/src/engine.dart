@@ -511,6 +511,7 @@ class SourceEngine {
         bool elements = false,
         bool element = false,
         bool formatContent = false,
+        bool resolveCover = false,
         bool scalar = false,
         bool isUrl = false,
         bool unescape = true,
@@ -531,6 +532,7 @@ class SourceEngine {
               elements: elements,
               element: element,
               formatContent: formatContent,
+              resolveCover: resolveCover,
               scalar: scalar,
               isUrl: isUrl,
               unescape: unescape,
@@ -610,10 +612,14 @@ class SourceEngine {
             'chapterUrl',
           }.contains(entry.key);
           final listField = {'kind', 'downloadUrls'}.contains(entry.key);
+          final nativeCover =
+              entry.key == 'coverUrl' &&
+              legacyHost?.supportsRule(entry.value) == true;
           final values = await evaluateRule(
             entry.value,
             row,
             scalar: !listField,
+            resolveCover: nativeCover,
             formatContent:
                 operation == 'content' &&
                 entry.key == 'content' &&
@@ -653,7 +659,8 @@ class SourceEngine {
             value = unescapeHtml4(value);
           }
           if ((entry.key.endsWith('Url') || entry.key == 'url') &&
-              value.isNotEmpty) {
+              value.isNotEmpty &&
+              !nativeCover) {
             value = response.url.resolve(value).toString();
           }
           if (legacyHost?.supportsRule(entry.value) == true && listField) {

@@ -17,6 +17,7 @@ abstract interface class LegacyRuleEvaluator {
     bool elements = false,
     bool element = false,
     bool formatContent = false,
+    bool resolveCover = false,
     bool scalar = false,
     bool isUrl = false,
     bool unescape = true,
@@ -59,6 +60,7 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
     bool elements = false,
     bool element = false,
     bool formatContent = false,
+    bool resolveCover = false,
     bool scalar = false,
     bool isUrl = false,
     bool unescape = true,
@@ -87,6 +89,8 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
         'operation': operation,
         'mode': element
             ? 'element'
+            : resolveCover
+            ? 'cover'
             : formatContent
             ? 'content'
             : elements
@@ -115,7 +119,7 @@ class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
     await applyLegacyScopeReply(context, response);
     final value = response['value'];
     if (value == null) return [];
-    if (scalar || element || formatContent) return [value];
+    if (scalar || element || formatContent || resolveCover) return [value];
     if (value is! List) {
       throw const EngineException(
         'invalid_legacy_rule_result',
