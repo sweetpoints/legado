@@ -337,7 +337,7 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyTocPaginationV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt",
-      "sourceSha256": "3f6d96ead10e793dbb697152c597cc27687cd0d00a80617e6dd240f564ade7ea",
+      "sourceSha256": "9c7943f1e65a77daf99962caec6f2e0edd2a52e68ffb9118c393c83fa766ed9c",
       "methods": [
         "blankTocUrlLoadsBookUrlAndPreservesItsRequestOptionsHeader",
         "selfLinksAndMultipleNextPagesKeepOriginalChapterOrderWithoutDuplicateFetches"

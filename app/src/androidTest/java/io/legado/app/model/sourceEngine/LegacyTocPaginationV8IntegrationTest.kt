@@ -79,7 +79,7 @@ class LegacyTocPaginationV8IntegrationTest {
         assertEquals(listOf("Chapter 1", "Chapter 2", "Chapter 3"), actual.map { it.title })
         assertEquals((1..3).map { "$base/chapter/$it" }, actual.map { it.url })
         assertEquals(expected.map { it.title }, actual.map { it.title })
-        assertEquals(expected.map { it.url }, actual.map { it.url })
+        assertEquals(expected.map { it.getAbsoluteURL() }, actual.map { it.getAbsoluteURL() })
         assertEquals(expected.map { it.index }, actual.map { it.index })
         assertEquals(listOf(0, 1, 2), actual.map { it.index })
     }
