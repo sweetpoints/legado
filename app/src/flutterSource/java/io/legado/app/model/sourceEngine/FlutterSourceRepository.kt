@@ -6,6 +6,7 @@ import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.BookSource
 import io.legado.app.help.JsExtensions
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
@@ -16,6 +17,7 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -50,6 +52,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         val context: CoroutineContext,
         val sourceKind: String = "book",
         val navigationSourceId: String = sourceId,
+        val ephemeralOrgOwner: String? = null,
     ) {
         val legacyRequests by lazy { LegacyRequestHost(navigationSourceId, context) }
         private val legacyRuleDelegate = lazy { LegacyRuleHost(navigationSourceId, context) }
@@ -83,6 +86,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     }
 
     private val orgJsoup = NativeOrgJsoupHost()
+    private val orgOwners = NativeOrgSourceOwners()
     private val hostTasks = mutableMapOf<String, HostTask>()
     private val responses = mutableMapOf<String, CompletableDeferred<Any?>>()
     private val ready = CompletableDeferred<Unit>()
@@ -353,12 +357,28 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             }
             task.context.ensureActive()
             @Suppress("UNCHECKED_CAST")
-            return LegacyDomHost.call(args[0] as Map<*, *>, args[1] as String, args[2] as List<Any?>)
+            return LegacyDomHost.call(
+                args[0] as Map<*, *>,
+                args[1] as String,
+                args[2] as List<Any?>,
+            )
         }
         if (method in NativeOrgJsoupHost.methods) {
             val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
                 else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
-            val owner = source?.let(DartSourceEngine::ownerId) ?: task.sourceId
+            val canonicalOwner = source?.let(DartSourceEngine::ownerId) ?: task.sourceId
+            val owner = task.ephemeralOrgOwner ?: canonicalOwner
+            val original = source?.getSource() ?: source
+            val bookRuntime = (original as? BookSource)?.let {
+                DartSourceEngine.engineIdentity(DartSourceEngine.sourceJson(it))
+            }
+            orgOwners.bind(owner, task.sourceId, canonicalOwner, bookRuntime.orEmpty())
+            if (source != null) {
+                orgJsoup.updateConfiguration(
+                    owner,
+                    NativeOrgSourceOwners.configurationFingerprint(source),
+                )
+            }
             return orgJsoup.call(owner, method, args, currentCoroutineContext())
         }
         if (method in NativeLegacyHttpHost.methods || method in NativeLegacyHttpContinuationHost.methods) {
@@ -377,25 +397,33 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             else NativeLegacyHttpHost.call(method, args, extensions)
         }
         if (method in LegacyJavaHost.methods) {
-            val source: BaseSource? = when (task.sourceKind) {
+            val source: BaseSource? =
+                when (task.sourceKind) {
+                    "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
+                    "tts" ->
+                        task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let {
+                            appDb.httpTTSDao.get(it)
+                        }
+                    "book" -> appDb.bookSourceDao.getBookSource(task.navigationSourceId)
+                    else -> null
+                }
+            val extensions =
+                object : JsExtensions {
+                    override fun getSource() = source
+
+                    override fun getTag() = source?.getTag() ?: task.sourceId
+
+                    override fun getSourceNavigationContext() = task.context
+                }
+            return LegacyJavaHost.call(extensions, method, args, task.sourceId)
+        }
+        val source: BaseSource =
+            when (task.sourceKind) {
                 "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
                 "tts" -> task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
                 "book" -> appDb.bookSourceDao.getBookSource(task.navigationSourceId)
                 else -> null
-            }
-            val extensions = object : JsExtensions {
-                override fun getSource() = source
-                override fun getTag() = source?.getTag() ?: task.sourceId
-                override fun getSourceNavigationContext() = task.context
-            }
-            return LegacyJavaHost.call(extensions, method, args, task.sourceId)
-        }
-        val source: BaseSource = when (task.sourceKind) {
-            "rss" -> appDb.rssSourceDao.getByKey(task.navigationSourceId)
-            "tts" -> task.navigationSourceId.removePrefix("httpTts:").toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
-            "book" -> appDb.bookSourceDao.getBookSource(task.navigationSourceId)
-            else -> null
-        } ?: error("Browser source not found")
+            } ?: error("Browser source not found")
         if (method == "browser.open") {
             require(args.size in 2..3 && args[0] is String && args[1] is String)
             val options = args.getOrNull(2) as? Map<*, *> ?: emptyMap<Any?, Any?>()
@@ -530,7 +558,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             val taskId = UUID.randomUUID().toString()
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
-            hostTasks[taskId] = HostTask(sourceId, currentCoroutineContext())
+            hostTasks[taskId] =
+                HostTask(
+                    sourceId,
+                    currentCoroutineContext(),
+                    ephemeralOrgOwner = if (ephemeral) "org-ephemeral:$taskId" else null,
+                )
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             try {
                 channel!!.invokeMethod(
@@ -572,7 +605,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)?.closeLegacyRules()
+                        hostTasks.remove(taskId)?.let { closeHostTask(it) }
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
@@ -595,11 +628,14 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             val effectiveId = sourceId ?: "auxiliary:$taskId"
             val response = CompletableDeferred<Any?>()
             responses[taskId] = response
-            hostTasks[taskId] = HostTask(
-                effectiveId, currentCoroutineContext(),
-                sourceJson?.get("sourceKind") as? String ?: "auxiliary",
-                sourceJson?.get("navigationSourceId") as? String ?: effectiveId,
-            )
+            hostTasks[taskId] =
+                HostTask(
+                    effectiveId,
+                    currentCoroutineContext(),
+                    sourceJson?.get("sourceKind") as? String ?: "auxiliary",
+                    sourceJson?.get("navigationSourceId") as? String ?: effectiveId,
+                    ephemeralOrgOwner = if (sourceId == null) "org-ephemeral:$taskId" else null,
+                )
             mutableTasks.value += taskId to SourceTaskState(taskId, "running")
             try {
                 channel!!.invokeMethod(
@@ -621,7 +657,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                     try { channel?.invokeMethod("cancel", mapOf("taskId" to taskId)) }
                     finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)?.closeLegacyRules()
+                        hostTasks.remove(taskId)?.let { closeHostTask(it) }
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value -= taskId
                     }
@@ -638,13 +674,24 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         prelude: String?,
         timeoutMs: Long,
     ): Any? {
-        val result = auxiliaryCall(
-            "evaluateAuxiliary",
-            mapOf("script" to script, "bindings" to bindings, "sourceId" to sourceId,
-                  "sourceJson" to sourceJson, "prelude" to prelude, "timeoutMs" to timeoutMs),
-            sourceId, sourceJson, timeoutMs,
-        )
-        require(result is Map<*, *> && result.containsKey("value")) { "Invalid V8 auxiliary result" }
+        val result =
+            auxiliaryCall(
+                "evaluateAuxiliary",
+                mapOf(
+                    "script" to script,
+                    "bindings" to bindings,
+                    "sourceId" to sourceId,
+                    "sourceJson" to sourceJson,
+                    "prelude" to prelude,
+                    "timeoutMs" to timeoutMs,
+                ),
+                sourceId,
+                sourceJson,
+                timeoutMs,
+            )
+        require(result is Map<*, *> && result.containsKey("value")) {
+            "Invalid V8 auxiliary result"
+        }
         return result["value"]
     }
 
@@ -659,7 +706,37 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
     }
 
     override suspend fun clearSourceState(sourceId: String) {
-        auxiliaryCall("clearSourceState", mapOf("sourceId" to sourceId), sourceId = sourceId)
+        // Release first so an in-flight native request cannot block the queued VM clear.
+        val runtimeIds = withContext(Dispatchers.Main.immediate) {
+            val aliases = orgOwners.runtimeAliases(sourceId) + sourceId
+            val staleTasks =
+                hostTasks.values.filter { task ->
+                    val source =
+                        if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
+                        else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
+                    task.sourceId in aliases ||
+                        source?.let(DartSourceEngine::ownerId) in aliases ||
+                        (source is BookSource &&
+                            DartSourceEngine.engineIdentity(DartSourceEngine.sourceJson(source)) in
+                                aliases)
+                }
+            staleTasks.forEach { task ->
+                task.closeLegacyRules()
+                task.context[Job]?.cancel(CancellationException("Source state cleared"))
+            }
+            orgOwners.take(sourceId).forEach { orgJsoup.releaseOwner(it) }
+            aliases
+        }
+        runtimeIds.forEach { id ->
+            auxiliaryCall("clearSourceState", mapOf("sourceId" to id), sourceId = id)
+        }
+    }
+
+    private suspend fun closeHostTask(task: HostTask) {
+        task.closeLegacyRules()
+        task.ephemeralOrgOwner?.let { owner ->
+            orgOwners.take(owner).forEach { orgJsoup.releaseOwner(it) }
+        }
     }
 
     override suspend fun execute(
@@ -720,7 +797,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
                         channel?.invokeMethod("cancel", mapOf("taskId" to taskId))
                     } finally {
                         responses.remove(taskId)
-                        hostTasks.remove(taskId)?.closeLegacyRules()
+                        hostTasks.remove(taskId)?.let { closeHostTask(it) }
                         browserJobs.remove(taskId)?.forEach { it.cancel() }
                         mutableTasks.value = mutableTasks.value - taskId
                     }
@@ -741,6 +818,8 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             responses.clear()
             hostTasks.values.forEach { it.closeLegacyRules() }
             hostTasks.clear()
+            orgJsoup.close()
+            orgOwners.clear()
             pending.forEach {
                 it.completeExceptionally(
                     IllegalStateException("Flutter source repository is closed")
