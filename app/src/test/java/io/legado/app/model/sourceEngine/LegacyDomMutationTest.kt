@@ -206,4 +206,30 @@ class LegacyDomMutationTest {
             (LegacyDomHost.restore(update(moved, removed)) as Element).attr("abs:href"),
         )
     }
+
+    @Test
+    fun repeatedHtmlSetterPrunesOnlyUnobservedDetachedTrees() {
+        val initial = marker(Jsoup.parse("<p id='keep'><b>Alias</b></p>"), "prune")
+        val bodyReply = reply(initial, "body")
+        var body = bodyReply["value"] as Map<*, *>
+        val kept = reply(body, "selectFirst", "#keep")["value"] as Map<*, *>
+        val originalState = kept[LegacyDomHost.NODE] as Map<*, *>
+        val keptId = (originalState["ids"] as List<*>)[(originalState["index"] as Number).toInt()]
+        repeat(400) {
+            val state = body[LegacyDomHost.NODE] as Map<*, *>
+            val ids = state["ids"] as List<*>
+            val bodyId = ids[(state["index"] as Number).toInt()]
+            val hinted =
+                mapOf(
+                    LegacyDomHost.NODE to
+                        (state.entries.associate { it.key as String to it.value } +
+                            ("retainIds" to listOf(ids[0], bodyId, keptId)))
+                )
+            val changed = reply(hinted, "html", "<p>New $it</p>")
+            val update = changed["__legacyDomUpdate"] as Map<*, *>
+            assertTrue((update["nodes"] as List<*>).size < 20)
+            body = changed["value"] as Map<*, *>
+            assertEquals("Alias", (LegacyDomHost.restore(update(kept, changed)) as Element).text())
+        }
+    }
 }

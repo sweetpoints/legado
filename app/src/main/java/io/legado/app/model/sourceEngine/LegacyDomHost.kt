@@ -444,6 +444,35 @@ object LegacyDomHost {
         val ids: MutableList<String>,
     ) {
         val merged = linkedSetOf(documentId)
+        var retained: MutableSet<String>? = null
+
+        fun prune(value: Any?) {
+            val keepIds = retained ?: return
+            fun resultIds(result: Any?) {
+                when (result) {
+                    is Node ->
+                        nodes
+                            .indexOfFirst { it === result }
+                            .takeIf { it >= 0 }
+                            ?.let { keepIds.add(ids[it]) }
+                    is Iterable<*> -> result.forEach(::resultIds)
+                }
+            }
+            resultIds(value)
+            if (nodes.isNotEmpty()) keepIds.add(ids.first())
+            val keepRoots =
+                java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Node, Boolean>())
+            ids.forEachIndexed { index, id ->
+                if (id in keepIds) keepRoots.add(nodes[index].root())
+            }
+            val keep = nodes.indices.filter { nodes[it].root() in keepRoots }
+            val nextNodes = keep.map { nodes[it] }
+            val nextIds = keep.map { ids[it] }
+            nodes.clear()
+            nodes.addAll(nextNodes)
+            ids.clear()
+            ids.addAll(nextIds)
+        }
 
         fun discover(value: Any?) {
             when (value) {
@@ -484,10 +513,18 @@ object LegacyDomHost {
     private fun mutableGraph(state: Map<*, *>): MutableGraph {
         require((state["schemaVersion"] as? Number)?.toDouble() == 2.0)
         return MutableGraph(
-            state["documentId"] as String,
-            restoreNodes(state).toMutableList(),
-            (state["ids"] as List<*>).map { it as String }.toMutableList(),
-        )
+                state["documentId"] as String,
+                restoreNodes(state).toMutableList(),
+                (state["ids"] as List<*>).map { it as String }.toMutableList(),
+            )
+            .also { graph ->
+                (state["retainIds"] as? List<*>)?.let { values ->
+                    require(values.all { it is String && it in graph.ids }) {
+                        "Invalid retained DOM identity"
+                    }
+                    graph.retained = values.map { it as String }.toMutableSet()
+                }
+            }
     }
 
     private fun callMutable(marker: Map<*, *>, operation: String, args: List<Any?>): Any? {
@@ -504,6 +541,9 @@ object LegacyDomHost {
                 graph.nodes.addAll(imported.nodes)
                 graph.ids.addAll(imported.ids)
                 graph.merged.add(imported.documentId)
+                if (graph.retained != null && imported.retained != null)
+                    graph.retained!!.addAll(imported.retained!!)
+                else graph.retained = null
                 require(graph.nodes.size <= 100000)
             }
             return graph.selected(value)
@@ -532,6 +572,12 @@ object LegacyDomHost {
         val node = if (selected == null) graph.selected(marker) else null
         fun element() = node as? Element ?: error("DOM element required")
         fun document() = node as? Document ?: error("DOM document required")
+        graph.retained?.let { retained ->
+            if (node != null) retained.add(graph.ids[graph.nodes.indexOfFirst { it === node }])
+            selected?.forEach { item ->
+                retained.add(graph.ids[graph.nodes.indexOfFirst { it === item }])
+            }
+        }
         val value: Any? =
             if (selected != null)
                 when (operation) {
@@ -704,6 +750,7 @@ object LegacyDomHost {
                     else -> error("Unsupported legacy DOM operation")
                 }
         graph.discover(value)
+        graph.prune(value)
         val indexes = graph.indexes()
         val rows = captureRows(graph.nodes, indexes)
         val roots = graph.nodes.indices.filter { graph.nodes[it].parentNode() == null }

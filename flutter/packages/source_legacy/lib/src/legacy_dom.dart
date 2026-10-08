@@ -27,7 +27,7 @@ const legacyDomPrelude = r'''
     }
     const state={documentId:value.documentId||identity(),nodes:value.nodes,
       ids:value.ids||value.nodes.map(()=>identity()), roots:value.roots||[0],
-      modified:value.schemaVersion===2, wrappers:new Map()};
+      modified:value.schemaVersion===2, wrappers:new Map(), snapshots:new Map()};
     remember(state);
     return state;
   }
@@ -39,7 +39,17 @@ const legacyDomPrelude = r'''
     const state=current(ref.state), positions=ref.ids.map(id=>state.ids.indexOf(id));
     if(positions.some(index=>index<0)) throw new Error('legacy.invalid_dom_identity');
     const base=internal||state.modified?table(state):{schemaVersion:1,nodes:state.nodes};
-    return ref.list?{__legacyDomList:{...base,indexes:positions}}:{__legacyDom:{...base,index:positions[0]}};
+    if(internal) {
+      const retained=new Set(ref.ids);
+      for(const [id,weak] of state.wrappers) if(weak.deref())retained.add(id);
+      for(const [id,snapshot] of state.snapshots) {
+        if(snapshot.ref.deref())snapshot.ids.forEach(id=>retained.add(id));else state.snapshots.delete(id);
+      }
+      base.retainIds=Array.from(retained).filter(id=>state.ids.includes(id));
+    }
+    const value=ref.list?{__legacyDomList:{...base,indexes:positions}}:{__legacyDom:{...base,index:positions[0]}};
+    if(!internal&&state.modified)state.snapshots.set(++serial,{ref:new WeakRef(value),ids:state.ids.slice()});
+    return value;
   }
   function apply(update) {
     if(update.schemaVersion!==2 || !Array.isArray(update.mergedDocumentIds)) throw new Error('legacy.invalid_dom_update');
@@ -52,6 +62,7 @@ const legacyDomPrelude = r'''
         const old=current(other);
         state.modified=state.modified||old.modified;
         for(const [id,wrapper] of old.wrappers) state.wrappers.set(id,wrapper);
+        for(const [id,snapshot] of old.snapshots)state.snapshots.set(id,snapshot);
         old.redirect=state;
       }
       remember(state,id);
