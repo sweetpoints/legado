@@ -318,10 +318,15 @@ def install(pin, target, *, local_pins=None,
     if cache_root.is_symlink():
         raise ValueError('Cache root symlinks forbidden')
     cache_root.mkdir(parents=True, exist_ok=True)
-    destination = cache_root / pin['v8']['revision'] / target
-    if destination.parent.is_symlink():
-        raise ValueError('SDK revision directory symlink forbidden')
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    # One immutable Release manifest identifies one SDK build, independently of
+    # its V8 source revision. Leave previous SDK generations untouched.
+    identity = _digest(pin['releaseManifestSha256'])
+    revision_root = cache_root / pin['v8']['revision']
+    target_root = revision_root / target
+    if revision_root.is_symlink() or target_root.is_symlink():
+        raise ValueError('SDK revision/target directory symlink forbidden')
+    target_root.mkdir(parents=True, exist_ok=True)
+    destination = target_root / identity
     expected_manifest = pin.get('sdkManifestSha256', {}).get(target)
     if expected_manifest is not None:
         _digest(expected_manifest)
@@ -333,7 +338,7 @@ def install(pin, target, *, local_pins=None,
             cached = json.loads((destination / 'manifest.json').read_text())
             validate_sdk(destination, cached, pin, local_pins, target)
             return destination
-    lock = cache_root / ('.sdk-' + pin['v8']['revision'] + '-' + target + '.lock')
+    lock = cache_root / ('.sdk-' + pin['v8']['revision'] + '-' + target + '-' + identity + '.lock')
     try:
         lock.mkdir()
     except FileExistsError as error:
