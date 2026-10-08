@@ -30,6 +30,7 @@ class SourceHost {
   final Map<String, _CachedEngine> _engines = {};
   final Map<String, Future<void>> _queues = {};
   final Set<String> _active = {};
+  final Map<String, Set<CancellationToken>> _cancelGroups = {};
   bool _closed = false;
 
   bool _issueAffectsOperation(
@@ -403,10 +404,22 @@ class SourceHost {
     final token = CancellationToken();
     _tasks[id!] = token;
     try {
-      await _serialize('__aux:$owner', token, () async {
-        final entry = _engines.remove('__aux:$owner');
-        await entry?.engine.close();
-      });
+      final keys = ['__aux:$owner', '$owner:true', '$owner:false'];
+      for (final key in keys) {
+        for (final pending
+            in _cancelGroups[key]?.toList() ?? <CancellationToken>[]) {
+          pending.cancel();
+        }
+      }
+      // Enqueue all barriers before awaiting; later calls start with a fresh VM.
+      await Future.wait(
+        keys.map(
+          (key) => _serialize(key, token, () async {
+            final entry = _engines.remove(key);
+            await entry?.engine.close();
+          }, trackCancellation: false),
+        ),
+      );
     } finally {
       _tasks.remove(id);
     }
@@ -551,7 +564,7 @@ class SourceHost {
           } finally {
             await engine.close();
           }
-        });
+        }, cancelGroup: key);
       }
       return await _serialize(key, token, () async {
         final records = await _execute(
@@ -632,8 +645,14 @@ class SourceHost {
   Future<T> _serialize<T>(
     String key,
     CancellationToken token,
-    Future<T> Function() action,
-  ) {
+    Future<T> Function() action, {
+    String? cancelGroup,
+    bool trackCancellation = true,
+  }) {
+    final group = cancelGroup ?? key;
+    if (trackCancellation) {
+      (_cancelGroups[group] ??= {}).add(token);
+    }
     final previous = _queues[key] ?? Future<void>.value();
     final result = Completer<T>();
     var started = false;
@@ -660,6 +679,11 @@ class SourceHost {
     unawaited(
       tail.then((_) {
         if (identical(_queues[key], tail)) _queues.remove(key);
+        if (trackCancellation) {
+          final members = _cancelGroups[group];
+          members?.remove(token);
+          if (members?.isEmpty == true) _cancelGroups.remove(group);
+        }
       }),
     );
     return result.future;
