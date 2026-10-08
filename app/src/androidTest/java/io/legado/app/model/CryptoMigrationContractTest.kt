@@ -12,6 +12,9 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
+import io.legado.app.help.CacheManager
+import java.util.UUID
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,11 +70,38 @@ class CryptoMigrationContractTest {
             """.trimIndent(),
             "java-host",
         )
+        val cacheKey = "crypto-runtime-contract-${UUID.randomUUID()}"
+        val other = source("java-host-other-${UUID.randomUUID()}").copy(jsLib = original.jsLib)
+        val bindings = mapOf("fixtureCacheKey" to cacheKey)
         try {
             val result = withTimeout(60_000) {
                 DartSourceEngine.evaluate(original, "requestApiUrl('/fixture',{},this)")
             }
             assertEquals("Actual explicit runtime bindings: $result", "object|function|object|object", result)
+            val runtime = withTimeout(60_000) {
+                DartSourceEngine.evaluate(original,
+                    "cache.put(fixtureCacheKey,'native-cache-value');({key:source.getKey(),value:cache.get(fixtureCacheKey)})",
+                    bindings)
+            }
+            assertTrue("Actual source/cache operations: $runtime", runtime is Map<*, *>)
+            runtime as Map<*, *>
+            assertEquals("Actual source/cache operations: $runtime", original.bookSourceUrl, runtime["key"])
+            assertEquals("Actual source/cache operations: $runtime", "native-cache-value", runtime["value"])
+            assertEquals("native-cache-value", withContext(Dispatchers.IO) { CacheManager.get(cacheKey) })
+            // Original CacheManager uses a global key, not a per-source namespace.
+            val shared = withTimeout(60_000) {
+                DartSourceEngine.evaluate(other,
+                    "({key:source.getKey(),value:cache.get(fixtureCacheKey)})", bindings)
+            }
+            assertTrue("Actual second source/global cache: $shared", shared is Map<*, *>)
+            shared as Map<*, *>
+            assertEquals("Actual second source/global cache: $shared", other.bookSourceUrl, shared["key"])
+            assertEquals("Actual second source/global cache: $shared", "native-cache-value", shared["value"])
+            assertNull(withTimeout(60_000) {
+                DartSourceEngine.evaluate(original, "cache.delete(fixtureCacheKey);cache.get(fixtureCacheKey)", bindings)
+            })
+            assertNull(withTimeout(60_000) { DartSourceEngine.evaluate(other, "cache.get(fixtureCacheKey)", bindings) })
+            assertNull(withContext(Dispatchers.IO) { CacheManager.get(cacheKey) })
             val reflection = withTimeout(60_000) {
                 DartSourceEngine.evaluate(original, "({packages:typeof Packages,getClass:typeof getClass,bookReflection:typeof book.getClass})",
                     mapOf("book" to mapOf("name" to "JSON book")))
@@ -82,7 +112,9 @@ class CryptoMigrationContractTest {
             assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["getClass"])
             assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["bookReflection"])
         } finally {
+            withContext(Dispatchers.IO) { CacheManager.delete(cacheKey) }
             DartSourceEngine.clearSourceState(original)
+            DartSourceEngine.clearSourceState(other)
         }
     }
 
