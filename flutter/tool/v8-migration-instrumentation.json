@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 118,
+  "caseCount": 120,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -292,10 +292,12 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyOrgConnectionV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt",
-      "sourceSha256": "6992f2d0e6b58dbbc02cab1a891713abf570d9395de9adebd2ad557874867abc",
+      "sourceSha256": "0af65315ecb167444458b472bfade1d21c926b7d98e7f0d2b302a0ac8e412fd2",
       "methods": [
         "canonicalAndRawSourceClearRejectOldTokensButFreshConnectionsWork",
         "clearingSourceCancelsInflightConnectionAndPermitsFreshEntry",
+        "disposingConnectionLeavesItsIndependentUnreadResponseUsable",
+        "disposingResponseAllowsConnectionToReturnANewUsableWrapper",
         "explicitlyDisposedConnectionRejectsWrapperAndNativeTokenReuse",
         "libraryRecipeChangeInvalidatesOldConnectionLease",
         "putEnumHeadersBodyAndNativeResponseBytesKeepIdentityAndCacheBrand",

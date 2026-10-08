@@ -374,6 +374,73 @@ class LegacyOrgConnectionV8IntegrationTest {
         }
     }
 
+    @Test
+    fun disposingConnectionLeavesItsIndependentUnreadResponseUsable(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val server = FixtureServer()
+            server.start()
+            val source = source(server)
+            try {
+                val original = Jsoup.connect(server.url()).execute()
+                val expectedBody = original.body()
+                val expectedBytes = original.bodyAsBytes().map { it.toInt() }
+                // Do not call body/parse/bytes before disposing the connection.
+                val result =
+                    evaluate(
+                        source,
+                        "const c=org.jsoup.Jsoup.connect(url),r=c.execute();c.dispose();({body:r.body(),bytes:r.bodyAsBytes()})",
+                        mapOf("url" to server.url()),
+                    )
+                        as Map<*, *>
+                assertEquals(expectedBody, result["body"])
+                assertEquals(
+                    expectedBytes,
+                    (result["bytes"] as List<*>).map { (it as Number).toInt() },
+                )
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+                server.release.countDown()
+                server.stop()
+            }
+        }
+    }
+
+    @Test
+    fun disposingResponseAllowsConnectionToReturnANewUsableWrapper(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val server = FixtureServer()
+            server.start()
+            val source = source(server)
+            try {
+                val originalConnection = Jsoup.connect(server.url())
+                originalConnection.execute()
+                val original = originalConnection.response()
+                val expectedBody = original.body()
+                val expectedBytes = original.bodyAsBytes().map { it.toInt() }
+                // Release the wrapper before reading its stream. The retained native
+                // connection owns the original Response and must re-lease it intact.
+                val result =
+                    evaluate(
+                        source,
+                        "const c=org.jsoup.Jsoup.connect(url),first=c.execute();first.dispose();const second=c.response();({fresh:second!==first,stable:second===c.response(),body:second.body(),bytes:second.bodyAsBytes()})",
+                        mapOf("url" to server.url()),
+                    )
+                        as Map<*, *>
+                assertEquals(true, result["fresh"])
+                assertEquals(true, result["stable"])
+                assertEquals(expectedBody, result["body"])
+                assertEquals(
+                    expectedBytes,
+                    (result["bytes"] as List<*>).map { (it as Number).toInt() },
+                )
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+                server.release.countDown()
+                server.stop()
+            }
+        }
+    }
+
     companion object {
         private const val BODY = "native-中文"
     }
