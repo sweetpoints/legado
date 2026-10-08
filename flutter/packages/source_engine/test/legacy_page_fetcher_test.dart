@@ -47,6 +47,37 @@ class _Native implements ScriptHost {
 }
 
 void main() {
+  for (final tocUrl in [null, '', '  ']) {
+    test(
+      'blank legacy directory URL uses the original book URL ($tocUrl)',
+      () async {
+        final host = _Native();
+        const bookUrl =
+            'https://original.test/detail, {"headers":{"X-Book":"one"}}';
+        final response = await const HostLegacyPageFetcher().fetch(
+          SourceDefinition(
+            id: 'opaque-book-source',
+            name: 'Original book source',
+            baseUrl: Uri.parse('https://origin.test/'),
+            metadata: {'legacyOriginal': <String, Object?>{}},
+          ),
+          'toc',
+          {'tocUrl': tocUrl, 'bookUrl': bookUrl},
+          ScriptContext(
+            host: host,
+            variables: {
+              'taskId': 'toc-task',
+              'baseUrl': 'https://origin.test/',
+            },
+          ),
+        );
+        expect(host.calls.single['urlRule'], bookUrl);
+        expect(response.url.toString(), 'https://response.test/book/');
+        expect(host.calls.single['baseUrl'], 'https://origin.test/');
+      },
+    );
+  }
+
   test('native original request bypasses restricted portable templates and duplicate HTTP', () async {
     final host = _Native();
     const rawUrl =

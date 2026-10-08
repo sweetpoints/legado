@@ -33,13 +33,17 @@ class HostLegacyPageFetcher implements LegacyPageFetcher {
         'Native legacy requests require the original source snapshot',
       );
     }
+    final tocUrl = input['tocUrl'];
     final raw =
         nextUrl ??
         switch (operation) {
           'search' => original['searchUrl'],
           'explore' => input['exploreUrl'],
           'info' => input['bookUrl'],
-          'toc' => input['tocUrl'] ?? input['bookUrl'],
+          'toc' =>
+            tocUrl == null || tocUrl is String && tocUrl.trim().isEmpty
+                ? input['bookUrl']
+                : tocUrl,
           'content' => input['chapterUrl'],
           _ => null,
         };
