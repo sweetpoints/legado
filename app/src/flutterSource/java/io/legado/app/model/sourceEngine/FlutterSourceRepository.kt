@@ -285,6 +285,19 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             ?: error("Source identity missing")
     }
 
+    private fun rememberSourceIdentity(task: HostTask): String {
+        val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
+            else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
+        val canonicalOwner = source?.let(DartSourceEngine::ownerId) ?: task.sourceId
+        val owner = task.ephemeralOrgOwner ?: canonicalOwner
+        val original = source?.getSource() ?: source
+        val bookRuntime = (original as? BookSource)?.let {
+            DartSourceEngine.engineIdentity(DartSourceEngine.sourceJson(it))
+        }
+        orgOwners.bind(owner, task.sourceId, canonicalOwner, bookRuntime.orEmpty())
+        return owner
+    }
+
     private suspend fun callHost(
         task: HostTask,
         method: String,
@@ -366,13 +379,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         if (method in NativeOrgJsoupHost.methods) {
             val source = if (task.context[SourceTaskSourceSuppression]?.suppressed == true) null
                 else task.context[SourceTaskSource]?.sourceForTask(task.sourceId)
-            val canonicalOwner = source?.let(DartSourceEngine::ownerId) ?: task.sourceId
-            val owner = task.ephemeralOrgOwner ?: canonicalOwner
-            val original = source?.getSource() ?: source
-            val bookRuntime = (original as? BookSource)?.let {
-                DartSourceEngine.engineIdentity(DartSourceEngine.sourceJson(it))
-            }
-            orgOwners.bind(owner, task.sourceId, canonicalOwner, bookRuntime.orEmpty())
+            val owner = rememberSourceIdentity(task)
             if (source != null) {
                 orgJsoup.updateConfiguration(
                     owner,
@@ -557,13 +564,13 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             check(!closed) { "Flutter source repository is closed" }
             val taskId = UUID.randomUUID().toString()
             val response = CompletableDeferred<Any?>()
+            val task = HostTask(
+                sourceId, currentCoroutineContext(),
+                ephemeralOrgOwner = if (ephemeral) "org-ephemeral:$taskId" else null,
+            )
+            rememberSourceIdentity(task)
             responses[taskId] = response
-            hostTasks[taskId] =
-                HostTask(
-                    sourceId,
-                    currentCoroutineContext(),
-                    ephemeralOrgOwner = if (ephemeral) "org-ephemeral:$taskId" else null,
-                )
+            hostTasks[taskId] = task
             mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             try {
                 channel!!.invokeMethod(
@@ -627,15 +634,15 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             val taskId = UUID.randomUUID().toString()
             val effectiveId = sourceId ?: "auxiliary:$taskId"
             val response = CompletableDeferred<Any?>()
+            val task = HostTask(
+                effectiveId, currentCoroutineContext(),
+                sourceJson?.get("sourceKind") as? String ?: "auxiliary",
+                sourceJson?.get("navigationSourceId") as? String ?: effectiveId,
+                ephemeralOrgOwner = if (sourceId == null) "org-ephemeral:$taskId" else null,
+            )
+            if (method == "evaluateAuxiliary") rememberSourceIdentity(task)
             responses[taskId] = response
-            hostTasks[taskId] =
-                HostTask(
-                    effectiveId,
-                    currentCoroutineContext(),
-                    sourceJson?.get("sourceKind") as? String ?: "auxiliary",
-                    sourceJson?.get("navigationSourceId") as? String ?: effectiveId,
-                    ephemeralOrgOwner = if (sourceId == null) "org-ephemeral:$taskId" else null,
-                )
+            hostTasks[taskId] = task
             mutableTasks.value += taskId to SourceTaskState(taskId, "running")
             try {
                 channel!!.invokeMethod(
@@ -749,10 +756,12 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
         val taskId = UUID.randomUUID().toString()
         return withContext(Dispatchers.Main.immediate) {
             check(!closed) { "Flutter source repository is closed" }
-            mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             val response = CompletableDeferred<Any?>()
+            val task = HostTask(sourceId, currentCoroutineContext())
+            rememberSourceIdentity(task)
+            mutableTasks.value = mutableTasks.value + (taskId to SourceTaskState(taskId, "running"))
             responses[taskId] = response
-            hostTasks[taskId] = HostTask(sourceId, currentCoroutineContext())
+            hostTasks[taskId] = task
             try {
                 channel!!.invokeMethod(
                     "execute",
