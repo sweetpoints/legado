@@ -19,6 +19,7 @@ import io.legado.app.model.sourceEngine.V8ScriptExecutor
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceHostCallbacks
 import io.legado.app.model.sourceEngine.SourceScriptException
+import io.legado.app.model.sourceEngine.BookSourceScriptBridge
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -36,6 +37,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.apache.commons.text.StringEscapeUtils
+import io.legado.app.model.sourceEngine.LegacyDomHost
+import org.seimicrawler.xpath.JXNode
 import org.jsoup.nodes.Node
 import java.net.URL
 import java.util.Locale
@@ -58,6 +61,20 @@ class AnalyzeRule(
 
     private val book get() = ruleData as? BaseBook
     private val rssArticle get() = ruleData as? RssArticle
+
+    private var scriptBookSnapshot: Map<String, Any?>? = null
+    private var scriptChapterSnapshot: Map<String, Any?>? = null
+
+    /** Read-only JSON context for a parser hosted outside the original book object. */
+    fun setScriptContextSnapshots(
+        book: Map<String, Any?>?,
+        chapter: Map<String, Any?>?,
+    ): AnalyzeRule {
+        BookSourceScriptBridge.jsonBindings(mapOf("book" to book, "chapter" to chapter))
+        scriptBookSnapshot = book?.toMap()
+        scriptChapterSnapshot = chapter?.toMap()
+        return this
+    }
 
     private var chapter: BookChapter? = null
     private var nextChapterUrl: String? = null
@@ -836,12 +853,14 @@ class AnalyzeRule(
     fun get(key: String): String {
         localBindings[key]?.let { return it }
         when (key) {
-            "bookName" -> book?.let {
-                return it.name
+            "bookName" -> {
+                book?.let { return it.name }
+                (scriptBookSnapshot?.get("name") as? String)?.let { return it }
             }
 
-            "title" -> chapter?.let {
-                return it.title
+            "title" -> {
+                chapter?.let { return it.title }
+                (scriptChapterSnapshot?.get("title") as? String)?.let { return it }
             }
         }
         return chapter?.getVariable(key)?.takeIf { it.isNotEmpty() }
@@ -871,16 +890,18 @@ class AnalyzeRule(
         }
         fun jsonValue(value: Any?): Any? = when (value) {
             null, is String, is Number, is Boolean -> value
-            is Node -> value.toString()
-            is List<*> -> value.map(::jsonValue)
+            is Node -> LegacyDomHost.serialize(value)
+            is JXNode -> jsonValue(value.value())
+            is List<*> -> if (value.all { it is Node }) LegacyDomHost.serialize(value) else value.map(::jsonValue)
             is Array<*> -> value.map(::jsonValue)
             else -> DartSourceEngine.jsonObject(value)
         }
         val bindings = linkedMapOf<String, Any?>(
-            "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book),
+            "__legacyExtractionPrefix" to "analyze",
+            "sourceData" to jsonValue(source?.getSource() ?: source), "book" to jsonValue(book ?: scriptBookSnapshot),
             "result" to jsonValue(result), "baseUrl" to baseUrl,
-            "chapter" to jsonValue(chapter), "chapters" to jsonValue(batchContext?.chapters),
-            "title" to chapter?.title, "src" to jsonValue(content),
+            "chapter" to jsonValue(chapter ?: scriptChapterSnapshot), "chapters" to jsonValue(batchContext?.chapters),
+            "title" to (chapter?.title ?: scriptChapterSnapshot?.get("title")), "src" to jsonValue(content),
             "nextChapterUrl" to nextChapterUrl, "rssArticle" to jsonValue(rssArticle),
             "fromBookInfo" to isFromBookInfo,
         )
@@ -901,11 +922,11 @@ class AnalyzeRule(
                     "analyze.put" -> put(text(0), text(1))
                     "analyze.getString" -> {
                         if (args.getOrNull(1) is Boolean) getString(text(0), args[1] as Boolean)
-                        else getString(text(0), args.getOrNull(1), args.getOrNull(2) == true)
+                        else getString(text(0), LegacyDomHost.restoreValue(args.getOrNull(1)), args.getOrNull(2) == true)
                     }
-                    "analyze.getStringList" -> getStringList(text(0), args.getOrNull(1), args.getOrNull(2) == true)
-                    "analyze.getElement" -> jsonValue(getElement(text(0)))
-                    "analyze.getElements" -> jsonValue(getElements(text(0)))
+                    "analyze.getStringList" -> getStringList(text(0), LegacyDomHost.restoreValue(args.getOrNull(1)), args.getOrNull(2) == true)
+                    "analyze.getElement" -> LegacyDomHost.serialize(getElement(text(0)))
+                    "analyze.getElements" -> LegacyDomHost.serialize(getElements(text(0)))
                     else -> error("Unsupported analyze callback: $method")
                 }
             }
@@ -913,18 +934,24 @@ class AnalyzeRule(
         val script = """
             (async function() {
                 var nativeJava = globalThis.java;
+                globalThis.result = __legacyDomMaterialize(globalThis.result);
+                globalThis.src = __legacyDomMaterialize(globalThis.src);
                 var java = new Proxy(Object.create(null), {
                     get: (_, name) => ['get','put','getString','getStringList','getElement','getElements'].includes(String(name))
-                        ? (...args) => name === 'get' && args.length !== 1
-                            ? nativeJava[name](...args)
-                            : __sourceHostSync('analyze.' + String(name), args)
+                        ? (...args) => {
+                            if (name === 'get' && args.length !== 1) return nativeJava[name](...args);
+                            const value = __sourceHostSync('analyze.' + String(name), args);
+                            return ['getElement','getElements'].includes(String(name)) ? __legacyDomMaterialize(value) : value;
+                        }
                         : nativeJava && nativeJava[name]
                 });
                 return await eval(__analyzeScript);
             }).call(globalThis)
         """.trimIndent()
-        return V8ScriptExecutor.evaluateBlocking(
-            script, bindings, coroutineContext + callbacks, source = source,
+        return LegacyDomHost.restoreValue(
+            V8ScriptExecutor.evaluateBlocking(
+                script, bindings, coroutineContext + callbacks, source = source,
+            )
         )
     }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:source_engine/source_engine.dart';
 import 'package:source_legacy/source_legacy.dart';
 import 'package:source_platform/source_platform.dart';
@@ -14,6 +15,11 @@ Future<void> main() async {
   final host = SourceHost(
     createSourceEngine,
     sessionStore: const PlatformSessionStore(),
+    legacyRuleHostEnabled: defaultTargetPlatform == TargetPlatform.android,
+    legacyScriptRuleHostEnabled:
+        defaultTargetPlatform == TargetPlatform.android,
+    legacyPageFetchEnabled: defaultTargetPlatform == TargetPlatform.android,
+    legacyWebRuleHostEnabled: defaultTargetPlatform == TargetPlatform.android,
   );
   await host.attach(
     initialize: () async {
@@ -51,19 +57,36 @@ SourceEngine createSourceEngine(
   SourceDefinition source, {
   ScriptRuntime? runtime,
   ScriptHost? platform,
+  bool? useNativeLegacyHttp,
 }) => SourceEngine(
-  runtime: runtime ?? _SourceRuntime(legacy: source.metadata['legacy'] == true),
+  runtime:
+      runtime ??
+      _SourceRuntime(
+        legacy: source.metadata['legacy'] == true,
+        useNativeHttp:
+            useNativeLegacyHttp ??
+            defaultTargetPlatform == TargetPlatform.android,
+      ),
   requestAdapter: adaptLegacyRequest,
+  legacyPageFetcher: defaultTargetPlatform == TargetPlatform.android
+      ? const HostLegacyPageFetcher()
+      : null,
+  legacyRuleEvaluator: defaultTargetPlatform == TargetPlatform.android
+      ? const HostLegacyRuleEvaluator(allowScripts: true, allowWebScripts: true)
+      : null,
   platform: SourceUtilityHost(platform ?? SourcePlatform(sourceId: source.id)),
 );
 
 class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
-  _SourceRuntime({required this.legacy})
+  _SourceRuntime({required this.legacy, this.useNativeHttp = false})
     : runtime = V8Runtime(
-        prelude: legacy ? legacyScriptPrelude : '',
+        prelude: legacy
+            ? '$legacyScriptPrelude\nglobalThis.__legacyUseNativeHttp = ${useNativeHttp ? 'true' : 'false'};\n'
+            : '',
         persistent: true,
       );
   final bool legacy;
+  final bool useNativeHttp;
   final V8Runtime runtime;
   final variables = <String, String>{};
   ScriptContext _context(ScriptContext context) => ScriptContext(
@@ -72,6 +95,7 @@ class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
         ? LegacyScriptHost(
             TaskScriptHost(context.host, context.variables['taskId']),
             variables: variables,
+            useNativeHttp: useNativeHttp,
           )
         : TaskScriptHost(context.host, context.variables['taskId']),
     timeout: context.timeout,
@@ -106,6 +130,7 @@ class _SourceRuntime implements AuxiliaryScriptRuntime, SourceRuntimeState {
           ? LegacyScriptHost(
               TaskScriptHost(context.host, context.variables['taskId']),
               variables: variables,
+              useNativeHttp: useNativeHttp,
             )
           : TaskScriptHost(context.host, context.variables['taskId']),
       timeout: context.timeout,

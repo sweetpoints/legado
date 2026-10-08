@@ -1,3 +1,5 @@
+import 'legacy_variable_scope.dart';
+
 import 'dart:convert';
 import 'dart:io' show Cookie;
 
@@ -9,6 +11,8 @@ import 'rules.dart';
 import 'form_encoding.dart';
 import 'page_templates.dart';
 import 'html4.dart';
+import 'legacy_rule_host.dart';
+import 'legacy_page_fetcher.dart';
 
 typedef SourceRequestAdapter = SourceStage Function(
   SourceDefinition source,
@@ -23,11 +27,15 @@ class SourceEngine {
     this.platform,
     this.hostAdapter,
     this.requestAdapter,
+    this.legacyRuleEvaluator,
+    this.legacyPageFetcher,
   }) : _providedNetwork = network;
   final ScriptRuntime runtime;
   final ScriptHost? platform;
   final ScriptHost Function(ScriptHost)? hostAdapter;
   final SourceRequestAdapter? requestAdapter;
+  final LegacyRuleEvaluator? legacyRuleEvaluator;
+  final LegacyPageFetcher? legacyPageFetcher;
   final NetworkClient? _providedNetwork;
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
@@ -156,11 +164,41 @@ class SourceEngine {
       }
       return _records(result);
     }
+    final original = source.metadata['legacyOriginal'];
     var selectedStage = source.stages[operation];
+    if (operation == 'explore' &&
+        original is Map &&
+        legacyRuleEvaluator != null) {
+      Object? explore = original['ruleExplore'];
+      if (explore is String) {
+        try {
+          explore = jsonDecode(explore);
+        } on FormatException {
+          explore = null;
+        }
+      }
+      final bookList = explore is Map ? explore['bookList'] : null;
+      // Old BookList selects the entire SearchRule when Explore.bookList is blank.
+      // This is execution-only; original Explore fields and menu data remain intact.
+      if (bookList == null ||
+          (bookList is String && _trimLegacyLine(bookList).isEmpty)) {
+        final search = source.stages['search'];
+        if (search != null) {
+          selectedStage = SourceStage.fromJson({
+            ...search.toJson(),
+            'url': '{{exploreUrl}}',
+            'legacyRequestInput': 'exploreUrl',
+          });
+        }
+      }
+    }
     if (selectedStage == null) {
       throw EngineException('missing_stage', 'Source has no $operation stage');
     }
-    if (selectedStage.legacyRequestInput != null) {
+    final nativeFetcher = source.metadata['legacyOriginal'] is Map
+        ? legacyPageFetcher
+        : null;
+    if (nativeFetcher == null && selectedStage.legacyRequestInput != null) {
       final adapter = requestAdapter;
       if (adapter == null) {
         throw const EngineException(
@@ -177,98 +215,263 @@ class SourceEngine {
       }
     }
     final stage = selectedStage;
-    final urlTemplate = stage.legacyPageTemplates
-        ? expandLegacyPageTemplate(stage.url, input, urlChoices: true)
-        : stage.url;
-    final url = urlTemplate.replaceAllMapped(
-      RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
-      (m) {
-        final value = input[m[1]];
-        if (value == null) {
-          throw EngineException('missing_input', 'Missing ${m[1]}');
-        }
-        if (stage.legacyPageTemplates &&
-            RegExp(r'[<>]').hasMatch(value.toString())) {
+    var url = source.baseUrl.toString();
+    String? body;
+    if (nativeFetcher == null) {
+      final urlTemplate = stage.legacyPageTemplates
+          ? expandLegacyPageTemplate(stage.url, input, urlChoices: true)
+          : stage.url;
+      url = urlTemplate.replaceAllMapped(
+        RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
+        (m) {
+          final value = input[m[1]];
+          if (value == null) {
+            throw EngineException('missing_input', 'Missing ${m[1]}');
+          }
+          if (stage.legacyPageTemplates &&
+              RegExp(r'[<>]').hasMatch(value.toString())) {
+            throw const EngineException(
+              'legacy_page_requires_migration',
+              'Legacy URL input must not introduce page choice syntax',
+            );
+          }
+          // URL-valued inputs are full URLs; other values are encoded components.
+          return m[1]!.endsWith('Url')
+              ? value.toString()
+              : Uri.encodeComponent(value.toString());
+        },
+      );
+      if (source.metadata['legacyBaseUrlUnavailable'] == true) {
+        final explicit = Uri.tryParse(url);
+        // Uri.isAbsolute excludes URLs containing fragments; an HTTP request
+        // target is usable when it has an explicit HTTP(S) scheme and host.
+        if (explicit == null ||
+            !['http', 'https'].contains(explicit.scheme) ||
+            explicit.host.isEmpty) {
           throw const EngineException(
-            'legacy_page_requires_migration',
-            'Legacy URL input must not introduce page choice syntax',
+            'legacy_base_url_required',
+            'Legacy source ID has no HTTP base; the stage must provide an absolute HTTP(S) URL',
           );
         }
-        // URL-valued inputs are full URLs; other values are encoded components.
-        return m[1]!.endsWith('Url')
-            ? value.toString()
-            : Uri.encodeComponent(value.toString());
-      },
-    );
-    if (source.metadata['legacyBaseUrlUnavailable'] == true) {
-      final explicit = Uri.tryParse(url);
-      // Uri.isAbsolute excludes URLs containing fragments; an HTTP request
-      // target is usable when it has an explicit HTTP(S) scheme and host.
-      if (explicit == null ||
-          !['http', 'https'].contains(explicit.scheme) ||
-          explicit.host.isEmpty) {
-        throw const EngineException(
-          'legacy_base_url_required',
-          'Legacy source ID has no HTTP base; the stage must provide an absolute HTTP(S) URL',
-        );
       }
+      final bodyTemplate = stage.body != null && stage.legacyPageTemplates
+          ? expandLegacyPageTemplate(stage.body!, input)
+          : stage.body;
+      final substitutedBody = bodyTemplate?.replaceAllMapped(
+        RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
+        (m) {
+          final value = input[m[1]];
+          if (value == null) {
+            throw EngineException('missing_input', 'Missing ${m[1]}');
+          }
+          if (stage.bodyEncoding == 'legacyFormUtf8' ||
+              stage.bodyTemplateMode == 'legacyJsonString') {
+            if (value is! String && value is! bool && value is! int ||
+                value is int &&
+                    (value < -9007199254740991 || value > 9007199254740991)) {
+              throw const EngineException(
+                'legacy_body_template_requires_migration',
+                'Legacy body placeholders require strings, booleans or JS-safe integers',
+              );
+            }
+            if (RegExp(r'["\\<>\x00-\x1f\x7f]').hasMatch(value.toString())) {
+              throw const EngineException(
+                'legacy_body_template_requires_migration',
+                'Legacy body placeholder would change the old JSON request options',
+              );
+            }
+          }
+          return value.toString();
+        },
+      );
+      body = substitutedBody != null && stage.bodyEncoding == 'legacyFormUtf8'
+          ? encodeLegacyFormUtf8Body(substitutedBody)
+          : substitutedBody;
     }
-    final bodyTemplate = stage.body != null && stage.legacyPageTemplates
-        ? expandLegacyPageTemplate(stage.body!, input)
-        : stage.body;
-    final substitutedBody = bodyTemplate?.replaceAllMapped(
-      RegExp(r'\{\{([A-Za-z][A-Za-z0-9_]*)\}\}'),
-      (m) {
-        final value = input[m[1]];
-        if (value == null) {
-          throw EngineException('missing_input', 'Missing ${m[1]}');
-        }
-        if (stage.bodyEncoding == 'legacyFormUtf8' ||
-            stage.bodyTemplateMode == 'legacyJsonString') {
-          if (value is! String && value is! bool && value is! int ||
-              value is int &&
-                  (value < -9007199254740991 || value > 9007199254740991)) {
-            throw const EngineException(
-              'legacy_body_template_requires_migration',
-              'Legacy body placeholders require strings, booleans or JS-safe integers',
-            );
-          }
-          if (RegExp(r'["\\<>\x00-\x1f\x7f]').hasMatch(value.toString())) {
-            throw const EngineException(
-              'legacy_body_template_requires_migration',
-              'Legacy body placeholder would change the old JSON request options',
-            );
-          }
-        }
-        return value.toString();
-      },
-    );
-    final body =
-        substitutedBody != null && stage.bodyEncoding == 'legacyFormUtf8'
-        ? encodeLegacyFormUtf8Body(substitutedBody)
-        : substitutedBody;
     if (stage.maxPages < 1 || stage.maxPages > 1000) {
       throw const EngineException('invalid_source', 'maxPages must be 1..1000');
+    }
+    String? legacyHook(String group, String name) {
+      if (original is! Map) return null;
+      Object? container = original[group];
+      if (container is String) {
+        try {
+          container = jsonDecode(container);
+        } on FormatException {
+          return null;
+        }
+      }
+      if (container is! Map) return null;
+      final value = container[name];
+      if (value == null) return null;
+      if (value is! String) {
+        throw EngineException(
+          'invalid_legacy_hook',
+          '$group.$name must be a string',
+        );
+      }
+      return value;
+    }
+
+    final infoInit = operation == 'info'
+        ? legacyHook('ruleBookInfo', 'init')
+        : null;
+    final contentReplace = operation == 'content'
+        ? legacyHook('ruleContent', 'replaceRegex')
+        : null;
+    final subContent = operation == 'content'
+        ? legacyHook('ruleContent', 'subContent')
+        : null;
+    final legacyHost = original is Map ? legacyRuleEvaluator : null;
+    final scopedLegacy = legacyHost != null;
+    final bookSnapshot = input['book'] is Map
+        ? Map<String, Object?>.from(input['book'] as Map)
+        : <String, Object?>{
+            'bookUrl': input['bookUrl'],
+            'name': input['name'] ?? '',
+          };
+    final chapterSnapshot = input['chapter'] is Map
+        ? Map<String, Object?>.from(input['chapter'] as Map)
+        : <String, Object?>{
+            'url': input['chapterUrl'],
+            'title': input['chapterTitle'] ?? '',
+          };
+    final bookVariables = scopedLegacy
+        ? legacyEntityVariables(bookSnapshot['variable'] ?? input['variable'])
+        : <String, String>{};
+    final chapterVariables = scopedLegacy
+        ? legacyEntityVariables(chapterSnapshot['variable'])
+        : <String, String>{};
+    final sourceVariables = <String, String>{};
+    var rowSequence = 0;
+    final seededScopes = <String>{};
+    final bookWasSeeded = bookVariables.isNotEmpty;
+    Map<String, Object?> scope(
+      String id,
+      String target,
+      Map<String, String> book,
+      Map<String, String> chapter,
+    ) {
+      final identity = '${input['taskId'] ?? source.id}:$operation:$id';
+      if ((target == 'chapter' ? chapter : book).isNotEmpty) {
+        seededScopes.add(identity);
+      }
+      return {
+        'id': identity,
+        'target': target,
+        'source': sourceVariables,
+        'book': book,
+        'chapter': chapter,
+      };
+    }
+
+    final requestScope = scope(
+      'request',
+      'book',
+      bookVariables,
+      <String, String>{},
+    );
+    final entityScope = scope(
+      'entity',
+      operation == 'content' ? 'chapter' : 'book',
+      bookVariables,
+      operation == 'content' ? chapterVariables : <String, String>{},
+    );
+    ScriptContext scopedContext(
+      ScriptContext base,
+      Map<String, Object?> varsScope,
+      Map<String, Object?> book,
+      Map<String, Object?>? chapter,
+    ) => ScriptContext(
+      variables: {
+        ...base.variables,
+        'legacyVariableScope': varsScope,
+        'legacyVariables': legacyScopeReads(varsScope),
+        'book': {...book, 'variable': jsonEncode(varsScope['book'])},
+        if (chapter != null)
+          'chapter': {...chapter, 'variable': jsonEncode(varsScope['chapter'])},
+      },
+      host: base.host,
+      timeout: base.timeout,
+    );
+    void attachEntityVariables(
+      Map<String, Object?> record,
+      Map<String, Object?> varsScope,
+    ) {
+      final own = varsScope[varsScope['target']] as Map<String, String>;
+      if (own.isNotEmpty || seededScopes.contains(varsScope['id'])) {
+        record['variable'] = Map<String, String>.from(own);
+      }
+      if ((operation == 'toc' || operation == 'content') &&
+          (bookWasSeeded || bookVariables.isNotEmpty)) {
+        record['bookVariable'] = Map<String, String>.from(bookVariables);
+      }
+    }
+
+    for (final hook in [
+      if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) infoInit,
+      if (contentReplace != null && contentReplace.isNotEmpty) contentReplace,
+      if (subContent != null && _trimLegacyLine(subContent).isNotEmpty)
+        subContent,
+    ]) {
+      if (legacyHost == null || !legacyHost.supportsRule(hook)) {
+        throw const EngineException(
+          'legacy_pipeline_host_required',
+          'Legacy initialization and replacement require the original rule host',
+        );
+      }
     }
     final rules = RuleEvaluator(runtime);
     final results = <Map<String, Object?>>[];
     final visited = <String>{};
     var current = source.baseUrl.resolve(url);
+    String? nativeNext;
+    final legacyTocPages = <String>[];
+    var legacyTocFanOut = false;
+    ScriptContext? firstPageContext;
+    Object? firstPageBody;
     for (var page = 0; page < stage.maxPages; page++) {
-      if (!visited.add(current.toString())) {
+      final requestKey = nativeFetcher == null
+          ? current.toString()
+          : nativeNext ?? 'initial';
+      if (!visited.add(requestKey)) {
+        // Original BookChapterList/BookContent stop on a repeated next URL.
+        // Modern sources retain their explicit cycle-error contract.
+        if (nativeFetcher != null) break;
         throw const EngineException(
           'pagination_cycle',
           'Next page repeats an already fetched URL',
         );
       }
-      final response = await network.request(
-        current,
-        headers: stage.headers ?? source.headers,
-        method: stage.method,
-        body: body,
-        charset: stage.charset,
-        cancellation: cancellation,
-      );
+      final response = nativeFetcher != null
+          ? await nativeFetcher.fetch(
+              source,
+              operation,
+              input,
+              ScriptContext(
+                variables: {
+                  ...context.variables,
+                  'baseUrl': current.toString(),
+                  'legacyVariables': vars,
+                  if (scopedLegacy) 'legacyVariableScope': requestScope,
+                },
+                host: context.host,
+                timeout: context.timeout,
+              ),
+              nextUrl: nativeNext,
+              cancellation: cancellation,
+            )
+          : await network.request(
+              current,
+              headers: stage.headers ?? source.headers,
+              method: stage.method,
+              body: body,
+              charset: stage.charset,
+              cancellation: cancellation,
+            );
+      if (nativeFetcher != null && (page == 0 || operation == 'toc')) {
+        visited.add(response.url.toString());
+      }
       if (response.status >= 400) {
         throw EngineException('http_error', 'HTTP ${response.status}');
       }
@@ -282,36 +485,172 @@ class SourceEngine {
         runtime,
         source.headers,
       );
-      final pageContext = ScriptContext(
-        variables: {...context.variables, 'baseUrl': response.url.toString()},
+      var pageContext = ScriptContext(
+        variables: {
+          ...context.variables,
+          'baseUrl': response.url.toString(),
+          if (source.metadata['legacyOriginal'] is Map) 'legacyVariables': vars,
+        },
         host: hostAdapter?.call(pageHost) ?? pageHost,
         timeout: context.timeout,
       );
-      final rows = stage.list == null
-          ? [response.body]
-          : await rules.evaluate(
-              stage.list!,
-              response.body,
-              pageContext,
+      if (scopedLegacy) {
+        pageContext = scopedContext(
+          pageContext,
+          entityScope,
+          bookSnapshot,
+          operation == 'content' ? chapterSnapshot : null,
+        );
+      }
+      firstPageContext ??= pageContext;
+      firstPageBody ??= response.body;
+      var ruleContext = pageContext;
+      Future<List<Object?>> evaluateRule(
+        String rule,
+        Object? value, {
+        bool elements = false,
+        bool element = false,
+        bool formatContent = false,
+        bool resolveCover = false,
+        bool scalar = false,
+        bool isUrl = false,
+        bool unescape = true,
+      }) => legacyHost == null || !legacyHost.supportsRule(rule)
+          ? rules.evaluate(
+              rule,
+              value,
+              ruleContext,
               cancellation: cancellation,
-              elements: true,
+              elements: elements,
+            )
+          : legacyHost.evaluate(
+              rule,
+              value,
+              ruleContext,
+              source: source,
+              operation: operation,
+              elements: elements,
+              element: element,
+              formatContent: formatContent,
+              resolveCover: resolveCover,
+              scalar: scalar,
+              isUrl: isUrl,
+              unescape: unescape,
+              cancellation: cancellation,
             );
+      Object? pageInput = response.body;
+      if (infoInit != null && _trimLegacyLine(infoInit).isNotEmpty) {
+        final initialized = await evaluateRule(
+          infoInit,
+          pageInput,
+          element: true,
+        );
+        if (initialized.isEmpty || initialized.single == null) {
+          throw const EngineException(
+            'legacy_init_empty',
+            'Legacy detail initialization returned null content',
+          );
+        }
+        pageInput = initialized.single;
+      }
+      final rows = stage.list == null
+          ? [pageInput]
+          : await evaluateRule(stage.list!, pageInput, elements: true);
 
       for (final row in rows) {
         cancellation?.throwIfCancelled();
+        Map<String, Object?>? rowScope;
+        var rowBook = bookSnapshot;
+        Map<String, Object?>? rowChapter = operation == 'content'
+            ? chapterSnapshot
+            : null;
+        if (scopedLegacy) {
+          if (operation == 'search' || operation == 'explore') {
+            rowScope = scope(
+              'row:${rowSequence++}',
+              'book',
+              Map<String, String>.from(bookVariables),
+              <String, String>{},
+            );
+            rowBook = {'name': '', 'author': '', 'bookUrl': ''};
+          } else if (operation == 'toc') {
+            rowScope = scope(
+              'row:${rowSequence++}',
+              'chapter',
+              bookVariables,
+              <String, String>{},
+            );
+            rowChapter = {
+              'title': '',
+              'url': '',
+              'bookUrl': bookSnapshot['bookUrl'],
+            };
+          } else {
+            rowScope = entityScope;
+          }
+          ruleContext = scopedContext(
+            pageContext,
+            rowScope,
+            rowBook,
+            rowChapter,
+          );
+        }
         final fields = <String, Object?>{};
         for (final entry in stage.fields.entries) {
-          final values = await rules.evaluate(
+          if (original is Map &&
+              ((operation == 'info' && entry.key == 'init') ||
+                  (operation == 'content' &&
+                      (entry.key == 'replaceRegex' ||
+                          entry.key == 'title' ||
+                          entry.key == 'subContent')))) {
+            continue;
+          }
+          final isLink = {
+            'bookUrl',
+            'tocUrl',
+            'url',
+            'chapterUrl',
+          }.contains(entry.key);
+          final listField = {'kind', 'downloadUrls'}.contains(entry.key);
+          final nativeCover =
+              entry.key == 'coverUrl' &&
+              legacyHost?.supportsRule(entry.value) == true;
+          final values = await evaluateRule(
             entry.value,
             row,
-            pageContext,
-            cancellation: cancellation,
+            scalar: !listField,
+            resolveCover: nativeCover,
+            formatContent:
+                operation == 'content' &&
+                entry.key == 'content' &&
+                legacyHost != null,
+            // Original chapter-list URL extraction is scalar, not isUrl=true:
+            // a blank volume href must reach the App's title/index fallback.
+            isUrl:
+                isLink &&
+                !(legacyHost != null &&
+                    operation == 'toc' &&
+                    (entry.key == 'url' || entry.key == 'chapterUrl')),
+            unescape: operation != 'content' && !listField,
           );
-          var value = values.map(RuleEvaluator.text).join('\n');
+          final legacyScalar =
+              (source.metadata['legacy'] == true ||
+                  source.metadata['legacyOriginal'] is Map) &&
+              entry.value.trimLeft().toLowerCase().startsWith('@legacy:');
+          // AnalyzeRule.getString(isUrl=true) uses JSoup.getString0.
+          // Joining selected links would create a different URI.
+          final firstLegacyLink =
+              row is! Map &&
+              legacyScalar &&
+              {'bookUrl', 'tocUrl', 'url', 'chapterUrl'}.contains(entry.key);
+          var value = (firstLegacyLink ? values.take(1) : values)
+              .map(RuleEvaluator.text)
+              .join('\n');
           // Old getString unescapes once after joining/replacement. Content
           // formatting and kind/downloadUrls/nextPage use different old paths.
           // Keep this provenance-bound; modern rules and string lists are raw.
-          if ((source.metadata['legacy'] == true ||
+          if ((legacyHost == null || !legacyHost.supportsRule(entry.value)) &&
+              (source.metadata['legacy'] == true ||
                   source.metadata['legacyOriginal'] is Map) &&
               operation != 'content' &&
               entry.key != 'kind' &&
@@ -320,26 +659,77 @@ class SourceEngine {
             value = unescapeHtml4(value);
           }
           if ((entry.key.endsWith('Url') || entry.key == 'url') &&
-              value.isNotEmpty) {
+              value.isNotEmpty &&
+              !nativeCover) {
             value = response.url.resolve(value).toString();
           }
-          fields[entry.key] = value;
+          if (legacyHost?.supportsRule(entry.value) == true && listField) {
+            fields[entry.key] = entry.key == 'downloadUrls'
+                ? values
+                : values.map(RuleEvaluator.text).join(',');
+          } else {
+            fields[entry.key] = value;
+          }
+          if (scopedLegacy) {
+            if (operation == 'toc' || operation == 'content') {
+              rowChapter?[entry.key] = fields[entry.key];
+            } else {
+              rowBook[entry.key] = fields[entry.key];
+            }
+            ruleContext = scopedContext(
+              pageContext,
+              rowScope!,
+              rowBook,
+              rowChapter,
+            );
+          }
         }
+        if (rowScope != null) attachEntityVariables(fields, rowScope);
         results.add(fields);
       }
       if (stage.nextPage == null) break;
-      final links = await rules.evaluate(
-        stage.nextPage!,
-        response.body,
-        pageContext,
-        cancellation: cancellation,
-      );
-      final next = links
+      ruleContext = pageContext;
+      final nativeToc = nativeFetcher != null && operation == 'toc';
+      // Original BookChapterList excludes the current page before deciding
+      // between a single next-page chain and a list of independent pages.
+      // The latter are parsed once, without following each child's pagination.
+      final links = nativeToc && legacyTocFanOut
+          ? const <Object?>[]
+          : await evaluateRule(
+              stage.nextPage!,
+              pageInput,
+              isUrl: true,
+              unescape: false,
+            );
+      final candidates = links
           .map(RuleEvaluator.text)
           .where((x) => x.isNotEmpty)
-          .firstOrNull;
+          .where((x) => !nativeToc || x != response.url.toString())
+          .toList();
+      String? next;
+      if (nativeToc) {
+        if (page == 0 && candidates.length > 1) {
+          legacyTocFanOut = true;
+          legacyTocPages.addAll(candidates);
+        }
+        if (legacyTocFanOut) {
+          while (legacyTocPages.isNotEmpty && next == null) {
+            final candidate = legacyTocPages.removeAt(0);
+            if (!visited.contains(candidate)) next = candidate;
+          }
+        } else {
+          next = candidates.firstOrNull;
+        }
+      } else {
+        next = candidates.firstOrNull;
+      }
       if (next == null) break;
-      current = response.url.resolve(next);
+      if (nativeFetcher != null) {
+        nativeNext = next;
+        current = response.url;
+      } else {
+        current = response.url.resolve(next);
+      }
       if (page == stage.maxPages - 1) {
         throw const EngineException(
           'pagination_limit',
@@ -347,15 +737,160 @@ class SourceEngine {
         );
       }
     }
-    if (operation == 'content' && results.length > 1) {
+    if (operation == 'content' && results.isNotEmpty) {
       final merged = Map<String, Object?>.from(results.first);
-      merged['content'] = results
-          .map((r) => r['content']?.toString() ?? '')
-          .join('\n');
+      final parts = results.map((r) => r['content']?.toString() ?? '').toList();
+      if (subContent != null && _trimLegacyLine(subContent).isNotEmpty) {
+        // Old BookContent reads the first page after pagination. Extraction
+        // failures propagate; only the subsequent optional URL/media work is caught.
+        final values = await legacyHost!.evaluate(
+          subContent,
+          firstPageBody,
+          firstPageContext!,
+          source: source,
+          operation: operation,
+          scalar: true,
+          cancellation: cancellation,
+        );
+        final raw = values.map(RuleEvaluator.text).join('\n');
+        if (input['__legacyOnLineTxt'] == true) {
+          parts.add(raw);
+        } else {
+          try {
+            var value = _trimLegacyLine(raw);
+            if (value.toLowerCase().startsWith('http')) {
+              if (nativeFetcher == null) {
+                throw const EngineException(
+                  'legacy_pipeline_host_required',
+                  'Legacy URL subcontent requires the native request pipeline',
+                );
+              }
+              final response = await nativeFetcher.fetch(
+                source,
+                operation,
+                input,
+                scopedContext(
+                  firstPageContext,
+                  requestScope,
+                  bookSnapshot,
+                  null,
+                ),
+                nextUrl: value,
+                cancellation: cancellation,
+              );
+              value = response.body;
+            }
+            if (input['__legacyIsAudio'] == true) {
+              chapterVariables['lyric'] = value;
+            } else if (input['__legacyIsVideo'] == true) {
+              chapterVariables['danmaku'] = value;
+            }
+            if (input['__legacyIsAudio'] == true ||
+                input['__legacyIsVideo'] == true) {
+              // The original putLyric/putDanmaku updates the entity outside
+              // rule evaluation. Seed a fresh parser scope with that full state,
+              // so its old dirty-key overlay cannot undo the external update.
+              firstPageContext = scopedContext(
+                firstPageContext,
+                scope(
+                  'post-subcontent',
+                  'chapter',
+                  bookVariables,
+                  chapterVariables,
+                ),
+                bookSnapshot,
+                chapterSnapshot,
+              );
+            }
+            // Ordinary text sources do not append subcontent in the original path.
+          } catch (_) {
+            cancellation?.throwIfCancelled();
+          }
+        }
+      }
+      var content = parts.join('\n');
+      if (contentReplace != null && contentReplace.isNotEmpty) {
+        content = content.split('\n').map(_trimLegacyLine).join('\n');
+        final replaced = await legacyHost!.evaluate(
+          contentReplace,
+          content,
+          firstPageContext!,
+          source: source,
+          operation: operation,
+          scalar: true,
+          cancellation: cancellation,
+        );
+        content = replaced.map(RuleEvaluator.text).join('\n');
+        if (input['__legacyOnLineTxt'] == true) {
+          content = content.split('\n').map((line) => '　　$line').join('\n');
+        }
+      }
+      merged['content'] = content;
+      // Original BookContent evaluates its title only after whole-text replacement,
+      // against the first page parser. An optional title failure does not erase content.
+      final titleRule = original is Map ? stage.fields['title'] : null;
+      if (titleRule != null && _trimLegacyLine(titleRule).isNotEmpty) {
+        try {
+          final titles =
+              legacyHost != null && legacyHost.supportsRule(titleRule)
+              ? await legacyHost.evaluate(
+                  titleRule,
+                  firstPageBody,
+                  firstPageContext!,
+                  source: source,
+                  operation: operation,
+                  scalar: true,
+                  cancellation: cancellation,
+                )
+              : await rules.evaluate(
+                  titleRule,
+                  firstPageBody,
+                  firstPageContext!,
+                  cancellation: cancellation,
+                );
+          merged['title'] = titles.map(RuleEvaluator.text).join('\n');
+        } catch (_) {
+          cancellation?.throwIfCancelled();
+        }
+      }
+      if (scopedLegacy) attachEntityVariables(merged, entityScope);
       return [merged];
     }
 
+    if (scopedLegacy && (operation == 'info' || operation == 'toc')) {
+      for (final record in results) {
+        if (operation == 'info' &&
+            (bookWasSeeded || bookVariables.isNotEmpty)) {
+          record['variable'] = Map<String, String>.from(bookVariables);
+        } else if (operation == 'toc' &&
+            (bookWasSeeded || bookVariables.isNotEmpty)) {
+          record['bookVariable'] = Map<String, String>.from(bookVariables);
+        }
+      }
+    }
     return results;
+  }
+
+  static String _trimLegacyLine(String value) {
+    bool whitespace(int c) =>
+        (c >= 0x09 && c <= 0x0d) ||
+        (c >= 0x1c && c <= 0x20) ||
+        c == 0xa0 ||
+        c == 0x1680 ||
+        (c >= 0x2000 && c <= 0x200a) ||
+        c == 0x2028 ||
+        c == 0x2029 ||
+        c == 0x202f ||
+        c == 0x205f ||
+        c == 0x3000;
+    var start = 0, end = value.length;
+    while (start < end && whitespace(value.codeUnitAt(start))) {
+      start++;
+    }
+    while (end > start && whitespace(value.codeUnitAt(end - 1))) {
+      end--;
+    }
+    return value.substring(start, end);
   }
 
   List<Map<String, Object?>> _records(Object? result) {

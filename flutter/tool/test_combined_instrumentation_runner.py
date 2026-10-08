@@ -104,6 +104,27 @@ if os.environ['FIXTURE_MODE']=='changed-source':
             self.assertIn('public instance void method', result.stderr)
             self.assertFalse((Path(d) / 'device-run-started').exists())
 
+    def test_reviewed_case_counts_and_real_webjs_class_are_locked(self):
+        document = combined.manifest(True)
+        self.assertEqual(document['caseCount'], 196)
+        self.assertEqual(len(document['classes']), 37)
+        self.assertEqual(sum(combined.EXPECTED_CASE_COUNTS.values()), 196)
+        self.assertIn('io.legado.app.model.sourceEngine.LegacyWebJsAppIntegrationTest',
+                      {record['name'] for record in document['classes']})
+        self.assertFalse(any(Path(record['source']).name == 'PublicSourceCorpusTest.kt'
+                             for record in document['classes']))
+
+    def test_removing_test_method_cannot_be_blessed_by_regeneration(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            relative = combined.TEST_FILES[0]
+            source = root / combined.SOURCE_ROOT / relative
+            source.parent.mkdir(parents=True)
+            text = (combined.ROOT / combined.SOURCE_ROOT / relative).read_text()
+            source.write_text(text.replace('@Test', '@NotATest', 1))
+            with self.assertRaisesRegex(ValueError, 'case count differs'):
+                combined.class_record(relative, root)
+
     def test_workflow_trigger_covers_combined_tests_and_script_helpers(self):
         text = (combined.ROOT / '.github/workflows/flutter-source-engine.yml').read_text()
         patterns = re.findall(r"^      - '([^']+)'$", text, re.MULTILINE)

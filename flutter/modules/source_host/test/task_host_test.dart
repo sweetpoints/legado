@@ -15,6 +15,261 @@ void main() {
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
   test(
+    'native Jsoup calls retain caller-owned task and source identity',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return 'native-result';
+      });
+      const platform = SourcePlatform(sourceId: 'registered-source');
+      final host = TaskScriptHost(platform, 'registered-task');
+      const operations = [
+        'parse',
+        'parseBodyFragment',
+        'newDocument',
+        'newElement',
+        'connect',
+        'connectionCall',
+        'responseCall',
+        'release',
+      ];
+      for (final operation in operations) {
+        final arguments = <Object?>[
+          'fixture',
+          {'__sourceTaskId': 'script-task', '__sourceHostCallback': false},
+        ];
+        expect(
+          await host.call('orgJsoup.$operation', arguments),
+          'native-result',
+        );
+        expect(calls.last, {
+          'sourceId': 'registered-source',
+          'taskId': 'registered-task',
+          'fromScript': true,
+          'method': 'orgJsoup.$operation',
+          'arguments': arguments,
+        });
+        await expectLater(
+          TaskScriptHost(platform, null).call('orgJsoup.$operation', []),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'invalid_request',
+            ),
+          ),
+        );
+        await expectLater(
+          platform.call('orgJsoup.$operation', []),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'invalid_request',
+            ),
+          ),
+        );
+      }
+      expect(calls, hasLength(operations.length));
+      await expectLater(
+        host.call('orgJsoup.forName', []),
+        throwsA(isA<EngineException>()),
+      );
+      expect(calls, hasLength(operations.length));
+    },
+  );
+
+  test('cache methods require the registered task and preserve exact source identity', () async {
+    final calls = <Map>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.arguments as Map);
+      return null;
+    });
+    final host = TaskScriptHost(
+      const SourcePlatform(sourceId: 'opaque-owner'),
+      'cache-task',
+    );
+    for (final method in [
+      'put',
+      'get',
+      'delete',
+      'putMemory',
+      'getFromMemory',
+      'deleteMemory',
+      'getInt',
+      'getLong',
+      'getDouble',
+      'getFloat',
+      'getByteArray',
+      'putFile',
+      'getFile',
+    ]) {
+      await host.call('cacheHost.$method', ['fixture-key']);
+    }
+    expect(calls, hasLength(13));
+    for (final call in calls) {
+      expect(call['sourceId'], 'opaque-owner');
+      expect(call['taskId'], 'cache-task');
+      expect(call['fromScript'], true);
+      expect(call['arguments'], ['fixture-key']);
+    }
+    await expectLater(
+      host.call('cacheHost.unknown', []),
+      throwsA(isA<EngineException>()),
+    );
+    await expectLater(
+      TaskScriptHost(
+        const SourcePlatform(sourceId: 'opaque-owner'),
+        null,
+      ).call('cacheHost.get', ['fixture-key']),
+      throwsA(
+        isA<EngineException>().having(
+          (error) => error.code,
+          'code',
+          'invalid_request',
+        ),
+      ),
+    );
+    expect(calls, hasLength(13));
+  });
+
+  test(
+    'all explicit explore InfoMap methods retain trusted task/source origin',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return 'native';
+      });
+      final host = TaskScriptHost(
+        const SourcePlatform(sourceId: 'book:fixture'),
+        'bound-task',
+      );
+      for (final operation in [
+        'get',
+        'put',
+        'remove',
+        'set',
+        'save',
+        'saveNow',
+        'getNeedSave',
+        'setNeedSave',
+        'putAll',
+        'containsKey',
+        'containsValue',
+        'size',
+        'isEmpty',
+        'clear',
+        'keys',
+        'values',
+        'entries',
+        'sourceUrl',
+      ]) {
+        expect(
+          await host.call('exploreInfoMap.$operation', ['key', 'value']),
+          'native',
+        );
+      }
+      expect(calls, hasLength(18));
+      for (final request in calls) {
+        expect(request['sourceId'], 'book:fixture');
+        expect(request['taskId'], 'bound-task');
+        expect(request['fromScript'], true);
+        expect(request['arguments'], ['key', 'value']);
+      }
+      await expectLater(
+        host.call('exploreInfoMap.unknown', []),
+        throwsA(isA<EngineException>()),
+      );
+    },
+  );
+  test(
+    'script cannot forge outer rule origin through payload or marker',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return {'value': '', 'variables': <String, String>{}};
+      });
+      final script = TaskScriptHost(
+        const SourcePlatform(sourceId: 'source'),
+        'task',
+      );
+      await script.call('legacyRule.evaluate', [
+        {'mode': 'scalar', 'fromScript': false},
+        {'__sourceTaskId': 'forged', '__sourceHostCallback': false},
+      ]);
+      expect(calls.single['taskId'], 'task');
+      expect(calls.single['fromScript'], true);
+      expect((calls.single['arguments'] as List).last, {
+        '__sourceTaskId': 'forged',
+        '__sourceHostCallback': false,
+      });
+      calls.clear();
+      await const SourcePlatform(sourceId: 'source')
+          .call('legacyRule.evaluate', [
+            {'mode': 'scalar'},
+            {'__sourceTaskId': 'task', '__sourceHostCallback': false},
+          ]);
+      expect(calls.single['fromScript'], false);
+      expect(calls.single['arguments'], [
+        {'mode': 'scalar'},
+      ]);
+    },
+  );
+  test(
+    'legacy Java delegates cross platform with bound task and source',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        final request = call.arguments as Map;
+        calls.add(request);
+        return request['method'] == 'javaHost.log'
+            ? (request['arguments'] as List).single
+            : 'native';
+      });
+      final host = LegacyScriptHost(
+        TaskScriptHost(
+          const SourcePlatform(sourceId: 'book:fixture'),
+          'bound-task',
+        ),
+      );
+      expect(
+        await host.call('java.log', [
+          {'value': 7},
+        ]),
+        {'value': 7},
+      );
+      expect(await host.call('java.timeFormat', [1234]), 'native');
+      expect(
+        await host.call('java.getCookie', ['cookie-tag', 'key']),
+        'native',
+      );
+      expect(await host.call('java.t2s', ['繁體']), 'native');
+      expect(await host.call('java.toast', [null]), 'native');
+      for (final request in calls) {
+        expect(request['taskId'], 'bound-task');
+        expect(request['sourceId'], 'book:fixture');
+      }
+      expect(calls[2]['arguments'], ['cookie-tag', 'key']);
+      await expectLater(
+        LegacyScriptHost(
+          TaskScriptHost(const SourcePlatform(sourceId: 'book:fixture'), null),
+        ).call('java.log', ['x']),
+        throwsA(
+          isA<EngineException>().having(
+            (e) => e.code,
+            'code',
+            'invalid_request',
+          ),
+        ),
+      );
+      expect(calls.length, 5);
+    },
+  );
+
+  test(
     'concurrent cache callbacks carry caller task and preserve boolean results',
     () async {
       final entered = Completer<void>();
@@ -48,6 +303,7 @@ void main() {
       expect(calls.first.arguments, {
         'sourceId': 'source',
         'taskId': 'first',
+        'fromScript': true,
         'method': 'batch.cacheContent',
         'arguments': [
           {'index': 1},
@@ -254,6 +510,7 @@ void main() {
       expect(calls.last.arguments, {
         'sourceId': 'auxiliary',
         'taskId': 'local-task',
+        'fromScript': true,
         'method': method,
         'arguments': args,
       });

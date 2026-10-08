@@ -4,7 +4,84 @@
 
 旧 `java` Proxy 通过 V8 同步桥取得返回值；脚本工作 isolate 等待，父 isolate 执行异步 Dart 宿主能力。直接调用 Dart 的 `LegacyScriptHost.call` 仍返回 Future，不能替代脚本同步桥。
 
+## Android 任务宿主
+
+下表方法已通过 `LegacyScriptHost` → `TaskScriptHost` → Android `LegacyJavaHost` 接入生产。它们需要 Android App 宿主；独立 Dart/CLI 消费者必须注入对应宿主，不能把转发能力当成跨平台实现。脚本中的调用使用同步 V8 桥，直接返回值而非 Promise；Dart 分派仍是异步 Future。现代 `source.*` API 的异步合同独立，不由这些旧方法推导。
+
+任务 ID 由调用方绑定，`TaskScriptHost` 添加受信回调标记；Android 按活动任务选择 source、tag 和协程上下文，进入方法前检查取消。脚本参数不能替换任务所有者。对象经 JSON 传输，`logType` 输出的是宿主接收到的对象类型，不提供原 Java 对象身份。
+
+| 旧方法签名 | 返回值及语义 |
+|---|---|
+| `log(value)` | 返回原 JS 参数，同时向当前来源调试日志输出；value 可为 null 或可传输 JSON 值 |
+| `logType(value)` | null；记录宿主值的类型，null 记录 `null` |
+| `toast(value)`、`longToast(value)` | null；通过 Android UI 显示带来源 tag 的提示 |
+| `timeFormat(timeMs)` | String；按 App 的 `AppConst.dateFormat` 格式化毫秒时间戳 |
+| `timeFormatUTC(timeMs,format,offsetMs)` | 格式化字符串；format 使用 Java SimpleDateFormat，offset 是时区偏移毫秒，**不是小时** |
+| `t2s(text)`、`s2t(text)` | String；分别调用 App 简繁转换，参数必须为 String |
+| `getCookie(tag)`、`getCookie(tag,key)` | String；读取 Android CookieStore 的完整 Cookie 或指定项；key=null 等同完整 Cookie |
+| `getWebViewUA()` | String；Android WebSettings 默认 User-Agent |
+| `HMacHex(data,algorithm,key)` | String；使用旧 Hutool/JCA HMAC，输出十六进制；data/key 为 UTF-8 String |
+| `HMacBase64(data,algorithm,key)` | String；同上，输出不换行的 Base64 |
+| `androidId()` | String；AppConst.androidId；不是随机 UUID，也不是跨设备固定值 |
+| `randomUUID()` | String；Java UUID.randomUUID().toString() |
+| `toNumChapter(text)` | String 或 null；按 App 章节标题模式将匹配的中文数字转数字，未匹配保留原文，null 返回 null |
+
+时间参数要求有符号整数毫秒：timeMs 在 Java Long 范围内，offsetMs 在 Java Int 范围内；非有限、小数和越界值拒绝。HMAC algorithm 交由现有 Android Hutool/JCA 支持并校验，例如 `HmacSHA256`，不保证所有提供者算法可用。CookieStore 是 Android 旧宿主存储，不等同于独立引擎 HTTP jar 的读取 API，也不由此承诺两者自动同步。
+
+## 对称加密对象
+
+`java.createSymmetricCrypto(transformation,key[,iv])` 返回有限 JS facade。transformation 为 String；key 为 String、整数数组或 null。String key 的 IV 只能为 String/null，按 UTF-8 转字节；数组/null key 的 IV 只能为数组/null。数组元素接受整数 -128..255，转 Java byte；返回字节为 signed -128..127。key=null 由原实现生成随机密钥，之后保留同一生成密钥；空/省略 IV 不成为显式参数。
+
+| facade 方法 | 支持重载与返回值 |
+|---|---|
+| `encrypt(text[,charset])`、`encrypt(bytes)` | signed 字节数组 |
+| `encryptHex(text[,charset])`、`encryptHex(bytes)` | 十六进制字符串 |
+| `encryptBase64(text[,charset])`、`encryptBase64(bytes)` | Base64 字符串 |
+| `decrypt(ciphertext)`、`decrypt(bytes)` | signed 字节数组；仅单参，ciphertext 按旧实现先识别 hex，否则 Base64 |
+| `decryptStr(ciphertext[,charset])`、`decryptStr(bytes[,charset])` | 明文字符串 |
+| `setIv(bytes)` | 返回当前 facade，可链式调用；只接受单个非null字节数组 |
+
+字符集省略时 UTF-8，显式字符集由 Android Charset.forName 校验。encrypt 系列的字节数组重载不接受额外 charset。对象不支持 InputStream、任意 Hutool 方法或 Java 参数对象。
+
+facade 保存 `{schemaVersion,ownerId,transformation,key,iv}` JSON 状态，每次调用重建 SymmetricCrypto，再恢复配置的 IV；没有按句柄增长的原生对象注册表。生产 ownerId 为受信任务的 sourceId；跨 source 的状态调用拒绝。新密钥只在 create 时生成；后续操作不重新生成密钥。只有显式 create IV 或 setIv 更新配置，提供者在一次操作中生成的 IV 不自动提升为下一次配置；这保留旧对象按配置重新初始化的行为，也不保证随机参数模式可解密或每次密文相同。状态包含密钥，不能作为安全加密存储或跨来源令牌使用。
+
+`PBE*` transformation 在这个 JSON 状态对象入口明确拒绝为 `legacy.unsupported_crypto_parameter_snapshot`：尚未复刻 PBE 参数/盐等完整状态。其他 transformation 仍取决于 Android 提供者，非法密钥、IV、padding 或操作原样失败，不自动降级。
+
+两个旧快捷入口也已接入：`aesBase64DecodeToString(text,key,transformation,iv)` 返回解密文本；`desEncodeToBase64String(data,key,transformation,iv)` 返回加密 Base64。两者恰好四个 String 参数，调用原 JsEncodeUtils 的对应方法，并不意味着其他 AES/DES/3DES、非对称、签名或流重载已覆盖。
+
+实现与回归入口：[LegacyScriptHost](../../../packages/source_legacy/lib/src/legacy_host.dart)、[Dart 参数/分派测试](../../../packages/source_legacy/test/legacy_java_host_test.dart)、[Android 分派与密钥/IV 序列测试](../../../../app/src/test/java/io/legado/app/model/sourceEngine/LegacyJavaHostTest.kt)。这些测试分别验证调用链子合同，不替代真实书源或完整阶段验收。
+
 ## 网络与响应
+
+### Android 原生旧 HTTP
+
+Android source_host 已启用 useNativeHttp：六个旧 HTTP 方法转发到 NativeLegacyHttpHost。ajax/connect/ajaxAll 使用原 AnalyzeUrl 请求管线，get/post/head 使用原 JsExtensions 的 Jsoup 管线；成功请求的 URL options、来源默认头、charset、限流及 Cookie 行为沿对应原管线执行，不重写成现代 net.request。get(key) 单参数变量读取不进入 HTTP。
+
+| 方法 | Android 参数与结果 |
+|---|---|
+| `ajax(url[,timeoutMs])` | URL 或数组首项；返回正文，使用 AnalyzeUrl |
+| `connect(url[,headersJson[,timeoutMs]])` | headers 为 String/null；返回 StrResponse facade |
+| `ajaxAll(urls[,skipRateLimit])` | String URL 数组、可选 Boolean（默认 false，原生路径支持 true）；按原并发管线返回响应列表 |
+| `get(url,headers[,timeoutMs])`、`head(url,headers[,timeoutMs])` | 原 Jsoup 请求，不跟随重定向；返回 Response facade |
+| `post(url,body,headers[,timeoutMs])` | String body；原 Jsoup POST，不跟随重定向；返回 Response facade |
+
+可选 timeout 允许 null，否则必须为整数毫秒；ajax/connect 接收 Long 范围，Jsoup 三方法接收 Int 范围，其有效值与默认值由原客户端解释。旧 URL options 只由支持它们的 AnalyzeUrl 路径解析，不表示 Jsoup get/post/head 也解释逗号 options。
+
+任务上下文 SourceTaskSource 保存调用方的真实 BaseSource 和 engineSourceId；取源时必须与已注册 task.sourceId 一致，不从脚本 JSON 重建来源，也无需先保存到 DAO。未保存的编辑源可使用其真实默认头和来源配置。显式无源/guest 调用通过 SourceTaskSourceSuppression 屏蔽继承来源，不虚构来源，也不让脚本指定另一来源对象。
+
+Android 旧路径使用原按域共享的 CookieStore/客户端 Cookie 合同，受原 enabledCookieJar 等配置控制；这是旧兼容存储，不是现代每 source 隔离的 HTTP Cookie jar。现代 `source.net` 和其他平台的旧 Dart portable 分派保持各自原合同，不能从 Android 接线推导全平台 Cookie 共享或自动同步。
+
+错误处理有明确变化：IO 失败返回 typed `network_error`，Jsoup HttpStatusException 返回 `legacy.http_error`，取消继续传播；不会把 ajax/connect 的失败堆栈变为正文或合成成功200，也不会失败后静默改走 Dart HTTP。因此成功请求沿原语义，不等于所有旧错误行为完全兼容。
+
+### 同所有者请求续传
+
+原生请求中的 Header eval、URL/body 模板脚本通过 begin→continue→stepCall→abort 内部协议续传；脚本仍在当前 V8 VM、原来源/library 上下文运行，不另造来源或第二个脚本运行时。token 与递增 sequence 由宿主校验并绑定活动请求所有者；临时 result/baseUrl 等请求变量保存后恢复，finally 中 abort 释放续传，错误与取消不会改走另一 HTTP 管线。这些内部方法不是任意脚本可选择所有者的公开网络 API。
+
+Header eval 与 URL/body 变量恢复已经接线，但同步等待不支持所有异步嵌套：在 microtask 内等待仍 pending 的 Promise 时明确报 `__sourceAwaitSync cannot await a pending Promise inside a microtask`。不能承诺任意 async header、递归 pending Promise 或无限重入兼容。
+
+### 非 Android 的 Dart portable 子集
+
+下表描述未启用 useNativeHttp 的 LegacyScriptHost，不能用它覆盖上面的 Android 行为。
 
 | 方法 | 支持的参数 | 结果与限制 |
 |---|---|---|
@@ -19,13 +96,33 @@ URL 中逗号形式的旧请求选项报 `legacy.url_options_require_migration`�
 
 当前 headers 对象的键和值不可为 null，转换成字符串。connect 特别限制 headers 为 JSON 字符串或 null。JSoup get/post/head 在响应>=400时报 legacy.http_error；POST 未明确 Content-Type 时设为 application/x-www-form-urlencoded; charset=UTF-8。相对 URL 由当前规则上下文或源脚本基础地址解析；不表示已复刻旧 AnalyzeUrl 的动态 URL、请求选项与登录能力。
 
-响应由 Dart JSON 传输，再由 JS prelude 建立方法：`body()`、`url()`、`code()`、`statusCode()`、`headers()`、`header(name)`、`hasHeader(name)`、`message()`、`statusMessage()`、`isSuccessful()`、`callTime()`、`toString()`。header 查找不区分大小写，缺失返回 null；headers() 返回带 get(name) 的头对象；isSuccessful 对 2xx 为 true。callTime 是包括宿主等待的耗时毫秒，message 未提供时为空字符串。StrResponse header 使用重复头的最后一个值，JSoup header 使用合并值。bodyAsBytes() 返回 signed 原始响应字节，multiHeaders() 返回多值头对象，cookies()/cookie(name)/hasCookie(name) 读取本响应 Cookie 映射。raw()/errorBody() 明确报 legacy.unsupported_response_api。
+响应由 Dart JSON 传输，再由 JS prelude 建立方法：`body()`、`url()`、`code()`、`statusCode()`、`headers()`、`header(name)`、`hasHeader(name)`、`message()`、`statusMessage()`、`isSuccessful()`、`callTime()`、`toString()`。header 查找不区分大小写，缺失返回 null；headers() 返回带 get(name) 的头对象；isSuccessful 对 2xx 为 true。callTime 是包括宿主等待的耗时毫秒，message 未提供时为空字符串。StrResponse header 使用重复头的最后一个值，JSoup header 使用合并值。bodyAsBytes() 返回 signed 字节；Android Jsoup 返回原响应字节，Android StrResponse 当前由已解码 body 重新编码，不能据此承诺原始 wire bytes。multiHeaders() 返回多值头对象，cookies()/cookie(name)/hasCookie(name) 读取本响应 Cookie 映射。raw()/errorBody() 明确报 legacy.unsupported_response_api。
 
 body 和 url 为可调用对象，支持字符串强制转换以兼容属性形式，但 `response.body === "text"` 不会等价于字符串属性；需要 `response.body()` 或明确字符串转换。这是已知差异，不能宣称完整 StrResponse/JSoup 类型兼容。
 
 ## 变量
 
 `get(key)` 的单参数形式读取变量，缺失为空字符串；它与两/三参数 HTTP get 不同。`put(key,value)` 接受字符串键和值，保存并返回值。变量属于该 LegacyScriptHost 使用的变量表，不自动持久化到 Room。
+
+## Android 旧 cache
+
+`cache` 已绑定真实 CacheManager，键在 JS 中 String 转换，null key/value 拒绝。它是旧全局共享缓存，不自动加 source 前缀；来源任务约束调用生命周期，并不把数据隔离成现代每源 storage/variables。消费者需要自行避免共享键冲突。
+
+| 方法 | 结果与重载 |
+|---|---|
+| `put(key,value[,ttlSeconds])` | 无返回值；默认 TTL=0；普通值按 JS String 转换保存，已标记 Java byte[] 保持字节存储 |
+| `get(key[,onlyDisk])` | String/null；onlyDisk 默认 false，显式必须 Boolean |
+| `delete(key)`、`deleteMemory(key)` | 无返回值；分别原全存储删除与仅内存删除 |
+| `putMemory(key,value)`、`getFromMemory(key)` | 保存可传输 JSON 值或已标记字节；读取原值/null，无持久化 TTL 参数 |
+| `getInt/getLong/getDouble/getFloat(key)` | 原数值读取或 null；不是任意默认值重载 |
+| `getByteArray(key)` | signed 字节数组或 null |
+| `putFile(key,text[,ttlSeconds])`、`getFile(key)` | ACache 文本写入/读取；text 必须 String，读取 String/null |
+
+TTL 是有符号 Int **秒**，默认0沿原实现表示无到期时间，不新增毫秒或负值规范化策略。String 存储与 Java ByteArray 存储保持区别：prelude 只对原字节 API 返回的数组作 VM 弱标记，普通 `[1,2]` 不会自动当 Java byte[]；复制/重建普通数组不继承标记。putMemory 的普通 JSON 不是任意 Java 对象，不能保留 Java 类身份。以上13方法为明确白名单，不开放整个 CacheManager。
+
+## Android 旧 source 对象
+
+已绑定真实来源的旧脚本入口提供 JSON 字段视图及有限方法：getKey/getTag、getLoginInfo/putLoginInfo、getLoginHeader/putLoginHeader、getVariable/putVariable/removeLoginInfo（具体入口按已注入 facade）。状态方法同步调用受信 sourceState 宿主，作用于原来源对象，不是脚本任选的 Room/Java 对象；原 source/sourceApi JSON 字段与新版异步 source.* API 不能混用。缺少来源的 guest 调用不因此获得这些状态能力。现代 namespace 和各平台 standalone 合同保持独立。
 
 ## 编码与字节
 
@@ -58,7 +155,7 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 ## 错误与范围
 
-不支持的参数数量报 `legacy.unsupported_overload`；不支持的方法报 `legacy.unsupported_api`。非法类型、非法 Base64/hex 等还会产生 ArgumentError/FormatException。网络错误、取消和超时由下层传播。未列出的文件、加解密、浏览器、Cookie、任意 Java 类、脚本库与应用控制接口不因这些方法存在而自动兼容。
+不支持的参数数量报 `legacy.unsupported_overload`；不支持的方法报 `legacy.unsupported_api`。非法类型、非法 Base64/hex 等还会产生 ArgumentError/FormatException。网络错误、取消和超时由下层传播。未列出的文件、加解密重载、浏览器、Cookie 操作、任意 Java 类、脚本库与应用控制接口不因这些方法存在而自动兼容。
 
 测试依据：`packages/source_legacy/test`；真实 V8 同步桥需要 `source_v8` 测试或 Android 验收另行证明。
 
@@ -68,6 +165,48 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 空规则的旧约定：getString 返回空字符串、getStringList 返回 null、getElement 返回 null、getElements 返回空数组，与新版 getStringList 空数组不同。
 
-HTML 字符串在旧 JS 环境转为有限元素 facade：text()、attr(name)、outerHtml()、select(selector)、selectFirst(selector)、toString()、toJSON()。元素列表提供 size()、get(index)、first()、last()、text()、attr(name)、select(selector)。JSON 值保留其对象形态。序列化转换不保留原始 DOM 对象身份；元素不是完整 Java JSoup 对象，修改 DOM、父子关系与任意方法不保证支持。
+生产 typed DOM 已使用 schema2 可变 alias forest：节点有稳定 ID，V8 memo 同一节点 wrapper，更新同步到已保留别名。节点移除后已保留的 detached alias 仍有效；appendChild 跨 Document 是真实移动，同时更新两棵树，不克隆成无关 HTML 字符串。文档输出设置、XML parser 大小写、声明、CDATA、tag flags 以及 own/inherited baseURI 随快照保存。schema1 旧 JSON 形状继续兼容，但不因此开放任意 Java 对象身份。
 
-元素 facade 的 html() 明确报 `legacy.unsupported_element_api`。列表缺失 first/last 返回 null，attr 在空列表时为空字符串；get 越界返回 undefined。html 规则输出与 html() 方法不是同一能力。未知元素序列化报 `legacy.invalid_element_serialization`。
+节点读取提供 attr(name)、hasAttr(name)、text()、ownText()、html()、outerHtml()、data()、tagName()、id()、className()、select/selectFirst、getElementsByTag/Class、getElementById、parent/children、nextElementSibling/previousElementSibling。Document 另有 body()/head()/title()/createElement(tag)。可变重载为 attr(name,value)、text(text)、html(html)、title(text)，以及 remove()/empty()/append(html)/appendElement(tag)/appendChild(node)，具体节点类型仍由真实 Jsoup 校验。shared Elements 支持 text/html/attr/select/toString 与 size/get/first/last/toArray；attr/html setter、remove/append/appendChild/empty 返回原列表以保持链式调用和自定义属性，toArray() 无参返回数组副本。未知重载与无效快照拒绝；没有一般反射或任意 DOM 方法兜底。
+
+原生规则提取另有 task-local 节点/值引用：仅当前活动任务可恢复，任务关闭或取消即清理；不能跨任务传递这些 token。typed JSON 快照与这种受限任务引用是两种传输形式，均不开放 Java 反射。
+
+## Android `org.jsoup` 显式兼容入口
+
+旧兼容 prelude 提供同一有限 namespace 的 `org.jsoup` 和 `Packages.org.jsoup`，保留已有 bounded Packages 成员。现代 runtime 不提供 org/Packages。入口由实际 Android Jsoup 执行，不是 Dart 模拟 parser；没有 JavaImporter/importClass、一般 Java 类解析或其他 org 包覆盖。
+
+| 入口 | 支持参数 |
+|---|---|
+| `Jsoup.parse(html[,baseUri[,parser]])` | String HTML；也接受 parse(html,parser)，parser 仅下面两种显式 marker |
+| `Jsoup.parseBodyFragment(html[,baseUri])` | String HTML/baseUri |
+| `Parser.htmlParser()`、`Parser.xmlParser()` | org.jsoup.parser.Parser 中的显式 parser marker |
+| `new Document(baseUri)`、`Document.createShell(baseUri)` | org.jsoup.nodes.Document；返回实际 Document facade |
+| `new Element(tag[,namespace])` | org.jsoup.nodes.Element；第二参数是 **namespace，不是 baseUri** |
+| `Jsoup.connect(url)` | String URL；返回真实保留的 Connection lease |
+| `Connection.Method` | GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS/TRACE；name()/ordinal()/toString()，valueOf(name)/values() |
+
+Connection 支持单参 String setters url/userAgent/referrer/postDataCharset/requestBody，单参 Int setters timeout（毫秒）/maxBodySize，单参 Boolean setters ignoreHttpErrors/ignoreContentType/followRedirects，method(Method)；header(name,value)/cookie(name,value)、headers(map)/cookies(map) 要求字符串映射；data(map) 或成对 String 参数。setters 返回原 Connection。get()/post() 返回 Document；execute()/response() 返回真实 Response，取得对象时不提前读 body。Response 支持 lazy body()/bodyAsBytes()/parse()，statusCode/statusMessage/header(name)/headers/cookie(name)/cookies/hasHeader/hasCookie/url 读取，charset() 与 charset(name)（setter 返回原 Response）。bytes 为标记的 signed Java 字节。未暴露 stream/upload/request 任意重载，不把原生已有但 JS facade 未提供的方法算作公开支持。
+
+这里沿 Jsoup 自身默认设置，**不自动叠加** Legado 默认 header、CookieStore 或 SSL 配置；与 java.ajax 原 AnalyzeUrl 路径不同。保留同一实际 Connection 的 cookie jar 可跨同 owner 的 entry 使用，重复 response() 的同一原生 Response 保持 wrapper 身份。Connection/Response 是 opaque handles，无 toJSON，不承诺跨 owner、进程重启恢复。
+
+注册来源的 canonical/raw book engine IDs 关联 owner；source clear 取消相关任务、释放实际 lease 并清 Dart aliases。临时执行使用独立 task owner，稳定 recipe/config 变化会使旧 lease 失效。dispose() 显式释放；GC 只排队，下一受信 RPC 才 flush release，不能承诺 GC 即时关流。释放也取消使用 lease 的操作并关闭 response stream；已释放 facade 再调用明确失败。此生命周期边界不允许脚本伪造 owner 或借 token访问其他来源。
+
+实现入口：[org prelude](../../../packages/source_legacy/lib/src/legacy_org_jsoup.dart)、[原生 org 宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/NativeOrgJsoupHost.kt)、[Connection 宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/NativeOrgConnectionHost.kt)。生产接线不等于新的184项 Android 验收已执行，也不代表其他 JavaImporter/JCE 或所有历史来源兼容。
+
+## 发现脚本 InfoMap
+
+Android 发现菜单/按钮脚本的 infoMap 已绑定原 InfoMap 宿主，不再只是任意 JSON 草稿。键和值必须为 String。支持 get() 返回映射 view、get(key)、put(key,value)、remove(key)、set(map)、putAll(map)、containsKey/containsValue、size()/isEmpty()/clear()、keySet()/values()/entrySet()，以及属性读取/写入/删除。get(key) 缺失返回 null，属性形式缺失为 undefined；put/remove 返回原值或 null。entrySet() 返回 key/value JSON 条目，不是任意 Java Entry 对象。
+
+save([timeSeconds[,need]]) 默认 0/true，time 必须为 Int 范围整数秒，need 必须为 Boolean；它只记录原 InfoMap 的 TTL 与 needSave，不立即持久化。saveNow() 按最后配置的秒 TTL 写入 CacheManager 后清除 needSave；needSave 属性及 getNeedSave()/setNeedSave(bool) 控制标记，sourceUrl/getSourceUrl() 只读。没有另设毫秒 saveTTL API，也不把 save() 改成无条件立即保存。任务回调绑定当前来源的 InfoMap。
+
+## 原生规则宿主与变量层
+
+Android 已接入原 AnalyzeRule 的 JSON RPC，由 Dart 编排请求、分页及阶段结果，JavaScript 仍由 V8 执行。info 的 ruleBookInfo.init 在字段提取之前执行，得到的新内容用于后续字段；null 结果报 legacy_init_empty。content 每页使用原正文提取/格式化，分页后合并；subContent 在分页后以第一页原内容与上下文求值，再执行原在线文本追加或音频 lyric/视频 danmaku 分支；普通文字来源不因此追加 subContent。最后对合并文本逐行 trim 后执行 replaceRegex，在线文本分支随后缩进，再求标题。可选 URL/media 处理失败沿原路径处理，取消仍传播；提取失败不会静默吞掉。
+
+变量作用域携带 source/book/chapter 三层字符串映射及固定 target。chapter 读取顺序 chapter→book→source，book 为 book→source，source 只读本层；空值允许继续回退。put 写入当前 target，null 删除当前层键；脏键不会被后续旧 snapshot 覆盖。book/chapter 脚本快照携带对应 variable 数据，任务返回更新层供 App 回写，不把所有变量混成单一来源 map，也不承诺跨来源共享。
+
+WebJS 是独立 Android 后台能力：仅外层声明式规则显式允许时执行 BackstageWebView，使用原 URL/HTML/headers/result、10秒超时和任务协程上下文；主线程调用拒绝。java 提取回调仍禁止递归 JS/WebJS，报 nested_script_requires_migration。任务取消和关闭传播并清理引用，不将 WebJS 作为独立 Dart/CLI 的默认能力。
+
+Release 的反射注册入口需要既有 keep 规则：JsoupXpath AxisSelector/NodeTest/Function 实现和 Jsoup 类，以及 Flutter GeneratedPluginRegistrant.registerWith。保留这些原生注册路径不等于 Java 反射对脚本开放。
+
+实现入口：[LegacyDomHost](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyDomHost.kt)、[DOM prelude](../../../packages/source_legacy/lib/src/legacy_dom.dart)、[原生规则宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/LegacyRuleHost.kt)、[InfoMap 分派](../../../../app/src/main/java/io/legado/app/help/source/BookSourceExtensions.kt)。最新固定公开四源严格验收仍失败：掌阅成功；悠读为空（原 parser 对同一 response 为0，V8 也为0）；9书为 HTTP 错误；笔趣为 SSL 错误。局部实现和回归通过不能将这四源结果标为全部成功。局部 checkpoint 或方法接线不能标记整源 fully compatible/verified，也不能写成完整验收已通过。

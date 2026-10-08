@@ -8,6 +8,23 @@ import org.junit.Test
 
 class ExploreScriptValueTest {
     @Test
+    fun exportedScriptClosingTagsAllowTrailingWhitespaceLikeTheOldParser() {
+        for (suffix in listOf("", "\n", "\r\n", " \t\r\n", "\\n", " // menu")) {
+            val value = "<js>JSON.stringify([{title:'Fixture',url:'/list'}])</js>$suffix"
+            val originalBody = value.substring(4, value.lastIndexOf('<'))
+            assertEquals(originalBody, legacyExploreScript(value))
+        }
+        assertEquals("42", legacyExploreScript(" \n<JS>42</JS>\r\n"))
+        assertEquals("42", legacyExploreScript("@JS:42\n"))
+        assertEquals(null, legacyExploreScript("Fixture::https://example.org/list"))
+    }
+
+    @Test
+    fun trulyUnterminatedScriptStillFailsBeforeExecution() {
+        assertThrows(IllegalArgumentException::class.java) { legacyExploreScript("<js>42\n") }
+    }
+
+    @Test
     fun arraysAndObjectsBecomeJsonRatherThanJvmMapText() {
         val value = listOf(mapOf("title" to "分类", "url" to "https://example.org"))
         assertEquals(GSON.toJson(value), exploreScriptResultText(value))
@@ -39,4 +56,16 @@ class ExploreScriptValueTest {
             assertThrows(IllegalArgumentException::class.java) { validateExploreInfoMap(invalid) }
         }
     }
+    @Test
+    fun infoMapSaveUsesOriginalDefaultsAndKeepsDeferredTtlAndNeedFalse() {
+        assertEquals(0 to true, exploreInfoMapSaveArguments(emptyList()))
+        assertEquals(60 to true, exploreInfoMapSaveArguments(listOf(60)))
+        assertEquals(60 to false, exploreInfoMapSaveArguments(listOf(60, false)))
+        assertEquals(-1 to true, exploreInfoMapSaveArguments(listOf(-1, true)))
+        assertEquals(Int.MAX_VALUE to false, exploreInfoMapSaveArguments(listOf(Int.MAX_VALUE.toLong(), false)))
+        for (invalid in listOf(listOf(1.5), listOf(2147483648L), listOf("60"), listOf(1, "false"), listOf(1, true, false))) {
+            assertThrows(IllegalArgumentException::class.java) { exploreInfoMapSaveArguments(invalid) }
+        }
+    }
+
 }

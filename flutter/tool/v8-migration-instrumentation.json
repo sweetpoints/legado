@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 66,
+  "caseCount": 130,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -137,6 +137,210 @@
         "realAtomicSavingCheckpointRequiresExplicitRetryBeforeRoomMutation",
         "realRoomAcceptAndAtomicReceiptFinishWhenCallerIsCanceled",
         "unchangedSourceStillWritesReceiptWithoutRestampingSource"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyPipelineHooksV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyPipelineHooksV8IntegrationTest.kt",
+      "sourceSha256": "02357eba7ee6fd6178a802b42681190a3fd1b0b3b96b5e7486a335f5d8e32911",
+      "methods": [
+        "contentFormatsEachPageThenReplacesWholeJoinOnceAndReadsTitleFromFirstBody",
+        "infoInitTransformsWholeElementContainerBeforeFieldsWithOneLibraryInitialization",
+        "nullInfoInitReturnsExplicitFailureInsteadOfUsingUninitializedBody"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacySourceAppEntryTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacySourceAppEntryTest.kt",
+      "sourceSha256": "80e914c48609b3935f00bd3fecc67729ccbbf222353cde764b6f960c69aac7fc",
+      "methods": [
+        "importedOldSourceRunsSearchExploreInfoInitTocAndFormattedReplacementThroughApp",
+        "importingCompleteOldSourceDoesNotBlockSearchOnUnselectedInvalidContentScript",
+        "initScriptIdentityPreservesWholeNativeElementContainer",
+        "selectedInvalidJavaScriptFailsAfterFetchWithoutBlockingSearch"
+      ]
+    },
+    {
+      "name": "io.legado.app.help.source.ExploreScriptV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/help/source/ExploreScriptV8IntegrationTest.kt",
+      "sourceSha256": "2f7a89c402b39a62a0d76c2173c954ec9e47e11905237dbc6f52b1e3cf52dc3b",
+      "methods": [
+        "infoMapMethodsAndPropertiesMutateLiveMapWithoutImplicitPersistence",
+        "infoMapSaveNowRunsAtCallTimeAndRetainsTtlEvenWhenNeedIsFalse",
+        "oldExportedMenusExecuteThroughActualV8WithWhitespaceAfterClosingTag"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyBookVariableScopeIntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyBookVariableScopeIntegrationTest.kt",
+      "sourceSha256": "7bffa3782ebf58f663963769cf106af86bcb5012ee962229de650b87e32bd077",
+      "methods": [
+        "nativeScopedParserCallbackReadsTheSameBookLayerAsPureRule",
+        "originalParserKeepsSearchBookVariablesThroughConversionAndSeparateStages",
+        "searchPutFollowsEachBookIntoInterleavedInfoAndTocCalls"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyWebJsAppIntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyWebJsAppIntegrationTest.kt",
+      "sourceSha256": "75c574fc6c060f4493c7e386fc88f103575dc830390bbdb4037137a325e1ae9a",
+      "methods": [
+        "cancellingAnActiveWebJsRendererReleasesTaskAndAllowsNextExtraction",
+        "webJsFieldExtractionRunsThroughActualWebBookAndBackgroundRenderer"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyRuleV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyRuleV8IntegrationTest.kt",
+      "sourceSha256": "a3211618f2e26503344eededb911b10dc06c0e13c8106977a1ceb0fb457f628b",
+      "methods": [
+        "javascriptInsideSynchronousExtractionCallbackIsRejectedWithoutDeadlock",
+        "libraryInitializesOnceAndGlobalXPathCallbackPreservesOuterHtmlAcrossFieldsAndStages",
+        "mixedCssJavaScriptAndInlineExpressionsUseActualOuterParser",
+        "trustedLegacyHostUsesJsonSnapshotsAndCannotAdoptScriptSuppliedSourceIdentity"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyCookieV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCookieV8IntegrationTest.kt",
+      "sourceSha256": "1b524417ca3205a92d115911a44ae9b633a80ddc08d5f715b6eee4d6cb32ad03",
+      "methods": [
+        "legacyCookieMapConversionCrossesActualV8JsonBoundary",
+        "legacyRemoveSourceCookieUpdatesNativeJarBeforeNextGet"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyDomV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyDomV8IntegrationTest.kt",
+      "sourceSha256": "9bbc227bc40915c7cfbc14c826e3fb12e4a77368290bf1fc3624c32aecfa9670",
+      "methods": [
+        "nativeElementsKeepTableAncestorsAndSupportOriginalExtractionInputs",
+        "storedDomObjectSurvivesAnotherAuxiliaryTaskAndUsesItsOriginalDocument"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyHostFailureV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyHostFailureV8IntegrationTest.kt",
+      "sourceSha256": "9501950ffdd53cd05e4b670bf4a8824217a05043bf8f21f3afe917b8b6efd89d",
+      "methods": [
+        "refusedLocalConnectionPreservesNativeFailureCodeAndTypes"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyHttpDispatcherContextIntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyHttpDispatcherContextIntegrationTest.kt",
+      "sourceSha256": "1c0ce1302f87b4cd2818af7f78e55a34ca0d3deeb1e07dab56ec55975198afec",
+      "methods": [
+        "cancellationWhileNativeRequestWaitsForHeadersReleasesTaskAndPermitsNextCall",
+        "slowResponseBodyLeavesMainResponsiveAndCompletesAfterExplicitRelease"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyAuxiliaryFacadeV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyAuxiliaryFacadeV8IntegrationTest.kt",
+      "sourceSha256": "8843daad5e68523692cbe2e9a9e96e9e662d9d4aacac8d2ab916f15de5ac4e8e",
+      "methods": [
+        "existingEntityCallbacksRemainTheVariableOwnerInsteadOfSourceGlobalState",
+        "invalidModernCarrierStaysStrictAndDoesNotLoadTheLegacyLibrary",
+        "opaqueSourceLoadsItsLibraryOnceAndDefersDynamicHeadersUntilNetworking"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyDynamicHttpHeaderV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyDynamicHttpHeaderV8IntegrationTest.kt",
+      "sourceSha256": "45f879553535e98fb46010c1dcd8d95fb6a5029e00e9268a7ae5f497db4e28e9",
+      "methods": [
+        "ajaxSourceHeaderRunsInTheExistingOwnerAndPreservesLibraryAndGlobals",
+        "dynamicHeaderUsesSourceVariablesAndRestoresTheCallerBookScope",
+        "jsoupGetUsesItsExplicitDynamicHeaderAndDoesNotEvaluateSourceHeader"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyNestedHttpScriptV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt",
+      "sourceSha256": "8d1b0358cb077400e3c3048f29c53356e057c67ec13244e552521919dd8e8bc6",
+      "methods": [
+        "dynamicUrlJsAndInterpolationReuseTheOwnerWithoutLeakingOuterVariables",
+        "promisedUrlInsideAjaxStillReturnsASynchronousStringForConcatenation",
+        "responseBodyJsRunsAfterNativeFetchInTheSameOwnerAndReceivesTheRawBody",
+        "urlOptionJsReceivesResolvedUrlAndPreservesTheSameLibraryAndGlobals"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyCacheV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCacheV8IntegrationTest.kt",
+      "sourceSha256": "dfa5f573bdfefcd5954d3bc3c7bd5372be03f88f22928f68ab440657d6b8909a",
+      "methods": [
+        "actualCacheSurvivesVmClearAndSupportsMemoryDiskFileAndJavaBytes",
+        "ttlUsesSecondsAndExpiredDiskCannotBeHiddenByStaleMemory"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyOrgJsoupV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt",
+      "sourceSha256": "d666afa85e55acaddb36973d0abc7516bfaf8117dc4ce7504c9d26f7a9eeb0c3",
+      "methods": [
+        "bodyFragmentParsingMatchesOriginalBodyAndAbsoluteLink",
+        "documentMutationsUpdateSavedAliasesAcrossAuxiliaryExecutions",
+        "originalOrgParseSelectAndPackagesConstructorsUseNativeDom",
+        "originalXmlParserOverloadsPreserveDeclarationAndMixedCase",
+        "packagesConstructorsAndInstanceChecksMatchDocumentAndElementKinds",
+        "parseSelectTextAndAbsoluteHrefMatchOriginalJsoup",
+        "xmlParserTwoAndThreeArgumentOverloadsPreserveXmlCaseAndBaseUri"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyOrgConnectionV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt",
+      "sourceSha256": "53aa3664b140351d9a09f9421b582fec8b5a987b4773ca6a91f75f92333b4062",
+      "methods": [
+        "canonicalAndRawSourceClearRejectOldTokensButFreshConnectionsWork",
+        "clearingSourceCancelsInflightConnectionAndPermitsFreshEntry",
+        "disposingConnectionLeavesItsIndependentUnreadResponseUsable",
+        "disposingResponseAllowsConnectionToReturnANewUsableWrapper",
+        "explicitlyDisposedConnectionRejectsWrapperAndNativeTokenReuse",
+        "libraryRecipeChangeInvalidatesOldConnectionLease",
+        "putEnumHeadersBodyAndNativeResponseBytesKeepIdentityAndCacheBrand",
+        "retainedConnectionUsesItsCookieStoreAcrossAuxiliaryExecutions",
+        "serializedConnectionTokenCannotBeInvokedByAnotherSourceOwner"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacySourceRuntimeClearV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt",
+      "sourceSha256": "027b4f56eeaf6e77dd20f66d677d3c979c744ff21898fdb9bb4f3c4f28108fe9",
+      "methods": [
+        "canonicalClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor",
+        "rawEngineIdClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor"
+      ]
+    },
+    {
+      "name": "io.legado.app.help.source.LegacyOrgExploreMenuV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/help/source/LegacyOrgExploreMenuV8IntegrationTest.kt",
+      "sourceSha256": "73276730c8ba7acc5b99dde45e579c60f6349cd7c788f18f0cf10df1c12f7080",
+      "methods": [
+        "nativeConnectionDiscoveryParsesRealLocalNavigationAndCachesStyledMenus",
+        "packagesJsoupAliasInitializesInSourceLibraryBeforeDiscoveryScript",
+        "taggedOrgParserDiscoveryReturnsExactStyledMenusWithTrailingComment"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyCoverImageV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyCoverImageV8IntegrationTest.kt",
+      "sourceSha256": "2d5eb9de0451f702f285016855cc5237efc1d3d19f61bd9cf9a9baba27598a47",
+      "methods": [
+        "aSearchWithoutACoverRuleDoesNotInventAnImageOrFetchBookInfo",
+        "legacyCoverOptionsAndSourceHeaderReachActualGlidePixels",
+        "signedJavaDecodeBytesRetainTheActualPngAndRejectOutOfRangeBytes"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyTocPaginationV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt",
+      "sourceSha256": "9c7943f1e65a77daf99962caec6f2e0edd2a52e68ffb9118c393c83fa766ed9c",
+      "methods": [
+        "blankTocUrlLoadsBookUrlAndPreservesItsRequestOptionsHeader",
+        "selfLinksAndMultipleNextPagesKeepOriginalChapterOrderWithoutDuplicateFetches"
       ]
     }
   ]

@@ -49,6 +49,43 @@ class SourcePlatform implements ScriptHost {
       case 'browser.start':
       case 'browser.openUrl':
       case 'browser.video':
+      case 'javaHost.cryptoCreate':
+      case 'javaHost.cryptoCall':
+      case 'cookieHost.setCookie':
+      case 'cookieHost.setWebCookie':
+      case 'cookieHost.replaceCookie':
+      case 'cookieHost.getCookie':
+      case 'cookieHost.getKey':
+      case 'cookieHost.removeCookie':
+      case 'cookieHost.cookieToMap':
+      case 'cookieHost.mapToCookie':
+      case 'cookieHost.clear':
+      case 'javaHost.domCall':
+      case 'orgJsoup.parse':
+      case 'orgJsoup.parseBodyFragment':
+      case 'orgJsoup.newDocument':
+      case 'orgJsoup.newElement':
+      case 'orgJsoup.connect':
+      case 'orgJsoup.connectionCall':
+      case 'orgJsoup.responseCall':
+      case 'orgJsoup.release':
+      case 'javaHost.aesBase64DecodeToString':
+      case 'javaHost.desEncodeToBase64String':
+      case 'javaHost.getWebViewUA':
+      case 'javaHost.HMacHex':
+      case 'javaHost.HMacBase64':
+      case 'javaHost.androidId':
+      case 'javaHost.randomUUID':
+      case 'javaHost.toNumChapter':
+      case 'javaHost.log':
+      case 'javaHost.logType':
+      case 'javaHost.toast':
+      case 'javaHost.longToast':
+      case 'javaHost.timeFormat':
+      case 'javaHost.timeFormatUTC':
+      case 'javaHost.t2s':
+      case 'javaHost.s2t':
+      case 'javaHost.getCookie':
       case 'replacement.log':
       case 'replacement.logType':
       case 'replacement.t2s':
@@ -86,6 +123,56 @@ class SourcePlatform implements ScriptHost {
       case 'sourceState.getVariable':
       case 'sourceState.putVariable':
       case 'sourceState.removeLoginInfo':
+      case 'exploreInfoMap.get':
+      case 'exploreInfoMap.put':
+      case 'exploreInfoMap.remove':
+      case 'exploreInfoMap.set':
+      case 'exploreInfoMap.save':
+      case 'exploreInfoMap.saveNow':
+      case 'exploreInfoMap.getNeedSave':
+      case 'exploreInfoMap.setNeedSave':
+      case 'exploreInfoMap.putAll':
+      case 'exploreInfoMap.containsKey':
+      case 'exploreInfoMap.containsValue':
+      case 'exploreInfoMap.size':
+      case 'exploreInfoMap.isEmpty':
+      case 'exploreInfoMap.clear':
+      case 'exploreInfoMap.keys':
+      case 'exploreInfoMap.values':
+      case 'exploreInfoMap.entries':
+      case 'exploreInfoMap.sourceUrl':
+      case 'javaHttp.ajax':
+      case 'javaHttp.get':
+      case 'javaHttp.post':
+      case 'javaHttp.head':
+      case 'javaHttp.connect':
+      case 'javaHttp.ajaxAll':
+      case 'javaHttp.prepareHeader':
+      case 'javaHttp.ajaxResolved':
+      case 'javaHttp.connectResolved':
+      case 'javaHttp.ajaxAllResolved':
+      case 'javaHttp.headerGet':
+      case 'javaHttp.headerPut':
+      case 'javaHttp.begin':
+      case 'javaHttp.continue':
+      case 'javaHttp.stepCall':
+      case 'javaHttp.abort':
+      case 'cacheHost.put':
+      case 'cacheHost.get':
+      case 'cacheHost.delete':
+      case 'cacheHost.putMemory':
+      case 'cacheHost.getFromMemory':
+      case 'cacheHost.deleteMemory':
+      case 'cacheHost.getInt':
+      case 'cacheHost.getLong':
+      case 'cacheHost.getDouble':
+      case 'cacheHost.getFloat':
+      case 'cacheHost.getByteArray':
+      case 'cacheHost.putFile':
+      case 'cacheHost.getFile':
+      case 'legacyRule.evaluate':
+      case 'legacyRequest.fetch':
+      case 'legacyRequest.resolve':
       case 'batch.cacheContent':
         if (arguments.isEmpty ||
             arguments.last is! Map ||
@@ -96,10 +183,18 @@ class SourcePlatform implements ScriptHost {
           );
         }
         final taskId = (arguments.last as Map)['__sourceTaskId'] as String;
+        final fromScript = (arguments.last as Map)['__sourceHostCallback'];
+        if (fromScript != null && fromScript is! bool) {
+          throw const EngineException(
+            'invalid_request',
+            'Host callback origin must be boolean',
+          );
+        }
         final result = await const MethodChannel('legado/source_host_platform')
             .invokeMethod<Object?>('call', {
               'sourceId': sourceId,
               'taskId': taskId,
+              'fromScript': fromScript ?? true,
               'method': method,
               'arguments': arguments.sublist(0, arguments.length - 1),
             });

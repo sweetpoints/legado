@@ -206,6 +206,96 @@ void main() {
       await host.close();
     },
   );
+  test(
+    'native legacy auxiliary keeps opaque task owner and variables isolated',
+    () async {
+      final created = <SourceDefinition>[];
+      final runtimes = <_Runtime>[];
+      final host = SourceHost((source) {
+        created.add(source);
+        final runtime = _Runtime();
+        runtimes.add(runtime);
+        return SourceEngine(runtime: runtime);
+      }, legacyRuleHostEnabled: true);
+      Map<String, Object?> source(String id) => {
+        ...legacy,
+        'bookSourceUrl': id,
+        'searchUrl': 'https://source.example/search',
+        'ruleSearch': {'bookList': 'class.row'},
+      };
+      try {
+        expect(
+          await host.handle(
+            evaluate(
+              'a1',
+              source('Local A'),
+              bindings: {'save': 'A', 'taskId': 'forged'},
+            ),
+          ),
+          {'value': 'A'},
+        );
+        expect(
+          await host.handle(
+            evaluate('b1', source('Local B'), bindings: {'save': 'B'}),
+          ),
+          {'value': 'B'},
+        );
+        expect(await host.handle(evaluate('a2', source('Local A'))), {
+          'value': 'A',
+        });
+        expect(created.map((source) => source.id), ['Local A', 'Local B']);
+        expect(
+          created.every(
+            (source) => source.metadata['legacyBaseUrlUnavailable'] == true,
+          ),
+          true,
+        );
+        expect(runtimes.first.contexts.first.variables['taskId'], 'a1');
+        expect(runtimes.first.contexts.first.variables['sourceId'], 'Local A');
+        expect(
+          runtimes.first.contexts.first.variables['baseUrl'],
+          'https://source.example',
+        );
+        expect(
+          created.first.baseUrl,
+          Uri.parse('https://source.example'),
+        );
+        await expectLater(
+          host.handle(
+            evaluate('library', {
+              ...source('Local C'),
+              'jsLib': 'function helper(){}',
+            }),
+          ),
+          throwsA(
+            isA<PlatformException>().having(
+              (error) => error.code,
+              'code',
+              'legacy_requires_migration',
+            ),
+          ),
+        );
+        await expectLater(
+          host.handle(
+            evaluate('header', {
+              ...source('Local C'),
+              'header': '@js:({token:"x"})',
+            }),
+          ),
+          throwsA(
+            isA<PlatformException>().having(
+              (error) => error.code,
+              'code',
+              'legacy_requires_migration',
+            ),
+          ),
+        );
+      } finally {
+        await host.close();
+      }
+    },
+  );
+
   test('invalid args, unsafe legacy identity and jsLib fail without creating engine', () async {
     final host = SourceHost((_) => throw StateError('must not create engine'));
     try {

@@ -10,16 +10,113 @@ import 'session_store.dart';
 
 /// Protocol v1. Long requests are cancellable by task ID; failures never fall back.
 class SourceHost {
-  SourceHost(this.createEngine, {MethodChannel? channel, this.sessionStore})
-    : channel = channel ?? const MethodChannel('legado/source_engine');
+  SourceHost(
+    this.createEngine, {
+    MethodChannel? channel,
+    this.sessionStore,
+    this.legacyRuleHostEnabled = false,
+    this.legacyScriptRuleHostEnabled = false,
+    this.legacyWebRuleHostEnabled = false,
+    this.legacyPageFetchEnabled = false,
+  }) : channel = channel ?? const MethodChannel('legado/source_engine');
   final SourceEngine Function(SourceDefinition) createEngine;
   final MethodChannel channel;
   final SourceSessionStore? sessionStore;
+  final bool legacyRuleHostEnabled;
+  final bool legacyScriptRuleHostEnabled;
+  final bool legacyWebRuleHostEnabled;
+  final bool legacyPageFetchEnabled;
   final Map<String, CancellationToken> _tasks = {};
   final Map<String, _CachedEngine> _engines = {};
   final Map<String, Future<void>> _queues = {};
   final Set<String> _active = {};
+  final Map<String, Set<CancellationToken>> _cancelGroups = {};
   bool _closed = false;
+
+  bool _issueAffectsOperation(
+    LegacyIssue issue,
+    String operation,
+    Map<String, Object?> original,
+  ) {
+    if (!legacyRuleHostEnabled) return true;
+    if (operation == 'explore') {
+      try {
+        final list = legacyRuleObject(original, 'ruleExplore')?['bookList'];
+        if (list == null || (list is String && list.trim().isEmpty)) {
+          if (issue.path.startsWith('ruleExplore.')) return false;
+          if (issue.path == 'ruleSearch' ||
+              issue.path.startsWith('ruleSearch.')) {
+            return legacyIssueAffectsOperation(issue, 'search');
+          }
+        }
+      } on FormatException {
+        /* invalid containers retain their actual issue */
+      }
+    }
+    return legacyIssueAffectsOperation(issue, operation);
+  }
+
+  bool _hostedRequestIssue(LegacyIssue issue, String operation, Map input) {
+    if (!legacyPageFetchEnabled) return false;
+    if ({
+      'legacy.request_options',
+      'legacy.dynamic_header',
+      'legacy.cookie_policy_requires_review',
+    }.contains(issue.code)) {
+      return true;
+    }
+    return issue.code == 'legacy.explore_menu_requires_review' &&
+        operation == 'explore' &&
+        input['exploreUrl'] is String;
+  }
+
+  bool _hostedRuleIssue(LegacyIssue issue, Map<String, Object?> original) {
+    final type = original['bookSourceType'];
+    if (legacyPageFetchEnabled &&
+        issue.code == 'legacy.non_text_source' &&
+        type is num &&
+        const {1, 2, 4}.contains(type.toInt())) {
+      // Native extraction/formatting preserves original audio/image/video behavior.
+      return true;
+    }
+    if (legacyScriptRuleHostEnabled &&
+        issue.code == 'legacy.capability_requires_review' &&
+        issue.path == 'jsLib' &&
+        (original['mainJs'] is! String ||
+            (original['mainJs'] as String).trim().isEmpty)) {
+      return true;
+    }
+    final hostedPipeline =
+        issue.code == 'legacy.pipeline_requires_review' &&
+        {
+          'ruleBookInfo.init',
+          'ruleContent.replaceRegex',
+          'ruleContent.subContent',
+        }.contains(issue.path);
+    if (!hostedPipeline &&
+        !{
+          'legacy.rule_requires_review',
+          'legacy.regex_mode',
+        }.contains(issue.code)) {
+      return false;
+    }
+    final dot = issue.path.indexOf('.');
+    if (dot < 0) return false;
+    Map<String, Object?>? group;
+    try {
+      group = legacyRuleObject(original, issue.path.substring(0, dot));
+    } on FormatException {
+      return false;
+    }
+    if (group == null) return false;
+    final rule = group[issue.path.substring(dot + 1)];
+    return rule is String &&
+        HostLegacyRuleEvaluator.canEvaluate(
+          rule,
+          allowScripts: legacyScriptRuleHostEnabled,
+          allowWebScripts: legacyWebRuleHostEnabled,
+        );
+  }
 
   Future<void> attach({Future<void> Function()? initialize}) async {
     channel.setMethodCallHandler(handle);
@@ -85,10 +182,21 @@ class SourceHost {
         final blockingIssues = legacy.issues
             .where(
               (issue) =>
+                  _issueAffectsOperation(
+                    issue,
+                    args['operation'] as String,
+                    raw,
+                  ) &&
                   !(legacy.source.metadata['legacyBaseUrlUnavailable'] ==
                           true &&
                       issue.code == 'legacy.base_url_requires_review' &&
-                      issue.path == 'bookSourceUrl'),
+                      issue.path == 'bookSourceUrl') &&
+                  !(legacyRuleHostEnabled && _hostedRuleIssue(issue, raw)) &&
+                  !_hostedRequestIssue(
+                    issue,
+                    args['operation'] as String,
+                    args['input'] as Map? ?? {},
+                  ),
             )
             .toList();
         // This one reviewed identity risk is enforced by the engine's absolute
@@ -296,10 +404,22 @@ class SourceHost {
     final token = CancellationToken();
     _tasks[id!] = token;
     try {
-      await _serialize('__aux:$owner', token, () async {
-        final entry = _engines.remove('__aux:$owner');
-        await entry?.engine.close();
-      });
+      final keys = ['__aux:$owner', '$owner:true', '$owner:false'];
+      for (final key in keys) {
+        for (final pending
+            in _cancelGroups[key]?.toList() ?? <CancellationToken>[]) {
+          pending.cancel();
+        }
+      }
+      // Enqueue all barriers before awaiting; later calls start with a fresh VM.
+      await Future.wait(
+        keys.map(
+          (key) => _serialize(key, token, () async {
+            final entry = _engines.remove(key);
+            await entry?.engine.close();
+          }, trackCancellation: false),
+        ),
+      );
     } finally {
       _tasks.remove(id);
     }
@@ -359,7 +479,18 @@ class SourceHost {
         identity = SourceDefinition.fromJson(raw);
       } else {
         final sourceId = raw['bookSourceUrl'];
-        final base = sourceId is String ? Uri.tryParse(sourceId) : null;
+        var base = sourceId is String ? Uri.tryParse(sourceId) : null;
+        Map<String, Object?> legacyMetadata = const {'legacy': true};
+        if (legacyRuleHostEnabled &&
+            sourceId is String &&
+            sourceId.isNotEmpty &&
+            (base == null ||
+                !['http', 'https'].contains(base.scheme) ||
+                base.host.isEmpty)) {
+          final imported = LegacySourceImporter().import(raw);
+          base = imported.source.baseUrl;
+          legacyMetadata = imported.source.metadata;
+        }
         if (base == null ||
             !['http', 'https'].contains(base.scheme) ||
             base.host.isEmpty) {
@@ -400,9 +531,11 @@ class SourceHost {
         }
         identity = SourceDefinition(
           id: sourceId as String,
-          name: raw['bookSourceName']?.toString() ?? sourceId,
+          name: raw['bookSourceName']?.toString().trim().isNotEmpty == true
+              ? raw['bookSourceName'].toString()
+              : sourceId,
           baseUrl: base,
-          metadata: const {'legacy': true},
+          metadata: legacyMetadata,
           headers: staticHeaders,
         );
       }
@@ -431,7 +564,7 @@ class SourceHost {
           } finally {
             await engine.close();
           }
-        });
+        }, cancelGroup: key);
       }
       return await _serialize(key, token, () async {
         final records = await _execute(
@@ -512,8 +645,14 @@ class SourceHost {
   Future<T> _serialize<T>(
     String key,
     CancellationToken token,
-    Future<T> Function() action,
-  ) {
+    Future<T> Function() action, {
+    String? cancelGroup,
+    bool trackCancellation = true,
+  }) {
+    final group = cancelGroup ?? key;
+    if (trackCancellation) {
+      (_cancelGroups[group] ??= {}).add(token);
+    }
     final previous = _queues[key] ?? Future<void>.value();
     final result = Completer<T>();
     var started = false;
@@ -540,9 +679,59 @@ class SourceHost {
     unawaited(
       tail.then((_) {
         if (identical(_queues[key], tail)) _queues.remove(key);
+        if (trackCancellation) {
+          final members = _cancelGroups[group];
+          members?.remove(token);
+          if (members?.isEmpty == true) _cancelGroups.remove(group);
+        }
       }),
     );
     return result.future;
+  }
+
+  PlatformException _sessionFailure(
+    Object error,
+    String phase, {
+    required bool writing,
+  }) {
+    final causeType = error.runtimeType.toString();
+    if (error is MissingPluginException) {
+      return PlatformException(
+        code: 'session_storage_unavailable',
+        message: 'Session storage plugin is not registered',
+        details: {'phase': phase, 'causeType': causeType},
+      );
+    }
+    if (error is PlatformException) {
+      return PlatformException(
+        code: writing
+            ? 'session_storage_write_failed'
+            : 'session_storage_read_failed',
+        message: 'Session storage operation failed ($phase)',
+        details: {
+          'phase': phase,
+          'causeType': causeType,
+          'causeCode': error.code,
+        },
+      );
+    }
+    final invalid =
+        error is FormatException ||
+        error is TypeError ||
+        (error is EngineException && error.code == 'invalid_session');
+    return PlatformException(
+      code: invalid
+          ? 'session_state_invalid'
+          : (writing ? 'session_write_failed' : 'session_restore_failed'),
+      message: invalid
+          ? 'Saved source session has invalid fields ($phase)'
+          : 'Source session failed ($phase: $causeType)',
+      details: {
+        'phase': phase,
+        'causeType': causeType,
+        if (error is EngineException) 'causeCode': error.code,
+      },
+    );
   }
 
   Future<List<Map<String, Object?>>> _execute(
@@ -568,31 +757,68 @@ class SourceHost {
     }
     if (entry == null) {
       final engine = createEngine(source);
+      var restorePhase = 'storage_read';
       try {
+        token.throwIfCancelled();
         final stored = await sessionStore?.read(
           source.id,
           source.metadata['legacy'] == true,
         );
-        if (stored != null &&
-            stored['formatVersion'] == 1 &&
-            stored['origin'] == source.baseUrl.origin) {
-          engine.importSession(
-            source.id,
-            Map<String, Object?>.from(stored['engine'] as Map),
-          );
-          final runtime = engine.runtime;
-          if (runtime is SourceRuntimeState && stored['runtime'] is Map) {
-            (runtime as SourceRuntimeState).importRuntimeState(
-              Map<String, Object?>.from(stored['runtime'] as Map),
+        token.throwIfCancelled();
+        if (stored != null) {
+          restorePhase = 'session_format';
+          if (stored['formatVersion'] != 1) {
+            throw const EngineException(
+              'session_format_unsupported',
+              'Unsupported saved session format',
             );
           }
+          final origin = stored['origin'];
+          if (origin is! String) {
+            throw const FormatException('Session origin required');
+          }
+          final uri = Uri.tryParse(origin);
+          if (uri == null ||
+              !{'http', 'https'}.contains(uri.scheme) ||
+              uri.host.isEmpty ||
+              uri.userInfo.isNotEmpty ||
+              uri.hasFragment) {
+            throw const FormatException('Invalid session origin');
+          }
+          // Older v1 writers could store the base URL rather than URI.origin.
+          // Canonicalizing its origin preserves matching source sessions while
+          // cookie domain/path/security fields remain untouched.
+          if (uri.origin == source.baseUrl.origin) {
+            final engineState = stored['engine'];
+            if (engineState is! Map) {
+              throw const FormatException('Session engine state required');
+            }
+            final runtimeState = stored['runtime'];
+            if (runtimeState != null && runtimeState is! Map) {
+              throw const FormatException('Invalid runtime session state');
+            }
+            restorePhase = 'engine_state';
+            engine.importSession(
+              source.id,
+              Map<String, Object?>.from(engineState),
+            );
+            final runtime = engine.runtime;
+            if (runtime is SourceRuntimeState && runtimeState is Map) {
+              restorePhase = 'runtime_state';
+              (runtime as SourceRuntimeState).importRuntimeState(
+                Map<String, Object?>.from(runtimeState),
+              );
+            }
+          }
         }
-      } catch (_) {
+      } catch (error) {
         await engine.close();
-        throw const EngineException(
-          'session_restore_failed',
-          'Persisted source session could not be restored',
-        );
+        if (error is EngineException && error.code == 'cancelled') rethrow;
+        if (error is EngineException &&
+            error.code == 'session_format_unsupported') {
+          rethrow;
+        }
+        throw _sessionFailure(error, restorePhase, writing: false);
       }
       entry = _CachedEngine(fingerprint, engine);
       _engines[key] = entry;
@@ -621,11 +847,8 @@ class SourceHost {
               'runtime': (runtime as SourceRuntimeState).exportRuntimeState(),
           },
         );
-      } catch (_) {
-        throw const EngineException(
-          'session_write_failed',
-          'Source session could not be committed',
-        );
+      } catch (error) {
+        throw _sessionFailure(error, 'storage_write', writing: true);
       } finally {
         _active.remove(key);
         while (_engines.length > 32) {
