@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 104,
+  "caseCount": 109,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -273,6 +273,18 @@
       "methods": [
         "actualCacheSurvivesVmClearAndSupportsMemoryDiskFileAndJavaBytes",
         "ttlUsesSecondsAndExpiredDiskCannotBeHiddenByStaleMemory"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyOrgJsoupV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt",
+      "sourceSha256": "199ac85395c66972c5168d94c3c23395b660ffd2b2442be2c998309208f21e5c",
+      "methods": [
+        "bodyFragmentParsingMatchesOriginalBodyAndAbsoluteLink",
+        "documentMutationsUpdateSavedAliasesAcrossAuxiliaryExecutions",
+        "packagesConstructorsAndInstanceChecksMatchDocumentAndElementKinds",
+        "parseSelectTextAndAbsoluteHrefMatchOriginalJsoup",
+        "xmlParserTwoAndThreeArgumentOverloadsPreserveXmlCaseAndBaseUri"
       ]
     }
   ]

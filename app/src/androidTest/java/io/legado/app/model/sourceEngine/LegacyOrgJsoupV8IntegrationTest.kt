@@ -1,0 +1,178 @@
+package io.legado.app.model.sourceEngine
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.legado.app.data.entities.BookSource
+import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Actual legacy source V8 -> native Jsoup; all inputs are self-authored and offline. */
+@RunWith(AndroidJUnit4::class)
+class LegacyOrgJsoupV8IntegrationTest {
+    private fun source() =
+        BookSource(
+            bookSourceUrl = "https://org-jsoup-${UUID.randomUUID()}.invalid",
+            bookSourceName = "Org Jsoup fixture",
+        )
+
+    private suspend fun evaluate(
+        source: BookSource,
+        script: String,
+        bindings: Map<String, Any?> = emptyMap(),
+    ): Any? =
+        withTimeout(20_000) {
+            V8ScriptExecutor.evaluate(script, bindings = bindings, source = source)
+        }
+
+    @Test
+    fun parseSelectTextAndAbsoluteHrefMatchOriginalJsoup(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source = source()
+            val html = "<main><a href='../chapter/1'>Chapter &amp; one</a><p>Second</p></main>"
+            val base = "https://fixture.invalid/book/index.html"
+            val native = Jsoup.parse(html, base)
+            try {
+                val result =
+                    evaluate(
+                        source,
+                        "const d=org.jsoup.Jsoup.parse(html,base); ({text:d.select('main').text(),href:d.select('a').get(0).attr('abs:href'),html:d.outerHtml()})",
+                        mapOf("html" to html, "base" to base),
+                    )
+                        as Map<*, *>
+                assertEquals(native.select("main").text(), result["text"])
+                assertEquals(native.select("a").first()!!.attr("abs:href"), result["href"])
+                assertEquals(native.outerHtml(), result["html"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+
+    @Test
+    fun packagesConstructorsAndInstanceChecksMatchDocumentAndElementKinds(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source = source()
+            val nativeDocument = Document("https://fixture.invalid/base/")
+            val nativeElement = Element("article")
+            nativeElement.attr("id", "created")
+            nativeElement.text("Constructed")
+            try {
+                val result =
+                    evaluate(
+                        source,
+                        "const D=Packages.org.jsoup.nodes.Document,E=org.jsoup.nodes.Element; const d=new D('https://fixture.invalid/base/'),e=new E('article');e.attr('id','created');e.text('Constructed');({document:d instanceof D,documentElement:d instanceof E,element:e instanceof E,elementDocument:e instanceof D,alias:D===org.jsoup.nodes.Document,docHtml:d.outerHtml(),elementHtml:e.outerHtml()})",
+                    )
+                        as Map<*, *>
+                assertEquals(true, result["document"])
+                assertEquals(true, result["documentElement"])
+                assertEquals(true, result["element"])
+                assertEquals(false, result["elementDocument"])
+                assertEquals(true, result["alias"])
+                assertEquals(nativeDocument.outerHtml(), result["docHtml"])
+                assertEquals(nativeElement.outerHtml(), result["elementHtml"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+
+    @Test
+    fun xmlParserTwoAndThreeArgumentOverloadsPreserveXmlCaseAndBaseUri(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source = source()
+            val xml =
+                "<Catalog><Entry href='next.xml'>First &amp; second</Entry><Entry>Last</Entry></Catalog>"
+            val base = "https://fixture.invalid/catalog/index.xml"
+            val two = Jsoup.parse(xml, Parser.xmlParser())
+            val three = Jsoup.parse(xml, base, Parser.xmlParser())
+            try {
+                val result =
+                    evaluate(
+                        source,
+                        "const p=Packages.org.jsoup.parser.Parser.xmlParser();const two=org.jsoup.Jsoup.parse(xml,p),three=org.jsoup.Jsoup.parse(xml,base,p);({two:two.outerHtml(),three:three.outerHtml(),tag:three.select('Entry').get(0).tagName(),href:three.select('Entry').get(0).attr('abs:href')})",
+                        mapOf("xml" to xml, "base" to base),
+                    )
+                        as Map<*, *>
+                assertEquals(two.outerHtml(), result["two"])
+                assertEquals(three.outerHtml(), result["three"])
+                assertEquals("Entry", result["tag"])
+                assertEquals(three.select("Entry").first()!!.attr("abs:href"), result["href"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+
+    @Test
+    fun documentMutationsUpdateSavedAliasesAcrossAuxiliaryExecutions(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source = source()
+            val native = Jsoup.parse("<p id='old'>Old</p>", "https://fixture.invalid/")
+            val created = native.createElement("article")
+            created.attr("id", "new")
+            created.text("Created")
+            native.body().appendChild(created)
+            native.body().append("<b>Tail</b>")
+            native.selectFirst("#old")!!.remove()
+            try {
+                evaluate(
+                    source,
+                    "globalThis.orgDocument=org.jsoup.Jsoup.parse('<p id=old>Old</p>','https://fixture.invalid/');globalThis.orgBody=orgDocument.body();globalThis.orgCreated=orgDocument.createElement('article');orgCreated.attr('id','new');orgCreated.text('Created');orgBody.appendChild(orgCreated);orgBody.append('<b>Tail</b>');orgDocument.selectFirst('#old').remove();",
+                )
+                val result =
+                    evaluate(
+                        source,
+                        "({body:orgBody.outerHtml(),created:orgCreated.outerHtml(),doc:orgDocument.outerHtml(),parent:orgCreated.parent().tagName()})",
+                    )
+                        as Map<*, *>
+                assertEquals(native.body().outerHtml(), result["body"])
+                assertEquals(created.outerHtml(), result["created"])
+                assertEquals(native.outerHtml(), result["doc"])
+                assertEquals("body", result["parent"])
+                created.text("Updated")
+                val updated =
+                    evaluate(
+                        source,
+                        "orgCreated.text('Updated');({body:orgBody.outerHtml(),selected:orgDocument.selectFirst('#new').text()})",
+                    )
+                        as Map<*, *>
+                assertEquals(native.body().outerHtml(), updated["body"])
+                assertEquals("Updated", updated["selected"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+
+    @Test
+    fun bodyFragmentParsingMatchesOriginalBodyAndAbsoluteLink(): Unit {
+        runBlocking(Dispatchers.IO) {
+            val source = source()
+            val html = "Before <a href='chapter'>Chapter</a><span>After</span>"
+            val base = "https://fixture.invalid/book/"
+            val native = Jsoup.parseBodyFragment(html, base)
+            try {
+                val result =
+                    evaluate(
+                        source,
+                        "const d=Packages.org.jsoup.Jsoup.parseBodyFragment(html,base);({body:d.body().outerHtml(),text:d.body().text(),href:d.selectFirst('a').attr('abs:href')})",
+                        mapOf("html" to html, "base" to base),
+                    )
+                        as Map<*, *>
+                assertEquals(native.body().outerHtml(), result["body"])
+                assertEquals(native.body().text(), result["text"])
+                assertEquals(native.selectFirst("a")!!.attr("abs:href"), result["href"])
+            } finally {
+                DartSourceEngine.clearSourceState(source)
+            }
+        }
+    }
+}
