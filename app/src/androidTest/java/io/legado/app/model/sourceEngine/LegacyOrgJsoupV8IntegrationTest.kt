@@ -89,7 +89,7 @@ class LegacyOrgJsoupV8IntegrationTest {
         runBlocking(Dispatchers.IO) {
             val source = source()
             val xml =
-                "<Catalog><Entry href='next.xml'>First &amp; second</Entry><Entry>Last</Entry></Catalog>"
+                "<?xml version=\"1.0\"?><Catalog xmlns='urn:fixture'><Entry href='next.xml'>First &amp; second</Entry><Entry>Last</Entry></Catalog>"
             val base = "https://fixture.invalid/catalog/index.xml"
             val two = Jsoup.parse(xml, Parser.xmlParser())
             val three = Jsoup.parse(xml, base, Parser.xmlParser())
@@ -97,7 +97,7 @@ class LegacyOrgJsoupV8IntegrationTest {
                 val result =
                     evaluate(
                         source,
-                        "const p=Packages.org.jsoup.parser.Parser.xmlParser();const two=org.jsoup.Jsoup.parse(xml,p),three=org.jsoup.Jsoup.parse(xml,base,p);({two:two.outerHtml(),three:three.outerHtml(),tag:three.select('Entry').get(0).tagName(),href:three.select('Entry').get(0).attr('abs:href')})",
+                        "const p=Packages.org.jsoup.parser.Parser.xmlParser();globalThis.orgXmlTwo=org.jsoup.Jsoup.parse(xml,p);globalThis.orgXmlThree=org.jsoup.Jsoup.parse(xml,base,p);({two:orgXmlTwo.outerHtml(),three:orgXmlThree.outerHtml(),tag:orgXmlThree.select('Entry').get(0).tagName(),href:orgXmlThree.select('Entry').get(0).attr('abs:href')})",
                         mapOf("xml" to xml, "base" to base),
                     )
                         as Map<*, *>
@@ -105,6 +105,21 @@ class LegacyOrgJsoupV8IntegrationTest {
                 assertEquals(three.outerHtml(), result["three"])
                 assertEquals("Entry", result["tag"])
                 assertEquals(three.select("Entry").first()!!.attr("abs:href"), result["href"])
+                for (document in listOf(two, three)) {
+                    document.selectFirst("Catalog")!!.append("<MixedCase/>")
+                    document.selectFirst("Catalog")!!.appendChild(document.createElement("NewCase"))
+                }
+                val changed =
+                    evaluate(
+                        source,
+                        "for(const d of [orgXmlTwo,orgXmlThree]){d.selectFirst('Catalog').append('<MixedCase/>');d.selectFirst('Catalog').appendChild(d.createElement('NewCase'));}({two:orgXmlTwo.outerHtml(),three:orgXmlThree.outerHtml(),mixed:orgXmlThree.selectFirst('MixedCase').tagName(),created:orgXmlThree.selectFirst('NewCase').tagName(),namespace:orgXmlThree.selectFirst('Catalog').attr('xmlns')})",
+                    )
+                        as Map<*, *>
+                assertEquals(two.outerHtml(), changed["two"])
+                assertEquals(three.outerHtml(), changed["three"])
+                assertEquals(three.selectFirst("MixedCase")!!.tagName(), changed["mixed"])
+                assertEquals(three.selectFirst("NewCase")!!.tagName(), changed["created"])
+                assertEquals(three.selectFirst("Catalog")!!.attr("xmlns"), changed["namespace"])
             } finally {
                 DartSourceEngine.clearSourceState(source)
             }
