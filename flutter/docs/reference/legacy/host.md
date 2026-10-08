@@ -165,11 +165,33 @@ algorithm 支持 MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512，忽略大
 
 空规则的旧约定：getString 返回空字符串、getStringList 返回 null、getElement 返回 null、getElements 返回空数组，与新版 getStringList 空数组不同。
 
-生产已接入 typed DOM：Android `LegacyDomHost` 将 Jsoup/JXNode 转为带节点表、类型、baseUri、属性、子节点和文档输出设置的 JSON 快照，V8 prelude 将其物化为只读方法 facade。共享 Elements 快照保留同一树中的节点索引，支持 text()/html()/attr(name)/select(selector)/toString()；列表另有 size()/get(index)/first()/last()/toArray()。toArray() 仅无参，返回数组副本；不会复制成可反射的 Java 数组。
+生产 typed DOM 已使用 schema2 可变 alias forest：节点有稳定 ID，V8 memo 同一节点 wrapper，更新同步到已保留别名。节点移除后已保留的 detached alias 仍有效；appendChild 跨 Document 是真实移动，同时更新两棵树，不克隆成无关 HTML 字符串。文档输出设置、XML parser 大小写、声明、CDATA、tag flags 以及 own/inherited baseURI 随快照保存。schema1 旧 JSON 形状继续兼容，但不因此开放任意 Java 对象身份。
 
-节点提供 attr(name)、hasAttr(name)、text()、ownText()、html()、outerHtml()、data()、tagName()、id()、className()、select(selector)、selectFirst(selector)、getElementsByTag(name)、getElementsByClass(name)、getElementById(id)、parent()、children()、nextElementSibling()、previousElementSibling()。方法适用节点类型由 Jsoup 校验，例如 TextNode 没有 Element.text() 能力。未知方法、非法参数和无效快照明确失败；不支持 DOM 写操作、任意 Java 方法或进程级 Java 对象身份。旧字符串内容的有限 fallback facade 仍可存在，不能由 typed DOM 的 html() 支持推导字符串 fallback 全部重载也已实现。
+节点读取提供 attr(name)、hasAttr(name)、text()、ownText()、html()、outerHtml()、data()、tagName()、id()、className()、select/selectFirst、getElementsByTag/Class、getElementById、parent/children、nextElementSibling/previousElementSibling。Document 另有 body()/head()/title()/createElement(tag)。可变重载为 attr(name,value)、text(text)、html(html)、title(text)，以及 remove()/empty()/append(html)/appendElement(tag)/appendChild(node)，具体节点类型仍由真实 Jsoup 校验。shared Elements 支持 text/html/attr/select/toString 与 size/get/first/last/toArray；attr/html setter、remove/append/appendChild/empty 返回原列表以保持链式调用和自定义属性，toArray() 无参返回数组副本。未知重载与无效快照拒绝；没有一般反射或任意 DOM 方法兜底。
 
 原生规则提取另有 task-local 节点/值引用：仅当前活动任务可恢复，任务关闭或取消即清理；不能跨任务传递这些 token。typed JSON 快照与这种受限任务引用是两种传输形式，均不开放 Java 反射。
+
+## Android `org.jsoup` 显式兼容入口
+
+旧兼容 prelude 提供同一有限 namespace 的 `org.jsoup` 和 `Packages.org.jsoup`，保留已有 bounded Packages 成员。现代 runtime 不提供 org/Packages。入口由实际 Android Jsoup 执行，不是 Dart 模拟 parser；没有 JavaImporter/importClass、一般 Java 类解析或其他 org 包覆盖。
+
+| 入口 | 支持参数 |
+|---|---|
+| `Jsoup.parse(html[,baseUri[,parser]])` | String HTML；也接受 parse(html,parser)，parser 仅下面两种显式 marker |
+| `Jsoup.parseBodyFragment(html[,baseUri])` | String HTML/baseUri |
+| `Parser.htmlParser()`、`Parser.xmlParser()` | org.jsoup.parser.Parser 中的显式 parser marker |
+| `new Document(baseUri)`、`Document.createShell(baseUri)` | org.jsoup.nodes.Document；返回实际 Document facade |
+| `new Element(tag[,namespace])` | org.jsoup.nodes.Element；第二参数是 **namespace，不是 baseUri** |
+| `Jsoup.connect(url)` | String URL；返回真实保留的 Connection lease |
+| `Connection.Method` | GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS/TRACE；name()/ordinal()/toString()，valueOf(name)/values() |
+
+Connection 支持单参 String setters url/userAgent/referrer/postDataCharset/requestBody，单参 Int setters timeout（毫秒）/maxBodySize，单参 Boolean setters ignoreHttpErrors/ignoreContentType/followRedirects，method(Method)；header(name,value)/cookie(name,value)、headers(map)/cookies(map) 要求字符串映射；data(map) 或成对 String 参数。setters 返回原 Connection。get()/post() 返回 Document；execute()/response() 返回真实 Response，取得对象时不提前读 body。Response 支持 lazy body()/bodyAsBytes()/parse()，statusCode/statusMessage/header(name)/headers/cookie(name)/cookies/hasHeader/hasCookie/url 读取，charset() 与 charset(name)（setter 返回原 Response）。bytes 为标记的 signed Java 字节。未暴露 stream/upload/request 任意重载，不把原生已有但 JS facade 未提供的方法算作公开支持。
+
+这里沿 Jsoup 自身默认设置，**不自动叠加** Legado 默认 header、CookieStore 或 SSL 配置；与 java.ajax 原 AnalyzeUrl 路径不同。保留同一实际 Connection 的 cookie jar 可跨同 owner 的 entry 使用，重复 response() 的同一原生 Response 保持 wrapper 身份。Connection/Response 是 opaque handles，无 toJSON，不承诺跨 owner、进程重启恢复。
+
+注册来源的 canonical/raw book engine IDs 关联 owner；source clear 取消相关任务、释放实际 lease 并清 Dart aliases。临时执行使用独立 task owner，稳定 recipe/config 变化会使旧 lease 失效。dispose() 显式释放；GC 只排队，下一受信 RPC 才 flush release，不能承诺 GC 即时关流。释放也取消使用 lease 的操作并关闭 response stream；已释放 facade 再调用明确失败。此生命周期边界不允许脚本伪造 owner 或借 token访问其他来源。
+
+实现入口：[org prelude](../../../packages/source_legacy/lib/src/legacy_org_jsoup.dart)、[原生 org 宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/NativeOrgJsoupHost.kt)、[Connection 宿主](../../../../app/src/main/java/io/legado/app/model/sourceEngine/NativeOrgConnectionHost.kt)。生产接线不等于新的184项 Android 验收已执行，也不代表其他 JavaImporter/JCE 或所有历史来源兼容。
 
 ## 发现脚本 InfoMap
 

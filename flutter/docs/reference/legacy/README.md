@@ -84,16 +84,18 @@ URL choice必须为静态分支：其内部任意 `{{...}}`（包括page算术�
 
 search/explore/toc允许JSON字符串解析后必须为数组；info必须为对象，缺失函数或null/undefined/空字符串时返回输入book；content字符串原样、null为空字符串，其他值JSON.stringify。java仍仅提供旧宿主白名单，未知接口在运行时明确unsupported_api。jsLib及未实现能力继续manual；每次求值独立context，不提供跨阶段JS全局内存。默认Dart执行并不意味着所有旧mainJs均可执行。
 
-内置JS模板和App帮助示例按当前V8更新：不导入org/Packages或任意Java类；source/sourceApi为JSON snapshot，不能调用Room/登录信息/登录头对象方法。book/chapter及java.ajax返回文本为原生JS String，length是属性、严格相等与空字符串真值均遵JS，不提供Java String包装重载。jsLib/CryptoJS等库仍需迁移，已覆盖的摘要接口为java.md5Encode/java.digestHex。模板保留五阶段、文件源downloadUrls、发现/登录配置及评论位置参数，但保留配置形状不代表所有平台宿主能力已经支持。
+内置JS模板和App帮助示例按当前V8更新：现代模板不导入任意Java类；Android旧兼容现有显式org.jsoup/Packages.org.jsoup白名单，不扩展到其他包；source/sourceApi为JSON snapshot，不能调用Room/登录信息/登录头对象方法。book/chapter及java.ajax返回文本为原生JS String，length是属性、严格相等与空字符串真值均遵JS，不提供Java String包装重载。jsLib/CryptoJS等库仍需迁移，已覆盖的摘要接口为java.md5Encode/java.digestHex。模板保留五阶段、文件源downloadUrls、发现/登录配置及评论位置参数，但保留配置形状不代表所有平台宿主能力已经支持。
 
 即使非空mainJs替代了普通stage提取，ruleContent的imageStyle/imageDecode/payAction/callBackJs仍按App消费能力检查：非空值产生 `legacy.pipeline_requires_review`，非法值产生 `legacy.invalid_rule`，非Map的ruleContent产生 `legacy.invalid_rule_object`。null或空Map不因此产生issue；普通mainJs的stage字段不会被误判为这四个hooks。上述检查不意味着hooks已迁移或可通过旧引擎执行。
 
 ## 当前接入边界
 
-typed DOM 与共享列表 toArray 已生产接入；只读节点方法、task-local 引用、InfoMap 的原秒 TTL/save 标记、原生 init/subContent/replace 顺序及 source/book/chapter 变量层详见 [宿主 Reference](host.md)。Android 外层声明式 WebJS 使用独立后台能力和任务取消上下文，脚本提取回调仍禁止递归 JS/WebJS；独立 CLI 不由此获得 Android WebView。
+typed DOM 与共享列表 toArray 已生产接入；schema2可变节点别名、task-local 引用、InfoMap 的原秒 TTL/save 标记、原生 init/subContent/replace 顺序及 source/book/chapter 变量层详见 [宿主 Reference](host.md)。Android 外层声明式 WebJS 使用独立后台能力和任务取消上下文，脚本提取回调仍禁止递归 JS/WebJS；独立 CLI 不由此获得 Android WebView。
 
 原生 parser 能力与导入审核/应用 pipeline gates 分开；接线不会自动清除全部 manualRequired，也不会恢复任意 Java 类。最新固定公开四源严格验收仍失败：掌阅成功，悠读空结果（原 parser 同 response 与 V8 均0），9书 HTTP 错误，笔趣 SSL 错误。不能将局部 checkpoint 或生产方法接入写成全源 verified 或整体验收通过。Release 原生反射注册 keep 与 Flutter 注册入口仍需保留，具体见 host.md。
 
 Android 的六个旧 HTTP 方法已委派原 AnalyzeUrl/Jsoup，使用真实任务绑定来源（未保存源不要求 DAO）及旧域 CookieStore 合同。显式无源调用屏蔽继承来源；现代 source.net 与其他平台旧 Dart 路径不变。IO 失败为 network_error、Jsoup HTTP 状态错误为 legacy.http_error，不再把失败堆栈当正文或伪造200；这是明确错误行为差异，不是所有旧失败完全兼容。精确重载与来源/Cookie边界见 [网络宿主](host.md#android-原生旧-http)。
 
 Android 旧 HTTP 已接入同所有者请求续传、Header eval 和 URL/body 变量恢复；microtask 内同步等待仍 pending Promise 的嵌套明确拒绝，不能据此承诺一般 async 完全兼容。旧 source 状态 facade 和 cache 13方法已接入原宿主；cache 保留全局共享键、秒 TTL 与文本/Java字节区别，现代每源隔离 API 不变。签名及边界见 [host.md](host.md)。
+
+Android org.jsoup 的 parse/Parser、Document/Element 构造、Connection/Response 已接入真实 Jsoup；Element 第二参数为 namespace，execute/response 不提前读正文。DOM mutations 更新同节点别名，列表写操作返回原列表；Connection owner/recipe/clear/dispose 边界与 Jsoup 默认网络配置见 [宿主 Reference](host.md#android-orgjsoup-显式兼容入口)。现代 runtime 无 org，未实现 JavaImporter/JCE 等能力不能由此推导为支持；本次新 Android 验收尚未执行，公开四源严格验收仍未全部通过。
