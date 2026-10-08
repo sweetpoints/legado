@@ -56,8 +56,11 @@ class NativeOrgJsoupHostTest {
             shell.outerHtml(),
         )
         val element = node("orgJsoup.newElement", "div", "https://fixture.invalid/") as Element
-        assertEquals(Element("div", "https://fixture.invalid/").outerHtml(), element.outerHtml())
-        assertEquals("https://fixture.invalid/", element.baseUri())
+        // Jsoup 1.23 String/String constructor takes a namespace, not a base URI.
+        val original = Element("div", "https://fixture.invalid/")
+        assertEquals(original.outerHtml(), element.outerHtml())
+        assertEquals(original.baseUri(), element.baseUri())
+        assertEquals(original.tag().namespace(), element.tag().namespace())
     }
 
     @Test
@@ -69,7 +72,8 @@ class NativeOrgJsoupHostTest {
                 listOf("java.lang.System"),
                 EmptyCoroutineContext,
             )
-        }.exceptionOrNull()
+        }
+            .exceptionOrNull()
         assertEquals("legacy.unsupported_org_api", (error as SourceScriptException).code)
         assertEquals(
             "invalid_request",

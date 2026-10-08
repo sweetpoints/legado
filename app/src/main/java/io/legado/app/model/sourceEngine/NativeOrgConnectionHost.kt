@@ -321,7 +321,6 @@ internal class NativeOrgConnectionHost {
                     lease,
                     context,
                     created,
-                    encodeBody = false,
                 )
             }
             else -> unsupported()
@@ -409,13 +408,10 @@ internal class NativeOrgConnectionHost {
         parent: Lease,
         context: CoroutineContext,
         created: MutableList<String>,
-        encodeBody: Boolean = true,
     ): Map<String, Any?> {
-        // get/post parse consumes the response stream. c.response() must still expose its
-        // real status/headers and identity without calling body() on that consumed stream.
-        val encoded =
-            if (encodeBody) LegacyJsoupResponseCodec.encode(value)
-            else mapOf("__legacyResponseKind" to "jsoup")
+        // Execute publishes headers without consuming the real response stream. The caller
+        // selects body(), bodyAsBytes() or parse(); post/get may already have parsed that stream.
+        val encoded = mapOf("__legacyResponseKind" to "jsoup")
         val token = register(owner, value, parent, context, created)
         return encoded + mapOf("__legacyOrgResponse" to token)
     }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.junit.Assert.*
 import org.junit.Test
@@ -309,20 +310,22 @@ class NativeOrgConnectionHostTest {
         }
 
     @Test
-    fun truncatedActualHttpBodyDoesNotCreateAnUnpublishedResponseLease(): Unit =
+    fun truncatedActualHttpBodyFailsOnLazyReadLikeOriginalJsoup(): Unit =
         runBlocking(Dispatchers.IO) {
             ServerSocket(0).use { socket ->
                 val thread = Thread {
-                    socket.accept().use { peer ->
-                        val input = peer.getInputStream().bufferedReader()
-                        while (input.readLine()?.isNotEmpty() == true) Unit
-                        peer
-                            .getOutputStream()
-                            .write(
-                                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 1000\r\nConnection: close\r\n\r\nx"
-                                    .toByteArray(StandardCharsets.US_ASCII)
-                            )
-                        peer.getOutputStream().flush()
+                    repeat(2) {
+                        socket.accept().use { peer ->
+                            val input = peer.getInputStream().bufferedReader()
+                            while (input.readLine()?.isNotEmpty() == true) Unit
+                            peer
+                                .getOutputStream()
+                                .write(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 1000\r\nConnection: close\r\n\r\nx"
+                                        .toByteArray(StandardCharsets.US_ASCII)
+                                )
+                            peer.getOutputStream().flush()
+                        }
                     }
                 }
                     .apply {
@@ -331,17 +334,24 @@ class NativeOrgConnectionHostTest {
                     }
                 val host = NativeOrgConnectionHost()
                 try {
-                    val c = connect(host, "owner", "http://127.0.0.1:${socket.localPort}/truncated")
-                    conn(host, "owner", c, "timeout", 2000)
-                    val failure = runCatching {
-                        conn(host, "owner", c, "execute")
-                    }
-                        .exceptionOrNull()
+                    val url = "http://127.0.0.1:${socket.localPort}/truncated"
+                    val original = Jsoup.connect(url).timeout(2000).execute()
+                    assertEquals(200, original.statusCode())
                     assertTrue(
-                        "failureType=${failure?.javaClass?.name ?: "none"}",
-                        failure is SourceScriptException,
+                        runCatching { original.body() }.exceptionOrNull()
+                            is java.io.UncheckedIOException
                     )
+                    val c = connect(host, "owner", url)
+                    conn(host, "owner", c, "timeout", 2000)
+                    val r = responseToken(conn(host, "owner", c, "execute"))
+                    assertEquals(200, resp(host, "owner", r, "statusCode"))
+                    val failure = runCatching { resp(host, "owner", r, "body") }.exceptionOrNull()
+                    assertTrue(failure is SourceScriptException)
                     assertEquals("network_error", (failure as SourceScriptException).code)
+                    // Both leases were actually published. A failed lazy read must not leak an
+                    // extra one.
+                    assertEquals(2, leases(host))
+                    host.call("owner", "orgJsoup.release", listOf(r), currentCoroutineContext())
                     assertEquals(1, leases(host))
                 } finally {
                     host.close()
