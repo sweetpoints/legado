@@ -59,58 +59,126 @@ class CryptoMigrationContractTest {
     }
 
     @Test
-    fun explicitHostLibraryExecutesWithOriginalRuntimeBindingsWhileModernMigrationNeedsReview(): Unit = runBlocking {
+    fun explicitHostLibraryExecutesWithOriginalRuntimeBindingsWhileModernMigrationNeedsReview():
+        Unit = runBlocking {
         assumeTrue(BuildConfig.FLUTTER_SOURCE_ENGINE)
-        val original = assertModernLibraryMigrationRequiresReview(
-            """
-            function requestApiUrl(path,data,runtime) {
-              return [typeof runtime.java,typeof runtime.java.log,
-                typeof runtime.source,typeof runtime.cache].join('|');
-            }
-            """.trimIndent(),
-            "java-host",
-        )
+        val original =
+            assertModernLibraryMigrationRequiresReview(
+                """
+                function requestApiUrl(path,data,runtime) {
+                  return [typeof runtime.java,typeof runtime.java.log,
+                    typeof runtime.source,typeof runtime.cache].join('|');
+                }
+                """
+                    .trimIndent(),
+                "java-host",
+            )
         val cacheKey = "crypto-runtime-contract-${UUID.randomUUID()}"
         val other = source("java-host-other-${UUID.randomUUID()}").copy(jsLib = original.jsLib)
         val bindings = mapOf("fixtureCacheKey" to cacheKey)
         try {
-            val result = withTimeout(60_000) {
-                DartSourceEngine.evaluate(original, "requestApiUrl('/fixture',{},this)")
-            }
-            assertEquals("Actual explicit runtime bindings: $result", "object|function|object|object", result)
-            val runtime = withTimeout(60_000) {
-                DartSourceEngine.evaluate(original,
-                    "cache.put(fixtureCacheKey,'native-cache-value');({key:source.getKey(),value:cache.get(fixtureCacheKey)})",
-                    bindings)
-            }
+            val result =
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(original, "requestApiUrl('/fixture',{},this)")
+                }
+            assertEquals(
+                "Actual explicit runtime bindings: $result",
+                "object|function|object|object",
+                result,
+            )
+            val runtime =
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(
+                        original,
+                        "cache.put(fixtureCacheKey,'native-cache-value');({key:source.getKey(),value:cache.get(fixtureCacheKey)})",
+                        bindings,
+                    )
+                }
             assertTrue("Actual source/cache operations: $runtime", runtime is Map<*, *>)
             runtime as Map<*, *>
-            assertEquals("Actual source/cache operations: $runtime", original.bookSourceUrl, runtime["key"])
-            assertEquals("Actual source/cache operations: $runtime", "native-cache-value", runtime["value"])
-            assertEquals("native-cache-value", withContext(Dispatchers.IO) { CacheManager.get(cacheKey) })
+            assertEquals(
+                "Actual source/cache operations: $runtime",
+                original.bookSourceUrl,
+                runtime["key"],
+            )
+            assertEquals(
+                "Actual source/cache operations: $runtime",
+                "native-cache-value",
+                runtime["value"],
+            )
+            assertEquals(
+                "native-cache-value",
+                withContext(Dispatchers.IO) { CacheManager.get(cacheKey) },
+            )
             // Original CacheManager uses a global key, not a per-source namespace.
-            val shared = withTimeout(60_000) {
-                DartSourceEngine.evaluate(other,
-                    "({key:source.getKey(),value:cache.get(fixtureCacheKey)})", bindings)
-            }
+            val shared =
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(
+                        other,
+                        "({key:source.getKey(),value:cache.get(fixtureCacheKey)})",
+                        bindings,
+                    )
+                }
             assertTrue("Actual second source/global cache: $shared", shared is Map<*, *>)
             shared as Map<*, *>
-            assertEquals("Actual second source/global cache: $shared", other.bookSourceUrl, shared["key"])
-            assertEquals("Actual second source/global cache: $shared", "native-cache-value", shared["value"])
-            assertNull(withTimeout(60_000) {
-                DartSourceEngine.evaluate(original, "cache.delete(fixtureCacheKey);cache.get(fixtureCacheKey)", bindings)
-            })
-            assertNull(withTimeout(60_000) { DartSourceEngine.evaluate(other, "cache.get(fixtureCacheKey)", bindings) })
+            assertEquals(
+                "Actual second source/global cache: $shared",
+                other.bookSourceUrl,
+                shared["key"],
+            )
+            assertEquals(
+                "Actual second source/global cache: $shared",
+                "native-cache-value",
+                shared["value"],
+            )
+            assertNull(
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(
+                        original,
+                        "cache.delete(fixtureCacheKey);cache.get(fixtureCacheKey)",
+                        bindings,
+                    )
+                }
+            )
+            assertNull(
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(other, "cache.get(fixtureCacheKey)", bindings)
+                }
+            )
             assertNull(withContext(Dispatchers.IO) { CacheManager.get(cacheKey) })
-            val reflection = withTimeout(60_000) {
-                DartSourceEngine.evaluate(original, "({packages:typeof Packages,getClass:typeof getClass,bookReflection:typeof book.getClass})",
-                    mapOf("book" to mapOf("name" to "JSON book")))
-            }
+            val reflection =
+                withTimeout(60_000) {
+                    DartSourceEngine.evaluate(
+                        original,
+                        "({packages:typeof Packages,sameOrg:Packages.org===org,jsoupParse:typeof org.jsoup.Jsoup.parse,packageKeys:Object.keys(Packages).join('|'),javaNamespace:typeof Packages.java,javaxNamespace:typeof Packages.javax,arbitraryResolver:typeof Packages.arbitraryclassResolver,classForName:typeof Packages.classForName,getClass:typeof getClass,sourceReflection:typeof source.getClass,bookReflection:typeof book.getClass})",
+                        mapOf("book" to mapOf("name" to "JSON book")),
+                    )
+                }
             assertTrue("Actual JSON runtime boundary: $reflection", reflection is Map<*, *>)
             reflection as Map<*, *>
-            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["packages"])
-            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["getClass"])
-            assertEquals("Actual JSON runtime boundary: $reflection", "undefined", reflection["bookReflection"])
+            assertEquals(
+                "Actual JSON runtime boundary: $reflection",
+                "object",
+                reflection["packages"],
+            )
+            assertEquals(
+                "Actual JSON runtime boundary: $reflection",
+                "undefined",
+                reflection["getClass"],
+            )
+            assertEquals(true, reflection["sameOrg"])
+            assertEquals("function", reflection["jsoupParse"])
+            assertEquals("org", reflection["packageKeys"])
+            assertEquals("undefined", reflection["javaNamespace"])
+            assertEquals("undefined", reflection["javaxNamespace"])
+            assertEquals("undefined", reflection["arbitraryResolver"])
+            assertEquals("undefined", reflection["classForName"])
+            assertEquals("undefined", reflection["sourceReflection"])
+            assertEquals(
+                "Actual JSON runtime boundary: $reflection",
+                "undefined",
+                reflection["bookReflection"],
+            )
         } finally {
             withContext(Dispatchers.IO) { CacheManager.delete(cacheKey) }
             DartSourceEngine.clearSourceState(original)
@@ -227,7 +295,10 @@ class CryptoMigrationContractTest {
             const config={
               bookSourceUrl:'https://crypto-config.invalid',
               bookSourceName:java.md5Encode('abc'),
-              bookSourceComment:[typeof Packages,typeof java,typeof getClass,
+              bookSourceComment:[typeof Packages,Packages.org===org,typeof org.jsoup.Jsoup.parse,
+                Object.keys(Packages).join(','),typeof Packages.java,typeof Packages.javax,
+                typeof Packages.arbitraryclassResolver,typeof Packages.classForName,
+                typeof java,typeof getClass,typeof source.getClass,
                 typeof __legadoSecureRandomInt].join('|')
             };
             function search(key,page){return [];}
@@ -240,18 +311,29 @@ class CryptoMigrationContractTest {
                 withContext(Dispatchers.IO) { JsSourceConfig.extract(text) }
             }
         assertEquals("900150983cd24fb0d6963f7d28e17f72", imported.bookSourceName)
-        assertEquals("undefined|object|undefined|undefined", imported.bookSourceComment)
+        assertEquals(
+            "object|true|function|org|undefined|undefined|undefined|undefined|object|undefined|undefined|undefined",
+            imported.bookSourceComment,
+        )
         assertEquals(text, imported.mainJs)
         val dto =
             withTimeout(60_000) {
                 DartSourceEngine.evaluate(
                     source("dto"),
-                    "({name:book.name,reflection:typeof book.getClass,packages:typeof Packages})",
+                    "({name:book.name,reflection:typeof book.getClass,packages:typeof Packages,sameOrg:Packages.org===org,jsoupParse:typeof org.jsoup.Jsoup.parse,packageKeys:Object.keys(Packages).join('|'),javaNamespace:typeof Packages.java,javaxNamespace:typeof Packages.javax,arbitraryResolver:typeof Packages.arbitraryclassResolver,classForName:typeof Packages.classForName,sourceReflection:typeof source.getClass})",
                     mapOf("book" to mapOf("name" to "JSON book")),
                 ) as Map<*, *>
             }
         assertEquals("JSON book", dto["name"])
         assertEquals("undefined", dto["reflection"])
-        assertEquals("undefined", dto["packages"])
+        assertEquals("object", dto["packages"])
+        assertEquals(true, dto["sameOrg"])
+        assertEquals("function", dto["jsoupParse"])
+        assertEquals("org", dto["packageKeys"])
+        assertEquals("undefined", dto["javaNamespace"])
+        assertEquals("undefined", dto["javaxNamespace"])
+        assertEquals("undefined", dto["arbitraryResolver"])
+        assertEquals("undefined", dto["classForName"])
+        assertEquals("undefined", dto["sourceReflection"])
     }
 }
