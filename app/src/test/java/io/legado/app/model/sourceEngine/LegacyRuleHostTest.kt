@@ -43,6 +43,42 @@ class LegacyRuleHostTest {
     private fun host() = LegacyRuleHost("https://fixture.invalid", EmptyCoroutineContext)
 
     @Test
+    fun coverUrlResolutionMatchesOriginalNetworkUtilsWithoutEscapingOptionsOrData() {
+        val task = host()
+        val base = "https://fixture.invalid/books/page.html"
+        val suffix = ",{\"headers\":{\"X-Fixture\":\"value with spaces\"}}"
+        try {
+            for (raw in
+                listOf(
+                    "https://cdn.fixture.invalid/cover.png" + suffix,
+                    "../image.png" + suffix,
+                    "data:image/png;base64,iVBORw0KGgo=",
+                    "javascript:void(0)",
+                    "",
+                )) {
+                val input = "<img src='" + raw + "'>"
+                val actual =
+                    task
+                        .evaluate(
+                            request(
+                                "tag.img@src",
+                                input = input,
+                                mode = "cover",
+                                extra = mapOf("baseUrl" to base),
+                            )
+                        )["value"]
+                val expected =
+                    if (raw.isEmpty()) ""
+                    else io.legado.app.utils.NetworkUtils.getAbsoluteURL(base, raw)
+                assertEquals(expected, actual)
+                if (raw.endsWith(suffix)) assertTrue((actual as String).endsWith(suffix))
+            }
+        } finally {
+            task.close()
+        }
+    }
+
+    @Test
     fun backgroundWebScriptsRequireExplicitCapabilityAndStillRejectActiveScriptReentry() {
         val rule = "@webjs:document.body.textContent"
         assertFalse(LegacyRuleHost.supportsRule(rule, allowJs = true))

@@ -10,6 +10,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.utils.GSON
 import io.legado.app.utils.HtmlFormatter
+import io.legado.app.utils.NetworkUtils
 import java.net.URL
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -120,7 +121,7 @@ class LegacyRuleHost(
             )
         }
         val mode = payload["mode"] as? String ?: invalid("mode is required")
-        require(mode in setOf("elements", "element", "content", "scalar", "list")) {
+        require(mode in setOf("elements", "element", "content", "cover", "scalar", "list")) {
             "Invalid legacy rule mode"
         }
         val input = restoreInput(payload["input"] ?: invalid("input must not be null"))
@@ -172,6 +173,10 @@ class LegacyRuleHost(
                         source,
                         baseUrl,
                     )
+                "cover" -> {
+                    val raw = parser.getString(parser.splitSourceRule(rule), unescape = unescape)
+                    if (raw.isEmpty()) raw else NetworkUtils.getAbsoluteURL(baseUrl, raw)
+                }
                 "scalar" ->
                     parser.getString(
                         parser.splitSourceRule(rule),
