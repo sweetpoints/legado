@@ -61,6 +61,14 @@ class SourcePlatform implements ScriptHost {
       case 'cookieHost.mapToCookie':
       case 'cookieHost.clear':
       case 'javaHost.domCall':
+      case 'orgJsoup.parse':
+      case 'orgJsoup.parseBodyFragment':
+      case 'orgJsoup.newDocument':
+      case 'orgJsoup.newElement':
+      case 'orgJsoup.connect':
+      case 'orgJsoup.connectionCall':
+      case 'orgJsoup.responseCall':
+      case 'orgJsoup.release':
       case 'javaHost.aesBase64DecodeToString':
       case 'javaHost.desEncodeToBase64String':
       case 'javaHost.getWebViewUA':

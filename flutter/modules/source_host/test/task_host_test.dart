@@ -14,6 +14,72 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
+  test(
+    'native Jsoup calls retain caller-owned task and source identity',
+    () async {
+      final calls = <Map>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.arguments as Map);
+        return 'native-result';
+      });
+      const platform = SourcePlatform(sourceId: 'registered-source');
+      final host = TaskScriptHost(platform, 'registered-task');
+      const operations = [
+        'parse',
+        'parseBodyFragment',
+        'newDocument',
+        'newElement',
+        'connect',
+        'connectionCall',
+        'responseCall',
+        'release',
+      ];
+      for (final operation in operations) {
+        final arguments = <Object?>[
+          'fixture',
+          {'__sourceTaskId': 'script-task', '__sourceHostCallback': false},
+        ];
+        expect(
+          await host.call('orgJsoup.$operation', arguments),
+          'native-result',
+        );
+        expect(calls.last, {
+          'sourceId': 'registered-source',
+          'taskId': 'registered-task',
+          'fromScript': true,
+          'method': 'orgJsoup.$operation',
+          'arguments': arguments,
+        });
+        await expectLater(
+          TaskScriptHost(platform, null).call('orgJsoup.$operation', []),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'invalid_request',
+            ),
+          ),
+        );
+        await expectLater(
+          platform.call('orgJsoup.$operation', []),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'invalid_request',
+            ),
+          ),
+        );
+      }
+      expect(calls, hasLength(operations.length));
+      await expectLater(
+        host.call('orgJsoup.forName', []),
+        throwsA(isA<EngineException>()),
+      );
+      expect(calls, hasLength(operations.length));
+    },
+  );
+
   test('cache methods require the registered task and preserve exact source identity', () async {
     final calls = <Map>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
