@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 111,
+  "caseCount": 118,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -287,6 +287,20 @@
         "packagesConstructorsAndInstanceChecksMatchDocumentAndElementKinds",
         "parseSelectTextAndAbsoluteHrefMatchOriginalJsoup",
         "xmlParserTwoAndThreeArgumentOverloadsPreserveXmlCaseAndBaseUri"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyOrgConnectionV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt",
+      "sourceSha256": "5a9d4b18e8188ab3a1d9031f7e72af7594fabeccca004fa5ff61517f302728a5",
+      "methods": [
+        "canonicalAndRawSourceClearRejectOldTokensButFreshConnectionsWork",
+        "clearingSourceCancelsInflightConnectionAndPermitsFreshEntry",
+        "explicitlyDisposedConnectionRejectsWrapperAndNativeTokenReuse",
+        "libraryRecipeChangeInvalidatesOldConnectionLease",
+        "putEnumHeadersBodyAndNativeResponseBytesKeepIdentityAndCacheBrand",
+        "retainedConnectionUsesItsCookieStoreAcrossAuxiliaryExecutions",
+        "serializedConnectionTokenCannotBeInvokedByAnotherSourceOwner"
       ]
     }
   ]
