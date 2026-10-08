@@ -227,6 +227,13 @@ const legacyScriptPrelude =
     });
     return list;
   }
+  // Restrict legacy capability discovery without changing the async RPC proxy.
+  globalThis.source = new Proxy(globalThis.source, {
+    get(target, name, receiver) {
+      if (['getClass','forName','class'].includes(String(name))) return undefined;
+      return Reflect.get(target, name, receiver);
+    }
+  });
   globalThis.java = new Proxy(Object.create(null), {
     get(_target, name) {
       // No JVM reflection is exposed by the bounded JSON helper bridge.

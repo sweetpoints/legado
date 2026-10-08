@@ -67,6 +67,8 @@ class OrgJsoupHost implements ScriptHost {
   Future<Object?> call(String method, List<Object?> args) async {
     calls.add((method, args));
     switch (method) {
+      case 'fixture.echo':
+        return args.single;
       case 'orgJsoup.parse':
       case 'orgJsoup.parseBodyFragment':
         expect(args.first, '<a href="/book">Book</a>');
@@ -312,6 +314,57 @@ void main() {
           ),
         );
       }
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test('legacy source hides reflection across entries and preserves async RPC delegation', () async {
+    final host = OrgJsoupHost();
+    final runtime = V8Runtime(prelude: legacyScriptPrelude, persistent: true);
+    try {
+      for (var entry = 0; entry < 2; entry++) {
+        expect(
+          await runtime.evaluateAuxiliary(
+            '(async()=>({getClass:typeof source.getClass,forName:typeof source.forName,className:typeof source.class,'
+            'nested:await source.fixture.echo("nested"),direct:await source.call("fixture.echo",["direct"])}))()',
+            ScriptContext(host: host),
+          ),
+          {
+            'getClass': 'undefined',
+            'forName': 'undefined',
+            'className': 'undefined',
+            'nested': 'nested',
+            'direct': 'direct',
+          },
+        );
+        for (final name in ['getClass', 'forName', 'class']) {
+          await expectLater(
+            runtime.evaluateAuxiliary(
+              'source.$name()',
+              ScriptContext(host: host),
+            ),
+            throwsA(
+              isA<EngineException>().having(
+                (e) => e.code,
+                'code',
+                'script_error',
+              ),
+            ),
+          );
+        }
+      }
+      expect(
+        host.calls
+            .where((call) => call.$1 == 'fixture.echo')
+            .map((call) => call.$2),
+        [
+          ['nested'],
+          ['direct'],
+          ['nested'],
+          ['direct'],
+        ],
+      );
     } finally {
       await runtime.close();
     }
