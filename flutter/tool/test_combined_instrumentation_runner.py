@@ -106,9 +106,9 @@ if os.environ['FIXTURE_MODE']=='changed-source':
 
     def test_reviewed_case_counts_and_real_webjs_class_are_locked(self):
         document = combined.manifest(True)
-        self.assertEqual(document['caseCount'], 188)
-        self.assertEqual(len(document['classes']), 34)
-        self.assertEqual(sum(combined.EXPECTED_CASE_COUNTS.values()), 188)
+        self.assertEqual(document['caseCount'], 191)
+        self.assertEqual(len(document['classes']), 35)
+        self.assertEqual(sum(combined.EXPECTED_CASE_COUNTS.values()), 191)
         self.assertIn('io.legado.app.model.sourceEngine.LegacyWebJsAppIntegrationTest',
                       {record['name'] for record in document['classes']})
         self.assertFalse(any(Path(record['source']).name == 'PublicSourceCorpusTest.kt'

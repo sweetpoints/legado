@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": false,
-  "caseCount": 122,
+  "caseCount": 125,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -312,6 +312,16 @@
       "methods": [
         "canonicalClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor",
         "rawEngineIdClearResetsMainAndAuxiliaryContextsWithoutClearingPrefixNeighbor"
+      ]
+    },
+    {
+      "name": "io.legado.app.help.source.LegacyOrgExploreMenuV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/help/source/LegacyOrgExploreMenuV8IntegrationTest.kt",
+      "sourceSha256": "73276730c8ba7acc5b99dde45e579c60f6349cd7c788f18f0cf10df1c12f7080",
+      "methods": [
+        "nativeConnectionDiscoveryParsesRealLocalNavigationAndCachesStyledMenus",
+        "packagesJsoupAliasInitializesInSourceLibraryBeforeDiscoveryScript",
+        "taggedOrgParserDiscoveryReturnsExactStyledMenusWithTrailingComment"
       ]
     }
   ]
