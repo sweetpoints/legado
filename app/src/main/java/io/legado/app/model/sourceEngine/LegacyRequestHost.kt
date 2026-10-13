@@ -6,6 +6,7 @@ import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.utils.GSON
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 
 /** Original URL/request semantics at an outer, task-bound JSON boundary. */
@@ -27,9 +28,51 @@ class LegacyRequestHost(
     suspend fun fetch(payload: Map<String, Any?>, fromScript: Boolean = true): Map<String, Any?> {
         val scoped = variableScopes.select(payload["variableScope"])
         val analyzed = analyze(payload, fromScript, scoped)
-        // This is the sole HTTP/WebView path: no compile-then-send duplicate request.
-        val response = analyzed.getStrResponseAwait()
+        // This is the sole original request stack; a login hook may explicitly re-fetch it.
+        val check =
+            (analyzed.getSource()?.getSource() ?: analyzed.getSource())
+                ?.let { it as? BookSource }
+                ?.loginCheckJs
+        val response =
+            try {
+                analyzed.getStrResponseAwait()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (failure: Throwable) {
+                if (check.isNullOrBlank()) throw failure
+                val recovered =
+                    try {
+                        LegacyLoginCheckHost(analyzed, context)
+                            .evaluate(check, analyzed.getErrStrResponse(failure))
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (_: Throwable) {
+                        throw failure
+                    }
+                if ((recovered["status"] as Number).toInt() == 500) throw failure
+                return envelope(
+                    mapOf(
+                        "url" to recovered["url"],
+                        "body" to recovered["body"],
+                        "status" to recovered["status"],
+                        "headers" to recovered["multiHeaders"],
+                    ),
+                    scoped,
+                )
+            }
         context.ensureActive()
+        if (!check.isNullOrBlank()) {
+            val checked = LegacyLoginCheckHost(analyzed, context).evaluate(check, response)
+            return envelope(
+                mapOf(
+                    "url" to checked["url"],
+                    "body" to checked["body"],
+                    "status" to checked["status"],
+                    "headers" to checked["multiHeaders"],
+                ),
+                scoped,
+            )
+        }
         return envelope(
             mapOf(
                 "url" to response.url,

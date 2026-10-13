@@ -153,6 +153,10 @@ class SourcePlatform implements ScriptHost {
       case 'javaHttp.ajaxAllResolved':
       case 'javaHttp.headerGet':
       case 'javaHttp.headerPut':
+      case 'loginCheck.begin':
+      case 'loginCheck.continue':
+      case 'loginCheck.stepCall':
+      case 'loginCheck.abort':
       case 'javaHttp.begin':
       case 'javaHttp.continue':
       case 'javaHttp.stepCall':

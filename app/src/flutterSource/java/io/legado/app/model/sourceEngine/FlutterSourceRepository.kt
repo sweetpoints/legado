@@ -342,7 +342,7 @@ class FlutterSourceRepository(context: Context) : SourceEngineBackend {
             "exploreInfoMap.isEmpty", "exploreInfoMap.clear", "exploreInfoMap.keys", "exploreInfoMap.values",
             "exploreInfoMap.entries", "exploreInfoMap.sourceUrl",
         )
-        if (method in callbackMethods || method in exploreInfoMapMethods) {
+        if (method in callbackMethods || method in exploreInfoMapMethods || method in LegacyLoginCheckHost.methods) {
             val caller = task.context[SourceHostCallbacks]
                 ?: error("Source task has no bound callback for $method")
             return caller.call(method, args)

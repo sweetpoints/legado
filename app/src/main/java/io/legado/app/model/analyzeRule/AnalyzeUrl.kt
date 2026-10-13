@@ -95,7 +95,7 @@ class AnalyzeUrl(
     private val extraParams: Map<String, String>? = null,
     private val scriptBookSnapshot: Map<String, Any?>? = null,
     private val scriptChapterSnapshot: Map<String, Any?>? = null,
-    private val scriptEvaluator: ((String, Map<String, Any?>, SourceHostCallbacks) -> Any?)? = null,
+    private var scriptEvaluator: ((String, Map<String, Any?>, SourceHostCallbacks) -> Any?)? = null,
 ) : JsExtensions {
     constructor(mUrl: String) : this(mUrl, null)
 
@@ -393,6 +393,18 @@ class AnalyzeUrl(
     /**
      * 执行JS
      */
+    /** Resume this same request on a task-owned native worker, yielding scripts to its active VM. */
+    fun <T> withScriptContext(context: CoroutineContext, block: () -> T): T {
+        val previousContext = coroutineContext
+        val previousEvaluator = scriptEvaluator
+        coroutineContext = context.minusKey(ContinuationInterceptor)
+        scriptEvaluator = context[io.legado.app.model.sourceEngine.LegacyUrlScriptContext]?.evaluator(context)
+        return try { block() } finally {
+            coroutineContext = previousContext
+            scriptEvaluator = previousEvaluator
+        }
+    }
+
     fun evalJS(jsStr: String, result: Any? = null): Any? {
         val bindings = linkedMapOf<String, Any?>(
             "baseUrl" to baseUrl, "page" to page, "key" to key,
