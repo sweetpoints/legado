@@ -29,6 +29,65 @@ class LegacyImport {
   bool get requiresManualWork => issues.isNotEmpty;
 }
 
+/// Resolve rule containers using the old Gson adapters, without mutating the
+/// original source. Raw arrays are null rules; an encoded array is an invalid
+/// reflective object. BookList's execution fallback must not replace imported
+/// menu/field structure or delete an explore stage.
+Map<String, Object?>? legacyRuleObject(
+  Map<String, Object?> source,
+  String key,
+) {
+  Map<String, Object?>? decode(Object? value) {
+    if (value == null || value is List) return null;
+    if (value is String) {
+      value = jsonDecode(value);
+      if (value == null) return null;
+    }
+    if (value is! Map || value.keys.any((key) => key is! String)) {
+      throw const FormatException('Expected a legacy rule object');
+    }
+    return Map<String, Object?>.from(value);
+  }
+
+  return decode(source[key]);
+}
+
+/// Operation gating only: the complete migration report keeps every issue.
+/// UI capabilities do not block reading; actual request and script capabilities
+/// still apply globally unless their concrete host has implemented them.
+bool legacyIssueAffectsOperation(LegacyIssue issue, String operation) {
+  const scopes = {
+    'ruleSearch': 'search',
+    'searchUrl': 'search',
+    'ruleExplore': 'explore',
+    'exploreUrl': 'explore',
+    'ruleBookInfo': 'info',
+    'ruleToc': 'toc',
+    'ruleContent': 'content',
+  };
+  for (final entry in scopes.entries) {
+    if (issue.path == entry.key ||
+        issue.path.startsWith('${entry.key}.') ||
+        issue.path.startsWith('${entry.key}[')) {
+      return operation == entry.value;
+    }
+  }
+  if (issue.code == 'legacy.capability_requires_review' &&
+      const {
+        'loginUrl',
+        'loginUi',
+        'ruleReview',
+        'exploreScreen',
+      }.contains(issue.path)) {
+    return false;
+  }
+  if (issue.code == 'legacy.non_text_source' &&
+      const {'search', 'explore', 'info', 'toc'}.contains(operation)) {
+    return false;
+  }
+  return true;
+}
+
 /// Imports the structural format without claiming every legacy semantic works.
 class LegacySourceImporter {
   LegacyImport import(Map<String, Object?> input) {
@@ -103,9 +162,10 @@ class LegacySourceImporter {
             ? <MapEntry<String, (String, String?, String?)>>[]
             : mapping.entries) {
       final (ruleKey, urlKey, listKey) = entry.value;
-      final raw = input[ruleKey];
-      if (raw == null) continue;
-      if (raw is! Map) {
+      Map<String, Object?>? raw;
+      try {
+        raw = legacyRuleObject(input, ruleKey);
+      } on FormatException {
         issues.add(
           LegacyIssue(
             ruleKey,
@@ -115,10 +175,20 @@ class LegacySourceImporter {
         );
         continue;
       }
+      if (raw == null) continue;
       final fields = <String, String>{};
       String? list;
       String? nextPage;
+      var hasAppConfiguration = false;
       for (final rule in raw.entries) {
+        // These are App configuration, not extraction or executable hooks.
+        // The original Gson StringJsonDeserializer accepts every JSON value;
+        // preserve it verbatim in legacyOriginal instead of creating a field.
+        if ((entry.key == 'search' && rule.key == 'checkKeyWord') ||
+            (entry.key == 'content' && rule.key == 'imageStyle')) {
+          hasAppConfiguration = true;
+          continue;
+        }
         if (rule.value == null || rule.value == '') continue;
         if (rule.value is! String) {
           issues.add(
@@ -151,7 +221,13 @@ class LegacySourceImporter {
             ),
           );
         }
-        var text = rule.value as String;
+        var text = (rule.value as String).trim();
+        final lower = text.toLowerCase();
+        if (lower.startsWith('<js>') && lower.endsWith('</js>')) {
+          text = '@js:${text.substring(4, text.length - 5)}';
+        } else if (lower.startsWith('@js:')) {
+          text = '@js:${text.substring(4)}';
+        }
         if (text.toLowerCase().startsWith('@css:')) {
           text = '@legacy:${text.substring(5)}';
         } else if ([
@@ -180,6 +256,9 @@ class LegacySourceImporter {
           );
         }
         final simpleLegacyScript =
+            (listKey != null &&
+                rule.key == listKey &&
+                _portableV8Script(text)) ||
             _simpleExtractionScript(text) ||
             RegExp(
               r'^@js:\s*(?:return\s+)?java\.(?:ajax|ajaxAll|connect|get|post|head|put|base64Encode|base64Decode|base64DecodeToByteArray|strToBytes|bytesToStr|hexDecodeToByteArray|hexDecodeToString|hexEncodeToString|md5Encode|md5Encode16|digestHex|digestBase64Str|encodeURI)\([^()]*\)\s*;?\s*$',
@@ -189,6 +268,7 @@ class LegacySourceImporter {
             _legacyScalarReplacementField(entry.key, rule.key.toString()) &&
             _simpleLiteralReplacement(text);
         if (!simpleLegacyScript &&
+            !_supportedLegacyCssCombination(text) &&
             !literalReplacement &&
             RegExp(
               r'@js:|<js>|@webjs:|@put:|@get:|##|&&|\|\||%%|\{\{|^//|^@XPath:',
@@ -198,7 +278,7 @@ class LegacySourceImporter {
             LegacyIssue(
               '$ruleKey.${rule.key}',
               'legacy.rule_requires_review',
-              'Compound, script, XPath, or variable rules require semantic review.',
+              'Unsupported rule dialect, embedded script, host dependency, or variable behavior requires semantic review.',
             ),
           );
         }
@@ -218,6 +298,12 @@ class LegacySourceImporter {
               : rule.key.toString();
           fields[fieldName] = text;
         }
+      }
+      if (hasAppConfiguration &&
+          fields.isEmpty &&
+          list == null &&
+          nextPage == null) {
+        continue;
       }
       var url = urlKey == null
           ? switch (entry.key) {
@@ -268,23 +354,22 @@ class LegacySourceImporter {
     }
     // mainJs owns stage extraction, but Android still consumes these content
     // hooks outside that execution path. Keep their migration boundary explicit.
-    final contentRules = input['ruleContent'];
-    if (hasMainJs && contentRules != null && contentRules is! Map) {
-      issues.add(
-        const LegacyIssue(
-          'ruleContent',
-          'legacy.invalid_rule_object',
-          'Expected a rule object.',
-        ),
-      );
+    Map<String, Object?>? contentRules;
+    if (hasMainJs) {
+      try {
+        contentRules = legacyRuleObject(input, 'ruleContent');
+      } on FormatException {
+        issues.add(
+          const LegacyIssue(
+            'ruleContent',
+            'legacy.invalid_rule_object',
+            'Expected a rule object.',
+          ),
+        );
+      }
     }
-    if (hasMainJs && contentRules is Map) {
-      for (final hook in [
-        'imageStyle',
-        'imageDecode',
-        'payAction',
-        'callBackJs',
-      ]) {
+    if (hasMainJs && contentRules != null) {
+      for (final hook in ['imageDecode', 'payAction', 'callBackJs']) {
         final value = contentRules[hook];
         if (value == null || value == '') continue;
         issues.add(
@@ -332,7 +417,10 @@ class LegacySourceImporter {
         ),
       );
     }
-    final sourceType = input['bookSourceType'] ?? 0;
+    final rawSourceType = input['bookSourceType'];
+    // The original IntJsonDeserializer accepts only numbers; other JSON
+    // shapes return null and leave the primitive BookSource default (text).
+    final sourceType = rawSourceType is num ? rawSourceType.toInt() : 0;
     // File download fields are handled by the positional mainJs adapter and
     // Android's file-book pipeline. Other media and declarative files remain
     // outside the supported legacy stage contract.
@@ -349,7 +437,9 @@ class LegacySourceImporter {
       original,
       SourceDefinition(
         id: id,
-        name: input['bookSourceName']?.toString() ?? base.host,
+        name: input['bookSourceName']?.toString().trim().isNotEmpty == true
+            ? input['bookSourceName'].toString()
+            : id,
         baseUrl: base,
         stages: stages,
         script: hasMainJs ? wrapLegacyMainJs(mainJs, original) : null,
@@ -859,6 +949,156 @@ bool _simpleLiteralReplacement(String rule) {
   // Other outputs (HTML, attributes or implicit nodes) have additional
   // scalar serialization/unescape contracts outside this replacement subset.
   return RegExp(r'@(text|ownText|textNodes)$').hasMatch(extraction);
+}
+
+/// Entire JS list rules are opaque to the rule splitter. Host-dependent scripts
+/// retain review until their specific bridge contract is established.
+bool _portableV8Script(String rule) {
+  if (!rule.startsWith('@js:')) return false;
+  final script = rule.substring(4);
+  if (script.trim().isEmpty ||
+      RegExp(
+        r'@(?:get|put|webjs):|<js>|\{\{',
+        caseSensitive: false,
+      ).hasMatch(script)) {
+    return false;
+  }
+  final code = _jsOutsideStrings(script);
+  if (code == null || code.contains('##')) return false;
+  return !RegExp(
+    r'(?:^|[^\w$.])(?:java|Packages|Java|JavaAdapter|importClass|importPackage|source|sourceApi|book|chapter|cookie|cache|src)\b(?!\s*:)|\b(?:eval|Function)\s*\(|\b(?:globalThis|this)\s*(?:\[|\.\s*(?:java|source|sourceApi|Packages|Java)\b)',
+  ).hasMatch(code.replaceAll(RegExp(r'\.\s+'), '.'));
+}
+
+String? _jsOutsideStrings(String input) {
+  final out = StringBuffer();
+  String? quote;
+  var escape = false;
+  for (var i = 0; i < input.length; i++) {
+    final c = input[i];
+    if (quote != null) {
+      if (escape) {
+        escape = false;
+      } else if (c == r'\') {
+        escape = true;
+      } else if (c == quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (c == '`') {
+      return null; // Interpolated templates need their own host analysis.
+    }
+    if (c == "'" || c == '"') {
+      quote = c;
+      out.write(' ');
+      continue;
+    }
+    if (input.startsWith('//', i)) {
+      final end = input.indexOf('\n', i + 2);
+      if (end < 0) break;
+      i = end;
+      out.write(' ');
+      continue;
+    }
+    if (input.startsWith('/*', i)) {
+      final end = input.indexOf('*/', i + 2);
+      if (end < 0) return null;
+      i = end + 1;
+      out.write(' ');
+      continue;
+    }
+    out.write(c);
+  }
+  return quote == null ? out.toString() : null;
+}
+
+/// The old RuleAnalyzer selects one operator family. Keep that boundary until
+/// mixed-family precedence has a separate equivalence contract. Quotes and
+/// selector brackets are scanned so literal operator text is never a branch.
+bool _supportedLegacyCssCombination(String rule) {
+  if (!rule.toLowerCase().startsWith('@legacy:')) return false;
+  final input = rule.substring(8);
+  final parts = <String>[];
+  final operators = <String>{};
+  final brackets = <String>[];
+  var start = 0;
+  String? quote;
+  var escape = false;
+  for (var i = 0; i < input.length; i++) {
+    final c = input[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (c == r'\') {
+      escape = true;
+      continue;
+    }
+    if (quote != null) {
+      if (c == quote) quote = null;
+      continue;
+    }
+    if (c == "'" || c == '"') {
+      quote = c;
+      continue;
+    }
+    if ('([{'.contains(c)) brackets.add(c);
+    if (')]}'.contains(c)) {
+      if (brackets.isEmpty ||
+          '([{'.indexOf(brackets.removeLast()) != ')]}'.indexOf(c)) {
+        return false;
+      }
+    }
+    if (brackets.isEmpty && i + 1 < input.length) {
+      final op = input.substring(i, i + 2);
+      if (const {'||', '&&', '%%'}.contains(op)) {
+        parts.add(input.substring(start, i));
+        operators.add(op);
+        i++;
+        start = i + 1;
+        continue;
+      }
+    }
+  }
+  if (escape || quote != null || brackets.isNotEmpty || operators.length > 1) {
+    return false;
+  }
+  parts.add(input.substring(start));
+  if (RegExp(
+    r'@js:|<js>|@webjs:|@put:|@get:|##|\{\{|@xpath:|@regex:|@json:',
+    caseSensitive: false,
+  ).hasMatch(input)) {
+    return false;
+  }
+  for (var part in parts) {
+    part = part.trim();
+    if (part.toLowerCase().startsWith('@legacy:')) part = part.substring(8);
+    if (part.isEmpty ||
+        part.startsWith('//') ||
+        part.startsWith(':') ||
+        part.startsWith(r'$')) {
+      return false;
+    }
+    if (part.startsWith('@') &&
+        !const {
+          '@text',
+          '@ownText',
+          '@textNodes',
+          '@html',
+          '@all',
+          '@children',
+        }.contains(part)) {
+      return false;
+    }
+    // HTML extraction can mutate the old tree; `all` can also return an empty
+    // singleton. Neither contract is covered by this operator subset.
+    if (operators.isNotEmpty &&
+        RegExp(r'(?:^|@)(?:html|all)$').hasMatch(part)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _simpleExtractionScript(String script) {

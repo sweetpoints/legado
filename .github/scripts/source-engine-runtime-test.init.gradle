@@ -1,0 +1,18 @@
+gradle.beforeProject { project ->
+    project.plugins.withId('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            def release = android.buildTypes.getByName('release')
+            // Single, genuinely shrunk release APK with an isolated test identity.
+            release.signingConfig = android.signingConfigs.getByName('debug')
+            release.applicationIdSuffix = '.sourceenginesmoke'
+            release.debuggable = false
+            assert release.minifyEnabled : 'Source engine runtime acceptance requires R8'
+            android.sourceSets.getByName('release').kotlin.directories.add('src/sourceEngineRuntime/java')
+            android.sourceSets.getByName('release').manifest.srcFile('src/sourceEngineRuntime/AndroidManifest.xml')
+        }
+        // This isolated instrumentation identity has no production Firebase registration.
+        project.tasks.matching { it.name == 'processAppReleaseGoogleServices' }.configureEach {
+            enabled = false
+        }
+    }
+}

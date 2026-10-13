@@ -1,5 +1,20 @@
 // Loaded through the workspace-only Gradle user home's init.d directory.
 // Keep Flutter's generated .android project intact while configuring its public DSL.
+gradle.beforeSettings { settings ->
+    // The Flutter tools included build declares its Kotlin plugin separately.
+    // Its default Plugin Portal can lack transitive Kotlin artifacts that are
+    // published on Maven Central. Configure this build before plugin resolution,
+    // without changing the SDK or generated module's settings files.
+    def tools = settings.settingsDir
+    if (tools.name == 'gradle' && tools.parentFile.name == 'flutter_tools' &&
+        tools.parentFile.parentFile.name == 'packages') {
+        settings.pluginManagement.repositories {
+            mavenCentral()
+            gradlePluginPortal()
+        }
+    }
+}
+
 gradle.beforeProject { project ->
     if (project.name == 'flutter' && project.projectDir.name == 'Flutter' &&
         project.projectDir.parentFile.name == '.android' &&

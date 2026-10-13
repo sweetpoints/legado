@@ -77,11 +77,35 @@ object DartSourceEngine {
         source: BookSource,
         script: String,
         bindings: Map<String, Any?> = emptyMap(),
-    ): Any? = backend.evaluate(sourceJson(source), script, jsonObject(bindings))
+    ): Any? {
+        if (usesLegacyAuxiliary(source)) {
+            val original = source.getSource() ?: source
+            val caller = currentCoroutineContext()[SourceHostCallbacks]
+            return withContext(SourceHostCallbacks { method, args ->
+                if (caller != null) caller.call(method, args)
+                else when (method) {
+                    "analyze.get" -> original.get(args.firstOrNull()?.toString().orEmpty())
+                    "analyze.put" -> original.put(args.getOrNull(0)?.toString().orEmpty(),
+                        args.getOrNull(1)?.toString().orEmpty())
+                    else -> error("Unbound source callback: $method")
+                }
+            }) {
+                evaluateAuxiliary(script, jsonObject(bindings), source = source)
+            }
+        }
+        val json = sourceJson(source)
+        return withContext(
+            SourceTaskSource(source.getSource() ?: source, engineIdentity(json)) +
+                SourceTaskSourceSuppression(false),
+        ) {
+            backend.evaluate(json, script, jsonObject(bindings))
+        }
+    }
 
     suspend fun evaluateConfiguration(script: String): Any? =
-        backend.evaluate(
-            GSON.toJson(
+        withContext(SourceTaskSourceSuppression(true)) {
+            backend.evaluate(
+                GSON.toJson(
                 mapOf(
                     "bookSourceUrl" to
                         "https://source-import.invalid/${java.util.UUID.randomUUID()}",
@@ -90,8 +114,9 @@ object DartSourceEngine {
             ),
             script,
             emptyMap(),
-            ephemeral = true,
-        )
+                ephemeral = true,
+            )
+        }
 
     private val secureRandom by lazy { SecureRandom() }
 
@@ -148,6 +173,7 @@ object DartSourceEngine {
                 put("sourceKind", when (it) { is BookSource -> "book"; is RssSource -> "rss"; is HttpTTS -> "tts"; else -> "auxiliary" })
             }
         }
+        globals.putIfAbsent("__legacyExtractionPrefix", null)
         original?.let { globals.putIfAbsent("baseUrl", descriptor?.get("baseUrl") ?: it.getKey()) }
         val networkDescriptor = (descriptor ?: emptyMap()).toMutableMap()
         networkDescriptor["baseUrl"] = auxiliaryNetworkBaseUrl(descriptor?.get("baseUrl") ?: globals["baseUrl"])
@@ -180,10 +206,17 @@ object DartSourceEngine {
                 caller.call(method, arguments)
             }
         }) {
-            backend.evaluateAuxiliary(
-                script, BookSourceScriptBridge.jsonBindings(globals), owner, networkDescriptor,
-                ownerPrelude, timeoutMs,
-            )
+            if (original != null && owner != null) {
+                withContext(SourceTaskSource(original, owner) + SourceTaskSourceSuppression(false)) {
+                    backend.evaluateAuxiliary(script, BookSourceScriptBridge.jsonBindings(globals),
+                        owner, networkDescriptor, ownerPrelude, timeoutMs)
+                }
+            } else {
+                withContext(SourceTaskSourceSuppression(true)) {
+                    backend.evaluateAuxiliary(script, BookSourceScriptBridge.jsonBindings(globals),
+                        owner, networkDescriptor, ownerPrelude, timeoutMs)
+                }
+            }
         }
     }
 
@@ -221,17 +254,29 @@ object DartSourceEngine {
         operation: String,
         input: Map<String, Any?>,
     ): List<Map<String, Any?>> {
-        return backend.execute(operation, sourceJson(source), input)
+        val json = sourceJson(source)
+        return withContext(
+            SourceTaskSource(source.getSource() ?: source, engineIdentity(json)) +
+                SourceTaskSourceSuppression(false),
+        ) {
+            backend.execute(operation, json, input)
+        }
     }
 
+    internal fun engineIdentity(sourceJson: String): String {
+        val value = GSON.fromJson(sourceJson, Map::class.java)
+        return (value["id"] ?: value["bookSourceUrl"]) as? String
+            ?: error("Source identity missing")
+    }
+
+    internal fun usesLegacyAuxiliary(source: BookSource): Boolean = appliedDefinition(source) == null
+
+    private fun appliedDefinition(source: BookSource): String? =
+        source.bookSourceComment.orEmpty().lineSequence().map { it.trim() }
+            .firstOrNull { it.startsWith("@source:v1 ") }?.removePrefix("@source:v1 ")
+
     internal fun sourceJson(source: BookSource): String {
-        val candidate =
-            source.bookSourceComment
-                .orEmpty()
-                .lineSequence()
-                .map { it.trim() }
-                .firstOrNull { it.startsWith("@source:v1 ") }
-                ?.removePrefix("@source:v1 ")
+        val candidate = appliedDefinition(source)
         return candidate ?: GSON.toJson(source)
     }
 

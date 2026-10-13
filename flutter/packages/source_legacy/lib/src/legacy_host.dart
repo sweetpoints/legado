@@ -1,12 +1,35 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'legacy_dom.dart';
+import 'legacy_org_jsoup.dart';
+import 'legacy_cookie.dart';
+import 'legacy_cache.dart';
+
 import 'package:crypto/crypto.dart';
 import 'package:enough_convert/gbk.dart';
 import 'package:source_engine/source_engine.dart';
 
 /// Actual legacy overloads supported by the importer and compatibility runtime.
 const legacySupportedMethods = {
+  'createSymmetricCrypto',
+  'aesBase64DecodeToString',
+  'desEncodeToBase64String',
+  'getWebViewUA',
+  'HMacHex',
+  'HMacBase64',
+  'androidId',
+  'randomUUID',
+  'toNumChapter',
+  'log',
+  'logType',
+  'toast',
+  'longToast',
+  'timeFormat',
+  'timeFormatUTC',
+  't2s',
+  's2t',
+  'getCookie',
   'ajax',
   'ajaxAll',
   'connect',
@@ -41,8 +64,94 @@ const legacySupportedMethods = {
 
 /// StrResponse and Jsoup response method facades. Dart only transports JSON;
 /// response methods are materialized in JS after the synchronous host returns.
-const legacyScriptPrelude = r"""
+const legacyScriptPrelude =
+    legacyCookiePrelude +
+    legacyCachePrelude +
+    legacyDomPrelude +
+    legacyOrgJsoupPrelude +
+    r"""
 (() => {
+  // A dedicated function keeps request-bridge locals out of the header's scope.
+  // Its eval still uses this V8 context and the existing source globals/library.
+  const __legacyHeaderEvaluator = new Function('__legacyHeaderCode', 'return eval(__legacyHeaderCode);');
+  const __legacyHttpFrames = [];
+  function __legacyRestoreHttpFrame(__legacyFrame) {
+    for (const [__legacyKey,__legacyDescriptor] of Array.from(__legacyFrame).reverse()) {
+      if (__legacyDescriptor === undefined) Reflect.deleteProperty(globalThis,__legacyKey);
+      else Object.defineProperty(globalThis,__legacyKey,__legacyDescriptor);
+    }
+    const __legacyPosition = __legacyHttpFrames.lastIndexOf(__legacyFrame);
+    if (__legacyPosition >= 0) __legacyHttpFrames.splice(__legacyPosition,1);
+  }
+  function __legacySetHttpBinding(__legacyFrame,__legacyKey,__legacyValue) {
+    __legacyFrame.set(__legacyKey,Object.getOwnPropertyDescriptor(globalThis,__legacyKey));
+    if (!Reflect.set(globalThis,__legacyKey,__legacyValue)) throw new Error('legacy.invalid_step_binding');
+  }
+  Object.defineProperty(globalThis,'__sourceBeforeEntry',{
+    value:() => {while (__legacyHttpFrames.length) __legacyRestoreHttpFrame(__legacyHttpFrames[__legacyHttpFrames.length-1]);},
+    writable:false,configurable:false,enumerable:false
+  });
+
+  function __legacyHttpStepOutcome(__legacyReply) {
+    const __legacySaved = new Map();
+    __legacyHttpFrames.push(__legacySaved);
+    const __legacyBindings = Object.assign(Object.create(null), __legacyReply.bindings, {
+      __legacyHttpStep: {token:__legacyReply.token, sequence:__legacyReply.sequence},
+      __legacyHeaderEvaluation:false,
+      __legacyExtractionPrefix:null
+    });
+    try {
+      for (const __legacyKey of Object.keys(__legacyBindings)) {
+        if (['java','source','sourceApi','cache','cookie','globalThis','global','taskId'].includes(__legacyKey)
+            || __legacyKey.startsWith('__source') || __legacyKey.startsWith('__sv8')) continue;
+        __legacySetHttpBinding(__legacySaved,__legacyKey,__legacyBindings[__legacyKey]);
+      }
+      const __legacyRaw = __legacyHeaderEvaluator(__legacyReply.script);
+      const __legacyValue = __legacyRaw && typeof __legacyRaw.then === 'function'
+        ? __sourceAwaitSync(__legacyRaw) : __legacyRaw;
+      return {ok:true,value:__legacyValue === undefined ? null : __legacyValue};
+    } catch (__legacyError) {
+      const __legacyCode = __legacyError && typeof __legacyError.__sourceErrorCode === 'string'
+        ? __legacyError.__sourceErrorCode : 'script_error';
+      return {ok:false,code:__legacyCode,message:String(__legacyError)};
+    } finally {
+      __legacyRestoreHttpFrame(__legacySaved);
+    }
+  }
+  function __legacyHttpRequest(__legacyMethod,__legacyArgs,__legacyHeaders) {
+    let __legacyToken = null;
+    let __legacySequence = 0;
+    try {
+      let __legacyReply = __sourceHostSync('javaHttp.begin',[__legacyMethod,__legacyArgs,__legacyHeaders]);
+      while (__legacyReply && __legacyReply.status === 'script') {
+        if (__legacyToken === null && typeof __legacyReply.token === 'string' && __legacyReply.token) __legacyToken = __legacyReply.token;
+        if (typeof __legacyReply.token !== 'string' || !__legacyReply.token
+            || (__legacyToken !== null && __legacyReply.token !== __legacyToken)
+            || !Number.isSafeInteger(__legacyReply.sequence) || __legacyReply.sequence !== __legacySequence + 1
+            || typeof __legacyReply.script !== 'string' || !__legacyReply.bindings
+            || typeof __legacyReply.bindings !== 'object' || Array.isArray(__legacyReply.bindings)) {
+          throw new Error('legacy.invalid_http_continuation');
+        }
+        __legacyToken = __legacyReply.token;
+        __legacySequence = __legacyReply.sequence;
+        const __legacyOutcome = __legacyHttpStepOutcome(__legacyReply);
+        __legacyReply = __sourceHostSync('javaHttp.continue',[__legacyToken,__legacySequence,__legacyOutcome]);
+      }
+      if (!__legacyReply || __legacyReply.status !== 'done' || typeof __legacyReply.token !== 'string'
+          || !__legacyReply.token || (__legacyToken !== null && __legacyReply.token !== __legacyToken)
+          || !Object.prototype.hasOwnProperty.call(__legacyReply,'value')) {
+        throw new Error('legacy.invalid_http_continuation');
+      }
+      __legacyToken = __legacyReply.token;
+      return response(__legacyReply.value);
+    } finally {
+      if (__legacyToken !== null) __sourceHostSync('javaHttp.abort',[__legacyToken]);
+    }
+  }
+  function __legacyMarkedBytes(__legacyValue) {
+    return typeof globalThis.__legacyCacheMarkBytes === 'function'
+      ? globalThis.__legacyCacheMarkBytes(__legacyValue) : __legacyValue;
+  }
   function response(value) {
     if (Array.isArray(value)) return value.map(response);
     if (!value || typeof value !== 'object' || !value.__legacyResponseKind) return value;
@@ -78,7 +187,7 @@ const legacyScriptPrelude = r"""
       headers: callable(headers), header, hasHeader: name => header(name) !== null,
       isSuccessful: () => value.status >= 200 && value.status < 300,
       callTime: () => value.callTime || 0,
-      bodyAsBytes: () => value.bytes,
+      bodyAsBytes: () => __legacyMarkedBytes(value.bytes),
       multiHeaders: () => value.multiHeaders || {},
       cookies: () => value.cookieMap || {}, cookie: name => (value.cookieMap || {})[name] ?? null,
       hasCookie: name => Object.prototype.hasOwnProperty.call(value.cookieMap || {}, name),
@@ -89,6 +198,7 @@ const legacyScriptPrelude = r"""
     return out;
   }
   function element(value) {
+    if (value && (value.__legacyDom || value.__legacyDomList)) return __legacyDomMaterialize(value);
     if (typeof value !== 'string') return value;
     const rootTag = /^<([A-Za-z][A-Za-z0-9:_-]*)/.exec(value);
     if (!rootTag) throw new Error('legacy.invalid_element_serialization');
@@ -105,6 +215,7 @@ const legacyScriptPrelude = r"""
     return out;
   }
   function elementList(values) {
+    if (values && values.__legacyDomList) return __legacyDomMaterialize(values);
     const list = (values || []).map(element);
     Object.defineProperties(list, {
       size: {value: () => list.length}, get: {value: index => list[index]},
@@ -116,8 +227,17 @@ const legacyScriptPrelude = r"""
     });
     return list;
   }
+  // Restrict legacy capability discovery without changing the async RPC proxy.
+  globalThis.source = new Proxy(globalThis.source, {
+    get(target, name, receiver) {
+      if (['getClass','forName','class'].includes(String(name))) return undefined;
+      return Reflect.get(target, name, receiver);
+    }
+  });
   globalThis.java = new Proxy(Object.create(null), {
     get(_target, name) {
+      // No JVM reflection is exposed by the bounded JSON helper bridge.
+      if (['getClass','forName','class'].includes(String(name))) return undefined;
       return (...args) => {
         if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
           const unescape = String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean' ? args[1] : true;
@@ -129,7 +249,66 @@ const legacyScriptPrelude = r"""
           args = [args[0], content, args.length > 2 ? args[2] : false, globalThis.baseUrl];
           if (String(name) === 'getString') args.push(unescape);
         }
+        if (globalThis.__legacyUseNativeHttp === true) {
+          if (globalThis.__legacyHeaderEvaluation === true && ['get','put'].includes(String(name))
+              && !(String(name) === 'get' && args.length !== 1)) {
+            return __sourceHostSync('javaHttp.header' + (String(name) === 'get' ? 'Get' : 'Put'), args);
+          }
+          if (globalThis.__legacyHttpStep && ['get','put'].includes(String(name))
+              && !(String(name) === 'get' && args.length !== 1)) {
+            return __sourceHostSync('javaHttp.stepCall',[__legacyHttpStep.token,__legacyHttpStep.sequence,String(name),args]);
+          }
+          if (['ajax','connect','ajaxAll'].includes(String(name))) {
+            const plan = __sourceHostSync('javaHttp.prepareHeader', [String(name), args]);
+            if (plan !== null) {
+              if (!plan || typeof plan.script !== 'string' || !Number.isSafeInteger(plan.count) || plan.count < 0) {
+                throw new Error('legacy.invalid_header_plan');
+              }
+              const evaluations = [];
+              for (let index = 0; index < plan.count; index++) {
+                const __legacyHeaderFrame = new Map();
+                __legacyHttpFrames.push(__legacyHeaderFrame);
+                __legacySetHttpBinding(__legacyHeaderFrame,'__legacyHeaderEvaluation',true);
+                try {
+                  const __legacyHeaderValue = __legacyHeaderEvaluator(plan.script);
+                  if (__legacyHeaderValue && typeof __legacyHeaderValue.then === 'function') {
+                    throw new Error('legacy.async_header_requires_await');
+                  }
+                  evaluations.push({value:__legacyHeaderValue, failed:false});
+                } catch (error) {
+                  if (String(error).includes('legacy.async_header_requires_await')) throw error;
+                  // BaseSource.getHeaderMap also retains default headers when its rule fails.
+                  evaluations.push({value:null, failed:true});
+                } finally {
+                  __legacyRestoreHttpFrame(__legacyHeaderFrame);
+                }
+              }
+              return __legacyHttpRequest(String(name), args, evaluations);
+            }
+            return __legacyHttpRequest(String(name), args, null);
+          }
+        }
         const value = __sourceHostSync('java.' + String(name), args);
+        if (String(name) === 'createSymmetricCrypto') {
+          if (!value || !value.__legacyCryptoState) throw new Error('legacy.invalid_crypto_state');
+          let state = value.__legacyCryptoState;
+          const crypto = Object.create(null);
+          const invoke = (operation, values) => {
+            const result = __sourceHostSync('javaHost.cryptoCall', [state, operation, values]);
+            if (!result || !result.state) throw new Error('legacy.invalid_crypto_state');
+            state = result.state;
+            return result.value;
+          };
+          for (const operation of ['encrypt','encryptHex','encryptBase64','decrypt','decryptStr']) {
+            crypto[operation] = (...values) => ['encrypt','decrypt'].includes(operation)
+                ? __legacyMarkedBytes(invoke(operation, values)) : invoke(operation, values);
+          }
+          crypto.setIv = iv => {invoke('setIv', [iv]); return crypto;};
+          return crypto;
+        }
+
+        if (['strToBytes','base64DecodeToByteArray','hexDecodeToByteArray'].includes(String(name))) return __legacyMarkedBytes(value);
+        if (String(name) === 'log') return args[0];
         if (String(name) === 'getElement') return element(value);
         if (String(name) === 'getElements') return elementList(value);
         return response(value);
@@ -141,8 +320,12 @@ const legacyScriptPrelude = r"""
 
 /// Legacy host: known JVM operations implemented by Dart, not arbitrary Java.
 class LegacyScriptHost implements ScriptHost {
-  LegacyScriptHost(this.delegate, {Map<String, String>? variables})
-    : variables = variables ?? <String, String>{};
+  LegacyScriptHost(
+    this.delegate, {
+    Map<String, String>? variables,
+    this.useNativeHttp = false,
+  }) : variables = variables ?? <String, String>{};
+  final bool useNativeHttp;
   final ScriptHost delegate;
   final Map<String, String> variables;
 
@@ -150,6 +333,21 @@ class LegacyScriptHost implements ScriptHost {
   Future<Object?> call(String method, List<Object?> arguments) async {
     if (!method.startsWith('java.')) return delegate.call(method, arguments);
     final name = method.substring(5);
+    if (useNativeHttp &&
+        const {
+          'ajax',
+          'get',
+          'post',
+          'head',
+          'connect',
+          'ajaxAll',
+        }.contains(name) &&
+        !(name == 'get' && arguments.length == 1)) {
+      // Android owns the original overloads, URL options, headers and request
+      // compilation. Never retry a native failure through another transport.
+      return delegate.call('javaHttp.$name', arguments);
+    }
+
     void arity(int min, [int? max]) {
       if (arguments.length < min || arguments.length > (max ?? min)) {
         throw UnsupportedError('legacy.unsupported_overload: $method');
@@ -165,6 +363,95 @@ class LegacyScriptHost implements ScriptHost {
 
     final arg = arguments.isEmpty ? null : arguments.first;
     switch (name) {
+      case 'createSymmetricCrypto':
+        arity(2, 3);
+        str(0);
+        final key = arguments[1];
+        final iv = arguments.length == 3 ? arguments[2] : null;
+        void bytes(Object? value) {
+          if (value == null) return;
+          if (value is! List ||
+              value.any((b) => b is! int || b < -128 || b > 255)) {
+            throw ArgumentError('Legacy crypto bytes required');
+          }
+        }
+        if (key is String) {
+          if (iv != null && iv is! String) {
+            throw ArgumentError('Legacy string IV required');
+          }
+        } else {
+          bytes(key);
+          bytes(iv);
+        }
+        return delegate.call('javaHost.cryptoCreate', arguments);
+      case 'aesBase64DecodeToString':
+      case 'desEncodeToBase64String':
+        arity(4);
+        for (var i = 0; i < 4; i++) {
+          str(i);
+        }
+        return delegate.call('javaHost.$name', arguments);
+      case 'getWebViewUA':
+        arity(0);
+        return delegate.call('javaHost.getWebViewUA', arguments);
+
+      case 'HMacHex':
+      case 'HMacBase64':
+        arity(3);
+        str(0);
+        str(1);
+        str(2);
+        return delegate.call('javaHost.$name', arguments);
+      case 'androidId':
+      case 'randomUUID':
+        arity(0);
+        return delegate.call('javaHost.$name', arguments);
+      case 'toNumChapter':
+        arity(1);
+        if (arg != null) str(0);
+        return delegate.call('javaHost.toNumChapter', arguments);
+
+      case 'log':
+      case 'logType':
+      case 'toast':
+      case 'longToast':
+        arity(1);
+        return delegate.call('javaHost.$name', arguments);
+      case 't2s':
+      case 's2t':
+        arity(1);
+        str(0);
+        return delegate.call('javaHost.$name', arguments);
+      case 'getCookie':
+        arity(1, 2);
+        str(0);
+        if (arguments.length == 2 && arguments[1] != null) str(1);
+        return delegate.call('javaHost.getCookie', arguments);
+      case 'timeFormat':
+      case 'timeFormatUTC':
+        arity(name == 'timeFormat' ? 1 : 3);
+        final time = arguments[0];
+        if (time is! num ||
+            !time.isFinite ||
+            (time is! int && time != time.truncateToDouble()) ||
+            time < -9223372036854775808 ||
+            time > 9223372036854775807) {
+          throw ArgumentError('Time must be signed integer milliseconds');
+        }
+        if (name == 'timeFormatUTC') {
+          str(1);
+          final offset = arguments[2];
+          if (offset is! num ||
+              !offset.isFinite ||
+              offset != offset.truncateToDouble() ||
+              offset < -2147483648 ||
+              offset > 2147483647) {
+            throw ArgumentError(
+              'UTC offset must be signed integer milliseconds',
+            );
+          }
+        }
+        return delegate.call('javaHost.$name', arguments);
       case 'cacheContent':
         arity(2, 3);
         // Native callbacks accept both implicit batch context and explicit ID.

@@ -103,11 +103,19 @@ class RuleEvaluator {
     List<Object?> values;
     final lower = selector.toLowerCase();
     if (lower.startsWith('@legacy:')) {
-      values = LegacyHtmlRule.evaluate(
-        selector.substring(8),
-        input,
-        elements: elements,
-      );
+      final legacySelector = selector.substring(8);
+      // AnalyzeRule reads a literal key when the current result is JSON.
+      // Stringifying a JSON record and parsing it as HTML loses that field.
+      if (input is Map) {
+        final value = input[legacySelector];
+        values = value is List ? List<Object?>.from(value) : [?value];
+      } else {
+        values = LegacyHtmlRule.evaluate(
+          legacySelector,
+          input,
+          elements: elements,
+        );
+      }
     } else if (lower.startsWith('@json:') || selector.startsWith(r'$')) {
       final data = input is String ? jsonDecode(input) : input;
       values = JsonPath(

@@ -23,7 +23,67 @@ TEST_FILES = (
     'data/repository/AutoTaskDebugRepositoryTest.kt',
     'data/repository/MainRssRepositoryTest.kt',
     'ui/book/source/edit/JsSourceEditAcceptedIoTest.kt',
+    'model/sourceEngine/LegacyPipelineHooksV8IntegrationTest.kt',
+    'model/sourceEngine/LegacySourceAppEntryTest.kt',
+    'help/source/ExploreScriptV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyBookVariableScopeIntegrationTest.kt',
+    'model/sourceEngine/LegacyWebJsAppIntegrationTest.kt',
+    'model/sourceEngine/LegacyRuleV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyCookieV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyDomV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyHostFailureV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyHttpDispatcherContextIntegrationTest.kt',
+    'model/sourceEngine/LegacyAuxiliaryFacadeV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyDynamicHttpHeaderV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyCacheV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt',
+    'model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt',
+    'help/source/LegacyOrgExploreMenuV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyCoverImageV8IntegrationTest.kt',
+    'model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt',
 )
+# Deliberately reviewed cardinalities: regeneration must not silently bless lost cases.
+EXPECTED_CASE_COUNTS = {
+    'V8ApplicationScriptTest.kt': 16,
+    'model/CryptoJsV8CompatibilityTest.kt': 10,
+    'help/book/BookExportFileNameV8Test.kt': 5,
+    'model/analyzeRule/AnalyzeUrlV8TemplateGoldenTest.kt': 5,
+    'model/analyzeRule/AnalyzeRuleElementsNormalizationTest.kt': 1,
+    'ui/replace/edit/ReplacePreviewV8Test.kt': 3,
+    'model/analyzeRule/ReviewRuleParserV8Test.kt': 11,
+    'data/repository/AutoTaskDebugRepositoryTest.kt': 5,
+    'data/repository/MainRssRepositoryTest.kt': 6,
+    'ui/book/source/edit/JsSourceEditAcceptedIoTest.kt': 4,
+    'model/sourceEngine/LegacyPipelineHooksV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacySourceAppEntryTest.kt': 4,
+    'help/source/ExploreScriptV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyBookVariableScopeIntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyWebJsAppIntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyRuleV8IntegrationTest.kt': 4,
+    'model/sourceEngine/LegacyCookieV8IntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyDomV8IntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyHostFailureV8IntegrationTest.kt': 1,
+    'model/sourceEngine/LegacyHttpDispatcherContextIntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyAuxiliaryFacadeV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyDynamicHttpHeaderV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyNestedHttpScriptV8IntegrationTest.kt': 4,
+    'model/sourceEngine/LegacyCacheV8IntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyOrgJsoupV8IntegrationTest.kt': 7,
+    'model/sourceEngine/LegacyOrgConnectionV8IntegrationTest.kt': 9,
+    'model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt': 2,
+    'help/source/LegacyOrgExploreMenuV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyCoverImageV8IntegrationTest.kt': 3,
+    'model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt': 2,
+    'model/FlutterSourceEngineTest.kt': 21,
+    'ui/book/source/edit/BookSourceMigrationUiTest.kt': 5,
+    'model/jsSource/JsSourceReviewV8Test.kt': 13,
+    'model/login/FlutterLoginUiV2Test.kt': 6,
+    'model/JsSourceV8ExecutionTest.kt': 14,
+    'model/CryptoMigrationContractTest.kt': 5,
+    'web/mcp/FlutterMcpSourceTest.kt': 2,
+}
 DEFAULT_MANIFEST = Path(__file__).with_name('v8-migration-instrumentation.json')
 spec = importlib.util.spec_from_file_location('original_instrumentation', Path(__file__).with_name('verify-instrumentation.py'))
 original = importlib.util.module_from_spec(spec)
@@ -48,6 +108,10 @@ def class_record(relative, root):
         raise ValueError(f'Every @Test must be an explicit zero-argument DEX-safe method: {path}')
     if len(set(methods)) != len(methods) or re.search(r'@Ignore\b', code):
         raise ValueError(f'Duplicate or ignored instrumentation declaration: {path}')
+    if len(methods) != EXPECTED_CASE_COUNTS.get(relative):
+        raise ValueError(f'Instrumentation case count differs from reviewed contract: {path}')
+    if classes[0] != Path(relative).stem:
+        raise ValueError(f'Instrumentation class does not match reviewed source filename: {path}')
     return {'name': f'{package[1]}.{classes[0]}', 'source': path.as_posix(),
             'sourceSha256': hashlib.sha256(data).hexdigest(), 'methods': sorted(methods)}
 

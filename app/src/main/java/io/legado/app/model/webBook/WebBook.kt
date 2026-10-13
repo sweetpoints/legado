@@ -2,6 +2,7 @@ package io.legado.app.model.webBook
 
 import com.google.gson.JsonObject
 import io.legado.app.R
+import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -12,14 +13,18 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
+import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isOnLineTxt
+import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeAllBookType
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SuppressSourceNavigation
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.BatchContentContext
 import io.legado.app.model.Debug
+import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.model.jsSource.JsSourceMarshaller
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.utils.GSON
@@ -41,6 +46,36 @@ import splitties.init.appCtx
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
+
+    /** Export the live entity variables together with the immutable script snapshot. */
+    private fun scriptSnapshot(value: RuleDataInterface): Map<String, Any?> =
+        DartSourceEngine.jsonObject(value) + ("variable" to GSON.toJson(value.variableMap))
+
+    private fun bookVariablePatch(row: Map<String, Any?>): Map<String, String>? {
+        val raw = row["bookVariable"] ?: return null
+        val value =
+            when (raw) {
+                is String -> GSON.fromJson(raw, JsonObject::class.java)
+                is Map<*, *> -> GSON.toJsonTree(raw).asJsonObject
+                else -> error("Dart bookVariable must be a JSON object")
+            }
+        require(
+            value != null &&
+                value.entrySet().all {
+                    it.value.isJsonPrimitive && it.value.asJsonPrimitive.isString
+                }
+        ) {
+            "Dart bookVariable values must be strings"
+        }
+        return value.entrySet().associate { it.key to it.value.asString }
+    }
+
+    private fun applyBookVariables(book: Book, variables: Map<String, String>?) {
+        if (variables == null) return
+        book.variableMap.clear()
+        book.variableMap.putAll(variables)
+        book.variable = GSON.toJson(book.variableMap)
+    }
 
     private fun usesLegacyDartFields(source: BookSource): Boolean {
         val definition =
@@ -89,6 +124,7 @@ object WebBook {
     ): Map<String, Any?> {
         if (!usesLegacyDartFields(source)) return row
         return row.toMutableMap().apply {
+            if (row["variable"] is Map<*, *>) this["variable"] = GSON.toJson(row["variable"])
             (row["name"] as? String)?.let { this["name"] = BookHelp.formatBookName(it) }
             (row["author"] as? String)?.let { this["author"] = BookHelp.formatBookAuthor(it) }
             (row["wordCount"] as? String)?.let { this["wordCount"] = wordCountFormat(it) }
@@ -207,11 +243,11 @@ object WebBook {
                 DartSourceEngine.execute(
                         bookSource,
                         "info",
-                        DartSourceEngine.jsonObject(book) +
-                            mapOf("book" to DartSourceEngine.jsonObject(book)),
+                        scriptSnapshot(book) + mapOf("book" to scriptSnapshot(book)),
                     )
                     .single(),
             )
+        val bookVariables = bookVariablePatch(fields)
         val allowRename = canReName && canRenameDartBook(bookSource)
         (fields["name"] as? String)
             ?.takeIf { it.isNotEmpty() }
@@ -237,6 +273,7 @@ object WebBook {
             bookSource,
             canReName = false,
         )
+        applyBookVariables(book, bookVariables)
         if (bookSource.bookSourceType == io.legado.app.constant.BookSourceType.file) {
             book.addType(bookSource.getBookType())
         }
@@ -270,7 +307,7 @@ object WebBook {
             .runCatching {
                 val script = bookSource.ruleToc?.preUpdateJs
                 if (!script.isNullOrBlank()) {
-                    val before = DartSourceEngine.jsonObject(book)
+                    val before = scriptSnapshot(book)
                     val sourceInfo = DartSourceEngine.jsonObject(bookSource)
                     val result =
                         DartSourceEngine.evaluate(
@@ -387,11 +424,13 @@ object WebBook {
                     DartSourceEngine.execute(
                             bookSource,
                             "toc",
-                            DartSourceEngine.jsonObject(book) +
-                                mapOf("book" to DartSourceEngine.jsonObject(book)),
+                            scriptSnapshot(book) + mapOf("book" to scriptSnapshot(book)),
                         )
                         .mapIndexed { index, row ->
+                            val bookVariables = bookVariablePatch(row)
                             val normalized = row.toMutableMap()
+                            if (row["variable"] is Map<*, *>)
+                                normalized["variable"] = GSON.toJson(row["variable"])
                             for (field in listOf("isVip", "isPay", "isVolume")) {
                                 val value = row[field]
                                 if (legacy && value is String) {
@@ -413,6 +452,7 @@ object WebBook {
                                 bookUrl = book.bookUrl
                                 baseUrl = book.tocUrl
                                 this.index = index
+                                applyBookVariables(book, bookVariables)
                             }
                         }
                 if (chapters.isEmpty()) {
@@ -487,13 +527,18 @@ object WebBook {
         }
 
         val input =
-            DartSourceEngine.jsonObject(book) +
+            scriptSnapshot(book) +
                 mapOf(
-                    "book" to DartSourceEngine.jsonObject(book),
-                    "chapter" to DartSourceEngine.jsonObject(bookChapter),
+                    "book" to scriptSnapshot(book),
+                    "chapter" to scriptSnapshot(bookChapter),
                     "chapterUrl" to bookChapter.getAbsoluteURL(),
                     "chapterTitle" to bookChapter.title,
                     "nextChapterUrl" to nextChapterUrl,
+                    "__legacyContentFormat" to (!book.isAudio && !book.isVideo),
+                    "__legacyIsAudio" to book.isAudio,
+                    "__legacyIsVideo" to book.isVideo,
+                    "__legacyAdaptSpecialStyle" to AppConfig.adaptSpecialStyle,
+                    "__legacyOnLineTxt" to book.isOnLineTxt,
                 )
         val row = DartSourceEngine.execute(bookSource, "content", input).single()
         val content =
@@ -502,6 +547,7 @@ object WebBook {
         if (!bookChapter.isVolume && content.isBlank()) throw ContentEmptyException("内容为空")
         // Stage fields are JSON transport values, never live Java chapter objects.
         // Validate the entire patch before touching metadata or publishing the cache.
+        val bookVariables = bookVariablePatch(row)
         val variable = row["variable"]
         val variables =
             when (variable) {
@@ -518,6 +564,9 @@ object WebBook {
         ) {
             "Dart chapter variable values must be strings"
         }
+        require(!row.containsKey("title") || row["title"] == null || row["title"] is String) {
+            "Dart chapter title must be a string"
+        }
         require(!row.containsKey("imgUrl") || row["imgUrl"] == null || row["imgUrl"] is String) {
             "Dart chapter imgUrl must be a string"
         }
@@ -528,6 +577,19 @@ object WebBook {
             }
             bookChapter.variable = GSON.toJson(bookChapter.variableMap)
         }
+        applyBookVariables(book, bookVariables)
+        (row["title"] as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { title ->
+                val image = AppPattern.imgRegex.find(title)
+                bookChapter.title =
+                    if (image == null) title
+                    else {
+                        bookChapter.imgUrl = image.groupValues[2]
+                        image.groupValues[1].ifEmpty { bookChapter.title }
+                    }
+                bookChapter.titleMD5 = null
+            }
         if (row.containsKey("imgUrl")) bookChapter.imgUrl = row["imgUrl"] as String?
         if (saveToken != null) {
             val saved =
@@ -628,10 +690,10 @@ object WebBook {
                 bookSource,
                 code,
                 mapOf(
-                    "book" to DartSourceEngine.jsonObject(book),
+                    "book" to scriptSnapshot(book),
                     "chapters" to
                         chapters.map {
-                            DartSourceEngine.jsonObject(it) + ("absoluteUrl" to it.getAbsoluteURL())
+                            scriptSnapshot(it) + ("absoluteUrl" to it.getAbsoluteURL())
                         },
                 ),
             )

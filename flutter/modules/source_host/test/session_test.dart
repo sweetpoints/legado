@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:source_engine/source_engine.dart';
 import 'package:source_host/session_store.dart';
 import 'package:source_host/source_host.dart';
+import 'package:source_host/main.dart' show createSourceEngine;
 
 class _MemoryStore implements SourceSessionStore {
   final values = <String, Map<String, Object?>>{};
@@ -56,6 +57,13 @@ class _StateRuntime implements ScriptRuntime, SourceRuntimeState {
   Future<void> close() async {
     closed = true;
   }
+}
+
+class _InvalidRuntime extends _StateRuntime {
+  _InvalidRuntime() : super('fixture');
+  @override
+  void importRuntimeState(Map<String, Object?> value) =>
+      throw StateError('private-detail');
 }
 
 Map<String, Object?> _definition(
@@ -193,6 +201,212 @@ void main() {
       await host.close();
     },
   );
+  test(
+    'missing storage plugin is not reported as corrupt saved cookies',
+    () async {
+      const channel = MethodChannel('legado/source_platform');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => throw MissingPluginException('private-detail'),
+      );
+      final runtime = _StateRuntime('fixture');
+      final host = SourceHost(
+        (_) => SourceEngine(runtime: runtime),
+        sessionStore: const PlatformSessionStore(),
+      );
+      try {
+        await expectLater(
+          _execute(host, _definition('source-a'), {}, 'missing'),
+          throwsA(
+            isA<PlatformException>()
+                .having((e) => e.code, 'code', 'session_storage_unavailable')
+                .having((e) => e.details, 'details', {
+                  'phase': 'storage_read',
+                  'causeType': 'MissingPluginException',
+                }),
+          ),
+        );
+        expect(runtime.closed, true);
+      } finally {
+        await host.close();
+        messenger.setMockMethodCallHandler(channel, null);
+      }
+    },
+  );
+
+  test(
+    'storage I/O failures preserve phase without disclosing original messages',
+    () async {
+      const channel = MethodChannel('legado/source_platform');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => throw PlatformException(
+          code: 'STORAGE_READ_FAILED',
+          message: 'private-detail',
+        ),
+      );
+      final host = SourceHost(
+        (_) => SourceEngine(runtime: _StateRuntime('fixture')),
+        sessionStore: const PlatformSessionStore(),
+      );
+      try {
+        await expectLater(
+          _execute(host, _definition('source-a'), {}, 'io'),
+          throwsA(
+            isA<PlatformException>()
+                .having((e) => e.code, 'code', 'session_storage_read_failed')
+                .having(
+                  (e) => e.message,
+                  'message',
+                  isNot(contains('private-detail')),
+                ),
+          ),
+        );
+      } finally {
+        await host.close();
+        messenger.setMockMethodCallHandler(channel, null);
+      }
+    },
+  );
+
+  test(
+    'invalid and unsupported saved sessions are rejected without overwriting',
+    () async {
+      final store = _MemoryStore();
+      final host = SourceHost(
+        (_) => SourceEngine(runtime: _StateRuntime('fixture')),
+        sessionStore: store,
+      );
+      try {
+        store.values['source-a:false'] = {
+          'formatVersion': 1,
+          'origin': 'https://example.org',
+          'engine': 'invalid',
+        };
+        await expectLater(
+          _execute(host, _definition('source-a'), {}, 'bad'),
+          throwsA(
+            isA<PlatformException>().having(
+              (e) => e.code,
+              'code',
+              'session_state_invalid',
+            ),
+          ),
+        );
+        expect(store.values['source-a:false']!['engine'], 'invalid');
+        store.values['source-a:false'] = {
+          'formatVersion': 99,
+          'origin': 'https://example.org',
+          'engine': {
+            'variables': {'saved': 'preserve'},
+          },
+        };
+        await expectLater(
+          _execute(host, _definition('source-a'), {}, 'future'),
+          throwsA(
+            isA<PlatformException>().having(
+              (e) => e.code,
+              'code',
+              'session_format_unsupported',
+            ),
+          ),
+        );
+        expect(store.values['source-a:false']!['formatVersion'], 99);
+      } finally {
+        await host.close();
+      }
+    },
+  );
+
+  test(
+    'unknown runtime restore failures remain fatal without overwriting',
+    () async {
+      final store = _MemoryStore();
+      store.values['source-a:false'] = {
+        'formatVersion': 1,
+        'origin': 'https://example.org',
+        'engine': {'variables': {}, 'cookies': []},
+        'runtime': {'saved': 'keep'},
+      };
+      final runtime = _InvalidRuntime();
+      final host = SourceHost(
+        (_) => SourceEngine(runtime: runtime),
+        sessionStore: store,
+      );
+      try {
+        await expectLater(
+          _execute(host, _definition('source-a'), {}, 'unknown'),
+          throwsA(
+            isA<PlatformException>()
+                .having((e) => e.code, 'code', 'session_restore_failed')
+                .having((e) => e.details, 'details', {
+                  'phase': 'runtime_state',
+                  'causeType': 'StateError',
+                })
+                .having(
+                  (e) => e.message,
+                  'message',
+                  isNot(contains('private-detail')),
+                ),
+          ),
+        );
+        expect(runtime.closed, true);
+        expect(
+          (store.values['source-a:false']!['runtime'] as Map)['saved'],
+          'keep',
+        );
+      } finally {
+        await host.close();
+      }
+    },
+  );
+
+  test('actual legacy V8 restores v1 runtime variables and canonicalizes older origin URL', () async {
+    final store = _MemoryStore();
+    store.values['source-a:true'] = {
+      'formatVersion': 1,
+      'origin': 'https://example.org/older/base/',
+      'engine': {
+        'variables': {
+          'objectData': {'n': 42},
+        },
+        'cookies': [],
+      },
+      'runtime': {
+        'legacyVariables': {'saved': 'restored'},
+      },
+    };
+    final source = {
+      ..._definition('source-a'),
+      'metadata': {'legacy': true},
+      'script':
+          'async function search(input){return [{name:java.get("saved")}];}',
+    };
+    var host = SourceHost(createSourceEngine, sessionStore: store);
+    try {
+      expect(
+        (await _execute(host, source, {}, 'legacy-restored')).single['name'],
+        'restored',
+      );
+      expect(store.values['source-a:true']!['origin'], 'https://example.org');
+      expect((store.values['source-a:true']!['engine'] as Map)['variables'], {
+        'objectData': {'n': 42},
+      });
+      await host.close();
+      host = SourceHost(createSourceEngine, sessionStore: store);
+      expect(
+        (await _execute(host, source, {}, 'legacy-again')).single['name'],
+        'restored',
+      );
+    } finally {
+      await host.close();
+    }
+  });
+
   test('platform session writes use committed channel and distinct execution mode keys', () async {
     const channel = MethodChannel('legado/source_platform');
     final writes = <MethodCall>[];

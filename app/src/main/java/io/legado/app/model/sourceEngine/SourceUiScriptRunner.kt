@@ -174,6 +174,7 @@ object SourceUiScriptRunner {
                     .trimIndent(),
                 BookSourceScriptBridge.jsonBindings(bindings) +
                     mapOf(
+                        "__legacyExtractionPrefix" to "ui",
                         "uiScript" to script,
                         "uiSourceTag" to source.getTag(),
                         "uiSourceKey" to source.getKey(),

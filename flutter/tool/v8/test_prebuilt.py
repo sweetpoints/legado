@@ -177,6 +177,70 @@ class PrebuiltContractTests(unittest.TestCase):
                 f.install(directory)
             self.assertEqual(f.urls, [])
 
+    def test_same_source_sdk_revisions_have_separate_immutable_cache_and_locks(self):
+        old = Fixture()
+        new = Fixture()
+        new.pin['tag'] += '-sdk.1'
+        def change_build_metadata(files):
+            manifest = json.loads(files['manifest.json'])
+            manifest['targets']['android-arm64']['sdkRevision'] = 1
+            files['manifest.json'] = encoded(manifest)
+            new.manifests['android-arm64'] = manifest
+        new.mutate_archive(change_build_metadata)
+        for fixture in (old, new):
+            fixture.pin['sdkManifestSha256'] = {
+                'android-arm64': digest(encoded(fixture.manifests['android-arm64']))}
+            fixture.pin['sdkPinsSha256'] = digest(encoded(fixture.local))
+        self.assertEqual(old.pin['v8'], new.pin['v8'])
+        self.assertNotEqual(old.pin['releaseManifestSha256'], new.pin['releaseManifestSha256'])
+        with tempfile.TemporaryDirectory() as directory:
+            # Preserve pre-identity cache files from earlier consumer versions.
+            legacy_root = Path(directory) / old.pin['v8']['revision'] / 'android-arm64'
+            legacy_root.mkdir(parents=True)
+            legacy_manifest = encoded(old.manifests['android-arm64'])
+            (legacy_root / 'manifest.json').write_bytes(legacy_manifest)
+            old_root = old.install(directory)
+            original = (old_root / 'manifest.json').read_bytes()
+            # An unrelated old-generation lock must not block the new SDK.
+            old_lock = Path(directory) / ('.sdk-' + old.pin['v8']['revision'] +
+                '-android-arm64-' + old.pin['releaseManifestSha256'] + '.lock')
+            old_lock.mkdir()
+            new_root = new.install(directory)
+            self.assertNotEqual(old_root, new_root)
+            self.assertEqual(new_root.name, new.pin['releaseManifestSha256'])
+            self.assertEqual((old_root / 'manifest.json').read_bytes(), original)
+            self.assertTrue(old_lock.is_dir())
+            self.assertEqual((legacy_root / 'manifest.json').read_bytes(), legacy_manifest)
+            new.urls.clear()
+            self.assertEqual(new.install(directory), new_root)
+            self.assertEqual(new.urls, [])
+            (new_root / 'manifest.json').write_bytes(b'{}')
+            with self.assertRaisesRegex(ValueError, 'Cached SDK manifest'):
+                new.install(directory)
+            self.assertEqual((old_root / 'manifest.json').read_bytes(), original)
+            self.assertEqual(new.urls, [])
+
+    def test_release_identity_is_not_optional_target_manifest_identity(self):
+        first = Fixture()
+        second = Fixture()
+        for fixture in (first, second):
+            fixture.pin['sdkManifestSha256'] = {
+                'android-arm64': digest(encoded(fixture.manifests['android-arm64']))}
+        second.pin['tag'] += '-sdk.1'
+        release = json.loads(second.payloads[consumer.RELEASE_MANIFEST])
+        release['builderRevision'] = 'c' * 40
+        payload = encoded(release)
+        second.payloads[consumer.RELEASE_MANIFEST] = payload
+        second.pin['releaseManifestSha256'] = digest(payload)
+        self.assertEqual(first.pin['sdkManifestSha256'], second.pin['sdkManifestSha256'])
+        with tempfile.TemporaryDirectory() as directory:
+            old_root = first.install(directory)
+            new_root = second.install(directory)
+            self.assertNotEqual(old_root, new_root)
+            self.assertEqual(len(second.urls), 2)
+            self.assertEqual((old_root / 'manifest.json').read_bytes(),
+                             (new_root / 'manifest.json').read_bytes())
+
     def test_downloaded_metadata_never_overrides_reviewed_archive_or_manifest_hash(self):
         for which in ('archive', 'manifest'):
             f = Fixture()
@@ -186,7 +250,7 @@ class PrebuiltContractTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError):
                     f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64' / f.pin['releaseManifestSha256']).exists())
                 self.assertFalse(list(Path(directory).glob('*.lock')))
 
     def test_api_quota_and_mutable_api_metadata_are_not_build_inputs(self):
@@ -259,7 +323,7 @@ class PrebuiltContractTests(unittest.TestCase):
             f = Fixture(); f.mutate_archive(change)
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64' / f.pin['releaseManifestSha256']).exists())
 
     def test_archive_rejects_traversal_absolute_links_and_duplicate_names(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -312,7 +376,7 @@ class PrebuiltContractTests(unittest.TestCase):
             f = Fixture(); f.mutate_archive(change)
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64' / f.pin['releaseManifestSha256']).exists())
 
     def test_inventory_requires_all_files_and_cannot_disagree_with_source_index(self):
         def without_header(files):
@@ -329,7 +393,7 @@ class PrebuiltContractTests(unittest.TestCase):
             f = Fixture(); f.mutate_archive(change)
             with tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError): f.install(directory)
-                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64').exists())
+                self.assertFalse((Path(directory) / ('a' * 40) / 'android-arm64' / f.pin['releaseManifestSha256']).exists())
 
     def test_failed_new_download_preserves_installed_cache(self):
         f = Fixture(('android-arm64', 'android-x64'))
@@ -368,7 +432,7 @@ class PrebuiltContractTests(unittest.TestCase):
     def test_lock_refuses_concurrent_install_and_never_removes_other_lock(self):
         f = Fixture()
         with tempfile.TemporaryDirectory() as directory:
-            lock = Path(directory) / ('.sdk-' + 'a' * 40 + '-android-arm64.lock'); lock.mkdir()
+            lock = Path(directory) / ('.sdk-' + 'a' * 40 + '-android-arm64-' + f.pin['releaseManifestSha256'] + '.lock'); lock.mkdir()
             with self.assertRaisesRegex(ValueError, 'locked'): f.install(directory)
             self.assertTrue(lock.exists())
             self.assertEqual(f.urls, [])

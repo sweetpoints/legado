@@ -92,7 +92,10 @@ class AnalyzeUrl(
     headerMapF: Map<String, String>? = null,
     hasLoginHeader: Boolean = true,
     private val infoMap: MutableMap<String, String>? = null,
-    private val extraParams: Map<String, String>? = null
+    private val extraParams: Map<String, String>? = null,
+    private val scriptBookSnapshot: Map<String, Any?>? = null,
+    private val scriptChapterSnapshot: Map<String, Any?>? = null,
+    private val scriptEvaluator: ((String, Map<String, Any?>, SourceHostCallbacks) -> Any?)? = null,
 ) : JsExtensions {
     constructor(mUrl: String) : this(mUrl, null)
 
@@ -130,6 +133,9 @@ class AnalyzeUrl(
         private set
 
     init {
+        io.legado.app.model.sourceEngine.BookSourceScriptBridge.jsonBindings(
+            mapOf("book" to scriptBookSnapshot, "chapter" to scriptChapterSnapshot),
+        )
         coroutineContext = coroutineContext.minusKey(ContinuationInterceptor)
         val urlMatcher = paramPattern.matcher(baseUrl)
         if (urlMatcher.find()) baseUrl = baseUrl.substring(0, urlMatcher.start())
@@ -391,7 +397,9 @@ class AnalyzeUrl(
         val bindings = linkedMapOf<String, Any?>(
             "baseUrl" to baseUrl, "page" to page, "key" to key,
             "speakText" to speakText, "speakSpeed" to speakSpeed,
-            "book" to (ruleData as? Book)?.let { DartSourceEngine.jsonObject(it) },
+            "book" to ((ruleData as? Book)?.let { DartSourceEngine.jsonObject(it) } ?: scriptBookSnapshot),
+            "chapter" to (chapter?.let { DartSourceEngine.jsonObject(it) } ?: scriptChapterSnapshot),
+            "title" to (chapter?.title ?: scriptChapterSnapshot?.get("title")),
             "sourceData" to source?.let { DartSourceEngine.jsonObject(it.getSource() ?: it) },
             "result" to result,
         )
@@ -413,6 +421,9 @@ class AnalyzeUrl(
                     parentCallbacks.call(method, args)
                 }
             }
+        }
+        scriptEvaluator?.let {
+            return it(jsStr, io.legado.app.model.sourceEngine.BookSourceScriptBridge.jsonBindings(bindings), callbacks)
         }
         val script = """
             (async function() {
@@ -444,12 +455,14 @@ class AnalyzeUrl(
     fun get(key: String): String {
         extraParams?.get(key)?.let { return it }
         when (key) {
-            "bookName" -> (ruleData as? Book)?.let {
-                return it.name
+            "bookName" -> {
+                (ruleData as? Book)?.let { return it.name }
+                (scriptBookSnapshot?.get("name") as? String)?.let { return it }
             }
 
-            "title" -> chapter?.let {
-                return it.title
+            "title" -> {
+                chapter?.let { return it.title }
+                (scriptChapterSnapshot?.get("title") as? String)?.let { return it }
             }
         }
         return chapter?.getVariable(key)?.takeIf { it.isNotEmpty() }
@@ -460,6 +473,68 @@ class AnalyzeUrl(
     /**
      * 访问网站,返回StrResponse
      */
+    /** Compile the actual request without sending HTTP or starting a WebView. */
+    fun resolveRequestDescriptor(includeCookies: Boolean = true): Map<String, Any?> {
+        if (includeCookies) setCookie()
+        val request = Request.Builder().apply {
+            addHeaders(headerMap)
+            when (method) {
+                RequestMethod.POST -> {
+                    url(urlNoQuery)
+                    val contentType = headerMap["Content-Type"]
+                    val currentBody = body
+                    if (!encodedForm.isNullOrEmpty() || currentBody.isNullOrBlank()) {
+                        postForm(encodedForm ?: "")
+                    } else if (this@AnalyzeUrl.useWebView) {
+                        // The original POST→WebView branch always uses postJson here.
+                        postJson(currentBody)
+                    } else if (!contentType.isNullOrBlank()) {
+                        post(currentBody.toRequestBody(contentType.toMediaType()))
+                    } else {
+                        postJson(currentBody)
+                    }
+                }
+                RequestMethod.HEAD -> {
+                    get(urlNoQuery, encodedQuery)
+                    head()
+                }
+                else -> get(urlNoQuery, encodedQuery)
+            }
+        }.build()
+        val bytes = request.body?.let { requestBody ->
+            val buffer = okio.Buffer()
+            requestBody.writeTo(buffer)
+            buffer.readByteArray().map { it.toInt() and 0xff }
+        }
+        return linkedMapOf(
+            "url" to request.url.toString(),
+            "method" to request.method,
+            "headers" to request.headers.toMultimap(),
+            "bodyBytes" to bytes,
+            "bodyText" to body,
+            "contentType" to request.body?.contentType()?.toString(),
+            "requestCharset" to charset,
+            "encodedQuery" to encodedQuery,
+            "encodedForm" to encodedForm,
+            "proxy" to proxy,
+            "dnsIp" to dnsIp,
+            "readTimeoutMs" to readTimeoutMs,
+            "callTimeoutMs" to callTimeoutMs,
+            "followRedirects" to followRedirects,
+            "retry" to retry,
+            "enabledCookieJar" to enabledCookieJar,
+            "domain" to domain,
+            "serverID" to serverID,
+            "responseType" to type,
+            "bodyJs" to bodyJs,
+            "webView" to mapOf(
+                "enabled" to useWebView, "url" to url,
+                "js" to webJs, "delayTime" to webViewDelayTime,
+                "postBeforeLoad" to (useWebView && method == RequestMethod.POST),
+            ),
+        )
+    }
+
     suspend fun getStrResponseAwait(
         jsStr: String? = null,
         sourceRegex: String? = null,

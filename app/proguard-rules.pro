@@ -201,7 +201,13 @@ cn.hutool.core.util.**{*;}
     java.lang.String html(boolean);
 }
 
-# Optional Flutter backend is loaded by name to keep default builds independent.
+# The required Flutter backend is loaded reflectively.
 -keep class io.legado.app.model.sourceEngine.FlutterSourceRepository {
     public <init>(android.content.Context);
+}
+
+# FlutterEngine discovers this generated entry point by its fixed class/method
+# names. Keep the entry point so R8 also follows its direct plugin registrations.
+-keep class io.flutter.plugins.GeneratedPluginRegistrant {
+    public static void registerWith(io.flutter.embedding.engine.FlutterEngine);
 }

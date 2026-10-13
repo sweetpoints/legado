@@ -11,6 +11,10 @@ import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.model.sourceEngine.SourceEngineBackend
 import io.legado.app.model.sourceEngine.SourceScriptException
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.help.http.CookieStore
+import io.legado.app.help.CacheManager
+import io.legado.app.utils.NetworkUtils
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -207,7 +211,7 @@ class FlutterSourceEngineTest {
     }
 
     @Test
-    fun mixedMainJsAppHooksRequireManualMigrationThroughActualHost() = runBlocking {
+    fun mixedMainJsContentHookReviewDoesNotBlockUnrelatedSearch() = runBlocking {
         val bridge = backend()
         try {
             for (hook in listOf("imageStyle", "imageDecode", "payAction", "callBackJs")) {
@@ -223,9 +227,18 @@ class FlutterSourceEngineTest {
                             )
                         )
                 val preview = withTimeout(60_000) { bridge.migrate(snapshot) }
-                assertTrue(preview.requiresManualWork)
-                assertTrue(!preview.canApply)
-                assertEquals("manualRequired", preview.status)
+                if (hook == "imageStyle") {
+                    assertTrue(preview.canApply)
+                    assertTrue(!preview.requiresManualWork)
+                    assertEquals("unverified", preview.status)
+                } else {
+                    assertTrue(preview.requiresManualWork)
+                    assertTrue(!preview.canApply)
+                    assertEquals("manualRequired", preview.status)
+                }
+                assertTrue(withTimeout(60_000) {
+                    bridge.execute("search", snapshot, mapOf("key" to "fixture"))
+                }.isEmpty())
                 val candidate =
                     Gson().fromJson(preview.candidateJson, com.google.gson.JsonObject::class.java)
                 assertEquals(
@@ -765,7 +778,7 @@ class FlutterSourceEngineTest {
             val requests = mutableListOf<String>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(3) {
+                    repeat(6) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             val reader = socket.getInputStream().bufferedReader()
@@ -829,26 +842,21 @@ class FlutterSourceEngineTest {
             assertEquals("Author", book.author)
             assertEquals("123字", book.wordCount)
             assertEquals("Fantasy,Adventure", book.kind)
-            serving.await()
-            assertEquals(listOf("/b?page=2", "/search", "/book"), requests)
-            for (unsupported in
-                listOf(
-                    "$origin/b/{{java.get('x')}}",
-                    "$origin/b,${Gson().toJson(mapOf("webJs" to "document.title"))}",
-                    "@js:java.ajax('$origin/b')",
-                )) {
-                val rejected =
-                    withTimeout(60_000) {
-                        runCatching { WebBook.exploreBookAwait(selected, unsupported) }
-                    }
-                assertTrue(
-                    rejected
-                        .exceptionOrNull()
-                        ?.message
-                        .orEmpty()
-                        .contains("legacy_request_requires_migration")
-                )
+            // These legacy URL capabilities are now executed by the Native adapter.
+            // The @js rule must return a URL, rather than an ajax HTML response.
+            for (category in listOf(
+                "$origin/b/{{java.get('x')}}",
+                "$origin/b,${Gson().toJson(mapOf("webJs" to "document.documentElement.outerHTML"))}",
+                "@js:'$origin/script?page=' + page",
+            )) {
+                val books = withTimeout(60_000) { WebBook.exploreBookAwait(selected, category, 2) }
+                assertEquals("Title", books.single().name)
+                assertEquals("Author", books.single().author)
+                assertEquals("123字", books.single().wordCount)
+                assertEquals("Fantasy,Adventure", books.single().kind)
             }
+            serving.await()
+            assertEquals(listOf("/b?page=2", "/search", "/book", "/b/", "/b", "/script?page=2"), requests)
         }
     }
 
@@ -922,7 +930,7 @@ class FlutterSourceEngineTest {
     }
 
     @Test
-    fun nonUrlLegacySourceIdsSearchAbsoluteEndpointAndKeepSessionsIsolated() = runBlocking {
+    fun nonUrlLegacySourceIdsKeepVariablesIsolatedButNativeCookiesKeepDomainScope() = runBlocking {
         assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
         val unique = java.util.UUID.randomUUID().toString()
         java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
@@ -991,21 +999,75 @@ class FlutterSourceEngineTest {
                 assertEquals("$origin/catalog/book", result.bookUrl)
                 assertEquals(source.bookSourceUrl, result.origin)
             }
+            assertEquals("A", withTimeout(60_000) { DartSourceEngine.evaluate(first, "java.put('fixtureOwner','A'); java.get('fixtureOwner')") })
+            assertEquals("B", withTimeout(60_000) { DartSourceEngine.evaluate(second, "java.put('fixtureOwner','B'); java.get('fixtureOwner')") })
+            assertEquals("A", withTimeout(60_000) { DartSourceEngine.evaluate(first, "java.get('fixtureOwner')") })
             serving.await()
             assertEquals(listOf("/catalog/search", "/catalog/search", "/catalog/search"), paths)
-            assertEquals(listOf("", "", "owner=A"), cookies)
+            // The independent Native golden below verifies the historical domain cookie jar.
+            assertEquals(listOf("", "owner=A", "owner=B"), cookies)
         }
     }
 
     @Test
-    fun legacyPostTemplatesEncodeFormAndRejectUnsafeInputsBeforeHttp() = runBlocking {
+    fun originalNativeCookieJarUsesDomainScopeAcrossDistinctSourceLabels(): Unit = runBlocking(Dispatchers.IO) {
+        val unique = java.util.UUID.randomUUID().toString()
+        java.net.ServerSocket(0, 3, java.net.InetAddress.getByName("127.0.0.7")).use { server ->
+            val origin = "http://127.0.0.7:${server.localPort}"
+            val domain = NetworkUtils.getSubDomain(origin)
+            val cookies = mutableListOf<String>()
+            val requests = mutableListOf<String>()
+            CookieStore.removeCookie(origin)
+            CacheManager.deleteMemory("${domain}_session_cookie")
+            val serving = async(Dispatchers.IO) {
+                repeat(3) { index ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10_000
+                        val reader = socket.getInputStream().bufferedReader()
+                        requests += reader.readLine()
+                        var cookie = ""
+                        while (true) {
+                            val header = reader.readLine()
+                            if (header.isNullOrEmpty()) break
+                            if (header.startsWith("Cookie:", true)) cookie = header.substringAfter(':').trim()
+                        }
+                        cookies += cookie
+                        val owner = if (index == 1) "B" else "A"
+                        socket.getOutputStream().apply {
+                            write("HTTP/1.1 200 OK\r\nSet-Cookie: owner=$owner; Path=/; HttpOnly\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK".toByteArray())
+                            flush()
+                        }
+                    }
+                }
+            }
+            try {
+                val first = BookSource(bookSourceUrl = "Native golden A $unique", bookSourceName = "A", enabledCookieJar = true)
+                val second = BookSource(bookSourceUrl = "Native golden B $unique", bookSourceName = "B", enabledCookieJar = true)
+                for (owner in listOf(first, second, first)) {
+                    val response = withTimeout(60_000) {
+                        AnalyzeUrl("$origin/golden", source = owner).getStrResponseAwait()
+                    }
+                    assertEquals("OK", response.body)
+                }
+                serving.await()
+                assertEquals(listOf("GET /golden HTTP/1.1", "GET /golden HTTP/1.1", "GET /golden HTTP/1.1"), requests)
+                assertEquals(listOf("", "owner=A", "owner=B"), cookies)
+            } finally {
+                CookieStore.removeCookie(origin)
+                CacheManager.deleteMemory("${domain}_session_cookie")
+            }
+        }
+    }
+
+    @Test
+    fun nativeLegacyPostWireAndExplicitModernJsonTemplateKeepTheirOwnContracts() = runBlocking {
         assumeTrue("Requires -PflutterSourceEngine=true", BuildConfig.FLUTTER_SOURCE_ENGINE)
         java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
             val origin = "http://127.0.0.1:${server.localPort}"
             val requests = mutableListOf<Triple<String, String, String>>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(2) {
+                    repeat(5) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             val input = socket.getInputStream()
@@ -1074,7 +1136,7 @@ class FlutterSourceEngineTest {
                                     }
                                     decoded.toByteArray()
                                 } else {
-                                    readExactly(headers.getValue("content-length").toInt())
+                                    readExactly(headers["content-length"]?.toInt() ?: 0)
                                 }
                             requests.add(
                                 Triple(
@@ -1128,17 +1190,31 @@ class FlutterSourceEngineTest {
                     )
                 }
             assertEquals(1, result.size)
+            val legacyEdgeGoldens = listOf("quote\"", "slash\\", "line\ncontrol").map { edgeKey ->
+                val golden = withContext(Dispatchers.IO) {
+                    AnalyzeUrl(legacy.searchUrl!!, key = edgeKey, page = 1, source = legacy, baseUrl = origin)
+                        .resolveRequestDescriptor(includeCookies = false)
+                }
+                assertEquals("Title", withTimeout(60_000) {
+                    WebBook.searchBookAwait(legacy, edgeKey, filter = { name, author, _ -> name == "Title" && author == "Author" }).single().name
+                })
+                golden
+            }
+            // Input rejection belongs to this explicit portable JSON-template contract,
+            // not to the Native legacy URL parser's historical lenient/default-GET behavior.
+            val guardedDefinition = Gson().toJson(mapOf(
+                "schemaVersion" to 1, "id" to "$origin/guard", "name" to "Explicit JSON guard", "baseUrl" to origin,
+                "stages" to mapOf("search" to mapOf(
+                    "url" to "$origin/guard", "method" to "POST", "body" to "q={{key}}&page={{page}}",
+                    "bodyTemplateMode" to "legacyJsonString", "bodyEncoding" to "legacyFormUtf8",
+                    "list" to "@css:.row", "fields" to fields.mapValues { "@css:${it.value}" },
+                )),
+            ))
+            val guarded = BookSource(bookSourceUrl = "$origin/guard").apply { bookSourceComment = "@source:v1 $guardedDefinition" }
             for (unsafe in listOf("quote\"", "slash\\", "line\ncontrol")) {
-                val failure =
-                    withTimeout(60_000) { runCatching { WebBook.searchBookAwait(legacy, unsafe) } }
+                val failure = withTimeout(60_000) { runCatching { WebBook.searchBookAwait(guarded, unsafe) } }
                 assertTrue(failure.isFailure)
-                assertTrue(
-                    failure
-                        .exceptionOrNull()
-                        ?.message
-                        .orEmpty()
-                        .contains("legacy_body_template_requires_migration")
-                )
+                assertTrue(failure.exceptionOrNull()?.message.orEmpty().contains("legacy_body_template_requires_migration"))
             }
             val rawBody = "q=$key&page=3"
             val definition =
@@ -1176,13 +1252,21 @@ class FlutterSourceEngineTest {
                 withTimeout(60_000) { WebBook.searchBookAwait(modern, "ignored").single().name },
             )
             serving.await()
-            assertEquals(2, requests.size)
+            assertEquals(5, requests.size)
             assertEquals("POST /legacy HTTP/1.1", requests[0].first)
-            assertEquals("application/x-www-form-urlencoded", requests[0].second)
+            assertEquals("application/x-www-form-urlencoded; charset=utf-8", requests[0].second)
             assertEquals("q=${java.net.URLEncoder.encode(key, "UTF-8")}&page=3", requests[0].third)
-            assertEquals("POST /modern HTTP/1.1", requests[1].first)
-            assertEquals("application/x-www-form-urlencoded", requests[1].second)
-            assertEquals(rawBody, requests[1].third)
+            legacyEdgeGoldens.forEachIndexed { index, golden ->
+                val actual = requests[index + 1]
+                assertEquals("${golden["method"]} /legacy HTTP/1.1", actual.first)
+                assertEquals(golden["contentType"]?.toString().orEmpty(), actual.second)
+                val expectedBytes = (golden["bodyBytes"] as? List<*>)?.map { (it as Number).toByte() }?.toByteArray() ?: byteArrayOf()
+                assertEquals(expectedBytes.toString(Charsets.UTF_8), actual.third)
+            }
+            assertEquals("POST /modern HTTP/1.1", requests[4].first)
+            assertEquals("application/x-www-form-urlencoded", requests[4].second)
+            assertEquals(rawBody, requests[4].third)
+            assertTrue(requests.none { it.first.contains("/guard ") })
         }
     }
 
@@ -1194,7 +1278,7 @@ class FlutterSourceEngineTest {
             val requests = mutableListOf<Map<String, String>>()
             val serving =
                 async(Dispatchers.IO) {
-                    repeat(3) {
+                    repeat(5) {
                         server.accept().use { socket ->
                             socket.soTimeout = 10_000
                             // This fixture's request body is ASCII p=1, so character counts equal
@@ -1308,12 +1392,33 @@ class FlutterSourceEngineTest {
                 "Title",
                 withTimeout(60_000) { WebBook.searchBookAwait(selected, "Title", 2).single().name },
             )
-            serving.await()
+            // Native java.get reads a variable, not the AnalyzeUrl page argument.
+            // The old getter has no implicit "page" alias; the bare JS binding does.
+            val variablePageRule = "$origin/{{java.get('page')}}"
+            val bindingPageRule = "$origin/{{page}}"
+            val variableGolden = withContext(Dispatchers.IO) {
+                AnalyzeUrl(variablePageRule, page = 2, source = selected, baseUrl = origin)
+                    .resolveRequestDescriptor(includeCookies = false)
+            }
+            val bindingGolden = withContext(Dispatchers.IO) {
+                AnalyzeUrl(bindingPageRule, page = 2, source = selected, baseUrl = origin)
+                    .resolveRequestDescriptor(includeCookies = false)
+            }
+            assertEquals("$origin/", variableGolden["url"])
+            assertEquals("$origin/2", bindingGolden["url"])
+            for (rule in listOf(variablePageRule, bindingPageRule)) {
+                assertEquals("Title", withTimeout(60_000) {
+                    WebBook.exploreBookAwait(selected, rule, 2).single().name
+                })
+            }
+
             assertEquals(
                 listOf(
                     "GET /first HTTP/1.1",
                     "POST /other HTTP/1.1",
                     "GET /search?page=3 HTTP/1.1",
+                    "GET / HTTP/1.1",
+                    "GET /2 HTTP/1.1",
                 ),
                 requests.map { it["request"] },
             )
@@ -1323,20 +1428,8 @@ class FlutterSourceEngineTest {
             assertEquals("selected", requests[1]["x-shared"])
             assertEquals("B", requests[1]["x-category"])
             assertEquals("p=1", requests[1]["body"])
-            assertEquals("application/x-www-form-urlencoded", requests[1]["content-type"])
-            val rejected =
-                withTimeout(60_000) {
-                    runCatching {
-                        WebBook.exploreBookAwait(selected, "$origin/{{java.get('page')}}", 2)
-                    }
-                }
-            assertTrue(
-                rejected
-                    .exceptionOrNull()
-                    ?.message
-                    .orEmpty()
-                    .contains("legacy_request_requires_migration")
-            )
+            assertEquals("application/x-www-form-urlencoded; charset=utf-8", requests[1]["content-type"])
+            serving.await()
         }
     }
 

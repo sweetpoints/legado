@@ -78,9 +78,9 @@ object ImageUtils {
             require(
                 number.toDouble().isFinite() &&
                     number.toDouble() == integer.toDouble() &&
-                    integer in 0..255
+                    integer in -128..255
             ) {
-                "Image decode byte must be an integer from 0 through 255"
+                "Image decode byte must be a signed Java byte or an unsigned byte (−128 through 255)"
             }
             integer.toByte()
         }

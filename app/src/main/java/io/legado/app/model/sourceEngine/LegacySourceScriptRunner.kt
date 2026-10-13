@@ -30,21 +30,38 @@ object LegacySourceScriptRunner {
             get: (target, name) => ['get','put'].includes(String(name))
                 ? (...args) => name === 'get' && args.length !== 1
                     ? target[name](...args)
-                    : __sourceHostSync('analyze.' + String(name), args)
+                    : globalThis.__legacyHeaderEvaluation === true
+                        ? __sourceHostSync('javaHttp.header' + (name === 'get' ? 'Get' : 'Put'), args)
+                        : globalThis.__legacyHttpStep
+                            ? __sourceHostSync('javaHttp.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
+                            : __sourceHostSync('analyze.' + String(name), args)
+                : ['getString','getStringList','getElement','getElements'].includes(String(name))
+                    && globalThis.__legacyExtractionPrefix === 'analyze'
+                    ? (...args) => {
+                        const value = __sourceHostSync('analyze.' + String(name), args);
+                        return ['getElement','getElements'].includes(String(name)) ? __legacyDomMaterialize(value) : value;
+                    }
+                : ['getString','getStringList'].includes(String(name))
+                    && globalThis.__legacyExtractionPrefix === 'ui'
+                    ? (...args) => __sourceHostSync('ui.' + String(name), args)
                 : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                     ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                     : target[name]
         });
         globalThis.__legacyAsyncSource = globalThis.__legacyAsyncSource || globalThis.source;
-        globalThis.source = new Proxy(globalThis.__legacyAsyncSource, {
+        globalThis.source = new Proxy(Object.create(null), {
             get: (target, name) => name === 'getTag' ? () => __legacySourceTag
                 : name === 'getKey' ? () => __legacySourceKey
                 : ['get','put'].includes(String(name))
-                    ? (...args) => __sourceHostSync('analyze.' + String(name), args)
+                    ? (...args) => globalThis.__legacyHeaderEvaluation === true
+                        ? __sourceHostSync('javaHttp.header' + (name === 'get' ? 'Get' : 'Put'), args)
+                        : globalThis.__legacyHttpStep
+                            ? __sourceHostSync('javaHttp.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
+                            : __sourceHostSync('analyze.' + String(name), args)
                     : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                         ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                         : Object.prototype.hasOwnProperty.call(sourceData, name)
-                            ? sourceData[name] : target[name]
+                            ? sourceData[name] : globalThis.__legacyAsyncSource[name]
         });
         globalThis.sourceApi = globalThis.source;
         $library
