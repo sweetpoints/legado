@@ -138,6 +138,35 @@ class LegacyLoginCheckV8IntegrationTest {
         }
 
     @Test
+    fun earlyCapturedLibraryRequestMethodsSurviveRedirectAndTheNextTask(): Unit =
+        runBlocking(Dispatchers.IO) {
+            val old = start()
+            val updated = start()
+            old.redirect = updated.base + "/landing"
+            val source =
+                source(
+                    old,
+                    "if(libraryLoginLoads!==1)throw new Error('library reloaded');var state=JSON.parse(source.getVariable()||'{}');var next=String(result.url()).replace(/(https?:\\/\\/[^/]+).*/, '$1');if(state.url!==next){state.url=next;source.setVariable(JSON.stringify(state));result=relocateCurrentRequest();}result",
+                )
+            source.jsLib =
+                "var libraryLoginLoads=(typeof libraryLoginLoads==='undefined'?0:libraryLoginLoads)+1;const savedInit=java.initUrl;const savedGet=java.getStrResponse;function relocateCurrentRequest(){savedInit();return savedGet();}"
+            source.searchUrl =
+                "@js:var state=JSON.parse(source.getVariable()||'{}');(state.url||'${old.base}')+'/search'"
+            try {
+                assertEquals("Before", search(source).name)
+                assertEquals("Before", search(source).name)
+                assertEquals(1, old.count("/search"))
+                assertEquals(1, updated.count("/landing"))
+                assertEquals(2, updated.count("/search"))
+            } finally {
+                old.stop()
+                updated.stop()
+                DartSourceEngine.clearSourceState(source)
+                source.setVariable(null)
+            }
+        }
+
+    @Test
     fun forbiddenResponseRunsTheHookAndPreservesItsHttpStatus(): Unit =
         runBlocking(Dispatchers.IO) {
             val server = start()

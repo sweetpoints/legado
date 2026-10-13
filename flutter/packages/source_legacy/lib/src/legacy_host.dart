@@ -150,6 +150,16 @@ const legacyScriptPrelude =
   }
   Object.defineProperty(globalThis,'__legacyLoginRequest',{value:(method,args)=>__legacyHttpRequest(method,args,null,'loginCheck')});
   Object.defineProperty(globalThis,'__legacyResponseMaterialize',{value:response});
+  Object.defineProperty(globalThis,'__legacyRunLoginCheck',{value:(script,input)=>{
+    const frame=new Map();__legacyHttpFrames.push(frame);
+    try {
+      __legacySetHttpBinding(frame,'__legacyLoginCheckActive',true);
+      __legacySetHttpBinding(frame,'result',response(input));
+      const value=__legacyHeaderEvaluator(script);
+      return value && typeof value.then==='function' ? __sourceAwaitSync(value) : value;
+    } finally {__legacyRestoreHttpFrame(frame);}
+  }});
+
   function __legacyMarkedBytes(__legacyValue) {
     return typeof globalThis.__legacyCacheMarkBytes === 'function'
       ? globalThis.__legacyCacheMarkBytes(__legacyValue) : __legacyValue;
@@ -242,6 +252,8 @@ const legacyScriptPrelude =
       // No JVM reflection is exposed by the bounded JSON helper bridge.
       if (['getClass','forName','class'].includes(String(name))) return undefined;
       return (...args) => {
+        if(globalThis.__legacyLoginCheckActive === true && ['initUrl','getStrResponse'].includes(String(name)))
+          return __legacyHttpRequest(String(name),args,null,'loginCheck');
         if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
           const unescape = String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean' ? args[1] : true;
           if (String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean') args = [args[0]];

@@ -74,16 +74,6 @@ internal class LegacyLoginCheckHost(
             if (method in methods) call(method, args)
             else parent?.call(method, args) ?: error("Unbound login callback: $method")
         }
-        val wrapper =
-            """
-            (function(nativeJava,originalResult) {
-                var result=__legacyResponseMaterialize(originalResult);
-                var java=new Proxy(nativeJava,{get:(target,name)=>['initUrl','getStrResponse'].includes(String(name))
-                    ? (...args)=>__legacyLoginRequest(String(name),args) : target[name]});
-                return eval(__loginCheckScript);
-            })(java,result)
-            """
-                .trimIndent()
         // Keep the analyzer's original key/page, library, source and scoped variable bindings.
         return try {
             withContext(callbacks) {
@@ -92,10 +82,9 @@ internal class LegacyLoginCheckHost(
                     val input = encode(response)
                     val evaluated =
                         analyzed.evalJS(
-                            "var __loginCheckScript=" +
+                            "__legacyRunLoginCheck(" +
                                 io.legado.app.utils.GSON.toJson(script) +
-                                ";" +
-                                wrapper,
+                                ",result)",
                             input,
                         )
                     originalContext.ensureActive()

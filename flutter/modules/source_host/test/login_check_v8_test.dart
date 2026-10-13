@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,10 @@ class _Login implements ScriptHost {
     calls.add(method);
     switch (method) {
       case 'loginCheck.begin':
+        if (args[0] == 'initUrl') {
+          expect(args, ['initUrl', [], null]);
+          return {'status': 'done', 'token': 'init-token', 'value': null};
+        }
         expect(args, ['getStrResponse', [], null]);
         return {
           'status': 'script',
@@ -50,11 +55,23 @@ class _Login implements ScriptHost {
           },
         };
       case 'loginCheck.abort':
-        expect(args, ['login-token']);
+        expect(args.single, anyOf('init-token', 'login-token'));
         return null;
       default:
         throw StateError('Unexpected callback $method');
     }
+  }
+}
+
+class _BusyLogin extends _Login {
+  final started = Completer<void>();
+  @override
+  Future<Object?> call(String method, List<Object?> args) async {
+    if (method == 'analyze.get') {
+      if (!started.isCompleted) started.complete();
+      return args.first;
+    }
+    return super.call(method, args);
   }
 }
 
@@ -105,6 +122,103 @@ void main() {
           'loginCheck.continue',
           'loginCheck.abort',
         ]);
+      } finally {
+        await engine.close();
+      }
+    },
+  );
+  test('early captured library methods use the active login frame and restore globals', () async {
+    final source = SourceDefinition(
+      id: 'captured-login-owner',
+      name: 'Captured login',
+      baseUrl: Uri.parse('https://fixture.invalid/'),
+      metadata: {'legacy': true},
+    );
+    final platform = _Login();
+    final engine = createSourceEngine(
+      source,
+      platform: platform,
+      useNativeLegacyHttp: true,
+    );
+    try {
+      final value = await engine.evaluateAuxiliary(
+        source,
+        "const r=__legacyRunLoginCheck('libraryLogin()',result);({body:r.body(),restored:result.body,active:typeof __legacyLoginCheckActive})",
+        bindings: {
+          'taskId': 'captured-task',
+          'result': {
+            '__legacyResponseKind': 'str',
+            'url': 'https://fixture.invalid/original',
+            'body': 'Before',
+            'status': 200,
+            'multiHeaders': <String, Object?>{},
+          },
+        },
+        prelude: "const savedInit=java.initUrl;const savedGet=java.getStrResponse;function libraryLogin(){savedInit();result=savedGet();return result;}",
+      );
+      expect(value, {
+        'body': 'After',
+        'restored': 'Before',
+        'active': 'undefined',
+      });
+      expect(platform.calls, [
+        'loginCheck.begin',
+        'loginCheck.abort',
+        'loginCheck.begin',
+        'loginCheck.stepCall',
+        'loginCheck.continue',
+        'loginCheck.abort',
+      ]);
+    } finally {
+      await engine.close();
+    }
+  });
+  test(
+    'hard cancelled login restores its frame before the next source call',
+    () async {
+      final source = SourceDefinition(
+        id: 'cancel-login-owner',
+        name: 'Cancel login',
+        baseUrl: Uri.parse('https://fixture.invalid/'),
+        metadata: {'legacy': true},
+      );
+      final platform = _BusyLogin();
+      final engine = createSourceEngine(
+        source,
+        platform: platform,
+        useNativeLegacyHttp: true,
+      );
+      final token = CancellationToken();
+      final input = {
+        '__legacyResponseKind': 'str',
+        'url': 'https://fixture.invalid/original',
+        'body': 'Before',
+        'status': 200,
+        'multiHeaders': <String, Object?>{},
+      };
+      try {
+        final pending = engine.evaluateAuxiliary(
+          source,
+          "__legacyRunLoginCheck(\"__sourceHostSync('analyze.get',['started']);while(true){}\",result)",
+          bindings: {'taskId': 'cancel-login-task', 'result': input},
+          cancellation: token,
+        );
+        await platform.started.future.timeout(const Duration(seconds: 5));
+        token.cancel();
+        await expectLater(
+          pending,
+          throwsA(
+            isA<EngineException>().having((e) => e.code, 'code', 'cancelled'),
+          ),
+        );
+        expect(
+          await engine.evaluateAuxiliary(
+            source,
+            "({active:typeof __legacyLoginCheckActive,body:__legacyRunLoginCheck('result',result).body()})",
+            bindings: {'taskId': 'fresh-login-task', 'result': input},
+          ),
+          {'active': 'undefined', 'body': 'Before'},
+        );
       } finally {
         await engine.close();
       }
