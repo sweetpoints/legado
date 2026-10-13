@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": true,
-  "caseCount": 197,
+  "caseCount": 203,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -349,6 +349,19 @@
       "sourceSha256": "bb7e2fa7da8aa1d7486df6f4b738cf41de3e98aaa8698c23b3e4c9cf0e59631a",
       "methods": [
         "categoryClickUsesItsAbsoluteUrlAndKeepsTheOpaqueSourceId"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyLoginCheckV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyLoginCheckV8IntegrationTest.kt",
+      "sourceSha256": "70fc2073cb6acb1d29b57c8f13a9e2b1c69cd7efea60dc8787520c14610d27b8",
+      "methods": [
+        "cancellationDuringLoginHttpDoesNotBecomeARecoveredResponseAndNextTaskWorks",
+        "forbiddenResponseRunsTheHookAndPreservesItsHttpStatus",
+        "loginAjaxThenGetStrResponseReusesTheCurrentRequest",
+        "malformedHookResultIsAnExplicitFailureAfterOneFetch",
+        "normalResponseFacadeRunsTheHookOnceAndKeepsOriginalResponse",
+        "redirectUpdatesSourceVariableAndInitUrlResumesDynamicUrlInTheSameVm"
       ]
     },
     {
