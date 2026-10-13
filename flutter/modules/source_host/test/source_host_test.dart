@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:source_host/source_host.dart';
 import 'package:source_engine/source_engine.dart';
+import 'package:source_legacy/source_legacy.dart';
 
 class _NoScripts implements ScriptRuntime {
   @override
@@ -107,6 +108,83 @@ void main() {
         expect(
           network.requests.single.toString(),
           'https://requests.example/search',
+        );
+        await expectLater(
+          host.handle(
+            execute('relative', 'content', input: {'chapterUrl': '/chapter'}),
+          ),
+          throwsA(
+            isA<PlatformException>().having(
+              (e) => e.code,
+              'code',
+              'legacy_base_url_required',
+            ),
+          ),
+        );
+        expect(created, 1);
+        expect(network.requests, hasLength(1));
+      } finally {
+        await host.close();
+      }
+    },
+  );
+  test(
+    'category click accepts a label identity with a dynamic search URL',
+    () async {
+      final network = _FixtureNetwork();
+      var created = 0;
+      final host = SourceHost((source) {
+        created++;
+        expect(source.id, '歪歪斜斜的字眼里，满篇都是吃人二字-----鲁迅');
+        expect(source.metadata['legacyBaseUrlUnavailable'], true);
+        return SourceEngine(
+          runtime: _NoScripts(),
+          network: network,
+          requestAdapter: adaptLegacyRequest,
+        );
+      });
+      final raw = {
+        'bookSourceUrl': '歪歪斜斜的字眼里，满篇都是吃人二字-----鲁迅',
+        'bookSourceName': 'Fixture',
+        'searchUrl': '<js>host + "/search.html?searchword={{key}}";</js>',
+        'exploreUrl': '[{"title":"分类","url":"https://requests.example/category?page={{page}}"}]',
+        'ruleExplore': {
+          'bookList': 'tag.article',
+          'name': 'tag.h2@text',
+          'bookUrl': 'tag.a@href',
+        },
+        'ruleContent': {'content': 'tag.p@text'},
+      };
+      MethodCall execute(
+        String id,
+        String operation, {
+        Map<String, Object?> input = const {},
+      }) => MethodCall('execute', {
+        'protocolVersion': 1,
+        'taskId': id,
+        'operation': operation,
+        'sourceJson': jsonEncode(raw),
+        'input': input,
+      });
+      try {
+        expect(
+          await host.handle(
+            execute(
+              'absolute',
+              'explore',
+              input: {
+                'exploreUrl': 'https://requests.example/category?page={{page}}',
+                'page': 1,
+              },
+            ),
+          ),
+          [
+            {'name': 'Fixture', 'bookUrl': 'https://requests.example/book'},
+          ],
+        );
+        expect(
+          network.requests.single.toString(),
+          'https://requests.example/category?page=1',
         );
         await expectLater(
           host.handle(

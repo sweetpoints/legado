@@ -106,14 +106,13 @@ class LegacySourceImporter {
         idUri == null ||
         !['http', 'https'].contains(idUri.scheme) ||
         idUri.host.isEmpty;
+    // A legacy source ID may be a label while scripts provide request URLs.
+    // Keep an inert context anchor until the selected request is materialized;
+    // legacyBaseUrlUnavailable makes the engine reject relative requests.
     final base = legacyBaseUrlUnavailable
-        ? _searchRequestAnchor(input['searchUrl'])
+        ? (_searchRequestAnchor(input['searchUrl']) ??
+              Uri.parse('https://source.legado.invalid/'))
         : idUri;
-    if (base == null) {
-      throw const FormatException(
-        'Cannot determine an HTTP(S) request base for this source identifier; a static absolute searchUrl is required',
-      );
-    }
     if (legacyBaseUrlUnavailable) {
       issues.add(
         const LegacyIssue(

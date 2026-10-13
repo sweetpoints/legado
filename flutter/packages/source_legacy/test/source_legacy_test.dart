@@ -386,40 +386,37 @@ void main() {
       expect(imported.original['bookSourceUrl'], id);
     }
   });
-  test(
-    'uncertain search hosts and missing anchors reject without mislabeling IDs',
-    () {
-      for (final url in [
-        null,
-        '/search',
-        '@JS:"https://books.test/search"',
-        'https://{{key}}.test/search',
-        'https://books.test/{{key}}',
-        'https://user:pass@books.test/search',
-        'https://books.test/search?q={{page * 2}}',
-        'https://books.test/search#fragment',
-      ]) {
-        expect(
-          () => LegacySourceImporter().import({
-            'bookSourceUrl': 'local-id',
-            'searchUrl': url,
-          }),
-          throwsA(
-            isA<FormatException>().having(
-              (e) => e.message,
-              'message',
-              contains('Cannot determine'),
-            ),
-          ),
-          reason: '$url',
-        );
-      }
+  test('dynamic or missing search anchors preserve IDs without inventing a request host', () {
+    for (final url in [
+      null,
+      '/search',
+      '@JS:"https://books.test/search"',
+      'https://{{key}}.test/search',
+      'https://books.test/{{key}}',
+      'https://user:pass@books.test/search',
+      'https://books.test/search?q={{page * 2}}',
+      'https://books.test/search#fragment',
+    ]) {
+      final imported = LegacySourceImporter().import({
+        'bookSourceUrl': 'local-id',
+        'searchUrl': url,
+      });
+      expect(imported.source.id, 'local-id');
       expect(
-        () => LegacySourceImporter().import({'bookSourceUrl': ''}),
-        throwsFormatException,
+        imported.source.baseUrl.toString(),
+        'https://source.legado.invalid/',
       );
-    },
-  );
+      expect(imported.source.metadata['legacyBaseUrlUnavailable'], true);
+      expect(
+        imported.issues.map((issue) => issue.code),
+        contains('legacy.base_url_requires_review'),
+      );
+    }
+    expect(
+      () => LegacySourceImporter().import({'bookSourceUrl': ''}),
+      throwsFormatException,
+    );
+  });
   test('fixed shape templated form stays raw until legacy UTF8 encoding', () {
     for (final body in [
       'q={{key}}&page={{page}}',
@@ -809,10 +806,15 @@ void main() {
     expect(result.requiresManualWork, false);
     expect(result.source.metadata['compatibility'], 'unverified');
   });
-  test('invalid source URL fails rather than using relative URL', () {
+  test('a relative-looking source label is never treated as a request URL', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'relative',
+    });
+    expect(imported.source.id, 'relative');
+    expect(imported.source.metadata['legacyBaseUrlUnavailable'], true);
     expect(
-      () => LegacySourceImporter().import({'bookSourceUrl': 'relative'}),
-      throwsFormatException,
+      imported.source.baseUrl.toString(),
+      'https://source.legado.invalid/',
     );
   });
   test('known utility adapters and unsupported sync requests', () async {
