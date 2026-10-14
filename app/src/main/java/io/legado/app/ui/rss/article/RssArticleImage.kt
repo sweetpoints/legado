@@ -42,22 +42,23 @@ fun RssArticleImage(
         remember(source, row.origin, repository, requestRevision) { mutableStateOf<Float?>(null) }
     var failed by
         remember(source, row.origin, repository, requestRevision) { mutableStateOf(false) }
+    val requestedWidth = dimensions.width
     val requestedHeight = if (natural) 0 else dimensions.height
     LaunchedEffect(
         source,
         row.origin,
         repository,
-        dimensions.width,
+        requestedWidth,
         requestedHeight,
         natural,
         requestRevision,
     ) {
-        if (source == null || dimensions.width <= 0 || !natural && requestedHeight <= 0)
+        if (source == null || requestedWidth <= 0 || !natural && requestedHeight <= 0)
             return@LaunchedEffect
         val loaded =
             try {
                 if (natural) ratio = repository.ratio(source)?.takeIf { it.isFinite() && it > 0 }
-                repository.load(source, row.origin, dimensions.width, requestedHeight, natural)
+                repository.load(source, row.origin, requestedWidth, requestedHeight, natural)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

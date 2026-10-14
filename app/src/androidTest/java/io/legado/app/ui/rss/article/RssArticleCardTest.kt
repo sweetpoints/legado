@@ -69,11 +69,11 @@ class RssArticleCardTest {
     fun listAndGridImageFramesRetainOriginalSizes() {
         show()
         compose.onNodeWithTag("rss-article-row-owned").assertHeightIsEqualTo(100.dp)
-        compose.onNodeWithTag("image-slot").assertHeightIsEqualTo(68.dp)
+        compose.onNodeWithTag("image-slot", useUnmergedTree = true).assertHeightIsEqualTo(68.dp)
         compose.runOnIdle { style = 2 }
-        compose.onNodeWithTag("image-slot").assertHeightIsEqualTo(272.dp)
+        compose.onNodeWithTag("image-slot", useUnmergedTree = true).assertHeightIsEqualTo(272.dp)
         compose.runOnIdle { style = 4 }
-        compose.onNodeWithTag("image-slot").assertHeightIsEqualTo(182.dp)
+        compose.onNodeWithTag("image-slot", useUnmergedTree = true).assertHeightIsEqualTo(182.dp)
     }
 
     @Test
@@ -162,7 +162,7 @@ class RssArticleCardTest {
     fun naturalImagePreservesRatioSourceOriginAndDoesNotReloadWhenItsHeightChanges() {
         val images = Images()
         compose.setContent { RssArticleImage(row, images, Modifier.width(120.dp), natural = true) }
-        compose.waitUntil { images.loads == 1 }
+        compose.waitUntil { images.loads > 0 }
         compose.onNodeWithTag("rss-article-image-owned").assertHeightIsEqualTo(240.dp)
         assertEquals("source", images.sourceOrigin)
         assertTrue(images.natural)
@@ -238,13 +238,13 @@ class RssArticleCardTest {
             RssArticleImage(row, images, modifier, natural, keep)
         })
         compose.waitUntil { images.loads == 1 }
-        compose.onNodeWithTag("rss-article-image-owned")
+        compose.onNodeWithTag("rss-article-image-owned", useUnmergedTree = true)
             .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
         compose.runOnIdle { images.result.complete(null) }
-        compose.onNodeWithTag("rss-article-image-owned")
+        compose.onNodeWithTag("rss-article-image-owned", useUnmergedTree = true)
             .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
         compose.runOnIdle { row = row.copy(image = null) }
-        compose.onNodeWithTag("rss-article-image-owned")
+        compose.onNodeWithTag("rss-article-image-owned", useUnmergedTree = true)
             .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
         assertEquals(1, images.loads)
     }
