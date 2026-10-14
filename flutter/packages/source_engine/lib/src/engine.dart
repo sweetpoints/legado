@@ -661,7 +661,17 @@ class SourceEngine {
           if ((entry.key.endsWith('Url') || entry.key == 'url') &&
               value.isNotEmpty &&
               !nativeCover) {
-            value = response.url.resolve(value).toString();
+            // Legacy links can carry AnalyzeUrl options after `,{...}`.
+            // Resolve only the address: Uri.resolve would percent-encode the
+            // option object and prevent the native request parser seeing it.
+            final options =
+                (source.metadata['legacy'] == true || original is Map)
+                ? RegExp(r'\s*,\s*(?=\{)').firstMatch(value)
+                : null;
+            value = options == null
+                ? response.url.resolve(value).toString()
+                : '${response.url.resolve(value.substring(0, options.start))}'
+                      '${value.substring(options.start)}';
           }
           if (legacyHost?.supportsRule(entry.value) == true && listField) {
             fields[entry.key] = entry.key == 'downloadUrls'
