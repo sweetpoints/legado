@@ -210,7 +210,13 @@ class CoverStylePreviewUiTest {
                     .onNodeWithTag("font-list")
                     .performScrollToNode(hasTestTag("font-entry-${font.path}"))
                 compose.onNodeWithTag("font-entry-${font.path}").performClick()
-                waitUntil { preferences.getString(PreferKey.coverFont, "") == font.path }
+                // Saving the preference precedes loading the typeface on Dispatchers.IO.
+                // Wait for the renderer's matching font, not just the persisted selection.
+                val expectedFontKey = "${font.path}:${font.length()}:${font.lastModified()}"
+                waitUntil {
+                    preferences.getString(PreferKey.coverFont, "") == font.path &&
+                        BookCover.fontCacheKey == expectedFontKey && BookCover.fontTypeface != null
+                }
                 assertNotNull(BookCover.fontTypeface)
                 assertEquals(readerFont, ReadBookConfig.textFont)
                 assertEquals(readerTitleFont, ReadBookConfig.titleFont)
