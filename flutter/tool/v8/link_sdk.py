@@ -132,6 +132,9 @@ def command(sdk_root, target, linking, compiler, sysroot, output, files):
     platform_root = Path(sdk_root) / target
     args = [str(compiler), *linking['compileOptions'], '--target=' + triple,
             '--sysroot=' + str(sysroot), '-fPIC', '-fvisibility=hidden', '-fvisibility-inlines-hidden']
+    if target.startswith('android-'):
+        # Compile only our bridge for size; the verified V8 archives are unchanged.
+        args += ['-Oz', '-ffunction-sections', '-fdata-sections']
     args += ['-I' + str(platform_root / path) for path in linking['includeDirs']]
     args += ['-D' + define for define in linking['defines']]
     args += ['-I' + str(files['src/source_v8.h'].parent), str(files['src/source_v8.cpp'])]
@@ -150,6 +153,7 @@ def command(sdk_root, target, linking, compiler, sysroot, output, files):
         # The SDK's function/data sections allow removal of unreachable code
         # after the export map makes V8's static-library symbols local.
         args += ['-shared', '-Wl,--no-undefined', '-Wl,--exclude-libs,ALL', '-Wl,--gc-sections',
+                 '-Wl,-O2', '-Wl,--icf=all',
                  '-Wl,--version-script=' + str(files['src/android_exports.map']), '-Wl,-z,max-page-size=16384',
                  '-Wl,-soname,libsource_v8.so']
     else:
