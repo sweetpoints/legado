@@ -9,6 +9,12 @@ gradle.beforeSettings { settings ->
     if (tools.name == 'gradle' && tools.parentFile.name == 'flutter_tools' &&
         tools.parentFile.parentFile.name == 'packages') {
         settings.pluginManagement.repositories {
+            // Hosted runners can receive 403 from Central and Portal's Central redirect.
+            // Use Google's documented Central mirror for the same pinned coordinates.
+            maven {
+                name = 'GoogleCloudMavenCentralMirror'
+                url = 'https://maven-central.storage-download.googleapis.com/maven2/'
+            }
             mavenCentral()
             gradlePluginPortal()
         }
