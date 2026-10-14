@@ -8,6 +8,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     io.legado.app.ui.widget.dialog.BottomWebViewDialogShowTest::class,
     io.legado.app.ui.book.explore.ExploreCategoriesTest::class,
+    io.legado.app.ui.rss.article.RssArticleCardTest::class,
     io.legado.app.ui.main.explore.ExploreRefreshUiTest::class,
     io.legado.app.ui.main.my.MyPageCustomizationTest::class,
     io.legado.app.ui.book.read.ContentEditSearchTest::class,

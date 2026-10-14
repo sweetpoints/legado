@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.legado.app.data.image.AnimatedDrawableResource
 import io.legado.app.data.repository.*
 import io.legado.app.ui.theme.LegadoComposeTheme
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.*
 import org.junit.Assert.*
 
@@ -210,5 +211,41 @@ class RssArticleCardTest {
         compose.onNodeWithTag("rss-article-image-owned").assertExists()
         compose.runOnIdle { row = row.copy(image = null) }
         compose.onNodeWithTag("rss-article-image-owned").assertExists()
+    }
+
+    @Test
+    fun imageGridStyleKeepsItsFrameWhilePendingAfterFailureAndWithoutAnImage() {
+        val images =
+            object : RssArticleImageRepository {
+                var loads = 0
+                val result = CompletableDeferred<AnimatedDrawableResource?>()
+
+                override suspend fun ratio(source: String): Float? = null
+
+                override suspend fun load(
+                    source: String,
+                    origin: String,
+                    width: Int,
+                    height: Int,
+                    natural: Boolean,
+                ): AnimatedDrawableResource? {
+                    loads++
+                    return result.await()
+                }
+            }
+        compose.runOnIdle { style = 2 }
+        show(image = { modifier, natural, keep ->
+            RssArticleImage(row, images, modifier, natural, keep)
+        })
+        compose.waitUntil { images.loads == 1 }
+        compose.onNodeWithTag("rss-article-image-owned")
+            .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
+        compose.runOnIdle { images.result.complete(null) }
+        compose.onNodeWithTag("rss-article-image-owned")
+            .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
+        compose.runOnIdle { row = row.copy(image = null) }
+        compose.onNodeWithTag("rss-article-image-owned")
+            .assertIsDisplayed().assertHeightIsEqualTo(272.dp)
+        assertEquals(1, images.loads)
     }
 }

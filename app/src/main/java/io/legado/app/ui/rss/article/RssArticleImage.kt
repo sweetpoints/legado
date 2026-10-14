@@ -7,7 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -87,6 +86,7 @@ fun RssArticleImage(
     val sized =
         if (natural) ratio?.let { modifier.aspectRatio(1f / it) } ?: modifier.height(1.dp)
         else modifier
+    // The empty Box itself reserves a transparent loading/error frame for grids.
     Box(sized.onSizeChanged { dimensions = it }.testTag("rss-article-image-${row.key}")) {
         val current = resource
         if (current != null) {
@@ -111,7 +111,6 @@ fun RssArticleImage(
                 Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-        } else if (keepEmpty)
-            Image(painterResource(R.drawable.transparent_placeholder), null, Modifier.fillMaxSize())
+        }
     }
 }
