@@ -2,11 +2,18 @@ package io.legado.app.ui.book.read
 
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
@@ -195,6 +202,45 @@ class ContentEditSearchTest {
         compose.onNodeWithTag("content-body").performTextReplacement("short")
         compose.waitForIdle()
         compose.onNodeWithTag("content-position").assertIsNotEnabled()
+    }
+
+    @Test
+    fun positionBarKeepsDraggingWhenTheEditorViewportChanges() {
+        val model = create(Fake((0..499).joinToString("\n") { "Line $it" }))
+        var height by mutableStateOf(400.dp)
+        compose.setContent {
+            LegadoComposeTheme {
+                ContentEditorRoute(
+                    model, {}, {}, {},
+                    Modifier.height(height).consumeWindowInsets(WindowInsets.ime),
+                )
+            }
+        }
+        compose.waitUntil { model.state.value.hasDraft }
+        compose.onNodeWithTag("content-body").performTextInputSelection(TextRange(3))
+        val position = compose.onNodeWithTag("content-position")
+        position.assertIsEnabled().performTouchInput {
+            down(topCenter)
+            moveTo(center)
+        }
+        // Resizing changes ScrollState.maxValue while this pointer is still down.
+        compose.runOnIdle { height = 300.dp }
+        compose.waitForIdle()
+        position.performTouchInput {
+            moveTo(bottomCenter)
+            up()
+        }
+        compose.waitUntil {
+            position.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current >
+                0.95f
+        }
+        compose.runOnIdle {
+            assertEquals(3, model.state.value.selectionStart)
+            assertEquals(3, model.state.value.selectionEnd)
+        }
+        compose.onNodeWithTag("content-body").performTextReplacement("short")
+        compose.waitForIdle()
+        position.assertIsNotEnabled()
     }
 
     @Test
