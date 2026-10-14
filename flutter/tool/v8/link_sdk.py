@@ -147,7 +147,9 @@ def command(sdk_root, target, linking, compiler, sysroot, output, files):
         # SDK explicitly supplies compiler-rt/libunwind/libc++ archives. Keep
         # NDK CRT objects, but do not add a second implicit host Clang runtime.
         args += ['-nodefaultlibs', '-lc']
-        args += ['-shared', '-Wl,--no-undefined', '-Wl,--exclude-libs,ALL',
+        # The SDK's function/data sections allow removal of unreachable code
+        # after the export map makes V8's static-library symbols local.
+        args += ['-shared', '-Wl,--no-undefined', '-Wl,--exclude-libs,ALL', '-Wl,--gc-sections',
                  '-Wl,--version-script=' + str(files['src/android_exports.map']), '-Wl,-z,max-page-size=16384',
                  '-Wl,-soname,libsource_v8.so']
     else:

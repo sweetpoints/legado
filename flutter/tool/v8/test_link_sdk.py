@@ -109,6 +109,7 @@ class LinkContractTests(unittest.TestCase):
             self.assertIn('-Wl,--no-undefined', args)
             self.assertIn('-Wl,--version-script=/fixture/android_exports.map', args)
             self.assertIn('-Wl,--exclude-libs,ALL', args)
+            self.assertIn('-Wl,--gc-sections', args)
             self.assertIn('-Wl,-z,max-page-size=16384', args)
             self.assertLess(args.index('/sdk/' + target + '/lib/monolith.a'), args.index('/sdk/' + target + '/lib/runtime.a'))
 
