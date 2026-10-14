@@ -275,7 +275,6 @@ class TextChapterLayout(
     }
 
     private fun onCompleted() {
-        channel.close()
         try {
             listener?.onLayoutCompleted()
         } catch (e: Exception) {
@@ -283,6 +282,9 @@ class TextChapterLayout(
             AppLog.put("调用布局进度监听回调出错\n${e.localizedMessage}", e)
         } finally {
             listener = null
+            // Readers treat the end of this stream as a completed chapter. Publish completion
+            // first so their continuation cannot skip speech preparation while isCompleted is false.
+            channel.close()
         }
     }
 

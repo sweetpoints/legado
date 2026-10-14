@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "includeExisting": false,
-  "caseCount": 130,
+  "includeExisting": true,
+  "caseCount": 204,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -341,6 +341,143 @@
       "methods": [
         "blankTocUrlLoadsBookUrlAndPreservesItsRequestOptionsHeader",
         "selfLinksAndMultipleNextPagesKeepOriginalChapterOrderWithoutDuplicateFetches"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyDynamicIdentityV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyDynamicIdentityV8IntegrationTest.kt",
+      "sourceSha256": "bb7e2fa7da8aa1d7486df6f4b738cf41de3e98aaa8698c23b3e4c9cf0e59631a",
+      "methods": [
+        "categoryClickUsesItsAbsoluteUrlAndKeepsTheOpaqueSourceId"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.sourceEngine.LegacyLoginCheckV8IntegrationTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyLoginCheckV8IntegrationTest.kt",
+      "sourceSha256": "1e7a1939a7b885a300a788643e5bd9ce0c9a3389540e68ca09e9588ebcb3233c",
+      "methods": [
+        "cancellationDuringLoginHttpDoesNotBecomeARecoveredResponseAndNextTaskWorks",
+        "earlyCapturedLibraryRequestMethodsSurviveRedirectAndTheNextTask",
+        "forbiddenResponseRunsTheHookAndPreservesItsHttpStatus",
+        "loginAjaxThenGetStrResponseReusesTheCurrentRequest",
+        "malformedHookResultIsAnExplicitFailureAfterOneFetch",
+        "normalResponseFacadeRunsTheHookOnceAndKeepsOriginalResponse",
+        "redirectUpdatesSourceVariableAndInitUrlResumesDynamicUrlInTheSameVm"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.FlutterSourceEngineTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/FlutterSourceEngineTest.kt",
+      "sourceSha256": "cc45e9a7cd799d651283d0800ec9b75d21d67a17330805c02c8179111bf2374d",
+      "methods": [
+        "auxiliaryScriptsAndEphemeralJsConfigurationRunActualV8",
+        "cancellationStopsInfiniteScriptAndEngineRemainsUsable",
+        "closeDuringStartupWakesReadyWaiter",
+        "composeRepositoryRunsActualDartV8AndAsyncFunctions",
+        "emptyDartTocFailsWithoutChangingBookMetadata",
+        "legacyExploreOptionsAndFinitePaginationUseSelectedRequest",
+        "legacyExploreUsesSelectedCategoryAndNormalizesBookFields",
+        "legacyLiteralReplacementAndFinalHtml4DecodeRunThroughApp",
+        "legacyTocFlagsKeepLegacyTruthinessAndModernFlagsRequireBoolean",
+        "migrationChannelBlocksManualPreviewAndRejectsAfterShutdownWithoutMutation",
+        "migrationChannelProducesApplicableUnverifiedPreviewWithoutMutatingSource",
+        "mixedMainJsContentHookReviewDoesNotBlockUnrelatedSearch",
+        "modernBookFieldsRemainUnchangedAndMigratedFieldsUseLegacyFormatting",
+        "nativeLegacyPostWireAndExplicitModernJsonTemplateKeepTheirOwnContracts",
+        "nonUrlLegacySourceIdsKeepVariablesIsolatedButNativeCookiesKeepDomainScope",
+        "originalNativeCookieJarUsesDomainScopeAcrossDistinctSourceLabels",
+        "preUpdateScriptsApplyValidatedMetadataWithActualV8",
+        "sessionVariablesSurviveEngineShutdownAndStaySourceIsolated",
+        "synchronousSendFailureCleansTaskAndCloseWakesPendingRequest",
+        "unmarkedLegacySourcesUseDartV8ByDefault",
+        "volumeHeadingSkipsDartContentExecution"
+      ]
+    },
+    {
+      "name": "io.legado.app.ui.book.source.edit.BookSourceMigrationUiTest",
+      "source": "app/src/androidTest/java/io/legado/app/ui/book/source/edit/BookSourceMigrationUiTest.kt",
+      "sourceSha256": "4795ae72211fbe44951dc71ee288aa5ef89de0cd48c48c37712de10faac414fb",
+      "methods": [
+        "currentUnverifiedReportExplicitlyWarnsAndApplyCallsAction",
+        "editorShowsOnlyFixedFlutterV8EngineAndPreviewCallsAction",
+        "existingModernPayloadShowsReasonWithoutCandidateApplyOrCopy",
+        "manualMigrationDisplaysIssueAndAllowsCopyButNotApply",
+        "staleUnverifiedReportCannotApplyAndOffersNewPreview"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.jsSource.JsSourceReviewV8Test",
+      "source": "app/src/androidTest/java/io/legado/app/model/jsSource/JsSourceReviewV8Test.kt",
+      "sourceSha256": "60d61a041716931ed98df1ba1c3a205e636e0916f18c733a4b0e47d855c35575",
+      "methods": [
+        "V8AsyncReviewWithLexicalSourceAndStringResultPreservesDTOArguments",
+        "detailFlattensRecursiveRepliesForTheNativeDialog",
+        "detailParsesMetadataPaginationAndBadge",
+        "detailParsesStructuredContentAndBadgeArrays",
+        "detailPreservesStringIdsOutsideTheJavaScriptSafeIntegerRange",
+        "detailRejectsNullOrNonArrayItemsWithoutThrowing",
+        "detailToleratesNullRepliesAndDropsBlankContent",
+        "missingPagedRepliesCapabilityReturnsNoResult",
+        "missingSummaryCapabilityReturnsNoResult",
+        "pagedRepliesReceiveContextAndFlattenNestedItems",
+        "pagedRepliesRejectMalformedResult",
+        "summaryIgnoresInvalidEntriesAndNonPositiveCounts",
+        "summaryParsesCountsDataAndTitleReviews"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.login.FlutterLoginUiV2Test",
+      "source": "app/src/androidTest/java/io/legado/app/model/login/FlutterLoginUiV2Test.kt",
+      "sourceSha256": "ee5cc87c2f0ef7ba0b9ebcb12bd6f1579fa86362f2e730cb4d1d632ae1c818b8",
+      "methods": [
+        "declarativeLoginScriptUsesLoginUrl",
+        "dispatchesActionsAcrossJsonBoundary",
+        "rendersFromExplicitState",
+        "repositoryAwaitsAsyncScriptsAndKeepsRowsImmutable",
+        "synchronousV2EvaluationRejectsMainThread",
+        "v2LoginScriptReceivesBookAndChapterContext"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.JsSourceV8ExecutionTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/JsSourceV8ExecutionTest.kt",
+      "sourceSha256": "1db42267c0b49d597f5b1ceefbb05185bd6422840d5c804fa89331058ab2dd7f",
+      "methods": [
+        "blankContentAllowedOnlyForVolumeChapters",
+        "builtInTemplateRemainsImportableInActualV8",
+        "callsMainJsSearchThroughCompleteV8Engine",
+        "constForInAndBranchScopesExecuteInV8",
+        "customToJsonAndGetterRunInV8SourceScope",
+        "documentedExampleRemainsImportableInActualV8",
+        "fileSourceRejectsEmptyDownloadUrls",
+        "fileSourceResolvesDownloadsWithoutTocFallback",
+        "infiniteConfigurationSaveTimesOutBeforeDatabaseChanges",
+        "optionalMissingFunctionProducesNullInActualV8",
+        "optionalPresentFunctionRunsInActualV8",
+        "persistedSourceApiSurvivesScriptSourceShadowing",
+        "runtimeSourceRemainsAvailableWithConfigObject",
+        "volumePlaceholderSkipsContentAndIgnoresTag"
+      ]
+    },
+    {
+      "name": "io.legado.app.model.CryptoMigrationContractTest",
+      "source": "app/src/androidTest/java/io/legado/app/model/CryptoMigrationContractTest.kt",
+      "sourceSha256": "24987b7a02495cac837cc3f319d9d1df00c51cbc7c9f93cd17155967eda51b85",
+      "methods": [
+        "blankLibraryUsesSupportedHashHelpersOnActualV8",
+        "configurationUsesHashHelperAndJsonRuntimeWithoutJavaReflection",
+        "explicitHostLibraryExecutesWithOriginalRuntimeBindingsWhileModernMigrationNeedsReview",
+        "retainedLibraryStateRefreshAndClearStayOwnerScopedWhileModernMigrationNeedsReview",
+        "sharedLibraryDescriptorsAndFrozenGlobalsKeepTheirOriginalRuntimeContract"
+      ]
+    },
+    {
+      "name": "io.legado.app.web.mcp.FlutterMcpSourceTest",
+      "source": "app/src/androidTest/java/io/legado/app/web/mcp/FlutterMcpSourceTest.kt",
+      "sourceSha256": "df4e8781a08b9e2819e882be611837717c63e4e45a5ea912f56c02b43fbeeea3",
+      "methods": [
+        "requestCancellationStopsActualV8AndNextRequestSucceeds",
+        "requestContextExecutesActualV8AndKeepsJsonMetadataContract"
       ]
     }
   ]

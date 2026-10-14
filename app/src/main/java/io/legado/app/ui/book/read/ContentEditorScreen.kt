@@ -3,8 +3,8 @@ package io.legado.app.ui.book.read
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -339,6 +339,8 @@ internal fun ContentEditorScreen(
                             scroll.scrollTo((fraction.coerceIn(0f, 1f) * maximum).toInt())
                         }
                 }
+                // Viewport/IME changes must update the scroll range without cancelling a drag.
+                val currentSetPosition by rememberUpdatedState(setPosition)
                 Canvas(
                     Modifier.width(40.dp)
                         .fillMaxHeight()
@@ -357,18 +359,24 @@ internal fun ContentEditorScreen(
                             }
                         }
                         .focusable(enabled)
-                        .pointerInput(enabled, maximum) {
-                            detectTapGestures { setPosition(it.y / size.height) }
-                        }
-                        .pointerInput(enabled, maximum) {
-                            detectVerticalDragGestures(
-                                onDragStart = { setPosition(it.y / size.height) }
-                            ) { change, _ ->
-                                if (enabled) {
-                                    change.consume()
-                                    setPosition(change.position.y / size.height)
+                        .pointerInput(enabled) {
+                            if (enabled)
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    down.consume()
+                                    currentSetPosition(down.position.y / size.height.coerceAtLeast(1))
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        event.changes.firstOrNull { it.id == down.id }?.let { change ->
+                                            if (!change.isConsumed) {
+                                                currentSetPosition(
+                                                    change.position.y / size.height.coerceAtLeast(1)
+                                                )
+                                                change.consume()
+                                            }
+                                        }
+                                    } while (event.changes.any { it.pressed })
                                 }
-                            }
                         }
                 ) {
                     drawLine(

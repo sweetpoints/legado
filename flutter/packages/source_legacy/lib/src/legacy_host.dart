@@ -92,11 +92,11 @@ const legacyScriptPrelude =
     writable:false,configurable:false,enumerable:false
   });
 
-  function __legacyHttpStepOutcome(__legacyReply) {
+  function __legacyHttpStepOutcome(__legacyReply,__legacyNamespace) {
     const __legacySaved = new Map();
     __legacyHttpFrames.push(__legacySaved);
     const __legacyBindings = Object.assign(Object.create(null), __legacyReply.bindings, {
-      __legacyHttpStep: {token:__legacyReply.token, sequence:__legacyReply.sequence},
+      __legacyHttpStep: {token:__legacyReply.token, sequence:__legacyReply.sequence, namespace:__legacyNamespace},
       __legacyHeaderEvaluation:false,
       __legacyExtractionPrefix:null
     });
@@ -118,11 +118,11 @@ const legacyScriptPrelude =
       __legacyRestoreHttpFrame(__legacySaved);
     }
   }
-  function __legacyHttpRequest(__legacyMethod,__legacyArgs,__legacyHeaders) {
+  function __legacyHttpRequest(__legacyMethod,__legacyArgs,__legacyHeaders,__legacyNamespace = 'javaHttp') {
     let __legacyToken = null;
     let __legacySequence = 0;
     try {
-      let __legacyReply = __sourceHostSync('javaHttp.begin',[__legacyMethod,__legacyArgs,__legacyHeaders]);
+      let __legacyReply = __sourceHostSync(__legacyNamespace+'.begin',[__legacyMethod,__legacyArgs,__legacyHeaders]);
       while (__legacyReply && __legacyReply.status === 'script') {
         if (__legacyToken === null && typeof __legacyReply.token === 'string' && __legacyReply.token) __legacyToken = __legacyReply.token;
         if (typeof __legacyReply.token !== 'string' || !__legacyReply.token
@@ -134,8 +134,8 @@ const legacyScriptPrelude =
         }
         __legacyToken = __legacyReply.token;
         __legacySequence = __legacyReply.sequence;
-        const __legacyOutcome = __legacyHttpStepOutcome(__legacyReply);
-        __legacyReply = __sourceHostSync('javaHttp.continue',[__legacyToken,__legacySequence,__legacyOutcome]);
+        const __legacyOutcome = __legacyHttpStepOutcome(__legacyReply,__legacyNamespace);
+        __legacyReply = __sourceHostSync(__legacyNamespace+'.continue',[__legacyToken,__legacySequence,__legacyOutcome]);
       }
       if (!__legacyReply || __legacyReply.status !== 'done' || typeof __legacyReply.token !== 'string'
           || !__legacyReply.token || (__legacyToken !== null && __legacyReply.token !== __legacyToken)
@@ -145,9 +145,21 @@ const legacyScriptPrelude =
       __legacyToken = __legacyReply.token;
       return response(__legacyReply.value);
     } finally {
-      if (__legacyToken !== null) __sourceHostSync('javaHttp.abort',[__legacyToken]);
+      if (__legacyToken !== null) __sourceHostSync(__legacyNamespace+'.abort',[__legacyToken]);
     }
   }
+  Object.defineProperty(globalThis,'__legacyLoginRequest',{value:(method,args)=>__legacyHttpRequest(method,args,null,'loginCheck')});
+  Object.defineProperty(globalThis,'__legacyResponseMaterialize',{value:response});
+  Object.defineProperty(globalThis,'__legacyRunLoginCheck',{value:(script,input)=>{
+    const frame=new Map();__legacyHttpFrames.push(frame);
+    try {
+      __legacySetHttpBinding(frame,'__legacyLoginCheckActive',true);
+      __legacySetHttpBinding(frame,'result',response(input));
+      const value=__legacyHeaderEvaluator(script);
+      return value && typeof value.then==='function' ? __sourceAwaitSync(value) : value;
+    } finally {__legacyRestoreHttpFrame(frame);}
+  }});
+
   function __legacyMarkedBytes(__legacyValue) {
     return typeof globalThis.__legacyCacheMarkBytes === 'function'
       ? globalThis.__legacyCacheMarkBytes(__legacyValue) : __legacyValue;
@@ -193,6 +205,7 @@ const legacyScriptPrelude =
       hasCookie: name => Object.prototype.hasOwnProperty.call(value.cookieMap || {}, name),
       raw: () => {throw new Error('legacy.unsupported_response_api: raw');},
       errorBody: () => {throw new Error('legacy.unsupported_response_api: errorBody');},
+      toJSON: () => value,
       toString: () => 'Response{code=' + value.status + ', url=' + value.url + '}'
     };
     return out;
@@ -239,6 +252,8 @@ const legacyScriptPrelude =
       // No JVM reflection is exposed by the bounded JSON helper bridge.
       if (['getClass','forName','class'].includes(String(name))) return undefined;
       return (...args) => {
+        if(globalThis.__legacyLoginCheckActive === true && ['initUrl','getStrResponse'].includes(String(name)))
+          return __legacyHttpRequest(String(name),args,null,'loginCheck');
         if (['getString','getStringList','getElement','getElements'].includes(String(name))) {
           const unescape = String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean' ? args[1] : true;
           if (String(name) === 'getString' && args.length === 2 && typeof args[1] === 'boolean') args = [args[0]];
@@ -256,7 +271,7 @@ const legacyScriptPrelude =
           }
           if (globalThis.__legacyHttpStep && ['get','put'].includes(String(name))
               && !(String(name) === 'get' && args.length !== 1)) {
-            return __sourceHostSync('javaHttp.stepCall',[__legacyHttpStep.token,__legacyHttpStep.sequence,String(name),args]);
+            return __sourceHostSync((__legacyHttpStep.namespace || 'javaHttp')+'.stepCall',[__legacyHttpStep.token,__legacyHttpStep.sequence,String(name),args]);
           }
           if (['ajax','connect','ajaxAll'].includes(String(name))) {
             const plan = __sourceHostSync('javaHttp.prepareHeader', [String(name), args]);

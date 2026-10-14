@@ -33,7 +33,7 @@ object LegacySourceScriptRunner {
                     : globalThis.__legacyHeaderEvaluation === true
                         ? __sourceHostSync('javaHttp.header' + (name === 'get' ? 'Get' : 'Put'), args)
                         : globalThis.__legacyHttpStep
-                            ? __sourceHostSync('javaHttp.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
+                            ? __sourceHostSync((__legacyHttpStep.namespace || 'javaHttp') + '.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
                             : __sourceHostSync('analyze.' + String(name), args)
                 : ['getString','getStringList','getElement','getElements'].includes(String(name))
                     && globalThis.__legacyExtractionPrefix === 'analyze'
@@ -44,6 +44,7 @@ object LegacySourceScriptRunner {
                 : ['getString','getStringList'].includes(String(name))
                     && globalThis.__legacyExtractionPrefix === 'ui'
                     ? (...args) => __sourceHostSync('ui.' + String(name), args)
+                : name === 'setVariable' ? (...args) => __sourceHostSync('sourceState.putVariable', args)
                 : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                     ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                     : target[name]
@@ -56,9 +57,10 @@ object LegacySourceScriptRunner {
                     ? (...args) => globalThis.__legacyHeaderEvaluation === true
                         ? __sourceHostSync('javaHttp.header' + (name === 'get' ? 'Get' : 'Put'), args)
                         : globalThis.__legacyHttpStep
-                            ? __sourceHostSync('javaHttp.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
+                            ? __sourceHostSync((__legacyHttpStep.namespace || 'javaHttp') + '.stepCall', [__legacyHttpStep.token, __legacyHttpStep.sequence, String(name), args])
                             : __sourceHostSync('analyze.' + String(name), args)
-                    : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
+                    : name === 'setVariable' ? (...args) => __sourceHostSync('sourceState.putVariable', args)
+                : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                         ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                         : Object.prototype.hasOwnProperty.call(sourceData, name)
                             ? sourceData[name] : globalThis.__legacyAsyncSource[name]
@@ -77,7 +79,8 @@ object LegacySourceScriptRunner {
                     ? (...args) => name === 'get' && args.length !== 1
                         ? nativeJava[name](...args)
                         : __sourceHostSync('analyze.' + String(name), args)
-                    : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
+                    : name === 'setVariable' ? (...args) => __sourceHostSync('sourceState.putVariable', args)
+                : ['getLoginInfo','putLoginInfo','getLoginHeader','putLoginHeader','getVariable','putVariable','removeLoginInfo'].includes(String(name))
                         ? (...args) => __sourceHostSync('sourceState.' + String(name), args)
                         : nativeJava && nativeJava[name]
             });

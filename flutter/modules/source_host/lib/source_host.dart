@@ -58,6 +58,10 @@ class SourceHost {
 
   bool _hostedRequestIssue(LegacyIssue issue, String operation, Map input) {
     if (!legacyPageFetchEnabled) return false;
+    if (issue.code == 'legacy.capability_requires_review' &&
+        issue.path == 'loginCheckJs') {
+      return true;
+    }
     if ({
       'legacy.request_options',
       'legacy.dynamic_header',
