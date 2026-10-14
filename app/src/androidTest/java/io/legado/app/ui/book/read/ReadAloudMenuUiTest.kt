@@ -66,6 +66,8 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.column.TextBaseColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
+import io.legado.app.ui.book.read.page.provider.TextChapterLayout
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.dpToPx
 import java.io.File
@@ -82,6 +84,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -907,6 +910,65 @@ class ReadAloudMenuUiTest {
         } finally {
             scenario!!.onActivity { service.clearTTS() }
             recorder.shutdown()
+        }
+    }
+
+    @Test
+    fun pageStreamCannotFinishBeforeChapterCompletionIsPublished() = runBlocking {
+        awaitReaderGeometry()
+        val chapter = checkNotNull(ReadBook.curTextChapter)
+        val layout =
+            chapter.javaClass.getDeclaredField("layout").apply { isAccessible = true }
+                .get(chapter) as TextChapterLayout
+        val listenerField =
+            TextChapterLayout::class.java.getDeclaredField("listener").apply { isAccessible = true }
+        val originalChannel = layout.channel
+        val originalListener = listenerField.get(layout)
+        val completion = chapter.copy()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pageStream = Channel<TextPage>(Channel.UNLIMITED)
+        // Invoke the real producer finalizer with an empty stream and a held completion callback.
+        // This makes close-before-publication fail deterministically, independent of device speed.
+        layout.channel = pageStream
+        listenerField.set(
+            layout,
+            object : LayoutProgressListener {
+                override fun onLayoutCompleted() {
+                    entered.countDown()
+                    check(release.await(30, TimeUnit.SECONDS))
+                    completion.onLayoutCompleted()
+                }
+            },
+        )
+        val finished = async(Dispatchers.IO) {
+            TextChapterLayout::class.java.getDeclaredMethod("onCompleted")
+                .apply { isAccessible = true }.invoke(layout)
+        }
+        try {
+            assertTrue(
+                "The producer reaches its completion callback",
+                entered.await(30, TimeUnit.SECONDS),
+            )
+            assertFalse("Completion is still held", completion.isCompleted)
+            val terminal = pageStream.tryReceive()
+            assertTrue(
+                "The page stream must remain open until completion is published",
+                terminal.isFailure && !terminal.isClosed,
+            )
+            release.countDown()
+            withTimeout(30_000) { finished.await() }
+            assertTrue("The chapter is completed before its stream ends", completion.isCompleted)
+            assertTrue("The completed page stream closes normally", pageStream.receiveCatching().isClosed)
+        } finally {
+            release.countDown()
+            try {
+                withTimeout(30_000) { finished.await() }
+            } finally {
+                layout.channel = originalChannel
+                listenerField.set(layout, originalListener)
+                pageStream.cancel()
+            }
         }
     }
 
