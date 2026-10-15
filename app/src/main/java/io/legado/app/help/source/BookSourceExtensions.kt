@@ -94,7 +94,7 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                             else -> exploreUrl
                         }
                     if (ruleStr.isJsonArray()) {
-                        GSON.fromJsonArray<ExploreKind>(ruleStr).getOrThrow().let {
+                        GSON.fromJsonArray<ExploreKind>(normalizeLegacyExploreJson(ruleStr)).getOrThrow().let {
                             kinds.addAll(it)
                         }
                     } else {
