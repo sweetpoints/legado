@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": true,
-  "caseCount": 204,
+  "caseCount": 205,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -337,9 +337,10 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyTocPaginationV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt",
-      "sourceSha256": "9c7943f1e65a77daf99962caec6f2e0edd2a52e68ffb9118c393c83fa766ed9c",
+      "sourceSha256": "931a3ff25fde7b6cd4f3df56549cda4be11293fb4683109d2127fa07dc32fa09",
       "methods": [
         "blankTocUrlLoadsBookUrlAndPreservesItsRequestOptionsHeader",
+        "javascriptCatalogueArrayCanLoadMoreThanTwentyPages",
         "selfLinksAndMultipleNextPagesKeepOriginalChapterOrderWithoutDuplicateFetches"
       ]
     },
