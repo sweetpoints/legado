@@ -77,7 +77,7 @@ EXPECTED_CASE_COUNTS = {
     'model/sourceEngine/LegacySourceRuntimeClearV8IntegrationTest.kt': 2,
     'help/source/LegacyOrgExploreMenuV8IntegrationTest.kt': 3,
     'model/sourceEngine/LegacyCoverImageV8IntegrationTest.kt': 3,
-    'model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt': 2,
+    'model/sourceEngine/LegacyTocPaginationV8IntegrationTest.kt': 3,
     'model/sourceEngine/LegacyDynamicIdentityV8IntegrationTest.kt': 1,
     'model/sourceEngine/LegacyLoginCheckV8IntegrationTest.kt': 7,
     'model/FlutterSourceEngineTest.kt': 21,
