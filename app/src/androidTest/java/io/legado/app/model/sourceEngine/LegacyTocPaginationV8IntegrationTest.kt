@@ -41,6 +41,8 @@ class LegacyTocPaginationV8IntegrationTest {
             requests.add(Seen(session.uri, session.headers["x-toc-fixture"]))
             val html =
                 when (session.uri) {
+                    in (1..21).map { "/long_$it" } ->
+                        chapter(session.uri.substringAfterLast('_').toInt()) + "(第1/21页)当前1条/页"
                     "/toc/1" -> first
                     "/toc/2" ->
                         chapter(2) + "<a class='next' href='/toc/3'>Ignored child continuation</a>"
@@ -82,6 +84,37 @@ class LegacyTocPaginationV8IntegrationTest {
         assertEquals(expected.map { it.getAbsoluteURL() }, actual.map { it.getAbsoluteURL() })
         assertEquals(expected.map { it.index }, actual.map { it.index })
         assertEquals(listOf(0, 1, 2), actual.map { it.index })
+    }
+
+    @Test
+    fun javascriptCatalogueArrayCanLoadMoreThanTwentyPages(): Unit = runBlocking(Dispatchers.IO) {
+        val server = Server()
+        server.start()
+        val source = source(server, true).apply {
+            ruleToc = TocRule(
+                chapterList = "tag.li",
+                chapterName = "a@text",
+                chapterUrl = "a@href",
+                nextTocUrl = """<js>page=result.match(/\(第\d+\/(\d+)页\)当前\d+条\/页/)[1];
+                    list=[];for(i=2;i<=page;i++){list.push(baseUrl.replace(/_1/,'_'+i))}
+                    list</js>""".trimIndent(),
+            )
+        }
+        val book = Book(bookUrl = server.base + "/book", tocUrl = server.base + "/long_1",
+            origin = source.bookSourceUrl, name = "Long catalogue fixture")
+        appDb.bookSourceDao.insert(source)
+        try {
+            val chapters = withTimeout(60_000) {
+                WebBook.getChapterListAwait(source, book).getOrThrow()
+            }
+            assertEquals((1..21).map { "Chapter $it" }, chapters.map { it.title })
+            assertEquals((0..20).toList(), chapters.map { it.index })
+            assertEquals((1..21).map { "/long_$it" }, server.requests.map { it.path })
+        } finally {
+            DartSourceEngine.clearSourceState(source)
+            appDb.bookSourceDao.delete(source)
+            server.stop()
+        }
     }
 
     @Test

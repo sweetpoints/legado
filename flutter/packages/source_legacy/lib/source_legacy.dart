@@ -332,6 +332,9 @@ class LegacySourceImporter {
       url = selectedExplore ? '{{exploreUrl}}' : request.url;
       stages[entry.key] = SourceStage(
         url: url,
+        // Old TOC rules commonly enumerate hundreds of independent catalogue pages.
+        // Keep the bounded engine guard, without applying the modern 20-page default.
+        maxPages: entry.key == 'toc' ? 1000 : 20,
         list: list,
         fields: fields,
         nextPage: nextPage,
@@ -515,7 +518,7 @@ List<Map<String, Object?>> _legacyExploreMenu(
   Object? decoded = menu;
   if (menu is String && menu.trim().startsWith('[')) {
     try {
-      decoded = jsonDecode(menu);
+      decoded = jsonDecode(_normalizeExploreArray(menu));
     } on FormatException {
       malformed();
       return [];
@@ -584,6 +587,43 @@ List<Map<String, Object?>> _legacyExploreMenu(
     }
   }
   return items;
+}
+
+// Accept final array commas from old JS-style menus, without editing quoted URLs
+// or silently dropping explicit nulls / missing interior entries.
+String _normalizeExploreArray(String value) {
+  final out = StringBuffer();
+  String? quote;
+  var escaped = false;
+  String? previous;
+  for (var i = 0; i < value.length; i++) {
+    final c = value[i];
+    if (quote != null) {
+      if (escaped) {
+        escaped = false;
+      } else if (c == r'\') {
+        escaped = true;
+      } else if (c == quote) {
+        quote = null;
+      }
+    } else {
+      if (c == '"' || c == "'") quote = c;
+      if (c == ',') {
+        var next = i + 1;
+        while (next < value.length && value[next].trim().isEmpty) {
+          next++;
+        }
+        if (next < value.length &&
+            value[next] == ']' &&
+            previous != '[' &&
+            previous != ',')
+          continue;
+      }
+    }
+    out.write(c);
+    if (c.trim().isNotEmpty) previous = c;
+  }
+  return out.toString();
 }
 
 /// Materializes a selected legacy category request before stage templating.
