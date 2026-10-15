@@ -1,0 +1,23 @@
+{
+  "bookSourceUrl": "歪歪斜斜的字眼里，满篇都是吃人二字-----鲁迅",
+  "bookSourceComment": "v = String(source.getVariable())\nv.indexOf(\"源站\") == -1\n  ? (java.toast(\"\\n❗未设置源变量❗\\n使用默认设置\"),\n    (v = \"设置源站[1-3]：1\"),\n    source.setVariable(v))\n  : \"\";\nvar v = v.match(/\\d$/)[0]\n  link = \"https://myaavideonet.neocities.org/aabook.html\",\n  J = org.jsoup.Jsoup.parse(java.ajax(link)),\n  host=\"https://fqsk.xyz\"\n  mail1 = \"waimanhua@gmail.com\",\n  mail2 = \"momodaqqq@gmail.com\",\n  mail3 = \"bang985211@gmail.com\",\n  wiki = \"https://github.com/momodaqqq/qscxx/wiki\";\nhost =\n  1 == v\n    ? String(J).match(/url\\[0\\]=\"(.*)\"/)[1]\n    : 2 == v\n    ? String(J).match(/url\\[1\\]=\"(.*)\"/)[1]\n    : 3 == v\n    ? String(J).match(/url\\[2\\]=\"(.*)\"/)[1]\n    : host;",
+  "enabledCookieJar": false,
+  "ruleBookInfo": {
+    "author": "author",
+    "coverUrl": "cover",
+    "init": "<js>\neval(String(source.bookSourceComment))\nvar J = org.jsoup.Jsoup.parse(result),\n  url = baseUrl.replace(/book-/, \"chapterList-\")\n  book = {\n    name: String(J.select(\".book_name a\").text())\n      .replace(/(全文|小说|免费阅读|最新章节).*|[\\(（].*[）\\)]/g, ''),\n    author: J.select(\".author\").text(),\n    kind: String(J.select(\".xinxi_content span\").text().split(\" \")[1])\n      .replace(/[中已]/g, \"\")\n      + \",\" +\n      J.select(\".xinxi_content span\").text().split(\" \")[0]\n      + \",\" +\n      J.select(\".dt_r\").text().split(\" \")[0],\n    word: String(J.select(\".xinxi_content span\").text().split(\" \")[2])\n      .replace(/字/, \"\"),\n    latest: String(J.select(\".new_zhangjie1 .dt_l a\").text())\n      .replace(/^(正文|VIP章节|最新章节)?(\\s+|_)/g, \"\")\n      .replace(/[\\(（【].*?[求更谢乐发订合贺补加推票章字修防kK].*/g, \"\")\n      + \"·\" +\n      String(J.select(\".new_zhangjie1 .dt_r\").text()).replace(/\\s.*/, \"\")\n      + \"·\\[\" +\n      String(org.jsoup.Jsoup.parse(java.ajax(url)).select(\".section_list li\"))\n        .split(\"\\n\").length\n      + \"\\]\",\n    intro: \"<br>\" + String(J.select(\".jianjieneirong\").html()).replace(/\\s/g,\"<br>\"),\n    cover: host + \"/\" + J.select(\".book_info_top_l img\").attr(\"src\"),\n    url: url\n  };\n//java.log(JSON.stringify(book))\nbook;\n</js>",
+    "intro": "intro",
+    "kind": "kind",
+    "lastChapter": "latest",
+    "name": "name",
+    "tocUrl": "url",
+    "wordCount": "word"
+  },
+  "ruleToc": {
+    "chapterList": "<js>\neval(String(source.bookSourceComment))\n1 == v || 2 == v || 3 == v\n  ? (java.put(\"host\",host), java.toast(\"\\n♥已设置源变量♥\\n源站：\" + host))\n  : java.toast(\"\\n❗未设置源变量❗\\n默认：\" + source.bookSourceUrl);\nchapterList = java.getElements(\".section_list li a\");\n</js>\n",
+    "chapterName": "text\n@js:\nresult\n  .replace(/^(正文|VIP章节|最新章节)?(\\s+|_)/g, \"\")\n  .replace(/[\\(（【].*?[求更谢乐发订合贺补加推票章字修防kK].*/g, \"\")",
+    "chapterUrl": "@get:{host}/{{@href}}"
+  },
+  "bookSourceName": "Dynamic detail and TOC fixture",
+  "header": "{\n  \"User-Agent\": \"Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36\"\n}"
+}

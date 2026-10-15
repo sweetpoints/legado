@@ -67,6 +67,51 @@ class BookDetailSessionRepositoryTest {
         withContext(Dispatchers.IO) { database.bookDao.getBook(url) }
 
     @Test
+    fun previewChaptersSurviveReceiptRecoveryAndReopenWithoutBeingAddedToRoom(): Unit =
+        runBlocking {
+            for (sourceChanged in listOf(false, true)) {
+                val old = book().copy(bookUrl = "https://fixture.invalid/preview-$sourceChanged")
+                val initial = BookDetailSession(
+                    BookDetailIdentity(old.name, old.author, old.bookUrl), data(old, false),
+                )
+                val id = ticket()
+                repository().write(id, initial)
+                val parsed = old.copy(
+                    bookUrl = if (sourceChanged) "https://fixture.invalid/new-preview" else old.bookUrl,
+                    tocUrl = "https://fixture.invalid/toc", totalChapterNum = 2,
+                )
+                val chapters = (0..1).map { index ->
+                    BookDetailChapter.from(BookChapter(bookUrl = parsed.bookUrl,
+                        url = "https://fixture.invalid/chapter-$index", title = "Chapter $index", index = index))
+                }
+                val result = BookDetailNetworkResult(BookDetailBook.from(parsed), chapters, emptyList())
+                val failing = repository {
+                    if (it.pendingNetwork == null && "preview" in it.completedOperations)
+                        error("final preview receipt failed")
+                }
+                assertTrue(runCatching {
+                    failing.completeNetwork(id, initial, initial.data!!, result, sourceChanged, "preview")
+                }.isFailure)
+                assertNotNull(repository().read(id)!!.pendingNetwork)
+                val restored = repository().recover(id)!!
+                assertFalse(restored.data!!.inBookshelf)
+                assertEquals(chapters, restored.data.chapters)
+                assertEquals(chapters, repository().read(id)!!.data!!.chapters)
+                assertNull(read(parsed.bookUrl))
+                assertTrue(withContext(Dispatchers.IO) {
+                    database.bookChapterDao.getChapterList(parsed.bookUrl).isEmpty()
+                })
+                assertFalse(restored.effects.any { it.kind == BookDetailNativeKind.ReaderSync ||
+                    it.kind == BookDetailNativeKind.ShelfAdded })
+                val edited = repository().mutate(id, restored, BookDetailOperation("preview-setting",
+                    BookDetailMutation(BookDetailMutationKind.CanUpdate, flag = false)))
+                assertEquals(chapters, edited.data!!.chapters)
+                assertEquals(chapters, repository().read(id)!!.data!!.chapters)
+                assertNull(read(parsed.bookUrl))
+            }
+        }
+
+    @Test
     fun largeUrlsCachedHtmlAndNativePayloadRoundTripThroughDiskAndStaleRevisionCannotOverwriteThem() =
         runBlocking {
             val full = book().copy(bookUrl = "https://book/" + "x".repeat(1_000_000))

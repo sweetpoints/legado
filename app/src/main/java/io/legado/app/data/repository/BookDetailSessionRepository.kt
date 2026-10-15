@@ -261,7 +261,15 @@ class FileBookDetailSessionRepository(
                     native.downloadUrls = cached.downloadUrls
                     committed = BookDetailBook.from(native)
                 }
-                val updated = details.describe(committed, result.inBookshelf)
+                val described = details.describe(committed, result.inBookshelf)
+                // Read/TOC preparation persists chapters even for a preview. Other preview
+                // edits must retain the chapters owned by the private session.
+                val preparesNavigation =
+                    active.change.kind == BookDetailMutationKind.PrepareRead ||
+                        active.change.kind == BookDetailMutationKind.PrepareToc
+                val updated =
+                    if (result.inBookshelf || preparesNavigation) described
+                    else described.copy(chapters = data.chapters.toList())
                 val effects = current.effects.toMutableList()
                 if (result.inBookshelf && !data.inBookshelf)
                     effects +=
@@ -362,7 +370,12 @@ class FileBookDetailSessionRepository(
         native.infoHtml = cached.infoHtml
         native.tocHtml = cached.tocHtml
         native.downloadUrls = cached.downloadUrls
-        val updated = details.describe(BookDetailBook.from(native), result.inBookshelf)
+        val described = details.describe(BookDetailBook.from(native), result.inBookshelf)
+        // A preview is intentionally not stored in Room. Its parsed chapters belong to this
+        // durable detail session; reloading Room here would replace them with an empty list.
+        val updated =
+            if (result.inBookshelf) described
+            else described.copy(chapters = pending.result.chapters.toList())
         val effects = current.effects.toMutableList()
         if (result.inBookshelf && !pending.request.inBookshelf)
             effects +=

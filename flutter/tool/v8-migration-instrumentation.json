@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "includeExisting": true,
-  "caseCount": 205,
+  "caseCount": 206,
   "classes": [
     {
       "name": "io.legado.app.V8ApplicationScriptTest",
@@ -347,9 +347,10 @@
     {
       "name": "io.legado.app.model.sourceEngine.LegacyDynamicIdentityV8IntegrationTest",
       "source": "app/src/androidTest/java/io/legado/app/model/sourceEngine/LegacyDynamicIdentityV8IntegrationTest.kt",
-      "sourceSha256": "bb7e2fa7da8aa1d7486df6f4b738cf41de3e98aaa8698c23b3e4c9cf0e59631a",
+      "sourceSha256": "d06bf55e7e9b7313153e39c6e2160d96c7be646ea0a38a5fb17ddc6f18465784",
       "methods": [
-        "categoryClickUsesItsAbsoluteUrlAndKeepsTheOpaqueSourceId"
+        "categoryClickUsesItsAbsoluteUrlAndKeepsTheOpaqueSourceId",
+        "objectDetailInitializationCarriesDynamicHostIntoSeparateTocCall"
       ]
     },
     {
