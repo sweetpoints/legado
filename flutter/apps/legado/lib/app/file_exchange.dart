@@ -2,9 +2,11 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'local_text_decoder.dart';
+
+part 'file_exchange.g.dart';
 
 class FileExchangeException implements Exception {
   const FileExchangeException(this.code);
@@ -31,9 +33,8 @@ DecodedLocalText _decodeTextFile(
   ({Uint8List bytes, LocalTextEncoding? encoding}) job,
 ) => LocalTextDecoder.decode(job.bytes, encoding: job.encoding);
 
-final fileExchangeProvider = Provider<FileExchange>(
-  (ref) => const NativeFileExchange(),
-);
+@Riverpod(keepAlive: true)
+FileExchange fileExchange(Ref ref) => const NativeFileExchange();
 
 class NativeFileExchange implements FileExchange, EncodedTextFileExchange {
   const NativeFileExchange();
