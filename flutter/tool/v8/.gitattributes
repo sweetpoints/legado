@@ -1,0 +1,2 @@
+# Preserve reviewed Windows release/toolchain JSON SHA-256 bytes on checkout.
+windows-*.json text eol=lf
