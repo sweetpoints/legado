@@ -1,0 +1,13 @@
+name: app_storage
+description: Durable cross-platform SQLite library storage for Legado.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dependencies:
+  app_core: ^0.1.0
+  sqlite3: ^3.7.1
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
