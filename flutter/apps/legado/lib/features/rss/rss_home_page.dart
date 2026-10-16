@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:html/parser.dart' as html;
 import 'package:go_router/go_router.dart';
 
@@ -14,38 +15,47 @@ import 'rss_service.dart';
 import 'rss_html_rules.dart';
 export 'rss_models.dart';
 
-final rssStoreProvider = Provider.family<RssStore, LibraryRepository>(
-  (ref, repository) => RssStore(repository),
-);
+part 'rss_home_page.g.dart';
+
+@Riverpod(keepAlive: true)
+RssStore rssStore(Ref ref, LibraryRepository repository) =>
+    RssStore(repository);
+
 typedef RssSourceView = ({
   List<RssSource> sources,
   int restoredCount,
   int conflictCount,
 });
-final rssSourceViewProvider = FutureProvider.autoDispose
-    .family<RssSourceView, LibraryRepository>((ref, repository) {
-      final subscription = repository.changes.listen(
-        (_) => ref.invalidateSelf(),
-      );
-      ref.onDispose(subscription.cancel);
-      return ref.watch(rssStoreProvider(repository)).sourceView();
-    });
-final rssSourcesProvider = FutureProvider.autoDispose
-    .family<List<RssSource>, LibraryRepository>(
-      (ref, repository) async =>
-          (await ref.watch(rssSourceViewProvider(repository).future)).sources,
-    );
-final rssArticlesProvider = FutureProvider.autoDispose
-    .family<List<RssArticle>, (LibraryRepository, String)>((ref, args) {
-      final subscription = args.$1.changes.listen((_) => ref.invalidateSelf());
-      ref.onDispose(subscription.cancel);
-      return ref.watch(rssStoreProvider(args.$1)).articles(args.$2);
-    });
-final rssClientProvider = Provider.autoDispose<RssFeedClient>((ref) {
+
+@riverpod
+Future<RssSourceView> rssSourceView(Ref ref, LibraryRepository repository) {
+  final subscription = repository.changes.listen((_) => ref.invalidateSelf());
+  ref.onDispose(subscription.cancel);
+  return ref.watch(rssStoreProvider(repository)).sourceView();
+}
+
+@riverpod
+Future<List<RssSource>> rssSources(
+  Ref ref,
+  LibraryRepository repository,
+) async => (await ref.watch(rssSourceViewProvider(repository).future)).sources;
+
+@riverpod
+Future<List<RssArticle>> rssArticles(
+  Ref ref,
+  (LibraryRepository, String) args,
+) {
+  final subscription = args.$1.changes.listen((_) => ref.invalidateSelf());
+  ref.onDispose(subscription.cancel);
+  return ref.watch(rssStoreProvider(args.$1)).articles(args.$2);
+}
+
+@riverpod
+RssFeedClient rssClient(Ref ref) {
   final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
   ref.onDispose(() => dio.close(force: true));
   return RssFeedClient(dio);
-});
+}
 
 class RssHomePage extends ConsumerWidget {
   const RssHomePage({super.key, required this.repository});
