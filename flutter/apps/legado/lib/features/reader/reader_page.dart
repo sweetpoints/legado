@@ -17,10 +17,16 @@ class ReaderPage extends ConsumerStatefulWidget {
     required this.repository,
     required this.bookUrl,
     this.loadChapter,
+    this.previewBook,
+    this.previewChapters,
+    this.initialChapterIndex,
   });
   final LibraryRepository repository;
   final String bookUrl;
   final Future<void> Function(ReaderChapter chapter)? loadChapter;
+  final LegacyBookRecord? previewBook;
+  final List<ReaderChapter>? previewChapters;
+  final int? initialChapterIndex;
 
   @override
   ConsumerState<ReaderPage> createState() => _ReaderPageState();
@@ -29,18 +35,19 @@ class ReaderPage extends ConsumerStatefulWidget {
 class _ReaderPageState extends ConsumerState<ReaderPage>
     with WidgetsBindingObserver {
   final _scroll = ScrollController();
-  ReaderStateController get _controller => ref.read(
-    readerStateProvider((
-      repository: widget.repository,
-      bookUrl: widget.bookUrl,
-    )).notifier,
+  late ReaderIdentity _identity;
+  ReaderIdentity _widgetIdentity() => ReaderIdentity(
+    repository: widget.repository,
+    bookUrl: widget.bookUrl,
+    previewBook: widget.previewBook,
+    previewChapters: widget.previewChapters == null
+        ? null
+        : List.unmodifiable(widget.previewChapters!),
+    initialChapterIndex: widget.initialChapterIndex,
   );
-  ReaderViewState get _state => ref.read(
-    readerStateProvider((
-      repository: widget.repository,
-      bookUrl: widget.bookUrl,
-    )),
-  );
+  ReaderStateController get _controller =>
+      ref.read(readerStateProvider(_identity).notifier);
+  ReaderViewState get _state => ref.read(readerStateProvider(_identity));
   LegacyBookRecord? get _book => _state.book;
   set _book(LegacyBookRecord? value) =>
       _controller.replace(_state.copyWith(book: value));
@@ -71,8 +78,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   String get _theme => _state.theme;
   set _theme(String value) =>
       _controller.replace(_state.copyWith(theme: value));
-  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+  AppLocalizations get _l10n => AppLocalizations.of(context);
   bool _settingsSaveFailed = false;
+  bool _persistToLibrary = false;
   int _request = 0;
   bool _restoring = false;
   Timer? _saveTimer;
@@ -85,6 +93,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   @override
   void initState() {
     super.initState();
+    _identity = _widgetIdentity();
     WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
     unawaited(Future.microtask(_initialize));
@@ -98,8 +107,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   @override
   void didUpdateWidget(ReaderPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.bookUrl != widget.bookUrl ||
-        oldWidget.repository != widget.repository) {
+    final identity = _widgetIdentity();
+    if (identity != _identity) {
+      _identity = identity;
       _saveTimer?.cancel();
       _request++;
       unawaited(Future.microtask(_initialize));
@@ -117,10 +127,15 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       _error = null;
     });
     try {
-      final book = await widget.repository.book(widget.bookUrl);
+      final storedBook = await widget.repository.book(widget.bookUrl);
+      final book = storedBook ?? _identity.previewBook;
       if (!mounted || request != _request) return;
+      _persistToLibrary = storedBook != null;
       if (book == null) throw StateError(_l10n.readerBookMissing);
-      final chapters = await widget.repository.chapters(widget.bookUrl);
+      final storedChapters = await widget.repository.chapters(widget.bookUrl);
+      final chapters = storedChapters.isNotEmpty
+          ? storedChapters
+          : (_identity.previewChapters ?? <ReaderChapter>[]);
       if (!mounted || request != _request) return;
       if (chapters.isEmpty) throw StateError(_l10n.readerTocMissing);
       final size = double.tryParse(
@@ -131,10 +146,20 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       _book = book;
       _chapters = chapters.where((chapter) => !chapter.isVolume).toList();
       if (_chapters.isEmpty) throw StateError(_l10n.readerTocEmpty);
-      final saved = _chapters.indexWhere((c) => c.index == book.chapterIndex);
+      final saved = _chapters.indexWhere(
+        (c) => c.index == (_identity.initialChapterIndex ?? book.chapterIndex),
+      );
       _fontSize = (size ?? 20).clamp(14, 36);
       _theme = ['light', 'dark'].contains(theme) ? theme! : 'system';
-      await _openChapter(saved < 0 ? 0 : saved, offset: book.characterOffset);
+      await _openChapter(
+        saved < 0 ? 0 : saved,
+        offset:
+            saved < 0 ||
+                (_identity.initialChapterIndex != null &&
+                    _identity.initialChapterIndex != book.chapterIndex)
+            ? 0
+            : book.characterOffset,
+      );
     } catch (error) {
       if (!mounted || request != _request) return;
       _change(() {
@@ -187,7 +212,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Future<void> _navigate(int index) async {
     if (_loading || index < 0 || index >= _chapters.length) return;
     await _persist();
-    if (!mounted) return;
+    if (!mounted || (_saveError != null && !_settingsSaveFailed)) return;
     await _openChapter(index);
     if (mounted && _error == null) await _persist();
   }
@@ -208,7 +233,11 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   }
 
   Future<void> _persist() {
-    if (!mounted || _loading || _error != null || _text == null) {
+    if (!mounted ||
+        !_persistToLibrary ||
+        _loading ||
+        _error != null ||
+        _text == null) {
       return Future.value();
     }
     _saveTimer?.cancel();
@@ -416,10 +445,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // Scrolling updates the UTF-16 position without relaying out the whole
     // chapter on each pointer frame. Visual state changes still rebuild here.
     ref.watch(
-      readerStateProvider((
-        repository: widget.repository,
-        bookUrl: widget.bookUrl,
-      )).select((state) => state.copyWith(characterOffset: 0)),
+      readerStateProvider(_identity)
+          .select((state) => state.copyWith(characterOffset: 0)),
     );
     final inherited = Theme.of(context);
     final brightness = switch (_theme) {

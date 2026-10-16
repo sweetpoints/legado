@@ -20,17 +20,28 @@ abstract class ReaderViewState with _$ReaderViewState {
   }) = _ReaderViewState;
 }
 
+/// Immutable provider identity prevents preview content from sharing a session
+/// with another book or a different chapter-selection route.
+@freezed
+abstract class ReaderIdentity with _$ReaderIdentity {
+  const factory ReaderIdentity({
+    required LibraryRepository repository,
+    required String bookUrl,
+    LegacyBookRecord? previewBook,
+    List<ReaderChapter>? previewChapters,
+    int? initialChapterIndex,
+  }) = _ReaderIdentity;
+}
+
 /// Each reader route owns an immutable session. Layout objects stay in the UI.
 final readerStateProvider = NotifierProvider.autoDispose
-    .family<
-      ReaderStateController,
-      ReaderViewState,
-      ({LibraryRepository repository, String bookUrl})
-    >(ReaderStateController.new);
+    .family<ReaderStateController, ReaderViewState, ReaderIdentity>(
+      ReaderStateController.new,
+    );
 
 class ReaderStateController extends Notifier<ReaderViewState> {
   ReaderStateController(this.identity);
-  final ({LibraryRepository repository, String bookUrl}) identity;
+  final ReaderIdentity identity;
   @override
   ReaderViewState build() => const ReaderViewState();
   void replace(ReaderViewState value) => state = value;

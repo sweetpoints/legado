@@ -216,6 +216,88 @@ void main() {
     expect(library.records[book.url]!.characterOffset, saved);
   });
 
+  testWidgets('preview selected chapter never adds a book or writes progress', (
+    tester,
+  ) async {
+    final library = MemoryLibrary();
+    final book = await LocalTextImporter.importText(
+      library,
+      name: '未收藏预览',
+      text: '第一章 开始\n内容一\n第二章 继续\n内容二',
+    );
+    final chapters = await library.chapters(book.url);
+    library.records.clear();
+    library.toc.clear();
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ReaderPage(
+            repository: library,
+            bookUrl: book.url,
+            previewBook: book,
+            previewChapters: chapters,
+            initialChapterIndex: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('内容二'), findsOneWidget);
+    await tester.tap(find.byTooltip('上一章'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('内容一'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    expect(library.records, isEmpty);
+    expect(library.progress, isEmpty);
+  });
+
+  testWidgets(
+    'explicit chapter resets offset and shelf metadata wins over preview',
+    (tester) async {
+      final library = MemoryLibrary();
+      final book = await LocalTextImporter.importText(
+        library,
+        name: '收藏书籍',
+        text: '第一章 开始\n内容一\n第二章 继续\n内容二',
+      );
+      await library.updateProgress(book.url, 0, 8);
+      library.progress.clear();
+      final preview = LegacyBookRecord({...book.toJson(), 'name': '预览元数据'});
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ReaderPage(
+              repository: library,
+              bookUrl: book.url,
+              previewBook: preview,
+              initialChapterIndex: 1,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('收藏书籍'), findsOneWidget);
+      expect(find.textContaining('内容二'), findsOneWidget);
+      await tester.tap(find.byTooltip('上一章'));
+      await tester.pumpAndSettle();
+      expect(library.progress.first, (chapter: 1, offset: 0));
+      expect(library.records[book.url]!.name, '收藏书籍');
+    },
+  );
+
   testWidgets(
     'uncached chapter retries and late result never saves after disposal',
     (tester) async {

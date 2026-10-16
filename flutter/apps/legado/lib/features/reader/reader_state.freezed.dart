@@ -309,4 +309,288 @@ as String,
 
 }
 
+/// @nodoc
+mixin _$ReaderIdentity {
+
+ LibraryRepository get repository; String get bookUrl; LegacyBookRecord? get previewBook; List<ReaderChapter>? get previewChapters; int? get initialChapterIndex;
+/// Create a copy of ReaderIdentity
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ReaderIdentityCopyWith<ReaderIdentity> get copyWith => _$ReaderIdentityCopyWithImpl<ReaderIdentity>(this as ReaderIdentity, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  final _this = this as ReaderIdentity;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReaderIdentity&&(identical(other.repository, _this.repository) || other.repository == _this.repository)&&(identical(other.bookUrl, _this.bookUrl) || other.bookUrl == _this.bookUrl)&&(identical(other.previewBook, _this.previewBook) || other.previewBook == _this.previewBook)&&const DeepCollectionEquality().equals(other.previewChapters, _this.previewChapters)&&(identical(other.initialChapterIndex, _this.initialChapterIndex) || other.initialChapterIndex == _this.initialChapterIndex));
+}
+
+
+@override
+int get hashCode {
+  final _this = this as ReaderIdentity;
+  return Object.hash(runtimeType,_this.repository,_this.bookUrl,_this.previewBook,const DeepCollectionEquality().hash(_this.previewChapters),_this.initialChapterIndex);
+}
+
+@override
+String toString() {
+  final _this = this as ReaderIdentity;
+  return 'ReaderIdentity(repository: ${_this.repository}, bookUrl: ${_this.bookUrl}, previewBook: ${_this.previewBook}, previewChapters: ${_this.previewChapters}, initialChapterIndex: ${_this.initialChapterIndex})';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ReaderIdentityCopyWith<$Res>  {
+  factory $ReaderIdentityCopyWith(ReaderIdentity value, $Res Function(ReaderIdentity) _then) = _$ReaderIdentityCopyWithImpl;
+@useResult
+$Res call({
+ LibraryRepository repository, String bookUrl, LegacyBookRecord? previewBook, List<ReaderChapter>? previewChapters, int? initialChapterIndex
+});
+
+
+
+
+}
+/// @nodoc
+class _$ReaderIdentityCopyWithImpl<$Res>
+    implements $ReaderIdentityCopyWith<$Res> {
+  _$ReaderIdentityCopyWithImpl(this._self, this._then);
+
+  final ReaderIdentity _self;
+  final $Res Function(ReaderIdentity) _then;
+
+/// Create a copy of ReaderIdentity
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? repository = null,Object? bookUrl = null,Object? previewBook = freezed,Object? previewChapters = freezed,Object? initialChapterIndex = freezed,}) {
+  return _then(ReaderIdentity(
+repository: null == repository ? _self.repository : repository // ignore: cast_nullable_to_non_nullable
+as LibraryRepository,bookUrl: null == bookUrl ? _self.bookUrl : bookUrl // ignore: cast_nullable_to_non_nullable
+as String,previewBook: freezed == previewBook ? _self.previewBook : previewBook // ignore: cast_nullable_to_non_nullable
+as LegacyBookRecord?,previewChapters: freezed == previewChapters ? _self.previewChapters : previewChapters // ignore: cast_nullable_to_non_nullable
+as List<ReaderChapter>?,initialChapterIndex: freezed == initialChapterIndex ? _self.initialChapterIndex : initialChapterIndex // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ReaderIdentity].
+extension ReaderIdentityPatterns on ReaderIdentity {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ReaderIdentity value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _ReaderIdentity() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ReaderIdentity value)  $default,){
+final _that = this;
+switch (_that) {
+case _ReaderIdentity():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ReaderIdentity value)?  $default,){
+final _that = this;
+switch (_that) {
+case _ReaderIdentity() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( LibraryRepository repository,  String bookUrl,  LegacyBookRecord? previewBook,  List<ReaderChapter>? previewChapters,  int? initialChapterIndex)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _ReaderIdentity() when $default != null:
+return $default(_that.repository,_that.bookUrl,_that.previewBook,_that.previewChapters,_that.initialChapterIndex);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( LibraryRepository repository,  String bookUrl,  LegacyBookRecord? previewBook,  List<ReaderChapter>? previewChapters,  int? initialChapterIndex)  $default,) {final _that = this;
+switch (_that) {
+case _ReaderIdentity():
+return $default(_that.repository,_that.bookUrl,_that.previewBook,_that.previewChapters,_that.initialChapterIndex);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( LibraryRepository repository,  String bookUrl,  LegacyBookRecord? previewBook,  List<ReaderChapter>? previewChapters,  int? initialChapterIndex)?  $default,) {final _that = this;
+switch (_that) {
+case _ReaderIdentity() when $default != null:
+return $default(_that.repository,_that.bookUrl,_that.previewBook,_that.previewChapters,_that.initialChapterIndex);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class _ReaderIdentity implements ReaderIdentity {
+  const _ReaderIdentity({required this.repository, required this.bookUrl, this.previewBook,  List<ReaderChapter>? previewChapters, this.initialChapterIndex}): _previewChapters = previewChapters;
+
+
+@override final  LibraryRepository repository;
+@override final  String bookUrl;
+@override final  LegacyBookRecord? previewBook;
+ final  List<ReaderChapter>? _previewChapters;
+@override List<ReaderChapter>? get previewChapters {
+  final value = _previewChapters;
+  if (value == null) return null;
+  if (_previewChapters is EqualUnmodifiableListView) return _previewChapters;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(value);
+}
+
+@override final  int? initialChapterIndex;
+
+/// Create a copy of ReaderIdentity
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$ReaderIdentityCopyWith<_ReaderIdentity> get copyWith => __$ReaderIdentityCopyWithImpl<_ReaderIdentity>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ReaderIdentity&&(identical(other.repository, repository) || other.repository == repository)&&(identical(other.bookUrl, bookUrl) || other.bookUrl == bookUrl)&&(identical(other.previewBook, previewBook) || other.previewBook == previewBook)&&const DeepCollectionEquality().equals(other.previewChapters, _previewChapters)&&(identical(other.initialChapterIndex, initialChapterIndex) || other.initialChapterIndex == initialChapterIndex));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,repository,bookUrl,previewBook,const DeepCollectionEquality().hash(_previewChapters),initialChapterIndex);
+}
+
+@override
+String toString() {
+    return 'ReaderIdentity(repository: $repository, bookUrl: $bookUrl, previewBook: $previewBook, previewChapters: $previewChapters, initialChapterIndex: $initialChapterIndex)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$ReaderIdentityCopyWith<$Res> implements $ReaderIdentityCopyWith<$Res> {
+  factory _$ReaderIdentityCopyWith(_ReaderIdentity value, $Res Function(_ReaderIdentity) _then) = __$ReaderIdentityCopyWithImpl;
+@override @useResult
+$Res call({
+ LibraryRepository repository, String bookUrl, LegacyBookRecord? previewBook, List<ReaderChapter>? previewChapters, int? initialChapterIndex
+});
+
+
+
+
+}
+/// @nodoc
+class __$ReaderIdentityCopyWithImpl<$Res>
+    implements _$ReaderIdentityCopyWith<$Res> {
+  __$ReaderIdentityCopyWithImpl(this._self, this._then);
+
+  final _ReaderIdentity _self;
+  final $Res Function(_ReaderIdentity) _then;
+
+/// Create a copy of ReaderIdentity
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? repository = null,Object? bookUrl = null,Object? previewBook = freezed,Object? previewChapters = freezed,Object? initialChapterIndex = freezed,}) {
+  return _then(_ReaderIdentity(
+repository: null == repository ? _self.repository : repository // ignore: cast_nullable_to_non_nullable
+as LibraryRepository,bookUrl: null == bookUrl ? _self.bookUrl : bookUrl // ignore: cast_nullable_to_non_nullable
+as String,previewBook: freezed == previewBook ? _self.previewBook : previewBook // ignore: cast_nullable_to_non_nullable
+as LegacyBookRecord?,previewChapters: freezed == previewChapters ? _self._previewChapters : previewChapters // ignore: cast_nullable_to_non_nullable
+as List<ReaderChapter>?,initialChapterIndex: freezed == initialChapterIndex ? _self.initialChapterIndex : initialChapterIndex // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+
+}
+
 // dart format on
