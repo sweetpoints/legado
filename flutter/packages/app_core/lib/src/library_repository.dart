@@ -51,3 +51,18 @@ abstract interface class LibraryRepository {
   Future<void> restoreBackup(LegacyBackupDocument document);
   Future<void> close();
 }
+
+/// Text and opaque archive entries are read in one consistent snapshot.
+class LibraryBackupSnapshot {
+  LibraryBackupSnapshot({required Map<String, String> files, required Map<String, List<int>> entries})
+    : files = Map.unmodifiable(files),
+      entries = Map.unmodifiable(entries.map((key, value) => MapEntry(key, List<int>.unmodifiable(value))));
+  final Map<String, String> files;
+  final Map<String, List<int>> entries;
+}
+
+/// An optional capability; a text-only repository must not discard media.
+abstract interface class ArchiveLibraryRepository {
+  Future<LibraryBackupSnapshot> backupSnapshot();
+  Future<void> restoreArchive(LegacyBackupDocument document, Map<String, List<int>> retainedEntries);
+}
