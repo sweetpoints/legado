@@ -182,6 +182,13 @@ class SourceDefinition {
         throw const EngineException('invalid_source', 'Invalid request header');
       }
     }
+    if (metadata.containsKey('cookieJarEnabled') &&
+        metadata['cookieJarEnabled'] is! bool) {
+      throw const EngineException(
+        'invalid_source',
+        'cookieJarEnabled must be a boolean',
+      );
+    }
     for (final option in ['maxConcurrentRequests', 'requestIntervalMs']) {
       final value = metadata[option];
       if (value != null &&
@@ -244,6 +251,17 @@ class SourceDefinition {
   final Map<String, Object?> metadata;
   final String? script;
   final Map<String, String> headers;
+
+  /// Missing legacy flags retain BookSource's default true; explicit false/null
+  /// disables the automatic jar, including snapshots imported by older clients.
+  bool get cookieJarEnabled {
+    final original = metadata['legacyOriginal'];
+    if (original is Map && original.containsKey('enabledCookieJar')) {
+      return original['enabledCookieJar'] == true;
+    }
+    return metadata['cookieJarEnabled'] as bool? ?? true;
+  }
+
   factory SourceDefinition.fromJson(Map<String, Object?> json) =>
       SourceDefinition(
         id: json['id'] as String? ?? '',

@@ -55,7 +55,7 @@ void main() {
       expect(result.source.metadata['compatibility'], 'unverified');
     }
   });
-  test('field aliases and disabled cookie policy are explicit', () {
+  test('field aliases and disabled cookie policy are implemented', () {
     final result = LegacySourceImporter().import({
       'bookSourceUrl': 'https://books.test',
       'searchUrl': '/search',
@@ -68,6 +68,49 @@ void main() {
     );
     expect(
       result.issues.map((e) => e.code),
+      isNot(contains('legacy.cookie_policy_requires_review')),
+    );
+  });
+  test('cookie jar disabled metadata is persisted', () {
+    final result = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'enabledCookieJar': false,
+    });
+    expect(result.source.cookieJarEnabled, false);
+    expect(
+      result.source.toJson()['metadata'],
+      containsPair('cookieJarEnabled', false),
+    );
+  });
+  test('cookie policy preserves missing default and explicit null while original remains intact', () {
+    for (final original in [
+      {'bookSourceUrl': 'https://books.test'},
+      {'bookSourceUrl': 'https://books.test', 'enabledCookieJar': true},
+      {'bookSourceUrl': 'https://books.test', 'enabledCookieJar': null},
+      {'bookSourceUrl': 'https://books.test', 'enabledCookieJar': false},
+    ]) {
+      final imported = LegacySourceImporter().import(original);
+      expect(imported.original, original);
+      expect(
+        imported.source.cookieJarEnabled,
+        !original.containsKey('enabledCookieJar') ||
+            original['enabledCookieJar'] == true,
+      );
+      expect(
+        imported.issues.where(
+          (issue) => issue.code == 'legacy.cookie_policy_requires_review',
+        ),
+        isEmpty,
+      );
+    }
+  });
+  test('non-boolean cookie flags retain review instead of claiming coercion parity', () {
+    final imported = LegacySourceImporter().import({
+      'bookSourceUrl': 'https://books.test',
+      'enabledCookieJar': 'true',
+    });
+    expect(
+      imported.issues.map((issue) => issue.code),
       contains('legacy.cookie_policy_requires_review'),
     );
   });

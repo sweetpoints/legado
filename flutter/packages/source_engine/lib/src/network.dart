@@ -43,6 +43,7 @@ class NetworkResponse {
 class NetworkClient {
   NetworkClient({
     this.charsetDecoder,
+    this.cookieJarEnabled = true,
     this.maxConcurrentRequests = 4,
     this.minRequestInterval = Duration.zero,
   }) {
@@ -50,30 +51,36 @@ class NetworkClient {
       throw ArgumentError('Invalid network scheduling limits');
     }
   }
+
+  /// Controls only the automatic jar. Explicit Cookie request headers still work.
+  final bool cookieJarEnabled;
   final int maxConcurrentRequests;
   final Duration minRequestInterval;
   int _active = 0;
   final Queue<Completer<void>> _waiters = Queue();
   DateTime _nextRequest = DateTime.fromMillisecondsSinceEpoch(0);
 
-  List<Map<String, Object?>> exportCookies() => _cookies
-      .where((c) => !c.expired)
-      .map(
-        (c) => {
-          'name': c.cookie.name,
-          'value': c.cookie.value,
-          'domain': c.domain,
-          'path': c.path,
-          'hostOnly': c.hostOnly,
-          'secure': c.cookie.secure,
-          'httpOnly': c.cookie.httpOnly,
-          'maxAge': c.cookie.maxAge,
-          'expires': c.cookie.expires?.toUtc().toIso8601String(),
-          'created': c.created.toUtc().toIso8601String(),
-        },
-      )
-      .toList();
+  List<Map<String, Object?>> exportCookies() => !cookieJarEnabled
+      ? []
+      : _cookies
+            .where((c) => !c.expired)
+            .map(
+              (c) => {
+                'name': c.cookie.name,
+                'value': c.cookie.value,
+                'domain': c.domain,
+                'path': c.path,
+                'hostOnly': c.hostOnly,
+                'secure': c.cookie.secure,
+                'httpOnly': c.cookie.httpOnly,
+                'maxAge': c.cookie.maxAge,
+                'expires': c.cookie.expires?.toUtc().toIso8601String(),
+                'created': c.created.toUtc().toIso8601String(),
+              },
+            )
+            .toList();
   void restoreCookies(List<Map<String, Object?>> records) {
+    if (!cookieJarEnabled) return;
     final restored = <_StoredCookie>[];
     for (final record in records) {
       final domain = record['domain'] as String;
@@ -104,6 +111,7 @@ class NetworkClient {
   }
 
   String cookieHeader(Uri uri) {
+    if (!cookieJarEnabled) return '';
     _cookies.removeWhere((c) => c.expired);
     return _cookies
         .where((c) => c.matches(uri))
@@ -114,6 +122,7 @@ class NetworkClient {
   /// Import cookies with their supplied domain/path/security attributes.
   /// Invalid unrelated domains are ignored. This is also used by adapters.
   void importCookies(Uri uri, Iterable<Cookie> cookies) {
+    if (!cookieJarEnabled) return;
     for (final cookie in cookies) {
       final domain =
           cookie.domain?.replaceFirst(RegExp(r'^\.'), '').toLowerCase() ??
@@ -271,10 +280,12 @@ class NetworkClient {
         }
         req.followRedirects = false;
         forwarded.forEach(req.headers.set);
-        _cookies.removeWhere((c) => c.expired);
-        req.cookies.addAll(
-          _cookies.where((c) => c.matches(current)).map((c) => c.cookie),
-        );
+        if (cookieJarEnabled) {
+          _cookies.removeWhere((c) => c.expired);
+          req.cookies.addAll(
+            _cookies.where((c) => c.matches(current)).map((c) => c.cookie),
+          );
+        }
         if (payload != null) {
           final name = charset?.toLowerCase() ?? 'utf-8';
           final encoder = ['gbk', 'gb2312', 'cp936'].contains(name)

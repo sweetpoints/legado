@@ -185,7 +185,10 @@ void main() {
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final base = 'http://${server.address.address}:${server.port}';
+      final receivedCookies = <String?>[];
       server.listen((request) async {
+        receivedCookies.add(request.headers.value('cookie'));
+        request.response.cookies.add(Cookie('automatic', 'must-not-save'));
         request.response.headers.contentType = ContentType.json;
         request.response.write('{"value":"from HTTP"}');
         await request.response.close();
@@ -197,7 +200,7 @@ void main() {
           jsonEncode({
             'bookSourceUrl': base,
             'bookSourceName': 'Native V8 fixture',
-            'enabledCookieJar': true,
+            'enabledCookieJar': false,
             'mainJs': r"""
           function search(key, page) {
             const counter = String(Number(java.get('counter') || '0') + 1);
@@ -216,6 +219,9 @@ void main() {
         final restored = await service.search(base, 'Again');
         expect(restored.single.name, 'Again:from HTTP');
         expect(restored.single.author, '2');
+        expect(receivedCookies, [null, null]);
+        final snapshot = jsonDecode(repo.settings.values.single) as Map;
+        expect((snapshot['engine'] as Map)['cookies'], isEmpty);
       } finally {
         await service.close();
         await repo.close();

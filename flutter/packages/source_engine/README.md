@@ -16,6 +16,19 @@ HTTP sessions isolate source cookies, follow redirects, bound concurrency and
 support cancellation and request spacing. UTF-8, Latin-1, ASCII, GBK/GB2312/CP936
 are available; other charsets need `NetworkClient.charsetDecoder`.
 
+The automatic cookie jar defaults to enabled. Set `metadata.cookieJarEnabled`
+to `false` to disable automatic cookie sending, response capture, browser-cookie
+imports and session-cookie restore/export. A legacy original snapshot's explicit
+`enabledCookieJar` flag remains authoritative. Explicit `Cookie` request headers
+are retained for same-origin requests; cross-origin redirects keep stripping
+sensitive headers. Response cookie metadata remains readable without saving it.
+
+Cookie policy is immutable for a source identity inside one engine. Recreate the
+engine after changing the policy. A disabled source receives its own jar-free
+network client even when an enabled shared client was injected; its charset
+adapter and scheduling limits are retained, and its stored cookies are not
+installed into that shared client. Source variables still restore normally.
+
 See `../../docs/reference/v1/` for the normative interface reference and
 `../../docs/reference/legacy/` for compatibility boundaries.
 
