@@ -380,4 +380,173 @@ CREATE TABLE backup_files (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
       }
     },
   );
+
+  test(
+    'archive BLOB entries survive reopen and snapshots reflect current edits',
+    () async {
+      final bytes = [0, 255, 128, 17];
+      final restoring = repository.restoreArchive(
+        LegacyBackupDocument.parse({
+          'bookshelf.json': jsonEncode([record('a').toJson()]),
+        }),
+        {
+          'covers/image.png': bytes,
+          'servers': [1, 0, 2],
+        },
+      );
+      bytes[0] = 42;
+      await restoring;
+      await repository.updateProgress('a', 5, 99);
+      await repository.close();
+      repository = await SqliteLibraryRepository.open(path);
+      final snapshot = await repository.backupSnapshot();
+      expect(snapshot.entries, {
+        'covers/image.png': [0, 255, 128, 17],
+        'servers': [1, 0, 2],
+      });
+      expect(
+        (jsonDecode(
+          snapshot.files['bookshelf.json']!,
+        ) as List).single['durChapterPos'],
+        99,
+      );
+      expect(() => snapshot.entries['servers']![0] = 9, throwsUnsupportedError);
+      final raw = sqlite3.open(path, mode: OpenMode.readOnly);
+      try {
+        expect(raw.userVersion, 2);
+        expect(
+          raw
+              .select(
+                "SELECT typeof(value) AS type FROM archive_entries LIMIT 1",
+              )
+              .single['type'],
+          'blob',
+        );
+      } finally {
+        raw.close();
+      }
+    },
+  );
+
+  test('archive restore rolls back text and BLOB replacement on late invalid bytes', () async {
+    await repository.restoreArchive(
+      LegacyBackupDocument.parse({
+        'bookshelf.json': jsonEncode([record('old').toJson()]),
+      }),
+      {
+        'old/media': [10, 20],
+      },
+    );
+    final before = await repository.backupSnapshot();
+    var changes = 0;
+    final subscription = repository.changes.listen((_) => changes++);
+    await expectLater(
+      repository.restoreArchive(
+        LegacyBackupDocument.parse({
+          'bookshelf.json': jsonEncode([record('new').toJson()]),
+          'new.txt': 'rollback',
+        }),
+        {
+          'new/media': [7],
+          'bad/media': [256],
+        },
+      ),
+      throwsStateError,
+    );
+    final after = await repository.backupSnapshot();
+    expect(after.files, before.files);
+    expect(after.entries, before.entries);
+    await Future<void>.delayed(Duration.zero);
+    expect(changes, 0);
+    await subscription.cancel();
+  });
+
+  test(
+    'text-only restore preserves binary while archive restore replaces binary',
+    () async {
+      await repository.restoreArchive(LegacyBackupDocument.parse({}), {
+        'media': [1, 2],
+      });
+      await repository.restoreBackup(
+        LegacyBackupDocument.parse({'future.txt': 'preserved'}),
+      );
+      expect((await repository.backupSnapshot()).entries, {
+        'media': [1, 2],
+      });
+      await repository.restoreArchive(LegacyBackupDocument.parse({}), {});
+      final result = await repository.backupSnapshot();
+      expect(result.entries, isEmpty);
+      expect(result.files['future.txt'], 'preserved');
+    },
+  );
+
+  test('archive rejects unsafe paths and text collisions without changing stored bytes', () async {
+    await repository.restoreArchive(LegacyBackupDocument.parse({}), {
+      'safe': [1],
+    });
+    for (final name in [
+      '../bad',
+      '/bad',
+      'dir\\bad',
+      'scheme:bad',
+      'a//b',
+      'bookshelf.json',
+    ]) {
+      await expectLater(
+        repository.restoreArchive(LegacyBackupDocument.parse({}), {
+          name: [2],
+        }),
+        throwsStateError,
+      );
+      expect((await repository.backupSnapshot()).entries, {
+        'safe': [1],
+      });
+    }
+    await expectLater(
+      repository.restoreArchive(LegacyBackupDocument.parse({'same': 'text'}), {
+        'same': [1],
+      }),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.restoreBackup(LegacyBackupDocument.parse({'safe': 'text'})),
+      throwsStateError,
+    );
+    expect((await repository.backupSnapshot()).entries, {
+      'safe': [1],
+    });
+  });
+
+  test(
+    'failed schema-1 to schema-2 upgrade preserves version and original tables',
+    () async {
+      final oldPath = '${directory.path}/migration-conflict.sqlite';
+      final raw = sqlite3.open(oldPath);
+      raw.execute('CREATE TABLE sentinel (value TEXT)');
+      raw.execute('CREATE INDEX archive_entries ON sentinel(value)');
+      raw.execute("INSERT INTO sentinel VALUES ('keep')");
+      raw.userVersion = 1;
+      raw.close();
+      await expectLater(
+        SqliteLibraryRepository.open(oldPath),
+        throwsStateError,
+      );
+      final check = sqlite3.open(oldPath);
+      try {
+        expect(check.userVersion, 1);
+        expect(
+          check.select('SELECT value FROM sentinel').single['value'],
+          'keep',
+        );
+        expect(
+          check.select(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'archive_entries'",
+          ),
+          isEmpty,
+        );
+      } finally {
+        check.close();
+      }
+    },
+  );
 }

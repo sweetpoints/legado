@@ -11,11 +11,12 @@ import 'library_database.dart';
 
 /// Drift-backed library with SQLite work in a Drift-managed worker isolate.
 /// The historical class name is retained as the public storage boundary.
-class SqliteLibraryRepository implements LibraryRepository {
+class SqliteLibraryRepository
+    implements LibraryRepository, ArchiveLibraryRepository {
   SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
 
   final LibraryDatabase _db;
   final _changes = StreamController<void>.broadcast();
@@ -277,159 +278,224 @@ class SqliteLibraryRepository implements LibraryRepository {
   }, change: true);
 
   @override
-  Future<Map<String, String>> backupFiles() => _run(
-    () => _db.transaction(() async {
-      final rows = await (_db.select(
-        _db.storedBackupFiles,
-      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
-      final files = {for (final row in rows) row.id: row.value};
-      final extension = files.containsKey(backupEntry)
-          ? _decode(files[backupEntry]!)
-          : <String, Object?>{};
-      final chapters =
-          await (_db.select(_db.storedChapters)..orderBy([
-                (t) => OrderingTerm.asc(t.bookId),
-                (t) => OrderingTerm.asc(t.position),
-              ]))
-              .get();
-      final content =
-          await (_db.select(_db.storedContent)..orderBy([
-                (t) => OrderingTerm.asc(t.bookId),
-                (t) => OrderingTerm.asc(t.chapterId),
-              ]))
-              .get();
-      final settings = await (_db.select(
-        _db.storedSettings,
-      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
-      final books = await (_db.select(
-        _db.storedBooks,
-      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
-      extension.addAll({
-        'version': 1,
-        'chapters': [
-          for (final row in chapters)
-            {'bookUrl': row.bookId, 'chapter': _decode(row.data)},
-        ],
-        'content': [
-          for (final row in content)
-            {
-              'bookUrl': row.bookId,
-              'chapterUrl': row.chapterId,
-              'content': row.value,
-            },
-        ],
-        'settings': {for (final row in settings) row.id: row.value},
-      });
-      files['bookshelf.json'] = jsonEncode(
-        books.map((e) => _decode(e.data)).toList(),
-      );
-      files['bookSource.json'] = jsonEncode(await _sources());
-      files[backupEntry] = jsonEncode(extension);
-      return files;
-    }),
-  );
+  Future<Map<String, String>> backupFiles() =>
+      _run(() => _db.transaction(_backupFiles));
+
+  Future<Map<String, String>> _backupFiles() async {
+    final rows = await (_db.select(
+      _db.storedBackupFiles,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    final files = {for (final row in rows) row.id: row.value};
+    final extension = files.containsKey(backupEntry)
+        ? _decode(files[backupEntry]!)
+        : <String, Object?>{};
+    final chapters =
+        await (_db.select(_db.storedChapters)..orderBy([
+              (t) => OrderingTerm.asc(t.bookId),
+              (t) => OrderingTerm.asc(t.position),
+            ]))
+            .get();
+    final content =
+        await (_db.select(_db.storedContent)..orderBy([
+              (t) => OrderingTerm.asc(t.bookId),
+              (t) => OrderingTerm.asc(t.chapterId),
+            ]))
+            .get();
+    final settings = await (_db.select(
+      _db.storedSettings,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    final books = await (_db.select(
+      _db.storedBooks,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    extension.addAll({
+      'version': 1,
+      'chapters': [
+        for (final row in chapters)
+          {'bookUrl': row.bookId, 'chapter': _decode(row.data)},
+      ],
+      'content': [
+        for (final row in content)
+          {
+            'bookUrl': row.bookId,
+            'chapterUrl': row.chapterId,
+            'content': row.value,
+          },
+      ],
+      'settings': {for (final row in settings) row.id: row.value},
+    });
+    files['bookshelf.json'] = jsonEncode(
+      books.map((e) => _decode(e.data)).toList(),
+    );
+    files['bookSource.json'] = jsonEncode(await _sources());
+    files[backupEntry] = jsonEncode(extension);
+    return files;
+  }
 
   @override
   Future<void> restoreBackup(LegacyBackupDocument document) => _run(
     () => _db.transaction(() async {
-      final files = document.files;
-      if (files.containsKey('bookshelf.json')) {
-        await _db.delete(_db.storedBooks).go();
-        for (final book in document.books) {
-          await _putBook(book);
-        }
+      final binaries = await _db.select(_db.storedArchiveEntries).get();
+      if (binaries.any((e) => document.files.containsKey(e.id))) {
+        throw const FormatException(
+          'Text entry collides with retained archive data',
+        );
       }
-      if (files.containsKey('bookSource.json')) {
-        await _db.delete(_db.storedSources).go();
-        final seen = <String>{};
-        for (final entry in jsonDecode(files['bookSource.json']!) as List) {
-          final source = Map<String, Object?>.from(entry as Map);
-          if (!seen.add(_sourceId(source))) {
-            throw const FormatException('Duplicate source identity');
-          }
-          await _putSource(source);
-        }
-      }
-      if (files.containsKey(backupEntry)) {
-        final extension = _decode(files[backupEntry]!);
-        if (extension['version'] != 1) {
-          throw const FormatException('Unsupported library backup version');
-        }
-        if (extension.containsKey('chapters')) {
-          await _db.delete(_db.storedChapters).go();
-          final grouped = <String, List<Map<String, Object?>>>{};
-          for (final entry in extension['chapters'] as List) {
-            final item = Map<String, Object?>.from(entry as Map);
-            grouped
-                .putIfAbsent(item['bookUrl'] as String, () => [])
-                .add(Map<String, Object?>.from(item['chapter'] as Map));
-          }
-          for (final entry in grouped.entries) {
-            await _putChapters(entry.key, entry.value);
-          }
-        }
-        if (extension.containsKey('content')) {
-          await _db.delete(_db.storedContent).go();
-          await _db.batch((batch) {
-            for (final entry in extension['content'] as List) {
-              final item = Map<String, Object?>.from(entry as Map);
-              final book = item['bookUrl'];
-              final chapter = item['chapterUrl'];
-              final content = item['content'];
-              if (book is! String ||
-                  book.isEmpty ||
-                  chapter is! String ||
-                  chapter.isEmpty ||
-                  content is! String) {
-                throw const FormatException('Invalid content');
-              }
-              batch.insert(
-                _db.storedContent,
-                StoredContentCompanion.insert(
-                  bookId: book,
-                  chapterId: chapter,
-                  value: content,
-                ),
-              );
-            }
-          });
-        }
-        if (extension.containsKey('settings')) {
-          await _db.delete(_db.storedSettings).go();
-          final settings = Map<String, Object?>.from(
-            extension['settings'] as Map,
-          );
-          await _db.batch((batch) {
-            for (final entry in settings.entries) {
-              if (entry.value is! String) {
-                throw const FormatException('Invalid setting');
-              }
-              batch.insert(
-                _db.storedSettings,
-                StoredSettingsCompanion.insert(
-                  id: entry.key,
-                  value: entry.value! as String,
-                ),
-              );
-            }
-          });
-        }
-      }
-      await _db.batch((batch) {
-        for (final entry in files.entries) {
-          batch.insert(
-            _db.storedBackupFiles,
-            StoredBackupFilesCompanion.insert(
-              id: entry.key,
-              value: entry.value,
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
-        }
-      });
+      await _restoreDocument(document);
     }),
     change: true,
   );
+
+  Future<void> _restoreDocument(LegacyBackupDocument document) async {
+    final files = document.files;
+    if (files.containsKey('bookshelf.json')) {
+      await _db.delete(_db.storedBooks).go();
+      for (final book in document.books) {
+        await _putBook(book);
+      }
+    }
+    if (files.containsKey('bookSource.json')) {
+      await _db.delete(_db.storedSources).go();
+      final seen = <String>{};
+      for (final entry in jsonDecode(files['bookSource.json']!) as List) {
+        final source = Map<String, Object?>.from(entry as Map);
+        if (!seen.add(_sourceId(source))) {
+          throw const FormatException('Duplicate source identity');
+        }
+        await _putSource(source);
+      }
+    }
+    if (files.containsKey(backupEntry)) {
+      final extension = _decode(files[backupEntry]!);
+      if (extension['version'] != 1) {
+        throw const FormatException('Unsupported library backup version');
+      }
+      if (extension.containsKey('chapters')) {
+        await _db.delete(_db.storedChapters).go();
+        final grouped = <String, List<Map<String, Object?>>>{};
+        for (final entry in extension['chapters'] as List) {
+          final item = Map<String, Object?>.from(entry as Map);
+          grouped
+              .putIfAbsent(item['bookUrl'] as String, () => [])
+              .add(Map<String, Object?>.from(item['chapter'] as Map));
+        }
+        for (final entry in grouped.entries) {
+          await _putChapters(entry.key, entry.value);
+        }
+      }
+      if (extension.containsKey('content')) {
+        await _db.delete(_db.storedContent).go();
+        await _db.batch((batch) {
+          for (final entry in extension['content'] as List) {
+            final item = Map<String, Object?>.from(entry as Map);
+            final book = item['bookUrl'];
+            final chapter = item['chapterUrl'];
+            final content = item['content'];
+            if (book is! String ||
+                book.isEmpty ||
+                chapter is! String ||
+                chapter.isEmpty ||
+                content is! String) {
+              throw const FormatException('Invalid content');
+            }
+            batch.insert(
+              _db.storedContent,
+              StoredContentCompanion.insert(
+                bookId: book,
+                chapterId: chapter,
+                value: content,
+              ),
+            );
+          }
+        });
+      }
+      if (extension.containsKey('settings')) {
+        await _db.delete(_db.storedSettings).go();
+        final settings = Map<String, Object?>.from(
+          extension['settings'] as Map,
+        );
+        await _db.batch((batch) {
+          for (final entry in settings.entries) {
+            if (entry.value is! String) {
+              throw const FormatException('Invalid setting');
+            }
+            batch.insert(
+              _db.storedSettings,
+              StoredSettingsCompanion.insert(
+                id: entry.key,
+                value: entry.value! as String,
+              ),
+            );
+          }
+        });
+      }
+    }
+    await _db.batch((batch) {
+      for (final entry in files.entries) {
+        batch.insert(
+          _db.storedBackupFiles,
+          StoredBackupFilesCompanion.insert(id: entry.key, value: entry.value),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  @override
+  Future<LibraryBackupSnapshot> backupSnapshot() => _run(
+    () => _db.transaction(() async {
+      final files = await _backupFiles();
+      final binary = await (_db.select(
+        _db.storedArchiveEntries,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+      return LibraryBackupSnapshot(
+        files: files,
+        entries: {for (final entry in binary) entry.id: entry.value},
+      );
+    }),
+  );
+
+  @override
+  Future<void> restoreArchive(
+    LegacyBackupDocument document,
+    Map<String, List<int>> retainedEntries,
+  ) {
+    final snapshot = {
+      for (final entry in retainedEntries.entries)
+        entry.key: List<int>.from(entry.value),
+    };
+    return _run(
+      () => _db.transaction(() async {
+        await _db.delete(_db.storedArchiveEntries).go();
+        await _restoreDocument(document);
+        await _db.batch((batch) {
+          for (final entry in snapshot.entries) {
+            final name = entry.key;
+            final parts = name.split('/');
+            if (name.isEmpty ||
+                name.startsWith('/') ||
+                name.contains('\\') ||
+                name.contains(':') ||
+                parts.any((p) => p.isEmpty || p == '.' || p == '..') ||
+                document.files.containsKey(name) ||
+                LegacyBackupDocument.listFiles.contains(name) ||
+                name == backupEntry ||
+                entry.value.any((b) => b < 0 || b > 255)) {
+              throw const FormatException('Invalid retained archive entry');
+            }
+            batch.deleteWhere(_db.storedBackupFiles, (t) => t.id.equals(name));
+            batch.insert(
+              _db.storedArchiveEntries,
+              StoredArchiveEntriesCompanion.insert(
+                id: name,
+                value: Uint8List.fromList(entry.value),
+              ),
+            );
+          }
+        });
+      }),
+      change: true,
+    );
+  }
 
   @override
   Future<void> close() => _closing ??= _close();

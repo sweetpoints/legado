@@ -69,6 +69,16 @@ class StoredBackupFiles extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+@DataClassName('LibraryArchiveEntryRow')
+class StoredArchiveEntries extends Table {
+  @override
+  String get tableName => 'archive_entries';
+  TextColumn get id => text()();
+  BlobColumn get value => blob()();
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 /// Generated schema deliberately matches the original SQLite version-1 layout.
 /// Existing installations can adopt Drift without copying or clearing tables.
 @DriftDatabase(
@@ -79,20 +89,25 @@ class StoredBackupFiles extends Table {
     StoredChapters,
     StoredContent,
     StoredBackupFiles,
+    StoredArchiveEntries,
   ],
 )
 class LibraryDatabase extends _$LibraryDatabase {
   LibraryDatabase(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => transaction(m.createAll),
     onUpgrade: (m, from, to) async {
-      // This also rejects a newer schema instead of silently downgrading it.
-      throw StateError('Unsupported library schema transition');
+      if (from == 1 && to == 2) {
+        await transaction(() => m.createTable(storedArchiveEntries));
+      } else {
+        // Reject a newer schema instead of silently downgrading it.
+        throw StateError('Unsupported library schema transition');
+      }
     },
     beforeOpen: (_) => customStatement('PRAGMA busy_timeout = 5000'),
   );
