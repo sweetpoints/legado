@@ -1,0 +1,66 @@
+{
+  "appTitle": "阅读",
+  "bookshelfTitle": "书架",
+  "exploreTitle": "发现",
+  "rssTitle": "订阅",
+  "settingsTitle": "设置",
+  "searchTitle": "搜索图书",
+  "sourcesTitle": "书源管理",
+  "backupTitle": "备份与恢复",
+  "importText": "导入 TXT 图书",
+  "emptyShelf": "书架还没有图书",
+  "emptyShelfHint": "导入本地图书，或从书源搜索图书。",
+  "retry": "重试",
+  "cancel": "取消",
+  "confirm": "确认",
+  "close": "关闭",
+  "delete": "删除",
+  "save": "保存",
+  "loading": "正在加载…",
+  "operationFailed": "操作失败，请重试。",
+  "startupFailed": "无法打开书库，原始数据未删除。",
+  "bookRemoved": "图书已移除",
+  "undo": "撤销",
+  "deleteBookTitle": "移除这本书？",
+  "deleteBookMessage": "将从当前书库移除这本书及其缓存章节。",
+  "importSucceeded": "图书已导入",
+  "languageTitle": "语言",
+  "systemLanguage": "跟随系统",
+  "chineseLanguage": "简体中文",
+  "englishLanguage": "English",
+  "appearanceTitle": "外观",
+  "systemTheme": "跟随系统",
+  "lightTheme": "浅色",
+  "darkTheme": "深色",
+  "restoreZip": "恢复 ZIP 备份",
+  "exportZip": "导出 ZIP 备份",
+  "restoreTitle": "恢复此备份？",
+  "restoreMessage": "备份中存在的数据集合将替换书库中对应的数据，备份未包含的集合会保留。",
+  "restoreSucceeded": "备份已恢复",
+  "exportSucceeded": "备份已导出",
+  "backupExplanation": "恢复旧版阅读 ZIP 备份，或导出当前书库。",
+  "noChapters": "暂无可用目录",
+  "backToShelf": "返回书架",
+  "invalidRoute": "无法打开此链接。",
+  "bookMissing": "这本书已不在书库中。",
+  "unsupportedText": "此文件不是有效 UTF-8 文本，请转换编码后导入。",
+  "textTooLarge": "此文件超过 20 MiB 导入上限。",
+  "backupTooLarge": "此备份超过 128 MiB 输入上限。",
+  "details": "详情",
+  "bookCount": "共 {count} 本书",
+  "@bookCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chapterProgress": "第 {chapter} 章",
+  "@chapterProgress": {
+    "placeholders": {
+      "chapter": {
+        "type": "int"
+      }
+    }
+  }
+}
