@@ -21,7 +21,7 @@ class SqliteLibraryRepository
   SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
 
   final LibraryDatabase _db;
   final _changes = StreamController<void>.broadcast();
@@ -109,6 +109,7 @@ class SqliteLibraryRepository
   @override
   Future<void> removeBook(String url) => _run(
     () => _db.transaction(() async {
+      await _removeLocalAssetReferences(url);
       await (_db.delete(
         _db.storedChapters,
       )..where((t) => t.bookId.equals(url))).go();
@@ -321,8 +322,15 @@ class SqliteLibraryRepository
     final books = await (_db.select(
       _db.storedBooks,
     )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    final localAssets =
+        await (_db.select(_db.storedLocalBookAssets)..orderBy([
+              (t) => OrderingTerm.asc(t.bookId),
+              (t) => OrderingTerm.asc(t.assetKey),
+            ]))
+            .get();
     extension.addAll({
       'version': 1,
+      'localAssets': [for (final row in localAssets) _decode(row.data)],
       'chapters': [
         for (final row in chapters)
           {'bookUrl': row.bookId, 'chapter': _decode(row.data)},
@@ -351,8 +359,12 @@ class SqliteLibraryRepository
   @override
   Future<void> restoreBackup(LegacyBackupDocument document) => _run(
     () => _db.transaction(() async {
-      final binaries = await _db.select(_db.storedArchiveEntries).get();
-      if (binaries.any((e) => document.files.containsKey(e.id))) {
+      final names = _db.selectOnly(_db.storedArchiveEntries)
+        ..addColumns([_db.storedArchiveEntries.id]);
+      final binaries = await names.get();
+      if (binaries.any(
+        (e) => document.files.containsKey(e.read(_db.storedArchiveEntries.id)),
+      )) {
         throw const FormatException(
           'Text entry collides with retained archive data',
         );
@@ -362,7 +374,10 @@ class SqliteLibraryRepository
     change: true,
   );
 
-  Future<void> _restoreDocument(LegacyBackupDocument document) async {
+  Future<void> _restoreDocument(
+    LegacyBackupDocument document, {
+    bool acceptNewAssetOwnership = false,
+  }) async {
     final files = document.files;
     if (files.containsKey('bookshelf.json')) {
       await _db.delete(_db.storedBooks).go();
@@ -396,6 +411,46 @@ class SqliteLibraryRepository
       final extension = _decode(files[backupEntry]!);
       if (extension['version'] != 1) {
         throw const FormatException('Unsupported library backup version');
+      }
+      if (extension.containsKey('localAssets')) {
+        final proven = acceptNewAssetOwnership
+            ? <String>{}
+            : (await (_db.select(
+                    _db.storedLocalBookAssets,
+                  )..where((t) => t.managed.equals(true))).get())
+                  .map((r) => r.assetKey)
+                  .toSet();
+        await _db.delete(_db.storedLocalBookAssets).go();
+        final flags = <String, bool>{};
+        for (final entry in extension['localAssets'] as List) {
+          final data = Map<String, Object?>.from(entry as Map);
+          final bookUrl = data['bookUrl'];
+          final assetKey = data['assetKey'];
+          final claim = data['managed'] ?? false;
+          if (bookUrl is! String ||
+              assetKey is! String ||
+              claim is! bool ||
+              !_assetBelongsToBook(bookUrl, assetKey)) {
+            throw const FormatException('Invalid local asset ownership');
+          }
+          if (flags.containsKey(assetKey) && flags[assetKey] != claim) {
+            throw const FormatException('Ambiguous local asset ownership');
+          }
+          flags[assetKey] = claim;
+          final managed =
+              claim && (acceptNewAssetOwnership || proven.contains(assetKey));
+          if (claim != managed) data['managed'] = managed;
+          await _db
+              .into(_db.storedLocalBookAssets)
+              .insert(
+                StoredLocalBookAssetsCompanion.insert(
+                  bookId: bookUrl,
+                  assetKey: assetKey,
+                  managed: managed,
+                  data: jsonEncode(data),
+                ),
+              );
+        }
       }
       if (extension.containsKey('chapters')) {
         await _db.delete(_db.storedChapters).go();
@@ -494,7 +549,9 @@ class SqliteLibraryRepository
     return _run(
       () => _db.transaction(() async {
         await _db.delete(_db.storedArchiveEntries).go();
-        await _restoreDocument(document);
+        // New archive bytes must not inherit ownership from the previous archive.
+        await _db.delete(_db.storedLocalBookAssets).go();
+        await _restoreDocument(document, acceptNewAssetOwnership: true);
         await _db.batch((batch) {
           for (final entry in snapshot.entries) {
             final name = entry.key;
@@ -783,12 +840,21 @@ class SqliteLibraryRepository
             throw StateError('Local asset collides with preserved legacy text');
           }
           final existing = await _readLocalAsset(entry.key);
+          var managed = existing == null;
           if (existing != null) {
             if (!_sameBytes(existing, entry.value)) {
               throw StateError(
                 'Local asset collides with preserved archive data',
               );
             }
+            final ownerQuery = _db.selectOnly(_db.storedLocalBookAssets)
+              ..addColumns([_db.storedLocalBookAssets.assetKey])
+              ..where(
+                _db.storedLocalBookAssets.assetKey.equals(entry.key) &
+                    _db.storedLocalBookAssets.managed.equals(true),
+              )
+              ..limit(1);
+            managed = await ownerQuery.getSingleOrNull() != null;
           } else {
             await _db
                 .into(_db.storedArchiveEntries)
@@ -799,6 +865,21 @@ class SqliteLibraryRepository
                   ),
                 );
           }
+          final ownership = {
+            'bookUrl': book.url,
+            'assetKey': entry.key,
+            'managed': managed,
+          };
+          await _db
+              .into(_db.storedLocalBookAssets)
+              .insert(
+                StoredLocalBookAssetsCompanion.insert(
+                  bookId: book.url,
+                  assetKey: entry.key,
+                  managed: managed,
+                  data: jsonEncode(ownership),
+                ),
+              );
         }
         // Publish the shelf row only after every dependent value has been staged.
         // A failure here still rolls back chapters, contents and asset insertions.
@@ -806,6 +887,35 @@ class SqliteLibraryRepository
       }),
       change: true,
     );
+  }
+
+  bool _assetBelongsToBook(String bookUrl, String key) {
+    final identity = RegExp(r'^local:[a-z][a-z0-9-]*:([0-9a-f]{64})$')
+        .firstMatch(bookUrl);
+    return identity != null &&
+        LocalBookAssets.isValidKey(key) &&
+        key.startsWith('${LocalBookAssets.prefix}${identity.group(1)}/');
+  }
+
+  Future<void> _removeLocalAssetReferences(String bookUrl) async {
+    final refs = await (_db.select(
+      _db.storedLocalBookAssets,
+    )..where((t) => t.bookId.equals(bookUrl))).get();
+    await (_db.delete(
+      _db.storedLocalBookAssets,
+    )..where((t) => t.bookId.equals(bookUrl))).go();
+    for (final ref in refs) {
+      if (!ref.managed) continue;
+      final remaining = _db.selectOnly(_db.storedLocalBookAssets)
+        ..addColumns([_db.storedLocalBookAssets.assetKey])
+        ..where(_db.storedLocalBookAssets.assetKey.equals(ref.assetKey))
+        ..limit(1);
+      if (await remaining.getSingleOrNull() == null) {
+        await (_db.delete(
+          _db.storedArchiveEntries,
+        )..where((t) => t.id.equals(ref.assetKey))).go();
+      }
+    }
   }
 
   bool _sameBytes(List<int> a, List<int> b) {
