@@ -42,3 +42,15 @@ acceptance. A local amd64 Docker process on an ARM64 machine runs through
 emulation and is only supporting reproduction evidence. A local GTK result,
 Dart-only result or a green workflow from another commit is not that acceptance.
 The five-platform application migration remains broader than this suite.
+
+The first native Linux CI exposed a real host-filesystem difference that the
+initial macOS-bound container reproduction did not exercise: a case-insensitive
+APFS bind directory had overwritten legal case-colliding sysroot entries while
+generating the initial extracted-file pin. The archive SHA values stayed valid.
+The correction computes the full identity from authenticated tar entries and
+independently verifies both architectures on Linux's native case-sensitive
+filesystem. Case-folding caches now fail before extraction; they are not given a
+weaker identity. The Ubuntu runner's normal ext4 cache preserves every entry.
+On Docker Desktop use a native named volume at
+`flutter/packages/source_v8/.cache/linux-sysroots`, rather than a macOS bind
+directory, when reproducing this CI.

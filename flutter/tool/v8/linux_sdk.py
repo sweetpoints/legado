@@ -59,6 +59,61 @@ def inventory_digest(files):
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+
+def sysroot_relative(name):
+    # These Unix-only archives legitimately contain a literal backslash in a
+    # systemd unit name. Windows SDK filename restrictions do not apply here.
+    if (not name or name.startswith('/') or '\x00' in name or
+            any(part in ('', '.', '..') for part in name.split('/'))):
+        raise ValueError('Unsafe sysroot archive path')
+    return name
+
+
+def archive_inventory(archive):
+    """Compute the exact content identity without host filesystem case folding."""
+    import posixpath
+    files = {}
+    with tarfile.open(archive, 'r:xz') as source:
+        members = source.getmembers()
+        if len(members) > 50000 or sum(member.size for member in members) > 1024**3:
+            raise ValueError('Sysroot archive unpacked size exceeds limit')
+        for member in members:
+            name = member.name.removeprefix('./').rstrip('/')
+            if member.isdir() and name in ('', '.'):
+                continue
+            name = sysroot_relative(name)
+            if member.isdir():
+                continue
+            if name in files:
+                raise ValueError('Duplicate sysroot archive file')
+            if member.issym():
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), member.linkname))
+                if member.linkname.startswith('/') or resolved == '..' or resolved.startswith('../'):
+                    raise ValueError('Sysroot archive symlink escapes root')
+                files[name] = {'link': member.linkname}
+            elif member.isfile() or member.islnk():
+                if member.islnk():
+                    sysroot_relative(member.linkname.removeprefix('./'))
+                digest, size = hashlib.sha256(), 0
+                with source.extractfile(member) as stream:
+                    while data := stream.read(1024 * 1024):
+                        digest.update(data)
+                        size += len(data)
+                        if size > 1024**3:
+                            raise ValueError('Sysroot archive file exceeds size limit')
+                files[name] = {'sha256': digest.hexdigest(), 'size': size}
+            else:
+                raise ValueError('Sysroot archive contains a special file')
+    return files
+
+
+def case_sensitive_filesystem(root):
+    with tempfile.TemporaryDirectory(prefix='.case-probe-', dir=root) as temporary:
+        lower = Path(temporary) / 'case-sensitive-check'
+        lower.write_bytes(b'lower')
+        return not (Path(temporary) / 'CASE-SENSITIVE-CHECK').exists()
+
+
 def install_sysroot(target, cache, pins):
     if target not in PROFILES:
         raise ValueError('Unsupported Linux target')
@@ -72,6 +127,8 @@ def install_sysroot(target, cache, pins):
     if cache.is_symlink():
         raise ValueError('Sysroot cache must not be a symlink')
     cache.mkdir(parents=True, exist_ok=True)
+    if not case_sensitive_filesystem(cache):
+        raise ValueError('Linux sysroot cache requires a case-sensitive filesystem; use native Linux or case-sensitive APFS')
     destination = cache / (target + '-' + digest)
 
     def verify(root):
@@ -104,6 +161,8 @@ def install_sysroot(target, cache, pins):
                     output.write(data)
             if size != pin['size'] or prebuilt.sha(archive) != digest:
                 raise ValueError('Sysroot archive SHA256/size mismatch')
+            if inventory_digest(archive_inventory(archive)) != pin['filesSha256']:
+                raise ValueError('Sysroot archive content inventory differs from reviewed pin')
             incoming = work / 'incoming'
             incoming.mkdir()
             with tarfile.open(archive, 'r:xz') as source:
