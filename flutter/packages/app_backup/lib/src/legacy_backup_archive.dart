@@ -71,6 +71,37 @@ abstract final class LegacyBackupArchive {
     Uint8List bytes, {
     BackupArchiveLimits limits = const BackupArchiveLimits(),
   }) {
+    final files = decodeEntries(bytes, limits: limits);
+    final text = <String, String>{};
+    for (final name in textFileNames) {
+      final value = files[name];
+      if (value == null) continue;
+      var decoded = utf8.decode(value, allowMalformed: false);
+      if (decoded.startsWith('\uFEFF')) decoded = decoded.substring(1);
+      // A present blank list is rejected instead of silently erasing data.
+      if (LegacyBackupDocument.listFiles.contains(name) &&
+          decoded.trim().isEmpty) {
+        throw const FormatException('Known backup list is empty');
+      }
+      text[name] = decoded;
+    }
+    if (text.isEmpty) {
+      throw const FormatException(
+        'ZIP contains no recognized legacy backup files',
+      );
+    }
+    return LegacyBackupStaging._(LegacyBackupDocument.parse(text), files);
+  }
+
+  /// Decodes a generic ZIP into detached immutable regular-file payloads.
+  ///
+  /// Applies all structural, path, CRC and resource checks without interpreting
+  /// legacy JSON or requiring a recognized backup file. Useful for EPUB staging;
+  /// callers must separately validate container-specific formats and contents.
+  static Map<String, Uint8List> decodeEntries(
+    Uint8List bytes, {
+    BackupArchiveLimits limits = const BackupArchiveLimits(),
+  }) {
     limits._validate();
     if (bytes.length > limits.maxArchiveBytes) {
       throw const FormatException('Backup ZIP exceeds archive byte limit');
@@ -107,26 +138,10 @@ abstract final class LegacyBackupArchive {
         }
         if (!record.directory) files[record.name] = result;
       }
-      final text = <String, String>{};
-      for (final name in textFileNames) {
-        final value = files[name];
-        if (value == null) continue;
-        var decoded = utf8.decode(value, allowMalformed: false);
-        if (decoded.startsWith('\uFEFF')) decoded = decoded.substring(1);
-        // Android can omit empty lists; a present blank list is deliberately
-        // rejected rather than silently erasing persisted collections.
-        if (LegacyBackupDocument.listFiles.contains(name) &&
-            decoded.trim().isEmpty) {
-          throw const FormatException('Known backup list is empty');
-        }
-        text[name] = decoded;
-      }
-      if (text.isEmpty) {
-        throw const FormatException(
-          'ZIP contains no recognized legacy backup files',
-        );
-      }
-      return LegacyBackupStaging._(LegacyBackupDocument.parse(text), files);
+      return Map.unmodifiable({
+        for (final entry in files.entries)
+          entry.key: Uint8List.fromList(entry.value).asUnmodifiableView(),
+      });
     } on FormatException {
       rethrow;
     } on Exception {

@@ -42,6 +42,12 @@ claiming full media/config round-trip support. Retaining opaque bytes alone does
 not apply Android preferences, import cookies, decrypt server credentials, or
 make media available to the reader.
 
+For a different container such as EPUB, `LegacyBackupArchive.decodeEntries(bytes)`
+returns the same bounded immutable file map without parsing known legacy JSON or
+requiring backup filenames. This does **not** validate EPUB manifests, XML,
+resource references or document content; that responsibility stays with the EPUB
+importer. `decode`, `encode` and `encodeFiles` retain their backup-specific checks.
+
 ## Supported containers and limits
 
 - Single-disk ZIP32, stored or deflated entries, optional signed/unsigned data
