@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
 
 import 'rss_models.dart';
+import 'rss_html_rules.dart';
 
 /// Versioned single-record commit keeps read/star state and source imports atomic.
 class RssStore {
@@ -103,6 +104,24 @@ class RssStore {
     },
   );
 
+  Future<void> saveArticleContent(String source, RssArticle article) =>
+      _commit((data) async {
+        final all = Map<String, Object?>.from(data['articles'] as Map);
+        all[source] = ((all[source] as List?) ?? []).map((e) {
+          final old = RssArticle.fromJson(Map<String, Object?>.from(e as Map));
+          return old.id != article.id
+              ? old.toJson()
+              : article
+                    .copyWith(
+                      read: old.read,
+                      starred: old.starred,
+                      original: {...old.original, ...article.original},
+                    )
+                    .toJson();
+        }).toList();
+        data['articles'] = all;
+      });
+
   Future<void> mark(String source, String id, {bool? read, bool? starred}) =>
       _commit((data) async {
         final all = Map<String, Object?>.from(data['articles'] as Map);
@@ -124,24 +143,86 @@ class RssFeedClient {
   final Dio dio;
   static const maxBytes = 5 * 1024 * 1024;
 
+  final htmlRules = RssHtmlRules();
+
   Future<List<RssArticle>> fetch(
     RssSource source, {
     CancelToken? cancelToken,
+    String? categoryUrl,
   }) async {
     if (source.requiresRuleEngine) {
-      throw const FormatException('rssLegacyRules');
+      if ((source.original['ruleArticles']?.toString() ?? '').isEmpty) {
+        throw const FormatException('rssUnsupportedRule');
+      }
+      if (RssHtmlRules.hasScript(source.original['ruleArticles'].toString())) {
+        throw const FormatException('rssScriptCapability');
+      }
+      var url = htmlRules.categoryUrl(
+        source,
+        categoryUrl ?? htmlRules.categories(source).first.url,
+      );
+      final visited = <String>{};
+      final articles = <String, RssArticle>{};
+      for (var page = 0; page < 20; page++) {
+        if (!visited.add(url)) {
+          throw const FormatException('rssPaginationCycle');
+        }
+        final response = await _document(source, url, cancelToken: cancelToken);
+        for (final article in await htmlRules.articles(
+          source,
+          response.text,
+          response.base,
+        )) {
+          articles[article.id] = article;
+        }
+        final next = await htmlRules.nextPage(
+          source,
+          response.text,
+          response.base,
+        );
+        if (next.isEmpty) return articles.values.toList();
+        url = next;
+      }
+      throw const FormatException('rssPageLimit');
     }
+    final document = await _document(
+      source,
+      source.url,
+      cancelToken: cancelToken,
+    );
+    return parseFeed(document.text, document.base);
+  }
+
+  Future<RssArticle> fetchArticle(
+    RssSource source,
+    RssArticle article, {
+    CancelToken? cancelToken,
+  }) async {
+    if (article.original['rssDetailPending'] != true) return article;
+    final document = await _document(
+      source,
+      article.link,
+      cancelToken: cancelToken,
+    );
+    return htmlRules.content(source, article, document.text, document.base);
+  }
+
+  Future<({String text, Uri base})> _document(
+    RssSource source,
+    String url, {
+    CancelToken? cancelToken,
+  }) async {
     final headers = <String, Object?>{
       'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml',
     };
     final sourceHeader = source.original['header'];
     if (sourceHeader is String && sourceHeader.trim().isNotEmpty) {
-      if (sourceHeader.contains('{{') ||
+      if (sourceHeader.replaceAll('{{baseUrl}}', url).contains('{{') ||
           sourceHeader.contains('<js>') ||
           sourceHeader.startsWith('@js:')) {
         throw const FormatException('rssLegacyRules');
       }
-      final decoded = jsonDecode(sourceHeader);
+      final decoded = jsonDecode(sourceHeader.replaceAll('{{baseUrl}}', url));
       if (decoded is! Map || decoded.values.any((value) => value is! String)) {
         throw const FormatException('rssInvalidSource');
       }
@@ -150,7 +231,7 @@ class RssFeedClient {
       }
     }
     final response = await dio.get<ResponseBody>(
-      source.url,
+      url,
       cancelToken: cancelToken,
       options: Options(
         responseType: ResponseType.stream,
@@ -181,9 +262,9 @@ class RssFeedClient {
       r'(?:iso-8859-1|latin-1)',
       caseSensitive: false,
     ).hasMatch('$declaration $contentType');
-    return parseFeed(
-      latin ? latin1.decode(bytes) : utf8.decode(bytes),
-      response.realUri,
+    return (
+      text: latin ? latin1.decode(bytes) : utf8.decode(bytes),
+      base: response.realUri,
     );
   }
 }

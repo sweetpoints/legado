@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import '../../l10n/generated/app_localizations.dart';
 import 'rss_models.dart';
 import 'rss_service.dart';
+import 'rss_html_rules.dart';
 export 'rss_models.dart';
 
 final rssStoreProvider = Provider.family<RssStore, LibraryRepository>(
@@ -179,6 +180,7 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
   CancelToken? _request;
   String? _error;
   bool _busy = false;
+  String? _category;
   (LibraryRepository, String) get _key =>
       (widget.repository, widget.source.url);
   @override
@@ -197,7 +199,11 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
     });
     try {
       final client = ref.read(rssClientProvider);
-      final articles = await client.fetch(widget.source, cancelToken: token);
+      final articles = await client.fetch(
+        widget.source,
+        cancelToken: token,
+        categoryUrl: _category,
+      );
       if (!mounted || token.isCancelled) return;
       await ref
           .read(rssStoreProvider(widget.repository))
@@ -214,6 +220,37 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
           _request = null;
         });
       }
+    }
+  }
+
+  Widget _categoryPicker() {
+    try {
+      final categories = RssHtmlRules().categories(widget.source);
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: DropdownButtonFormField<String>(
+          initialValue: _category ?? categories.first.url,
+          isExpanded: true,
+          items: [
+            for (final category in categories)
+              DropdownMenuItem(
+                value: category.url,
+                child: Text(category.title),
+              ),
+          ],
+          onChanged: _busy
+              ? null
+              : (value) {
+                  setState(() => _category = value);
+                  _refresh();
+                },
+        ),
+      );
+    } catch (e) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(_message(context, e)),
+      );
     }
   }
 
@@ -244,6 +281,7 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
       body: Column(
         children: [
           if (_busy) const LinearProgressIndicator(),
+          if (widget.source.requiresRuleEngine) _categoryPicker(),
           if (widget.source.requiresRuleEngine)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -330,12 +368,58 @@ class RssArticlePage extends ConsumerStatefulWidget {
 
 class _RssArticlePageState extends ConsumerState<RssArticlePage> {
   String? _error;
+  CancelToken? _request;
+  bool _loading = false;
   (LibraryRepository, String) get _key =>
       (widget.repository, widget.location.source.url);
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => _mark(read: true));
+    Future.microtask(() async {
+      await _mark(read: true);
+      if (mounted) await _loadArticle();
+    });
+  }
+
+  @override
+  void dispose() {
+    _request?.cancel('article_disposed');
+    super.dispose();
+  }
+
+  Future<void> _loadArticle() async {
+    if (!mounted) return;
+    final token = CancelToken();
+    _request?.cancel('article_replaced');
+    _request = token;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final store = ref.read(rssStoreProvider(widget.repository));
+      final current = (await store.articles(widget.location.source.url))
+          .where((e) => e.id == widget.location.articleId)
+          .firstOrNull;
+      if (current == null || !mounted || token.isCancelled) return;
+      final loaded = await ref
+          .read(rssClientProvider)
+          .fetchArticle(widget.location.source, current, cancelToken: token);
+      if (!mounted || token.isCancelled) return;
+      await store.saveArticleContent(widget.location.source.url, loaded);
+      if (mounted) ref.invalidate(rssArticlesProvider(_key));
+    } catch (e) {
+      if (mounted && !token.isCancelled) {
+        setState(() => _error = _message(context, e));
+      }
+    } finally {
+      if (mounted && identical(token, _request)) {
+        setState(() {
+          _loading = false;
+          _request = null;
+        });
+      }
+    }
   }
 
   Future<void> _mark({bool? read, bool? starred}) async {
@@ -356,98 +440,134 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
   }
 
   @override
-  Widget build(BuildContext context) => ref
-      .watch(rssArticlesProvider(_key))
-      .when(
-        loading: () =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
-        error: (error, _) => Scaffold(
-          appBar: AppBar(title: Text(AppLocalizations.of(context)!.rssArticle)),
-          body: _Failure(
-            error: error,
-            retry: () => ref.invalidate(rssArticlesProvider(_key)),
+  Widget build(BuildContext context) {
+    ref.watch(rssClientProvider);
+    return ref
+        .watch(rssArticlesProvider(_key))
+        .when(
+          loading: () =>
+              const Scaffold(body: Center(child: CircularProgressIndicator())),
+          error: (error, _) => Scaffold(
+            appBar: AppBar(
+              title: Text(AppLocalizations.of(context)!.rssArticle),
+            ),
+            body: _Failure(
+              error: error,
+              retry: () => ref.invalidate(rssArticlesProvider(_key)),
+            ),
           ),
-        ),
-        data: (articles) {
-          final article = articles
-              .where((e) => e.id == widget.location.articleId)
-              .firstOrNull;
-          if (article == null) {
+          data: (articles) {
+            final article = articles
+                .where((e) => e.id == widget.location.articleId)
+                .firstOrNull;
+            if (article == null) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: Text(AppLocalizations.of(context)!.rssArticle),
+                ),
+                body: Center(
+                  child: Text(AppLocalizations.of(context)!.rssMissingArticle),
+                ),
+              );
+            }
             return Scaffold(
               appBar: AppBar(
-                title: Text(AppLocalizations.of(context)!.rssArticle),
-              ),
-              body: Center(
-                child: Text(AppLocalizations.of(context)!.rssMissingArticle),
-              ),
-            );
-          }
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(article.title),
-              actions: [
-                IconButton(
-                  tooltip: article.starred
-                      ? AppLocalizations.of(context)!.rssUnstar
-                      : AppLocalizations.of(context)!.rssStar,
-                  onPressed: () => _mark(starred: !article.starred),
-                  icon: Icon(article.starred ? Icons.star : Icons.star_outline),
-                ),
-              ],
-            ),
-            body: SelectionArea(
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Text(
-                    article.title,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8), Text(article.published),
-                  if (_error != null)
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                title: Text(article.title),
+                actions: [
+                  IconButton(
+                    tooltip: article.starred
+                        ? AppLocalizations.of(context)!.rssUnstar
+                        : AppLocalizations.of(context)!.rssStar,
+                    onPressed: () => _mark(starred: !article.starred),
+                    icon: Icon(
+                      article.starred ? Icons.star : Icons.star_outline,
                     ),
-                  const SizedBox(height: 24),
-                  // Content is deliberately text-only: untrusted HTML/scripts never run.
-                  Text(
-                    _plainText(article.content),
-                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  if (article.link.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    SelectableText(article.link),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.copy),
-                        label: Text(AppLocalizations.of(context)!.rssCopyLink),
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(text: article.link),
-                          );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  AppLocalizations.of(context)!.rssCopied,
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ],
                 ],
               ),
-            ),
-          );
-        },
-      );
+              body: SelectionArea(
+                child: ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Text(
+                      article.title,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8), Text(article.published),
+                    if (_error != null)
+                      Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    const SizedBox(height: 24),
+                    if (_loading) const LinearProgressIndicator(),
+                    if (_error != null)
+                      TextButton(
+                        onPressed: _loadArticle,
+                        child: Text(AppLocalizations.of(context)!.rssRetry),
+                      ),
+                    // Scripts never run; extracted HTTP images render natively.
+                    Text(
+                      _plainText(article.content),
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    for (final image
+                        in ((article.original['rssImages'] as List?) ?? [])
+                            .whereType<String>())
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Image.network(
+                          image,
+                          fit: BoxFit.contain,
+                          headers: _imageHeaders(
+                            widget.location.source,
+                            article.link,
+                          ),
+                          semanticLabel: article.title,
+                          errorBuilder: (context, error, stack) => Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              AppLocalizations.of(context)!.rssImageError,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (article.link.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      SelectableText(article.link),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.copy),
+                          label: Text(
+                            AppLocalizations.of(context)!.rssCopyLink,
+                          ),
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: article.link),
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    AppLocalizations.of(context)!.rssCopied,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+  }
 }
 
 class _Failure extends StatelessWidget {
@@ -480,7 +600,11 @@ String _message(BuildContext context, Object error) {
       'rssInvalidUrl' => l10n.rssInvalidUrl,
       'rssCorruptStorage' => l10n.rssCorruptStorage,
       'rssInvalidSource' => l10n.rssInvalidSource,
-      'rssLegacyRules' => l10n.rssLegacyHelp,
+      'rssLegacyRules' || 'rssScriptCapability' => l10n.rssScriptCapability,
+      'rssUnsupportedRule' => l10n.rssUnsupportedRule,
+      'rssPaginationCycle' => l10n.rssPaginationCycle,
+      'rssPageLimit' => l10n.rssPageLimit,
+      'rssInvalidArticleLink' => l10n.rssInvalidArticleLink,
       'rssEmptyResponse' => l10n.rssEmptyResponse,
       'rssTooLarge' => l10n.rssTooLarge,
       _ => l10n.rssInvalidFeed,
@@ -500,4 +624,19 @@ String _plainText(String content) {
     br.replaceWith(html.parseFragment('\n'));
   }
   return fragment.text ?? '';
+}
+
+Map<String, String> _imageHeaders(RssSource source, String baseUrl) {
+  final raw = source.original['header'];
+  if (raw is! String || raw.isEmpty) return {};
+  try {
+    final json = jsonDecode(raw.replaceAll('{{baseUrl}}', baseUrl));
+    if (json is! Map) return {};
+    return {
+      for (final entry in json.entries)
+        if (entry.value is String) entry.key.toString(): entry.value as String,
+    };
+  } catch (_) {
+    return {};
+  }
 }
