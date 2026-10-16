@@ -145,7 +145,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unsupportedText =>
-      'This text file is not valid UTF-8. Convert its encoding before importing.';
+      'The text encoding is ambiguous, unsupported or damaged. UTF-8, UTF-16 with a BOM and GBK are supported. Check the encoding and convert the file to UTF-8 before importing.';
 
   @override
   String get textTooLarge => 'This file exceeds the 20 MiB import limit.';
@@ -171,6 +171,97 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get epubTooLarge => 'This EPUB exceeds the 128 MiB input limit.';
+
+  @override
+  String get shelfOptions => 'Bookshelf options';
+
+  @override
+  String get shelfManageGroups => 'Manage groups';
+
+  @override
+  String get shelfCreateGroup => 'Create group';
+
+  @override
+  String get shelfRenameGroup => 'Rename group';
+
+  @override
+  String get shelfDeleteGroup => 'Delete group';
+
+  @override
+  String get shelfDeleteGroupMessage =>
+      'Books will stay in your library. Only membership in this group will be removed.';
+
+  @override
+  String get shelfGroupName => 'Group name';
+
+  @override
+  String get shelfGroupNameRequired => 'Enter a group name.';
+
+  @override
+  String get shelfNoGroups => 'Create a group before assigning books.';
+
+  @override
+  String get shelfAssignGroups => 'Assign groups';
+
+  @override
+  String get shelfGroup => 'Group';
+
+  @override
+  String get shelfSort => 'Sort';
+
+  @override
+  String get shelfAll => 'All books';
+
+  @override
+  String get shelfUngrouped => 'Ungrouped';
+
+  @override
+  String get shelfLocal => 'Local books';
+
+  @override
+  String get shelfAudio => 'Audio books';
+
+  @override
+  String get shelfVideo => 'Video books';
+
+  @override
+  String get shelfNetworkUngrouped => 'Ungrouped online books';
+
+  @override
+  String get shelfLocalUngrouped => 'Ungrouped local books';
+
+  @override
+  String get shelfUpdateFailed => 'Update failed';
+
+  @override
+  String get shelfSortRead => 'Recently read';
+
+  @override
+  String get shelfSortUpdated => 'Latest update';
+
+  @override
+  String get shelfSortTitle => 'Title';
+
+  @override
+  String get shelfSortManual => 'Manual order';
+
+  @override
+  String get shelfSortActivity => 'Recent activity';
+
+  @override
+  String get shelfSortAuthor => 'Author';
+
+  @override
+  String get shelfBookActions => 'Book actions';
+
+  @override
+  String get shelfMoveUp => 'Move up';
+
+  @override
+  String get shelfMoveDown => 'Move down';
+
+  @override
+  String get shelfEmptyGroup => 'There are no books in this group.';
 
   @override
   String get readerTitle => 'Read';

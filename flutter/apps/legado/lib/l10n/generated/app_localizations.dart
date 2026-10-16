@@ -359,7 +359,7 @@ abstract class AppLocalizations {
   /// No description provided for @unsupportedText.
   ///
   /// In en, this message translates to:
-  /// **'This text file is not valid UTF-8. Convert its encoding before importing.'**
+  /// **'The text encoding is ambiguous, unsupported or damaged. UTF-8, UTF-16 with a BOM and GBK are supported. Check the encoding and convert the file to UTF-8 before importing.'**
   String get unsupportedText;
 
   /// No description provided for @textTooLarge.
@@ -403,6 +403,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This EPUB exceeds the 128 MiB input limit.'**
   String get epubTooLarge;
+
+  /// No description provided for @shelfOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookshelf options'**
+  String get shelfOptions;
+
+  /// No description provided for @shelfManageGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage groups'**
+  String get shelfManageGroups;
+
+  /// No description provided for @shelfCreateGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Create group'**
+  String get shelfCreateGroup;
+
+  /// No description provided for @shelfRenameGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename group'**
+  String get shelfRenameGroup;
+
+  /// No description provided for @shelfDeleteGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group'**
+  String get shelfDeleteGroup;
+
+  /// No description provided for @shelfDeleteGroupMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Books will stay in your library. Only membership in this group will be removed.'**
+  String get shelfDeleteGroupMessage;
+
+  /// No description provided for @shelfGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get shelfGroupName;
+
+  /// No description provided for @shelfGroupNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a group name.'**
+  String get shelfGroupNameRequired;
+
+  /// No description provided for @shelfNoGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a group before assigning books.'**
+  String get shelfNoGroups;
+
+  /// No description provided for @shelfAssignGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign groups'**
+  String get shelfAssignGroups;
+
+  /// No description provided for @shelfGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get shelfGroup;
+
+  /// No description provided for @shelfSort.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get shelfSort;
+
+  /// No description provided for @shelfAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All books'**
+  String get shelfAll;
+
+  /// No description provided for @shelfUngrouped.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped'**
+  String get shelfUngrouped;
+
+  /// No description provided for @shelfLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Local books'**
+  String get shelfLocal;
+
+  /// No description provided for @shelfAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio books'**
+  String get shelfAudio;
+
+  /// No description provided for @shelfVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video books'**
+  String get shelfVideo;
+
+  /// No description provided for @shelfNetworkUngrouped.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped online books'**
+  String get shelfNetworkUngrouped;
+
+  /// No description provided for @shelfLocalUngrouped.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped local books'**
+  String get shelfLocalUngrouped;
+
+  /// No description provided for @shelfUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get shelfUpdateFailed;
+
+  /// No description provided for @shelfSortRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently read'**
+  String get shelfSortRead;
+
+  /// No description provided for @shelfSortUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest update'**
+  String get shelfSortUpdated;
+
+  /// No description provided for @shelfSortTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get shelfSortTitle;
+
+  /// No description provided for @shelfSortManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual order'**
+  String get shelfSortManual;
+
+  /// No description provided for @shelfSortActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent activity'**
+  String get shelfSortActivity;
+
+  /// No description provided for @shelfSortAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get shelfSortAuthor;
+
+  /// No description provided for @shelfBookActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Book actions'**
+  String get shelfBookActions;
+
+  /// No description provided for @shelfMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get shelfMoveUp;
+
+  /// No description provided for @shelfMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get shelfMoveDown;
+
+  /// No description provided for @shelfEmptyGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no books in this group.'**
+  String get shelfEmptyGroup;
 
   /// No description provided for @readerTitle.
   ///
