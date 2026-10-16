@@ -432,7 +432,7 @@ CREATE TABLE backup_files (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
       expect(() => snapshot.entries['servers']![0] = 9, throwsUnsupportedError);
       final raw = sqlite3.open(path, mode: OpenMode.readOnly);
       try {
-        expect(raw.userVersion, 2);
+        expect(raw.userVersion, SqliteLibraryRepository.schemaVersion);
         expect(
           raw
               .select(
