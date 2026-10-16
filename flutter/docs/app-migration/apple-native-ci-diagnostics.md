@@ -96,3 +96,13 @@ matches this application are retained. A matching host crash summary is not
 proof that it came from the selected simulator; its timestamp and PID must be
 correlated with the selected App process and Flutter log. Other applications'
 crash reports and simulator system logs are not retained.
+
+After adding verbose execution and scoped diagnostics, the same unchanged native
+App again passed 3/3 tests through the complete helper (8 phases, exit 0), on
+Xcode 27.1 build 27A9275 and the dedicated iOS 27.0 simulator. Xcode took 21.7s;
+`flutter test --verbose` took 44.3s in total. A separate real diagnostic probe
+confirmed that `simctl get_app_container` failure is retained as an installation
+state and that the bundle-filtered `log show` command succeeds. Flutter's verbose
+log explicitly records uninstalling this App after tests, so an absent container
+after successful test completion is expected, not a launch failure. These local
+results still do not replace hosted-run acceptance.
