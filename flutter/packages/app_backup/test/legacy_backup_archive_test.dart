@@ -599,4 +599,22 @@ void main() {
       throwsFormatException,
     );
   });
+  test(
+    'managed chapter nullable volume flag matches ReaderChapter legacy default',
+    () {
+      final text = jsonEncode({
+        'version': 1,
+        'chapters': [
+          {
+            'bookUrl': 'b',
+            'chapter': {'url': 'c', 'title': 'C', 'index': 0, 'isVolume': null},
+          },
+        ],
+      });
+      final staged = LegacyBackupArchive.decode(
+        textZip({'legado-library.json': text}),
+      );
+      expect(staged.document.files['legado-library.json'], text);
+    },
+  );
 }
