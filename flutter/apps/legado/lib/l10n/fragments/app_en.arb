@@ -63,5 +63,6 @@
     }
   },
   "navigationRssTitle": "Feeds",
-  "epubTooLarge": "This EPUB exceeds the 128 MiB input limit."
+  "epubTooLarge": "This EPUB exceeds the 128 MiB input limit.",
+  "licensesTitle": "Licenses"
 }

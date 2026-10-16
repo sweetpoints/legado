@@ -86,6 +86,14 @@ class SettingsPage extends ConsumerWidget {
               title: Text(strings.sourcesTitle),
               onTap: () => context.push('/sources'),
             ),
+            ListTile(
+              leading: const Icon(Icons.policy_outlined),
+              title: Text(strings.licensesTitle),
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: strings.appTitle,
+              ),
+            ),
           ],
         ),
       ),

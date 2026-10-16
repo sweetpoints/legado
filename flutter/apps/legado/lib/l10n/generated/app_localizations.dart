@@ -404,6 +404,12 @@ abstract class AppLocalizations {
   /// **'This EPUB exceeds the 128 MiB input limit.'**
   String get epubTooLarge;
 
+  /// No description provided for @licensesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Licenses'**
+  String get licensesTitle;
+
   /// No description provided for @shelfOptions.
   ///
   /// In en, this message translates to:

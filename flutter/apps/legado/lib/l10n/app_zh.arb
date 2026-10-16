@@ -65,6 +65,7 @@
   },
   "navigationRssTitle": "订阅",
   "epubTooLarge": "此 EPUB 超过 128 MiB 输入上限。",
+  "licensesTitle": "开源许可证",
   "shelfOptions": "书架选项",
   "shelfManageGroups": "管理分组",
   "shelfCreateGroup": "新建分组",
