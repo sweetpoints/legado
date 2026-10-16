@@ -38,9 +38,8 @@ void main() {
           'bookshelf.json': jsonEncode([book('a', mask: 65).toJson()]),
         }),
       );
-      final old = (await repository.bookGroups()).firstWhere((g) => g.id == 1);
       await repository.updateBookGroup(
-        LegacyBookGroup(old.toJson()..['groupName'] = '新名称'),
+        LegacyBookGroup({'groupId': 1, 'groupName': '新名称'}),
       );
       final created = await repository.createBookGroup('新分组');
       expect(created.id, 2); // Orphan bit 64 must not be reallocated.
