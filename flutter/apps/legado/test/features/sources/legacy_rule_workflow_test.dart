@@ -24,7 +24,7 @@ void main() {
           jsonEncode({
             'bookSourceUrl': id,
             'bookSourceName': 'Native org boundary',
-            'ruleSearch': {'bookList': '@js:org.jsoup.Jsoup.parse(result)'},
+            'ruleSearch': {'bookList': '@js:org.jsoup.Jsoup.connect(baseUrl)'},
             'searchUrl': '/search',
           }),
         );

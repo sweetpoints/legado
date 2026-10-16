@@ -8,6 +8,9 @@ import 'src/main_js.dart';
 export 'src/legacy_host.dart';
 export 'src/portable_rules.dart';
 export 'src/portable_dom.dart';
+export 'src/portable_source.dart';
+export 'src/portable_request.dart';
+export 'src/hosted_rules.dart';
 
 import 'package:source_engine/source_engine.dart';
 

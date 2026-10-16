@@ -63,6 +63,30 @@ void main() {
         await expectLater(action(), throwsA(isA<EngineException>()));
       }
       expect(await call(doc, 'text'), 'Original');
+      for (final invalidValue in [
+        42,
+        <String, Object?>{'not': 'text'},
+      ]) {
+        await expectLater(
+          call({
+            '__legacyDom': {
+              'schemaVersion': 1,
+              'index': 0,
+              'nodes': [
+                {'kind': 'text', 'value': invalidValue, 'children': []},
+              ],
+            },
+          }, 'text'),
+          throwsA(
+            isA<EngineException>().having(
+              (e) => e.code,
+              'code',
+              'legacy.invalid_dom',
+            ),
+          ),
+        );
+      }
+
       await expectLater(
         call({
           '__legacyDom': {

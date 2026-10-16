@@ -116,24 +116,62 @@ class BookSourceService {
         .toList();
   }
 
-  Future<List<Map<String, Object?>>> exploreMenu(String id) async {
-    final source = await _source(id);
-    final imported = definition(source);
-    final menu = imported.metadata['legacyExploreItems'];
-    if (menu is List) {
-      return menu
+  Future<List<Map<String, Object?>>> exploreMenu(
+    String id,
+  ) => _serial(id, () async {
+    final original = await _source(id);
+    if (original['enabled'] == false) {
+      throw const EngineException('source_disabled', 'Source is disabled');
+    }
+    final source = definition(original);
+    final staticMenu = source.metadata['legacyExploreItems'];
+    if (staticMenu is List) {
+      return staticMenu
           .map((item) => Map<String, Object?>.from(item as Map))
           .toList();
     }
-    if (source['exploreUrl'] is String &&
-        (source['exploreUrl'] as String).isNotEmpty) {
+    final raw = original['exploreUrl'];
+    if (raw == null || raw == '') return [];
+    final code = raw is String ? PortableLegacyPageFetcher.script(raw) : null;
+    final capabilities = PortableLegacyScriptCapabilities(original);
+    if (code == null || !capabilities.supports(code)) {
       throw const EngineException(
         'legacy_requires_migration',
-        '动态发现菜单尚需跨平台执行适配',
+        'Dynamic explore menu requires unavailable script capabilities',
       );
     }
-    return [];
-  }
+    final session = await _sessions.putIfAbsent(id, () => _create(original));
+    try {
+      Object? result = await session.engine.evaluateAuxiliary(
+        session.source,
+        code,
+      );
+      if (result is String) result = jsonDecode(result);
+      if (result is! List || result.length > 1000) {
+        throw const EngineException(
+          'invalid_explore_menu',
+          'Explore menu must return a bounded JSON array',
+        );
+      }
+      final items = <Map<String, Object?>>[];
+      for (final row in result) {
+        if (row is! Map || row['title'] is! String || row['url'] is! String) {
+          throw const EngineException(
+            'invalid_explore_menu',
+            'Explore items require string title and URL',
+          );
+        }
+        // Headers remain in the original source; the picker receives actionable
+        // entries, avoiding duplicate empty identities for group headings.
+        if ((row['url'] as String).isNotEmpty) {
+          items.add(Map<String, Object?>.from(row));
+        }
+      }
+      return items;
+    } finally {
+      await _saveSession(id, session);
+    }
+  });
 
   Future<List<NetworkBook>> explore(
     String id,
@@ -264,33 +302,83 @@ class BookSourceService {
         input: input,
       );
     } finally {
-      await repository.setSetting(
+      await _saveSession(id, session);
+    }
+  });
+
+  Future<void> _saveSession(String id, _SourceSession session) =>
+      repository.setSetting(
         _sessionKey(id),
         jsonEncode({
           'engine': session.engine.exportSession(id),
           'legacyVariables': session.variables,
+          'sourceState': session.sourceState,
         }),
       );
-    }
-  });
+
+  static bool _needsHosted(Map<String, Object?> original) =>
+      RegExp(r'\borg\.jsoup\b').hasMatch(jsonEncode(original)) ||
+      PortableLegacyPageFetcher.script(
+            original['searchUrl']?.toString() ?? '',
+          ) !=
+          null ||
+      PortableLegacyPageFetcher.script(
+            original['exploreUrl']?.toString() ?? '',
+          ) !=
+          null;
 
   static bool _portableRuleIssue(
     Map<String, Object?> original,
     LegacyIssue issue,
   ) {
-    if (issue.code != 'legacy.rule_requires_review') return false;
+    final hosted = _needsHosted(original);
+    final capabilities = PortableLegacyScriptCapabilities(original);
+    if (hosted &&
+        issue.code == 'legacy.request_options' &&
+        issue.path == 'searchUrl') {
+      final code = PortableLegacyPageFetcher.script(
+        original['searchUrl']?.toString() ?? '',
+      );
+      return code != null && capabilities.supports(code);
+    }
+    if (hosted &&
+        issue.code == 'legacy.explore_menu_requires_review' &&
+        issue.path == 'exploreUrl') {
+      final code = PortableLegacyPageFetcher.script(
+        original['exploreUrl']?.toString() ?? '',
+      );
+      return code != null && capabilities.supports(code);
+    }
+    if (issue.code != 'legacy.rule_requires_review' &&
+        !(hosted &&
+            issue.code == 'legacy.pipeline_requires_review' &&
+            issue.path == 'ruleBookInfo.init')) {
+      return false;
+    }
     final path = issue.path.split('.');
     if (path.length != 2) return false;
-    final group = legacyRuleObject(original, path.first);
-    final rule = group?[path.last];
-    return rule is String && PortableLegacyRuleEvaluator.canEvaluate(rule);
+    final rule = legacyRuleObject(original, path.first)?[path.last];
+    if (rule is! String) return false;
+    return hosted
+        ? HostedLegacyRuleEvaluator(
+            _ValidationRuntime(),
+            capabilities,
+          ).supportsRule(rule)
+        : PortableLegacyRuleEvaluator.canEvaluate(rule);
   }
 
   Future<_SourceSession> _create(Map<String, Object?> original) async {
     final source = definition(original);
     final variables = <String, String>{};
+    final sourceState = <String, Object?>{
+      if (original['variable'] is String) 'variable': original['variable'],
+    };
+    final hosted = _needsHosted(original);
+    final capabilities = PortableLegacyScriptCapabilities(original);
     final runtime = V8Runtime(
-      prelude: source.metadata['legacy'] == true ? legacyScriptPrelude : '',
+      prelude: source.metadata['legacy'] == true
+          ? '$legacyScriptPrelude\n${hosted ? portableLegacySourcePrelude(original) : ''}'
+          : '',
       persistent: true,
     );
     final engine =
@@ -299,9 +387,21 @@ class BookSourceService {
           runtime: runtime,
           requestAdapter: adaptLegacyRequest,
           legacyRuleEvaluator: source.metadata['legacy'] == true
-              ? PortableLegacyRuleEvaluator(runtime)
+              ? hosted
+                    ? HostedLegacyRuleEvaluator(runtime, capabilities)
+                    : PortableLegacyRuleEvaluator(runtime)
               : null,
-          platform: SourceUtilityHost(const _UnavailableHost()),
+          legacyPageFetcher: hosted
+              ? PortableLegacyPageFetcher(runtime, capabilities)
+              : null,
+          platform: SourceUtilityHost(
+            hosted
+                ? PortableLegacySourceStateHost(
+                    const PortableLegacyDomHost(_UnavailableHost()),
+                    sourceState,
+                  )
+                : const _UnavailableHost(),
+          ),
           hostAdapter: source.metadata['legacy'] == true
               ? (host) => LegacyScriptHost(host, variables: variables)
               : null,
@@ -317,8 +417,17 @@ class BookSourceService {
         variables.addAll(
           Map<String, String>.from(state['legacyVariables'] as Map),
         );
+        if (state['sourceState'] is Map) {
+          sourceState.addAll(
+            Map<String, Object?>.from(state['sourceState'] as Map),
+          );
+        }
+        if (sourceState['variable'] != null &&
+            sourceState['variable'] is! String) {
+          throw const FormatException('Invalid source variable state');
+        }
       }
-      return _SourceSession(source, engine, variables);
+      return _SourceSession(source, engine, variables, sourceState);
     } catch (error) {
       await engine.close();
       throw EngineException('session_restore_failed', '书源会话无法恢复：$error');
@@ -352,7 +461,13 @@ class BookSourceService {
 }
 
 class _SourceSession {
-  const _SourceSession(this.source, this.engine, this.variables);
+  const _SourceSession(
+    this.source,
+    this.engine,
+    this.variables,
+    this.sourceState,
+  );
+  final Map<String, Object?> sourceState;
   final SourceDefinition source;
   final SourceEngine engine;
   final Map<String, String> variables;
@@ -363,4 +478,15 @@ class _UnavailableHost implements ScriptHost {
   @override
   Future<Object?> call(String method, List<Object?> arguments) async =>
       throw EngineException('unsupported_host_api', '当前平台尚未实现 $method');
+}
+
+class _ValidationRuntime implements ScriptRuntime {
+  @override
+  Future<Object?> evaluate(
+    String code,
+    ScriptContext context, {
+    CancellationToken? cancellation,
+  }) async => throw StateError('Capability inspection cannot run scripts');
+  @override
+  Future<void> close() async {}
 }

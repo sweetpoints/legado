@@ -36,6 +36,70 @@ class PortableLegacyDomHost implements ScriptHost {
     'title',
   };
 
+  static Future<Object?> legacyElements(
+    String rule,
+    Object? input, {
+    bool single = false,
+  }) async {
+    if (input is! String && input is! Element) {
+      throw const EngineException(
+        'legacy.invalid_dom',
+        'Legacy element extraction requires HTML content',
+      );
+    }
+    final normalized = rule.startsWith('@legacy:')
+        ? rule
+        : rule.startsWith('@css:')
+        ? '@legacy:${rule.substring(5)}'
+        : '@legacy:$rule';
+    final values = await RuleEvaluator(_NoScript()).evaluate(
+      normalized,
+      input,
+      ScriptContext(host: _NoHost()),
+      elements: true,
+    );
+    final nodes = values.whereType<Element>().toList();
+    if (nodes.length != values.length) {
+      throw const EngineException(
+        'legacy.invalid_dom',
+        'Element extraction returned non-element data',
+      );
+    }
+    if (nodes.isEmpty) return single ? null : <Object?>[];
+    Node root = nodes.first;
+    while (root.parentNode != null) {
+      root = root.parentNode!;
+    }
+    if (root is! Document) {
+      throw const EngineException(
+        'legacy.invalid_dom',
+        'Element extraction lost document ownership',
+      );
+    }
+    final forest = _Forest.capture(root, '');
+    return single ? forest.nodeMarker(nodes.first) : forest.listMarker(nodes);
+  }
+
+  static List<Node>? restoreMarker(Object? value) {
+    if (value is! Map) return null;
+    final list = value.containsKey('__legacyDomList');
+    final raw = value[list ? '__legacyDomList' : '__legacyDom'];
+    if (raw is! Map) return null;
+    final data = Map<String, Object?>.from(raw);
+    final forest = _Forest.restore(data);
+    final indices = list ? data['indexes'] : [data['index']];
+    if (indices is! List ||
+        indices.any(
+          (index) => index is! int || index < 0 || index >= forest.nodes.length,
+        )) {
+      throw const EngineException(
+        'legacy.invalid_dom',
+        'Invalid DOM marker indices',
+      );
+    }
+    return indices.cast<int>().map((index) => forest.nodes[index]).toList();
+  }
+
   @override
   Future<Object?> call(String method, List<Object?> arguments) async {
     if (method == 'orgJsoup.parse' || method == 'orgJsoup.parseBodyFragment') {
@@ -182,7 +246,9 @@ class PortableLegacyDomHost implements ScriptHost {
             )
             .join('');
       case 'tagName':
-        value = elementNodes.firstOrNull?.localName ?? '';
+        value = selected.firstOrNull is Document
+            ? '#root'
+            : elementNodes.firstOrNull?.localName ?? '';
       case 'id':
         value = elementNodes.firstOrNull?.id ?? '';
       case 'className':
@@ -225,7 +291,9 @@ class PortableLegacyDomHost implements ScriptHost {
       case 'parent':
         value = selected.firstOrNull?.parentNode;
       case 'children':
-        value = elementNodes.expand((node) => node.children).toList();
+        value = selected
+            .expand((node) => node.nodes.whereType<Element>())
+            .toList();
       case 'nextElementSibling':
         value = elementNodes.firstOrNull?.nextElementSibling;
       case 'previousElementSibling':
@@ -367,6 +435,15 @@ class _Forest {
           'DOM table row must be an object',
         );
       }
+      if (row.keys.any((key) => key is! String) ||
+          (row['baseUri'] != null && row['baseUri'] is! String) ||
+          (row['value'] != null && row['value'] is! String) ||
+          (row['name'] != null && row['name'] is! String)) {
+        throw const EngineException(
+          'legacy.invalid_dom',
+          'Invalid DOM row values',
+        );
+      }
       return Map<String, Object?>.from(row);
     }).toList();
     final parents = List<int>.filled(rows.length, 0);
@@ -451,11 +528,27 @@ class _Forest {
     if (data['schemaVersion'] == 2 &&
         (data['documentId'] is! String ||
             data['ids'] is! List ||
+            (data['ids'] as List).any((id) => id is! String || id.isEmpty) ||
             (data['ids'] as List).length != nodes.length ||
             (data['ids'] as List).toSet().length != nodes.length)) {
       throw const EngineException(
         'legacy.invalid_dom',
         'Invalid stable DOM identities',
+      );
+    }
+    final roots = data['roots'];
+    if (roots != null &&
+        (roots is! List ||
+            roots.any(
+              (root) =>
+                  root is! int ||
+                  root < 0 ||
+                  root >= nodes.length ||
+                  parents[root] != 0,
+            ))) {
+      throw const EngineException(
+        'legacy.invalid_dom',
+        'Invalid DOM forest roots',
       );
     }
     return _Forest(

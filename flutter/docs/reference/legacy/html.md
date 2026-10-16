@@ -57,3 +57,23 @@ text/ownText不会在拼接后进行全局空白压缩。每个文本节点检�
 | toc | chapterName、chapterUrl、updateTime、isVolume、isVip、isPay |
 
 必须恰好有两个 `##`，选择器按支持的HTML兼容子集归一化为显式 `@legacy:`，末尾必须明确为text、ownText或textNodes。pattern非空，不能含正则元字符、反斜杠、换行、`#`或引号；replacement不能含 `$`、反斜杠、换行、`#`、引号或 `&`。因此实体替换与捕获组替换不在自动放行范围。脚本、变量、模板、复合规则、XPath及不透明regex等仍需人工处理。content的所有字段、nextPage、kind、downloadUrls、list、管线扩展、未知字段，以及html/属性输出仍不放行。此限制属于旧源导入的保守边界，现代规则的正则替换能力不受它影响。
+
+## Flutter 独立 V8 的 org.jsoup 只读对象
+
+`BookSourceService` hosted legacy 路径使用 `PortableLegacyDomHost`，不依赖 Android MethodChannel。脚本可调用 `org.jsoup.Jsoup.parse(html[, baseUri])`、`parseBodyFragment(html[, baseUri])`，返回现有 V8 typed DOM facade。输入为字符串，HTML 上限 8 MiB，快照上限 100000 节点。
+
+| 接口 | 独立 Dart 行为 |
+|---|---|
+| select/selectFirst(css) | Dart HTML CSS selector，文档顺序；不承诺 JSoup 专有伪类 |
+| getElementsByTag/Class、getElementById | 根及后代的有序选择 |
+| text() | 忽略 script/style 的历史文本归一化 |
+| ownText()/data() | 直接文本/数据读取，不承诺所有 JSoup 空白格式一致 |
+| html()/outerHtml()/toString() | inner/outer HTML；Dart 紧凑序列化，不保证 JSoup pretty-print 字节一致 |
+| attr(name)/hasAttr(name) | 字面量属性读取，不自动解析相对 URL |
+| tagName()/id()/className() | 标记及属性；Document tagName 为 #root |
+| parent()/children()/nextElementSibling()/previousElementSibling() | 原树只读遍历 |
+| body()/head()/title() | Document 只读访问 |
+
+集合沿用 V8 facade 的顺序、get/size/toArray 与节点别名协议。每次 RPC 重建临时 Dart forest，schema-2 documentId/node IDs 随快照保留；没有 Dart 原生连接 lease。`java.getElement/getElements` 保留提取 Element 身份，后续 `@href` 面向该元素执行，不将 outerHTML 当整页再次提取。
+
+connect、XML Parser、Java 构造器及写操作不在子集内。能力审核仍报 `legacy_requires_migration`；直接 host 未实现 org 入口报 `legacy.unsupported_org_api`，修改或未知 DOM 成员报 `legacy.unsupported_dom_operation`，重载错误报 `legacy.invalid_dom_overload`，非法 forest 报 `legacy.invalid_dom`，资源超限报 `legacy.dom_limit`。不支持的 CSS 表达式抛选择器错误；WebView/WebJS 保留迁移错误，不回退浏览器。

@@ -125,6 +125,7 @@ void main() {
     for (final rule in [
       'p@text##[',
       'p@text##x##y##z',
+      'p@text##(?<=a)b##x###',
       'p@text@js:',
       '[data-x="broken]@text',
       '<js>result;',
