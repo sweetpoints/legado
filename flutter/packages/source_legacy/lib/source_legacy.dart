@@ -7,6 +7,7 @@ import 'src/main_js.dart';
 
 export 'src/legacy_host.dart';
 export 'src/portable_rules.dart';
+export 'src/portable_dom.dart';
 
 import 'package:source_engine/source_engine.dart';
 
