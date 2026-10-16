@@ -80,6 +80,12 @@ jobs:
           set -euo pipefail
           dart analyze hook test
           dart test test/ --reporter expanded 2>&1 | tee "$GITHUB_WORKSPACE/build/linux-app-acceptance/v8-tests.log"
+      - name: Verify the complete application with Linux native assets
+        working-directory: flutter/apps/legado
+        run: |
+          set -euo pipefail
+          flutter analyze
+          flutter test --reporter expanded 2>&1 | tee "$GITHUB_WORKSPACE/build/linux-app-acceptance/app-tests.log"
       - name: Build the Linux application in Release mode
         working-directory: flutter/apps/legado
         run: |

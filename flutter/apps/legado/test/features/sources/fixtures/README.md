@@ -19,6 +19,7 @@ page fetcher, despite an otherwise portable request.
 
 An explicit negative test keeps `org.jsoup` native leases and URL `webView`
 options unsupported. Those test assertions establish diagnostics, not successful
-source execution. The earlier user-supplied 疯情、全本 and 笔趣阁² sources still
-need their native DOM/browser/request-host capabilities ported before claiming
-complete compatibility.
+source execution. The separate `fengqing_source_workflow_test.dart` now executes the user-supplied
+疯情 source through the portable read-only DOM/source-state host. 全本 WebView
+and 笔趣阁² connection/raw-request capabilities still require implementation
+before claiming complete compatibility.
