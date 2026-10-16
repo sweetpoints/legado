@@ -264,6 +264,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shelfEmptyGroup => 'There are no books in this group.';
 
   @override
+  String get shelfImportEncodedText => 'Import TXT with encoding';
+
+  @override
+  String get shelfChooseTextEncoding => 'Choose TXT encoding';
+
+  @override
+  String get shelfTextEncodingHint =>
+      'Choose the file’s known encoding. A byte order mark (BOM) takes priority; a conflicting choice will stop the import.';
+
+  @override
+  String get shelfEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get shelfEncodingGbk => 'GBK / GB2312';
+
+  @override
+  String get shelfEncodingUtf16Le => 'UTF-16 Little Endian';
+
+  @override
+  String get shelfEncodingUtf16Be => 'UTF-16 Big Endian';
+
+  @override
+  String get shelfEncodingConflict =>
+      'The selected encoding conflicts with this file’s BOM. Choose the encoding indicated by the BOM, or use automatic TXT import.';
+
+  @override
+  String get shelfEncodingUnavailable =>
+      'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.';
+
+  @override
   String get readerTitle => 'Read';
 
   @override

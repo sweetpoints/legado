@@ -584,6 +584,60 @@ abstract class AppLocalizations {
   /// **'There are no books in this group.'**
   String get shelfEmptyGroup;
 
+  /// No description provided for @shelfImportEncodedText.
+  ///
+  /// In en, this message translates to:
+  /// **'Import TXT with encoding'**
+  String get shelfImportEncodedText;
+
+  /// No description provided for @shelfChooseTextEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose TXT encoding'**
+  String get shelfChooseTextEncoding;
+
+  /// No description provided for @shelfTextEncodingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the file’s known encoding. A byte order mark (BOM) takes priority; a conflicting choice will stop the import.'**
+  String get shelfTextEncodingHint;
+
+  /// No description provided for @shelfEncodingUtf8.
+  ///
+  /// In en, this message translates to:
+  /// **'UTF-8'**
+  String get shelfEncodingUtf8;
+
+  /// No description provided for @shelfEncodingGbk.
+  ///
+  /// In en, this message translates to:
+  /// **'GBK / GB2312'**
+  String get shelfEncodingGbk;
+
+  /// No description provided for @shelfEncodingUtf16Le.
+  ///
+  /// In en, this message translates to:
+  /// **'UTF-16 Little Endian'**
+  String get shelfEncodingUtf16Le;
+
+  /// No description provided for @shelfEncodingUtf16Be.
+  ///
+  /// In en, this message translates to:
+  /// **'UTF-16 Big Endian'**
+  String get shelfEncodingUtf16Be;
+
+  /// No description provided for @shelfEncodingConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected encoding conflicts with this file’s BOM. Choose the encoding indicated by the BOM, or use automatic TXT import.'**
+  String get shelfEncodingConflict;
+
+  /// No description provided for @shelfEncodingUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.'**
+  String get shelfEncodingUnavailable;
+
   /// No description provided for @readerTitle.
   ///
   /// In en, this message translates to:

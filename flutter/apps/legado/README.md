@@ -1,6 +1,8 @@
 # Legado Flutter App（迁移开发中）
 
-Flutter 3.47.6 官方五平台 app 工程。当前已有 Drift 书架存储、TXT/EPUB 文本导入与连续阅读、书源管理/搜索/发现/详情、RSS/Atom/有限 HTML 订阅、ZIP 备份原子恢复与导出、语言和主题设置。
+Flutter 3.47.6 官方五平台 app 工程。当前已有 Drift 书架/分组/排序、TXT/EPUB 文本导入与连续阅读、持久化书签与备注、书源管理/搜索/发现/详情、RSS/Atom/有限 HTML 订阅、ZIP 备份原子恢复与导出、语言和主题设置。
+
+TXT 支持严格 UTF-8、带 BOM 的 UTF-16 与 GBK；自动判定不确定时可使用编码选择入口，不支持 GB18030 四字节编码。
 
 统一技术栈：Drift + Riverpod、Freezed、Dio、go_router ^18.1.0、material_ui ^1.7.0、官方 ARB/gen_l10n 中英国际化。
 
