@@ -40,10 +40,86 @@ class RssStore {
     return next;
   }
 
-  Future<List<RssSource>> sources() async =>
-      ((await _load())['sources'] as List)
-          .map((e) => RssSource.fromJson(Map<String, Object?>.from(e as Map)))
-          .toList();
+  /// Existing app records win exact-identity conflicts. Reading never mutates
+  /// either app settings or the retained original backup entry.
+  Future<({List<RssSource> sources, int restoredCount, int conflictCount})>
+  sourceView() async {
+    final data = await _load();
+    final native = (data['sources'] as List)
+        .map((e) => RssSource.fromJson(Map<String, Object?>.from(e as Map)))
+        .toList();
+    final legacyState = _legacyState(data);
+    final tombstones = Set<String>.from(
+      legacyState['deletedSourceUrls'] as List,
+    );
+    final repository = this.repository;
+    final text = repository is LegacyBackupFileReader
+        ? await (repository as LegacyBackupFileReader).backupFile(
+            'rssSources.json',
+          )
+        : (await repository.backupFiles())['rssSources.json'];
+    if (text == null) {
+      return (sources: native, restoredCount: 0, conflictCount: 0);
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException {
+      throw const FormatException('rssInvalidRestore');
+    }
+    if (decoded is! List) throw const FormatException('rssInvalidRestore');
+    final seen = <String>{};
+    final currentIds = native.map((e) => e.url).toSet();
+    var conflicts = 0;
+    var restored = 0;
+    final merged = [...native];
+    for (final value in decoded) {
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('rssInvalidRestore');
+      }
+      final source = RssSource.fromJson(value);
+      if (!seen.add(source.url)) {
+        throw const FormatException('rssDuplicateRestoreSource');
+      }
+      if (tombstones.contains(source.url)) continue;
+      if (currentIds.contains(source.url)) {
+        conflicts++;
+        continue;
+      }
+      merged.add(source);
+      restored++;
+    }
+    return (sources: merged, restoredCount: restored, conflictCount: conflicts);
+  }
+
+  Future<List<RssSource>> sources() async => (await sourceView()).sources;
+
+  Map<String, Object?> _legacyState(Map<String, Object?> data) {
+    final value = data['legacyRestore'];
+    if (value == null) return {'version': 1, 'deletedSourceUrls': <String>[]};
+    if (value is! Map ||
+        value['version'] != 1 ||
+        value['deletedSourceUrls'] is! List ||
+        (value['deletedSourceUrls'] as List).any((e) => e is! String)) {
+      throw const FormatException('rssCorruptStorage');
+    }
+    return Map<String, Object?>.from(value);
+  }
+
+  /// Deletion is an explicit user action; retain a tombstone so restored legacy
+  /// sources cannot reappear on the next read or process restart.
+  Future<void> removeSource(String identity) => _commit((data) async {
+    data['sources'] = (data['sources'] as List)
+        .where((e) => ((e as Map)['sourceUrl'] ?? e['url']) != identity)
+        .toList();
+    final state = _legacyState(data);
+    state['deletedSourceUrls'] = {
+      ...Set<String>.from(state['deletedSourceUrls'] as List),
+      identity,
+    }.toList();
+    data['legacyRestore'] = state;
+    // Offline articles and bookmarks stay available if the source is re-added.
+  });
 
   Future<void> importSources(String text) async {
     final decoded = jsonDecode(text);
@@ -68,6 +144,12 @@ class RssStore {
         }
       }
       data['sources'] = existing;
+      final state = _legacyState(data);
+      final importedIds = imported.map((e) => e.url).toSet();
+      state['deletedSourceUrls'] = (state['deletedSourceUrls'] as List)
+          .where((e) => !importedIds.contains(e))
+          .toList();
+      data['legacyRestore'] = state;
     });
   }
 

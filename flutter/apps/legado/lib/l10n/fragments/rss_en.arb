@@ -33,5 +33,20 @@
   "rssPaginationCycle": "Pagination contains a cycle. Requests stopped; fix the next-page rule.",
   "rssPageLimit": "Pagination exceeded 20 pages. Requests stopped; narrow the category.",
   "rssInvalidArticleLink": "The article link is invalid. Check the link extraction rule.",
-  "rssImageError": "Image could not load. Copy the original article link to view it."
+  "rssImageError": "Image could not load. Copy the original article link to view it.",
+  "rssDelete": "Delete subscription",
+  "rssDeleteHelp": "The subscription will stay deleted across restarts. Original backups, offline articles and bookmarks are kept. Explicitly importing the same URL adds it back.",
+  "rssRestoreSummary": "Legacy backup: {restored} subscriptions available; {conflicts} URL conflicts keep the current configuration. Original backup data is unchanged.",
+  "@rssRestoreSummary": {
+    "placeholders": {
+      "restored": {
+        "type": "int"
+      },
+      "conflicts": {
+        "type": "int"
+      }
+    }
+  },
+  "rssInvalidRestore": "The legacy subscription backup is invalid. Original data is preserved; check rssSources.json.",
+  "rssDuplicateRestoreSource": "The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved."
 }

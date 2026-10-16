@@ -6,9 +6,44 @@ import 'package:legado_app/features/rss/rss_home_page.dart';
 import 'package:legado_app/features/rss/rss_service.dart';
 import 'package:legado_app/l10n/generated/app_localizations.dart';
 
-import 'rss_service_test.dart' show MemoryLibrary;
+import 'rss_service_test.dart' show MemoryLibrary, ReaderMemoryLibrary;
 
 void main() {
+  testWidgets(
+    'restored subscriptions show conflict policy and deletion stays hidden on reread',
+    (tester) async {
+      final repository = ReaderMemoryLibrary()
+        ..legacyText =
+            '[{"sourceUrl":"https://example.org/restored","sourceName":"Restored source"}]';
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: RssHomePage(repository: repository),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Restored source'), findsOneWidget);
+      expect(find.textContaining('1 subscriptions available'), findsOneWidget);
+      await tester.tap(find.byTooltip('Delete subscription'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Delete subscription'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Restored source'), findsNothing);
+      expect(await RssStore(repository).sources(), isEmpty);
+      expect(repository.legacyText, contains('Restored source'));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'English sources -> articles -> article persists read and bookmark',
     (tester) async {
