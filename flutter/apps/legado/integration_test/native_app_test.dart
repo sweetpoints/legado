@@ -43,7 +43,10 @@ void main() {
     'native file-backed Drift closes and reopens book and UTF-16 progress',
     (tester) async {
       expect(
-        Platform.isIOS || Platform.isMacOS || Platform.isLinux,
+        Platform.isIOS ||
+            Platform.isMacOS ||
+            Platform.isLinux ||
+            Platform.isWindows,
         isTrue,
         reason: 'Run on the actual native application, not flutter_tester',
       );
