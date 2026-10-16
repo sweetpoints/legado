@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "version": "15.4.80.25"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  },
+  "targets": {
+    "ios-arm64": {
+      "cpu": "arm64",
+      "environment": "device",
+      "minIOS": "15.0"
+    },
+    "ios-simulator-arm64": {
+      "cpu": "arm64",
+      "environment": "simulator",
+      "minIOS": "15.0"
+    }
+  }
+}

@@ -14,7 +14,7 @@ Legado downloads the published pure SDK and compiles **only its own bridge**.
 | macOS x64 | Yes | Added fixed SDK + bridge + Flutter hook | Real x86_64 bridge linked and ten ABI exports inspected; no x64 runtime result on this ARM64 host without Rosetta |
 | Linux x64 / ARM64 | Yes | Not yet enabled | Fixed Chromium sysroot, ELF GNU/Linux linker profile, rescan library grouping, export validation, and native runtime CI |
 | Windows x64 / ARM64 | Yes | Not yet enabled | Fixed Clang/clang-cl and MSVC SDK, DLL naming, `__declspec(dllexport)` ABI exports, PE validation, Windows-compatible atomic publish lock, native runtime CI |
-| iOS ARM64 device / simulator | Yes, jitless profile | Not yet enabled | iOS framework/native-asset packaging, platform-specific target selection, signing, jitless runtime and source compatibility acceptance |
+| iOS ARM64 device / simulator | Yes, jitless profile | Experimental static XCFramework and native probe; Flutter hook not enabled | App static/native-asset integration, signing and full source compatibility acceptance |
 
 `consumerConfigured` means a pinned SDK and consumer target exist. It does not mean
 that a full application Release has passed on that platform. To inspect the fixed
@@ -51,6 +51,10 @@ reviewed toolchain pin before automatic preparation can work there.
 No Rosetta installation, V8 source build, release mutation or runtime fallback was
 performed. Hardened Runtime application packaging still requires its existing JIT
 entitlement and a separate signed Release execution test for each architecture.
+
+See [IOS-CONSUMER.md](IOS-CONSUMER.md) for the real static bridge package and
+simulator runtime checks added after the initial audit. The app hook remains
+intentionally disabled until its application integration passes.
 
 ## iOS feature and packaging boundary
 
