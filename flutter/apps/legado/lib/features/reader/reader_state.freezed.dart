@@ -222,7 +222,7 @@ return $default(_that.book,_that.chapters,_that.selected,_that.characterOffset,_
 
 class _ReaderViewState implements ReaderViewState {
   const _ReaderViewState({this.book,  List<ReaderChapter> chapters = const <ReaderChapter>[], this.selected = 0, this.characterOffset = 0, this.content, this.error, this.saveError, this.loading = true, this.fontSize = 20, this.theme = 'system'}): _chapters = chapters;
-  
+
 
 @override final  LegacyBookRecord? book;
  final  List<ReaderChapter> _chapters;
