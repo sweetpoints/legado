@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -17,8 +18,12 @@ import '../l10n/generated/app_localizations.dart';
 import '../services/book_source_service.dart';
 import 'providers.dart';
 
-final initialLocationProvider = Provider<String>((ref) => '/bookshelf');
-final appRouterProvider = Provider<GoRouter>((ref) {
+part 'router.g.dart';
+
+@Riverpod(keepAlive: true)
+String initialLocation(Ref ref) => '/bookshelf';
+@Riverpod(keepAlive: true)
+GoRouter appRouter(Ref ref) {
   final repository = ref.watch(libraryProvider);
   final router = GoRouter(
     initialLocation: ref.read(initialLocationProvider),
@@ -149,7 +154,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
   ref.onDispose(router.dispose);
   return router;
-});
+}
 
 class _ReaderRoute extends ConsumerWidget {
   const _ReaderRoute({

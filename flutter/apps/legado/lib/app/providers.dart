@@ -4,14 +4,15 @@ import 'dart:io';
 import 'package:app_core/app_core.dart';
 import 'package:app_storage/app_storage.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'preferences.dart';
 
-final persistentLibraryProvider = FutureProvider<LibraryRepository>((
-  ref,
-) async {
+part 'providers.g.dart';
+
+@Riverpod(keepAlive: true)
+Future<LibraryRepository> persistentLibrary(Ref ref) async {
   final directory = await getApplicationSupportDirectory();
   await directory.create(recursive: true);
   final repository = await SqliteLibraryRepository.open(
@@ -23,27 +24,30 @@ final persistentLibraryProvider = FutureProvider<LibraryRepository>((
   }
   ref.onDispose(() => unawaited(repository.close()));
   return repository;
-});
+}
 
 /// Overridden only after opening the durable library; never a memory fallback.
-final libraryProvider = Provider<LibraryRepository>(
-  (ref) => ref.watch(persistentLibraryProvider).requireValue,
-);
+@Riverpod(keepAlive: true)
+LibraryRepository library(Ref ref) =>
+    ref.watch(persistentLibraryProvider).requireValue;
 
-final libraryChangesProvider = StreamProvider<int>((ref) async* {
+@Riverpod(keepAlive: true)
+Stream<int> libraryChanges(Ref ref) async* {
   var revision = 0;
   yield revision;
   await for (final _ in ref.watch(libraryProvider).changes) {
     yield ++revision;
   }
-});
+}
 
-final bookshelfProvider = FutureProvider<List<LegacyBookRecord>>((ref) {
+@Riverpod(keepAlive: true)
+Future<List<LegacyBookRecord>> bookshelf(Ref ref) {
   ref.watch(libraryChangesProvider);
   return ref.watch(libraryProvider).books();
-});
+}
 
-final dioProvider = Provider<Dio>((ref) {
+@Riverpod(keepAlive: true)
+Dio dio(Ref ref) {
   final dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 15),
@@ -53,14 +57,10 @@ final dioProvider = Provider<Dio>((ref) {
   );
   ref.onDispose(() => dio.close(force: true));
   return dio;
-});
+}
 
-final preferencesProvider =
-    AsyncNotifierProvider<PreferencesController, AppPreferences>(
-      PreferencesController.new,
-    );
-
-class PreferencesController extends AsyncNotifier<AppPreferences> {
+@Riverpod(name: 'preferencesProvider', keepAlive: true)
+class PreferencesController extends _$PreferencesController {
   Future<void> _pending = Future.value();
 
   @override
