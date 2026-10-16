@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'reader_state.dart';
+import 'reader_bookmarks.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 /// Continuous text reader. Positions are UTF-16 text offsets, never percentages
@@ -197,7 +198,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       if (!mounted || request != _request) return;
       _change(() {
         _text = content;
-        _offset = offset.clamp(0, content!.length);
+        _offset = ReaderBookmarks.safeOffset(content!, offset);
         _loading = false;
       });
     } catch (error) {
@@ -430,6 +431,212 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     if (mounted && index != null) await _navigate(index);
   }
 
+  Future<void> _addBookmark() async {
+    if (_loading || _book == null || _text == null || _error != null) return;
+    final request = _request;
+    final book = _book!;
+    final chapter = _chapters[_selected];
+    final offset = _offset;
+    final text = _text!;
+    var note = '';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_l10n.readerAddBookmark),
+        content: TextField(
+          autofocus: true,
+          maxLines: 3,
+          onChanged: (value) => note = value,
+          decoration: InputDecoration(labelText: _l10n.readerBookmarkNote),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(_l10n.readerBookmarkCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(_l10n.readerBookmarkSave),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || request != _request || accepted != true) return;
+    try {
+      await ReaderBookmarks(widget.repository)
+          .add(book, chapter, offset, text, note: note);
+      if (!mounted || request != _request) return;
+      ref.invalidate(
+        readerBookmarksProvider((repository: widget.repository, book: book)),
+      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_l10n.readerBookmarkAdded)));
+    } catch (error) {
+      if (mounted && request == _request) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_l10n.readerBookmarkFailed(error.toString()))),
+        );
+      }
+    }
+  }
+
+  Future<void> _bookmarks() async {
+    if (_book == null || _loading) return;
+    final book = _book!;
+    final query = (repository: widget.repository, book: book);
+    final request = _request;
+    var busy = false;
+    final selected = await showModalBottomSheet<ReaderBookmark>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, updateSheet) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .75,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        _l10n.readerBookmarks,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: busy ? null : _addBookmark,
+                        icon: const Icon(Icons.bookmark_add),
+                        label: Text(_l10n.readerAddBookmark),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Consumer(
+                    builder: (context, ref, _) => ref
+                        .watch(readerBookmarksProvider(query))
+                        .when(
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (error, _) => Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _l10n.readerBookmarkFailed(
+                                      error.toString(),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => ref.invalidate(
+                                      readerBookmarksProvider(query),
+                                    ),
+                                    child: Text(_l10n.readerRetry),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          data: (rows) => rows.isEmpty
+                              ? Center(child: Text(_l10n.readerBookmarksEmpty))
+                              : ListView.builder(
+                                  itemCount: rows.length,
+                                  itemBuilder: (context, index) {
+                                    final bookmark = rows[index];
+                                    final available =
+                                        bookmark.chapterIn(_chapters) != null;
+                                    return ListTile(
+                                      title: Text(
+                                        bookmark.chapterName.isEmpty
+                                            ? _l10n.readerTitle
+                                            : bookmark.chapterName,
+                                      ),
+                                      subtitle: Text(
+                                        available
+                                            ? [bookmark.note, bookmark.excerpt]
+                                                  .where(
+                                                    (value) => value.isNotEmpty,
+                                                  )
+                                                  .join('\n')
+                                            : _l10n.readerBookmarkUnavailable,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      onTap: available && !busy
+                                          ? () => Navigator.pop(
+                                              sheetContext,
+                                              bookmark,
+                                            )
+                                          : null,
+                                      trailing: IconButton(
+                                        tooltip: _l10n.readerDeleteBookmark,
+                                        icon: const Icon(Icons.delete_outline),
+                                        onPressed: busy
+                                            ? null
+                                            : () async {
+                                                updateSheet(() => busy = true);
+                                                try {
+                                                  await ReaderBookmarks(
+                                                    widget.repository,
+                                                  ).remove(bookmark);
+                                                  if (context.mounted) {
+                                                    ref.invalidate(
+                                                      readerBookmarksProvider(
+                                                        query,
+                                                      ),
+                                                    );
+                                                  }
+                                                } catch (error) {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          _l10n
+                                                              .readerBookmarkFailed(
+                                                                error
+                                                                    .toString(),
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                } finally {
+                                                  if (context.mounted) {
+                                                    updateSheet(
+                                                      () => busy = false,
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || request != _request || selected == null) return;
+    final target = selected.chapterIn(_chapters);
+    if (target == null) return;
+    await _persist();
+    if (!mounted || request != _request) return;
+    await _openChapter(target, offset: selected.position!);
+    if (mounted && _error == null) await _persist();
+  }
+
   @override
   void dispose() {
     _saveTimer?.cancel();
@@ -484,6 +691,11 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                 appBar: AppBar(
                   title: Text(_book?.name ?? _l10n.readerTitle),
                   actions: [
+                    IconButton(
+                      onPressed: _book == null || _loading ? null : _bookmarks,
+                      tooltip: _l10n.readerBookmarks,
+                      icon: const Icon(Icons.bookmarks_outlined),
+                    ),
                     IconButton(
                       onPressed: _settings,
                       tooltip: _l10n.readerSettings,

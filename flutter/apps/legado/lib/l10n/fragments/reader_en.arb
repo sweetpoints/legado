@@ -58,5 +58,22 @@
   "readerEpubEncrypted": "Encrypted or obfuscated EPUB resources are not supported.",
   "readerEpubUnsupported": "This EPUB contains a chapter format that the text reader cannot display.",
   "readerEpubEmpty": "This EPUB contains no readable text.",
-  "readerEpubImport": "Import EPUB"
+  "readerEpubImport": "Import EPUB",
+  "readerBookmarks": "Bookmarks",
+  "readerAddBookmark": "Bookmark this position",
+  "readerBookmarkNote": "Note (optional)",
+  "readerBookmarkCancel": "Cancel",
+  "readerBookmarkSave": "Save",
+  "readerBookmarkAdded": "Bookmark saved",
+  "readerBookmarkFailed": "Could not update bookmarks: {error}",
+  "readerBookmarksEmpty": "No bookmarks yet",
+  "readerBookmarkUnavailable": "This bookmark cannot be matched to the current book and chapter.",
+  "readerDeleteBookmark": "Delete bookmark",
+  "@readerBookmarkFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
