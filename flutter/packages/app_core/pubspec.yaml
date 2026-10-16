@@ -1,0 +1,10 @@
+name: app_core
+description: Cross-platform Legado application data and legacy backup contracts.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.13.5
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6

@@ -1,6 +1,8 @@
-# Dart 书源引擎工作区
+# Legado Flutter 工作区
 
 工程使用 Flutter 3.47.6 / Dart 3.13.5 官方脚手架生成：核心、兼容、迁移、工具和一致性测试使用 `package`，V8 使用 `package_ffi`，平台适配使用 `plugin`，Android 接入使用 `module`。保留官方工程结构；业务包移除不需要的 Flutter 依赖。多个工程由 Pub workspace 管理。
+
+独立五平台 App 位于 `apps/legado`；当前正在进行全应用迁移，范围与验收见[迁移清单](docs/app-migration/README.md)。App 工程存在不代表功能已迁移或五平台 V8 已可用。
 
 ## 使用
 
