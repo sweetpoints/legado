@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "repository": "sweetpoints/v8-prebuilt",
+  "tag": "v8-15.4.80.25",
+  "releaseManifestSha256": "d01f58c45b713edcccf3fdc3bc5969d2eb417773d895522e3ae330df8c71f0f2",
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "version": "15.4.80.25"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  },
+  "assets": [
+    {
+      "name": "v8-15.4.80.25-ios-arm64.tar.gz",
+      "sha256": "ced34060adcc8e2eabde29f62ba8410f13d9a59f72ef0efe4c20ca9ef7a001d5",
+      "size": 23674033,
+      "target": "ios-arm64"
+    },
+    {
+      "name": "v8-15.4.80.25-ios-simulator-arm64.tar.gz",
+      "sha256": "528440d3e24602ef8fe423db9e8a5888034bf1ebb6ed35377793d47f09f02bc2",
+      "size": 23988113,
+      "target": "ios-simulator-arm64"
+    }
+  ],
+  "sdkManifestSha256": {
+    "ios-arm64": "e79a8dd98f6448c138d5a5d0edcad275c534c714a423d79caf63fa98fb7b7fc4",
+    "ios-simulator-arm64": "95b405a1420d79e4abc617a42cb37d7546bc2bf6322ba385a7e6b7d9f87e09b8"
+  },
+  "sdkPinsSha256": "f04d578f82c6b5d39ebd103d26adf0dae79be5194c9bb56d26720e10706b7fe1"
+}

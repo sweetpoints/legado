@@ -283,6 +283,11 @@ __attribute__((visibility("default"))) const char *sv8_version() {
 __attribute__((visibility("default"))) Runtime *sv8_create(int timeout_ms,
                                                            int heap_mb) {
   std::call_once(initialized, [] {
+#if defined(SV8_IOS_JITLESS)
+    // The reviewed iOS SDK is compiled without JIT/Wasm. Keep its runtime
+    // flag contract explicit before any isolate or platform is initialized.
+    V8::SetFlagsFromString("--jitless");
+#endif
     V8::InitializeICUDefaultLocation(nullptr);
     runtime_platform = v8::platform::NewDefaultPlatform();
     V8::InitializePlatform(runtime_platform.get());
