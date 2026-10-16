@@ -51,31 +51,77 @@ dynamic dependencies and the highest required glibc version. It explicitly
 records `v8BuiltLocally=false`, `flutterHookEnabled=false` and
 `runtimeTested=false`.
 
-## Verification and remaining allocator boundary
+## Linux allocator boundary and verification
+
+The original SDK consumer cross-linked, and its JavaScript assertions passed,
+but normal process teardown failed with SIGTRAP. The released SDK contains a
+hidden PartitionAlloc `free`, while V8's default tracing controller obtains
+category names using system `strdup`; its destructor passed that glibc allocation
+to PartitionAlloc. The pinned [V8 tracing controller source](https://chromium.googlesource.com/v8/v8/+/c45871fec706a6e7b715e607065bb4578b23ce9f/src/libplatform/tracing/tracing-controller.cc)
+contains this `strdup`/`free` pair. The failure was symbolized to
+`v8::platform::tracing::TracingController::~TracingController`.
+
+`linux_allocator_boundary.cpp` now adapts the finite allocation-returning libc
+interfaces imported by these fixed SDKs. It is Linux-only bridge code and does
+not modify the V8 archives, replace process allocation, disable tracing, skip
+teardown, or change JIT/Intl/Temporal/WebAssembly settings.
+
+| Interface | Ownership handling |
+| --- | --- |
+| `strdup`, `strndup` | Copy directly into the bridge's own allocator; preserve truncation and terminator semantics. |
+| `realpath`, `getcwd` | Keep caller-provided buffers unchanged; copy libc-allocated results and preserve explicit `getcwd(NULL, size)` capacity. |
+| `vasprintf` | Copy the returned byte count plus terminator, including embedded NUL bytes. |
+| `backtrace_symbols` | Copy the pointer table and all strings into one allocation, preserving single-free semantics. |
+
+For the latter four functions, only the original libc-returned buffer is freed
+through the **versioned** system `__libc_free` symbol: GLIBC 2.17 on ARM64 and
+GLIBC 2.2.5 on x64. The explicit ELF version is essential because the SDK also
+contains an unversioned PartitionAlloc alias named `__libc_free`.
+
+The complete undefined dynamic-symbol inventory was reviewed for both targets
+and pinned by SHA-256. A changed import set fails the build and requires renewed
+ownership review. In particular:
+
+- V8's fixed `src/` tree calls `strdup` in tracing and `backtrace_symbols` in
+  stack-trace and external-reference diagnostics. Its `d8` CLI's `getcwd` call
+  uses a caller-supplied buffer; `d8` is not linked into this bridge.
+- Rust/libc++/ICU dependencies add `getcwd`, `realpath` and `vasprintf` to the
+  final SDK imports. These receive the same ownership adapters.
+- `FILE*`, `DIR*`, locale and message-catalog handles remain owned by libc and
+  use the matching libc `fclose`, `closedir`, `freelocale` and `catclose`
+  functions. Borrowed environment/locale/error strings are not freed.
+- Mapped memory keeps its `mmap`/`munmap` ownership. Compiler unwind runtime
+  calls do not return buffers for the bridge allocator to free.
+- No `malloc`, `free`, C++ allocation operator or boundary-test function is
+  exported by the production shared library; its ABI remains the ten `sv8`
+  functions.
+
+The ownership semantics are documented by the [GNU libc backtrace manual](https://sourceware.org/glibc/manual/latest/html_node/Backtraces.html)
+(single allocation for the table and strings) and exercised against the actual
+pinned SDK allocator in a separate test-only shared library.
 
 Locally verified on 2026-10-17:
 
-- Both real released SDKs were downloaded and authenticated.
-- Both bridges cross-linked using pinned Chromium Clang/LLD and target sysroots.
-- Both outputs are the correct ELF64 architecture, export exactly the ten `sv8`
-  ABI functions, contain no unexpected dynamic dependency and require at most
+- Both real released SDKs and target sysroots were downloaded and authenticated.
+- Both bridges cross-linked using pinned Chromium Clang/LLD; the target sysroot
+  is also selected explicitly for GCC CRT/unwind discovery.
+- Both outputs are the correct ELF64 architecture, export exactly ten `sv8`
+  functions, have no unexpected dynamic dependencies, and require at most
   GLIBC 2.27 (below the SDK's GLIBC 2.31 compatibility ceiling).
-- Linux ARM64 was loaded inside an isolated, network-disabled Linux ARM64
-  container. JavaScript, Intl, Temporal, WebAssembly availability, retained
-  sessions, asynchronous/synchronous host calls, cancellation and recovery all
-  ran, but **normal process teardown failed with SIGTRAP**.
+- Linux ARM64 executed inside a native ARM64, network-disabled container.
+- Linux x64 executed in an emulated amd64, network-disabled container on the
+  same ARM64 host. This is not native x64 machine acceptance.
+- Both executions passed all six allocation adapters' buffer/errno/string
+  semantics over 2,000 cycles, JavaScript, Intl, Temporal, actual WebAssembly
+  validation, retained sessions, asynchronous/synchronous host calls,
+  cancellation/recovery, and 100 V8 memory/feature stress cycles.
+- Both child processes exited normally, including the unchanged default tracing
+  controller's destructor. A receipt is only saved after zero process exit.
 
-This is not a successful runtime acceptance. The pinned SDK contains a local
-PartitionAlloc `free`, while V8's default tracing controller obtains category
-names using system `strdup`. The controller's destructor then passes a glibc
-allocation to PartitionAlloc. The pinned [V8 tracing controller source](https://chromium.googlesource.com/v8/v8/+/c45871fec706a6e7b715e607065bb4578b23ce9f/src/libplatform/tracing/tracing-controller.cc)
-contains the `strdup`/`free` pair, and the crash was symbolized to
-`v8::platform::tracing::TracingController::~TracingController`.
-
-The consumer does not hide that failure by omitting the destructor, calling
-`_Exit`, disabling SDK validation, changing the published V8 static library or
-marking Linux support ready. The bridge allocator boundary must be resolved and
-retested before Flutter hook registration or application acceptance.
+Flutter hooks, final application runtime and old-source compatibility acceptance
+remain separate integration work. `runtimeTested=false` in build provenance
+means build-only evidence; the separate runtime receipt reports the executed
+checks and whether the execution environment was native or emulated.
 
 An explicit same-architecture native probe is available:
 
@@ -87,8 +133,8 @@ python3 flutter/tool/v8/linux_sdk.py \
 
 The probe runs in a child process. A receipt is written only after normal child
 exit with status zero. Passing JavaScript assertions followed by an allocator
-crash remains a failure. An x64 execution under emulation must be reported as
-emulation, not native x64 validation. No real Flutter application or old-source
+crash remains a failure. Pass `--execution-mode emulated` when the Linux process
+runs under emulation; this is recorded in the receipt. No real Flutter application or old-source
 compatibility acceptance is implied by this probe.
 
 ```sh

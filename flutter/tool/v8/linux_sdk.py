@@ -26,6 +26,7 @@ import link_sdk
 
 HERE = Path(__file__).resolve().parent
 PACKAGE = link_sdk.PACKAGE
+ALLOCATOR_WRAPS = ('strdup', 'strndup', 'realpath', 'getcwd', 'vasprintf', 'backtrace_symbols')
 PROFILES = {'linux-x64': ('x86_64-linux-gnu', 62, 'amd64'),
             'linux-arm64': ('aarch64-linux-gnu', 183, 'arm64')}
 
@@ -164,11 +165,12 @@ def contract(root, target, pins):
 def command(root, target, linking, compiler_root, sysroot, output):
     platform_root = Path(root) / target
     args = [compiler_root / 'bin/clang++', *linking['compileOptions'], '--sysroot=' + str(sysroot),
+            '--gcc-toolchain=' + str(Path(sysroot) / 'usr'),
             '-Oz', '-ffunction-sections', '-fdata-sections', '-fvisibility=hidden',
             '-fvisibility-inlines-hidden']
     args += ['-I' + str(platform_root / relative) for relative in linking['includeDirs']]
     args += ['-D' + define for define in linking['defines']]
-    args += [PACKAGE / 'src/source_v8.cpp', '-Wl,--start-group']
+    args += [PACKAGE / 'src/source_v8.cpp', HERE / 'linux_allocator_boundary.cpp', '-Wl,--start-group']
     args += [platform_root / relative for relative in linking['libraries']]
     args += ['-Wl,--end-group', *linking['linkOptions'], '-nodefaultlibs', '-lc',
              '--ld-path=' + str(compiler_root / 'bin/ld.lld'), '-shared', '-Wl,--no-undefined',
@@ -182,8 +184,22 @@ def command(root, target, linking, compiler_root, sysroot, output):
     if not unwind.is_file() or not unwind.resolve().is_relative_to(Path(sysroot).resolve()):
         raise ValueError('Pinned sysroot unwind runtime missing')
     args += [unwind]
+    args += ['-Wl,--wrap=' + name for name in ALLOCATOR_WRAPS]
     args += ['-l' + library for library in linking['systemLibraries']]
     return args + ['-o', output]
+
+
+
+def audit_imports(symbols, target, pins):
+    names = sorted({parts[7] for line in symbols.splitlines() if len(parts := line.split()) >= 8
+                    and parts[0].rstrip(':').isdigit() and parts[6] == 'UND'})
+    digest = hashlib.sha256(('\n'.join(names) + '\n').encode()).hexdigest()
+    if digest != pins['undefinedSymbolsSha256'][target]:
+        raise ValueError('Linux SDK imports changed; allocator ownership audit required')
+    version = '2.17' if target == 'linux-arm64' else '2.2.5'
+    if '__libc_free@GLIBC_' + version not in names:
+        raise ValueError('Allocator boundary must use versioned system glibc free')
+    return digest
 
 
 def inspect_elf(data, target):
@@ -213,7 +229,7 @@ def build(output, targets, *, sdk_cache=None, compiler_cache=None, sysroot_cache
     identity = link_sdk.compiler_identity(run([compiler / 'bin/clang++', '--version']))
     source_digest = link_sdk.source_digest()
     inputs = {name: prebuilt.sha(HERE / name) for name in
-              ('linux_sdk.py', 'linux-pins.json', 'linux-release-pin.json')}
+              ('linux_sdk.py', 'linux_allocator_boundary.cpp', 'linux-pins.json', 'linux-release-pin.json')}
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.linux-bridge-', dir=output.parent) as temporary:
         work = Path(temporary)
@@ -229,8 +245,20 @@ def build(output, targets, *, sdk_cache=None, compiler_cache=None, sysroot_cache
             binary = folder / 'libsource_v8.so'
             args = command(root, target, linking, compiler, sysroot, binary)
             run(args)
+            # A separate fixture exercises ownership, caller-supplied buffers,
+            # errno, counted embedded-NUL output and 2,000 allocation cycles.
+            probe = folder / 'allocator-boundary-test.so'
+            export_map = folder / 'allocator-test.map'
+            export_map.write_text('{ global: sv8_linux_allocator_boundary_test; local: *; };\n')
+            probe_args = [item for item in args if item != PACKAGE / 'src/source_v8.cpp']
+            probe_args = [('-Wl,--version-script=' + str(export_map)) if str(item).startswith('-Wl,--version-script=')
+                          else item for item in probe_args]
+            probe_args = [probe if item == binary else item for item in probe_args]
+            probe_args.insert(1, '-DSV8_LINUX_ALLOCATOR_BOUNDARY_TEST=1')
+            run(probe_args)
             inspection = inspect_elf(binary.read_bytes(), target)
             exported = run([compiler / 'bin/llvm-readelf', '--dyn-syms', '--wide', binary])
+            imports_digest = audit_imports(exported, target, pins)
             defined = {parts[7] for line in exported.splitlines() if len(parts := line.split()) >= 8
                        and parts[0].rstrip(':').isdigit() and parts[6] != 'UND'
                        and parts[4] in ('GLOBAL', 'WEAK')}
@@ -250,6 +278,7 @@ def build(output, targets, *, sdk_cache=None, compiler_cache=None, sysroot_cache
             shutil.copytree(root / 'licenses', work / 'licenses' / target)
             evidence[target] = {'librarySha256': prebuilt.sha(binary), 'sdkManifestSha256': prebuilt.sha(root / 'manifest.json'),
                 'sysrootSha256': pins['sysroots'][target]['sha256'], 'inspection': inspection,
+                'allocatorProbeSha256': prebuilt.sha(probe), 'undefinedSymbolsSha256': imports_digest,
                 'command': [str(x) for x in args], 'dependencies': dependencies,
                 'maxGlibcRequired': '.'.join(map(str, max(glibc))),
                 'runtimeTested': False, 'sourceCompatibilityTested': False}
@@ -279,6 +308,15 @@ def _native_probe(package, target):
     if prebuilt.sha(binary) != provenance['targets'][target]['librarySha256']:
         raise ValueError('Runtime library differs from package evidence')
     inspect_elf(binary.read_bytes(), target)
+    probe = package / target / 'allocator-boundary-test.so'
+    if prebuilt.sha(probe) != provenance['targets'][target]['allocatorProbeSha256']:
+        raise ValueError('Allocator boundary probe differs from package evidence')
+    allocator = ctypes.CDLL(str(probe))
+    allocator.sv8_linux_allocator_boundary_test.argtypes = []
+    allocator.sv8_linux_allocator_boundary_test.restype = ctypes.c_int
+    allocation_result = allocator.sv8_linux_allocator_boundary_test()
+    if allocation_result != 0:
+        raise ValueError('Allocator boundary semantics/stress failed: ' + str(allocation_result))
     library = ctypes.CDLL(str(binary))
     signatures = {
         'sv8_create': ([ctypes.c_int, ctypes.c_int], ctypes.c_void_p),
@@ -295,7 +333,7 @@ def _native_probe(package, target):
     runtime = library.sv8_create(2000, 32)
     if not runtime:
         raise ValueError('Linux V8 runtime allocation failed')
-    checks = []
+    checks = ['allocator-ownership-2000-cycles']
     def start(script):
         library.sv8_start(runtime, script.encode(), b'{}', b'')
     def poll(function=library.sv8_poll):
@@ -360,6 +398,17 @@ def _native_probe(package, target):
         start('savedValue + 3')
         expect(44)
         checks += ['cancellation', 'recovery-after-cancellation']
+        for iteration in range(100):
+            start("JSON.stringify({n:Array.from({length:2000},(_,i)=>({i,value:'value'+i})).length," +
+                  "b:new Uint8Array(65536).length,t:new Temporal.PlainDate(2026,10,17).toString()," +
+                  "i:new Intl.NumberFormat('zh-CN').format(1234567)," +
+                  "w:WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0]))})")
+            result = poll()
+            value = json.loads(result.get('value', '{}')) if result else {}
+            if not result or result.get('status') != 'done' or value != {
+                    'n': 2000, 'b': 65536, 't': '2026-10-17', 'i': '1,234,567', 'w': True}:
+                raise ValueError('Linux allocation/Intl/Temporal/Wasm stress differs')
+        checks.append('v8-memory-feature-stress-100-cycles')
         receipt = {'schemaVersion': 1, 'target': target, 'hostMachine': platform.machine(),
                    'librarySha256': prebuilt.sha(binary), 'v8Version': library.sv8_version().decode(),
                    'checks': checks, 'applicationRuntimeAccepted': False,
@@ -370,8 +419,10 @@ def _native_probe(package, target):
 
 
 
-def run_native(package, target):
+def run_native(package, target, execution_mode='native'):
     """Accept a probe only after the child process completes normal teardown."""
+    if execution_mode not in ('native', 'emulated'):
+        raise ValueError('Explicit native/emulated execution mode required')
     host = {'x86_64': 'linux-x64', 'amd64': 'linux-x64',
             'aarch64': 'linux-arm64', 'arm64': 'linux-arm64'}.get(platform.machine().lower())
     if platform.system() != 'Linux' or target != host:
@@ -384,6 +435,8 @@ def run_native(package, target):
     receipt = json.loads(result.stdout)
     if receipt.get('target') != target or receipt.get('applicationRuntimeAccepted') is not False:
         raise ValueError('Linux runtime probe receipt differs')
+    receipt['executionMode'] = execution_mode
+    receipt['processExitCode'] = result.returncode
     (Path(package) / (target + '-runtime.json')).write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
@@ -400,6 +453,8 @@ def main():
     parser.add_argument('--sysroot-cache', type=Path)
     parser.add_argument('--verify-existing', action='store_true')
     parser.add_argument('--run-native', action='store_true')
+    parser.add_argument('--execution-mode', choices=('native', 'emulated'), default='native',
+                        help='Explicitly label emulated container execution when applicable')
     args = parser.parse_args()
     if not args.verify_existing:
         print(build(args.output, args.target, sdk_cache=args.sdk_cache, compiler_cache=args.compiler_cache,
@@ -409,7 +464,7 @@ def main():
     if args.run_native:
         if len(args.target) != 1:
             raise ValueError('--run-native requires exactly one host target')
-        print(json.dumps(run_native(args.output, args.target[0]), indent=2))
+        print(json.dumps(run_native(args.output, args.target[0], args.execution_mode), indent=2))
 
 
 if __name__ == '__main__':

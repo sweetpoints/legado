@@ -138,6 +138,15 @@ class LinuxSdkTests(unittest.TestCase):
                 module.run_native(directory, 'linux-arm64')
             self.assertFalse((Path(directory) / 'linux-arm64-runtime.json').exists())
 
+    def test_import_set_changes_require_a_new_allocator_audit(self):
+        import hashlib
+        symbols = '1: 00000000 0 FUNC GLOBAL DEFAULT UND __libc_free@GLIBC_2.17\n'
+        digest = hashlib.sha256(b'__libc_free@GLIBC_2.17\n').hexdigest()
+        pins = {'undefinedSymbolsSha256': {'linux-arm64': digest}}
+        self.assertEqual(module.audit_imports(symbols, 'linux-arm64', pins), digest)
+        with self.assertRaisesRegex(ValueError, 'ownership audit'):
+            module.audit_imports(symbols + '2: 0 0 FUNC GLOBAL DEFAULT UND wcsdup@GLIBC_2.17\n', 'linux-arm64', pins)
+
     def test_runtime_requires_matching_host_and_authenticated_library(self):
         with patch.object(module.platform, 'system', return_value='Darwin'):
             with self.assertRaisesRegex(ValueError, 'matching Linux'):
