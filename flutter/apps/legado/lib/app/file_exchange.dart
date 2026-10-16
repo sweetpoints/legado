@@ -21,11 +21,21 @@ abstract interface class FileExchange {
   Future<bool> saveBackup(Uint8List bytes, String name);
 }
 
+/// Optional capability; adapters without it must not silently auto-detect an
+/// explicitly requested encoding.
+abstract interface class EncodedTextFileExchange {
+  Future<ImportedTextFile?> pickTextEncoded(LocalTextEncoding encoding);
+}
+
+DecodedLocalText _decodeTextFile(
+  ({Uint8List bytes, LocalTextEncoding? encoding}) job,
+) => LocalTextDecoder.decode(job.bytes, encoding: job.encoding);
+
 final fileExchangeProvider = Provider<FileExchange>(
   (ref) => const NativeFileExchange(),
 );
 
-class NativeFileExchange implements FileExchange {
+class NativeFileExchange implements FileExchange, EncodedTextFileExchange {
   const NativeFileExchange();
 
   Future<Uint8List> _readBounded(
@@ -46,7 +56,13 @@ class NativeFileExchange implements FileExchange {
   }
 
   @override
-  Future<ImportedTextFile?> pickText() async {
+  Future<ImportedTextFile?> pickText() => _pickText(null);
+
+  @override
+  Future<ImportedTextFile?> pickTextEncoded(LocalTextEncoding encoding) =>
+      _pickText(encoding);
+
+  Future<ImportedTextFile?> _pickText(LocalTextEncoding? encoding) async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['txt'],
@@ -58,7 +74,10 @@ class NativeFileExchange implements FileExchange {
         file.readAsByteStream(),
         declaredLength: length,
       );
-      final decoded = await compute(LocalTextDecoder.decode, bytes);
+      final decoded = await compute(_decodeTextFile, (
+        bytes: bytes,
+        encoding: encoding,
+      ));
       return (
         name: file.name.replaceFirst(
           RegExp(r'\.txt$', caseSensitive: false),
