@@ -32,8 +32,14 @@ def check_notices():
     for name, value in provenance["notices"].items():
         if sha256(NOTICE_ROOT / name) != value["sha256"]:
             raise ValueError(f"PDFium native license mismatch: {name}")
-    if len(provenance["notices"]) != 16:
+    if len(provenance["notices"]) != 29:
         raise ValueError("The complete PDFium native notice inventory is required")
+    if set(provenance["targetNotices"]) != set(PINS["targets"]):
+        raise ValueError("Every supported native PDFium target requires a notice mapping")
+    for mapping in provenance["targetNotices"].values():
+        for name in mapping.values():
+            if name not in provenance["notices"]:
+                raise ValueError("A platform-specific PDFium native notice is missing")
 
 
 def check_binary(path, target):
@@ -101,7 +107,7 @@ def main():
     else:
         parser.error("Provide --prepare-target, --hooks-dir, or --library and --target")
     print("Verified native PDFium: " + ", ".join(sorted(checked)))
-    print("Verified 16 exact upstream license payloads (PDFium and third parties)")
+    print("Verified 29 exact upstream license payloads covering all 8 native targets")
 
 
 if __name__ == "__main__":

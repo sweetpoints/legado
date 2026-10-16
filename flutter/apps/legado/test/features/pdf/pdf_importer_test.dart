@@ -110,6 +110,37 @@ void main() {
     },
   );
 
+  test('reimport repairs a missing restored asset without resetting page or unknown fields', () async {
+    final first = await SqliteLibraryRepository.inMemory();
+    final bytes = createPdfFixture();
+    final book = await PdfImporter.importBytes(
+      first,
+      name: 'Original.pdf',
+      bytes: bytes,
+    );
+    final restored = await SqliteLibraryRepository.inMemory();
+    await restored.putBook(
+      LegacyBookRecord({
+        ...book.toJson(),
+        'durChapterIndex': 1,
+        'futureField': {'keep': true},
+      }),
+    );
+    final metadata = PdfBookDocument.fromBook(book)!;
+    expect(await restored.localAsset(metadata.assetKey), isNull);
+    final repaired = await PdfImporter.importBytes(
+      restored,
+      name: 'renamed.pdf',
+      bytes: bytes,
+    );
+    expect(await restored.localAsset(metadata.assetKey), bytes);
+    expect(repaired.chapterIndex, 1);
+    expect(repaired.toJson()['futureField'], {'keep': true});
+    expect(repaired.name, 'Original');
+    await first.close();
+    await restored.close();
+  });
+
   test('password-protected and empty-password encrypted PDFs are rejected atomically', () async {
     final repository = await SqliteLibraryRepository.inMemory();
     for (final name in ['password.pdf', 'empty-password.pdf']) {
