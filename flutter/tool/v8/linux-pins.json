@@ -36,5 +36,9 @@
       "metadataSha256": "586a193b7af31448bd09f8dd843cd0d19c1a9a5311c58a5ddf59805ba2480044",
       "filesSha256": "0962b21984316398d8ad4ce44796d765aef49813e214eb60fc08a774a879f277"
     }
+  },
+  "undefinedSymbolsSha256": {
+    "linux-x64": "80a5f18ada403b3aa653022e2738dc05be4eba50387e43f45a68898474c037d4",
+    "linux-arm64": "b9d9362de5b55f4b08c29d0329ff674e8d1b9cd96e78c2b6c1c6aa82ebb5c056"
   }
 }
