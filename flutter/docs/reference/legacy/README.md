@@ -19,7 +19,7 @@
 
 未带模式前缀的历史 HTML 规则添加 `@legacy:` 前缀；目录 `chapterName` 转成 `title`、`chapterUrl` 转成 `url`；`lastChapter` 转成 `latestChapterTitle`，其他规则字段按原名保留。空规则跳过。简单直接的已知 `java.*` 调用脚本允许导入但仍为 unverified。提取方法只放行 `@js: [return] java.getString/getStringList(单个字面量规则) [;]`；嵌套脚本、组合规则、模板、变量、额外参数以及 getElement/getElements 仍需人工处理；复杂脚本、组合规则、XPath、变量、不支持的URL请求选项及应用能力产生 review issue。JSoup 简写、索引、ownText/textNodes 和链式提取按明确的兼容子集执行，详见 HTML Reference；不支持的 selector 仍可能在执行时失败。部分管线扩展产生 `legacy.pipeline_requires_review`。contentBatch/callBackJs 产生 legacy.pipeline_requires_review，不静默当作普通提取字段；非空mainJs按下文V8 wrapper执行；jsLib、登录字段、封面解码、并发配置等仍需明确迁移。非文本书源也需要人工处理。
 
-静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。读取 enabledCookieJar 且值不是 true 时产生 `legacy.cookie_policy_requires_review`，不会悄悄改成自动 Cookie 策略。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
+静态 `header` 字符串中的 JSON 对象或直接字符串映射导入新版 headers；动态 JS、非法 JSON 或非字符串键值产生 `legacy.dynamic_header`。`enabledCookieJar` 缺失时默认开启，布尔 `false` 或显式 `null` 关闭自动会话 Cookie；关闭时不发送、保存、恢复或导出自动 Cookie，显式 `Cookie` 请求头仍保留并遵循跨源重定向剥离规则。非布尔且非 null 的值仍产生 `legacy.cookie_policy_requires_review`，不会猜测其语义。全局请求头非法 token/CRLF 仍可能由新版校验直接拒绝。
 
 应用扩展能力与五个 stage 的提取规则有独立边界。声明式 `ruleReview` 的 HTTP、提取和旧评论会话协议仍产生 `legacy.capability_requires_review`；它与已经通过 V8 辅助入口调用的 mainJs 评论函数不同。`coverDecodeJs` 同样产生该 issue。`ruleContent.imageStyle`、`imageDecode`、`payAction`、`callBackJs` 由阅读渲染、图片解码、支付按钮或生命周期回调继续读取，产生 `legacy.pipeline_requires_review`，原值保存在 `metadata.legacyOriginal`。这些字段即使与非空 mainJs 同时存在，也不能因为跳过 stage 提取规则而被自动接受。旧图片字节解码、Java 宿主动作或声明式评论协议需要明确迁移；辅助脚本可以运行并不表示对应应用协议已经恢复。书源不能回退到旧 AnalyzeRule/AnalyzeUrl 执行。
 
