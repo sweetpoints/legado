@@ -11,7 +11,7 @@ abstract class RssSource with _$RssSource {
     @Default(<String, Object?>{}) Map<String, Object?> original,
   }) = _RssSource;
 
-  /// HTML/JS subscription rules need the legacy rule host, not an XML parser.
+  /// HTML sources use portable DOM traversal instead of the XML feed parser.
   bool get requiresRuleEngine => [
     'ruleArticles',
     'ruleContent',

@@ -79,7 +79,7 @@ void main() {
       expect(source.name, 'Updated');
       expect(source.original['vendor'], {'flag': true});
       await store.importSources(
-        '{"sourceUrl":"https://example.org/html","ruleArticles":".entry"}',
+        '{"sourceUrl":"https://example.org/html","ruleArticles":"@js: unsupported()"}',
       );
       final legacy = (await store.sources()).last;
       expect(legacy.requiresRuleEngine, true);

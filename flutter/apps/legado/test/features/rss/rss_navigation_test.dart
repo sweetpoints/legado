@@ -88,7 +88,7 @@ void main() {
       final source = RssSource.fromJson({
         'sourceUrl': 'https://example.org/html',
         'sourceName': '旧规则',
-        'ruleArticles': '.list',
+        'ruleArticles': '@js: unsupported()',
       });
       await tester.pumpWidget(
         ProviderScope(
@@ -104,10 +104,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('原规则已保留'), findsOneWidget);
+      expect(find.textContaining('CSS/DOM'), findsOneWidget);
       await tester.tap(find.text('获取订阅文章'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('原 Android App'), findsNWidgets(2));
+      expect(find.textContaining('原 Android App'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
