@@ -33,6 +33,7 @@ dependencies:
   html: ^0.15.6
   xml: ^7.0.1
   intl: ^0.20.3
+  enough_convert: ^1.7.1
 
   flutter_localizations:
     sdk: flutter

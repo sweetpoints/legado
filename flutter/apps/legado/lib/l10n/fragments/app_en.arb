@@ -42,7 +42,7 @@
   "backToShelf": "Back to bookshelf",
   "invalidRoute": "This link cannot be opened.",
   "bookMissing": "This book is no longer in the library.",
-  "unsupportedText": "This text file is not valid UTF-8. Convert its encoding before importing.",
+  "unsupportedText": "The text encoding is ambiguous, unsupported or damaged. UTF-8, UTF-16 with a BOM and GBK are supported. Check the encoding and convert the file to UTF-8 before importing.",
   "textTooLarge": "This file exceeds the 20 MiB import limit.",
   "backupTooLarge": "This backup exceeds the 128 MiB input limit.",
   "details": "Details",

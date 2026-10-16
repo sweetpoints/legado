@@ -42,7 +42,7 @@
   "backToShelf": "返回书架",
   "invalidRoute": "无法打开此链接。",
   "bookMissing": "这本书已不在书库中。",
-  "unsupportedText": "此文件不是有效 UTF-8 文本，请转换编码后导入。",
+  "unsupportedText": "无法可靠识别此文本的编码，或文件已损坏、使用了混合编码。支持 UTF-8、带 BOM 的 UTF-16 和 GBK；请确认编码后转换为 UTF-8 再导入。",
   "textTooLarge": "此文件超过 20 MiB 导入上限。",
   "backupTooLarge": "此备份超过 128 MiB 输入上限。",
   "details": "详情",
