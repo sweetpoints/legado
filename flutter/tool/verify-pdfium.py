@@ -11,6 +11,7 @@ import hashlib
 import json
 import io
 import os
+import struct
 import tarfile
 import tempfile
 import urllib.request
@@ -42,9 +43,27 @@ def check_notices():
                 raise ValueError("A platform-specific PDFium native notice is missing")
 
 
+def check_android_alignment(data):
+    if len(data) < 64 or data[:6] != b"\x7fELF\x02\x01":
+        raise ValueError("Expected a little-endian ELF64 Android PDFium binary")
+    offset = struct.unpack_from("<Q", data, 32)[0]
+    size, count = struct.unpack_from("<HH", data, 54)
+    if size < 56 or count < 1 or offset + size * count > len(data):
+        raise ValueError("Invalid Android PDFium ELF program header table")
+    loads = []
+    for index in range(count):
+        header = struct.unpack_from("<IIQQQQQQ", data, offset + size * index)
+        if header[0] == 1:
+            loads.append(header)
+    if not loads or any(h[7] < 16384 or h[2] % 16384 != h[3] % 16384 for h in loads):
+        raise ValueError("Android PDFium LOAD segments are not 16 KiB compatible")
+
+
 def check_binary(path, target):
     if sha256(path) != PINS["targets"][target]["binarySha256"]:
         raise ValueError(f"Unverified PDFium consumer binary: {target}")
+    if target.startswith("android-"):
+        check_android_alignment(path.read_bytes())
     return target
 
 

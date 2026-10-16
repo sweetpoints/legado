@@ -69,6 +69,8 @@ void main() {
     expect((await repository.books()).length, 1);
     expect(same.toJson().toString(), isNot(contains('/private/device')));
     await reopened.close();
+    await repository.removeBook(book.url);
+    expect(await repository.localAsset(metadata.assetKey), isNull);
     await repository.close();
   });
 
