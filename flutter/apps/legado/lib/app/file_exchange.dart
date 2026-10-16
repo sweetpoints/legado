@@ -10,9 +10,11 @@ class FileExchangeException implements Exception {
 }
 
 typedef ImportedTextFile = ({String name, String text});
+typedef ImportedEpubFile = ({String name, Uint8List bytes});
 
 abstract interface class FileExchange {
   Future<ImportedTextFile?> pickText();
+  Future<ImportedEpubFile?> pickEpub();
   Future<Uint8List?> pickBackup();
   Future<bool> saveBackup(Uint8List bytes, String name);
 }
@@ -61,6 +63,19 @@ class NativeFileExchange implements FileExchange {
     } on FormatException {
       throw const FileExchangeException('unsupportedText');
     }
+  }
+
+  @override
+  Future<ImportedEpubFile?> pickEpub() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['epub'],
+    );
+    if (file == null) return null;
+    return (
+      name: file.name,
+      bytes: await _readBounded(file, 128 * 1024 * 1024, 'epubTooLarge'),
+    );
   }
 
   @override

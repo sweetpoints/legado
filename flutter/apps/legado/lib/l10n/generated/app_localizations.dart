@@ -398,6 +398,12 @@ abstract class AppLocalizations {
   /// **'Feeds'**
   String get navigationRssTitle;
 
+  /// No description provided for @epubTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This EPUB exceeds the 128 MiB input limit.'**
+  String get epubTooLarge;
+
   /// No description provided for @readerTitle.
   ///
   /// In en, this message translates to:
@@ -511,6 +517,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not save reading settings: {error}'**
   String readerSettingsSaveFailed(String error);
+
+  /// No description provided for @readerEpubInvalidArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'The EPUB archive is corrupt or exceeds the import limits.'**
+  String get readerEpubInvalidArchive;
+
+  /// No description provided for @readerEpubInvalidPackage.
+  ///
+  /// In en, this message translates to:
+  /// **'The EPUB package, catalogue, or chapter files are invalid.'**
+  String get readerEpubInvalidPackage;
+
+  /// No description provided for @readerEpubEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted or obfuscated EPUB resources are not supported.'**
+  String get readerEpubEncrypted;
+
+  /// No description provided for @readerEpubUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This EPUB contains a chapter format that the text reader cannot display.'**
+  String get readerEpubUnsupported;
+
+  /// No description provided for @readerEpubEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This EPUB contains no readable text.'**
+  String get readerEpubEmpty;
+
+  /// No description provided for @readerEpubImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import EPUB'**
+  String get readerEpubImport;
 
   /// No description provided for @rssTitle.
   ///
