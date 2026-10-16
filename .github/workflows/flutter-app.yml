@@ -52,7 +52,7 @@ jobs:
           git diff --exit-code -- lib
       - name: Check formatting
         working-directory: flutter
-        run: dart format --output=none --set-exit-if-changed apps/legado/lib apps/legado/test packages/app_core/lib packages/app_core/test
+        run: dart format --output=none --set-exit-if-changed apps/legado/lib apps/legado/test apps/legado/integration_test packages/app_core/lib packages/app_core/test
       - name: Verify application data contracts
         working-directory: flutter/packages/app_core
         run: |
@@ -121,3 +121,43 @@ jobs:
           name: windows-v8-toolchain-candidate
           path: build/windows-v8-toolchain-candidate/
           if-no-files-found: error
+
+  apple-native-app:
+    runs-on: macos-26
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos, ios]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/cache@v5
+        with:
+          path: flutter/packages/source_v8/.cache
+          key: app-v8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/**', 'flutter/packages/source_v8/src/**') }}
+      - name: Resolve workspace
+        working-directory: flutter
+        run: flutter pub get
+      - name: Run native application on macOS
+        if: matrix.platform == 'macos'
+        working-directory: flutter/apps/legado
+        run: flutter test integration_test/native_app_test.dart -d macos
+      - name: Run native application on ARM64 iOS simulator
+        if: matrix.platform == 'ios'
+        working-directory: flutter/apps/legado
+        run: |
+          test "$(uname -m)" = arm64
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/legado-simulators.json"
+          device="$(python3 -c 'import json,sys; devices=json.load(open(sys.argv[1]))["devices"]; print(next(device["udid"] for runtime, values in devices.items() if ".iOS-" in runtime for device in values if "iPhone" in device["name"] and device["isAvailable"]))' "$RUNNER_TEMP/legado-simulators.json")"
+          state="$(xcrun simctl list devices --json | python3 -c 'import json,sys; print(next(device["state"] for values in json.load(sys.stdin)["devices"].values() for device in values if device["udid"] == sys.argv[1]))' "$device")"
+          if [ "$state" != Booted ]; then xcrun simctl boot "$device"; fi
+          xcrun simctl bootstatus "$device" -b
+          flutter test integration_test/native_app_test.dart -d "$device"
