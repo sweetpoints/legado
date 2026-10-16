@@ -16,7 +16,8 @@ class SqliteLibraryRepository
         LibraryRepository,
         ArchiveLibraryRepository,
         LegacyBackupFileReader,
-        BookshelfLibraryRepository {
+        BookshelfLibraryRepository,
+        LocalBookRepository {
   SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
@@ -702,6 +703,150 @@ class SqliteLibraryRepository
       }),
       change: true,
     );
+  }
+
+  @override
+  Future<void> importLocalBook(
+    LegacyBookRecord book,
+    List<ReaderChapter> chapters,
+    Map<String, String> contentsByChapterUrl, {
+    Map<String, List<int>> assetsByKey = const {},
+  }) {
+    final chapterSnapshot = chapters.map((c) => c.toJson()).toList();
+    final contentSnapshot = Map<String, String>.from(contentsByChapterUrl);
+    // Check sizes before copying potentially large caller-owned byte buffers.
+    if (assetsByKey.length > LocalBookAssets.maximumAssetCount ||
+        assetsByKey.values.any(
+          (b) => b.length > LocalBookAssets.maximumAssetBytes,
+        ) ||
+        assetsByKey.values.fold<int>(0, (size, b) => size + b.length) >
+            LocalBookAssets.maximumImportBytes) {
+      return Future<void>.error(
+        ArgumentError('Local book assets exceed the import limits'),
+      );
+    }
+    final assetSnapshot = {
+      for (final entry in assetsByKey.entries)
+        entry.key: List<int>.from(entry.value),
+    };
+    return _run(
+      () => _db.transaction(() async {
+        final identity = RegExp(r'^local:[a-z][a-z0-9-]*:([0-9a-f]{64})$')
+            .firstMatch(book.url);
+        if (identity == null) {
+          throw const FormatException('Invalid local book identity');
+        }
+        final namespace = '${LocalBookAssets.prefix}${identity.group(1)}/';
+        final chapterUrls = chapterSnapshot
+            .map((c) => c['url'] as String)
+            .toSet();
+        if ((chapterSnapshot.isEmpty && assetSnapshot.isEmpty) ||
+            chapterUrls.length != chapterSnapshot.length ||
+            contentSnapshot.keys.any((url) => !chapterUrls.contains(url)) ||
+            chapterSnapshot.any(
+              (c) =>
+                  c['isVolume'] != true &&
+                  !contentSnapshot.containsKey(c['url']),
+            )) {
+          throw const FormatException('Incomplete local book contents');
+        }
+        for (final entry in assetSnapshot.entries) {
+          if (!LocalBookAssets.isValidKey(entry.key) ||
+              !entry.key.startsWith(namespace) ||
+              entry.value.any((b) => b < 0 || b > 255)) {
+            throw const FormatException('Invalid local book asset');
+          }
+        }
+        // Re-imports must not reset an existing book's progress or user edits.
+        if (await _book(book.url) != null) return;
+        await _putChapters(book.url, chapterSnapshot);
+        await (_db.delete(
+          _db.storedContent,
+        )..where((t) => t.bookId.equals(book.url))).go();
+        await _db.batch((batch) {
+          for (final entry in contentSnapshot.entries) {
+            batch.insert(
+              _db.storedContent,
+              StoredContentCompanion.insert(
+                bookId: book.url,
+                chapterId: entry.key,
+                value: entry.value,
+              ),
+            );
+          }
+        });
+        for (final entry in assetSnapshot.entries) {
+          final textQuery = _db.selectOnly(_db.storedBackupFiles)
+            ..addColumns([_db.storedBackupFiles.id])
+            ..where(_db.storedBackupFiles.id.equals(entry.key));
+          if (await textQuery.getSingleOrNull() != null) {
+            throw StateError('Local asset collides with preserved legacy text');
+          }
+          final existing = await _readLocalAsset(entry.key);
+          if (existing != null) {
+            if (!_sameBytes(existing, entry.value)) {
+              throw StateError(
+                'Local asset collides with preserved archive data',
+              );
+            }
+          } else {
+            await _db
+                .into(_db.storedArchiveEntries)
+                .insert(
+                  StoredArchiveEntriesCompanion.insert(
+                    id: entry.key,
+                    value: Uint8List.fromList(entry.value),
+                  ),
+                );
+          }
+        }
+        // Publish the shelf row only after every dependent value has been staged.
+        // A failure here still rolls back chapters, contents and asset insertions.
+        await _putBook(book);
+      }),
+      change: true,
+    );
+  }
+
+  bool _sameBytes(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  Future<List<int>?> localAsset(String key) {
+    if (!LocalBookAssets.isValidKey(key)) {
+      return Future<List<int>?>.error(
+        ArgumentError('Invalid local book asset key'),
+      );
+    }
+    return _run(() => _readLocalAsset(key));
+  }
+
+  Future<List<int>?> _readLocalAsset(String key) async {
+    final table = _db.storedArchiveEntries;
+    final size = table.value.length;
+    // Let SQLite reject oversize retained data without materializing its BLOB.
+    final bounded = CaseWhenExpression<Uint8List>(
+      cases: [
+        CaseWhen(
+          size.isSmallerOrEqualValue(LocalBookAssets.maximumAssetBytes),
+          then: table.value,
+        ),
+      ],
+    );
+    final query = _db.selectOnly(table)
+      ..addColumns([size, bounded])
+      ..where(table.id.equals(key));
+    final row = await query.getSingleOrNull();
+    if (row == null) return null;
+    if (row.read(size)! > LocalBookAssets.maximumAssetBytes) {
+      throw StateError('Local book asset exceeds the read limit');
+    }
+    return List<int>.unmodifiable(row.read(bounded)!);
   }
 
   @override
