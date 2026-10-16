@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "target": "windows-x64",
+  "lockFile": "windows-reviewed-x64-lock.json",
+  "lockSha256": "36c9e96bc7121600be930cb7700599a9864a4e6d5a5a4e5288357cee0c8d3fb5",
+  "status": "reviewed-for-compatibility-build",
+  "sourceRun": 38945901818,
+  "sourceJob": 117124818232,
+  "headSha": "475093507764b233397e7574a721beebec0e24f1",
+  "testedMergeSha": "167e259e2d9d674e4fe45d049426cd34fa65595c",
+  "runnerImage": "windows-2025-vs2026",
+  "imageVersion": "20261007.264.1",
+  "clangArchive": {
+    "url": "https://commondatastorage.googleapis.com/chromium-browser-clang/Win/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+    "size": 51467544,
+    "sha256": "166437ede456b3d7cf0d9317287511e47714f91da547dbde02992261aeef7174",
+    "filesSha256": "9439461e2394febdfe806e51251236421e59cc9c1aa35c18e8930025aa3b2c4f"
+  },
+  "msvcVersion": "14.51.36231",
+  "windowsSdkVersion": "10.0.26100.0",
+  "msvcVersionFile": {
+    "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Auxiliary\\Build\\Microsoft.VCToolsVersion.default.txt",
+    "sha256": "2ca998516f8f18b39c28ce022abb90ef5ad711b468494671dd84b74618b569d9",
+    "value": "14.51.36231"
+  },
+  "fileCounts": {
+    "clang": 346,
+    "msvc": 517,
+    "windows-sdk": 5260
+  },
+  "review": {
+    "sourceCommitParentVerified": true,
+    "officialClangInventoryVerified": true,
+    "pathsHashesCaseCollisionsVerified": true,
+    "targetCrtAndSdkLibrariesPresent": true,
+    "sameProducerSdkVersion": false,
+    "producerSdkVersion": "10.0.28000.0",
+    "buildApproved": true,
+    "nativeAbiCompatible": false,
+    "runtimeAccepted": false,
+    "releaseAccepted": false
+  },
+  "requiredAcceptance": [
+    "compile-and-link-against-pinned-V8-SDK",
+    "PE32+-machine-and-exact-exports",
+    "native-FFI-features-and-async-host",
+    "normal-process-exit",
+    "source-V8-conformance"
+  ]
+}
