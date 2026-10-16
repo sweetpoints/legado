@@ -16,5 +16,17 @@
     "windows-arm64": {
       "cpu": "arm64"
     }
+  },
+  "windowsConsumerToolchain": {
+    "clangVersion": "clang version 24.0.0git (https://chromium.googlesource.com/a/external/github.com/llvm/llvm-project 75adca17d7f5f488193fdf76cd07500e2a12081a)",
+    "clangArchive": {
+      "url": "https://commondatastorage.googleapis.com/chromium-browser-clang/Win/clang-llvmorg-24-init-3796-g20e97c4b-4.tar.xz",
+      "size": 51467544,
+      "sha256": "166437ede456b3d7cf0d9317287511e47714f91da547dbde02992261aeef7174",
+      "filesSha256": "9439461e2394febdfe806e51251236421e59cc9c1aa35c18e8930025aa3b2c4f"
+    },
+    "producerWindowsSdkVersion": "10.0.28000.0",
+    "producerRunnerImage": "windows-2025-vs2026/20260925.250.1",
+    "producerVisualStudioVersion": "18.10.12217.157"
   }
 }
