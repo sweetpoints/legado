@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -84,7 +85,59 @@ void replace(
 Matcher failure(EpubImportFailure kind) =>
     isA<EpubImportException>().having((e) => e.failure, 'failure', kind);
 
+// ReceivePort is deliberately unsendable; it catches accidental closure capture
+// of the repository when the importer dispatches work to its background isolate.
+class CallerOnlyLibrary extends MemoryLibrary {
+  final port = ReceivePort();
+  final caller = Isolate.current.controlPort;
+  int writes = 0;
+  @override
+  Future<void> putContent(String url, String chapter, String content) async {
+    expect(Isolate.current.controlPort, caller);
+    writes++;
+    await super.putContent(url, chapter, content);
+  }
+}
+
 void main() {
+  test(
+    'background parsing does not send repository handles and caller persists',
+    () async {
+      final library = CallerOnlyLibrary();
+      addTearDown(library.port.close);
+      final book = await EpubImporter.importBytes(
+        library,
+        name: 'book',
+        bytes: zip(fixture()),
+      );
+      expect(library.records[book.url], isNotNull);
+      expect(library.writes, 2);
+    },
+  );
+
+  test(
+    'moving internal chapter files does not change content identity',
+    () async {
+      final library = MemoryLibrary();
+      final files = fixture();
+      final first = await EpubImporter.importBytes(
+        library,
+        name: 'book',
+        bytes: zip(files),
+      );
+      files['EPUB/renamed.xhtml'] = files.remove('EPUB/text/one.xhtml')!;
+      replace(files, 'EPUB/book.opf', 'text/one.xhtml', 'renamed.xhtml');
+      replace(files, 'EPUB/nav.xhtml', 'text/one.xhtml', 'renamed.xhtml');
+      final moved = await EpubImporter.importBytes(
+        library,
+        name: 'book',
+        bytes: zip(files),
+      );
+      expect(moved.url, first.url);
+      expect(library.records.length, 1);
+    },
+  );
+
   test('actual namespaced EPUB imports spine order, nav titles and safe Unicode text', () async {
     final library = MemoryLibrary();
     final book = await EpubImporter.importBytes(
