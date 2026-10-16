@@ -25,6 +25,12 @@ abstract interface class LegacyRuleEvaluator {
   });
 }
 
+/// Opt-in for the original nextTocUrl array contract: first-page arrays fan out
+/// once, in order, rather than following each returned page's own pagination.
+/// Custom evaluators without this marker retain their existing link semantics.
+abstract interface class LegacyTocFanOutEvaluator
+    implements LegacyRuleEvaluator {}
+
 /// JSON-only transport to the Android parser; no JVM objects enter Dart/V8.
 class HostLegacyRuleEvaluator implements LegacyRuleEvaluator {
   const HostLegacyRuleEvaluator({

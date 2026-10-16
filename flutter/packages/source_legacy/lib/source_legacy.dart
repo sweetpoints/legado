@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'src/main_js.dart';
 
 export 'src/legacy_host.dart';
+export 'src/portable_rules.dart';
 
 import 'package:source_engine/source_engine.dart';
 
@@ -1009,7 +1010,7 @@ bool _portableV8Script(String rule) {
   final code = _jsOutsideStrings(script);
   if (code == null || code.contains('##')) return false;
   return !RegExp(
-    r'(?:^|[^\w$.])(?:java|Packages|Java|JavaAdapter|importClass|importPackage|source|sourceApi|book|chapter|cookie|cache|src)\b(?!\s*:)|\b(?:eval|Function)\s*\(|\b(?:globalThis|this)\s*(?:\[|\.\s*(?:java|source|sourceApi|Packages|Java)\b)',
+    r'(?:^|[^\w$.])(?:java|org|Packages|Java|JavaAdapter|importClass|importPackage|source|sourceApi|book|chapter|cookie|cache|src)\b(?!\s*:)|\b(?:eval|Function)\s*\(|\b(?:globalThis|this)\s*(?:\[|\.\s*(?:java|source|sourceApi|Packages|Java)\b)',
   ).hasMatch(code.replaceAll(RegExp(r'\.\s+'), '.'));
 }
 
