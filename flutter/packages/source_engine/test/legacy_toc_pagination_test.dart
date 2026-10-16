@@ -51,6 +51,69 @@ void main() {
   const second = 'https://fixture.invalid/toc/2';
   const third = 'https://fixture.invalid/toc/3';
 
+  test('portable evaluator opts into stable fanout order and removes cycles/duplicates', () async {
+    final pages = _NetworkPages({
+      first: _page('One', [first, second, second, third]),
+      second: _page('Two', [first, 'https://fixture.invalid/unwanted-child']),
+      third: _page('Three', [second]),
+    });
+    final engine = SourceEngine(
+      runtime: NoScripts(),
+      network: pages,
+      legacyRuleEvaluator: _PortableEvaluator(),
+    );
+    try {
+      final rows = await engine.execute(
+        _source(),
+        'toc',
+        input: {'tocUrl': first},
+      );
+      expect(rows.map((row) => row['title']), ['One', 'Two', 'Three']);
+      expect(pages.fetched, [first, second, third]);
+    } finally {
+      await engine.close();
+    }
+  });
+  test('portable fanout retains page budget and cancellation', () async {
+    for (final cancelled in [false, true]) {
+      final pages = _NetworkPages({
+        first: _page('One', [second, third]),
+        second: _page('Two', []),
+        third: _page('Three', []),
+      }, cancelOn: cancelled ? 2 : null);
+      final engine = SourceEngine(
+        runtime: NoScripts(),
+        network: pages,
+        legacyRuleEvaluator: _PortableEvaluator(),
+      );
+      final source = SourceDefinition.fromJson({
+        ..._source().toJson(),
+        'stages': {
+          'toc': {..._source().stages['toc']!.toJson(), 'maxPages': 2},
+        },
+      });
+      try {
+        await expectLater(
+          engine.execute(
+            source,
+            'toc',
+            input: {'tocUrl': first},
+            cancellation: CancellationToken(),
+          ),
+          throwsA(
+            isA<EngineException>().having(
+              (error) => error.code,
+              'code',
+              cancelled ? 'cancelled' : 'pagination_limit',
+            ),
+          ),
+        );
+        expect(pages.fetched, [first, second]);
+      } finally {
+        await engine.close();
+      }
+    }
+  });
   test('current directory link does not hide the valid next page', () async {
     final pages = _Pages({
       first: _page('One', [first, second]),
@@ -99,4 +162,67 @@ void main() {
       }
     },
   );
+}
+
+class _PortableEvaluator implements LegacyTocFanOutEvaluator {
+  @override
+  bool supportsRule(String rule) => true;
+  @override
+  Future<List<Object?>> evaluate(
+    String rule,
+    Object? input,
+    ScriptContext context, {
+    required SourceDefinition source,
+    required String operation,
+    bool elements = false,
+    bool element = false,
+    bool formatContent = false,
+    bool resolveCover = false,
+    bool scalar = false,
+    bool isUrl = false,
+    bool unescape = true,
+    CancellationToken? cancellation,
+  }) async {
+    final values = await RuleEvaluator(NoScripts()).evaluate(
+      rule,
+      input,
+      context,
+      elements: elements,
+      cancellation: cancellation,
+    );
+    return isUrl
+        ? values
+              .map(
+                (value) =>
+                    Uri.parse(context.variables['baseUrl'] as String)
+                        .resolve(value.toString())
+                        .toString(),
+              )
+              .toList()
+        : values;
+  }
+}
+
+class _NetworkPages extends NetworkClient {
+  _NetworkPages(this.pages, {this.cancelOn});
+  final Map<String, String> pages;
+  final int? cancelOn;
+  final fetched = <String>[];
+  @override
+  Future<NetworkResponse> request(
+    Uri uri, {
+    String method = 'GET',
+    Map<String, String> headers = const {},
+    String? body,
+    String? charset,
+    Duration timeout = const Duration(seconds: 30),
+    CancellationToken? cancellation,
+    int maxRedirects = 5,
+    bool followRedirects = true,
+  }) async {
+    fetched.add(uri.toString());
+    if (fetched.length == cancelOn) cancellation?.cancel();
+    cancellation?.throwIfCancelled();
+    return NetworkResponse(uri, 200, const {}, pages[uri.toString()]!);
+  }
 }

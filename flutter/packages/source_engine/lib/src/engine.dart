@@ -718,7 +718,9 @@ class SourceEngine {
       }
       if (stage.nextPage == null) break;
       ruleContext = pageContext;
-      final nativeToc = nativeFetcher != null && operation == 'toc';
+      final nativeToc =
+          operation == 'toc' &&
+          (nativeFetcher != null || legacyHost is LegacyTocFanOutEvaluator);
       // Original BookChapterList excludes the current page before deciding
       // between a single next-page chain and a list of independent pages.
       // The latter are parsed once, without following each child's pagination.

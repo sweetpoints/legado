@@ -6,6 +6,7 @@ resolution: workspace
 environment:
   sdk: ^3.13.5
 dependencies:
+  html: ^0.15.6
   crypto: ^3.0.6
   enough_convert: ^1.6.0
   source_engine:

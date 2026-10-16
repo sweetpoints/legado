@@ -230,12 +230,22 @@ class BookSourceService {
       throw const EngineException('source_disabled', '书源已停用');
     }
     if (original.containsKey('bookSourceUrl')) {
+      for (final key in ['bookUrl', 'tocUrl', 'chapterUrl']) {
+        final value = input[key];
+        if (value is String && RegExp(r',\s*(?=\{)').hasMatch(value)) {
+          throw const EngineException(
+            'legacy_request_requires_migration',
+            'URL request options require an implemented portable request compiler',
+          );
+        }
+      }
       final issues = LegacySourceImporter()
           .import(original)
           .issues
           .where(
             (issue) =>
                 issue.code != 'legacy.base_url_requires_review' &&
+                !_portableRuleIssue(original, issue) &&
                 legacyIssueAffectsOperation(issue, operation),
           )
           .toList();
@@ -264,19 +274,33 @@ class BookSourceService {
     }
   });
 
+  static bool _portableRuleIssue(
+    Map<String, Object?> original,
+    LegacyIssue issue,
+  ) {
+    if (issue.code != 'legacy.rule_requires_review') return false;
+    final path = issue.path.split('.');
+    if (path.length != 2) return false;
+    final group = legacyRuleObject(original, path.first);
+    final rule = group?[path.last];
+    return rule is String && PortableLegacyRuleEvaluator.canEvaluate(rule);
+  }
+
   Future<_SourceSession> _create(Map<String, Object?> original) async {
     final source = definition(original);
     final variables = <String, String>{};
+    final runtime = V8Runtime(
+      prelude: source.metadata['legacy'] == true ? legacyScriptPrelude : '',
+      persistent: true,
+    );
     final engine =
         _factory?.call(source) ??
         SourceEngine(
-          runtime: V8Runtime(
-            prelude: source.metadata['legacy'] == true
-                ? legacyScriptPrelude
-                : '',
-            persistent: true,
-          ),
+          runtime: runtime,
           requestAdapter: adaptLegacyRequest,
+          legacyRuleEvaluator: source.metadata['legacy'] == true
+              ? PortableLegacyRuleEvaluator(runtime)
+              : null,
           platform: SourceUtilityHost(const _UnavailableHost()),
           hostAdapter: source.metadata['legacy'] == true
               ? (host) => LegacyScriptHost(host, variables: variables)
