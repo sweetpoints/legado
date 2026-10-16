@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "scope": "Windows V8 consumer acceptance; not complete application acceptance",
+  "sourceCommit": "80e2e569e842e6b0cadc13bf371f8f5f6588c7f7",
+  "workflowRun": 38948022254,
+  "workflowUrl": "https://github.com/sweetpoints/legado/actions/runs/38948022254",
+  "v8Version": "15.4.80.25",
+  "bridgeAbi": 1,
+  "bridgeSourceSha256": "741170ffdf75b689910e1468d25f5a61ac4d2aec5b7acea35c98aa57abf2cd1d",
+  "windows-x64": {
+    "job": 117131994129,
+    "built": true,
+    "runtimeTested": true,
+    "normalProcessExit": true,
+    "pythonContractTests": 22,
+    "dartSourceV8Tests": 51,
+    "dartSourceConformanceTests": 173,
+    "dll": {
+      "size": 43886080,
+      "sha256": "42a9766d0874ae97f3ea43bbef722d847d857a51ed29a1632265541cc23bfa30"
+    },
+    "runtimeChecks": [
+      "Intl",
+      "Temporal",
+      "WebAssembly",
+      "persistent-context",
+      "Promise",
+      "async-host-request-reply",
+      "execution-timeout",
+      "timeout-recovery"
+    ],
+    "sdkVersion": "10.0.26100.0",
+    "sdkCompatibility": "Compiled, linked and executed against fixed V8 SDK produced with Windows SDK 10.0.28000.0"
+  },
+  "windows-arm64": {
+    "job": 117131993873,
+    "buildHost": "windows-x64",
+    "crossLinked": true,
+    "peMachine": 43620,
+    "runtimeTested": false,
+    "dll": {
+      "size": 41311744,
+      "sha256": "e6dc3f60865d4c520007fc07d49d05636989971d6455ad1e2026af6eec6329f9"
+    },
+    "executionAcceptance": "No ARM64 Windows runtime execution was performed"
+  },
+  "artifactReview": {
+    "downloadedBothArtifacts": true,
+    "dllHashesRecomputed": true,
+    "peArchitectureAndExactExportsRechecked": true,
+    "x64RuntimeResultBoundToDllHash": true
+  },
+  "mainApplication": {
+    "windowsReleaseBuilt": false,
+    "windowsUiIntegrationTested": false,
+    "pendingWorkflow": "flutter-windows-app.yml"
+  }
+}
