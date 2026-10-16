@@ -1,103 +1,118 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
+import 'dart:io';
 
 import 'package:app_core/app_core.dart';
-import 'package:sqlite3/sqlite3.dart';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:drift/isolate.dart';
 
-/// SQLite-backed library, with all database work confined to a worker isolate.
-///
-/// The caller chooses an application-private path. No book/source identity is
-/// normalized as a URL: legacy source identifiers can be arbitrary text.
+import 'library_database.dart';
+
+/// Drift-backed library with SQLite work in a Drift-managed worker isolate.
+/// The historical class name is retained as the public storage boundary.
 class SqliteLibraryRepository implements LibraryRepository {
-  SqliteLibraryRepository._(this._port, this._replies, this._subscription);
+  SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
   static const schemaVersion = 1;
 
-  final SendPort _port;
-  final ReceivePort _replies;
-  final StreamSubscription<Object?> _subscription;
+  final LibraryDatabase _db;
   final _changes = StreamController<void>.broadcast();
-  final _pending = <int, Completer<Object?>>{};
-  int _sequence = 0;
+  Future<void> _queue = Future.value();
+  Future<void>? _closing;
   bool _closed = false;
 
   static Future<SqliteLibraryRepository> open(String path) async {
     if (path.isEmpty) throw ArgumentError.value(path, 'path');
-    final replies = ReceivePort();
-    final ready = Completer<SendPort>();
-    SqliteLibraryRepository? repository;
-    final subscription = replies.cast<Object?>().listen((message) {
-      final data = message as List<Object?>;
-      if (!ready.isCompleted) {
-        if (data[0] == 'ready') {
-          ready.complete(data[1] as SendPort);
-        } else {
-          ready.completeError(StateError(data[1] as String));
-        }
-        return;
-      }
-      final pending = repository!._pending.remove(data[0]);
-      if (pending == null) return;
-      if (data[1] == true) {
-        pending.complete(data[2]);
-      } else {
-        // Do not forward SQLite bindings, source JSON or database paths in errors.
-        pending.completeError(StateError(data[2] as String));
-      }
-    });
+    if (path == ':memory:') return inMemory();
+    final executor = NativeDatabase.createInBackground(File(path));
+    return _initialize(LibraryDatabase(executor));
+  }
+
+  static Future<SqliteLibraryRepository> _initialize(LibraryDatabase db) async {
     try {
-      await Isolate.spawn(_serve, [replies.sendPort, path]);
-      final port = await ready.future;
-      return repository = SqliteLibraryRepository._(
-        port,
-        replies,
-        subscription,
-      );
+      // Eagerly run migrations before returning a usable repository.
+      await db.customSelect('SELECT 1').get();
+      return SqliteLibraryRepository._(db);
     } catch (_) {
-      await subscription.cancel();
-      replies.close();
-      rethrow;
+      await db.close();
+      throw StateError('Could not open library database');
     }
   }
 
-  static Future<SqliteLibraryRepository> inMemory() => open(':memory:');
+  static Future<SqliteLibraryRepository> inMemory() async {
+    final isolate = await DriftIsolate.spawn(() => NativeDatabase.memory());
+    final connection = await isolate.connect(singleClientMode: true);
+    return _initialize(LibraryDatabase(connection.executor));
+  }
 
   @override
   Stream<void> get changes => _changes.stream;
 
-  Future<Object?> _call(String operation, [Object? arguments]) {
-    if (_closed) throw StateError('Library is closed');
-    final id = ++_sequence;
-    final completion = Completer<Object?>();
-    _pending[id] = completion;
-    _port.send([id, operation, arguments]);
-    return completion.future;
+  Future<T> _run<T>(Future<T> Function() action, {bool change = false}) {
+    if (_closed) return Future<T>.error(StateError('Library is closed'));
+    final result = _queue.then((_) async {
+      try {
+        final value = await action();
+        if (change) _changes.add(null);
+        return value;
+      } catch (_) {
+        // Do not expose SQLite bindings, source JSON, or database paths.
+        throw StateError('Library database operation failed');
+      }
+    });
+    _queue = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
   }
 
-  Future<void> _write(String operation, Object? arguments) async {
-    await _call(operation, arguments);
-    _changes.add(null);
+  Map<String, Object?> _decode(String json) =>
+      Map<String, Object?>.from(jsonDecode(json) as Map);
+
+  @override
+  Future<List<LegacyBookRecord>> books() => _run(() async {
+    final rows = await (_db.select(
+      _db.storedBooks,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    return rows.map((e) => LegacyBookRecord(_decode(e.data))).toList();
+  });
+
+  Future<LegacyBookRecord?> _book(String url) async {
+    final row = await (_db.select(
+      _db.storedBooks,
+    )..where((t) => t.id.equals(url))).getSingleOrNull();
+    return row == null ? null : LegacyBookRecord(_decode(row.data));
   }
 
   @override
-  Future<List<LegacyBookRecord>> books() async => (await _call('books') as List)
-      .map((e) => LegacyBookRecord(_map(e)))
-      .toList();
+  Future<LegacyBookRecord?> book(String url) async => _run(() => _book(url));
 
-  @override
-  Future<LegacyBookRecord?> book(String url) async {
-    final result = await _call('book', url);
-    return result == null ? null : LegacyBookRecord(_map(result));
-  }
+  Future<void> _putBook(LegacyBookRecord book) => _db
+      .into(_db.storedBooks)
+      .insertOnConflictUpdate(
+        StoredBooksCompanion.insert(
+          id: book.url,
+          data: jsonEncode(book.toJson()),
+        ),
+      );
 
   @override
   Future<void> putBook(LegacyBookRecord book) =>
-      _write('putBook', book.toJson());
+      _run(() => _putBook(book), change: true);
 
   @override
-  Future<void> removeBook(String url) => _write('removeBook', url);
+  Future<void> removeBook(String url) => _run(
+    () => _db.transaction(() async {
+      await (_db.delete(
+        _db.storedChapters,
+      )..where((t) => t.bookId.equals(url))).go();
+      await (_db.delete(
+        _db.storedContent,
+      )..where((t) => t.bookId.equals(url))).go();
+      await (_db.delete(_db.storedBooks)..where((t) => t.id.equals(url))).go();
+    }),
+    change: true,
+  );
 
   @override
   Future<void> updateProgress(
@@ -108,173 +123,102 @@ class SqliteLibraryRepository implements LibraryRepository {
     if (chapterIndex < 0 || characterOffset < 0) {
       throw ArgumentError('Reading positions must be non-negative');
     }
-    return _write('updateProgress', [url, chapterIndex, characterOffset]);
+    return _run(
+      () => _db.transaction(() async {
+        final book = await _book(url);
+        if (book == null) throw StateError('Missing book');
+        final json = book.toJson()
+          ..['durChapterIndex'] = chapterIndex
+          ..['durChapterPos'] = characterOffset;
+        await _putBook(LegacyBookRecord(json));
+      }),
+      change: true,
+    );
   }
 
   @override
-  Future<List<ReaderChapter>> chapters(String bookUrl) async =>
-      (await _call('chapters', bookUrl) as List)
-          .map((e) => ReaderChapter.fromJson(_map(e)))
-          .toList();
+  Future<List<ReaderChapter>> chapters(String bookUrl) => _run(() async {
+    final rows =
+        await (_db.select(_db.storedChapters)
+              ..where((t) => t.bookId.equals(bookUrl))
+              ..orderBy([(t) => OrderingTerm.asc(t.position)]))
+            .get();
+    return rows.map((e) => ReaderChapter.fromJson(_decode(e.data))).toList();
+  });
+
+  Future<void> _putChapters(
+    String bookUrl,
+    List<Map<String, Object?>> items,
+  ) async {
+    if (bookUrl.isEmpty) throw const FormatException('Empty book identity');
+    await (_db.delete(
+      _db.storedChapters,
+    )..where((t) => t.bookId.equals(bookUrl))).go();
+    await _db.batch((batch) {
+      for (final json in items) {
+        final chapter = ReaderChapter.fromJson(json);
+        if (chapter.url.isEmpty || chapter.index < 0) {
+          throw const FormatException('Invalid chapter identity or index');
+        }
+        batch.insert(
+          _db.storedChapters,
+          StoredChaptersCompanion.insert(
+            bookId: bookUrl,
+            id: chapter.url,
+            position: chapter.index,
+            data: jsonEncode(json),
+          ),
+        );
+      }
+    });
+  }
 
   @override
-  Future<void> putChapters(String bookUrl, List<ReaderChapter> chapters) =>
-      _write('putChapters', [
-        bookUrl,
-        chapters.map((e) => e.toJson()).toList(),
-      ]);
+  Future<void> putChapters(String bookUrl, List<ReaderChapter> chapters) {
+    final snapshot = chapters.map((e) => e.toJson()).toList();
+    return _run(
+      () => _db.transaction(() => _putChapters(bookUrl, snapshot)),
+      change: true,
+    );
+  }
 
   @override
   Future<String?> content(String bookUrl, String chapterUrl) async =>
-      await _call('content', [bookUrl, chapterUrl]) as String?;
+      _run(() async {
+        final row =
+            await (_db.select(_db.storedContent)..where(
+                  (t) =>
+                      t.bookId.equals(bookUrl) & t.chapterId.equals(chapterUrl),
+                ))
+                .getSingleOrNull();
+        return row?.value;
+      });
 
   @override
   Future<void> putContent(String bookUrl, String chapterUrl, String content) =>
-      _write('putContent', [bookUrl, chapterUrl, content]);
+      _run(() async {
+        if (bookUrl.isEmpty || chapterUrl.isEmpty) {
+          throw const FormatException('Empty content identity');
+        }
+        await _db
+            .into(_db.storedContent)
+            .insertOnConflictUpdate(
+              StoredContentCompanion.insert(
+                bookId: bookUrl,
+                chapterId: chapterUrl,
+                value: content,
+              ),
+            );
+      }, change: true);
 
   @override
-  Future<List<Map<String, Object?>>> sources() async =>
-      (await _call('sources') as List).map(_map).toList();
+  Future<List<Map<String, Object?>>> sources() => _run(_sources);
 
-  @override
-  Future<void> putSource(Map<String, Object?> source) =>
-      _write('putSource', jsonDecode(jsonEncode(source)));
-
-  @override
-  Future<void> removeSource(String sourceId) =>
-      _write('removeSource', sourceId);
-
-  @override
-  Future<String?> setting(String key) async =>
-      await _call('setting', key) as String?;
-
-  @override
-  Future<void> setSetting(String key, String? value) =>
-      _write('setSetting', [key, value]);
-
-  @override
-  Future<Map<String, String>> backupFiles() async =>
-      Map<String, String>.from(await _call('backup') as Map);
-
-  @override
-  Future<void> restoreBackup(LegacyBackupDocument document) =>
-      _write('restore', document.files);
-
-  @override
-  Future<void> close() async {
-    if (_closed) return;
-    // Stop accepting new calls before awaiting; preceding writes drain in FIFO.
-    final completion = _call('close');
-    _closed = true;
-    await completion;
-    await _subscription.cancel();
-    _replies.close();
-    await _changes.close();
-  }
-}
-
-Map<String, Object?> _map(Object? value) =>
-    Map<String, Object?>.from(value as Map);
-
-void _serve(List<Object?> arguments) {
-  final reply = arguments[0] as SendPort;
-  final input = ReceivePort();
-  late final _Store store;
-  try {
-    store = _Store(arguments[1] as String);
-    reply.send(['ready', input.sendPort]);
-  } catch (_) {
-    input.close();
-    reply.send(['error', 'Could not open library database']);
-    return;
-  }
-  input.listen((message) {
-    final request = message as List<Object?>;
-    try {
-      final result = store.run(request[1] as String, request[2]);
-      reply.send([request[0], true, result]);
-    } on FormatException {
-      reply.send([request[0], false, 'Invalid library or backup data']);
-    } on ArgumentError {
-      reply.send([request[0], false, 'Invalid library operation']);
-    } on StateError {
-      reply.send([
-        request[0],
-        false,
-        'Library record is missing or incompatible',
-      ]);
-    } catch (_) {
-      reply.send([request[0], false, 'Library database operation failed']);
-    }
-    if (request[1] == 'close') input.close();
-  });
-}
-
-class _Store {
-  _Store(String path) : db = sqlite3.open(path) {
-    try {
-      db.execute('PRAGMA busy_timeout = 5000');
-      final version = db.userVersion;
-      if (version > SqliteLibraryRepository.schemaVersion) {
-        throw StateError('Newer database schema');
-      }
-      if (version == 0) {
-        _transaction(() {
-          db.execute('''
-CREATE TABLE books (id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
-CREATE TABLE sources (id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
-CREATE TABLE settings (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
-CREATE TABLE chapters (
-  book_id TEXT NOT NULL, id TEXT NOT NULL, position INTEGER NOT NULL,
-  data TEXT NOT NULL, PRIMARY KEY (book_id, id), UNIQUE(book_id, position)
-);
-CREATE TABLE content (
-  book_id TEXT NOT NULL, chapter_id TEXT NOT NULL, value TEXT NOT NULL,
-  PRIMARY KEY (book_id, chapter_id)
-);
-CREATE TABLE backup_files (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
-''');
-          db.userVersion = SqliteLibraryRepository.schemaVersion;
-        });
-      }
-    } catch (_) {
-      db.close();
-      rethrow;
-    }
-  }
-
-  final Database db;
-
-  T _transaction<T>(T Function() action) {
-    db.execute('BEGIN IMMEDIATE');
-    try {
-      final result = action();
-      db.execute('COMMIT');
-      return result;
-    } catch (_) {
-      db.execute('ROLLBACK');
-      rethrow;
-    }
-  }
-
-  List<Object?> _records(String table) => db
-      .select('SELECT data FROM $table ORDER BY id COLLATE BINARY')
-      .map((row) => jsonDecode(row['data'] as String))
-      .toList();
-
-  Map<String, Object?>? _book(String id) {
-    final rows = db.select('SELECT data FROM books WHERE id = ?', [id]);
-    return rows.isEmpty
-        ? null
-        : _map(jsonDecode(rows.single['data'] as String));
-  }
-
-  void _put(String table, String id, Map<String, Object?> data) {
-    if (id.isEmpty) throw const FormatException('Empty identity');
-    db.execute('INSERT OR REPLACE INTO $table (id, data) VALUES (?, ?)', [
-      id,
-      jsonEncode(data),
-    ]);
+  Future<List<Map<String, Object?>>> _sources() async {
+    final rows = await (_db.select(
+      _db.storedSources,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+    return rows.map((e) => _decode(e.data)).toList();
   }
 
   String _sourceId(Map<String, Object?> source) {
@@ -285,222 +229,215 @@ CREATE TABLE backup_files (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
     return id;
   }
 
-  void _putChapters(String book, List<Object?> items) {
-    if (book.isEmpty) throw const FormatException('Empty book identity');
-    db.execute('DELETE FROM chapters WHERE book_id = ?', [book]);
-    for (final item in items) {
-      final json = _map(item);
-      final chapter = ReaderChapter.fromJson(json);
-      if (chapter.url.isEmpty || chapter.index < 0) {
-        throw const FormatException('Invalid chapter identity or index');
-      }
-      db.execute(
-        'INSERT INTO chapters (book_id, id, position, data) VALUES (?, ?, ?, ?)',
-        [book, chapter.url, chapter.index, jsonEncode(json)],
-      );
-    }
-  }
-
-  Object? run(String operation, Object? arguments) {
-    switch (operation) {
-      case 'books':
-        return _records('books');
-      case 'book':
-        return _book(arguments as String);
-      case 'putBook':
-        final json = _map(arguments);
-        _put('books', LegacyBookRecord(json).url, json);
-      case 'removeBook':
-        _transaction(() {
-          for (final table in ['chapters', 'content']) {
-            db.execute('DELETE FROM $table WHERE book_id = ?', [arguments]);
-          }
-          db.execute('DELETE FROM books WHERE id = ?', [arguments]);
-        });
-      case 'updateProgress':
-        final args = arguments as List;
-        _transaction(() {
-          final json = _book(args[0] as String);
-          if (json == null) throw StateError('Missing book');
-          json['durChapterIndex'] = args[1];
-          json['durChapterPos'] = args[2];
-          _put('books', LegacyBookRecord(json).url, json);
-        });
-      case 'chapters':
-        return db
-            .select(
-              'SELECT data FROM chapters WHERE book_id = ? ORDER BY position',
-              [arguments],
-            )
-            .map((row) => jsonDecode(row['data'] as String))
-            .toList();
-      case 'putChapters':
-        final args = arguments as List;
-        _transaction(() => _putChapters(args[0] as String, args[1] as List));
-      case 'content':
-        final rows = db.select(
-          'SELECT value FROM content WHERE book_id = ? AND chapter_id = ?',
-          arguments as List,
+  Future<void> _putSource(Map<String, Object?> source) async {
+    await _db
+        .into(_db.storedSources)
+        .insertOnConflictUpdate(
+          StoredSourcesCompanion.insert(
+            id: _sourceId(source),
+            data: jsonEncode(source),
+          ),
         );
-        return rows.isEmpty ? null : rows.single['value'];
-      case 'putContent':
-        final args = arguments as List;
-        if ((args[0] as String).isEmpty || (args[1] as String).isEmpty) {
-          throw const FormatException('Empty content identity');
-        }
-        db.execute('INSERT OR REPLACE INTO content VALUES (?, ?, ?)', args);
-      case 'sources':
-        return _records('sources');
-      case 'putSource':
-        final json = _map(arguments);
-        _put('sources', _sourceId(json), json);
-      case 'removeSource':
-        db.execute('DELETE FROM sources WHERE id = ?', [arguments]);
-      case 'setting':
-        final rows = db.select('SELECT value FROM settings WHERE id = ?', [
-          arguments,
-        ]);
-        return rows.isEmpty ? null : rows.single['value'];
-      case 'setSetting':
-        final args = arguments as List;
-        if (args[1] == null) {
-          db.execute('DELETE FROM settings WHERE id = ?', [args[0]]);
-        } else {
-          db.execute('INSERT OR REPLACE INTO settings VALUES (?, ?)', args);
-        }
-      case 'backup':
-        return _backup();
-      case 'restore':
-        _restore(Map<String, String>.from(arguments as Map));
-      case 'close':
-        db.close();
-      default:
-        throw ArgumentError('Unknown operation');
-    }
-    return null;
   }
 
-  Map<String, String> _backup() {
-    return _transaction(() {
-      final files = {
-        for (final row in db.select(
-          'SELECT id, value FROM backup_files ORDER BY id',
-        ))
-          row['id'] as String: row['value'] as String,
-      };
-      final extension = files.containsKey(SqliteLibraryRepository.backupEntry)
-          ? _map(jsonDecode(files[SqliteLibraryRepository.backupEntry]!))
+  @override
+  Future<void> putSource(Map<String, Object?> source) {
+    final snapshot = _decode(jsonEncode(source));
+    return _run(() => _putSource(snapshot), change: true);
+  }
+
+  @override
+  Future<void> removeSource(String sourceId) => _run(() async {
+    await (_db.delete(
+      _db.storedSources,
+    )..where((t) => t.id.equals(sourceId))).go();
+  }, change: true);
+
+  @override
+  Future<String?> setting(String key) async => _run(() async {
+    final row = await (_db.select(
+      _db.storedSettings,
+    )..where((t) => t.id.equals(key))).getSingleOrNull();
+    return row?.value;
+  });
+
+  @override
+  Future<void> setSetting(String key, String? value) => _run(() async {
+    if (value == null) {
+      await (_db.delete(
+        _db.storedSettings,
+      )..where((t) => t.id.equals(key))).go();
+    } else {
+      await _db
+          .into(_db.storedSettings)
+          .insertOnConflictUpdate(
+            StoredSettingsCompanion.insert(id: key, value: value),
+          );
+    }
+  }, change: true);
+
+  @override
+  Future<Map<String, String>> backupFiles() => _run(
+    () => _db.transaction(() async {
+      final rows = await (_db.select(
+        _db.storedBackupFiles,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+      final files = {for (final row in rows) row.id: row.value};
+      final extension = files.containsKey(backupEntry)
+          ? _decode(files[backupEntry]!)
           : <String, Object?>{};
+      final chapters =
+          await (_db.select(_db.storedChapters)..orderBy([
+                (t) => OrderingTerm.asc(t.bookId),
+                (t) => OrderingTerm.asc(t.position),
+              ]))
+              .get();
+      final content =
+          await (_db.select(_db.storedContent)..orderBy([
+                (t) => OrderingTerm.asc(t.bookId),
+                (t) => OrderingTerm.asc(t.chapterId),
+              ]))
+              .get();
+      final settings = await (_db.select(
+        _db.storedSettings,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+      final books = await (_db.select(
+        _db.storedBooks,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
       extension.addAll({
         'version': 1,
         'chapters': [
-          for (final row in db.select(
-            'SELECT book_id, data FROM chapters ORDER BY book_id, position',
-          ))
-            {
-              'bookUrl': row['book_id'],
-              'chapter': jsonDecode(row['data'] as String),
-            },
+          for (final row in chapters)
+            {'bookUrl': row.bookId, 'chapter': _decode(row.data)},
         ],
         'content': [
-          for (final row in db.select(
-            'SELECT * FROM content ORDER BY book_id, chapter_id',
-          ))
+          for (final row in content)
             {
-              'bookUrl': row['book_id'],
-              'chapterUrl': row['chapter_id'],
-              'content': row['value'],
+              'bookUrl': row.bookId,
+              'chapterUrl': row.chapterId,
+              'content': row.value,
             },
         ],
-        'settings': {
-          for (final row in db.select('SELECT * FROM settings ORDER BY id'))
-            row['id'] as String: row['value'],
-        },
+        'settings': {for (final row in settings) row.id: row.value},
       });
-      files['bookshelf.json'] = jsonEncode(_records('books'));
-      files['bookSource.json'] = jsonEncode(_records('sources'));
-      files[SqliteLibraryRepository.backupEntry] = jsonEncode(extension);
+      files['bookshelf.json'] = jsonEncode(
+        books.map((e) => _decode(e.data)).toList(),
+      );
+      files['bookSource.json'] = jsonEncode(await _sources());
+      files[backupEntry] = jsonEncode(extension);
       return files;
-    });
-  }
+    }),
+  );
 
-  void _restore(Map<String, String> files) {
-    final document = LegacyBackupDocument.parse(files);
-    _transaction(() {
+  @override
+  Future<void> restoreBackup(LegacyBackupDocument document) => _run(
+    () => _db.transaction(() async {
+      final files = document.files;
       if (files.containsKey('bookshelf.json')) {
-        db.execute('DELETE FROM books');
+        await _db.delete(_db.storedBooks).go();
         for (final book in document.books) {
-          _put('books', book.url, book.toJson());
+          await _putBook(book);
         }
       }
       if (files.containsKey('bookSource.json')) {
-        db.execute('DELETE FROM sources');
+        await _db.delete(_db.storedSources).go();
         final seen = <String>{};
         for (final entry in jsonDecode(files['bookSource.json']!) as List) {
-          final source = _map(entry);
-          final id = _sourceId(source);
-          if (!seen.add(id)) {
+          final source = Map<String, Object?>.from(entry as Map);
+          if (!seen.add(_sourceId(source))) {
             throw const FormatException('Duplicate source identity');
           }
-          _put('sources', id, source);
+          await _putSource(source);
         }
       }
-      if (files.containsKey(SqliteLibraryRepository.backupEntry)) {
-        final extension = _map(
-          jsonDecode(files[SqliteLibraryRepository.backupEntry]!),
-        );
+      if (files.containsKey(backupEntry)) {
+        final extension = _decode(files[backupEntry]!);
         if (extension['version'] != 1) {
           throw const FormatException('Unsupported library backup version');
         }
         if (extension.containsKey('chapters')) {
-          db.execute('DELETE FROM chapters');
-          final grouped = <String, List<Object?>>{};
+          await _db.delete(_db.storedChapters).go();
+          final grouped = <String, List<Map<String, Object?>>>{};
           for (final entry in extension['chapters'] as List) {
-            final item = _map(entry);
-            final bookUrl = item['bookUrl'] as String;
-            grouped.putIfAbsent(bookUrl, () => []).add(item['chapter']);
+            final item = Map<String, Object?>.from(entry as Map);
+            grouped
+                .putIfAbsent(item['bookUrl'] as String, () => [])
+                .add(Map<String, Object?>.from(item['chapter'] as Map));
           }
           for (final entry in grouped.entries) {
-            _putChapters(entry.key, entry.value);
+            await _putChapters(entry.key, entry.value);
           }
         }
         if (extension.containsKey('content')) {
-          db.execute('DELETE FROM content');
-          for (final entry in extension['content'] as List) {
-            final item = _map(entry);
-            if (item['bookUrl'] is! String ||
-                (item['bookUrl'] as String).isEmpty ||
-                item['chapterUrl'] is! String ||
-                (item['chapterUrl'] as String).isEmpty ||
-                item['content'] is! String) {
-              throw const FormatException('Invalid content');
+          await _db.delete(_db.storedContent).go();
+          await _db.batch((batch) {
+            for (final entry in extension['content'] as List) {
+              final item = Map<String, Object?>.from(entry as Map);
+              final book = item['bookUrl'];
+              final chapter = item['chapterUrl'];
+              final content = item['content'];
+              if (book is! String ||
+                  book.isEmpty ||
+                  chapter is! String ||
+                  chapter.isEmpty ||
+                  content is! String) {
+                throw const FormatException('Invalid content');
+              }
+              batch.insert(
+                _db.storedContent,
+                StoredContentCompanion.insert(
+                  bookId: book,
+                  chapterId: chapter,
+                  value: content,
+                ),
+              );
             }
-            db.execute('INSERT INTO content VALUES (?, ?, ?)', [
-              item['bookUrl'],
-              item['chapterUrl'],
-              item['content'],
-            ]);
-          }
+          });
         }
         if (extension.containsKey('settings')) {
-          db.execute('DELETE FROM settings');
-          for (final entry in _map(extension['settings']).entries) {
-            if (entry.value is! String) {
-              throw const FormatException('Invalid setting');
+          await _db.delete(_db.storedSettings).go();
+          final settings = Map<String, Object?>.from(
+            extension['settings'] as Map,
+          );
+          await _db.batch((batch) {
+            for (final entry in settings.entries) {
+              if (entry.value is! String) {
+                throw const FormatException('Invalid setting');
+              }
+              batch.insert(
+                _db.storedSettings,
+                StoredSettingsCompanion.insert(
+                  id: entry.key,
+                  value: entry.value! as String,
+                ),
+              );
             }
-            db.execute('INSERT INTO settings VALUES (?, ?)', [
-              entry.key,
-              entry.value,
-            ]);
-          }
+          });
         }
       }
-      for (final entry in files.entries) {
-        db.execute('INSERT OR REPLACE INTO backup_files VALUES (?, ?)', [
-          entry.key,
-          entry.value,
-        ]);
-      }
-    });
+      await _db.batch((batch) {
+        for (final entry in files.entries) {
+          batch.insert(
+            _db.storedBackupFiles,
+            StoredBackupFilesCompanion.insert(
+              id: entry.key,
+              value: entry.value,
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+        }
+      });
+    }),
+    change: true,
+  );
+
+  @override
+  Future<void> close() => _closing ??= _close();
+
+  Future<void> _close() async {
+    _closed = true;
+    await _queue;
+    await _db.close();
+    await _changes.close();
   }
 }

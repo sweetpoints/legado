@@ -294,4 +294,90 @@ void main() {
     repository = await SqliteLibraryRepository.open(path);
     expect((await repository.books()).single.url, 'a');
   });
+
+  test(
+    'Drift adopts the existing version-1 SQLite layout without losing data',
+    () async {
+      final legacyPath = '${directory.path}/legacy.sqlite';
+      final raw = sqlite3.open(legacyPath);
+      raw.execute('''
+CREATE TABLE books (id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
+CREATE TABLE sources (id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
+CREATE TABLE settings (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+CREATE TABLE chapters (book_id TEXT NOT NULL, id TEXT NOT NULL,
+  position INTEGER NOT NULL, data TEXT NOT NULL,
+  PRIMARY KEY (book_id, id), UNIQUE(book_id, position));
+CREATE TABLE content (book_id TEXT NOT NULL, chapter_id TEXT NOT NULL,
+  value TEXT NOT NULL, PRIMARY KEY (book_id, chapter_id));
+CREATE TABLE backup_files (id TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+''');
+      raw.execute('INSERT INTO books VALUES (?, ?)', [
+        'old',
+        jsonEncode(record('old').toJson()),
+      ]);
+      raw.execute('INSERT INTO sources VALUES (?, ?)', [
+        '旧源',
+        '{"bookSourceUrl":"旧源","future":true}',
+      ]);
+      raw.execute('INSERT INTO settings VALUES (?, ?)', ['font', '20']);
+      raw.execute('INSERT INTO content VALUES (?, ?, ?)', [
+        'old',
+        'chapter',
+        '旧正文',
+      ]);
+      raw.userVersion = 1;
+      raw.close();
+      final legacy = await SqliteLibraryRepository.open(legacyPath);
+      try {
+        expect((await legacy.book('old'))!.toJson()['unknown'], {
+          'nested': [1, null, 'preserved'],
+        });
+        expect((await legacy.sources()).single['future'], true);
+        expect(await legacy.setting('font'), '20');
+        expect(await legacy.content('old', 'chapter'), '旧正文');
+        await legacy.updateProgress('old', 4, 31);
+        final files = await legacy.backupFiles();
+        expect(
+          (jsonDecode(
+            files['bookshelf.json']!,
+          ) as List).single['durChapterPos'],
+          31,
+        );
+      } finally {
+        await legacy.close();
+      }
+    },
+  );
+
+  test(
+    'failed Drift schema installation rolls back newly created tables',
+    () async {
+      final badPath = '${directory.path}/incompatible.sqlite';
+      final raw = sqlite3.open(badPath);
+      raw.execute('CREATE TABLE sentinel (future TEXT)');
+      raw.execute('CREATE INDEX sources ON sentinel(future)');
+      raw.execute("INSERT INTO sentinel VALUES ('original')");
+      raw.close();
+      await expectLater(
+        SqliteLibraryRepository.open(badPath),
+        throwsStateError,
+      );
+      final reopened = sqlite3.open(badPath);
+      try {
+        expect(reopened.userVersion, 0);
+        expect(
+          reopened.select('SELECT future FROM sentinel').single['future'],
+          'original',
+        );
+        expect(
+          reopened.select(
+            "SELECT name FROM sqlite_master WHERE name = 'books'",
+          ),
+          isEmpty,
+        );
+      } finally {
+        reopened.close();
+      }
+    },
+  );
 }
