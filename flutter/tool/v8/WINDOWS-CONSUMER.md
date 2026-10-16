@@ -261,3 +261,13 @@ compilation, the real native FFI probe with normal process exit, all Dart
 `source_v8` tests and the complete `source_conformance` suite, preserving exact
 native artifact/evidence. A second job collects ARM64 target libraries on the x64
 host for independent review. It does not claim ARM64 execution or compilation.
+
+The separate ARM64 library candidate from run `38947282697`, job `117129497294`,
+was subsequently reviewed with the same criteria. It contains 6,099 files (Clang
+346, MSVC 508, SDK 5,245), and all 5,470 shared Clang/header file hashes match the
+already reviewed x64 inventory. Its exact lock SHA-256 is
+`ffa9f0d876805e7cff113d144ae235df30d3d91aaab2f905f30c3e85bfe69de9`.
+The review and lock are committed separately as `windows-reviewed-arm64-*` files.
+The Windows workflow now **cross-compiles and links ARM64 on its x64 runner**,
+checks the resulting ARM64 PE machine/exports, and preserves that artifact. It
+never loads that DLL in the x64 test process or marks ARM64 runtime acceptance.
