@@ -34,17 +34,22 @@ void main(List<String> args) async {
       final result = await Process.run(await pythonExecutable(), [
         input.packageRoot
             .resolve(
-              os == OS.iOS
+              os == OS.windows
+                  ? '../../tool/v8/windows_ci.py'
+                  : os == OS.iOS
                   ? '../../tool/v8/ios_sdk.py'
                   : os == OS.linux
                   ? '../../tool/v8/linux_sdk.py'
                   : '../../tool/v8/prepare_sdk.py',
             )
             .toFilePath(),
-        os == OS.iOS || os == OS.linux ? '--prepare-dynamic' : '--target',
+        os == OS.iOS || os == OS.linux || os == OS.windows
+            ? '--prepare-dynamic'
+            : '--target',
         target,
       ]);
-      if ((os == OS.iOS || os == OS.linux) && result.exitCode == 0) {
+      if ((os == OS.iOS || os == OS.linux || os == OS.windows) &&
+          result.exitCode == 0) {
         final receipt =
             jsonDecode(result.stdout as String) as Map<String, dynamic>;
         root = Directory(receipt['artifactRoot'] as String);
@@ -65,6 +70,8 @@ void main(List<String> args) async {
     }
     final name = os == OS.macOS || os == OS.iOS
         ? 'libsource_v8.dylib'
+        : os == OS.windows
+        ? 'source_v8.dll'
         : 'libsource_v8.so';
     final destination = input.outputDirectory.resolve(name);
     final copied = await artifact.binary.copy(destination.toFilePath());
@@ -96,6 +103,7 @@ void main(List<String> args) async {
           'linux-pins.json',
           'linux-release-pin.json',
         ],
+        if (os == OS.windows) ...windowsConsumerInputs,
         'toolchain-pins.json',
       ])
         input.packageRoot.resolve('../../tool/v8/$name'),

@@ -211,8 +211,10 @@ def build(target, output, toolchain_root, toolchain_lock, lock_sha256, sdk_cache
     env['PATH'] = str((root / lock['compiler']).parent) + os.pathsep + os.environ.get('SystemRoot', 'C:\\Windows') + '\\System32'
 
     def run(command):
-        return subprocess.run([str(v) for v in command], env=env, check=True,
-                              capture_output=True, text=True).stdout.strip()
+        result = subprocess.run([str(v) for v in command], env=env, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError('Windows native compiler failed:\n' + result.stdout + '\n' + result.stderr)
+        return result.stdout.strip()
 
     version = run([root / lock['compiler'], '--version'])
     if link_sdk.compiler_identity(version) != lock['clangVersion']:
@@ -261,6 +263,18 @@ def build(target, output, toolchain_root, toolchain_lock, lock_sha256, sdk_cache
                     'binary': {'name': dll.name, 'size': dll.stat().st_size, 'sha256': prebuilt.sha(dll)},
                     'inspection': inspection, 'validation': {'built': True, 'runtimeTested': False,
                                                            'flutterHookIntegrated': False}}
+        evidence['depotTools'] = pins['depotTools']
+        evidence['targets'] = {target: {
+            'binary': dll.name, 'size': dll.stat().st_size, 'sha256': prebuilt.sha(dll),
+            'sdkProvenance': {'target': target,
+                              'releaseManifestSha256': release['releaseManifestSha256'],
+                              'manifestSha256': prebuilt.sha(sdk / 'manifest.json')},
+            'windowsToolchainLockSha256': lock_sha256,
+            'windowsConsumerInputsSha256': {
+                name: prebuilt.sha(HERE / name) for name in
+                ('windows_ci.py', 'windows_sdk.py', 'windows-pins.json', 'windows-release-pin.json',
+                 'windows-reviewed-toolchain.json', 'windows-reviewed-x64-lock.json')},
+        }}
         (work / 'manifest.json').write_text(json.dumps(evidence, indent=2) + '\n')
         # Publish a standalone artifact, never an unaccepted hook cache entry.
         work.rename(output)

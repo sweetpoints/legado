@@ -9,12 +9,23 @@ const v8Revision = 'c45871fec706a6e7b715e607065bb4578b23ce9f';
 const v8Version = '15.4.80.25';
 const depotToolsRevision = '8a5434051036b32412a2ecb10c213a72e3f3ccb9';
 const bridgeAbi = 1;
+const windowsConsumerInputs = [
+  'windows_ci.py',
+  'windows_sdk.py',
+  'windows-pins.json',
+  'windows-release-pin.json',
+  'windows-reviewed-toolchain.json',
+  'windows-reviewed-x64-lock.json',
+];
 
 String artifactTarget(OS os, Architecture architecture, {IOSSdk? iosSdk}) {
   if (os == OS.iOS && architecture == Architecture.arm64) {
     if (iosSdk == IOSSdk.iPhoneOS) return 'ios-arm64';
     if (iosSdk == IOSSdk.iPhoneSimulator) return 'ios-simulator-arm64';
     throw UnsupportedError('iOS device/simulator SDK is required');
+  }
+  if (os == OS.windows && architecture == Architecture.x64) {
+    return 'windows-x64';
   }
   if (os == OS.linux && architecture == Architecture.arm64) {
     return 'linux-arm64';
@@ -33,7 +44,7 @@ String artifactTarget(OS os, Architecture architecture, {IOSSdk? iosSdk}) {
     return 'android-x64';
   }
   throw UnsupportedError(
-    'Official V8 supports iOS ARM64 device/simulator, macOS/Linux arm64/x64 and Android arm64/x64; requested $os/$architecture',
+    'Official V8 supports iOS ARM64 device/simulator, macOS/Linux arm64/x64, Windows x64 and Android arm64/x64; requested $os/$architecture',
   );
 }
 
@@ -134,10 +145,13 @@ Future<VerifiedArtifact> verifyArtifact(
   final target = _object(targets[targetName], 'targets.$targetName');
   final isIOS = targetName.startsWith('ios-');
   final isLinux = targetName.startsWith('linux-');
+  final isWindows = targetName == 'windows-x64';
   final releasePinFile = _packageFile(
     packageRoot,
     '../../tool/v8/${isIOS
         ? 'ios-release-pin.json'
+        : isWindows
+        ? 'windows-release-pin.json'
         : isLinux
         ? 'linux-release-pin.json'
         : 'release-pin.json'}',
@@ -173,6 +187,45 @@ Future<VerifiedArtifact> verifyArtifact(
       target['iosPackagerSha256'],
       (await sha256.bind(packager.openRead()).first).toString(),
       '$targetName.iosPackagerSha256',
+    );
+  } else if (isWindows) {
+    final inputHashes = _object(
+      target['windowsConsumerInputsSha256'],
+      'windows consumer inputs',
+    );
+    for (final name in windowsConsumerInputs) {
+      final file = _packageFile(packageRoot, '../../tool/v8/$name');
+      _expect(
+        inputHashes[name],
+        (await sha256.bind(file.openRead()).first).toString(),
+        '$targetName.windowsConsumerInputsSha256.$name',
+      );
+    }
+    final reviewedFile = _packageFile(
+      packageRoot,
+      '../../tool/v8/windows-reviewed-toolchain.json',
+    );
+    final reviewed = _object(
+      jsonDecode(await reviewedFile.readAsString()),
+      'Windows toolchain review',
+    );
+    _expect(
+      reviewed['status'],
+      'reviewed-for-compatibility-build',
+      'Windows toolchain review status',
+    );
+    _expect(reviewed['target'], targetName, 'Windows toolchain target');
+    final reviewedLock = _packageFile(
+      packageRoot,
+      '../../tool/v8/windows-reviewed-x64-lock.json',
+    );
+    final reviewedHash = (await sha256.bind(reviewedLock.openRead()).first)
+        .toString();
+    _expect(reviewed['lockSha256'], reviewedHash, 'Windows reviewed lock hash');
+    _expect(
+      target['windowsToolchainLockSha256'],
+      reviewedHash,
+      'Windows toolchain lock hash',
     );
   } else if (isLinux) {
     _expect(target['minGlibc'], '2.31', '$targetName.minGlibc');
@@ -263,8 +316,15 @@ Future<VerifiedArtifact> verifyArtifact(
   if (!await binary.exists()) {
     throw StateError('SDK-linked V8 bridge binary is missing: ${binary.path}');
   }
-  final root = await artifactRoot.resolveSymbolicLinks();
-  if (!(await binary.resolveSymbolicLinks()).startsWith('$root/')) {
+  final root = Uri.directory(
+    await artifactRoot.resolveSymbolicLinks(),
+    windows: Platform.isWindows,
+  );
+  final resolved = Uri.file(
+    await binary.resolveSymbolicLinks(),
+    windows: Platform.isWindows,
+  );
+  if (!resolved.path.startsWith(root.path)) {
     throw StateError('V8 binary resolves outside the artifact directory');
   }
   final size = target['size'];
@@ -279,6 +339,10 @@ Future<VerifiedArtifact> verifyArtifact(
     releasePinFile.uri,
     binary.uri,
     ...sources.values.map((file) => file.uri),
+    if (isWindows) ...[
+      for (final name in windowsConsumerInputs)
+        _packageFile(packageRoot, '../../tool/v8/$name').uri,
+    ],
     if (isLinux) ...[
       for (final name in [
         'linux_sdk.py',

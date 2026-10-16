@@ -1,0 +1,120 @@
+name: Flutter Windows V8 native acceptance
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/flutter-windows-v8.yml'
+      - 'flutter/tool/v8/**'
+      - 'flutter/packages/source_v8/**'
+      - 'flutter/packages/source_engine/**'
+      - 'flutter/packages/source_conformance/**'
+      - 'flutter/packages/source_platform/**'
+      - 'flutter/packages/source_legacy/**'
+      - 'flutter/packages/source_migration/**'
+      - 'flutter/pubspec*'
+  push:
+    branches: [master, 'codex/flutter-full-app']
+    paths:
+      - '.github/workflows/flutter-windows-v8.yml'
+      - 'flutter/tool/v8/**'
+      - 'flutter/packages/source_v8/**'
+      - 'flutter/packages/source_engine/**'
+      - 'flutter/packages/source_conformance/**'
+      - 'flutter/packages/source_platform/**'
+      - 'flutter/packages/source_legacy/**'
+      - 'flutter/packages/source_migration/**'
+      - 'flutter/pubspec*'
+permissions:
+  contents: read
+jobs:
+  windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Validate native consumer contracts
+        shell: pwsh
+        run: python -m unittest discover -s flutter/tool/v8 -p 'test_windows*.py' -v
+      - name: Build bridge with independently reviewed Windows toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python flutter/tool/v8/windows_ci.py --prepare-dynamic windows-x64 `
+            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' > build-windows-receipt.json
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Windows bridge build failed' }
+      - name: Execute native FFI probe and require normal process exit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $receipt = Get-Content build-windows-receipt.json -Raw | ConvertFrom-Json
+          python flutter/tool/v8/windows_sdk.py --verify-runtime $receipt.artifactRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Native V8 FFI probe or normal process exit failed' }
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - name: Resolve Flutter workspace
+        shell: pwsh
+        working-directory: flutter
+        run: flutter pub get
+      - name: Run real Dart V8 worker transport and source conformance
+        env:
+          SOURCE_V8_PYTHON: ${{ steps.python.outputs.python-path }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build/windows-v8-acceptance | Out-Null
+          Push-Location flutter/packages/source_v8
+          dart test --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/source-v8.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Dart V8 transport or normal process exit failed' }
+          Pop-Location
+          Push-Location flutter/packages/source_conformance
+          dart test --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/conformance.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows V8 source conformance or normal process exit failed' }
+          Pop-Location
+      - name: Preserve exact native artifact and acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-x64-v8-native-acceptance
+          include-hidden-files: true
+          path: |
+            build-windows-receipt.json
+            build/windows-v8-acceptance/
+            flutter/packages/source_v8/.cache/windows-built/
+          if-no-files-found: warn
+  windows-arm64-toolchain-review:
+    # ARM64 builds stay on the x64 host; no ARM64 runtime claim is made here.
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Collect ARM64 target libraries on x64 host for independent review
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $collector = 'flutter/tool/v8/windows_toolchain_receipt.py'
+          $clangRoot = Join-Path $env:RUNNER_TEMP 'legado-reviewed-windows-clang'
+          python $collector fetch-clang --output $clangRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Fixed Clang verification failed' }
+          $vsRoot = 'C:/Program Files/Microsoft Visual Studio/18/Enterprise'
+          python $collector collect --target windows-arm64 `
+            --clang-root $clangRoot --msvc-root "$vsRoot/VC/Tools/MSVC/14.51.36231" `
+            --msvc-version '14.51.36231' --msvc-version-file "$vsRoot/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt" `
+            --sdk-root 'C:/Program Files (x86)/Windows Kits/10' --sdk-version '10.0.26100.0' `
+            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' `
+            --output build/windows-arm64-toolchain-candidate
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 target receipt collection failed' }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-arm64-toolchain-candidate
+          path: build/windows-arm64-toolchain-candidate/
+          if-no-files-found: error

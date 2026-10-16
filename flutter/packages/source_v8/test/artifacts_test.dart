@@ -15,7 +15,14 @@ void main() {
     expect(artifactTarget(OS.macOS, Architecture.arm64), 'macos-arm64');
     expect(artifactTarget(OS.macOS, Architecture.x64), 'macos-x64');
     expect(
-      () => artifactTarget(OS.windows, Architecture.x64),
+      () => artifactTarget(OS.windows, Architecture.ia32),
+      throwsUnsupportedError,
+    );
+  });
+  test('Windows exposes reviewed x64 and rejects unreviewed ARM64', () {
+    expect(artifactTarget(OS.windows, Architecture.x64), 'windows-x64');
+    expect(
+      () => artifactTarget(OS.windows, Architecture.arm64),
       throwsUnsupportedError,
     );
   });
@@ -148,6 +155,64 @@ void main() {
     await file.writeAsString(jsonEncode(manifest));
     await expectLater(
       verifyArtifact(directory, package, 'android-x64'),
+      throwsStateError,
+    );
+  });
+  test('Windows requires reviewed toolchain, current consumer and exact SDK provenance', () async {
+    final windows = File('${directory.path}/source_v8.dll');
+    await windows.writeAsBytes([1, 2, 3, 4]);
+    final release = jsonDecode(
+      await File.fromUri(
+        package.uri.resolve('../../tool/v8/windows-release-pin.json'),
+      ).readAsString(),
+    ) as Map;
+    final review = jsonDecode(
+      await File.fromUri(
+        package.uri.resolve('../../tool/v8/windows-reviewed-toolchain.json'),
+      ).readAsString(),
+    ) as Map;
+    final hashes = <String, Object>{};
+    for (final name in windowsConsumerInputs) {
+      hashes[name] =
+          (await sha256
+                  .bind(
+                    File.fromUri(package.uri.resolve('../../tool/v8/$name'))
+                        .openRead(),
+                  )
+                  .first)
+              .toString();
+    }
+    final entry = <String, Object>{
+      'binary': 'source_v8.dll',
+      'size': 4,
+      'sha256': sha256.convert([1, 2, 3, 4]).toString(),
+      'sdkProvenance': {
+        'target': 'windows-x64',
+        'releaseManifestSha256': release['releaseManifestSha256'],
+        'manifestSha256': (release['sdkManifestSha256'] as Map)['windows-x64'],
+      },
+      'windowsToolchainLockSha256': review['lockSha256'],
+      'windowsConsumerInputsSha256': hashes,
+    };
+    (manifest['targets'] as Map)['windows-x64'] = entry;
+    final file = File('${directory.path}/manifest.json');
+    await file.writeAsString(jsonEncode(manifest));
+    final artifact = await verifyArtifact(directory, package, 'windows-x64');
+    expect(artifact.binary.path, windows.path);
+    for (final dependency in artifact.dependencies) {
+      expect(await File.fromUri(dependency).exists(), isTrue);
+    }
+    entry['windowsToolchainLockSha256'] = '0' * 64;
+    await file.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, 'windows-x64'),
+      throwsStateError,
+    );
+    entry['windowsToolchainLockSha256'] = review['lockSha256'];
+    hashes['windows_sdk.py'] = '0' * 64;
+    await file.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, 'windows-x64'),
       throwsStateError,
     );
   });
