@@ -39,5 +39,18 @@
         "type": "String"
       }
     }
+  },
+  "sourcesBrowse": "Browse categories",
+  "sourcesCategory": "Category",
+  "sourcesNoCategories": "This source has no static browse categories.",
+  "sourcesPrevious": "Previous page",
+  "sourcesNext": "Next page",
+  "sourcesPage": "Page {page}",
+  "@sourcesPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
   }
 }

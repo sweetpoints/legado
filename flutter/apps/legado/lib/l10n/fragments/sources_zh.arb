@@ -39,5 +39,18 @@
         "type": "String"
       }
     }
+  },
+  "sourcesBrowse": "发现分类",
+  "sourcesCategory": "分类",
+  "sourcesNoCategories": "书源没有静态发现分类",
+  "sourcesPrevious": "上一页",
+  "sourcesNext": "下一页",
+  "sourcesPage": "第 {page} 页",
+  "@sourcesPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
   }
 }

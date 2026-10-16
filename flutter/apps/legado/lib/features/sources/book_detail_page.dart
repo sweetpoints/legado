@@ -115,10 +115,10 @@ class _BookDetailPageState extends ConsumerState<BookDetailPage> {
                 onTap: () => _act(() async {
                   // Reader consumes cache and persisted progress; cache before navigation.
                   await service.fetchChapter(preview, chapter.index);
-                  await service.addToShelf(preview);
                   if (context.mounted) {
                     await context.push(
                       '/reader?bookUrl=${Uri.encodeComponent(preview.book.url)}&chapter=${chapter.index}',
+                      extra: preview,
                     );
                   }
                 }),

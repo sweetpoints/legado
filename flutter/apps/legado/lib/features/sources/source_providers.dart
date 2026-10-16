@@ -27,13 +27,14 @@ typedef SourceSearchQuery = ({
   LibraryRepository repository,
   String sourceId,
   String key,
+  int page,
 });
 final sourceSearchProvider = FutureProvider.autoDispose
     .family<List<NetworkBook>, SourceSearchQuery>((ref, query) {
       if (query.key.isEmpty || query.sourceId.isEmpty) return Future.value([]);
       return ref
           .watch(bookSourceServiceProvider(query.repository))
-          .search(query.sourceId, query.key);
+          .search(query.sourceId, query.key, page: query.page);
     });
 
 typedef BookDetailQuery = ({LibraryRepository repository, NetworkBook book});
@@ -43,3 +44,27 @@ final bookDetailProvider = FutureProvider.autoDispose
           .watch(bookSourceServiceProvider(query.repository))
           .loadDetail(query.book),
     );
+
+final sourceExploreMenuProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, Object?>>,
+      ({LibraryRepository repository, String sourceId})
+    >((ref, query) {
+      if (query.sourceId.isEmpty) return Future.value([]);
+      return ref
+          .watch(bookSourceServiceProvider(query.repository))
+          .exploreMenu(query.sourceId);
+    });
+typedef SourceExploreQuery = ({
+  LibraryRepository repository,
+  String sourceId,
+  String url,
+  int page,
+});
+final sourceExploreProvider = FutureProvider.autoDispose
+    .family<List<NetworkBook>, SourceExploreQuery>((ref, query) {
+      if (query.sourceId.isEmpty || query.url.isEmpty) return Future.value([]);
+      return ref
+          .watch(bookSourceServiceProvider(query.repository))
+          .explore(query.sourceId, query.url, page: query.page);
+    });
