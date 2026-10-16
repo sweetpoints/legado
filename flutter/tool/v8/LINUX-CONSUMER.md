@@ -30,6 +30,23 @@ Flutter/Dart native-assets hook calls the same authenticated consumer.
 Chromium's [Linux sysroot documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/sysroot.md)
 explains why these target images are used instead of host-installed libraries.
 
+The sysroot cache **must use a case-sensitive filesystem**. The authenticated
+archives contain legal pairs such as `xt_MARK.h`/`xt_mark.h`, and `Sys`/`sys`
+Perl directories. A default case-insensitive macOS APFS directory silently
+replaces some of those entries during extraction. The consumer now rejects
+such a cache before downloading or extracting anything. For macOS cross-linking
+use a case-sensitive APFS volume, or perform the bridge preparation on Linux.
+Docker Desktop bind mounts of macOS directories retain the host's case behavior;
+use a native Linux volume for the sysroot cache instead.
+
+The reviewed `filesSha256` identities are derived directly from the unchanged
+SHA-authenticated tar entries, preserving exact names and bytes, symlink text
+and hard-link content. They were independently checked against full extraction
+on a native case-sensitive Linux filesystem: x64 contains 18,100 indexed files
+and ARM64 contains 18,110. Fresh installation checks both the archive-content
+identity and the complete extracted filesystem identity. Missing or overwritten
+legal files are rejected; neither the archive hashes nor file checks are relaxed.
+
 Python 3.12 or newer is required for the supported safe tar extraction API.
 A macOS ARM64 or Linux x64 host can use the existing verified Clang installer.
 Both Linux targets can be cross-linked on either host. Native Linux ARM64

@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import io
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -95,7 +97,8 @@ class LinuxSdkTests(unittest.TestCase):
             download.assert_not_called()
 
     def test_changed_cached_sysroot_is_rejected(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(module.urllib.request, 'urlopen') as download:
+        with tempfile.TemporaryDirectory() as directory, patch.object(module.urllib.request, 'urlopen') as download, \
+                patch.object(module, 'case_sensitive_filesystem', return_value=True):
             cache = Path(directory)
             root = cache / ('linux-arm64-' + 'a' * 64)
             root.mkdir()
@@ -110,6 +113,58 @@ class LinuxSdkTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'differs'):
                 module.install_sysroot('linux-arm64', cache, pins)
             download.assert_not_called()
+
+    def test_archive_identity_retains_case_colliding_files_on_any_host(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'sysroot.tar.xz'
+            with tarfile.open(path, 'w:xz') as archive:
+                for name, data in [('./usr/include/Case.h', b'upper'), ('./usr/include/case.h', b'lower')]:
+                    item = tarfile.TarInfo(name)
+                    item.size = len(data)
+                    archive.addfile(item, io.BytesIO(data))
+                alias = tarfile.TarInfo('./usr/include/alias.h')
+                alias.type, alias.linkname = tarfile.LNKTYPE, './usr/include/Case.h'
+                archive.addfile(alias)
+                link = tarfile.TarInfo('./usr/include/link.h')
+                link.type, link.linkname = tarfile.SYMTYPE, 'case.h'
+                archive.addfile(link)
+            expected = {'usr/include/Case.h': {'sha256': hashlib.sha256(b'upper').hexdigest(), 'size': 5},
+                        'usr/include/case.h': {'sha256': hashlib.sha256(b'lower').hexdigest(), 'size': 5},
+                        'usr/include/alias.h': {'sha256': hashlib.sha256(b'upper').hexdigest(), 'size': 5},
+                        'usr/include/link.h': {'link': 'case.h'}}
+            actual = module.archive_inventory(path)
+            self.assertEqual(actual, expected)
+            # Reproduce a case-folding filesystem overwriting a legal header.
+            folded = {name.lower(): item for name, item in actual.items()}
+            self.assertNotEqual(module.inventory_digest(folded), module.inventory_digest(expected))
+            missing = dict(actual)
+            del missing['usr/include/case.h']
+            self.assertNotEqual(module.inventory_digest(missing), module.inventory_digest(expected))
+
+    def test_case_folding_cache_fails_before_any_download_or_extraction(self):
+        pins = json.loads((module.HERE / 'linux-pins.json').read_text())
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(module, 'case_sensitive_filesystem', return_value=False), \
+                patch.object(module.urllib.request, 'urlopen') as download:
+            with self.assertRaisesRegex(ValueError, 'case-sensitive filesystem'):
+                module.install_sysroot('linux-x64', directory, pins)
+            download.assert_not_called()
+
+    def test_archive_inventory_rejects_traversal_and_escaping_links(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name, link in [('../outside', None), ('inside/link', '../../outside')]:
+                path = Path(directory) / 'unsafe.tar.xz'
+                with tarfile.open(path, 'w:xz') as archive:
+                    item = tarfile.TarInfo(name)
+                    if link:
+                        item.type, item.linkname = tarfile.SYMTYPE, link
+                        archive.addfile(item)
+                    else:
+                        item.size = 1
+                        archive.addfile(item, io.BytesIO(b'x'))
+                with self.assertRaises(ValueError):
+                    module.archive_inventory(path)
 
     def test_sysroot_linker_cannot_fall_back_to_host_unwind_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
