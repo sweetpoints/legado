@@ -62,5 +62,6 @@
       }
     }
   },
-  "navigationRssTitle": "订阅"
+  "navigationRssTitle": "订阅",
+  "epubTooLarge": "此 EPUB 超过 128 MiB 输入上限。"
 }

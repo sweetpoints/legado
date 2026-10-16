@@ -164,6 +164,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get navigationRssTitle => '订阅';
 
   @override
+  String get epubTooLarge => '此 EPUB 超过 128 MiB 输入上限。';
+
+  @override
   String get readerTitle => '阅读';
 
   @override
@@ -227,6 +230,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String readerSettingsSaveFailed(String error) {
     return '阅读设置保存失败：$error';
   }
+
+  @override
+  String get readerEpubInvalidArchive => 'EPUB 压缩包已损坏或超出导入限额。';
+
+  @override
+  String get readerEpubInvalidPackage => 'EPUB 包信息、目录或章节文件无效。';
+
+  @override
+  String get readerEpubEncrypted => '暂不支持加密或混淆资源的 EPUB。';
+
+  @override
+  String get readerEpubUnsupported => '此 EPUB 含有文本阅读器暂不支持的章节格式。';
+
+  @override
+  String get readerEpubEmpty => '此 EPUB 没有可阅读的文本。';
+
+  @override
+  String get readerEpubImport => '导入 EPUB';
 
   @override
   String get rssTitle => '订阅';

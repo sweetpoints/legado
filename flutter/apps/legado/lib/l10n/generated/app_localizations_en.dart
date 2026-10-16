@@ -170,6 +170,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navigationRssTitle => 'Feeds';
 
   @override
+  String get epubTooLarge => 'This EPUB exceeds the 128 MiB input limit.';
+
+  @override
   String get readerTitle => 'Read';
 
   @override
@@ -236,6 +239,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String readerSettingsSaveFailed(String error) {
     return 'Could not save reading settings: $error';
   }
+
+  @override
+  String get readerEpubInvalidArchive =>
+      'The EPUB archive is corrupt or exceeds the import limits.';
+
+  @override
+  String get readerEpubInvalidPackage =>
+      'The EPUB package, catalogue, or chapter files are invalid.';
+
+  @override
+  String get readerEpubEncrypted =>
+      'Encrypted or obfuscated EPUB resources are not supported.';
+
+  @override
+  String get readerEpubUnsupported =>
+      'This EPUB contains a chapter format that the text reader cannot display.';
+
+  @override
+  String get readerEpubEmpty => 'This EPUB contains no readable text.';
+
+  @override
+  String get readerEpubImport => 'Import EPUB';
 
   @override
   String get rssTitle => 'Subscriptions';

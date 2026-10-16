@@ -17,6 +17,8 @@ class _Files implements FileExchange {
   Future<ImportedTextFile?> pickText() async =>
       (name: '测试书', text: '第一章 起点\n这里是第一段正文。\n第二章 继续\n这里是第二段正文。');
   @override
+  Future<ImportedEpubFile?> pickEpub() async => null;
+  @override
   Future<Uint8List?> pickBackup() async => backup;
   @override
   Future<bool> saveBackup(Uint8List bytes, String name) async {

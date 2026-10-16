@@ -6,6 +6,7 @@ import '../../app/file_exchange.dart';
 import '../../app/providers.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../reader/local_text_importer.dart';
+import '../reader/epub_importer.dart';
 
 final importingTextProvider = NotifierProvider<ImportingTextController, bool>(
   ImportingTextController.new,
@@ -14,6 +15,24 @@ final importingTextProvider = NotifierProvider<ImportingTextController, bool>(
 class ImportingTextController extends Notifier<bool> {
   @override
   bool build() => false;
+  Future<void> importEpub() async {
+    if (state) return;
+    state = true;
+    try {
+      final picked = await ref.read(fileExchangeProvider).pickEpub();
+      if (picked != null) {
+        await EpubImporter.importBytes(
+          ref.read(libraryProvider),
+          name: picked.name,
+          bytes: picked.bytes,
+        );
+        ref.invalidate(bookshelfProvider);
+      }
+    } finally {
+      if (ref.mounted) state = false;
+    }
+  }
+
   Future<void> importText() async {
     if (state) return;
     state = true;
@@ -44,6 +63,40 @@ class BookshelfPage extends ConsumerWidget {
       appBar: AppBar(
         title: Text(strings.bookshelfTitle),
         actions: [
+          IconButton(
+            tooltip: strings.readerEpubImport,
+            icon: const Icon(Icons.file_open),
+            onPressed: busy
+                ? null
+                : () async {
+                    try {
+                      await ref
+                          .read(importingTextProvider.notifier)
+                          .importEpub();
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      final message = error is EpubImportException
+                          ? switch (error.failure) {
+                              EpubImportFailure.invalidArchive =>
+                                strings.readerEpubInvalidArchive,
+                              EpubImportFailure.invalidPackage =>
+                                strings.readerEpubInvalidPackage,
+                              EpubImportFailure.encrypted =>
+                                strings.readerEpubEncrypted,
+                              EpubImportFailure.unsupported =>
+                                strings.readerEpubUnsupported,
+                              EpubImportFailure.empty =>
+                                strings.readerEpubEmpty,
+                            }
+                          : error is FileExchangeException &&
+                                error.code == 'epubTooLarge'
+                          ? strings.epubTooLarge
+                          : strings.operationFailed;
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(message)));
+                    }
+                  },
+          ),
           IconButton(
             tooltip: strings.searchTitle,
             icon: const Icon(Icons.search),

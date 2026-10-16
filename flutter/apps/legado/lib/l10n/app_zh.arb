@@ -64,6 +64,7 @@
     }
   },
   "navigationRssTitle": "订阅",
+  "epubTooLarge": "此 EPUB 超过 128 MiB 输入上限。",
   "readerTitle": "阅读",
   "readerSettings": "阅读设置",
   "readerFontSize": "字号",
@@ -117,6 +118,12 @@
       }
     }
   },
+  "readerEpubInvalidArchive": "EPUB 压缩包已损坏或超出导入限额。",
+  "readerEpubInvalidPackage": "EPUB 包信息、目录或章节文件无效。",
+  "readerEpubEncrypted": "暂不支持加密或混淆资源的 EPUB。",
+  "readerEpubUnsupported": "此 EPUB 含有文本阅读器暂不支持的章节格式。",
+  "readerEpubEmpty": "此 EPUB 没有可阅读的文本。",
+  "readerEpubImport": "导入 EPUB",
   "rssTitle": "订阅",
   "rssAddTooltip": "添加订阅 / 导入旧订阅",
   "rssEmpty": "添加 RSS/Atom 地址，或导入旧版订阅 JSON",
