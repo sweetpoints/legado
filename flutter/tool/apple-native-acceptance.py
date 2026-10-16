@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import signal
 import subprocess
@@ -19,6 +20,7 @@ import selectors
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+APP_BUNDLE = 'io.legado.legadoApp'
 
 
 class PhaseFailure(RuntimeError):
@@ -60,7 +62,7 @@ class Runner:
         self.cwd = Path(cwd)
         self.phases = []
 
-    def command(self, phase, argv, seconds):
+    def command(self, phase, argv, seconds, on_tick=None):
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         print(f'[{timestamp}] phase={phase} deadlineSeconds={seconds} command={argv}', flush=True)
         log = self.output / (phase + '.log')
@@ -78,7 +80,8 @@ class Runner:
             self.save()
             raise PhaseFailure(f'{phase} could not start; see {log}') from error
         output = []
-        deadline = time.monotonic() + seconds
+        started = time.monotonic()
+        deadline = started + seconds
         selector = selectors.DefaultSelector()
         for pipe, stdout in ((process.stdout, True), (process.stderr, False)):
             os.set_blocking(pipe.fileno(), False)
@@ -86,6 +89,8 @@ class Runner:
         try:
             with log.open('wb') as stream:
                 while selector.get_map():
+                    if on_tick is not None and process.poll() is None:
+                        on_tick(time.monotonic() - started)
                     if time.monotonic() >= deadline and process.poll() is None:
                         result['timedOut'] = True
                         break
@@ -138,6 +143,94 @@ class Runner:
         (self.output / 'phases.json').write_text(json.dumps(self.phases, indent=2) + '\n')
 
 
+
+def app_processes(output, app_path):
+    """Filter in memory: never persist the host's other applications or arguments."""
+    expected = str(Path(app_path)) + '/'
+    result = []
+    for line in output.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) == 2 and fields[0].isdigit() and fields[1].startswith(expected):
+            result.append({'pid': int(fields[0]), 'executable': fields[1]})
+    return result
+
+
+def crash_summary(text):
+    # Apple .ips files contain a metadata JSON line followed by a JSON report.
+    decoder = json.JSONDecoder()
+    objects = []
+    while text.strip():
+        try:
+            value, end = decoder.raw_decode(text.lstrip())
+        except ValueError:
+            return None
+        objects.append(value)
+        text = text.lstrip()[end:]
+    report = next((item for item in objects if isinstance(item, dict)
+                   and isinstance(item.get('bundleInfo'), dict)
+                   and item['bundleInfo'].get('CFBundleIdentifier') == APP_BUNDLE), None)
+    if report is None:
+        return None
+    return {key: report[key] for key in ('procName', 'pid', 'captureTime', 'bundleInfo',
+                                        'exception', 'termination') if key in report}
+
+
+def app_diagnostics(runner, uuid, label):
+    """Read only this bundle's installation, processes, launch messages and crashes."""
+    summary = {'bundleIdentifier': APP_BUNDLE, 'device': uuid}
+    try:
+        app = runner.command(label + '-container',
+            ['xcrun', 'simctl', 'get_app_container', uuid, APP_BUNDLE, 'app'], 15).strip()
+        summary['appPath'] = app
+        # Capture all executable paths privately, then retain exact-container matches only.
+        processes = subprocess.run(['ps', '-axo', 'pid=,comm='], capture_output=True,
+                                   text=True, timeout=5, check=False)
+        summary['processes'] = app_processes(processes.stdout, app)
+        summary['processQueryExitCode'] = processes.returncode
+        info = Path(app) / 'Info.plist'
+        if info.is_file():
+            with info.open('rb') as stream:
+                summary['executableName'] = plistlib.load(stream).get('CFBundleExecutable')
+    except (PhaseFailure, OSError, ValueError, subprocess.TimeoutExpired) as error:
+        summary['installationOrProcessQuery'] = str(error)
+    # Match messages naming our exact bundle; never collect all Runner processes,
+    # SpringBoard messages, simulator system logs or other applications' reports.
+    predicate = 'eventMessage CONTAINS "' + APP_BUNDLE + '"'
+    for process in summary.get('processes', []):
+        predicate += ' OR processIdentifier == ' + str(process['pid'])
+    try:
+        runner.command(label + '-launch', ['xcrun', 'simctl', 'spawn', uuid,
+            'log', 'show', '--last', '5m', '--style', 'compact', '--predicate',
+            predicate], 15)
+    except (PhaseFailure, OSError):
+        pass
+    summary['crashes'] = []
+    reports = Path.home() / 'Library/Logs/DiagnosticReports'
+    try:
+        candidates = sorted(reports.glob('*.ips'), key=lambda item: item.stat().st_mtime,
+                            reverse=True)[:40]
+        for report in candidates:
+            if report.stat().st_size > 4 * 1024 * 1024 or time.time() - report.stat().st_mtime > 1800:
+                continue
+            parsed = crash_summary(report.read_text(errors='replace'))
+            if parsed is not None:
+                summary['crashes'].append(parsed)
+    except OSError as error:
+        summary['crashQueryError'] = str(error)
+    (runner.output / (label + '-app.json')).write_text(json.dumps(summary, indent=2) + '\n')
+
+
+def progress_diagnostics(runner, uuid, timeout):
+    sampled = set()
+    def tick(elapsed):
+        for label, threshold in [('progress', min(180, timeout / 2)),
+                                 ('before-timeout', max(0, timeout - 60))]:
+            if elapsed >= threshold and label not in sampled:
+                sampled.add(label)
+                app_diagnostics(runner, uuid, label)
+    return tick
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
@@ -166,6 +259,8 @@ def main():
             raise PhaseFailure('Python 3.12+ is required for the fixed SDK consumer')
         # Preserve setup-python's actual executable through Xcode's reduced PATH.
         os.environ.setdefault('SOURCE_V8_PYTHON', sys.executable)
+        runner.command('xcode-version', ['xcodebuild', '-version'], 30)
+        runner.command('installed-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '--json'], 30)
         sdk = runner.command('xcode-sdk', ['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], 30).strip()
         snapshot = json.loads(runner.command('available-devices',
                                             ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], 30))
@@ -183,9 +278,12 @@ def main():
         if not any(item.get('id') == uuid and item.get('isSupported') is True for item in listing):
             raise PhaseFailure('Booted simulator is not discoverable as a supported Flutter device')
         runner.command('flutter-test', [args.flutter, 'test', 'integration_test/native_app_test.dart',
-                                      '-d', uuid], args.test_timeout)
+                                      '-d', uuid, '--verbose'], args.test_timeout,
+                       on_tick=progress_diagnostics(runner, uuid, args.test_timeout))
     except (PhaseFailure, OSError, ValueError) as error:
         (runner.output / 'failure.txt').write_text(str(error) + '\n')
+        if selected is not None:
+            app_diagnostics(runner, selected['udid'], 'failure')
         for name, command in ([] if platform.system() != 'Darwin' else [
             ('diagnostic-devices', ['xcrun', 'simctl', 'list', 'devices', '--json']),
             ('diagnostic-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '--json']),

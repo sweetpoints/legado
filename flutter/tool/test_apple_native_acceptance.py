@@ -98,3 +98,41 @@ class DeviceSelectionTests(unittest.TestCase):
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]['exitCode'], 7)
             self.assertNotIn('timedOut', result[0])
+
+    def test_process_snapshot_retains_only_exact_app_container(self):
+        path = '/sim/Containers/Bundle/Application/ABC/Runner.app'
+        raw = '12 /other/Runner.app/Runner\n13 ' + path + '/Runner\n14 ' + path + '.other/Runner\n'
+        self.assertEqual(module.app_processes(raw, path),
+                         [{'pid': 13, 'executable': path + '/Runner'}])
+
+    def test_crash_snapshot_requires_exact_bundle_and_omits_unrelated_data(self):
+        report = {'bundleInfo': {'CFBundleIdentifier': module.APP_BUNDLE}, 'pid': 19,
+                  'exception': {'type': 'EXC_CRASH'}, 'environment': {'sensitive': 'not retained'}}
+        parsed = module.crash_summary('{}\n' + json.dumps(report))
+        self.assertEqual(parsed['pid'], 19)
+        self.assertNotIn('environment', parsed)
+        report['bundleInfo']['CFBundleIdentifier'] = 'another.app'
+        self.assertIsNone(module.crash_summary(json.dumps(report)))
+        self.assertIsNone(module.crash_summary('invalid json'))
+
+    def test_progress_snapshots_run_once_each_before_timeout(self):
+        with patch.object(module, 'app_diagnostics') as capture:
+            tick = module.progress_diagnostics(object(), 'selected-uuid', 1200)
+            tick(179)
+            capture.assert_not_called()
+            tick(180)
+            tick(181)
+            tick(1140)
+            tick(1141)
+            self.assertEqual([call.args[2] for call in capture.call_args_list],
+                             ['progress', 'before-timeout'])
+
+    def test_live_child_progress_callback_executes_before_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = module.Runner(directory, directory)
+            calls = []
+            with self.assertRaises(module.PhaseFailure):
+                runner.command('probe', [sys.executable, '-c', 'import time; time.sleep(10)'],
+                               0.2, on_tick=calls.append)
+            self.assertTrue(calls)
+            self.assertLess(calls[-1], 1)
