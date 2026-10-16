@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0" unique-identifier="uid">
+<opf:metadata><dc:identifier id="uid">urn:test:epub</dc:identifier><dc:title>跨平台阅读 😀</dc:title><dc:creator>作者甲</dc:creator><dc:creator>Author B</dc:creator><dc:language>zh</dc:language></opf:metadata>
+<opf:manifest>
+<opf:item id="two" href="text/two.xhtml" media-type="application/xhtml+xml"/>
+<opf:item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<opf:item id="one" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+</opf:manifest>
+<opf:spine><opf:itemref idref="nav" linear="no"/><opf:itemref idref="one"/><opf:itemref idref="two"/></opf:spine>
+</opf:package>

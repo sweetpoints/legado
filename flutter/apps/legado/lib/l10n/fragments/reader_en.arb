@@ -52,5 +52,11 @@
         "type": "String"
       }
     }
-  }
+  },
+  "readerEpubInvalidArchive": "The EPUB archive is corrupt or exceeds the import limits.",
+  "readerEpubInvalidPackage": "The EPUB package, catalogue, or chapter files are invalid.",
+  "readerEpubEncrypted": "Encrypted or obfuscated EPUB resources are not supported.",
+  "readerEpubUnsupported": "This EPUB contains a chapter format that the text reader cannot display.",
+  "readerEpubEmpty": "This EPUB contains no readable text.",
+  "readerEpubImport": "Import EPUB"
 }
