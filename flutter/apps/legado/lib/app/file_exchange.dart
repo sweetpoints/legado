@@ -1,8 +1,10 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'local_text_decoder.dart';
 
 class FileExchangeException implements Exception {
   const FileExchangeException(this.code);
@@ -50,18 +52,22 @@ class NativeFileExchange implements FileExchange {
       allowedExtensions: ['txt'],
     );
     if (file == null) return null;
-    final bytes = await _readBounded(file, 20 * 1024 * 1024, 'textTooLarge');
     try {
-      final text = utf8.decode(bytes);
+      final length = file.lengthSync() ?? await file.length();
+      final bytes = await LocalTextDecoder.readBounded(
+        file.readAsByteStream(),
+        declaredLength: length,
+      );
+      final decoded = await compute(LocalTextDecoder.decode, bytes);
       return (
         name: file.name.replaceFirst(
           RegExp(r'\.txt$', caseSensitive: false),
           '',
         ),
-        text: text.startsWith('\uFEFF') ? text.substring(1) : text,
+        text: decoded.text,
       );
-    } on FormatException {
-      throw const FileExchangeException('unsupportedText');
+    } on LocalTextDecodeException catch (error) {
+      throw FileExchangeException(error.code);
     }
   }
 
