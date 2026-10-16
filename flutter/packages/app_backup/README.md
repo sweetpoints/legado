@@ -25,7 +25,9 @@ final fresh = LegacyBackupArchive.encodeFiles(
 `entries` contains **all original file payloads**. `retainedEntries` contains files
 not in the known legacy-text allowlist. Both map and byte buffers are immutable.
 `document.files` contains root-level known legacy collections plus config XML,
-cookies and runtime-source-cache text. Unknown JSON files and encrypted
+cookies, runtime-source-cache text and the managed `legado-library.json` v1
+extension (chapters, content and settings). Known extension fields are validated
+before staging; unknown fields and original file bytes are preserved. Unknown JSON files and encrypted
 `servers.json` stay opaque and are never decoded or logged.
 
 Known text uses strict UTF-8; a leading BOM is removed for parsing only. Original

@@ -492,4 +492,111 @@ void main() {
       throwsFormatException,
     );
   });
+  test('managed library extension stays text while EPUB assets stay opaque through ZIP export', () {
+    const raw =
+        '\uFEFF{ "version": 1, "chapters": [{"bookUrl":"book:1","chapter":{"url":"chapter:1","title":"Chapter","index":0,"futureChapter":true}}], "content":[{"bookUrl":"book:1","chapterUrl":"chapter:1","content":"Fixture body"}], "settings":{"reader.font":"20"}, "future":{"nested":[null,true,42]} }';
+    final assets = {
+      'epub/assets/cover.png': Uint8List.fromList([137, 80, 78, 71, 0xff]),
+    };
+    final bytes = LegacyBackupArchive.encodeFiles({
+      'bookshelf.json': shelf,
+      'legado-library.json': raw,
+    }, retainedEntries: assets);
+    final staged = LegacyBackupArchive.decode(bytes);
+    expect(staged.document.files['legado-library.json'], raw.substring(1));
+    expect(staged.retainedEntries.keys, ['epub/assets/cover.png']);
+    expect(staged.entries['legado-library.json'], utf8.encode(raw));
+    final encoded = LegacyBackupArchive.decode(
+      LegacyBackupArchive.encode(staged),
+    );
+    expect(encoded.entries, staged.entries);
+    expect(encoded.document.files['legado-library.json'], raw.substring(1));
+  });
+
+  test(
+    'extension-only backup is recognized without inventing bookshelf data',
+    () {
+      final staged = LegacyBackupArchive.decode(
+        textZip({'legado-library.json': '{"version":1}'}),
+      );
+      expect(staged.document.files.keys, ['legado-library.json']);
+      expect(staged.document.books, isEmpty);
+      expect(staged.retainedEntries, isEmpty);
+    },
+  );
+
+  test(
+    'managed extension invalid versions and known field shapes fail atomically',
+    () {
+      for (final value in [
+        null,
+        [],
+        {'version': 2},
+        {'version': '1'},
+        {'version': 1.0},
+        {'version': 1, 'chapters': null},
+        {
+          'version': 1,
+          'chapters': [null],
+        },
+        {
+          'version': 1,
+          'chapters': [
+            {
+              'bookUrl': 'b',
+              'chapter': {'url': 'c', 'title': 'C', 'index': -1},
+            },
+          ],
+        },
+        {
+          'version': 1,
+          'chapters': [
+            {
+              'bookUrl': '',
+              'chapter': {'url': 'c', 'title': 'C', 'index': 0},
+            },
+          ],
+        },
+        {
+          'version': 1,
+          'content': [
+            {'bookUrl': 'b', 'chapterUrl': 'c', 'content': null},
+          ],
+        },
+        {
+          'version': 1,
+          'settings': {'a': null},
+        },
+        {'version': 1, 'settings': []},
+      ]) {
+        expect(
+          () => LegacyBackupArchive.decode(
+            textZip({
+              'bookshelf.json': shelf,
+              'legado-library.json': jsonEncode(value),
+            }),
+          ),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
+  test('managed extension still obeys byte limits and strict UTF8', () {
+    expect(
+      () => LegacyBackupArchive.decode(
+        zip({
+          'legado-library.json': [0xff],
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => LegacyBackupArchive.decode(
+        textZip({'legado-library.json': '{"version":1}'}),
+        limits: const BackupArchiveLimits(maxEntryBytes: 8),
+      ),
+      throwsFormatException,
+    );
+  });
 }

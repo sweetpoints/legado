@@ -65,6 +65,7 @@ abstract final class LegacyBackupArchive {
     'videoConfig.xml',
     'cookies.json',
     'runtimeSourceCache.json',
+    'legado-library.json',
   };
 
   static LegacyBackupStaging decode(
@@ -83,6 +84,7 @@ abstract final class LegacyBackupArchive {
           decoded.trim().isEmpty) {
         throw const FormatException('Known backup list is empty');
       }
+      if (name == 'legado-library.json') _validateLibraryExtension(decoded);
       text[name] = decoded;
     }
     if (text.isEmpty) {
@@ -91,6 +93,65 @@ abstract final class LegacyBackupArchive {
       );
     }
     return LegacyBackupStaging._(LegacyBackupDocument.parse(text), files);
+  }
+
+  /// Application-managed v1 extension exported by the library repository.
+  /// Validate known fields without re-encoding or discarding future fields.
+  static void _validateLibraryExtension(String text) {
+    final value = jsonDecode(text);
+    if (value is! Map<String, dynamic> ||
+        value['version'] is! int ||
+        value['version'] != 1) {
+      throw const FormatException(
+        'Invalid or unsupported library backup extension',
+      );
+    }
+    bool nonEmptyString(Object? value) => value is String && value.isNotEmpty;
+    if (value.containsKey('chapters')) {
+      final chapters = value['chapters'];
+      if (chapters is! List) {
+        throw const FormatException('Invalid library backup chapters');
+      }
+      for (final item in chapters) {
+        if (item is! Map<String, dynamic> || !nonEmptyString(item['bookUrl'])) {
+          throw const FormatException(
+            'Invalid library backup chapter identity',
+          );
+        }
+        final chapter = item['chapter'];
+        if (chapter is! Map<String, dynamic> ||
+            !nonEmptyString(chapter['url']) ||
+            chapter['title'] is! String ||
+            chapter['index'] is! int ||
+            (chapter['index'] as int) < 0 ||
+            (chapter.containsKey('isVolume') && chapter['isVolume'] is! bool)) {
+          throw const FormatException('Invalid library backup chapter');
+        }
+      }
+    }
+    if (value.containsKey('content')) {
+      final content = value['content'];
+      if (content is! List) {
+        throw const FormatException('Invalid library backup content');
+      }
+      for (final item in content) {
+        if (item is! Map<String, dynamic> ||
+            !nonEmptyString(item['bookUrl']) ||
+            !nonEmptyString(item['chapterUrl']) ||
+            item['content'] is! String) {
+          throw const FormatException(
+            'Invalid library backup content identity',
+          );
+        }
+      }
+    }
+    if (value.containsKey('settings')) {
+      final settings = value['settings'];
+      if (settings is! Map<String, dynamic> ||
+          settings.values.any((value) => value is! String)) {
+        throw const FormatException('Invalid library backup settings');
+      }
+    }
   }
 
   /// Decodes a generic ZIP into detached immutable regular-file payloads.
