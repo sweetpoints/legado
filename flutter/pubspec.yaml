@@ -3,6 +3,8 @@ publish_to: none
 environment:
   sdk: ^3.13.5
 workspace:
+  - apps/legado
+  - packages/app_core
   - packages/source_engine
   - packages/source_v8
   - packages/source_legacy
