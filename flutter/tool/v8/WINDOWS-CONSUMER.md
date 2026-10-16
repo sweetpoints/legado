@@ -271,3 +271,27 @@ The review and lock are committed separately as `windows-reviewed-arm64-*` files
 The Windows workflow now **cross-compiles and links ARM64 on its x64 runner**,
 checks the resulting ARM64 PE machine/exports, and preserves that artifact. It
 never loads that DLL in the x64 test process or marks ARM64 runtime acceptance.
+
+
+## Actual Windows native acceptance result
+
+[Run 38948022254](https://github.com/sweetpoints/legado/actions/runs/38948022254),
+exact source commit `80e2e569e842e6b0cadc13bf371f8f5f6588c7f7`, passed both jobs.
+The separate `windows-native-acceptance.json` records this immutable execution
+snapshot; it does not rewrite the earlier collection-time review flags.
+
+- Windows x64: real DLL compilation, native FFI feature/async/timeout checks,
+  normal process exit, **51 Dart V8 tests and 173 source conformance tests** passed.
+  This establishes that the reviewed SDK 26100 consumer can link and execute
+  against the fixed V8 SDK produced using SDK 28000 for the covered cases.
+- Windows ARM64: real x64-host cross-compilation/linkage passed. The downloaded
+  DLL was checked again for PE machine `0xAA64` and exact reviewed exports.
+  **No ARM64 runtime execution is claimed.**
+- Both native artifacts were downloaded and their DLL SHA-256 values recomputed.
+  The x64 runtime result's DLL hash matches the actual artifact. The x64 DLL is
+  43,886,080 bytes; ARM64 is 41,311,744 bytes. Pure upstream V8 SDKs were consumed,
+  never rebuilt in Legado.
+
+Complete Windows application Release building and actual main-application UI
+integration are separate gates in `flutter-windows-app.yml`; their outcome is not
+implied by the successful engine tests above.
