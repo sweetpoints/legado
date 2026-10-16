@@ -72,6 +72,8 @@ jobs:
         run: |
           python3 -m unittest discover -s flutter/tool/v8 -p test_linux_sdk.py -v
           python3 -m unittest discover -s flutter/tool -p test_verify_linux_app_bundle.py -v
+      - name: Authenticate native PDFium before application builds
+        run: python3 flutter/tool/verify-pdfium.py --prepare-target linux-x64
       - name: Run actual native-hook V8 and artifact contracts
         working-directory: flutter/packages/source_v8
         run: |

@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../features/backup/backup_page.dart';
 import '../features/bookshelf/bookshelf_page.dart';
+import '../features/pdf/pdf_import_page.dart';
+import '../features/pdf/pdf_reader_page.dart';
 import '../features/reader/reader_page.dart';
 import '../features/rss/rss_home_page.dart';
 import '../features/settings/settings_page.dart';
@@ -64,6 +66,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => SourceManagementPage(repository: repository),
       ),
       GoRoute(path: '/backup', builder: (_, _) => const BackupPage()),
+      GoRoute(
+        path: '/pdf/import',
+        builder: (context, state) => PdfImportPage(
+          repository: repository,
+          onImported: (book) {
+            ref.invalidate(bookshelfProvider);
+            context.replace(
+              Uri(
+                path: '/pdf',
+                queryParameters: {'bookUrl': book.url},
+              ).toString(),
+            );
+          },
+        ),
+      ),
+      GoRoute(
+        path: '/pdf',
+        builder: (context, state) {
+          final url = state.uri.queryParameters['bookUrl'];
+          if (url == null || url.isEmpty) return const InvalidLinkPage();
+          return PdfReaderPage(repository: repository, bookUrl: url);
+        },
+      ),
       GoRoute(
         path: '/book',
         builder: (context, state) {

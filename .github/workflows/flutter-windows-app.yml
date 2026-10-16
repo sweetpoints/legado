@@ -33,6 +33,11 @@ jobs:
         shell: pwsh
         working-directory: flutter
         run: flutter pub get
+      - name: Authenticate native PDFium before application builds
+        shell: pwsh
+        run: |
+          python flutter/tool/verify-pdfium.py --prepare-target win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Native PDFium authentication failed' }
       - name: Prepare and authenticate reviewed Windows V8 bridge
         shell: pwsh
         run: |

@@ -7,6 +7,7 @@ import '../../app/file_exchange.dart';
 import '../../app/providers.dart';
 import '../../app/local_text_decoder.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../pdf/pdf_importer.dart';
 import '../reader/local_text_importer.dart';
 import '../reader/epub_importer.dart';
 import 'bookshelf_state.dart';
@@ -102,6 +103,8 @@ class BookshelfPage extends ConsumerWidget {
                   isScrollControlled: true,
                   builder: (_) => const BookshelfGroupManager(),
                 );
+              } else if (action == 'pdf') {
+                context.push('/pdf/import');
               } else if (action == 'search') {
                 context.go('/search');
               } else if (action == 'sources') {
@@ -163,6 +166,11 @@ class BookshelfPage extends ConsumerWidget {
                 value: 'epub',
                 enabled: !busy,
                 child: Text(strings.readerEpubImport),
+              ),
+              PopupMenuItem(
+                value: 'pdf',
+                enabled: !busy,
+                child: Text(strings.pdfImportTitle),
               ),
               PopupMenuItem(value: 'search', child: Text(strings.searchTitle)),
               PopupMenuItem(
@@ -242,20 +250,25 @@ class BookshelfPage extends ConsumerWidget {
                           itemCount: items.length,
                           itemBuilder: (context, index) {
                             final book = items[index];
+                            final pdf = PdfBookDocument.fromBook(book);
                             return ListTile(
-                              leading: const Icon(Icons.menu_book),
+                              leading: Icon(
+                                pdf == null
+                                    ? Icons.menu_book
+                                    : Icons.picture_as_pdf,
+                              ),
                               title: Text(
                                 book.name,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(
-                                '${book.author}\n${strings.chapterProgress(book.chapterIndex + 1)}',
+                                '${book.author}\n${pdf == null ? strings.chapterProgress(book.chapterIndex + 1) : strings.pdfPagePosition(book.chapterIndex + 1, pdf.pageCount)}',
                               ),
                               isThreeLine: true,
                               onTap: () => context.push(
                                 Uri(
-                                  path: '/reader',
+                                  path: pdf == null ? '/reader' : '/pdf',
                                   queryParameters: {'bookUrl': book.url},
                                 ).toString(),
                               ),
