@@ -173,6 +173,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get epubTooLarge => 'This EPUB exceeds the 128 MiB input limit.';
 
   @override
+  String get licensesTitle => 'Licenses';
+
+  @override
   String get shelfOptions => 'Bookshelf options';
 
   @override

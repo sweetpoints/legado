@@ -168,6 +168,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get epubTooLarge => '此 EPUB 超过 128 MiB 输入上限。';
 
   @override
+  String get licensesTitle => '开源许可证';
+
+  @override
   String get shelfOptions => '书架选项';
 
   @override

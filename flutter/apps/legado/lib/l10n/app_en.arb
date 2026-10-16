@@ -65,6 +65,7 @@
   },
   "navigationRssTitle": "Feeds",
   "epubTooLarge": "This EPUB exceeds the 128 MiB input limit.",
+  "licensesTitle": "Licenses",
   "shelfOptions": "Bookshelf options",
   "shelfManageGroups": "Manage groups",
   "shelfCreateGroup": "Create group",
