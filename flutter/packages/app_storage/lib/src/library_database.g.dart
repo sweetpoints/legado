@@ -1610,6 +1610,252 @@ class StoredArchiveEntriesCompanion
   }
 }
 
+class $StoredBookGroupsTable extends StoredBookGroups
+    with TableInfo<$StoredBookGroupsTable, LibraryBookGroupRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoredBookGroupsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, position, data];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'book_groups';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LibraryBookGroupRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LibraryBookGroupRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LibraryBookGroupRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+    );
+  }
+
+  @override
+  $StoredBookGroupsTable createAlias(String alias) {
+    return $StoredBookGroupsTable(attachedDatabase, alias);
+  }
+}
+
+class LibraryBookGroupRow extends DataClass
+    implements Insertable<LibraryBookGroupRow> {
+  final int id;
+  final int position;
+  final String data;
+  const LibraryBookGroupRow({
+    required this.id,
+    required this.position,
+    required this.data,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['position'] = Variable<int>(position);
+    map['data'] = Variable<String>(data);
+    return map;
+  }
+
+  StoredBookGroupsCompanion toCompanion(bool nullToAbsent) {
+    return StoredBookGroupsCompanion(
+      id: Value(id),
+      position: Value(position),
+      data: Value(data),
+    );
+  }
+
+  factory LibraryBookGroupRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LibraryBookGroupRow(
+      id: serializer.fromJson<int>(json['id']),
+      position: serializer.fromJson<int>(json['position']),
+      data: serializer.fromJson<String>(json['data']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'position': serializer.toJson<int>(position),
+      'data': serializer.toJson<String>(data),
+    };
+  }
+
+  LibraryBookGroupRow copyWith({int? id, int? position, String? data}) =>
+      LibraryBookGroupRow(
+        id: id ?? this.id,
+        position: position ?? this.position,
+        data: data ?? this.data,
+      );
+  LibraryBookGroupRow copyWithCompanion(StoredBookGroupsCompanion data) {
+    return LibraryBookGroupRow(
+      id: data.id.present ? data.id.value : this.id,
+      position: data.position.present ? data.position.value : this.position,
+      data: data.data.present ? data.data.value : this.data,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryBookGroupRow(')
+          ..write('id: $id, ')
+          ..write('position: $position, ')
+          ..write('data: $data')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, position, data);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LibraryBookGroupRow &&
+          other.id == this.id &&
+          other.position == this.position &&
+          other.data == this.data);
+}
+
+class StoredBookGroupsCompanion extends UpdateCompanion<LibraryBookGroupRow> {
+  final Value<int> id;
+  final Value<int> position;
+  final Value<String> data;
+  const StoredBookGroupsCompanion({
+    this.id = const Value.absent(),
+    this.position = const Value.absent(),
+    this.data = const Value.absent(),
+  });
+  StoredBookGroupsCompanion.insert({
+    this.id = const Value.absent(),
+    required int position,
+    required String data,
+  }) : position = Value(position),
+       data = Value(data);
+  static Insertable<LibraryBookGroupRow> custom({
+    Expression<int>? id,
+    Expression<int>? position,
+    Expression<String>? data,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (position != null) 'position': position,
+      if (data != null) 'data': data,
+    });
+  }
+
+  StoredBookGroupsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? position,
+    Value<String>? data,
+  }) {
+    return StoredBookGroupsCompanion(
+      id: id ?? this.id,
+      position: position ?? this.position,
+      data: data ?? this.data,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredBookGroupsCompanion(')
+          ..write('id: $id, ')
+          ..write('position: $position, ')
+          ..write('data: $data')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$LibraryDatabase extends GeneratedDatabase {
   _$LibraryDatabase(QueryExecutor e) : super(e);
   $LibraryDatabaseManager get managers => $LibraryDatabaseManager(this);
@@ -1622,6 +1868,9 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
       $StoredBackupFilesTable(this);
   late final $StoredArchiveEntriesTable storedArchiveEntries =
       $StoredArchiveEntriesTable(this);
+  late final $StoredBookGroupsTable storedBookGroups = $StoredBookGroupsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1634,6 +1883,7 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
     storedContent,
     storedBackupFiles,
     storedArchiveEntries,
+    storedBookGroups,
   ];
 }
 
@@ -2806,6 +3056,183 @@ typedef $$StoredArchiveEntriesTableProcessedTableManager =
       LibraryArchiveEntryRow,
       PrefetchHooks Function()
     >;
+typedef $$StoredBookGroupsTableCreateCompanionBuilder =
+    StoredBookGroupsCompanion Function({
+      Value<int> id,
+      required int position,
+      required String data,
+    });
+typedef $$StoredBookGroupsTableUpdateCompanionBuilder =
+    StoredBookGroupsCompanion Function({
+      Value<int> id,
+      Value<int> position,
+      Value<String> data,
+    });
+
+class $$StoredBookGroupsTableFilterComposer
+    extends Composer<_$LibraryDatabase, $StoredBookGroupsTable> {
+  $$StoredBookGroupsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StoredBookGroupsTableOrderingComposer
+    extends Composer<_$LibraryDatabase, $StoredBookGroupsTable> {
+  $$StoredBookGroupsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StoredBookGroupsTableAnnotationComposer
+    extends Composer<_$LibraryDatabase, $StoredBookGroupsTable> {
+  $$StoredBookGroupsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+}
+
+class $$StoredBookGroupsTableTableManager
+    extends
+        RootTableManager<
+          _$LibraryDatabase,
+          $StoredBookGroupsTable,
+          LibraryBookGroupRow,
+          $$StoredBookGroupsTableFilterComposer,
+          $$StoredBookGroupsTableOrderingComposer,
+          $$StoredBookGroupsTableAnnotationComposer,
+          $$StoredBookGroupsTableCreateCompanionBuilder,
+          $$StoredBookGroupsTableUpdateCompanionBuilder,
+          (
+            LibraryBookGroupRow,
+            BaseReferences<
+              _$LibraryDatabase,
+              $StoredBookGroupsTable,
+              LibraryBookGroupRow
+            >,
+          ),
+          LibraryBookGroupRow,
+          PrefetchHooks Function()
+        > {
+  $$StoredBookGroupsTableTableManager(
+    _$LibraryDatabase db,
+    $StoredBookGroupsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoredBookGroupsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StoredBookGroupsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StoredBookGroupsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> data = const Value.absent(),
+              }) => StoredBookGroupsCompanion(
+                id: id,
+                position: position,
+                data: data,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int position,
+                required String data,
+              }) => StoredBookGroupsCompanion.insert(
+                id: id,
+                position: position,
+                data: data,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$StoredBookGroupsTable, LibraryBookGroupRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$LibraryDatabase,
+                    $StoredBookGroupsTable,
+                    LibraryBookGroupRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StoredBookGroupsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LibraryDatabase,
+      $StoredBookGroupsTable,
+      LibraryBookGroupRow,
+      $$StoredBookGroupsTableFilterComposer,
+      $$StoredBookGroupsTableOrderingComposer,
+      $$StoredBookGroupsTableAnnotationComposer,
+      $$StoredBookGroupsTableCreateCompanionBuilder,
+      $$StoredBookGroupsTableUpdateCompanionBuilder,
+      (
+        LibraryBookGroupRow,
+        BaseReferences<
+          _$LibraryDatabase,
+          $StoredBookGroupsTable,
+          LibraryBookGroupRow
+        >,
+      ),
+      LibraryBookGroupRow,
+      PrefetchHooks Function()
+    >;
 
 class $LibraryDatabaseManager {
   final _$LibraryDatabase _db;
@@ -2824,4 +3251,6 @@ class $LibraryDatabaseManager {
       $$StoredBackupFilesTableTableManager(_db, _db.storedBackupFiles);
   $$StoredArchiveEntriesTableTableManager get storedArchiveEntries =>
       $$StoredArchiveEntriesTableTableManager(_db, _db.storedArchiveEntries);
+  $$StoredBookGroupsTableTableManager get storedBookGroups =>
+      $$StoredBookGroupsTableTableManager(_db, _db.storedBookGroups);
 }

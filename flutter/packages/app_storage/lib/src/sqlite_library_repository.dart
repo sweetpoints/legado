@@ -15,11 +15,12 @@ class SqliteLibraryRepository
     implements
         LibraryRepository,
         ArchiveLibraryRepository,
-        LegacyBackupFileReader {
+        LegacyBackupFileReader,
+        BookshelfLibraryRepository {
   SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
 
   final LibraryDatabase _db;
   final _changes = StreamController<void>.broadcast();
@@ -133,7 +134,8 @@ class SqliteLibraryRepository
         if (book == null) throw StateError('Missing book');
         final json = book.toJson()
           ..['durChapterIndex'] = chapterIndex
-          ..['durChapterPos'] = characterOffset;
+          ..['durChapterPos'] = characterOffset
+          ..['durChapterTime'] = DateTime.now().millisecondsSinceEpoch;
         await _putBook(LegacyBookRecord(json));
       }),
       change: true,
@@ -338,6 +340,9 @@ class SqliteLibraryRepository
       books.map((e) => _decode(e.data)).toList(),
     );
     files['bookSource.json'] = jsonEncode(await _sources());
+    files['bookGroup.json'] = jsonEncode(
+      (await _bookGroups()).map((g) => g.toJson()).toList(),
+    );
     files[backupEntry] = jsonEncode(extension);
     return files;
   }
@@ -362,6 +367,17 @@ class SqliteLibraryRepository
       await _db.delete(_db.storedBooks).go();
       for (final book in document.books) {
         await _putBook(book);
+      }
+    }
+    if (files.containsKey('bookGroup.json')) {
+      await _db.delete(_db.storedBookGroups).go();
+      final seen = <int>{};
+      for (final entry in jsonDecode(files['bookGroup.json']!) as List) {
+        final group = LegacyBookGroup(Map<String, Object?>.from(entry as Map));
+        if (!seen.add(group.id)) {
+          throw const FormatException('Duplicate group identity');
+        }
+        await _putGroup(group);
       }
     }
     if (files.containsKey('bookSource.json')) {
@@ -503,6 +519,186 @@ class SqliteLibraryRepository
             );
           }
         });
+      }),
+      change: true,
+    );
+  }
+
+  Future<List<LegacyBookGroup>> _bookGroups() async {
+    final rows =
+        await (_db.select(_db.storedBookGroups)..orderBy([
+              (t) => OrderingTerm.asc(t.position),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
+    return rows.map((r) => LegacyBookGroup(_decode(r.data))).toList();
+  }
+
+  @override
+  Future<List<LegacyBookGroup>> bookGroups() => _run(_bookGroups);
+
+  Future<void> _putGroup(LegacyBookGroup group) async {
+    await _db
+        .into(_db.storedBookGroups)
+        .insertOnConflictUpdate(
+          StoredBookGroupsCompanion.insert(
+            id: Value(group.id),
+            position: group.order,
+            data: jsonEncode(group.toJson()),
+          ),
+        );
+  }
+
+  String _groupName(String name) {
+    if (name.trim().isEmpty) throw ArgumentError('Empty group name');
+    return name.trim();
+  }
+
+  Future<List<LegacyBookRecord>> _allBooks() async =>
+      (await _db.select(_db.storedBooks).get())
+          .map((r) => LegacyBookRecord(_decode(r.data)))
+          .toList();
+
+  @override
+  Future<LegacyBookGroup> createBookGroup(String name) => _run(
+    () => _db.transaction(() async {
+      final label = _groupName(name);
+      final groups = await _bookGroups();
+      if (groups.any((g) => g.name == label)) {
+        throw StateError('Duplicate group name');
+      }
+      var used = groups
+          .where((g) => g.id > 0)
+          .fold(0, (mask, g) => mask | g.id);
+      for (final book in await _allBooks()) {
+        used |= bookInteger(book, 'group');
+      }
+      for (var bit = 0; bit < 63; bit++) {
+        final id = 1 << bit;
+        if ((used & id) != 0) continue;
+        final order =
+            groups.fold(-1, (max, g) => g.order > max ? g.order : max) + 1;
+        final group = LegacyBookGroup({
+          'groupId': id,
+          'groupName': label,
+          'order': order,
+          'show': true,
+          'bookSort': -1,
+          'enableRefresh': true,
+          'onlyUpdateRead': false,
+        });
+        await _putGroup(group);
+        return group;
+      }
+      throw StateError('No free group bit');
+    }),
+    change: true,
+  );
+
+  @override
+  Future<void> updateBookGroup(LegacyBookGroup group) => _run(
+    () => _db.transaction(() async {
+      final groups = await _bookGroups();
+      final existing = groups.where((g) => g.id == group.id).firstOrNull;
+      if (existing == null) throw StateError('Missing group');
+      final label = group.isAssignable ? _groupName(group.name) : group.name;
+      if (label.isNotEmpty &&
+          groups.any((g) => g.id != group.id && g.name == label)) {
+        throw StateError('Duplicate group name');
+      }
+      final json = existing.toJson()
+        ..addAll(group.toJson())
+        ..['groupName'] = label;
+      await _putGroup(LegacyBookGroup(json));
+    }),
+    change: true,
+  );
+
+  @override
+  Future<void> removeBookGroup(int id) => _run(
+    () => _db.transaction(() async {
+      final groups = await _bookGroups();
+      final group = groups.where((g) => g.id == id).firstOrNull;
+      if (group == null || !group.isAssignable) {
+        throw StateError('Invalid group');
+      }
+      for (final book in await _allBooks()) {
+        final mask = bookInteger(book, 'group');
+        if ((mask & id) == 0) continue;
+        await _putBook(LegacyBookRecord(book.toJson()..['group'] = mask & ~id));
+      }
+      await (_db.delete(
+        _db.storedBookGroups,
+      )..where((t) => t.id.equals(id))).go();
+      final selected =
+          await (_db.select(_db.storedSettings)
+                ..where((t) => t.id.equals('bookshelf.selectedGroup')))
+              .getSingleOrNull();
+      if (selected?.value == '$id') {
+        await _db
+            .into(_db.storedSettings)
+            .insertOnConflictUpdate(
+              StoredSettingsCompanion.insert(
+                id: 'bookshelf.selectedGroup',
+                value: '-1',
+              ),
+            );
+      }
+    }),
+    change: true,
+  );
+
+  @override
+  Future<void> setBookGroups(String bookUrl, List<int> groupIds) {
+    final selected = groupIds.toSet();
+    return _run(
+      () => _db.transaction(() async {
+        final book = await _book(bookUrl);
+        if (book == null) throw StateError('Missing book');
+        final groups = (await _bookGroups())
+            .where((g) => g.isAssignable)
+            .toList();
+        if (selected.any((id) => !groups.any((g) => g.id == id))) {
+          throw StateError('Missing group');
+        }
+        final known = groups.fold(0, (mask, g) => mask | g.id);
+        var mask = bookInteger(book, 'group') & ~known;
+        for (final id in selected) {
+          mask |= id;
+        }
+        await _putBook(LegacyBookRecord(book.toJson()..['group'] = mask));
+      }),
+      change: true,
+    );
+  }
+
+  @override
+  Future<void> reorderBooks(List<String> orderedUrls) {
+    final requested = List<String>.from(orderedUrls);
+    return _run(
+      () => _db.transaction(() async {
+        if (requested.toSet().length != requested.length) {
+          throw ArgumentError('Duplicate book');
+        }
+        final books = selectBookshelfBooks(
+          await _allBooks(),
+          [],
+          sort: BookshelfSort.manual,
+        );
+        if (requested.any((url) => !books.any((book) => book.url == url))) {
+          throw StateError('Missing book');
+        }
+        final replacements = requested.iterator;
+        final selected = requested.toSet();
+        final lookup = {for (final book in books) book.url: book};
+        for (var i = 0; i < books.length; i++) {
+          var book = books[i];
+          if (selected.contains(book.url)) {
+            replacements.moveNext();
+            book = lookup[replacements.current]!;
+          }
+          await _putBook(LegacyBookRecord(book.toJson()..['order'] = i));
+        }
       }),
       change: true,
     );

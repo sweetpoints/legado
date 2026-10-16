@@ -18,7 +18,7 @@ this package. Always close a repository before deleting or moving its database.
 
 ## Durability and identity
 
-Schema version 2 is stored using SQLite `user_version`. Schema installation and
+Schema version 3 is stored using SQLite `user_version`. Schema installation and
 restores are transactions. Opening a future schema refuses it without rewriting
 its data. SQLite serializes writes and a 5-second busy timeout permits short
 concurrent accesses; each repository processes its own requests in FIFO order.
@@ -83,7 +83,7 @@ when constructing ZIP exports; `backupFiles()` intentionally returns only text.
 ## Drift schema and generation
 
 `LibraryDatabase` extends the generated Drift `GeneratedDatabase` implementation.
-Seven typed tables and generated companions implement every repository query and
+Eight typed tables and generated companions implement every repository query and
 write. `MigrationStrategy` creates the schema transactionally, adopts the
 pre-Drift version-1 layout without rewriting records, adds the opaque BLOB
 entry table in the 1-to-2 migration, and refuses unsupported
@@ -128,3 +128,23 @@ migration rollback, and atomic text/BLOB rollback.
 commit visibility from another connection, pre-Drift schema adoption, atomic
 schema/restore rollback, source identities,
 preview caches, unknown-field preservation, version refusal and backup roundtrip.
+
+## Bookshelf groups
+
+`BookshelfLibraryRepository` is an optional capability implemented by this
+repository. Schema 3 adds typed `book_groups`, migrating previously retained
+`bookGroup.json` in the same migration transaction. Both schema 1 and 2 upgrade;
+a malformed or duplicate legacy group rolls back installation and version changes.
+Export always regenerates the current `bookGroup.json`. Missing group files
+preserve groups; an explicit empty list replaces groups without modifying book
+bit masks. Negative Android built-in ids and all unknown group fields survive.
+
+Custom groups use positive single-bit ids; allocation avoids bits already used
+by any book, including orphan membership bits. Removing a group clears only that
+bit from books and does not remove books or caches. Setting membership preserves
+unknown/orphan bits. Names, custom order, per-group bookSort and private selected
+filter/global sort settings survive reopening. Manual reorder merges a visible
+subset into its current slots and leaves other books in place. Shared projections
+implement the six Android sort ids using numeric timestamps, and filter known
+built-in ids. Name and author ordering currently use deterministic Unicode order;
+Android's locale-specific Chinese collation is not replicated here.
