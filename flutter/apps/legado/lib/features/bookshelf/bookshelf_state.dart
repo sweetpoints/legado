@@ -1,10 +1,11 @@
 import 'package:app_core/app_core.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../app/providers.dart';
 
 part 'bookshelf_state.freezed.dart';
+part 'bookshelf_state.g.dart';
 
 @freezed
 abstract class BookshelfViewState with _$BookshelfViewState {
@@ -15,12 +16,8 @@ abstract class BookshelfViewState with _$BookshelfViewState {
   }) = _BookshelfViewState;
 }
 
-final bookshelfStateProvider =
-    AsyncNotifierProvider<BookshelfController, BookshelfViewState>(
-      BookshelfController.new,
-    );
-
-class BookshelfController extends AsyncNotifier<BookshelfViewState> {
+@Riverpod(name: 'bookshelfStateProvider', keepAlive: true)
+class BookshelfController extends _$BookshelfController {
   LibraryRepository get _library => ref.read(libraryProvider);
   BookshelfLibraryRepository get _groups =>
       _library as BookshelfLibraryRepository;

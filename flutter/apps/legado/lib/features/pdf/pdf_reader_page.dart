@@ -4,26 +4,34 @@ import 'dart:typed_data';
 import 'package:app_core/app_core.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import 'pdf_importer.dart';
 
+part 'pdf_reader_page.g.dart';
+
 typedef PdfReaderIdentity = ({LibraryRepository repository, String bookUrl});
 
-final pdfReadingSessionProvider = FutureProvider.autoDispose
-    .family<PdfReadingSession, PdfReaderIdentity>((ref, identity) async {
-      var disposed = false;
-      ref.onDispose(() => disposed = true);
-      final session = await PdfReadingSession.open(identity);
-      if (disposed) {
-        await session.close();
-        throw StateError('PDF reader was closed');
-      }
-      ref.onDispose(() => unawaited(session.close()));
-      return session;
-    }, retry: (_, _) => null);
+Duration? _noPdfSessionRetry(int retryCount, Object error) => null;
+
+@Riverpod(name: 'pdfReadingSessionProvider', retry: _noPdfSessionRetry)
+Future<PdfReadingSession> pdfReadingSession(
+  Ref ref,
+  PdfReaderIdentity identity,
+) async {
+  var disposed = false;
+  ref.onDispose(() => disposed = true);
+  final session = await PdfReadingSession.open(identity);
+  if (disposed) {
+    await session.close();
+    throw StateError('PDF reader was closed');
+  }
+  ref.onDispose(() => unawaited(session.close()));
+  return session;
+}
 
 /// Real PDFium document with serialized, zero-based page persistence.
 class PdfReadingSession {

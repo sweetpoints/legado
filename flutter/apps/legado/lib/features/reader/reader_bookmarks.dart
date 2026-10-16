@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:app_core/app_core.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'reader_bookmarks.g.dart';
 
 /// Android Bookmark uses time as its key and bookName/bookAuthor for ownership.
 /// New entries additionally bind exact opaque book and chapter identities.
@@ -49,11 +51,11 @@ final class ReaderBookmark {
   }
 }
 
-final readerBookmarksProvider = FutureProvider.autoDispose
-    .family<
-      List<ReaderBookmark>,
-      ({LibraryRepository repository, LegacyBookRecord book})
-    >((ref, query) => ReaderBookmarks(query.repository).list(query.book));
+@Riverpod(name: 'readerBookmarksProvider')
+Future<List<ReaderBookmark>> readerBookmarks(
+  Ref ref,
+  ({LibraryRepository repository, LegacyBookRecord book}) query,
+) => ReaderBookmarks(query.repository).list(query.book);
 
 /// Stored through LibraryRepository.setting, which Drift commits durably and
 /// includes in its versioned backup extension. Legacy backup bytes stay intact.
