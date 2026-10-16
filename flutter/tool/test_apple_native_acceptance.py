@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('ios_ci_runner', Path(__file__).with_name('apple-native-acceptance.py'))
 module = importlib.util.module_from_spec(SPEC)
@@ -74,6 +75,19 @@ class DeviceSelectionTests(unittest.TestCase):
             runner.command('probe', [sys.executable, '-c',
                 'import subprocess,sys; subprocess.Popen([sys.executable,"-c","import time; time.sleep(1)"])'], 5)
             self.assertLess(time.monotonic() - started, 1)
+
+    def test_preflight_failure_still_publishes_non_sensitive_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(module.platform, 'system', return_value='Linux'), \
+                 patch.object(module.sys, 'argv', ['runner', '--output', directory]), \
+                 patch.object(module.Runner, 'command') as command:
+                with self.assertRaisesRegex(module.PhaseFailure, 'macOS ARM64'):
+                    module.main()
+                command.assert_not_called()
+            root = Path(directory)
+            self.assertTrue((root / 'host.json').is_file())
+            self.assertTrue((root / 'phases.json').is_file())
+            self.assertIn('macOS ARM64', (root / 'failure.txt').read_text())
 
     def test_failing_child_does_not_get_retried_or_reported_as_timeout(self):
         with tempfile.TemporaryDirectory() as directory:
