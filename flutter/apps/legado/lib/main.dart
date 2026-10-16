@@ -4,11 +4,15 @@ import 'package:material_ui/material_ui.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'features/pdf/pdf_licenses.dart';
 import 'l10n/generated/app_localizations.dart';
 
 export 'app/theme.dart';
 
-void main() => runApp(const ProviderScope(child: LegadoApp()));
+void main() {
+  registerPdfLicenses();
+  runApp(const ProviderScope(child: LegadoApp()));
+}
 
 class LegadoApp extends ConsumerWidget {
   const LegadoApp({super.key});

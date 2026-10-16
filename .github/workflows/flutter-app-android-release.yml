@@ -49,6 +49,10 @@ jobs:
       - name: Resolve application with its integration-test dev plugin
         working-directory: flutter/apps/legado
         run: flutter pub get
+      - name: Authenticate native PDFium for both Android ABIs
+        run: |
+          python3 flutter/tool/verify-pdfium.py --prepare-target android-arm64
+          python3 flutter/tool/verify-pdfium.py --prepare-target android-x64
       - name: Build both standalone application Release APKs
         working-directory: flutter/apps/legado
         # Keep this checkout exclusive to this job. Do not run pub/analyze/test in
