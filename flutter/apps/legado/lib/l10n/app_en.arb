@@ -1,0 +1,67 @@
+{
+  "@@locale": "en",
+  "appTitle": "Legado",
+  "bookshelfTitle": "Bookshelf",
+  "exploreTitle": "Explore",
+  "rssTitle": "Feeds",
+  "settingsTitle": "Settings",
+  "searchTitle": "Search books",
+  "sourcesTitle": "Book sources",
+  "backupTitle": "Backup and restore",
+  "importText": "Import TXT book",
+  "emptyShelf": "Your bookshelf is empty",
+  "emptyShelfHint": "Import a local book or search your book sources.",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "close": "Close",
+  "delete": "Delete",
+  "save": "Save",
+  "loading": "Loading…",
+  "operationFailed": "The operation failed. Please try again.",
+  "startupFailed": "Unable to open the library. Your original data has not been deleted.",
+  "bookRemoved": "Book removed",
+  "undo": "Undo",
+  "deleteBookTitle": "Remove this book?",
+  "deleteBookMessage": "The book and its cached chapters will be removed from this library.",
+  "importSucceeded": "Book imported",
+  "languageTitle": "Language",
+  "systemLanguage": "Follow system",
+  "chineseLanguage": "简体中文",
+  "englishLanguage": "English",
+  "appearanceTitle": "Appearance",
+  "systemTheme": "Follow system",
+  "lightTheme": "Light",
+  "darkTheme": "Dark",
+  "restoreZip": "Restore ZIP backup",
+  "exportZip": "Export ZIP backup",
+  "restoreTitle": "Restore this backup?",
+  "restoreMessage": "Present backup collections will replace their matching library data. Missing collections are kept.",
+  "restoreSucceeded": "Backup restored",
+  "exportSucceeded": "Backup exported",
+  "backupExplanation": "Restore a legacy Legado ZIP backup or export your current library.",
+  "noChapters": "No chapters are available",
+  "backToShelf": "Back to bookshelf",
+  "invalidRoute": "This link cannot be opened.",
+  "bookMissing": "This book is no longer in the library.",
+  "unsupportedText": "This text file is not valid UTF-8. Convert its encoding before importing.",
+  "textTooLarge": "This file exceeds the 20 MiB import limit.",
+  "backupTooLarge": "This backup exceeds the 128 MiB input limit.",
+  "details": "Details",
+  "bookCount": "{count} books",
+  "@bookCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chapterProgress": "Chapter {chapter}",
+  "@chapterProgress": {
+    "placeholders": {
+      "chapter": {
+        "type": "int"
+      }
+    }
+  }
+}
