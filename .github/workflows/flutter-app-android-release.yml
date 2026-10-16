@@ -1,0 +1,71 @@
+name: Flutter Android Release
+
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-app-android-release.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-app-android-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-release:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    env:
+      GRADLE_OPTS: -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: actions/cache@v5
+        with:
+          path: flutter/packages/source_v8/.cache
+          key: standalone-android-v8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/**', 'flutter/packages/source_v8/src/**') }}
+      - name: Install Flutter and fixed bridge SDK requirements
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "ndk;30.0.15729638"
+      - name: Resolve application with its integration-test dev plugin
+        working-directory: flutter/apps/legado
+        run: flutter pub get
+      - name: Build both standalone application Release APKs
+        working-directory: flutter/apps/legado
+        # Keep this checkout exclusive to this job. Do not run pub/analyze/test in
+        # parallel: these commands can rewrite generated plugin registrants.
+        # Deliberately omit --no-pub: Flutter 3.47.6 otherwise skips Release-mode
+        # plugin regeneration after pub get and leaves IntegrationTestPlugin in
+        # Java while Gradle correctly excludes its dev-only Release dependency.
+        run: flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
+      - name: Verify Release registration, signatures, ABIs and real V8 payload
+        run: python3 flutter/tool/verify-flutter-app-release.py --output build/flutter-app-release-verification.json
+      - name: Upload test-signed standalone Flutter Release APKs
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: standalone-flutter-release-arm64-x64
+          path: |
+            flutter/apps/legado/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            flutter/apps/legado/build/app/outputs/flutter-apk/app-x86_64-release.apk
+            build/flutter-app-release-verification.json
+          if-no-files-found: error
+          retention-days: 14
