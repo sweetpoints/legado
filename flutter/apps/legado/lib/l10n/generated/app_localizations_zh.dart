@@ -139,7 +139,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookMissing => '这本书已不在书库中。';
 
   @override
-  String get unsupportedText => '此文件不是有效 UTF-8 文本，请转换编码后导入。';
+  String get unsupportedText =>
+      '无法可靠识别此文本的编码，或文件已损坏、使用了混合编码。支持 UTF-8、带 BOM 的 UTF-16 和 GBK；请确认编码后转换为 UTF-8 再导入。';
 
   @override
   String get textTooLarge => '此文件超过 20 MiB 导入上限。';
@@ -165,6 +166,96 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get epubTooLarge => '此 EPUB 超过 128 MiB 输入上限。';
+
+  @override
+  String get shelfOptions => '书架选项';
+
+  @override
+  String get shelfManageGroups => '管理分组';
+
+  @override
+  String get shelfCreateGroup => '新建分组';
+
+  @override
+  String get shelfRenameGroup => '重命名分组';
+
+  @override
+  String get shelfDeleteGroup => '删除分组';
+
+  @override
+  String get shelfDeleteGroupMessage => '书籍会保留在书架中，仅移除它们与此分组的关联。';
+
+  @override
+  String get shelfGroupName => '分组名称';
+
+  @override
+  String get shelfGroupNameRequired => '请输入分组名称。';
+
+  @override
+  String get shelfNoGroups => '请先新建分组，再为书籍设置分组。';
+
+  @override
+  String get shelfAssignGroups => '设置分组';
+
+  @override
+  String get shelfGroup => '分组';
+
+  @override
+  String get shelfSort => '排序';
+
+  @override
+  String get shelfAll => '全部图书';
+
+  @override
+  String get shelfUngrouped => '未分组';
+
+  @override
+  String get shelfLocal => '本地图书';
+
+  @override
+  String get shelfAudio => '有声图书';
+
+  @override
+  String get shelfVideo => '视频图书';
+
+  @override
+  String get shelfNetworkUngrouped => '未分组的网络图书';
+
+  @override
+  String get shelfLocalUngrouped => '未分组的本地图书';
+
+  @override
+  String get shelfUpdateFailed => '更新失败';
+
+  @override
+  String get shelfSortRead => '最近阅读';
+
+  @override
+  String get shelfSortUpdated => '最新更新';
+
+  @override
+  String get shelfSortTitle => '书名';
+
+  @override
+  String get shelfSortManual => '手动排序';
+
+  @override
+  String get shelfSortActivity => '最近活动';
+
+  @override
+  String get shelfSortAuthor => '作者';
+
+  @override
+  String get shelfBookActions => '图书操作';
+
+  @override
+  String get shelfMoveUp => '上移';
+
+  @override
+  String get shelfMoveDown => '下移';
+
+  @override
+  String get shelfEmptyGroup => '此分组暂无图书。';
 
   @override
   String get readerTitle => '阅读';
