@@ -88,33 +88,36 @@ jobs:
             build/windows-v8-acceptance/
             flutter/packages/source_v8/.cache/windows-built/
           if-no-files-found: warn
-  windows-arm64-toolchain-review:
-    # ARM64 builds stay on the x64 host; no ARM64 runtime claim is made here.
+  windows-arm64-cross-link:
+    # Both compiler and runner stay x64. Cross-link success is not ARM64 execution.
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
-      - name: Collect ARM64 target libraries on x64 host for independent review
+      - name: Validate reviewed target inventories
+        shell: pwsh
+        run: python -m unittest discover -s flutter/tool/v8 -p 'test_windows*.py' -v
+      - name: Cross-compile ARM64 bridge using reviewed ARM64 CRT and SDK libraries
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $collector = 'flutter/tool/v8/windows_toolchain_receipt.py'
-          $clangRoot = Join-Path $env:RUNNER_TEMP 'legado-reviewed-windows-clang'
-          python $collector fetch-clang --output $clangRoot
-          if ($LASTEXITCODE -ne 0) { throw 'Fixed Clang verification failed' }
-          $vsRoot = 'C:/Program Files/Microsoft Visual Studio/18/Enterprise'
-          python $collector collect --target windows-arm64 `
-            --clang-root $clangRoot --msvc-root "$vsRoot/VC/Tools/MSVC/14.51.36231" `
-            --msvc-version '14.51.36231' --msvc-version-file "$vsRoot/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt" `
-            --sdk-root 'C:/Program Files (x86)/Windows Kits/10' --sdk-version '10.0.26100.0' `
-            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' `
-            --output build/windows-arm64-toolchain-candidate
-          if ($LASTEXITCODE -ne 0) { throw 'ARM64 target receipt collection failed' }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          python flutter/tool/v8/windows_ci.py --prepare-dynamic windows-arm64 `
+            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' > build-windows-arm64-receipt.json
+          if ($LASTEXITCODE -ne 0) { throw 'Windows x64 to ARM64 bridge cross-link failed' }
+          $receipt = Get-Content build-windows-arm64-receipt.json -Raw | ConvertFrom-Json
+          $manifest = Get-Content "$($receipt.artifactRoot)/manifest.json" -Raw | ConvertFrom-Json
+          if ($manifest.target -ne 'windows-arm64' -or $manifest.inspection.machine -ne 43620) { throw 'Expected PE32+ ARM64 bridge' }
+          if ($manifest.validation.runtimeTested) { throw 'Cross-build must not claim ARM64 runtime testing' }
+      - name: Preserve exact ARM64 cross-link artifact and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: windows-arm64-toolchain-candidate
-          path: build/windows-arm64-toolchain-candidate/
-          if-no-files-found: error
+          name: windows-arm64-v8-cross-link
+          include-hidden-files: true
+          path: |
+            build-windows-arm64-receipt.json
+            flutter/packages/source_v8/.cache/windows-built/
+          if-no-files-found: warn

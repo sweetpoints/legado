@@ -28,6 +28,13 @@ UPSTREAM_EXPORTS = {'CrashForExceptionInNonABICompliantCodeRange'}
 WINDOWS_EXPORTS = link_sdk.EXPORTS | UPSTREAM_EXPORTS
 
 
+def consumer_inputs(target):
+    if target not in MACHINES:
+        raise ValueError('Unsupported Windows target')
+    review = ('windows-reviewed-toolchain.json', 'windows-reviewed-x64-lock.json') if target == 'windows-x64' else ('windows-reviewed-arm64-toolchain.json', 'windows-reviewed-arm64-lock.json')
+    return ('windows_ci.py', 'windows_sdk.py', 'windows-pins.json', 'windows-release-pin.json', *review)
+
+
 def inspect_pe(data, target):
     """Read PE32+ section/export directories without trusting external tools."""
     if target not in MACHINES:
@@ -271,9 +278,7 @@ def build(target, output, toolchain_root, toolchain_lock, lock_sha256, sdk_cache
                               'manifestSha256': prebuilt.sha(sdk / 'manifest.json')},
             'windowsToolchainLockSha256': lock_sha256,
             'windowsConsumerInputsSha256': {
-                name: prebuilt.sha(HERE / name) for name in
-                ('windows_ci.py', 'windows_sdk.py', 'windows-pins.json', 'windows-release-pin.json',
-                 'windows-reviewed-toolchain.json', 'windows-reviewed-x64-lock.json')},
+                name: prebuilt.sha(HERE / name) for name in consumer_inputs(target)},
         }}
         (work / 'manifest.json').write_text(json.dumps(evidence, indent=2) + '\n')
         # Publish a standalone artifact, never an unaccepted hook cache entry.

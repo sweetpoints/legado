@@ -18,6 +18,14 @@ class ReviewedConsumerTests(unittest.TestCase):
         self.assertFalse(reviewed['review']['nativeAbiCompatible'])
         self.assertFalse(reviewed['review']['runtimeAccepted'])
 
+    def test_arm64_review_is_separate_cross_build_input_not_execution_approval(self):
+        reviewed, path = windows_ci.review('windows-arm64')
+        self.assertEqual(prebuilt.sha(path), 'ffa9f0d876805e7cff113d144ae235df30d3d91aaab2f905f30c3e85bfe69de9')
+        self.assertEqual(reviewed['sourceJob'], 117129497294)
+        self.assertEqual(reviewed['executionPolicy']['buildHost'], 'windows-x64')
+        self.assertFalse(reviewed['review']['runtimeAccepted'])
+        self.assertIn('windows-reviewed-arm64-lock.json', __import__('windows_sdk').consumer_inputs('windows-arm64'))
+
     def fixture(self, directory):
         output = Path(directory)
         dll = output / 'source_v8.dll'
