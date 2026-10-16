@@ -1,0 +1,43 @@
+{
+  "sourcesManage": "Source management",
+  "sourcesImport": "Import",
+  "sourcesImportJson": "Import source JSON",
+  "sourcesEdit": "Edit source",
+  "sourcesJsonHint": "A source object or array of sources",
+  "sourcesCancel": "Cancel",
+  "sourcesSave": "Save",
+  "sourcesCopy": "Copy all sources as JSON",
+  "sourcesCopied": "Sources copied as JSON",
+  "sourcesEmpty": "No sources. Import source JSON to get started.",
+  "sourcesDelete": "Delete source",
+  "sourcesDeleteConfirm": "Delete this source?",
+  "sourcesDeleteAction": "Delete",
+  "sourcesSearchTitle": "Search books",
+  "sourcesSourceLabel": "Source",
+  "sourcesKeyword": "Book title or author",
+  "sourcesSearch": "Search",
+  "sourcesNeedSource": "Import and enable a source in source management first.",
+  "sourcesSearchPrompt": "Enter a keyword to search",
+  "sourcesNoResults": "No results",
+  "sourcesRefresh": "Refresh chapters",
+  "sourcesAdd": "Add to bookshelf",
+  "sourcesAdded": "Added to bookshelf",
+  "sourcesEmptyToc": "The source returned no chapters. Check its rules and website status.",
+  "sourcesIdentityImmutable": "Source identity cannot be changed while editing. Import it as a new source instead.",
+  "sourcesChapterCount": "Contents · {count} chapters",
+  "@sourcesChapterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesDetailError": "Could not load details or chapters\n{error}",
+  "@sourcesDetailError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

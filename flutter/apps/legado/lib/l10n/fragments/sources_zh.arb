@@ -1,0 +1,43 @@
+{
+  "sourcesManage": "书源管理",
+  "sourcesImport": "导入",
+  "sourcesImportJson": "导入书源 JSON",
+  "sourcesEdit": "编辑书源",
+  "sourcesJsonHint": "单个书源对象或书源数组",
+  "sourcesCancel": "取消",
+  "sourcesSave": "保存",
+  "sourcesCopy": "复制全部书源 JSON",
+  "sourcesCopied": "书源 JSON 已复制",
+  "sourcesEmpty": "暂无书源，点击导入添加 JSON 书源",
+  "sourcesDelete": "删除书源",
+  "sourcesDeleteConfirm": "删除书源？",
+  "sourcesDeleteAction": "删除",
+  "sourcesSearchTitle": "搜索图书",
+  "sourcesSourceLabel": "书源",
+  "sourcesKeyword": "书名或作者",
+  "sourcesSearch": "搜索",
+  "sourcesNeedSource": "请先在书源管理中导入并启用书源",
+  "sourcesSearchPrompt": "输入关键词开始搜索",
+  "sourcesNoResults": "没有搜索结果",
+  "sourcesRefresh": "刷新目录",
+  "sourcesAdd": "加入书架",
+  "sourcesAdded": "已加入书架",
+  "sourcesEmptyToc": "书源没有返回目录，请检查书源规则与站点状态。",
+  "sourcesIdentityImmutable": "编辑时不能更改书源标识，请使用导入新增书源",
+  "sourcesChapterCount": "目录 · {count} 章",
+  "@sourcesChapterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesDetailError": "获取详情或目录失败\n{error}",
+  "@sourcesDetailError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}
