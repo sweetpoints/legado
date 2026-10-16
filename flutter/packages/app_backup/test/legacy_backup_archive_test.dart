@@ -430,4 +430,66 @@ void main() {
       );
     },
   );
+  test('generic EPUB entries decode without requiring legacy backup JSON', () {
+    final fixture = {
+      'mimetype': utf8.encode('application/epub+zip'),
+      'META-INF/container.xml': utf8.encode(
+        '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>',
+      ),
+      'OEBPS/content.opf': utf8.encode('<package version="3.0"/>'),
+      'OEBPS/chapter.xhtml': utf8.encode(
+        '<html><body><p>Fixture</p></body></html>',
+      ),
+      'OEBPS/cover.png': [137, 80, 78, 71, 0xff],
+    };
+    final bytes = zip(fixture);
+    final entries = LegacyBackupArchive.decodeEntries(bytes);
+    expect(entries, fixture);
+    expect(() => entries.clear(), throwsUnsupportedError);
+    expect(() => entries['mimetype']![0] = 0, throwsUnsupportedError);
+    bytes.fillRange(0, bytes.length, 0);
+    expect(entries['mimetype'], utf8.encode('application/epub+zip'));
+    // Generic extraction intentionally does not weaken backup recognition.
+    expect(
+      () => LegacyBackupArchive.decode(zip(fixture)),
+      throwsFormatException,
+    );
+  });
+
+  test(
+    'generic ZIP decoding preserves malformed legacy JSON as opaque bytes',
+    () {
+      final entries = LegacyBackupArchive.decodeEntries(
+        textZip({'bookshelf.json': 'null'}),
+      );
+      expect(utf8.decode(entries['bookshelf.json']!), 'null');
+      expect(
+        () => LegacyBackupArchive.decode(textZip({'bookshelf.json': 'null'})),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test('generic ZIP decoding retains all safety and resource validation', () {
+    expect(
+      () => LegacyBackupArchive.decodeEntries(textZip({'../outside': 'x'})),
+      throwsFormatException,
+    );
+    expect(
+      () => LegacyBackupArchive.decodeEntries(
+        textZip({'mimetype': 'application/epub+zip'}),
+        limits: const BackupArchiveLimits(maxEntryBytes: 1),
+      ),
+      throwsFormatException,
+    );
+    final corrupt = textZip({'mimetype': 'application/epub+zip'});
+    final data = ByteData.sublistView(corrupt);
+    final central = centralOffsets(corrupt).first;
+    data.setUint32(central + 16, 42, Endian.little);
+    data.setUint32(14, 42, Endian.little);
+    expect(
+      () => LegacyBackupArchive.decodeEntries(corrupt),
+      throwsFormatException,
+    );
+  });
 }
