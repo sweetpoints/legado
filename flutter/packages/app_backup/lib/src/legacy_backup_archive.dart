@@ -295,7 +295,11 @@ final class _Directory {
       if (flags & 0x0800 == 0 && rawName.any((b) => b > 127)) fail();
       final name = utf8.decode(rawName, allowMalformed: false);
       final directory = name.endsWith('/');
-      if (directory && size != 0) fail();
+      if ((directory && size != 0) ||
+          (mode & 0xf000 == 0x4000 && !directory) ||
+          (mode & 0xf000 == 0x8000 && directory)) {
+        fail();
+      }
       paths.add(name, directory);
       total += size;
       if (total > limits.maxTotalBytes) fail();
@@ -362,6 +366,7 @@ final class _Directory {
 final class _Paths {
   final Map<String, bool> _names = {};
   final Map<String, String> _spelling = {};
+  final Set<String> _parents = {};
   void add(String name, bool directory) {
     final trimmed = directory ? name.substring(0, name.length - 1) : name;
     final parts = trimmed.split('/');
@@ -398,11 +403,12 @@ final class _Paths {
         throw const FormatException('Case-colliding backup directory');
       }
       _spelling[lower] = prefix;
+      if (i < parts.length) _parents.add(lower);
       if (i < parts.length && _names[lower] == false) {
         throw const FormatException('File used as backup directory');
       }
     }
-    if (!directory && _spelling.keys.any((path) => path.startsWith('$key/'))) {
+    if (!directory && _parents.contains(key)) {
       throw const FormatException('Backup file replaces directory');
     }
     _names[key] = directory;
