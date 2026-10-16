@@ -19,6 +19,32 @@ void main() {
       throwsUnsupportedError,
     );
   });
+  test('iOS ARM64 requires an explicit device or simulator SDK', () {
+    expect(
+      artifactTarget(OS.iOS, Architecture.arm64, iosSdk: IOSSdk.iPhoneOS),
+      'ios-arm64',
+    );
+    expect(
+      artifactTarget(
+        OS.iOS,
+        Architecture.arm64,
+        iosSdk: IOSSdk.iPhoneSimulator,
+      ),
+      'ios-simulator-arm64',
+    );
+    expect(
+      () => artifactTarget(OS.iOS, Architecture.arm64),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => artifactTarget(
+        OS.iOS,
+        Architecture.x64,
+        iosSdk: IOSSdk.iPhoneSimulator,
+      ),
+      throwsUnsupportedError,
+    );
+  });
   late Directory directory;
   late Directory package;
   late File binary;
@@ -145,6 +171,52 @@ void main() {
     await file.writeAsString(jsonEncode(manifest));
     await expectLater(
       verifyArtifact(directory, package, 'macos-x64'),
+      throwsStateError,
+    );
+  });
+  test('iOS artifact authenticates its SDK environment and packager', () async {
+    const target = 'ios-simulator-arm64';
+    final pin = jsonDecode(
+      await File('${package.path}/../../tool/v8/ios-release-pin.json')
+          .readAsString(),
+    ) as Map;
+    final file = File('${directory.path}/$target/libsource_v8.dylib');
+    await file.parent.create();
+    await file.writeAsBytes([1, 2, 3, 4]);
+    final packager = File('${package.path}/../../tool/v8/ios_sdk.py');
+    final packagerHash = (await sha256.bind(packager.openRead()).first)
+        .toString();
+    final entry = <String, Object>{
+      'binary': '$target/libsource_v8.dylib',
+      'sha256': sha256.convert([1, 2, 3, 4]).toString(),
+      'size': 4,
+      'minIOS': '15.0',
+      'iosPackagerSha256': packagerHash,
+      'sdkProvenance': {
+        'target': target,
+        'releaseManifestSha256': pin['releaseManifestSha256'],
+        'manifestSha256': (pin['sdkManifestSha256'] as Map)[target],
+      },
+    };
+    (manifest['targets'] as Map)[target] = entry;
+    final manifestFile = File('${directory.path}/manifest.json');
+    await manifestFile.writeAsString(jsonEncode(manifest));
+    expect(
+      (await verifyArtifact(directory, package, target)).binary.path,
+      file.path,
+    );
+    entry['iosPackagerSha256'] = '0' * 64;
+    await manifestFile.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, target),
+      throwsStateError,
+    );
+    entry['iosPackagerSha256'] = packagerHash;
+    (entry['sdkProvenance'] as Map)['manifestSha256'] =
+        (pin['sdkManifestSha256'] as Map)['ios-arm64'];
+    await manifestFile.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, target),
       throwsStateError,
     );
   });
