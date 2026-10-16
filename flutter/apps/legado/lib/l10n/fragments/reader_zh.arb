@@ -58,5 +58,22 @@
   "readerEpubEncrypted": "暂不支持加密或混淆资源的 EPUB。",
   "readerEpubUnsupported": "此 EPUB 含有文本阅读器暂不支持的章节格式。",
   "readerEpubEmpty": "此 EPUB 没有可阅读的文本。",
-  "readerEpubImport": "导入 EPUB"
+  "readerEpubImport": "导入 EPUB",
+  "readerBookmarks": "书签",
+  "readerAddBookmark": "添加当前位置",
+  "readerBookmarkNote": "备注（可选）",
+  "readerBookmarkCancel": "取消",
+  "readerBookmarkSave": "保存",
+  "readerBookmarkAdded": "书签已保存",
+  "readerBookmarkFailed": "书签操作失败：{error}",
+  "readerBookmarksEmpty": "暂无书签",
+  "readerBookmarkUnavailable": "此书签无法与当前图书和章节匹配。",
+  "readerDeleteBookmark": "删除书签",
+  "@readerBookmarkFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
