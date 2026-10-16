@@ -228,8 +228,7 @@ def build(output, targets, *, sdk_cache=None, compiler_cache=None, sysroot_cache
     compiler = toolchains.install(compiler_cache)
     identity = link_sdk.compiler_identity(run([compiler / 'bin/clang++', '--version']))
     source_digest = link_sdk.source_digest()
-    inputs = {name: prebuilt.sha(HERE / name) for name in
-              ('linux_sdk.py', 'linux_allocator_boundary.cpp', 'linux-pins.json', 'linux-release-pin.json')}
+    inputs = consumer_inputs()
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.linux-bridge-', dir=output.parent) as temporary:
         work = Path(temporary)
@@ -286,11 +285,93 @@ def build(output, targets, *, sdk_cache=None, compiler_cache=None, sysroot_cache
             raise ValueError('Linux bridge sources/pins changed while building')
         (work / 'provenance.json').write_text(json.dumps({'schemaVersion': 1,
             'bridgeSourceSha256': source_digest, 'inputsSha256': inputs,
+            'compilerHost': toolchains.host_key(),
+            'compilerPackage': json.loads((HERE / 'toolchain-pins.json').read_text())['hosts'][toolchains.host_key()],
             'releaseManifestSha256': release['releaseManifestSha256'],
             'v8BuiltLocally': False, 'flutterHookEnabled': False, 'targets': evidence}, indent=2) + '\n')
         shutil.move(str(work), output)
     return output
 
+
+
+
+def consumer_inputs():
+    return {name: prebuilt.sha(HERE / name) for name in
+            ('linux_sdk.py', 'linux_allocator_boundary.cpp', 'linux-pins.json',
+             'linux-release-pin.json', 'prebuilt.py', 'toolchains.py')}
+
+
+def prepare_dynamic(target, *, cache_root=None, sdk_cache=None, compiler_cache=None, sysroot_cache=None):
+    """Prepare and reauthenticate a real native-asset package for one Linux target."""
+    if target not in PROFILES:
+        raise ValueError('Unsupported Linux dynamic target')
+    cache = Path(cache_root or os.environ.get('SOURCE_V8_LINUX_ARTIFACT_CACHE') or PACKAGE / '.cache/linux-consumer')
+    sdk_cache = sdk_cache or os.environ.get('SOURCE_V8_SDK_CACHE')
+    compiler_cache = compiler_cache or os.environ.get('SOURCE_V8_COMPILER_CACHE')
+    sysroot_cache = sysroot_cache or os.environ.get('SOURCE_V8_SYSROOT_CACHE') or PACKAGE / '.cache/linux-sysroots'
+    if cache.is_symlink():
+        raise ValueError('Linux consumer cache must not be a symlink')
+    cache.mkdir(parents=True, exist_ok=True)
+    with link_sdk._publish_lock(cache / '.prepare.lock'):
+        pins = json.loads((HERE / 'linux-pins.json').read_text())
+        release = json.loads((HERE / 'linux-release-pin.json').read_text())
+        source = link_sdk.source_digest()
+        inputs = consumer_inputs()
+        identity = hashlib.sha256(json.dumps({'source': source, 'inputs': inputs, 'compilerHost': toolchains.host_key()}, sort_keys=True).encode()).hexdigest()
+        package = cache / (target + '-' + identity)
+        if package.is_symlink():
+            raise ValueError('Linux consumer package must not be a symlink')
+        if not package.exists():
+            build(package, [target], sdk_cache=sdk_cache, compiler_cache=compiler_cache, sysroot_cache=sysroot_cache)
+        receipt = json.loads((package / 'provenance.json').read_text())
+        if receipt['bridgeSourceSha256'] != source or receipt['inputsSha256'] != inputs:
+            raise ValueError('Linux consumer cache source/input provenance differs')
+        # Cache reuse is never an excuse to skip SDK, toolchain, sysroot or
+        # final-binary ABI/ownership validation before Flutter bundles bytes.
+        sdk = prebuilt.install(release, target, local_pins=pins, cache_root=sdk_cache)
+        contract(sdk, target, pins)
+        compiler = toolchains.install(compiler_cache)
+        compiler_pin = json.loads((HERE / 'toolchain-pins.json').read_text())['hosts'][toolchains.host_key()]
+        if receipt['compilerHost'] != toolchains.host_key() or receipt['compilerPackage'] != compiler_pin:
+            raise ValueError('Linux compiler package provenance differs')
+        sysroot = install_sysroot(target, sysroot_cache, pins)
+        original = receipt['targets'][target]
+        binary = package / target / 'libsource_v8.so'
+        if binary.is_symlink() or prebuilt.sha(binary) != original['librarySha256']:
+            raise ValueError('Linux consumer cache binary differs')
+        inspection = inspect_elf(binary.read_bytes(), target)
+        symbols = run([compiler / 'bin/llvm-readelf', '--dyn-syms', '--wide', binary])
+        imports = audit_imports(symbols, target, pins)
+        defined = {parts[7] for line in symbols.splitlines() if len(parts := line.split()) >= 8
+                   and parts[0].rstrip(':').isdigit() and parts[6] != 'UND' and parts[4] in ('GLOBAL', 'WEAK')}
+        if defined != link_sdk.EXPORTS:
+            raise ValueError('Linux native-asset exports differ')
+        if (original['sdkManifestSha256'] != release['sdkManifestSha256'][target]
+                or original['sysrootSha256'] != pins['sysroots'][target]['sha256']
+                or original['undefinedSymbolsSha256'] != imports):
+            raise ValueError('Linux native-asset SDK/sysroot/import provenance differs')
+        manifest = {'schemaVersion': 1, 'v8': pins['v8'], 'depotTools': pins['depotTools'],
+            'bridge': {'abi': 1, 'sourceSha256': source}, 'targets': {target: {
+                'binary': target + '/libsource_v8.so', 'size': binary.stat().st_size,
+                'sha256': prebuilt.sha(binary), 'minGlibc': pins['targets'][target]['minGlibc'],
+                'linuxConsumerInputsSha256': inputs, 'linuxCompilerHost': toolchains.host_key(),
+                'linuxCompilerPackage': compiler_pin,
+                'linuxSysrootSha256': pins['sysroots'][target]['sha256'],
+                'linuxSysrootFilesSha256': pins['sysroots'][target]['filesSha256'],
+                'linuxUndefinedSymbolsSha256': imports,
+                'sdkProvenance': {'target': target, 'manifestSha256': original['sdkManifestSha256'],
+                                  'releaseManifestSha256': release['releaseManifestSha256']},
+                'binaryInspection': inspection,
+                'validation': {'built': True, 'runtimeTested': False, 'sourceCompatibilityTested': False}}}}
+        if source != link_sdk.source_digest() or inputs != consumer_inputs():
+            raise ValueError('Linux native-asset inputs changed while verifying')
+        # The immutable, content-identified package is published as one unit by
+        # build(); only its complete manifest is atomically replaced afterwards.
+        with tempfile.NamedTemporaryFile(mode='w', dir=package, delete=False) as stream:
+            json.dump(manifest, stream, indent=2)
+            incoming = Path(stream.name)
+        incoming.replace(package / 'manifest.json')
+        return package
 
 
 def _native_probe(package, target):
@@ -446,8 +527,9 @@ def main():
         print(json.dumps(_native_probe(sys.argv[2], sys.argv[3])), flush=True)
         return
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', required=True, type=Path)
-    parser.add_argument('--target', action='append', required=True, choices=PROFILES)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--prepare-dynamic', choices=PROFILES)
+    parser.add_argument('--target', action='append', choices=PROFILES)
     parser.add_argument('--sdk-cache', type=Path)
     parser.add_argument('--compiler-cache', type=Path)
     parser.add_argument('--sysroot-cache', type=Path)
@@ -456,6 +538,12 @@ def main():
     parser.add_argument('--execution-mode', choices=('native', 'emulated'), default='native',
                         help='Explicitly label emulated container execution when applicable')
     args = parser.parse_args()
+    if args.prepare_dynamic:
+        print(json.dumps({'artifactRoot': str(prepare_dynamic(args.prepare_dynamic, sdk_cache=args.sdk_cache,
+            compiler_cache=args.compiler_cache, sysroot_cache=args.sysroot_cache))}))
+        return
+    if args.output is None or not args.target:
+        raise ValueError('--output and --target are required for standalone build')
     if not args.verify_existing:
         print(build(args.output, args.target, sdk_cache=args.sdk_cache, compiler_cache=args.compiler_cache,
                     sysroot_cache=args.sysroot_cache))

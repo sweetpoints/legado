@@ -36,13 +36,15 @@ void main(List<String> args) async {
             .resolve(
               os == OS.iOS
                   ? '../../tool/v8/ios_sdk.py'
+                  : os == OS.linux
+                  ? '../../tool/v8/linux_sdk.py'
                   : '../../tool/v8/prepare_sdk.py',
             )
             .toFilePath(),
-        os == OS.iOS ? '--prepare-dynamic' : '--target',
+        os == OS.iOS || os == OS.linux ? '--prepare-dynamic' : '--target',
         target,
       ]);
-      if (os == OS.iOS && result.exitCode == 0) {
+      if ((os == OS.iOS || os == OS.linux) && result.exitCode == 0) {
         final receipt =
             jsonDecode(result.stdout as String) as Map<String, dynamic>;
         root = Directory(receipt['artifactRoot'] as String);
@@ -87,6 +89,12 @@ void main(List<String> args) async {
           'ios_sdk.py',
           'ios-pins.json',
           'ios-release-pin.json',
+        ],
+        if (os == OS.linux) ...[
+          'linux_sdk.py',
+          'linux_allocator_boundary.cpp',
+          'linux-pins.json',
+          'linux-release-pin.json',
         ],
         'toolchain-pins.json',
       ])

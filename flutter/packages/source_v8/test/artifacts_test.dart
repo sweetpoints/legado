@@ -19,6 +19,14 @@ void main() {
       throwsUnsupportedError,
     );
   });
+  test('Linux selects both authenticated SDK architectures', () {
+    expect(artifactTarget(OS.linux, Architecture.arm64), 'linux-arm64');
+    expect(artifactTarget(OS.linux, Architecture.x64), 'linux-x64');
+    expect(
+      () => artifactTarget(OS.linux, Architecture.ia32),
+      throwsUnsupportedError,
+    );
+  });
   test('iOS ARM64 requires an explicit device or simulator SDK', () {
     expect(
       artifactTarget(OS.iOS, Architecture.arm64, iosSdk: IOSSdk.iPhoneOS),
@@ -99,6 +107,14 @@ void main() {
       final artifact = await verify();
       expect(artifact.binary.path, binary.path);
       expect(artifact.dependencies, hasLength(9));
+      for (final dependency in artifact.dependencies) {
+        expect(
+          await File.fromUri(dependency).exists(),
+          isTrue,
+          reason:
+              'Hook dependency must resolve to an existing file: $dependency',
+        );
+      }
     },
   );
   test('authenticates Android x64 and enforces its API floor', () async {
@@ -220,6 +236,94 @@ void main() {
       throwsStateError,
     );
   });
+  test(
+    'Linux artifact authenticates all consumer, sysroot and compiler inputs',
+    () async {
+      const target = 'linux-x64';
+      final toolRoot = '${package.path}/../../tool/v8';
+      final pin = jsonDecode(
+        await File('$toolRoot/linux-release-pin.json').readAsString(),
+      ) as Map;
+      final linux = jsonDecode(
+        await File('$toolRoot/linux-pins.json').readAsString(),
+      ) as Map;
+      final compilers = jsonDecode(
+        await File('$toolRoot/toolchain-pins.json').readAsString(),
+      ) as Map;
+      final file = File('${directory.path}/$target/libsource_v8.so');
+      await file.parent.create();
+      await file.writeAsBytes([1, 2, 3, 4]);
+      final inputs = <String, String>{};
+      for (final name in [
+        'linux_sdk.py',
+        'linux_allocator_boundary.cpp',
+        'linux-pins.json',
+        'linux-release-pin.json',
+        'prebuilt.py',
+        'toolchains.py',
+      ]) {
+        inputs[name] =
+            (await sha256.bind(File('$toolRoot/$name').openRead()).first)
+                .toString();
+      }
+      final sysroot = (linux['sysroots'] as Map)[target] as Map;
+      final entry = <String, Object>{
+        'binary': '$target/libsource_v8.so',
+        'sha256': sha256.convert([1, 2, 3, 4]).toString(),
+        'size': 4,
+        'minGlibc': '2.31',
+        'linuxConsumerInputsSha256': inputs,
+        'linuxCompilerHost': 'linux-x64',
+        'linuxCompilerPackage': Map<String, Object>.from(
+          (compilers['hosts'] as Map)['linux-x64'] as Map,
+        ),
+        'linuxSysrootSha256': sysroot['sha256'],
+        'linuxSysrootFilesSha256': sysroot['filesSha256'],
+        'linuxUndefinedSymbolsSha256':
+            (linux['undefinedSymbolsSha256'] as Map)[target],
+        'sdkProvenance': {
+          'target': target,
+          'releaseManifestSha256': pin['releaseManifestSha256'],
+          'manifestSha256': (pin['sdkManifestSha256'] as Map)[target],
+        },
+      };
+      (manifest['targets'] as Map)[target] = entry;
+      final manifestFile = File('${directory.path}/manifest.json');
+      Future<VerifiedArtifact> verifyLinux() async {
+        await manifestFile.writeAsString(jsonEncode(manifest));
+        return verifyArtifact(directory, package, target);
+      }
+
+      final artifact = await verifyLinux();
+      expect(artifact.binary.path, file.path);
+      expect(
+        artifact.dependencies,
+        contains(
+          package.uri.resolve('../../tool/v8/linux_allocator_boundary.cpp'),
+        ),
+      );
+      for (final key in [
+        'minGlibc',
+        'linuxSysrootSha256',
+        'linuxSysrootFilesSha256',
+        'linuxUndefinedSymbolsSha256',
+      ]) {
+        final original = entry[key]!;
+        entry[key] = 'changed';
+        await expectLater(verifyLinux(), throwsStateError);
+        entry[key] = original;
+      }
+      for (final name in inputs.keys.toList()) {
+        final original = inputs[name]!;
+        inputs[name] = '0' * 64;
+        await expectLater(verifyLinux(), throwsStateError);
+        inputs[name] = original;
+      }
+      final compiler = entry['linuxCompilerPackage'] as Map;
+      compiler['sha256'] = '0' * 64;
+      await expectLater(verifyLinux(), throwsStateError);
+    },
+  );
   test('rejects a binary with changed contents', () async {
     await binary.writeAsBytes([4, 3, 2, 1]);
     await expectLater(verify(), throwsStateError);

@@ -16,6 +16,10 @@ String artifactTarget(OS os, Architecture architecture, {IOSSdk? iosSdk}) {
     if (iosSdk == IOSSdk.iPhoneSimulator) return 'ios-simulator-arm64';
     throw UnsupportedError('iOS device/simulator SDK is required');
   }
+  if (os == OS.linux && architecture == Architecture.arm64) {
+    return 'linux-arm64';
+  }
+  if (os == OS.linux && architecture == Architecture.x64) return 'linux-x64';
   if (os == OS.macOS && architecture == Architecture.arm64) {
     return 'macos-arm64';
   }
@@ -29,23 +33,29 @@ String artifactTarget(OS os, Architecture architecture, {IOSSdk? iosSdk}) {
     return 'android-x64';
   }
   throw UnsupportedError(
-    'Official V8 supports iOS ARM64 device/simulator, macOS arm64/x64 and Android arm64/x64; requested $os/$architecture',
+    'Official V8 supports iOS ARM64 device/simulator, macOS/Linux arm64/x64 and Android arm64/x64; requested $os/$architecture',
   );
 }
 
+File _packageFile(Directory root, String relative) =>
+    File.fromUri(root.uri.resolve(relative));
+
 /// These labels and the length-prefixed digest are shared with build.py.
 Map<String, File> bridgeSources(Directory packageRoot) => {
-  'src/source_v8.cpp': File('${packageRoot.path}/src/source_v8.cpp'),
-  'src/source_v8.h': File('${packageRoot.path}/src/source_v8.h'),
-  'src/android_exports.map': File(
-    '${packageRoot.path}/src/android_exports.map',
+  'src/source_v8.cpp': _packageFile(packageRoot, 'src/source_v8.cpp'),
+  'src/source_v8.h': _packageFile(packageRoot, 'src/source_v8.h'),
+  'src/android_exports.map': _packageFile(
+    packageRoot,
+    'src/android_exports.map',
   ),
-  'tool/v8/source_v8.gni': File(
-    '${packageRoot.path}/../../tool/v8/source_v8.gni',
+  'tool/v8/source_v8.gni': _packageFile(
+    packageRoot,
+    '../../tool/v8/source_v8.gni',
   ),
-  'tool/v8/link_sdk.py': File('${packageRoot.path}/../../tool/v8/link_sdk.py'),
-  'tool/v8/toolchain-pins.json': File(
-    '${packageRoot.path}/../../tool/v8/toolchain-pins.json',
+  'tool/v8/link_sdk.py': _packageFile(packageRoot, '../../tool/v8/link_sdk.py'),
+  'tool/v8/toolchain-pins.json': _packageFile(
+    packageRoot,
+    '../../tool/v8/toolchain-pins.json',
   ),
 };
 
@@ -123,8 +133,14 @@ Future<VerifiedArtifact> verifyArtifact(
   final targets = _object(manifest['targets'], 'targets');
   final target = _object(targets[targetName], 'targets.$targetName');
   final isIOS = targetName.startsWith('ios-');
-  final releasePinFile = File(
-    '${packageRoot.path}/../../tool/v8/${isIOS ? 'ios-release-pin.json' : 'release-pin.json'}',
+  final isLinux = targetName.startsWith('linux-');
+  final releasePinFile = _packageFile(
+    packageRoot,
+    '../../tool/v8/${isIOS
+        ? 'ios-release-pin.json'
+        : isLinux
+        ? 'linux-release-pin.json'
+        : 'release-pin.json'}',
   );
   final releasePin = _object(
     jsonDecode(await releasePinFile.readAsString()),
@@ -152,12 +168,86 @@ Future<VerifiedArtifact> verifyArtifact(
     _expect(target['minMacOS'], '13.0', '$targetName.minMacOS');
   } else if (targetName == 'ios-arm64' || targetName == 'ios-simulator-arm64') {
     _expect(target['minIOS'], '15.0', '$targetName.minIOS');
-    final packager = File('${packageRoot.path}/../../tool/v8/ios_sdk.py');
+    final packager = _packageFile(packageRoot, '../../tool/v8/ios_sdk.py');
     _expect(
       target['iosPackagerSha256'],
       (await sha256.bind(packager.openRead()).first).toString(),
       '$targetName.iosPackagerSha256',
     );
+  } else if (isLinux) {
+    _expect(target['minGlibc'], '2.31', '$targetName.minGlibc');
+    final inputHashes = _object(
+      target['linuxConsumerInputsSha256'],
+      'linuxConsumerInputsSha256',
+    );
+    for (final name in [
+      'linux_sdk.py',
+      'linux_allocator_boundary.cpp',
+      'linux-pins.json',
+      'linux-release-pin.json',
+      'prebuilt.py',
+      'toolchains.py',
+    ]) {
+      final file = _packageFile(packageRoot, '../../tool/v8/$name');
+      _expect(
+        inputHashes[name],
+        (await sha256.bind(file.openRead()).first).toString(),
+        '$targetName.linuxConsumerInputsSha256.$name',
+      );
+    }
+    final linuxPins = _object(
+      jsonDecode(
+        await _packageFile(
+          packageRoot,
+          '../../tool/v8/linux-pins.json',
+        ).readAsString(),
+      ),
+      'linux pins',
+    );
+    final sysroots = _object(linuxPins['sysroots'], 'linux sysroots');
+    final sysroot = _object(sysroots[targetName], 'linux sysroot');
+    _expect(
+      target['linuxSysrootSha256'],
+      sysroot['sha256'] as String,
+      '$targetName.linuxSysrootSha256',
+    );
+    _expect(
+      target['linuxSysrootFilesSha256'],
+      sysroot['filesSha256'] as String,
+      '$targetName.linuxSysrootFilesSha256',
+    );
+    _expect(
+      target['linuxUndefinedSymbolsSha256'],
+      _object(
+            linuxPins['undefinedSymbolsSha256'],
+            'undefinedSymbolsSha256',
+          )[targetName]
+          as String,
+      '$targetName.linuxUndefinedSymbolsSha256',
+    );
+    final compilerHost = target['linuxCompilerHost'];
+    final toolchainPins = _object(
+      jsonDecode(
+        await _packageFile(
+          packageRoot,
+          '../../tool/v8/toolchain-pins.json',
+        ).readAsString(),
+      ),
+      'toolchain pins',
+    );
+    final hosts = _object(toolchainPins['hosts'], 'compiler hosts');
+    final expectedCompiler = _object(hosts[compilerHost], 'compiler host');
+    final compiler = _object(
+      target['linuxCompilerPackage'],
+      'linuxCompilerPackage',
+    );
+    for (final key in ['url', 'sha256', 'size', 'filesSha256']) {
+      _expect(
+        compiler[key],
+        expectedCompiler[key]!,
+        '$targetName.linuxCompilerPackage.$key',
+      );
+    }
   } else {
     throw UnsupportedError('Official V8 build does not support $targetName');
   }
@@ -189,9 +279,20 @@ Future<VerifiedArtifact> verifyArtifact(
     releasePinFile.uri,
     binary.uri,
     ...sources.values.map((file) => file.uri),
+    if (isLinux) ...[
+      for (final name in [
+        'linux_sdk.py',
+        'linux_allocator_boundary.cpp',
+        'linux-pins.json',
+        'linux-release-pin.json',
+        'prebuilt.py',
+        'toolchains.py',
+      ])
+        _packageFile(packageRoot, '../../tool/v8/$name').uri,
+    ],
     if (isIOS) ...[
       for (final name in ['ios_sdk.py', 'ios-pins.json'])
-        File('${packageRoot.path}/../../tool/v8/$name').uri,
+        _packageFile(packageRoot, '../../tool/v8/$name').uri,
     ],
   ], target);
 }

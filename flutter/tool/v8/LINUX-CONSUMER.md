@@ -2,8 +2,8 @@
 
 `linux_sdk.py` consumes the already published **15.4.80.25** pure SDK release
 for Linux x64 and ARM64. It builds only Legado's existing C bridge. It does not
-check out V8, run GN/Ninja, modify a published SDK, push a release or register
-Linux as a ready Flutter platform.
+check out V8, run GN/Ninja, modify a published SDK or push a release. The
+Flutter/Dart native-assets hook calls the same authenticated consumer.
 
 ## Build inputs and authentication
 
@@ -118,7 +118,7 @@ Locally verified on 2026-10-17:
 - Both child processes exited normally, including the unchanged default tracing
   controller's destructor. A receipt is only saved after zero process exit.
 
-Flutter hooks, final application runtime and old-source compatibility acceptance
+Final Flutter UI/application runtime and old-source compatibility acceptance
 remain separate integration work. `runtimeTested=false` in build provenance
 means build-only evidence; the separate runtime receipt reports the executed
 checks and whether the execution environment was native or emulated.
@@ -140,3 +140,54 @@ compatibility acceptance is implied by this probe.
 ```sh
 python3 -m unittest discover -s flutter/tool/v8 -p test_linux_sdk.py -v
 ```
+
+## Real Dart native-assets hook
+
+`source_v8/hook/build.dart` maps Linux x64 and ARM64 to this consumer's
+`--prepare-dynamic` mode. It publishes a content-identified, target-specific
+artifact cache. Before every reuse it validates the SDK, compiler package,
+sysroot file tree, bridge/source/consumer inputs, ELF architecture, exact exports
+and audited imports. `artifacts.dart` independently verifies the manifest's
+consumer file hashes, compiler archive/file inventory identities, sysroot and
+SDK identities before bundling; the bundled copy is checked again by SHA-256.
+All source and tool files are registered as real existing hook dependencies.
+
+The prepare cache identity includes compiler host, so macOS cross-linking and
+Linux linking cannot accidentally reuse each other's compiler receipts. On a
+native Linux ARM64 development host the fixed Clang installer is not yet
+available; use `artifact_root` pointing at a verified ARM64 artifact prepared on
+macOS ARM64 or Linux x64. Target selection alone does not imply a new compiler
+host has been authenticated.
+
+The real Linux x64 Dart 3.13.5 hook was executed in an amd64 container under
+Rosetta on an ARM64 host, using the original `source_engine` and `source_v8`
+packages in an isolated Dart workspace and the repository's dependency lock
+versions. The native hook automatically prepared the artifact; no configured
+`artifact_root` bypass was used. It then bundled and loaded the actual V8 shared
+library and passed **49 tests**, including the **31 V8 runtime tests**. A second
+run passed with container networking disabled and authenticated cached inputs.
+All **25 declared hook dependencies** were checked to exist. Static analysis
+reported no issues. This is emulated Linux Dart FFI acceptance, not Linux GTK
+application or native x64 machine acceptance.
+
+For Ubuntu 26 CI with the project's pinned Flutter SDK and Python 3.12+:
+
+```sh
+cd flutter
+flutter pub get --enforce-lockfile
+cd packages/source_v8
+# Run from the package so Dart includes its native build hook. Restrict the
+# directory to test/; example/integration_test contains iOS Flutter UI tests.
+dart analyze hook test
+dart test test/ --reporter expanded
+```
+
+Do not run `dart test packages/source_v8` from a workspace root that does not
+depend on `source_v8`: that invocation does not include this package in the root
+native-assets graph and also recursively discovers the Flutter-only example.
+
+The standalone CLI accepts explicit `--sdk-cache`, `--compiler-cache` and
+`--sysroot-cache` paths. `prepare_dynamic` also accepts the corresponding
+`SOURCE_V8_*_CACHE` environment variables, but a native hook runner may sanitize
+environment variables, so its authenticated default caches remain supported.
+Changing a cache directory never changes any pinned hash or validation rule.
