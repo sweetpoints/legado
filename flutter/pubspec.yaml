@@ -5,6 +5,7 @@ environment:
 workspace:
   - apps/legado
   - packages/app_core
+  - packages/app_storage
   - packages/source_engine
   - packages/source_v8
   - packages/source_legacy
