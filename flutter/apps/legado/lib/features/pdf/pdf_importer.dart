@@ -64,6 +64,7 @@ class PdfImporter {
       document = await PdfDocument.openData(
         data,
         sourceName: url,
+        useProgressiveLoading: true,
         passwordProvider: () async => null,
       );
       // Passwords are intentionally never retained in backups or preferences.
