@@ -297,6 +297,47 @@ class AppLocalizationsEn extends AppLocalizations {
       'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.';
 
   @override
+  String get pdfTitle => 'PDF reader';
+
+  @override
+  String get pdfImportTitle => 'Import PDF';
+
+  @override
+  String get pdfImportDescription =>
+      'Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.';
+
+  @override
+  String get pdfChooseFile => 'Choose PDF';
+
+  @override
+  String get pdfTooLarge => 'This PDF exceeds the 32 MiB limit.';
+
+  @override
+  String get pdfEncrypted =>
+      'Encrypted PDFs are not supported. Import an unencrypted copy.';
+
+  @override
+  String get pdfUnsupportedStorage =>
+      'This library does not support local PDF storage.';
+
+  @override
+  String get pdfOpenFailed => 'The PDF is missing, damaged, or unsupported.';
+
+  @override
+  String get pdfSaveFailed => 'Reading progress could not be saved.';
+
+  @override
+  String get pdfPreviousPage => 'Previous page';
+
+  @override
+  String get pdfNextPage => 'Next page';
+
+  @override
+  String pdfPagePosition(int page, int total) {
+    return 'Page $page of $total';
+  }
+
+  @override
   String get readerTitle => 'Read';
 
   @override

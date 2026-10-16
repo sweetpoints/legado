@@ -644,6 +644,78 @@ abstract class AppLocalizations {
   /// **'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.'**
   String get shelfEncodingUnavailable;
 
+  /// No description provided for @pdfTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF reader'**
+  String get pdfTitle;
+
+  /// No description provided for @pdfImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import PDF'**
+  String get pdfImportTitle;
+
+  /// No description provided for @pdfImportDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.'**
+  String get pdfImportDescription;
+
+  /// No description provided for @pdfChooseFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose PDF'**
+  String get pdfChooseFile;
+
+  /// No description provided for @pdfTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This PDF exceeds the 32 MiB limit.'**
+  String get pdfTooLarge;
+
+  /// No description provided for @pdfEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted PDFs are not supported. Import an unencrypted copy.'**
+  String get pdfEncrypted;
+
+  /// No description provided for @pdfUnsupportedStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'This library does not support local PDF storage.'**
+  String get pdfUnsupportedStorage;
+
+  /// No description provided for @pdfOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The PDF is missing, damaged, or unsupported.'**
+  String get pdfOpenFailed;
+
+  /// No description provided for @pdfSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading progress could not be saved.'**
+  String get pdfSaveFailed;
+
+  /// No description provided for @pdfPreviousPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous page'**
+  String get pdfPreviousPage;
+
+  /// No description provided for @pdfNextPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Next page'**
+  String get pdfNextPage;
+
+  /// No description provided for @pdfPagePosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {page} of {total}'**
+  String pdfPagePosition(int page, int total);
+
   /// No description provided for @readerTitle.
   ///
   /// In en, this message translates to:

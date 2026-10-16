@@ -34,6 +34,7 @@ dependencies:
   xml: ^7.0.1
   intl: ^0.20.3
   enough_convert: ^1.7.1
+  pdfrx: 2.6.5
 
   flutter_localizations:
     sdk: flutter
@@ -51,3 +52,6 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  assets:
+    - assets/notices/pdfium/
+    - assets/notices/pdfium/licenses/

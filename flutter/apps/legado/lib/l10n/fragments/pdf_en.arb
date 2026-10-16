@@ -1,0 +1,24 @@
+{
+  "pdfTitle": "PDF reader",
+  "pdfImportTitle": "Import PDF",
+  "pdfImportDescription": "Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.",
+  "pdfChooseFile": "Choose PDF",
+  "pdfTooLarge": "This PDF exceeds the 32 MiB limit.",
+  "pdfEncrypted": "Encrypted PDFs are not supported. Import an unencrypted copy.",
+  "pdfUnsupportedStorage": "This library does not support local PDF storage.",
+  "pdfOpenFailed": "The PDF is missing, damaged, or unsupported.",
+  "pdfSaveFailed": "Reading progress could not be saved.",
+  "pdfPreviousPage": "Previous page",
+  "pdfNextPage": "Next page",
+  "pdfPagePosition": "Page {page} of {total}",
+  "@pdfPagePosition": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
+}
