@@ -263,6 +263,87 @@ def build(output, *, sdk_cache=None, compiler_cache=None, downloader=prebuilt.do
 
 
 
+
+def prepare_dynamic(target, *, cache_root=None):
+    cache = Path(cache_root) if cache_root else PACKAGE / '.cache/ios-consumer'
+    if cache.is_symlink():
+        raise ValueError('iOS consumer cache must not be a symlink')
+    cache.mkdir(parents=True, exist_ok=True)
+    with link_sdk._publish_lock(cache / '.prepare.lock'):
+        return _prepare_dynamic(target, cache_root=cache)
+
+
+def _prepare_dynamic(target, *, cache_root):
+    """Link a ten-export dylib for Flutter's native-assets framework packaging."""
+    if target not in PROFILES:
+        raise ValueError('Unsupported iOS dynamic target')
+    pins = json.loads((HERE / 'ios-pins.json').read_text())
+    release = json.loads((HERE / 'ios-release-pin.json').read_text())
+    source = link_sdk.source_digest()
+    packager = prebuilt.sha(HERE / 'ios_sdk.py')
+    cache = Path(cache_root) if cache_root else PACKAGE / '.cache/ios-consumer'
+    package = cache / (source + '-' + packager)
+    if package.is_symlink():
+        raise ValueError('iOS consumer cache must not be a symlink')
+    if not package.exists():
+        build(package)
+    receipt = json.loads((package / 'provenance.json').read_text())
+    if (receipt['bridgeSourceSha256'] != source or receipt['packagerSha256'] != packager
+            or receipt['consumerPinsSha256'] != prebuilt.sha(HERE / 'ios-pins.json')
+            or receipt['releasePinSha256'] != prebuilt.sha(HERE / 'ios-release-pin.json')):
+        raise ValueError('iOS static cache provenance differs')
+    original = receipt['targets'][target]
+    library = package / target / 'libsource_v8.a'
+    if prebuilt.sha(library) != original['librarySha256']:
+        raise ValueError('iOS static bridge cache checksum differs')
+    destination = package / 'dynamic' / target
+    destination.mkdir(parents=True, exist_ok=True)
+    binary = destination / 'libsource_v8.dylib'
+    compiler = toolchains.install() / 'bin/clang++'
+    sdk, triple, _, _ = PROFILES[target]
+    command = [compiler, '--target=' + triple, '-isysroot',
+               xcrun('--sdk', sdk, '--show-sdk-path'), '-dynamiclib',
+               '-Wl,-undefined,error', '-Wl,-dead_strip',
+               '-Wl,-install_name,@rpath/libsource_v8.dylib', library,
+               '-framework', 'Security', '-framework', 'Foundation',
+               '-weak_framework', 'BrowserEngineKit', '-lc++', '-lobjc']
+    for symbol in sorted(link_sdk.EXPORTS):
+        command += ['-Wl,-u,_' + symbol, '-Wl,-exported_symbol,_' + symbol]
+    # Publish complete, inspected bytes atomically; parallel hooks cannot bundle
+    # an intermediate linker output.
+    with tempfile.TemporaryDirectory(prefix='.dynamic-', dir=destination) as temporary:
+        incoming = Path(temporary) / binary.name
+        run(command + ['-o', incoming])
+        inspection = inspect_macho(incoming.read_bytes(), target)
+        if struct.unpack_from('<I', incoming.read_bytes(), 12)[0] != 6:
+            raise ValueError('iOS native asset must be a Mach-O dynamic library')
+        inspection['exports'] = link_sdk.inspect_exports(incoming, target, Path(xcrun('--find', 'nm')))
+        if source != link_sdk.source_digest() or packager != prebuilt.sha(HERE / 'ios_sdk.py'):
+            raise ValueError('iOS bridge inputs changed while linking')
+        incoming.replace(binary)
+    manifest = {'schemaVersion': 1, 'v8': pins['v8'], 'depotTools': pins['depotTools'],
+        'bridge': {'abi': 1, 'sourceSha256': source}, 'targets': {target: {
+            'binary': target + '/libsource_v8.dylib', 'size': binary.stat().st_size,
+            'sha256': prebuilt.sha(binary), 'minIOS': '15.0', 'iosPackagerSha256': packager,
+            'sdkProvenance': {'target': target,
+                'manifestSha256': original['sdkManifestSha256'],
+                'releaseManifestSha256': release['releaseManifestSha256']},
+            'binaryInspection': inspection,
+            'validation': {'built': True, 'runtimeTested': False, 'sourceCompatibilityTested': False}}}}
+    # Each target has its own root/manifest; device and simulator hook workers
+    # never race to overwrite the other target's manifest.
+    artifact_root = package / ('artifact-' + target)
+    artifact_root.mkdir(exist_ok=True)
+    artifact_target = artifact_root / target
+    artifact_target.mkdir(exist_ok=True)
+    shutil.copyfile(binary, artifact_target / binary.name)
+    with tempfile.NamedTemporaryFile(mode='w', dir=artifact_root, delete=False) as stream:
+        json.dump(manifest, stream, indent=2)
+        incoming_manifest = Path(stream.name)
+    incoming_manifest.replace(artifact_root / 'manifest.json')
+    return artifact_root
+
+
 def run_simulator(package, device):
     if not re.fullmatch(r'[A-Fa-f0-9-]{36}', device):
         raise ValueError('Explicit simulator UUID required')
@@ -298,13 +379,19 @@ def run_simulator(package, device):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--prepare-dynamic', choices=PROFILES)
     parser.add_argument('--sdk-cache', type=Path)
     parser.add_argument('--compiler-cache', type=Path)
     parser.add_argument('--run-simulator', metavar='UUID')
     parser.add_argument('--verify-existing', action='store_true',
                         help='Only run the explicit simulator against an existing package')
     args = parser.parse_args()
+    if args.prepare_dynamic:
+        print(json.dumps({'artifactRoot': str(prepare_dynamic(args.prepare_dynamic))}))
+        return
+    if args.output is None:
+        raise ValueError('--output is required for static packaging')
     if args.verify_existing:
         if not args.run_simulator:
             raise ValueError('--verify-existing requires --run-simulator')

@@ -10,7 +10,12 @@ const v8Version = '15.4.80.25';
 const depotToolsRevision = '8a5434051036b32412a2ecb10c213a72e3f3ccb9';
 const bridgeAbi = 1;
 
-String artifactTarget(OS os, Architecture architecture) {
+String artifactTarget(OS os, Architecture architecture, {IOSSdk? iosSdk}) {
+  if (os == OS.iOS && architecture == Architecture.arm64) {
+    if (iosSdk == IOSSdk.iPhoneOS) return 'ios-arm64';
+    if (iosSdk == IOSSdk.iPhoneSimulator) return 'ios-simulator-arm64';
+    throw UnsupportedError('iOS device/simulator SDK is required');
+  }
   if (os == OS.macOS && architecture == Architecture.arm64) {
     return 'macos-arm64';
   }
@@ -24,7 +29,7 @@ String artifactTarget(OS os, Architecture architecture) {
     return 'android-x64';
   }
   throw UnsupportedError(
-    'Official V8 supports macOS arm64/x64 and Android arm64/x64; requested $os/$architecture',
+    'Official V8 supports iOS ARM64 device/simulator, macOS arm64/x64 and Android arm64/x64; requested $os/$architecture',
   );
 }
 
@@ -117,8 +122,9 @@ Future<VerifiedArtifact> verifyArtifact(
   );
   final targets = _object(manifest['targets'], 'targets');
   final target = _object(targets[targetName], 'targets.$targetName');
+  final isIOS = targetName.startsWith('ios-');
   final releasePinFile = File(
-    '${packageRoot.path}/../../tool/v8/release-pin.json',
+    '${packageRoot.path}/../../tool/v8/${isIOS ? 'ios-release-pin.json' : 'release-pin.json'}',
   );
   final releasePin = _object(
     jsonDecode(await releasePinFile.readAsString()),
@@ -144,6 +150,14 @@ Future<VerifiedArtifact> verifyArtifact(
     _expect(target['minApi'], 26, '$targetName.minApi');
   } else if (targetName == 'macos-arm64' || targetName == 'macos-x64') {
     _expect(target['minMacOS'], '13.0', '$targetName.minMacOS');
+  } else if (targetName == 'ios-arm64' || targetName == 'ios-simulator-arm64') {
+    _expect(target['minIOS'], '15.0', '$targetName.minIOS');
+    final packager = File('${packageRoot.path}/../../tool/v8/ios_sdk.py');
+    _expect(
+      target['iosPackagerSha256'],
+      (await sha256.bind(packager.openRead()).first).toString(),
+      '$targetName.iosPackagerSha256',
+    );
   } else {
     throw UnsupportedError('Official V8 build does not support $targetName');
   }
@@ -175,5 +189,9 @@ Future<VerifiedArtifact> verifyArtifact(
     releasePinFile.uri,
     binary.uri,
     ...sources.values.map((file) => file.uri),
+    if (isIOS) ...[
+      for (final name in ['ios_sdk.py', 'ios-pins.json'])
+        File('${packageRoot.path}/../../tool/v8/$name').uri,
+    ],
   ], target);
 }
