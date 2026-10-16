@@ -118,6 +118,8 @@ void main() {
           (await restored.book(book.url))!.toJson()['originalAssetKey'],
           key,
         );
+        await restored.removeBook(book.url);
+        expect(await restored.localAsset(key), isNull);
       } finally {
         await restored.close();
       }

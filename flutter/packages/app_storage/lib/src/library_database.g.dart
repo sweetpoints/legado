@@ -1856,6 +1856,327 @@ class StoredBookGroupsCompanion extends UpdateCompanion<LibraryBookGroupRow> {
   }
 }
 
+class $StoredLocalBookAssetsTable extends StoredLocalBookAssets
+    with TableInfo<$StoredLocalBookAssetsTable, LibraryLocalBookAssetRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoredLocalBookAssetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _bookIdMeta = const VerificationMeta('bookId');
+  @override
+  late final GeneratedColumn<String> bookId = GeneratedColumn<String>(
+    'book_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assetKeyMeta = const VerificationMeta(
+    'assetKey',
+  );
+  @override
+  late final GeneratedColumn<String> assetKey = GeneratedColumn<String>(
+    'asset_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _managedMeta = const VerificationMeta(
+    'managed',
+  );
+  @override
+  late final GeneratedColumn<bool> managed = GeneratedColumn<bool>(
+    'managed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("managed" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [bookId, assetKey, managed, data];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_book_assets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LibraryLocalBookAssetRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('book_id')) {
+      context.handle(
+        _bookIdMeta,
+        bookId.isAcceptableOrUnknown(data['book_id']!, _bookIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookIdMeta);
+    }
+    if (data.containsKey('asset_key')) {
+      context.handle(
+        _assetKeyMeta,
+        assetKey.isAcceptableOrUnknown(data['asset_key']!, _assetKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetKeyMeta);
+    }
+    if (data.containsKey('managed')) {
+      context.handle(
+        _managedMeta,
+        managed.isAcceptableOrUnknown(data['managed']!, _managedMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_managedMeta);
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dataMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {bookId, assetKey};
+  @override
+  LibraryLocalBookAssetRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LibraryLocalBookAssetRow(
+      bookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}book_id'],
+      )!,
+      assetKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_key'],
+      )!,
+      managed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}managed'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+    );
+  }
+
+  @override
+  $StoredLocalBookAssetsTable createAlias(String alias) {
+    return $StoredLocalBookAssetsTable(attachedDatabase, alias);
+  }
+}
+
+class LibraryLocalBookAssetRow extends DataClass
+    implements Insertable<LibraryLocalBookAssetRow> {
+  final String bookId;
+  final String assetKey;
+  final bool managed;
+  final String data;
+  const LibraryLocalBookAssetRow({
+    required this.bookId,
+    required this.assetKey,
+    required this.managed,
+    required this.data,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['book_id'] = Variable<String>(bookId);
+    map['asset_key'] = Variable<String>(assetKey);
+    map['managed'] = Variable<bool>(managed);
+    map['data'] = Variable<String>(data);
+    return map;
+  }
+
+  StoredLocalBookAssetsCompanion toCompanion(bool nullToAbsent) {
+    return StoredLocalBookAssetsCompanion(
+      bookId: Value(bookId),
+      assetKey: Value(assetKey),
+      managed: Value(managed),
+      data: Value(data),
+    );
+  }
+
+  factory LibraryLocalBookAssetRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LibraryLocalBookAssetRow(
+      bookId: serializer.fromJson<String>(json['bookId']),
+      assetKey: serializer.fromJson<String>(json['assetKey']),
+      managed: serializer.fromJson<bool>(json['managed']),
+      data: serializer.fromJson<String>(json['data']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'bookId': serializer.toJson<String>(bookId),
+      'assetKey': serializer.toJson<String>(assetKey),
+      'managed': serializer.toJson<bool>(managed),
+      'data': serializer.toJson<String>(data),
+    };
+  }
+
+  LibraryLocalBookAssetRow copyWith({
+    String? bookId,
+    String? assetKey,
+    bool? managed,
+    String? data,
+  }) => LibraryLocalBookAssetRow(
+    bookId: bookId ?? this.bookId,
+    assetKey: assetKey ?? this.assetKey,
+    managed: managed ?? this.managed,
+    data: data ?? this.data,
+  );
+  LibraryLocalBookAssetRow copyWithCompanion(
+    StoredLocalBookAssetsCompanion data,
+  ) {
+    return LibraryLocalBookAssetRow(
+      bookId: data.bookId.present ? data.bookId.value : this.bookId,
+      assetKey: data.assetKey.present ? data.assetKey.value : this.assetKey,
+      managed: data.managed.present ? data.managed.value : this.managed,
+      data: data.data.present ? data.data.value : this.data,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryLocalBookAssetRow(')
+          ..write('bookId: $bookId, ')
+          ..write('assetKey: $assetKey, ')
+          ..write('managed: $managed, ')
+          ..write('data: $data')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(bookId, assetKey, managed, data);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LibraryLocalBookAssetRow &&
+          other.bookId == this.bookId &&
+          other.assetKey == this.assetKey &&
+          other.managed == this.managed &&
+          other.data == this.data);
+}
+
+class StoredLocalBookAssetsCompanion
+    extends UpdateCompanion<LibraryLocalBookAssetRow> {
+  final Value<String> bookId;
+  final Value<String> assetKey;
+  final Value<bool> managed;
+  final Value<String> data;
+  final Value<int> rowid;
+  const StoredLocalBookAssetsCompanion({
+    this.bookId = const Value.absent(),
+    this.assetKey = const Value.absent(),
+    this.managed = const Value.absent(),
+    this.data = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoredLocalBookAssetsCompanion.insert({
+    required String bookId,
+    required String assetKey,
+    required bool managed,
+    required String data,
+    this.rowid = const Value.absent(),
+  }) : bookId = Value(bookId),
+       assetKey = Value(assetKey),
+       managed = Value(managed),
+       data = Value(data);
+  static Insertable<LibraryLocalBookAssetRow> custom({
+    Expression<String>? bookId,
+    Expression<String>? assetKey,
+    Expression<bool>? managed,
+    Expression<String>? data,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (bookId != null) 'book_id': bookId,
+      if (assetKey != null) 'asset_key': assetKey,
+      if (managed != null) 'managed': managed,
+      if (data != null) 'data': data,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoredLocalBookAssetsCompanion copyWith({
+    Value<String>? bookId,
+    Value<String>? assetKey,
+    Value<bool>? managed,
+    Value<String>? data,
+    Value<int>? rowid,
+  }) {
+    return StoredLocalBookAssetsCompanion(
+      bookId: bookId ?? this.bookId,
+      assetKey: assetKey ?? this.assetKey,
+      managed: managed ?? this.managed,
+      data: data ?? this.data,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (bookId.present) {
+      map['book_id'] = Variable<String>(bookId.value);
+    }
+    if (assetKey.present) {
+      map['asset_key'] = Variable<String>(assetKey.value);
+    }
+    if (managed.present) {
+      map['managed'] = Variable<bool>(managed.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredLocalBookAssetsCompanion(')
+          ..write('bookId: $bookId, ')
+          ..write('assetKey: $assetKey, ')
+          ..write('managed: $managed, ')
+          ..write('data: $data, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$LibraryDatabase extends GeneratedDatabase {
   _$LibraryDatabase(QueryExecutor e) : super(e);
   $LibraryDatabaseManager get managers => $LibraryDatabaseManager(this);
@@ -1871,6 +2192,8 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
   late final $StoredBookGroupsTable storedBookGroups = $StoredBookGroupsTable(
     this,
   );
+  late final $StoredLocalBookAssetsTable storedLocalBookAssets =
+      $StoredLocalBookAssetsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1884,6 +2207,7 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
     storedBackupFiles,
     storedArchiveEntries,
     storedBookGroups,
+    storedLocalBookAssets,
   ];
 }
 
@@ -3233,6 +3557,218 @@ typedef $$StoredBookGroupsTableProcessedTableManager =
       LibraryBookGroupRow,
       PrefetchHooks Function()
     >;
+typedef $$StoredLocalBookAssetsTableCreateCompanionBuilder =
+    StoredLocalBookAssetsCompanion Function({
+      required String bookId,
+      required String assetKey,
+      required bool managed,
+      required String data,
+      Value<int> rowid,
+    });
+typedef $$StoredLocalBookAssetsTableUpdateCompanionBuilder =
+    StoredLocalBookAssetsCompanion Function({
+      Value<String> bookId,
+      Value<String> assetKey,
+      Value<bool> managed,
+      Value<String> data,
+      Value<int> rowid,
+    });
+
+class $$StoredLocalBookAssetsTableFilterComposer
+    extends Composer<_$LibraryDatabase, $StoredLocalBookAssetsTable> {
+  $$StoredLocalBookAssetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get managed => $composableBuilder(
+    column: $table.managed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StoredLocalBookAssetsTableOrderingComposer
+    extends Composer<_$LibraryDatabase, $StoredLocalBookAssetsTable> {
+  $$StoredLocalBookAssetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get managed => $composableBuilder(
+    column: $table.managed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StoredLocalBookAssetsTableAnnotationComposer
+    extends Composer<_$LibraryDatabase, $StoredLocalBookAssetsTable> {
+  $$StoredLocalBookAssetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get bookId =>
+      $composableBuilder(column: $table.bookId, builder: (column) => column);
+
+  GeneratedColumn<String> get assetKey =>
+      $composableBuilder(column: $table.assetKey, builder: (column) => column);
+
+  GeneratedColumn<bool> get managed =>
+      $composableBuilder(column: $table.managed, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+}
+
+class $$StoredLocalBookAssetsTableTableManager
+    extends
+        RootTableManager<
+          _$LibraryDatabase,
+          $StoredLocalBookAssetsTable,
+          LibraryLocalBookAssetRow,
+          $$StoredLocalBookAssetsTableFilterComposer,
+          $$StoredLocalBookAssetsTableOrderingComposer,
+          $$StoredLocalBookAssetsTableAnnotationComposer,
+          $$StoredLocalBookAssetsTableCreateCompanionBuilder,
+          $$StoredLocalBookAssetsTableUpdateCompanionBuilder,
+          (
+            LibraryLocalBookAssetRow,
+            BaseReferences<
+              _$LibraryDatabase,
+              $StoredLocalBookAssetsTable,
+              LibraryLocalBookAssetRow
+            >,
+          ),
+          LibraryLocalBookAssetRow,
+          PrefetchHooks Function()
+        > {
+  $$StoredLocalBookAssetsTableTableManager(
+    _$LibraryDatabase db,
+    $StoredLocalBookAssetsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoredLocalBookAssetsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StoredLocalBookAssetsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StoredLocalBookAssetsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> bookId = const Value.absent(),
+                Value<String> assetKey = const Value.absent(),
+                Value<bool> managed = const Value.absent(),
+                Value<String> data = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredLocalBookAssetsCompanion(
+                bookId: bookId,
+                assetKey: assetKey,
+                managed: managed,
+                data: data,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String bookId,
+                required String assetKey,
+                required bool managed,
+                required String data,
+                Value<int> rowid = const Value.absent(),
+              }) => StoredLocalBookAssetsCompanion.insert(
+                bookId: bookId,
+                assetKey: assetKey,
+                managed: managed,
+                data: data,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $StoredLocalBookAssetsTable,
+                    LibraryLocalBookAssetRow
+                  >(table),
+                  BaseReferences<
+                    _$LibraryDatabase,
+                    $StoredLocalBookAssetsTable,
+                    LibraryLocalBookAssetRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StoredLocalBookAssetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LibraryDatabase,
+      $StoredLocalBookAssetsTable,
+      LibraryLocalBookAssetRow,
+      $$StoredLocalBookAssetsTableFilterComposer,
+      $$StoredLocalBookAssetsTableOrderingComposer,
+      $$StoredLocalBookAssetsTableAnnotationComposer,
+      $$StoredLocalBookAssetsTableCreateCompanionBuilder,
+      $$StoredLocalBookAssetsTableUpdateCompanionBuilder,
+      (
+        LibraryLocalBookAssetRow,
+        BaseReferences<
+          _$LibraryDatabase,
+          $StoredLocalBookAssetsTable,
+          LibraryLocalBookAssetRow
+        >,
+      ),
+      LibraryLocalBookAssetRow,
+      PrefetchHooks Function()
+    >;
 
 class $LibraryDatabaseManager {
   final _$LibraryDatabase _db;
@@ -3253,4 +3789,6 @@ class $LibraryDatabaseManager {
       $$StoredArchiveEntriesTableTableManager(_db, _db.storedArchiveEntries);
   $$StoredBookGroupsTableTableManager get storedBookGroups =>
       $$StoredBookGroupsTableTableManager(_db, _db.storedBookGroups);
+  $$StoredLocalBookAssetsTableTableManager get storedLocalBookAssets =>
+      $$StoredLocalBookAssetsTableTableManager(_db, _db.storedLocalBookAssets);
 }

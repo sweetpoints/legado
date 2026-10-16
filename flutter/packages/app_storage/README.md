@@ -18,7 +18,7 @@ this package. Always close a repository before deleting or moving its database.
 
 ## Durability and identity
 
-Schema version 3 is stored using SQLite `user_version`. Schema installation and
+Schema version 4 is stored using SQLite `user_version`. Schema installation and
 restores are transactions. Opening a future schema refuses it without rewriting
 its data. SQLite serializes writes and a 5-second busy timeout permits short
 concurrent accesses; each repository processes its own requests in FIFO order.
@@ -83,7 +83,7 @@ when constructing ZIP exports; `backupFiles()` intentionally returns only text.
 ## Drift schema and generation
 
 `LibraryDatabase` extends the generated Drift `GeneratedDatabase` implementation.
-Eight typed tables and generated companions implement every repository query and
+Nine typed tables and generated companions implement every repository query and
 write. `MigrationStrategy` creates the schema transactionally, adopts the
 pre-Drift version-1 layout without rewriting records, adds the opaque BLOB
 entry table in the 1-to-2 migration, and refuses unsupported
@@ -121,7 +121,7 @@ CI runners; local package tests are macOS ARM64 evidence only.
 
 ## Verification
 
-17 tests cover the repository, including BLOB reopen, version-1-to-2 migration,
+42 tests cover the repository, including BLOB reopen, version-1-to-2 migration,
 migration rollback, and atomic text/BLOB rollback.
 
 `dart analyze` and `dart test` exercise real SQLite files, reopen, worker FIFO,
@@ -169,7 +169,34 @@ is renamed, interpreted or deleted by this capability.
 `localAsset(key)` retrieves a single BLOB using a typed Drift expression. SQLite
 checks its length with a `CASE` expression before returning its bytes, so a large
 restored opaque entry cannot bypass the 32 MiB read limit. Assets are preserved by
-`backupSnapshot`/`restoreArchive` byte-for-byte. This change reuses schema-3 tables
-and does not require another schema upgrade. Deleting a shelf book currently
-retains opaque archive entries, including its assets; asset garbage collection
-needs explicit ownership and reference tracking before it can safely be added.
+`backupSnapshot`/`restoreArchive` byte-for-byte. Schema 4 adds explicit local asset
+ownership and reference tracking for safe book removal.
+
+## Owned asset lifecycle
+
+Schema 4 adds `local_book_assets` with book identity, asset key, managed flag and
+lossless reference JSON. A newly imported BLOB is marked managed. Same-byte reuse
+of an existing opaque archive entry is unmanaged unless another explicit managed
+reference already proves it belongs to Flutter. Import metadata alone never grants
+ownership. Re-importing an existing book is idempotent and never stages new assets.
+
+`removeBook` removes that book's references together with its book, chapters and
+content in one transaction. Only a managed BLOB with no other book reference is
+removed. Shared assets remain until the last owner is removed. Legacy unknown
+entries and same-byte unmanaged reuse remain untouched. A late SQL delete failure
+rolls asset and reference removal back with the book.
+
+The managed backup extension remains version 1 and adds `localAssets`, a list of
+`{bookUrl, assetKey, managed}` records. Unknown fields on these records survive.
+Full archive restores atomically replace old ownership with the incoming ownership
+claims and bytes. An archive without that field clears prior ownership claims so
+new unknown bytes cannot inherit stale deletion rights. Text-only restores retain
+existing claims when the field is absent, and cannot promote previously unmanaged
+bytes to managed ownership merely by introducing a metadata claim. Invalid keys,
+duplicate references or conflicting managed flags roll back the restore.
+
+Schemas 1, 2 and 3 upgrade transactionally to schema 4. Older schema-3 assets lack
+explicit ownership evidence and remain unmanaged after upgrade; no filename-based
+inference or migration-time deletion occurs. Newly imported assets have complete
+ownership tracking. Asset cleanup for historical unowned bytes requires a future
+explicit user action, rather than risking loss of retained unknown data.
