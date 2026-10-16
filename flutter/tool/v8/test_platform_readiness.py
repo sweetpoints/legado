@@ -69,6 +69,21 @@ class ReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'jitless'):
             self.run_audit(m, p, local)
 
+    def test_ios_consumer_uses_authenticated_top_level_platform_metadata(self):
+        m, p, local = self.fixture()
+        target = 'ios-simulator-arm64'
+        entry = m['targets'][target]
+        entry.pop('targetConfig')
+        entry.update(environment='simulator', minIOS='15.0',
+                     binaryInspection={'architecture': 'arm64'})
+        local['targets'][target] = {'cpu': 'arm64', 'environment': 'simulator', 'minIOS': '15.0'}
+        p['sdkManifestSha256'][target] = 'e' * 64
+        result = self.run_audit(m, p, local)
+        self.assertTrue(next(row for row in result['targets'] if row['target'] == target)['consumerConfigured'])
+        entry['environment'] = 'device'
+        with self.assertRaisesRegex(ValueError, 'metadata'):
+            self.run_audit(m, p, local)
+
     def test_duplicate_sdk_target_is_rejected(self):
         m, p, local = self.fixture()
         m['assets'].append(dict(m['assets'][1]))

@@ -16,8 +16,8 @@ REQUIRED_TARGETS = (
     'windows-x64', 'windows-arm64',
 )
 BLOCKERS = {
-    'ios-arm64': 'iOS device framework packaging, code signing, jitless runtime and source conformance',
-    'ios-simulator-arm64': 'iOS simulator framework packaging, jitless runtime and source conformance',
+    'ios-arm64': 'Signed physical-device application runtime and complete source conformance',
+    'ios-simulator-arm64': 'Full migrated application and complete source conformance (example native asset integration passed)',
     'linux-x64': 'Pinned Linux sysroot, shared bridge linker/export validation and runtime conformance',
     'linux-arm64': 'Pinned ARM64 Linux sysroot, cross linker/export validation and ARM64 runtime conformance',
     'windows-x64': 'Pinned Windows Clang/MSVC SDK, DLL export inspection and portable publish lock',
@@ -62,7 +62,11 @@ def audit(manifest_bytes, pin, application_pins):
         if configured:
             if not available or target not in pin['sdkManifestSha256']:
                 raise ValueError('Configured consumer lacks a pinned SDK manifest')
-            if sdk.get('targetConfig') != application_pins['targets'][target]:
+            actual_config = sdk.get('targetConfig')
+            if actual_config is None and target.startswith('ios-'):
+                actual_config = {'cpu': sdk.get('binaryInspection', {}).get('architecture'),
+                                 'environment': sdk.get('environment'), 'minIOS': sdk.get('minIOS')}
+            if actual_config != application_pins['targets'][target]:
                 raise ValueError('Configured consumer target metadata differs')
         rows.append({
             'target': target, 'sdkPublished': available,
@@ -82,9 +86,18 @@ def main():
     parser.add_argument('--release-manifest', required=True, type=Path)
     parser.add_argument('--require-all-consumers', action='store_true')
     args = parser.parse_args()
-    result = audit(args.release_manifest.read_bytes(),
-                   json.loads((HERE / 'release-pin.json').read_text()),
-                   json.loads((HERE / 'pins.json').read_text()))
+    release = json.loads((HERE / 'release-pin.json').read_text())
+    pins = json.loads((HERE / 'pins.json').read_text())
+    ios_release = json.loads((HERE / 'ios-release-pin.json').read_text())
+    ios_pins = json.loads((HERE / 'ios-pins.json').read_text())
+    if (any(ios_pins[key] != pins[key] for key in ('v8', 'depotTools')) or
+            any(ios_release[key] != release[key] for key in
+                ('v8', 'depotTools', 'releaseManifestSha256'))):
+        raise ValueError('iOS and Android/macOS consumer source pins differ')
+    pins['targets'] = pins['targets'] | ios_pins['targets']
+    release['assets'] += ios_release['assets']
+    release['sdkManifestSha256'] |= ios_release['sdkManifestSha256']
+    result = audit(args.release_manifest.read_bytes(), release, pins)
     print(json.dumps(result, indent=2))
     if args.require_all_consumers and not result['allConsumersConfigured']:
         raise SystemExit(1)
