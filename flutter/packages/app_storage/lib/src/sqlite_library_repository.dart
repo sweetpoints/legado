@@ -814,8 +814,18 @@ class SqliteLibraryRepository
             throw const FormatException('Invalid local book asset');
           }
         }
-        // Re-imports must not reset an existing book's progress or user edits.
-        if (await _book(book.url) != null) return;
+        // Re-imports preserve every book/content field. A known local document
+        // may repair only resource keys already referenced by its stored metadata.
+        final storedBook = await _book(book.url);
+        if (storedBook != null) {
+          final referenced = _repairableLocalAssetKeys(storedBook);
+          final repairs = {
+            for (final entry in assetSnapshot.entries)
+              if (referenced.contains(entry.key)) entry.key: entry.value,
+          };
+          await _storeLocalAssets(book.url, repairs);
+          return;
+        }
         await _putChapters(book.url, chapterSnapshot);
         await (_db.delete(
           _db.storedContent,
@@ -832,61 +842,102 @@ class SqliteLibraryRepository
             );
           }
         });
-        for (final entry in assetSnapshot.entries) {
-          final textQuery = _db.selectOnly(_db.storedBackupFiles)
-            ..addColumns([_db.storedBackupFiles.id])
-            ..where(_db.storedBackupFiles.id.equals(entry.key));
-          if (await textQuery.getSingleOrNull() != null) {
-            throw StateError('Local asset collides with preserved legacy text');
-          }
-          final existing = await _readLocalAsset(entry.key);
-          var managed = existing == null;
-          if (existing != null) {
-            if (!_sameBytes(existing, entry.value)) {
-              throw StateError(
-                'Local asset collides with preserved archive data',
-              );
-            }
-            final ownerQuery = _db.selectOnly(_db.storedLocalBookAssets)
-              ..addColumns([_db.storedLocalBookAssets.assetKey])
-              ..where(
-                _db.storedLocalBookAssets.assetKey.equals(entry.key) &
-                    _db.storedLocalBookAssets.managed.equals(true),
-              )
-              ..limit(1);
-            managed = await ownerQuery.getSingleOrNull() != null;
-          } else {
-            await _db
-                .into(_db.storedArchiveEntries)
-                .insert(
-                  StoredArchiveEntriesCompanion.insert(
-                    id: entry.key,
-                    value: Uint8List.fromList(entry.value),
-                  ),
-                );
-          }
-          final ownership = {
-            'bookUrl': book.url,
-            'assetKey': entry.key,
-            'managed': managed,
-          };
-          await _db
-              .into(_db.storedLocalBookAssets)
-              .insert(
-                StoredLocalBookAssetsCompanion.insert(
-                  bookId: book.url,
-                  assetKey: entry.key,
-                  managed: managed,
-                  data: jsonEncode(ownership),
-                ),
-              );
-        }
+        await _storeLocalAssets(book.url, assetSnapshot);
         // Publish the shelf row only after every dependent value has been staged.
         // A failure here still rolls back chapters, contents and asset insertions.
         await _putBook(book);
       }),
       change: true,
     );
+  }
+
+  Set<String> _repairableLocalAssetKeys(LegacyBookRecord book) {
+    final json = book.toJson();
+    final keys = <String>{};
+    final document = json['flutterDocument'];
+    if (book.url.startsWith('local:pdf:') &&
+        document is Map &&
+        document['format'] == 'pdf' &&
+        document['pageCount'] is int &&
+        (document['pageCount'] as int) > 0 &&
+        document['assetKey'] is String) {
+      keys.add(document['assetKey'] as String);
+    }
+    if (book.url.startsWith('local:epub:') &&
+        json['format'] == 'epub' &&
+        json['originalAssetKey'] is String) {
+      keys.add(json['originalAssetKey'] as String);
+    }
+    return keys.where((key) => _assetBelongsToBook(book.url, key)).toSet();
+  }
+
+  Future<void> _storeLocalAssets(
+    String bookUrl,
+    Map<String, List<int>> assets,
+  ) async {
+    for (final entry in assets.entries) {
+      final textQuery = _db.selectOnly(_db.storedBackupFiles)
+        ..addColumns([_db.storedBackupFiles.id])
+        ..where(_db.storedBackupFiles.id.equals(entry.key));
+      if (await textQuery.getSingleOrNull() != null) {
+        throw StateError('Local asset collides with preserved legacy text');
+      }
+      final existing = await _readLocalAsset(entry.key);
+      if (existing != null && !_sameBytes(existing, entry.value)) {
+        throw StateError('Local asset collides with preserved archive data');
+      }
+      final refs = await (_db.select(
+        _db.storedLocalBookAssets,
+      )..where((t) => t.assetKey.equals(entry.key))).get();
+      final managed = existing == null || refs.any((ref) => ref.managed);
+      if (existing == null) {
+        await _db
+            .into(_db.storedArchiveEntries)
+            .insert(
+              StoredArchiveEntriesCompanion.insert(
+                id: entry.key,
+                value: Uint8List.fromList(entry.value),
+              ),
+            );
+      }
+      // Repaired bytes are newly created by Flutter. Keep shared ownership flags
+      // consistent without rewriting any retained bytes or reference extensions.
+      if (managed) {
+        for (final ref in refs.where((ref) => !ref.managed)) {
+          final json = _decode(ref.data)..['managed'] = true;
+          await (_db.update(_db.storedLocalBookAssets)..where(
+                (t) =>
+                    t.bookId.equals(ref.bookId) &
+                    t.assetKey.equals(ref.assetKey),
+              ))
+              .write(
+                StoredLocalBookAssetsCompanion(
+                  managed: const Value(true),
+                  data: Value(jsonEncode(json)),
+                ),
+              );
+        }
+      }
+      final prior = refs.where((ref) => ref.bookId == bookUrl).firstOrNull;
+      final ownership = prior == null
+          ? <String, Object?>{}
+          : _decode(prior.data);
+      ownership.addAll({
+        'bookUrl': bookUrl,
+        'assetKey': entry.key,
+        'managed': managed,
+      });
+      await _db
+          .into(_db.storedLocalBookAssets)
+          .insertOnConflictUpdate(
+            StoredLocalBookAssetsCompanion.insert(
+              bookId: bookUrl,
+              assetKey: entry.key,
+              managed: managed,
+              data: jsonEncode(ownership),
+            ),
+          );
+    }
   }
 
   bool _assetBelongsToBook(String bookUrl, String key) {
