@@ -34,14 +34,20 @@ abstract final class EpubImporter {
     required String name,
     required Uint8List bytes,
   }) async {
+    final durable = repository is LocalBookRepository;
+    final original =
+        durable && bytes.length <= LocalBookAssets.maximumAssetBytes
+        ? Uint8List.fromList(bytes)
+        : null;
     // A bound method captures only the data-only receiver. A closure here can
     // accidentally capture a repository with native handles or a BuildContext.
-    final decoded = await Isolate.run(_DecodeJob(name, bytes).call);
+    final decoded = await Isolate.run(_DecodeJob(name, original ?? bytes).call);
     final book = decoded.book;
     final url = decoded.url;
     final existing = await repository.book(url);
     if (existing != null) return existing;
     final chapters = <ReaderChapter>[];
+    final contents = <String, String>{};
     for (var index = 0; index < book.chapters.length; index++) {
       final item = book.chapters[index];
       final chapter = ReaderChapter(
@@ -49,23 +55,40 @@ abstract final class EpubImporter {
         title: item.title,
         index: index,
       );
-      await repository.putContent(url, chapter.url, item.text);
+      contents[chapter.url] = item.text;
       chapters.add(chapter);
     }
-    await repository.putChapters(url, chapters);
+    final assetKey = original == null
+        ? null
+        : '${LocalBookAssets.prefix}${url.split(':').last}/original.epub';
     final record = LegacyBookRecord({
       'bookUrl': url,
       'name': book.title,
       'author': book.author,
       'origin': 'local',
       'originName': 'EPUB',
+      'format': 'epub',
+      'originalAssetKey': ?assetKey,
       'type': 0,
       'durChapterIndex': 0,
       'durChapterPos': 0,
       'totalChapterNum': chapters.length,
     });
-    await repository.putBook(record);
-    return record;
+    if (repository is LocalBookRepository) {
+      await (repository as LocalBookRepository).importLocalBook(
+        record,
+        chapters,
+        contents,
+        assetsByKey: {?assetKey: original!},
+      );
+    } else {
+      for (final entry in contents.entries) {
+        await repository.putContent(url, entry.key, entry.value);
+      }
+      await repository.putChapters(url, chapters);
+      await repository.putBook(record);
+    }
+    return await repository.book(url) ?? record;
   }
 }
 

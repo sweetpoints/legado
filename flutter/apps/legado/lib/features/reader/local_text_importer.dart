@@ -31,6 +31,7 @@ class LocalTextImporter {
       sections.add((start: heading.start, title: heading.group(0)!.trim()));
     }
     final chapters = <ReaderChapter>[];
+    final contents = <String, String>{};
     for (var index = 0; index < sections.length; index++) {
       final section = sections[index];
       final end = index + 1 < sections.length
@@ -41,14 +42,9 @@ class LocalTextImporter {
         title: section.title,
         index: index,
       );
-      await repository.putContent(
-        url,
-        chapter.url,
-        text.substring(section.start, end),
-      );
+      contents[chapter.url] = text.substring(section.start, end);
       chapters.add(chapter);
     }
-    await repository.putChapters(url, chapters);
     final book = LegacyBookRecord({
       'bookUrl': url,
       'name': name.trim(),
@@ -60,7 +56,21 @@ class LocalTextImporter {
       'durChapterPos': 0,
       'totalChapterNum': chapters.length,
     });
-    await repository.putBook(book);
-    return book;
+    if (repository is LocalBookRepository) {
+      await (repository as LocalBookRepository).importLocalBook(
+        book,
+        chapters,
+        contents,
+      );
+    } else {
+      // Compatibility for external repositories without the durable capability.
+      // Production storage implements LocalBookRepository and commits atomically.
+      for (final entry in contents.entries) {
+        await repository.putContent(url, entry.key, entry.value);
+      }
+      await repository.putChapters(url, chapters);
+      await repository.putBook(book);
+    }
+    return await repository.book(url) ?? book;
   }
 }
