@@ -15,7 +15,12 @@ import 'package:material_ui/material_ui.dart';
 Future<void> waitFor(WidgetTester tester, bool Function() ready) async {
   for (var attempt = 0; attempt < 160; attempt++) {
     await tester.pump(const Duration(milliseconds: 50));
-    if (ready()) return;
+    if (ready()) {
+      // Route contents exist before their slide animation becomes hittable.
+      // Wait for the native transition and confirm the state stayed ready.
+      await tester.pump(const Duration(milliseconds: 400));
+      if (ready()) return;
+    }
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   expect(
@@ -32,6 +37,7 @@ Finder textContent(String text) => find.byWidgetPredicate(
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  WidgetController.hitTestWarningShouldBeFatal = true;
 
   testWidgets(
     'native file-backed Drift closes and reopens book and UTF-16 progress',
@@ -208,9 +214,10 @@ function getContent(chapter) { return java.ajax(chapter.url); }
         repository,
         name: '原生验收书',
         text:
-            '第一章 起点\n第一章真实正文\n第二章 持久化\n'
+            '第一章 起点\n这里是第一段真实正文\n第二章 持久化\n'
             '${List.generate(120, (index) => '第$index行持久化正文😀。').join('\n')}',
       );
+      expect(await repository.chapters(book.url), hasLength(2));
       await repository.setSetting('app.locale', 'zh');
       container = ProviderContainer(
         overrides: [
@@ -225,7 +232,7 @@ function getContent(chapter) { return java.ajax(chapter.url); }
       );
       await waitFor(tester, () => find.text('原生验收书').evaluate().isNotEmpty);
       await tester.tap(find.text('原生验收书'));
-      await waitFor(tester, () => textContent('第一章真实正文').evaluate().isNotEmpty);
+      await waitFor(tester, () => textContent('这里是第一段真实正文').evaluate().isNotEmpty);
       await tester.tap(find.byTooltip('下一章'));
       await waitFor(
         tester,
