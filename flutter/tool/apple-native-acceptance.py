@@ -147,16 +147,6 @@ def main():
     parser.add_argument('--test-timeout', type=int, default=1200)
     parser.add_argument('--list-only', action='store_true')
     args = parser.parse_args()
-    if platform.system() != 'Darwin' or platform.machine().lower() not in ('arm64', 'aarch64'):
-        raise PhaseFailure('iOS native acceptance requires a macOS ARM64 host')
-    if args.boot_timeout < 1 or args.test_timeout < 1:
-        raise PhaseFailure('Phase timeouts must be positive')
-    if not args.list_only and not args.device and os.environ.get('GITHUB_ACTIONS') != 'true':
-        raise PhaseFailure('Local simulator execution requires an explicit --device UUID')
-    if sys.version_info < (3, 12):
-        raise PhaseFailure('Python 3.12+ is required for the fixed SDK consumer')
-    # Preserve setup-python's actual executable through Xcode's reduced PATH.
-    os.environ.setdefault('SOURCE_V8_PYTHON', sys.executable)
     runner = Runner(args.output.resolve(), ROOT / 'flutter/apps/legado')
     (runner.output / 'host.json').write_text(json.dumps({
         'os': platform.system(), 'architecture': platform.machine(),
@@ -164,7 +154,18 @@ def main():
         'githubActions': os.environ.get('GITHUB_ACTIONS') == 'true',
     }, indent=2) + '\n')
     selected = None
+    runner.save()
     try:
+        if platform.system() != 'Darwin' or platform.machine().lower() not in ('arm64', 'aarch64'):
+            raise PhaseFailure('iOS native acceptance requires a macOS ARM64 host')
+        if args.boot_timeout < 1 or args.test_timeout < 1:
+            raise PhaseFailure('Phase timeouts must be positive')
+        if not args.list_only and not args.device and os.environ.get('GITHUB_ACTIONS') != 'true':
+            raise PhaseFailure('Local simulator execution requires an explicit --device UUID')
+        if sys.version_info < (3, 12):
+            raise PhaseFailure('Python 3.12+ is required for the fixed SDK consumer')
+        # Preserve setup-python's actual executable through Xcode's reduced PATH.
+        os.environ.setdefault('SOURCE_V8_PYTHON', sys.executable)
         sdk = runner.command('xcode-sdk', ['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], 30).strip()
         snapshot = json.loads(runner.command('available-devices',
                                             ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], 30))
@@ -185,10 +186,10 @@ def main():
                                       '-d', uuid], args.test_timeout)
     except (PhaseFailure, OSError, ValueError) as error:
         (runner.output / 'failure.txt').write_text(str(error) + '\n')
-        for name, command in [
+        for name, command in ([] if platform.system() != 'Darwin' else [
             ('diagnostic-devices', ['xcrun', 'simctl', 'list', 'devices', '--json']),
             ('diagnostic-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '--json']),
-        ]:
+        ]):
             try:
                 runner.command(name, command, 20)
             except (PhaseFailure, OSError):
