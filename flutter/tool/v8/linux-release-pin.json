@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "version": "15.4.80.25"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  },
+  "repository": "sweetpoints/v8-prebuilt",
+  "tag": "v8-15.4.80.25",
+  "releaseManifestSha256": "d01f58c45b713edcccf3fdc3bc5969d2eb417773d895522e3ae330df8c71f0f2",
+  "assets": [
+    {
+      "name": "v8-15.4.80.25-linux-x64.tar.gz",
+      "sha256": "3dc2d56f7d6493ea8dd3665dc8868107c93020290f45e13a13511f8bf7539cbf",
+      "size": 57608701,
+      "target": "linux-x64"
+    },
+    {
+      "name": "v8-15.4.80.25-linux-arm64.tar.gz",
+      "sha256": "7858ae7c10985190b287b4bd1297042ef09a74ee62ad76e3808ba77f2b4a36dc",
+      "size": 57049432,
+      "target": "linux-arm64"
+    }
+  ],
+  "sdkManifestSha256": {
+    "linux-x64": "5c2dbf0163f54460c06bdbdfd288847261ed6773cb80abe82d823d5e97b62208",
+    "linux-arm64": "a47183b4c0883b1a5385d8d384eb9e9e4b9e3337e9a7462559ed89a8a4fa24b9"
+  },
+  "sdkPinsSha256": "f04d578f82c6b5d39ebd103d26adf0dae79be5194c9bb56d26720e10706b7fe1"
+}
