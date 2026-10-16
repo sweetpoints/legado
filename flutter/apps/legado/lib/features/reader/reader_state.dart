@@ -1,8 +1,9 @@
 import 'package:app_core/app_core.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'reader_state.freezed.dart';
+part 'reader_state.g.dart';
 
 @freezed
 abstract class ReaderViewState with _$ReaderViewState {
@@ -34,15 +35,9 @@ abstract class ReaderIdentity with _$ReaderIdentity {
 }
 
 /// Each reader route owns an immutable session. Layout objects stay in the UI.
-final readerStateProvider = NotifierProvider.autoDispose
-    .family<ReaderStateController, ReaderViewState, ReaderIdentity>(
-      ReaderStateController.new,
-    );
-
-class ReaderStateController extends Notifier<ReaderViewState> {
-  ReaderStateController(this.identity);
-  final ReaderIdentity identity;
+@Riverpod(name: 'readerStateProvider')
+class ReaderStateController extends _$ReaderStateController {
   @override
-  ReaderViewState build() => const ReaderViewState();
+  ReaderViewState build(ReaderIdentity identity) => const ReaderViewState();
   void replace(ReaderViewState value) => state = value;
 }

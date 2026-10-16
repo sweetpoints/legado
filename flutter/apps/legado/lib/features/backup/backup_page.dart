@@ -3,18 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:app_backup/app_backup.dart';
 import 'package:app_core/app_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/file_exchange.dart';
 import '../../app/providers.dart';
 import '../../l10n/generated/app_localizations.dart';
 
-final backupOperationProvider =
-    NotifierProvider<BackupOperationController, bool>(
-      BackupOperationController.new,
-    );
+part 'backup_page.g.dart';
 
-class BackupOperationController extends Notifier<bool> {
+@Riverpod(name: 'backupOperationProvider', keepAlive: true)
+class BackupOperationController extends _$BackupOperationController {
   @override
   bool build() => false;
   Future<void> run(Future<void> Function() action) async {

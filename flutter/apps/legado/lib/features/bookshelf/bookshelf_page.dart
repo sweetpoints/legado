@@ -1,5 +1,6 @@
 import 'package:app_core/app_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -14,11 +15,10 @@ import 'bookshelf_state.dart';
 import 'bookshelf_groups.dart';
 import 'text_encoding_dialog.dart';
 
-final importingTextProvider = NotifierProvider<ImportingTextController, bool>(
-  ImportingTextController.new,
-);
+part 'bookshelf_page.g.dart';
 
-class ImportingTextController extends Notifier<bool> {
+@Riverpod(name: 'importingTextProvider', keepAlive: true)
+class ImportingTextController extends _$ImportingTextController {
   @override
   bool build() => false;
   Future<void> importEpub() async {
