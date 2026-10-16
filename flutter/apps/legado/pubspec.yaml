@@ -38,6 +38,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 dev_dependencies:
+  sqlite3: ^3.7.1
   integration_test:
     sdk: flutter
   flutter_test:
