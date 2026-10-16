@@ -2,8 +2,10 @@ import 'legacy_backup.dart';
 import 'library_repository.dart';
 
 /// Optional durable capability for all-or-nothing local book imports.
-/// Existing book identities are idempotent: importing again preserves progress,
-/// metadata, content and assets already associated with the existing book.
+/// Existing identities preserve progress, metadata, chapters and contents. For a
+/// known PDF/EPUB document, assets already referenced by its stored metadata may
+/// be checked or repaired atomically; different existing bytes are rejected.
+/// New unreferenced asset keys on an existing book are ignored.
 abstract interface class LocalBookRepository {
   Future<void> importLocalBook(
     LegacyBookRecord book,

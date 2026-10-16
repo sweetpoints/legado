@@ -121,7 +121,7 @@ CI runners; local package tests are macOS ARM64 evidence only.
 
 ## Verification
 
-42 tests cover the repository, including BLOB reopen, version-1-to-2 migration,
+48 tests cover the repository, including BLOB reopen, version-1-to-2 migration,
 migration rollback, and atomic text/BLOB rollback.
 
 `dart analyze` and `dart test` exercise real SQLite files, reopen, worker FIFO,
@@ -154,7 +154,7 @@ Android's locale-specific Chinese collation is not replicated here.
 `LocalBookRepository.importLocalBook` commits a complete book, its chapter list,
 its chapter-content map and optional small native assets in one Drift transaction.
 A late SQLite failure rolls back every row. Re-importing an existing book identity
-is idempotent and preserves its user edits/progress. Caller maps, lists and bytes
+preserves its user edits/progress, metadata, chapters and contents. Caller maps, lists and bytes
 are snapshotted. Non-volume chapters require corresponding content; extra content
 keys are rejected. Asset-only PDF books may use empty chapter/content collections.
 
@@ -178,7 +178,8 @@ Schema 4 adds `local_book_assets` with book identity, asset key, managed flag an
 lossless reference JSON. A newly imported BLOB is marked managed. Same-byte reuse
 of an existing opaque archive entry is unmanaged unless another explicit managed
 reference already proves it belongs to Flutter. Import metadata alone never grants
-ownership. Re-importing an existing book is idempotent and never stages new assets.
+ownership. Re-importing an existing book does not stage unrelated new assets;
+the narrow missing-document repair described below is the only exception.
 
 `removeBook` removes that book's references together with its book, chapters and
 content in one transaction. Only a managed BLOB with no other book reference is
@@ -200,3 +201,22 @@ explicit ownership evidence and remain unmanaged after upgrade; no filename-base
 inference or migration-time deletion occurs. Newly imported assets have complete
 ownership tracking. Asset cleanup for historical unowned bytes requires a future
 explicit user action, rather than risking loss of retained unknown data.
+
+## Repairing a missing local document
+
+A restored PDF can retain its book metadata and page position while its BLOB is
+missing. `importLocalBook` may repair assets explicitly referenced by the stored
+PDF's `flutterDocument` (`format: pdf`, positive `pageCount`, exact `assetKey`) or
+an EPUB's known `originalAssetKey`. Both the stored book identity and asset key
+must use the same existing content-identity namespace. Incoming book metadata
+cannot authorize an additional key. All unreferenced new keys are ignored for an
+existing book, preserving the no-orphan re-import contract.
+
+The repair checks existing bytes and refuses a conflict; it never overwrites an
+old BLOB. Same-byte unknown legacy data remain unmanaged. Missing bytes are newly
+created and receive explicit ownership in the same transaction. Existing reference
+extensions and shared references are preserved. Book metadata, progress, chapter
+lists and chapter contents are not rewritten. A failure when publishing the final
+ownership row rolls back staged BLOBs and emits no change notification. Tests cover
+file reopen, page-position preservation, different-byte refusal, malicious incoming
+references, restored dangling ownership, and removal after successful repair.
