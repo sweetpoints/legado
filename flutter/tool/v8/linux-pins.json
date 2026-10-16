@@ -1,0 +1,40 @@
+{
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "8a5434051036b32412a2ecb10c213a72e3f3ccb9"
+  },
+  "schemaVersion": 1,
+  "targets": {
+    "linux-arm64": {
+      "cpu": "arm64",
+      "minGlibc": "2.31"
+    },
+    "linux-x64": {
+      "cpu": "x64",
+      "minGlibc": "2.31"
+    }
+  },
+  "v8": {
+    "repository": "https://chromium.googlesource.com/v8/v8.git",
+    "revision": "c45871fec706a6e7b715e607065bb4578b23ce9f",
+    "version": "15.4.80.25"
+  },
+  "sysroots": {
+    "linux-x64": {
+      "url": "https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "sha256": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "size": 19727236,
+      "metadataUrl": "https://chromium.googlesource.com/chromium/src/build/+/fdd530b37c6cd6c8645cdfa296d209643ab2dc26/linux/sysroot_scripts/sysroots.json",
+      "metadataSha256": "586a193b7af31448bd09f8dd843cd0d19c1a9a5311c58a5ddf59805ba2480044",
+      "filesSha256": "71141b1f69d9204759000833ef99cb70f0b1123762e966c30ecf1baf6a03dc6c"
+    },
+    "linux-arm64": {
+      "url": "https://commondatastorage.googleapis.com/chrome-linux-sysroot/c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8",
+      "sha256": "c7176a4c7aacbf46bda58a029f39f79a68008d3dee6518f154dcf5161a5486d8",
+      "size": 18420984,
+      "metadataUrl": "https://chromium.googlesource.com/chromium/src/build/+/fdd530b37c6cd6c8645cdfa296d209643ab2dc26/linux/sysroot_scripts/sysroots.json",
+      "metadataSha256": "586a193b7af31448bd09f8dd843cd0d19c1a9a5311c58a5ddf59805ba2480044",
+      "filesSha256": "0962b21984316398d8ad4ce44796d765aef49813e214eb60fc08a774a879f277"
+    }
+  }
+}
