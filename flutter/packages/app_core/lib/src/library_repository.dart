@@ -75,3 +75,10 @@ abstract interface class ArchiveLibraryRepository {
     Map<String, List<int>> retainedEntries,
   );
 }
+
+/// Optional access to one preserved legacy entry without exporting caches.
+/// Names are opaque archive keys; implementations never read filesystem paths.
+/// Live books/sources use their dedicated repository methods instead.
+abstract interface class LegacyBackupFileReader {
+  Future<String?> backupFile(String name);
+}

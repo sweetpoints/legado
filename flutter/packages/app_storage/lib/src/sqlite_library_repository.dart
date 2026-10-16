@@ -12,7 +12,10 @@ import 'library_database.dart';
 /// Drift-backed library with SQLite work in a Drift-managed worker isolate.
 /// The historical class name is retained as the public storage boundary.
 class SqliteLibraryRepository
-    implements LibraryRepository, ArchiveLibraryRepository {
+    implements
+        LibraryRepository,
+        ArchiveLibraryRepository,
+        LegacyBackupFileReader {
   SqliteLibraryRepository._(this._db);
 
   static const backupEntry = 'legado-library.json';
@@ -280,6 +283,14 @@ class SqliteLibraryRepository
   @override
   Future<Map<String, String>> backupFiles() =>
       _run(() => _db.transaction(_backupFiles));
+
+  @override
+  Future<String?> backupFile(String name) => _run(() async {
+    final row = await (_db.select(
+      _db.storedBackupFiles,
+    )..where((t) => t.id.equals(name))).getSingleOrNull();
+    return row?.value;
+  });
 
   Future<Map<String, String>> _backupFiles() async {
     final rows = await (_db.select(

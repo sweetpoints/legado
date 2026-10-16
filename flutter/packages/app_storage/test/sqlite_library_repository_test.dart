@@ -32,6 +32,25 @@ void main() {
   });
 
   test(
+    'single legacy entry read preserves bytes and treats names literally',
+    () async {
+      await repository.restoreBackup(
+        LegacyBackupDocument.parse({
+          'bookmark.json': ' [ {"future":true} ] \n',
+          'nested/unknown.txt': 'unchanged',
+        }),
+      );
+      expect(
+        await repository.backupFile('bookmark.json'),
+        ' [ {"future":true} ] \n',
+      );
+      expect(await repository.backupFile('nested/unknown.txt'), 'unchanged');
+      expect(await repository.backupFile('../bookmark.json'), isNull);
+      expect(await repository.backupFile('missing'), isNull);
+    },
+  );
+
+  test(
     'file reopen retains progress, sources, chapters, content and settings',
     () async {
       await repository.putBook(record('opaque book'));
