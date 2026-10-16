@@ -25,6 +25,10 @@
       "abi": "x86_64",
       "minApi": 26,
       "elfMachine": 62
+    },
+    "macos-x64": {
+      "cpu": "x64",
+      "minMacOS": "13.0"
     }
   }
 }

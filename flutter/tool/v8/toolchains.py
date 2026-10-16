@@ -91,8 +91,10 @@ def install(cache_root=None):
 
 
 def sysroot(target):
-    if target == 'macos-arm64':
+    if target in ('macos-arm64', 'macos-x64'):
         return Path(subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip())
+    if target not in ('android-arm64', 'android-x64'):
+        raise ValueError('Unsupported bridge sysroot target: ' + target)
     pins = json.loads((HERE / 'toolchain-pins.json').read_text())
     sdk = os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME')
     if not sdk:
@@ -111,8 +113,10 @@ def sysroot(target):
 
 
 def symbol_inspector(target, root):
-    if target == 'macos-arm64':
+    if target in ('macos-arm64', 'macos-x64'):
         return Path(subprocess.check_output(['xcrun', '--find', 'nm'], text=True).strip())
+    if target not in ('android-arm64', 'android-x64'):
+        raise ValueError('Unsupported bridge symbol inspector target: ' + target)
     candidate = root.parent / 'bin/llvm-nm'
     if not candidate.is_file(): raise ValueError('Pinned NDK symbol inspector missing')
     return candidate

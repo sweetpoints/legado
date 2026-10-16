@@ -9,18 +9,16 @@ import 'package:test/test.dart';
 import '../hook/artifacts.dart';
 
 void main() {
-  test(
-    'Android selects matching official artifacts while macOS stays arm64',
-    () {
-      expect(artifactTarget(OS.android, Architecture.arm64), 'android-arm64');
-      expect(artifactTarget(OS.android, Architecture.x64), 'android-x64');
-      expect(artifactTarget(OS.macOS, Architecture.arm64), 'macos-arm64');
-      expect(
-        () => artifactTarget(OS.macOS, Architecture.x64),
-        throwsUnsupportedError,
-      );
-    },
-  );
+  test('Android and macOS select both pinned architectures', () {
+    expect(artifactTarget(OS.android, Architecture.arm64), 'android-arm64');
+    expect(artifactTarget(OS.android, Architecture.x64), 'android-x64');
+    expect(artifactTarget(OS.macOS, Architecture.arm64), 'macos-arm64');
+    expect(artifactTarget(OS.macOS, Architecture.x64), 'macos-x64');
+    expect(
+      () => artifactTarget(OS.windows, Architecture.x64),
+      throwsUnsupportedError,
+    );
+  });
   late Directory directory;
   late Directory package;
   late File binary;
@@ -108,6 +106,45 @@ void main() {
     await file.writeAsString(jsonEncode(manifest));
     await expectLater(
       verifyArtifact(directory, package, 'android-x64'),
+      throwsStateError,
+    );
+  });
+  test('macOS x64 uses its own SDK provenance and deployment floor', () async {
+    final pin = jsonDecode(
+      await File('${package.path}/../../tool/v8/release-pin.json')
+          .readAsString(),
+    ) as Map;
+    final x64 = File('${directory.path}/macos-x64/libsource_v8.dylib');
+    await x64.parent.create();
+    await x64.writeAsBytes([1, 2, 3, 4]);
+    final entry = Map<String, Object>.from(
+      (manifest['targets'] as Map)['macos-arm64'] as Map,
+    );
+    entry['binary'] = 'macos-x64/libsource_v8.dylib';
+    entry['sdkProvenance'] = {
+      'target': 'macos-x64',
+      'releaseManifestSha256': pin['releaseManifestSha256'],
+      'manifestSha256': (pin['sdkManifestSha256'] as Map)['macos-x64'],
+    };
+    (manifest['targets'] as Map)['macos-x64'] = entry;
+    final file = File('${directory.path}/manifest.json');
+    await file.writeAsString(jsonEncode(manifest));
+    expect(
+      (await verifyArtifact(directory, package, 'macos-x64')).binary.path,
+      x64.path,
+    );
+    entry['minMacOS'] = '12.0';
+    await file.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, 'macos-x64'),
+      throwsStateError,
+    );
+    entry['minMacOS'] = '13.0';
+    (entry['sdkProvenance'] as Map)['manifestSha256'] =
+        (pin['sdkManifestSha256'] as Map)['macos-arm64'];
+    await file.writeAsString(jsonEncode(manifest));
+    await expectLater(
+      verifyArtifact(directory, package, 'macos-x64'),
       throwsStateError,
     );
   });

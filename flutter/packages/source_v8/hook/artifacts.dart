@@ -14,6 +14,9 @@ String artifactTarget(OS os, Architecture architecture) {
   if (os == OS.macOS && architecture == Architecture.arm64) {
     return 'macos-arm64';
   }
+  if (os == OS.macOS && architecture == Architecture.x64) {
+    return 'macos-x64';
+  }
   if (os == OS.android && architecture == Architecture.arm64) {
     return 'android-arm64';
   }
@@ -21,7 +24,7 @@ String artifactTarget(OS os, Architecture architecture) {
     return 'android-x64';
   }
   throw UnsupportedError(
-    'Official V8 supports macOS arm64 and Android arm64/x64; requested $os/$architecture',
+    'Official V8 supports macOS arm64/x64 and Android arm64/x64; requested $os/$architecture',
   );
 }
 
@@ -139,7 +142,7 @@ Future<VerifiedArtifact> verifyArtifact(
   );
   if (targetName == 'android-arm64' || targetName == 'android-x64') {
     _expect(target['minApi'], 26, '$targetName.minApi');
-  } else if (targetName == 'macos-arm64') {
+  } else if (targetName == 'macos-arm64' || targetName == 'macos-x64') {
     _expect(target['minMacOS'], '13.0', '$targetName.minMacOS');
   } else {
     throw UnsupportedError('Official V8 build does not support $targetName');
