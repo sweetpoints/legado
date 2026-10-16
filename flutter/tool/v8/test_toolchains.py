@@ -53,6 +53,21 @@ class ToolchainTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'requires'):
                 module.host_key()
 
+    def test_both_macos_architectures_use_apple_sdk_and_nm(self):
+        with patch.object(module.subprocess, 'check_output', side_effect=[
+                '/SDK/MacOSX.sdk\n', '/Xcode/usr/bin/nm\n'] * 2) as command:
+            for target in ('macos-arm64', 'macos-x64'):
+                self.assertEqual(module.sysroot(target), Path('/SDK/MacOSX.sdk'))
+                self.assertEqual(module.symbol_inspector(target, Path('/SDK/MacOSX.sdk')),
+                                 Path('/Xcode/usr/bin/nm'))
+            self.assertEqual(command.call_count, 4)
+
+    def test_unknown_target_cannot_fall_through_to_android_sdk(self):
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            module.sysroot('windows-x64')
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            module.symbol_inspector('linux-x64', Path('/SDK'))
+
     def test_official_compiler_pins_are_exact(self):
         pins = json.loads(Path(__file__).with_name('toolchain-pins.json').read_text())
         self.assertEqual(pins['metadata']['v8Revision'], 'c45871fec706a6e7b715e607065bb4578b23ce9f')

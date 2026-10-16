@@ -9,7 +9,7 @@ import struct
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PACKAGE = ROOT / 'flutter/packages/source_v8'
-TARGETS = ('macos-arm64', 'android-arm64', 'android-x64')
+TARGETS = ('macos-arm64', 'macos-x64', 'android-arm64', 'android-x64')
 
 def read_pins():
     pins = json.loads((HERE / 'pins.json').read_text())

@@ -37,7 +37,7 @@ def prepare(target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--target', required=True, choices=['macos-arm64', 'android-arm64', 'android-x64'])
+    parser.add_argument('--target', required=True, choices=['macos-arm64', 'macos-x64', 'android-arm64', 'android-x64'])
     args = parser.parse_args()
     print(json.dumps({'artifactRoot': str(prepare(args.target)), 'target': args.target,
                       'v8BuiltLocally': False, 'bridgeLinkedFromSdk': True}))

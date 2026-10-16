@@ -30,12 +30,19 @@
       "sha256": "6f43f0a9c25b0bae59d8b569e50884c6fb7e7ba9b4a8875ef4d3012ec81a2cc8",
       "size": 53917923,
       "target": "macos-arm64"
+    },
+    {
+      "name": "v8-15.4.80.25-macos-x64.tar.gz",
+      "sha256": "81db90fbe699202637b57f4bc517e52d9a94fb75f9612044629604328dd50723",
+      "size": 54915348,
+      "target": "macos-x64"
     }
   ],
   "sdkManifestSha256": {
     "android-arm64": "a5a63dd9e6a796c3443ac8e7d1a16cbd7b521f41c19032e34fe1f728fb58e99b",
     "android-x64": "f5476e80bcb3215338acf50569615b6c8b577ab7b0107240e74c3a4e0c872faa",
-    "macos-arm64": "408deb50ea2ed8b683e3ad8c6e308cf275c7ca63e1e486947e9cb5382e631e84"
+    "macos-arm64": "408deb50ea2ed8b683e3ad8c6e308cf275c7ca63e1e486947e9cb5382e631e84",
+    "macos-x64": "29c551f5235375eeda6dc016d23004b620fdeaaf22db005cdfab6f1e56c5cce4"
   },
   "sdkPinsSha256": "f04d578f82c6b5d39ebd103d26adf0dae79be5194c9bb56d26720e10706b7fe1"
 }
