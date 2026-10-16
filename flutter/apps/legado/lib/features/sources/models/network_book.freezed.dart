@@ -214,7 +214,7 @@ return $default(_that.sourceId,_that.metadata);case _:
 
 class _NetworkBook extends NetworkBook {
   const _NetworkBook({required this.sourceId, required  Map<String, Object?> metadata}): _metadata = metadata,super._();
-  
+
 
 @override final  String sourceId;
  final  Map<String, Object?> _metadata;

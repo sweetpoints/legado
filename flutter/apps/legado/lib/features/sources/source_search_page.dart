@@ -34,7 +34,7 @@ class _SourceSearchPageState extends ConsumerState<SourceSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     final sources = ref.watch(sourceListProvider(widget.repository));
     final available =
         sources.asData?.value.where((s) => s['enabled'] != false).toList() ??

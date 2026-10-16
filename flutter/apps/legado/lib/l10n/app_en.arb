@@ -3,7 +3,6 @@
   "appTitle": "Legado",
   "bookshelfTitle": "Bookshelf",
   "exploreTitle": "Explore",
-  "rssTitle": "Feeds",
   "settingsTitle": "Settings",
   "searchTitle": "Search books",
   "sourcesTitle": "Book sources",
@@ -60,6 +59,149 @@
   "@chapterProgress": {
     "placeholders": {
       "chapter": {
+        "type": "int"
+      }
+    }
+  },
+  "navigationRssTitle": "Feeds",
+  "readerTitle": "Read",
+  "readerSettings": "Reading settings",
+  "readerFontSize": "Font size",
+  "readerSystemTheme": "System",
+  "readerLightTheme": "Light",
+  "readerDarkTheme": "Dark",
+  "readerDone": "Done",
+  "readerRetry": "Retry",
+  "readerPreviousChapter": "Previous chapter",
+  "readerNextChapter": "Next chapter",
+  "readerCatalogue": "Chapters",
+  "readerCatalogueCount": "Chapters ({count})",
+  "readerChapterPosition": "{current}/{total} · {title}",
+  "readerBookMissing": "This book is missing. Return to the library and reopen it.",
+  "readerTocMissing": "No chapter catalogue is available. Load it from the book details first.",
+  "readerTocEmpty": "The catalogue contains no readable chapters.",
+  "readerContentMissing": "This chapter is not cached. Download it from book details or retry.",
+  "readerProgressSaveFailed": "Could not save reading progress: {error}",
+  "readerSettingsSaveFailed": "Could not save reading settings: {error}",
+  "@readerCatalogueCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@readerChapterPosition": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerProgressSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerSettingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "rssTitle": "Subscriptions",
+  "rssAddTooltip": "Add or import subscriptions",
+  "rssEmpty": "Add an RSS/Atom URL or import legacy subscription JSON",
+  "rssLegacySubtitle": "CSS/DOM HTML subscription",
+  "rssAdd": "Add subscription",
+  "rssImportHelp": "Paste an RSS/Atom URL or legacy rssSources.json. CSS/DOM HTML rules are supported; JavaScript rules are preserved with explicit capability errors.",
+  "rssInput": "URL or subscription JSON",
+  "rssCancel": "Cancel",
+  "rssSaving": "Saving…",
+  "rssSave": "Save",
+  "rssCancelRefresh": "Cancel refresh",
+  "rssRefresh": "Refresh feed",
+  "rssLegacyHelp": "HTML lists, CSS/DOM rules and safe templates are supported. JavaScript and browser verification require a separate host.",
+  "rssFetch": "Fetch articles",
+  "rssArticle": "Article",
+  "rssMissingArticle": "Article unavailable. Go back and refresh the subscription.",
+  "rssUnstar": "Remove bookmark",
+  "rssStar": "Bookmark article",
+  "rssCopyLink": "Copy original link",
+  "rssCopied": "Original link copied",
+  "rssRetry": "Retry",
+  "rssInvalidUrl": "Subscription URL must use HTTP or HTTPS",
+  "rssCorruptStorage": "Subscription data is invalid. Restore a backup; the original data is preserved.",
+  "rssInvalidSource": "Each subscription must be a JSON object",
+  "rssEmptyResponse": "The feed returned an empty response",
+  "rssTooLarge": "The feed exceeds the 5 MiB limit",
+  "rssInvalidFeed": "Cannot parse RSS/Atom. Check the URL and feed format.",
+  "rssNetworkError": "Feed request failed. Check the network and URL, then retry.",
+  "rssOperationError": "Subscription operation failed. Retry; existing data is preserved.",
+  "rssScriptCapability": "This rule requires a JavaScript or browser host which is not connected yet. The original rules are preserved; use the existing Android app.",
+  "rssUnsupportedRule": "This rule format is not supported yet. Use CSS/Legado DOM rules or the existing Android app.",
+  "rssPaginationCycle": "Pagination contains a cycle. Requests stopped; fix the next-page rule.",
+  "rssPageLimit": "Pagination exceeded 20 pages. Requests stopped; narrow the category.",
+  "rssInvalidArticleLink": "The article link is invalid. Check the link extraction rule.",
+  "rssImageError": "Image could not load. Copy the original article link to view it.",
+  "sourcesManage": "Source management",
+  "sourcesImport": "Import",
+  "sourcesImportJson": "Import source JSON",
+  "sourcesEdit": "Edit source",
+  "sourcesJsonHint": "A source object or array of sources",
+  "sourcesCancel": "Cancel",
+  "sourcesSave": "Save",
+  "sourcesCopy": "Copy all sources as JSON",
+  "sourcesCopied": "Sources copied as JSON",
+  "sourcesEmpty": "No sources. Import source JSON to get started.",
+  "sourcesDelete": "Delete source",
+  "sourcesDeleteConfirm": "Delete this source?",
+  "sourcesDeleteAction": "Delete",
+  "sourcesSearchTitle": "Search books",
+  "sourcesSourceLabel": "Source",
+  "sourcesKeyword": "Book title or author",
+  "sourcesSearch": "Search",
+  "sourcesNeedSource": "Import and enable a source in source management first.",
+  "sourcesSearchPrompt": "Enter a keyword to search",
+  "sourcesNoResults": "No results",
+  "sourcesRefresh": "Refresh chapters",
+  "sourcesAdd": "Add to bookshelf",
+  "sourcesAdded": "Added to bookshelf",
+  "sourcesEmptyToc": "The source returned no chapters. Check its rules and website status.",
+  "sourcesIdentityImmutable": "Source identity cannot be changed while editing. Import it as a new source instead.",
+  "sourcesChapterCount": "Contents · {count} chapters",
+  "@sourcesChapterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesDetailError": "Could not load details or chapters\n{error}",
+  "@sourcesDetailError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesBrowse": "Browse categories",
+  "sourcesCategory": "Category",
+  "sourcesNoCategories": "This source has no static browse categories.",
+  "sourcesPrevious": "Previous page",
+  "sourcesNext": "Next page",
+  "sourcesPage": "Page {page}",
+  "@sourcesPage": {
+    "placeholders": {
+      "page": {
         "type": "int"
       }
     }

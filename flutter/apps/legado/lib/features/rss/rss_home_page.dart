@@ -43,10 +43,10 @@ class RssHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     appBar: AppBar(
-      title: Text(AppLocalizations.of(context)!.rssTitle),
+      title: Text(AppLocalizations.of(context).rssTitle),
       actions: [
         IconButton(
-          tooltip: AppLocalizations.of(context)!.rssAddTooltip,
+          tooltip: AppLocalizations.of(context).rssAddTooltip,
           onPressed: () => _import(context, ref),
           icon: const Icon(Icons.add),
         ),
@@ -61,7 +61,7 @@ class RssHomePage extends ConsumerWidget {
             retry: () => ref.invalidate(rssSourcesProvider(repository)),
           ),
           data: (sources) => sources.isEmpty
-              ? Center(child: Text(AppLocalizations.of(context)!.rssEmpty))
+              ? Center(child: Text(AppLocalizations.of(context).rssEmpty))
               : ListView.builder(
                   itemCount: sources.length,
                   itemBuilder: (context, index) {
@@ -75,7 +75,7 @@ class RssHomePage extends ConsumerWidget {
                       title: Text(source.name),
                       subtitle: Text(
                         source.requiresRuleEngine
-                            ? AppLocalizations.of(context)!.rssLegacySubtitle
+                            ? AppLocalizations.of(context).rssLegacySubtitle
                             : source.url,
                       ),
                       trailing: const Icon(Icons.chevron_right),
@@ -94,21 +94,21 @@ class RssHomePage extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, update) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.rssAdd),
+          title: Text(AppLocalizations.of(context).rssAdd),
           content: SizedBox(
             width: 560,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(AppLocalizations.of(context)!.rssImportHelp),
+                  Text(AppLocalizations.of(context).rssImportHelp),
                   const SizedBox(height: 16),
                   TextField(
                     controller: controller,
                     minLines: 3,
                     maxLines: 8,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.rssInput,
+                      labelText: AppLocalizations.of(context).rssInput,
                       errorText: error,
                       errorMaxLines: 4,
                       border: const OutlineInputBorder(),
@@ -121,7 +121,7 @@ class RssHomePage extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: busy ? null : () => Navigator.pop(context),
-              child: Text(AppLocalizations.of(context)!.rssCancel),
+              child: Text(AppLocalizations.of(context).rssCancel),
             ),
             FilledButton(
               onPressed: busy
@@ -152,8 +152,8 @@ class RssHomePage extends ConsumerWidget {
                     },
               child: Text(
                 busy
-                    ? AppLocalizations.of(context)!.rssSaving
-                    : AppLocalizations.of(context)!.rssSave,
+                    ? AppLocalizations.of(context).rssSaving
+                    : AppLocalizations.of(context).rssSave,
               ),
             ),
           ],
@@ -263,8 +263,8 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
         actions: [
           IconButton(
             tooltip: _busy
-                ? AppLocalizations.of(context)!.rssCancelRefresh
-                : AppLocalizations.of(context)!.rssRefresh,
+                ? AppLocalizations.of(context).rssCancelRefresh
+                : AppLocalizations.of(context).rssRefresh,
             onPressed: _busy
                 ? () {
                     _request?.cancel('用户取消');
@@ -285,7 +285,7 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
           if (widget.source.requiresRuleEngine)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(AppLocalizations.of(context)!.rssLegacyHelp),
+              child: Text(AppLocalizations.of(context).rssLegacyHelp),
             ),
           if (_error != null)
             Padding(
@@ -310,7 +310,7 @@ class _RssSourcePageState extends ConsumerState<RssSourcePage> {
                           child: FilledButton.icon(
                             onPressed: _busy ? null : _refresh,
                             icon: const Icon(Icons.refresh),
-                            label: Text(AppLocalizations.of(context)!.rssFetch),
+                            label: Text(AppLocalizations.of(context).rssFetch),
                           ),
                         )
                       : RefreshIndicator(
@@ -449,7 +449,7 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
               const Scaffold(body: Center(child: CircularProgressIndicator())),
           error: (error, _) => Scaffold(
             appBar: AppBar(
-              title: Text(AppLocalizations.of(context)!.rssArticle),
+              title: Text(AppLocalizations.of(context).rssArticle),
             ),
             body: _Failure(
               error: error,
@@ -463,10 +463,10 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
             if (article == null) {
               return Scaffold(
                 appBar: AppBar(
-                  title: Text(AppLocalizations.of(context)!.rssArticle),
+                  title: Text(AppLocalizations.of(context).rssArticle),
                 ),
                 body: Center(
-                  child: Text(AppLocalizations.of(context)!.rssMissingArticle),
+                  child: Text(AppLocalizations.of(context).rssMissingArticle),
                 ),
               );
             }
@@ -476,8 +476,8 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
                 actions: [
                   IconButton(
                     tooltip: article.starred
-                        ? AppLocalizations.of(context)!.rssUnstar
-                        : AppLocalizations.of(context)!.rssStar,
+                        ? AppLocalizations.of(context).rssUnstar
+                        : AppLocalizations.of(context).rssStar,
                     onPressed: () => _mark(starred: !article.starred),
                     icon: Icon(
                       article.starred ? Icons.star : Icons.star_outline,
@@ -506,7 +506,7 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
                     if (_error != null)
                       TextButton(
                         onPressed: _loadArticle,
-                        child: Text(AppLocalizations.of(context)!.rssRetry),
+                        child: Text(AppLocalizations.of(context).rssRetry),
                       ),
                     // Scripts never run; extracted HTTP images render natively.
                     Text(
@@ -529,7 +529,7 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
                           errorBuilder: (context, error, stack) => Padding(
                             padding: const EdgeInsets.all(16),
                             child: Text(
-                              AppLocalizations.of(context)!.rssImageError,
+                              AppLocalizations.of(context).rssImageError,
                             ),
                           ),
                         ),
@@ -541,9 +541,7 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           icon: const Icon(Icons.copy),
-                          label: Text(
-                            AppLocalizations.of(context)!.rssCopyLink,
-                          ),
+                          label: Text(AppLocalizations.of(context).rssCopyLink),
                           onPressed: () async {
                             await Clipboard.setData(
                               ClipboardData(text: article.link),
@@ -552,7 +550,7 @@ class _RssArticlePageState extends ConsumerState<RssArticlePage> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    AppLocalizations.of(context)!.rssCopied,
+                                    AppLocalizations.of(context).rssCopied,
                                   ),
                                 ),
                               );
@@ -585,7 +583,7 @@ class _Failure extends StatelessWidget {
           const SizedBox(height: 12),
           FilledButton(
             onPressed: retry,
-            child: Text(AppLocalizations.of(context)!.rssRetry),
+            child: Text(AppLocalizations.of(context).rssRetry),
           ),
         ],
       ),
@@ -594,7 +592,7 @@ class _Failure extends StatelessWidget {
 }
 
 String _message(BuildContext context, Object error) {
-  final l10n = AppLocalizations.of(context)!;
+  final l10n = AppLocalizations.of(context);
   if (error is FormatException) {
     return switch (error.message) {
       'rssInvalidUrl' => l10n.rssInvalidUrl,
