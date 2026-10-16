@@ -13,7 +13,7 @@ on:
       - 'flutter/packages/source_migration/**'
       - 'flutter/pubspec*'
   push:
-    branches: [master, 'codex/flutter-full-app']
+    branches: [master]
     paths:
       - '.github/workflows/flutter-windows-v8.yml'
       - 'flutter/tool/v8/**'
@@ -70,11 +70,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force build/windows-v8-acceptance | Out-Null
           Push-Location flutter/packages/source_v8
-          dart test --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/source-v8.log
+          dart test test/ --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/source-v8.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows Dart V8 transport or normal process exit failed' }
           Pop-Location
           Push-Location flutter/packages/source_conformance
-          dart test --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/conformance.log
+          dart test test/ --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/conformance.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows V8 source conformance or normal process exit failed' }
           Pop-Location
       - name: Preserve exact native artifact and acceptance evidence
