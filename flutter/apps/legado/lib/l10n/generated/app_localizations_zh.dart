@@ -258,6 +258,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shelfEmptyGroup => '此分组暂无图书。';
 
   @override
+  String get shelfImportEncodedText => '按编码导入 TXT';
+
+  @override
+  String get shelfChooseTextEncoding => '选择 TXT 编码';
+
+  @override
+  String get shelfTextEncodingHint =>
+      '请选择文件的已知编码。文件中的字节顺序标记（BOM）优先，所选编码与 BOM 冲突时将停止导入。';
+
+  @override
+  String get shelfEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get shelfEncodingGbk => 'GBK / GB2312';
+
+  @override
+  String get shelfEncodingUtf16Le => 'UTF-16 小端序';
+
+  @override
+  String get shelfEncodingUtf16Be => 'UTF-16 大端序';
+
+  @override
+  String get shelfEncodingConflict =>
+      '所选编码与文件的 BOM 不一致，请选择 BOM 对应的编码，或使用普通 TXT 导入自动识别。';
+
+  @override
+  String get shelfEncodingUnavailable =>
+      '当前文件适配器不支持按指定编码导入，已停止操作，请更换支持此功能的文件适配器。';
+
+  @override
   String get readerTitle => '阅读';
 
   @override
