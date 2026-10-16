@@ -4,6 +4,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tarfile
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -64,6 +65,28 @@ class PdfiumPrefetchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unverified PDFium"):
             module.prepare("linux-x64")
         self.assertEqual(destination.read_bytes(), b"tampered")
+
+
+class AndroidAlignmentTests(unittest.TestCase):
+    def fixture(self, alignment=16384, virtual_address=16384):
+        data = bytearray(120)
+        data[:6] = b"\x7fELF\x02\x01"
+        struct.pack_into("<Q", data, 32, 64)
+        struct.pack_into("<HH", data, 54, 56, 1)
+        struct.pack_into("<IIQQQQQQ", data, 64, 1, 5, 0, virtual_address, 0, 0, 0, alignment)
+        return data
+
+    def test_accepts_16k_load_segments(self):
+        module.check_android_alignment(self.fixture())
+
+    def test_rejects_4k_only_or_misaligned_segments(self):
+        for data in [self.fixture(alignment=4096), self.fixture(virtual_address=4096)]:
+            with self.assertRaisesRegex(ValueError, "16 KiB"):
+                module.check_android_alignment(data)
+
+    def test_rejects_truncated_program_headers(self):
+        with self.assertRaisesRegex(ValueError, "program header"):
+            module.check_android_alignment(self.fixture()[:-1])
 
 
 if __name__ == "__main__":
