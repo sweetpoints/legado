@@ -14,7 +14,7 @@ Legado downloads the published pure SDK and compiles **only its own bridge**.
 | macOS x64 | Yes | Added fixed SDK + bridge + Flutter hook | Real x86_64 bridge linked and ten ABI exports inspected; no x64 runtime result on this ARM64 host without Rosetta |
 | Linux x64 / ARM64 | Yes | Not yet enabled | Fixed Chromium sysroot, ELF GNU/Linux linker profile, rescan library grouping, export validation, and native runtime CI |
 | Windows x64 / ARM64 | Yes | Not yet enabled | Fixed Clang/clang-cl and MSVC SDK, DLL naming, `__declspec(dllexport)` ABI exports, PE validation, Windows-compatible atomic publish lock, native runtime CI |
-| iOS ARM64 device / simulator | Yes, jitless profile | Experimental static XCFramework and native probe; Flutter hook not enabled | App static/native-asset integration, signing and full source compatibility acceptance |
+| iOS ARM64 device / simulator | Yes, jitless profile | Real static XCFramework and Flutter native-assets framework; simulator FFI integration passed | Full migrated app acceptance, physical-device signing/runtime and complete source compatibility |
 
 `consumerConfigured` means a pinned SDK and consumer target exist. It does not mean
 that a full application Release has passed on that platform. To inspect the fixed
@@ -52,9 +52,9 @@ No Rosetta installation, V8 source build, release mutation or runtime fallback w
 performed. Hardened Runtime application packaging still requires its existing JIT
 entitlement and a separate signed Release execution test for each architecture.
 
-See [IOS-CONSUMER.md](IOS-CONSUMER.md) for the real static bridge package and
-simulator runtime checks added after the initial audit. The app hook remains
-intentionally disabled until its application integration passes.
+See [IOS-CONSUMER.md](IOS-CONSUMER.md) for the real static bridge package,
+simulator runtime checks, passing Flutter native-assets integration and unsigned
+device Release/AOT build added after the initial audit.
 
 ## iOS feature and packaging boundary
 
@@ -77,10 +77,9 @@ a weak `BrowserEngineKit` dependency, with no required undefined framework symbo
 the consumer must retain and inspect that weak dependency rather than converting it
 to a strong link or making the whole app require that framework at launch.
 
-The existing consumer selects targets only by OS and architecture, which cannot
-separate iOS device ARM64 from simulator ARM64. It also only emits bundled `.so`
-or macOS `.dylib` artifacts. iOS must select the actual build environment, package
-an appropriate signed framework/native asset, retain required exported symbols,
-and test cancellation, synchronous host replies, microtasks and persistent sessions
-with the jitless runtime. Merely adding `OS.iOS` to the target selector would skip
-these requirements and remains intentionally rejected.
+The iOS consumer selects the real device/simulator SDK as well as ARM64 architecture,
+links a ten-export dylib against the static SDK and uses Flutter's actual signed
+framework/native-asset packaging. Simulator Dart FFI integration covers cancellation,
+synchronous/asynchronous host replies and persistent sessions; device Release/AOT
+compilation also passes. These results remain separate from signed physical-device
+execution and full migrated-application/source compatibility acceptance.

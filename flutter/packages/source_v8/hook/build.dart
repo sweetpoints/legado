@@ -6,29 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:hooks/hooks.dart';
 
 import 'artifacts.dart';
-
-Future<String> pythonExecutable() async {
-  final configured = Platform.environment['SOURCE_V8_PYTHON'];
-  final candidates = configured != null
-      ? [configured]
-      : ['python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3'];
-  for (final candidate in candidates) {
-    try {
-      final version = await Process.run(candidate, [
-        '-c',
-        'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)',
-      ]);
-      if (version.exitCode == 0) return candidate;
-    } on ProcessException {
-      // Xcode often resolves python3 to Apple's old system Python. Try the
-      // installed tool interpreter, never weaken SDK extraction or hashing.
-    }
-  }
-  throw StateError(
-    'V8 SDK preparation requires Python 3.12+. '
-    'Set SOURCE_V8_PYTHON to its absolute executable path.',
-  );
-}
+import 'python.dart';
 
 void main(List<String> args) async {
   await build(args, (input, output) async {
@@ -41,6 +19,9 @@ void main(List<String> args) async {
       arch,
       iosSdk: os == OS.iOS ? code.iOS.targetSdk : null,
     );
+    if (os == OS.iOS && code.iOS.targetVersion < 15) {
+      throw UnsupportedError('Official iOS V8 artifact requires iOS 15+');
+    }
     final configuredRoot = input.userDefines.path('artifact_root');
     if (input.userDefines['artifact_root'] != null && configuredRoot == null) {
       throw FormatException('source_v8.artifact_root must be a path string');
