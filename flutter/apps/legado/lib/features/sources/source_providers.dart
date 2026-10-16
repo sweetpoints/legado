@@ -1,27 +1,29 @@
 import 'dart:async';
 
 import 'package:app_core/app_core.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../services/book_source_service.dart';
 
-final bookSourceServiceProvider =
-    Provider.family<BookSourceService, LibraryRepository>((ref, repository) {
-      final service = BookSourceService(repository);
-      ref.onDispose(() => unawaited(service.close()));
-      return service;
-    });
+part 'source_providers.g.dart';
 
-final sourceListProvider =
-    StreamProvider.family<List<Map<String, Object?>>, LibraryRepository>((
-      ref,
-      repository,
-    ) async* {
-      yield await repository.sources();
-      await for (final _ in repository.changes) {
-        yield await repository.sources();
-      }
-    });
+@Riverpod(keepAlive: true)
+BookSourceService bookSourceService(Ref ref, LibraryRepository repository) {
+  final service = BookSourceService(repository);
+  ref.onDispose(() => unawaited(service.close()));
+  return service;
+}
+
+@Riverpod(keepAlive: true)
+Stream<List<Map<String, Object?>>> sourceList(
+  Ref ref,
+  LibraryRepository repository,
+) async* {
+  yield await repository.sources();
+  await for (final _ in repository.changes) {
+    yield await repository.sources();
+  }
+}
 
 typedef SourceSearchQuery = ({
   LibraryRepository repository,
@@ -29,42 +31,44 @@ typedef SourceSearchQuery = ({
   String key,
   int page,
 });
-final sourceSearchProvider = FutureProvider.autoDispose
-    .family<List<NetworkBook>, SourceSearchQuery>((ref, query) {
-      if (query.key.isEmpty || query.sourceId.isEmpty) return Future.value([]);
-      return ref
-          .watch(bookSourceServiceProvider(query.repository))
-          .search(query.sourceId, query.key, page: query.page);
-    });
+
+@riverpod
+Future<List<NetworkBook>> sourceSearch(Ref ref, SourceSearchQuery query) {
+  if (query.key.isEmpty || query.sourceId.isEmpty) return Future.value([]);
+  return ref
+      .watch(bookSourceServiceProvider(query.repository))
+      .search(query.sourceId, query.key, page: query.page);
+}
 
 typedef BookDetailQuery = ({LibraryRepository repository, NetworkBook book});
-final bookDetailProvider = FutureProvider.autoDispose
-    .family<BookPreview, BookDetailQuery>(
-      (ref, query) => ref
-          .watch(bookSourceServiceProvider(query.repository))
-          .loadDetail(query.book),
-    );
 
-final sourceExploreMenuProvider = FutureProvider.autoDispose
-    .family<
-      List<Map<String, Object?>>,
-      ({LibraryRepository repository, String sourceId})
-    >((ref, query) {
-      if (query.sourceId.isEmpty) return Future.value([]);
-      return ref
-          .watch(bookSourceServiceProvider(query.repository))
-          .exploreMenu(query.sourceId);
-    });
+@riverpod
+Future<BookPreview> bookDetail(Ref ref, BookDetailQuery query) => ref
+    .watch(bookSourceServiceProvider(query.repository))
+    .loadDetail(query.book);
+
+@riverpod
+Future<List<Map<String, Object?>>> sourceExploreMenu(
+  Ref ref,
+  ({LibraryRepository repository, String sourceId}) query,
+) {
+  if (query.sourceId.isEmpty) return Future.value([]);
+  return ref
+      .watch(bookSourceServiceProvider(query.repository))
+      .exploreMenu(query.sourceId);
+}
+
 typedef SourceExploreQuery = ({
   LibraryRepository repository,
   String sourceId,
   String url,
   int page,
 });
-final sourceExploreProvider = FutureProvider.autoDispose
-    .family<List<NetworkBook>, SourceExploreQuery>((ref, query) {
-      if (query.sourceId.isEmpty || query.url.isEmpty) return Future.value([]);
-      return ref
-          .watch(bookSourceServiceProvider(query.repository))
-          .explore(query.sourceId, query.url, page: query.page);
-    });
+
+@riverpod
+Future<List<NetworkBook>> sourceExplore(Ref ref, SourceExploreQuery query) {
+  if (query.sourceId.isEmpty || query.url.isEmpty) return Future.value([]);
+  return ref
+      .watch(bookSourceServiceProvider(query.repository))
+      .explore(query.sourceId, query.url, page: query.page);
+}
