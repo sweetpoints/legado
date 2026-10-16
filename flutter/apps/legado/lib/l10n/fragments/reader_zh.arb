@@ -1,0 +1,56 @@
+{
+  "@@locale": "zh",
+  "readerTitle": "阅读",
+  "readerSettings": "阅读设置",
+  "readerFontSize": "字号",
+  "readerSystemTheme": "跟随系统",
+  "readerLightTheme": "浅色",
+  "readerDarkTheme": "深色",
+  "readerDone": "完成",
+  "readerRetry": "重试",
+  "readerPreviousChapter": "上一章",
+  "readerNextChapter": "下一章",
+  "readerCatalogue": "目录",
+  "readerCatalogueCount": "目录（{count}章）",
+  "readerChapterPosition": "{current}/{total} · {title}",
+  "readerBookMissing": "书籍不存在，请返回书架重新打开",
+  "readerTocMissing": "尚无目录，请先在详情页获取目录",
+  "readerTocEmpty": "目录中没有可阅读的章节",
+  "readerContentMissing": "本章正文尚未缓存，请返回详情页下载或重试",
+  "readerProgressSaveFailed": "阅读进度保存失败：{error}",
+  "readerSettingsSaveFailed": "阅读设置保存失败：{error}",
+  "@readerCatalogueCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@readerChapterPosition": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerProgressSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerSettingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}
