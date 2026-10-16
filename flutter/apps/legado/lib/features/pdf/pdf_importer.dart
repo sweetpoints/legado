@@ -58,7 +58,6 @@ class PdfImporter {
     final digest = sha256.convert(data).toString();
     final url = 'local:pdf:$digest';
     final existing = await repository.book(url);
-    if (existing != null) return existing;
     await pdfrxFlutterInitialize();
     PdfDocument? document;
     try {
@@ -83,13 +82,14 @@ class PdfImporter {
           .replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '')
           .trim();
       final book = LegacyBookRecord({
+        ...?existing?.toJson(),
         'bookUrl': url,
-        'name': title.isEmpty ? 'PDF' : title,
+        'name': existing?.name ?? (title.isEmpty ? 'PDF' : title),
         'author': '',
         'origin': 'loc_book',
         'originName': 'PDF',
         'type': 256,
-        'durChapterIndex': 0,
+        'durChapterIndex': (existing?.chapterIndex ?? 0).clamp(0, count - 1),
         'durChapterPos': 0,
         'totalChapterNum': count,
         'flutterDocument': {

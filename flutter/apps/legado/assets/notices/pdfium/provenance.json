@@ -68,6 +68,210 @@
     "licenses/zlib.txt": {
       "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe",
       "encoding": "utf8"
+    },
+    "licenses/catapult.txt": {
+      "sha256": "f0df289ba9d03d857ad1c2f5918861376b1510b71588ffc60eff5c7a7bfedb09",
+      "encoding": "utf8"
+    },
+    "licenses/libunwind.txt": {
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+      "encoding": "utf8"
+    },
+    "licenses/cpu_features.txt": {
+      "sha256": "af272c1b4dd08dd61d43e001d3134119d03ca7a2b057a64f7355fdf27fbea3dd",
+      "encoding": "utf8"
+    },
+    "licenses/pdfium-android.txt": {
+      "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e",
+      "encoding": "utf8"
+    },
+    "licenses/binaries-win.txt": {
+      "sha256": "8854f4388f1ca13b3ad9baa42e95f5546b4c0b17109c159256d3eca7be39b09b",
+      "encoding": "utf8"
+    },
+    "licenses/icu-win.txt": {
+      "sha256": "93679f4389d53b6835d89843f251844fb9bc455b35bab036d3c8e7abe497a47a",
+      "encoding": "utf8"
+    },
+    "licenses/libjpeg_turbo-win.ijg": {
+      "sha256": "db16a04128171879c60708d171b88d97345a2dd20f9bfc173680a4497c73f704",
+      "encoding": "utf8"
+    },
+    "licenses/llvm-libc-win.txt": {
+      "sha256": "3b6226c32e168c83b891d8d6f0d3c29c2116dc3ef93dc93c307b54f279ecf383",
+      "encoding": "utf8"
+    },
+    "licenses/libpng-win.txt": {
+      "sha256": "452390433ba0f88aa3e2b122c647741b72a0c117cd6ed7a329b49785aecb5511",
+      "encoding": "utf8"
+    },
+    "licenses/libjpeg_turbo-win.md": {
+      "sha256": "be2b2b5ab168bce87bc3e31f2a5c5adba4b7f6e9e51d618e958d1d46972ebd95",
+      "encoding": "utf8"
+    },
+    "licenses/fast_float-win.txt": {
+      "sha256": "bf1b57355feca8fce77ee95f48002f8d4789fb71b30ec7599c06cda4901fbb2b",
+      "encoding": "utf8"
+    },
+    "licenses/abseil-win.txt": {
+      "sha256": "f54fff0b905df5b3464527c652a30e903b172d6dcab4d89b5e6f105d5e4a4603",
+      "encoding": "utf8"
+    },
+    "licenses/simdutf-win.txt": {
+      "sha256": "c172a0ba936ff31230febb5dad869e25cb7c1a07480c7a381be8cf011bb52719",
+      "encoding": "utf8"
+    }
+  },
+  "targetNotices": {
+    "android-arm64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/catapult.txt": "licenses/catapult.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libunwind.txt": "licenses/libunwind.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/cpu_features.txt": "licenses/cpu_features.txt",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "android-x64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/catapult.txt": "licenses/catapult.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libunwind.txt": "licenses/libunwind.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/cpu_features.txt": "licenses/cpu_features.txt",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "linux-arm64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "linux-x64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "mac-arm64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "mac-x64": {
+      "LICENSE": "LICENSE",
+      "licenses/icu.txt": "licenses/icu.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc.txt",
+      "licenses/pdfium.txt": "licenses/pdfium.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float.txt",
+      "licenses/abseil.txt": "licenses/abseil.txt",
+      "licenses/simdutf.txt": "licenses/simdutf.txt"
+    },
+    "win-arm64": {
+      "LICENSE": "licenses/binaries-win.txt",
+      "licenses/icu.txt": "licenses/icu-win.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo-win.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc-win.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng-win.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo-win.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float-win.txt",
+      "licenses/abseil.txt": "licenses/abseil-win.txt",
+      "licenses/simdutf.txt": "licenses/simdutf-win.txt"
+    },
+    "win-x64": {
+      "LICENSE": "licenses/binaries-win.txt",
+      "licenses/icu.txt": "licenses/icu-win.txt",
+      "licenses/zlib.txt": "licenses/zlib.txt",
+      "licenses/libjpeg_turbo.ijg": "licenses/libjpeg_turbo-win.ijg",
+      "licenses/llvm-libc.txt": "licenses/llvm-libc-win.txt",
+      "licenses/pdfium.txt": "licenses/pdfium-android.txt",
+      "licenses/lcms.txt": "licenses/lcms.txt",
+      "licenses/libpng.txt": "licenses/libpng-win.txt",
+      "licenses/agg23.txt": "licenses/agg23.txt",
+      "licenses/libopenjpeg.txt": "licenses/libopenjpeg.txt",
+      "licenses/libjpeg_turbo.md": "licenses/libjpeg_turbo-win.md",
+      "licenses/freetype.txt": "licenses/freetype.txt",
+      "licenses/libtiff.txt": "licenses/libtiff.txt",
+      "licenses/fast_float.txt": "licenses/fast_float-win.txt",
+      "licenses/abseil.txt": "licenses/abseil-win.txt",
+      "licenses/simdutf.txt": "licenses/simdutf-win.txt"
     }
   }
 }

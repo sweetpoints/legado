@@ -14,11 +14,14 @@ void main() {
       await rootBundle.loadString('${prefix}provenance.json'),
     ) as Map;
     final notices = provenance['notices'] as Map;
-    expect(notices.length, 16);
+    expect(notices.length, 29);
     expect(
       notices.keys,
       containsAll([
         'licenses/pdfium.txt',
+        'licenses/cpu_features.txt',
+        'licenses/libunwind.txt',
+        'licenses/catapult.txt',
         'licenses/icu.txt',
         'licenses/freetype.txt',
         'licenses/libjpeg_turbo.ijg',
@@ -43,7 +46,7 @@ void main() {
           (entry) => entry.packages.any((name) => name.startsWith('PDFium (')),
         )
         .toList();
-    expect(entries.length, 16);
+    expect(entries.length, 29);
     expect(entries.every((entry) => entry.paragraphs.isNotEmpty), isTrue);
   });
 }
