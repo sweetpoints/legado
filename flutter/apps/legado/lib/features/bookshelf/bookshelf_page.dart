@@ -5,11 +5,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../app/file_exchange.dart';
 import '../../app/providers.dart';
+import '../../app/local_text_decoder.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../reader/local_text_importer.dart';
 import '../reader/epub_importer.dart';
 import 'bookshelf_state.dart';
 import 'bookshelf_groups.dart';
+import 'text_encoding_dialog.dart';
 
 final importingTextProvider = NotifierProvider<ImportingTextController, bool>(
   ImportingTextController.new,
@@ -36,11 +38,21 @@ class ImportingTextController extends Notifier<bool> {
     }
   }
 
-  Future<void> importText() async {
+  Future<void> importText({LocalTextEncoding? encoding}) async {
     if (state) return;
     state = true;
     try {
-      final picked = await ref.read(fileExchangeProvider).pickText();
+      final files = ref.read(fileExchangeProvider);
+      final ImportedTextFile? picked;
+      if (encoding == null) {
+        picked = await files.pickText();
+      } else if (files is EncodedTextFileExchange) {
+        picked = await (files as EncodedTextFileExchange).pickTextEncoded(
+          encoding,
+        );
+      } else {
+        throw const FileExchangeException('textEncodingUnavailable');
+      }
       if (picked != null) {
         await LocalTextImporter.importText(
           ref.read(libraryProvider),
@@ -53,6 +65,17 @@ class ImportingTextController extends Notifier<bool> {
       if (ref.mounted) state = false;
     }
   }
+}
+
+String _textImportError(AppLocalizations strings, Object error) {
+  final code = error is FileExchangeException ? error.code : '';
+  return switch (code) {
+    'unsupportedText' => strings.unsupportedText,
+    'textTooLarge' => strings.textTooLarge,
+    'textEncodingConflict' => strings.shelfEncodingConflict,
+    'textEncodingUnavailable' => strings.shelfEncodingUnavailable,
+    _ => strings.operationFailed,
+  };
 }
 
 class BookshelfPage extends ConsumerWidget {
@@ -83,6 +106,22 @@ class BookshelfPage extends ConsumerWidget {
                 context.go('/search');
               } else if (action == 'sources') {
                 context.push('/sources');
+              } else if (action == 'encodedText') {
+                final encoding = await showDialog<LocalTextEncoding>(
+                  context: context,
+                  builder: (_) => const TextEncodingDialog(),
+                );
+                if (encoding == null || !context.mounted) return;
+                try {
+                  await ref
+                      .read(importingTextProvider.notifier)
+                      .importText(encoding: encoding);
+                } catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(_textImportError(strings, error))),
+                  );
+                }
               } else if (action == 'epub') {
                 try {
                   await ref.read(importingTextProvider.notifier).importEpub();
@@ -116,6 +155,11 @@ class BookshelfPage extends ConsumerWidget {
                   child: Text(strings.shelfManageGroups),
                 ),
               PopupMenuItem(
+                value: 'encodedText',
+                enabled: !busy,
+                child: Text(strings.shelfImportEncodedText),
+              ),
+              PopupMenuItem(
                 value: 'epub',
                 enabled: !busy,
                 child: Text(strings.readerEpubImport),
@@ -137,12 +181,7 @@ class BookshelfPage extends ConsumerWidget {
                   await ref.read(importingTextProvider.notifier).importText();
                 } catch (error) {
                   if (!context.mounted) return;
-                  final code = error is FileExchangeException ? error.code : '';
-                  final message = switch (code) {
-                    'unsupportedText' => strings.unsupportedText,
-                    'textTooLarge' => strings.textTooLarge,
-                    _ => strings.operationFailed,
-                  };
+                  final message = _textImportError(strings, error);
                   ScaffoldMessenger.of(context)
                       .showSnackBar(SnackBar(content: Text(message)));
                 }

@@ -50,7 +50,9 @@ abstract final class LocalTextDecoder {
     try {
       final bom = _bom(bytes);
       if (bom != null) {
-        if (encoding != null && encoding != bom.encoding) _unsupported();
+        if (encoding != null && encoding != bom.encoding) {
+          throw const LocalTextDecodeException('textEncodingConflict');
+        }
         return _decodeAs(bytes, bom.encoding, bom.length);
       }
       if (encoding != null) return _decodeAs(bytes, encoding, 0);

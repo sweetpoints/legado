@@ -171,7 +171,7 @@ void main() {
         utf16('你好', little: true),
         encoding: LocalTextEncoding.gbk,
       ),
-      failsWith('unsupportedText'),
+      failsWith('textEncodingConflict'),
     );
   });
 

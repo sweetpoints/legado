@@ -28,5 +28,14 @@
   "shelfBookActions": "图书操作",
   "shelfMoveUp": "上移",
   "shelfMoveDown": "下移",
-  "shelfEmptyGroup": "此分组暂无图书。"
+  "shelfEmptyGroup": "此分组暂无图书。",
+  "shelfImportEncodedText": "按编码导入 TXT",
+  "shelfChooseTextEncoding": "选择 TXT 编码",
+  "shelfTextEncodingHint": "请选择文件的已知编码。文件中的字节顺序标记（BOM）优先，所选编码与 BOM 冲突时将停止导入。",
+  "shelfEncodingUtf8": "UTF-8",
+  "shelfEncodingGbk": "GBK / GB2312",
+  "shelfEncodingUtf16Le": "UTF-16 小端序",
+  "shelfEncodingUtf16Be": "UTF-16 大端序",
+  "shelfEncodingConflict": "所选编码与文件的 BOM 不一致，请选择 BOM 对应的编码，或使用普通 TXT 导入自动识别。",
+  "shelfEncodingUnavailable": "当前文件适配器不支持按指定编码导入，已停止操作，请更换支持此功能的文件适配器。"
 }
