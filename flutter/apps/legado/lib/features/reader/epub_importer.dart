@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:app_backup/app_backup.dart';
@@ -33,18 +34,11 @@ abstract final class EpubImporter {
     required String name,
     required Uint8List bytes,
   }) async {
-    late Map<String, Uint8List> files;
-    try {
-      files = LegacyBackupArchive.decodeEntries(bytes);
-    } on FormatException catch (error) {
-      throw EpubImportException(
-        EpubImportFailure.invalidArchive,
-        error.message,
-      );
-    }
-    final book = _Package(files).read(name);
-    final digest = sha256.convert(utf8.encode(jsonEncode(book.identity)));
-    final url = 'local:epub:$digest';
+    // A bound method captures only the data-only receiver. A closure here can
+    // accidentally capture a repository with native handles or a BuildContext.
+    final decoded = await Isolate.run(_DecodeJob(name, bytes).call);
+    final book = decoded.book;
+    final url = decoded.url;
     final existing = await repository.book(url);
     if (existing != null) return existing;
     final chapters = <ReaderChapter>[];
@@ -75,6 +69,27 @@ abstract final class EpubImporter {
   }
 }
 
+final class _DecodeJob {
+  const _DecodeJob(this.name, this.bytes);
+  final String name;
+  final Uint8List bytes;
+
+  ({_Book book, String url}) call() {
+    late Map<String, Uint8List> files;
+    try {
+      files = LegacyBackupArchive.decodeEntries(bytes);
+    } on FormatException catch (error) {
+      throw EpubImportException(
+        EpubImportFailure.invalidArchive,
+        error.message,
+      );
+    }
+    final book = _Package(files).read(name);
+    final digest = sha256.convert(utf8.encode(jsonEncode(book.identity)));
+    return (book: book, url: 'local:epub:$digest');
+  }
+}
+
 final class _Book {
   const _Book(this.title, this.author, this.metadataTitle, this.chapters);
   final String title, author, metadataTitle;
@@ -84,7 +99,7 @@ final class _Book {
     'title': metadataTitle,
     'author': author,
     'chapters': [
-      for (final c in chapters) [c.path, c.title, c.text],
+      for (final c in chapters) [c.title, c.text],
     ],
   };
 }
