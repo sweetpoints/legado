@@ -66,6 +66,7 @@ class PdfReadingSession {
     final document = await PdfDocument.openData(
       Uint8List.fromList(bytes),
       sourceName: book.url,
+      useProgressiveLoading: true,
       passwordProvider: () async => null,
     );
     if (document.isEncrypted || document.pages.length != metadata.pageCount) {
