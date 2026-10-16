@@ -26,7 +26,7 @@ abstract class RssSource with _$RssSource {
     'sourceName': name,
   };
   factory RssSource.fromJson(Map<String, Object?> json) {
-    final url = (json['sourceUrl'] ?? json['url'])?.toString().trim() ?? '';
+    final url = (json['sourceUrl'] ?? json['url'])?.toString() ?? '';
     final uri = Uri.tryParse(url);
     if (uri == null ||
         !['http', 'https'].contains(uri.scheme) ||

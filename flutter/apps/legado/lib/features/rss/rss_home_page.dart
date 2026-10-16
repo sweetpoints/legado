@@ -17,14 +17,24 @@ export 'rss_models.dart';
 final rssStoreProvider = Provider.family<RssStore, LibraryRepository>(
   (ref, repository) => RssStore(repository),
 );
-final rssSourcesProvider = FutureProvider.autoDispose
-    .family<List<RssSource>, LibraryRepository>((ref, repository) {
+typedef RssSourceView = ({
+  List<RssSource> sources,
+  int restoredCount,
+  int conflictCount,
+});
+final rssSourceViewProvider = FutureProvider.autoDispose
+    .family<RssSourceView, LibraryRepository>((ref, repository) {
       final subscription = repository.changes.listen(
         (_) => ref.invalidateSelf(),
       );
       ref.onDispose(subscription.cancel);
-      return ref.watch(rssStoreProvider(repository)).sources();
+      return ref.watch(rssStoreProvider(repository)).sourceView();
     });
+final rssSourcesProvider = FutureProvider.autoDispose
+    .family<List<RssSource>, LibraryRepository>(
+      (ref, repository) async =>
+          (await ref.watch(rssSourceViewProvider(repository).future)).sources,
+    );
 final rssArticlesProvider = FutureProvider.autoDispose
     .family<List<RssArticle>, (LibraryRepository, String)>((ref, args) {
       final subscription = args.$1.changes.listen((_) => ref.invalidateSelf());
@@ -53,38 +63,93 @@ class RssHomePage extends ConsumerWidget {
       ],
     ),
     body: ref
-        .watch(rssSourcesProvider(repository))
+        .watch(rssSourceViewProvider(repository))
         .when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => _Failure(
             error: error,
-            retry: () => ref.invalidate(rssSourcesProvider(repository)),
+            retry: () => ref.invalidate(rssSourceViewProvider(repository)),
           ),
-          data: (sources) => sources.isEmpty
-              ? Center(child: Text(AppLocalizations.of(context).rssEmpty))
-              : ListView.builder(
-                  itemCount: sources.length,
-                  itemBuilder: (context, index) {
-                    final source = sources[index];
-                    return ListTile(
-                      leading: Icon(
-                        source.requiresRuleEngine
-                            ? Icons.warning_amber
-                            : Icons.rss_feed,
-                      ),
-                      title: Text(source.name),
-                      subtitle: Text(
-                        source.requiresRuleEngine
-                            ? AppLocalizations.of(context).rssLegacySubtitle
-                            : source.url,
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/rss/source', extra: source),
-                    );
-                  },
+          data: (view) => Column(
+            children: [
+              if (view.restoredCount > 0 || view.conflictCount > 0)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    AppLocalizations.of(
+                      context,
+                    ).rssRestoreSummary(view.restoredCount, view.conflictCount),
+                  ),
                 ),
+              Expanded(
+                child: view.sources.isEmpty
+                    ? Center(child: Text(AppLocalizations.of(context).rssEmpty))
+                    : ListView.builder(
+                        itemCount: view.sources.length,
+                        itemBuilder: (context, index) {
+                          final source = view.sources[index];
+                          return ListTile(
+                            leading: Icon(
+                              source.requiresRuleEngine
+                                  ? Icons.warning_amber
+                                  : Icons.rss_feed,
+                            ),
+                            title: Text(source.name),
+                            subtitle: Text(
+                              source.requiresRuleEngine
+                                  ? AppLocalizations.of(context)
+                                        .rssLegacySubtitle
+                                  : source.url,
+                            ),
+                            trailing: IconButton(
+                              tooltip: AppLocalizations.of(context).rssDelete,
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(context, ref, source),
+                            ),
+                            onTap: () =>
+                                context.push('/rss/source', extra: source),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
   );
+
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    RssSource source,
+  ) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context).rssDelete),
+        content: Text(AppLocalizations.of(context).rssDeleteHelp),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(AppLocalizations.of(context).rssCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(AppLocalizations.of(context).rssDelete),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !context.mounted) return;
+    try {
+      await ref.read(rssStoreProvider(repository)).removeSource(source.url);
+      ref.invalidate(rssSourceViewProvider(repository));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_message(context, e))));
+      }
+    }
+  }
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     final controller = TextEditingController();
@@ -139,7 +204,7 @@ class RssHomePage extends ConsumerWidget {
                         await ref
                             .read(rssStoreProvider(repository))
                             .importSources(input);
-                        ref.invalidate(rssSourcesProvider(repository));
+                        ref.invalidate(rssSourceViewProvider(repository));
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                         if (context.mounted) {
@@ -597,6 +662,8 @@ String _message(BuildContext context, Object error) {
     return switch (error.message) {
       'rssInvalidUrl' => l10n.rssInvalidUrl,
       'rssCorruptStorage' => l10n.rssCorruptStorage,
+      'rssInvalidRestore' => l10n.rssInvalidRestore,
+      'rssDuplicateRestoreSource' => l10n.rssDuplicateRestoreSource,
       'rssInvalidSource' => l10n.rssInvalidSource,
       'rssLegacyRules' || 'rssScriptCapability' => l10n.rssScriptCapability,
       'rssUnsupportedRule' => l10n.rssUnsupportedRule,

@@ -11,6 +11,8 @@ import 'package:legado_app/features/rss/rss_service.dart';
 class MemoryLibrary implements LibraryRepository {
   final settings = <String, String>{};
   @override
+  Future<Map<String, String>> backupFiles() async => {};
+  @override
   Stream<void> get changes => const Stream.empty();
   @override
   Future<String?> setting(String key) async => settings[key];
@@ -27,9 +29,47 @@ class MemoryLibrary implements LibraryRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class ReaderMemoryLibrary extends MemoryLibrary
+    implements LegacyBackupFileReader {
+  String? legacyText;
+  var reads = 0;
+  @override
+  Future<String?> backupFile(String name) async {
+    if (name != 'rssSources.json') throw StateError('Unexpected entry');
+    reads++;
+    return legacyText;
+  }
+
+  @override
+  Future<Map<String, String>> backupFiles() async =>
+      throw StateError('Full export must not be used');
+}
+
 const rss =
     '''<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>中文</title><item><guid>opaque-1</guid><title>标题 &amp; 内容</title><link>/articles/1</link><content:encoded><![CDATA[<p>Hello</p>]]></content:encoded><pubDate>Mon, 01 Jun 2026 10:00:00 GMT</pubDate></item></channel></rss>''';
 void main() {
+  test('optional single-entry capability avoids full cache export and keeps reads side-effect free', () async {
+    final repository = ReaderMemoryLibrary()
+      ..legacyText =
+          '[{"sourceUrl":"https://example.org/rss","sourceName":"Legacy","future":true}]';
+    final store = RssStore(repository);
+    expect((await store.sources()).single.original['future'], true);
+    expect(repository.reads, 1);
+    expect(repository.settings, isEmpty);
+    repository.legacyText = '{bad';
+    await expectLater(
+      store.sources(),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'code',
+          'rssInvalidRestore',
+        ),
+      ),
+    );
+    expect(repository.settings, isEmpty);
+  });
+
   test(
     'RSS2 CDATA, entities, opaque ids, relative links and Atom xml:base',
     () {
