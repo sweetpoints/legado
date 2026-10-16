@@ -1,6 +1,6 @@
 # Legado Flutter App（迁移开发中）
 
-Flutter 3.47.6 官方五平台 app 工程。当前已有 Drift 书架/分组/排序、TXT/EPUB 文本导入与连续阅读、持久化书签与备注、书源管理/搜索/发现/详情、RSS/Atom/有限 HTML 订阅、ZIP 备份原子恢复与导出、语言和主题设置。
+Flutter 3.47.6 官方五平台 app 工程。当前已有 Drift 书架/分组/排序、TXT/EPUB 文本导入与连续阅读、PDF 导入/缩放/翻页/进度、持久化书签与备注、书源管理/搜索/发现/详情、RSS/Atom/有限 HTML 订阅、ZIP 备份原子恢复与导出、语言和主题设置。
 
 TXT 支持严格 UTF-8、带 BOM 的 UTF-16 与 GBK；自动判定不确定时可使用编码选择入口，不支持 GB18030 四字节编码。
 
@@ -8,4 +8,4 @@ TXT 支持严格 UTF-8、带 BOM 的 UTF-16 与 GBK；自动判定不确定时�
 
 在工作区 `flutter pub get`，再执行 `python3 tool/merge-app-localizations.py`；进入本目录运行 `flutter gen-l10n`、`dart run build_runner build`、`flutter run -d macos`。V8 消费固定预编译 SDK，禁止在此工程构建 V8。App 测试目前使用支持 V8 的 macOS；Windows/Linux 的数据包测试与整个 App 原生支持是不同证据。
 
-EPUB 当前只提取章节文本，不呈现原版式、图片和字体。当前尚未实现 PDF、完整分页排版、朗读、同步、全部旧宿主兼容和五平台 Release 验收。详见[完整迁移清单](../../docs/app-migration/README.md)。使用独立开发标识，不覆盖原 App；平台默认开发签名不可作为正式发行签名。
+EPUB 当前只提取章节文本，不呈现原版式、图片和字体。PDF 当前限制 32 MiB，并明确拒绝加密文档；采用固定预编译 PDFium，包含全部平台的原生第三方许可证。当前尚未实现完整文本分页排版、朗读、同步、全部旧宿主兼容和五平台 Release 验收。详见[完整迁移清单](../../docs/app-migration/README.md)。使用独立开发标识，不覆盖原 App；平台默认开发签名不可作为正式发行签名。
