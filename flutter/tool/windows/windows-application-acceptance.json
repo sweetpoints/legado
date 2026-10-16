@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "headSha": "e07e489891a91d57d566a0570aa8274a79022d98",
+  "testedMergeSha": "32c557969253b4c085472f96d477b63d43e122f1",
+  "runId": 38951664298,
+  "jobId": 117144287733,
+  "artifactId": 12068489330,
+  "runUrl": "https://github.com/sweetpoints/legado/actions/runs/38951664298",
+  "platform": "windows-x64",
+  "buildType": "Release",
+  "nativeApplicationIntegrationPassed": 3,
+  "bundle": {
+    "sourceSha": "32c557969253b4c085472f96d477b63d43e122f1",
+    "name": "legado-windows-x64-portable-release.zip",
+    "size": 36993992,
+    "sha256": "27526dc6a74e06a43f1a7e5801edf849e1342b436d509e7ab7d9fdad9ba03ea4"
+  },
+  "startup": {
+    "javaHomeAbsent": true,
+    "sourceSha": "32c557969253b4c085472f96d477b63d43e122f1",
+    "jvmLibraryVisible": false,
+    "javaCommandVisible": false,
+    "buildType": "Release",
+    "nativeBridgeSha256": "9a2320d418fa855db3626301f0c3adad027d46995cc6b7553a6050692de98118",
+    "startupProcessStayedAlive": true,
+    "jvmModuleLoaded": false,
+    "gracefulWindowClose": true,
+    "jniModuleLoaded": false,
+    "environmentScope": "child process only",
+    "appLocalCrtLoaded": true,
+    "searchPath": [
+      "bundle",
+      "Windows/System32",
+      "Windows"
+    ],
+    "exitCode": 0,
+    "platform": "windows-x64",
+    "executableSha256": "2d8e2e230473263278eb03c36e32864f5a3dca369d0590c760fa3537e6738b3e"
+  },
+  "crt": {
+    "schemaVersion": 1,
+    "files": [
+      {
+        "name": "msvcp140.dll",
+        "version": "14.51.36247.0",
+        "microsoftAuthenticodeValid": true,
+        "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+        "source": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Redist\\MSVC\\14.51.36231\\x64\\Microsoft.VC145.CRT\\msvcp140.dll",
+        "size": 643512,
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      },
+      {
+        "name": "vcruntime140.dll",
+        "version": "14.51.36247.0",
+        "microsoftAuthenticodeValid": true,
+        "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+        "source": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Redist\\MSVC\\14.51.36231\\x64\\Microsoft.VC145.CRT\\vcruntime140.dll",
+        "size": 178616,
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      },
+      {
+        "name": "vcruntime140_1.dll",
+        "version": "14.51.36247.0",
+        "microsoftAuthenticodeValid": true,
+        "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+        "source": "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Redist\\MSVC\\14.51.36231\\x64\\Microsoft.VC145.CRT\\vcruntime140_1.dll",
+        "size": 50112,
+        "signer": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    ],
+    "architecture": "x64",
+    "distribution": "app-local Microsoft Visual C++ release redistributables",
+    "redistributableVersion": "14.51.36231",
+    "sourceSha": "32c557969253b4c085472f96d477b63d43e122f1",
+    "documentation": [
+      "https://docs.flutter.dev/platform-integration/windows/building#building-your-own-zip-file-for-windows",
+      "https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files"
+    ],
+    "versionFileSha256": "2ca998516f8f18b39c28ce022abb90ef5ad711b468494671dd84b74618b569d9"
+  },
+  "independentArtifactChecks": {
+    "zipCrcPassed": true,
+    "bundleSha256Matched": true,
+    "executableAndV8Sha256Matched": true,
+    "allThreeCrtSha256Matched": true,
+    "embeddedCrtProvenanceMatched": true,
+    "bundledJvmAbsent": true,
+    "dartjniRetainedButNotLoadedDuringStartup": true
+  },
+  "limits": [
+    "Windows ARM64 has native V8 cross-link evidence only; this application runtime acceptance is x64.",
+    "The isolated startup covers application launch and graceful close; it does not claim every future plugin path is Java-free.",
+    "The runner is Windows Server 2025; Windows versions and hardware outside this runner remain untested."
+  ]
+}
