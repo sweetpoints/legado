@@ -40,6 +40,38 @@ class SourceEngine {
   final Map<String, NetworkClient> _sessions = {};
   final Map<String, Map<String, Object?>> _variables = {};
   final Map<String, List<Map<String, Object?>>> _pendingCookies = {};
+  final Map<String, bool> _cookiePolicies = {};
+
+  NetworkClient _networkFor(SourceDefinition source) {
+    final enabled = source.cookieJarEnabled;
+    final previous = _cookiePolicies[source.id];
+    if (previous != null && previous != enabled) {
+      throw const EngineException(
+        'source_policy_changed',
+        'Recreate the source engine after changing its cookie policy',
+      );
+    }
+    _cookiePolicies[source.id] = enabled;
+    if (enabled && _providedNetwork != null) return _providedNetwork;
+    return _sessions.putIfAbsent(
+      source.id,
+      () => NetworkClient(
+        cookieJarEnabled: enabled,
+        charsetDecoder: _providedNetwork?.charsetDecoder,
+        maxConcurrentRequests:
+            source.metadata['maxConcurrentRequests'] as int? ??
+            _providedNetwork?.maxConcurrentRequests ??
+            4,
+        minRequestInterval: Duration(
+          milliseconds:
+              source.metadata['requestIntervalMs'] as int? ??
+              _providedNetwork?.minRequestInterval.inMilliseconds ??
+              0,
+        ),
+      ),
+    );
+  }
+
   Future<Object?> evaluateAuxiliary(
     SourceDefinition source,
     String script, {
@@ -56,9 +88,7 @@ class SourceEngine {
         'Runtime has no auxiliary execution',
       );
     }
-    final network =
-        _providedNetwork ??
-        _sessions.putIfAbsent(source.id, () => NetworkClient());
+    final network = _networkFor(source);
     final pending = _pendingCookies.remove(source.id);
     if (pending != null) network.restoreCookies(pending);
     final variables = _variables.putIfAbsent(source.id, () => {});
@@ -111,18 +141,7 @@ class SourceEngine {
     if (!['search', 'explore', 'info', 'toc', 'content'].contains(operation)) {
       throw EngineException('unsupported_operation', operation);
     }
-    final network =
-        _providedNetwork ??
-        _sessions.putIfAbsent(
-          source.id,
-          () => NetworkClient(
-            maxConcurrentRequests:
-                source.metadata['maxConcurrentRequests'] as int? ?? 4,
-            minRequestInterval: Duration(
-              milliseconds: source.metadata['requestIntervalMs'] as int? ?? 0,
-            ),
-          ),
-        );
+    final network = _networkFor(source);
     final pendingCookies = _pendingCookies.remove(source.id);
     if (pendingCookies != null) network.restoreCookies(pendingCookies);
     final vars = _variables.putIfAbsent(source.id, () => {});
@@ -919,10 +938,11 @@ class SourceEngine {
 
   Map<String, Object?> exportSession(String sourceId) => {
     'variables': Map<String, Object?>.from(_variables[sourceId] ?? {}),
-    'cookies':
-        (_providedNetwork ?? _sessions[sourceId])?.exportCookies() ??
-        _pendingCookies[sourceId] ??
-        [],
+    'cookies': _cookiePolicies[sourceId] == false
+        ? []
+        : _pendingCookies[sourceId] ??
+              (_sessions[sourceId] ?? _providedNetwork)?.exportCookies() ??
+              [],
   };
   void importSession(String sourceId, Map<String, Object?> session) {
     final variables = Map<String, Object?>.from(
@@ -930,10 +950,17 @@ class SourceEngine {
     );
     // Ensure storage boundaries remain JSON serializable.
     jsonEncode(variables);
-    final records = (session['cookies'] as List? ?? [])
-        .map((e) => Map<String, Object?>.from(e as Map))
-        .toList();
-    final network = _providedNetwork ?? _sessions[sourceId];
+    final records =
+        (_cookiePolicies[sourceId] == false
+                ? <Object?>[]
+                : (session['cookies'] as List? ?? []))
+            .map((e) => Map<String, Object?>.from(e as Map))
+            .toList();
+    // Until a definition supplies its policy, stage restoration separately.
+    // An injected shared client must not receive a disabled source's cookies.
+    final network =
+        _sessions[sourceId] ??
+        (_cookiePolicies[sourceId] == true ? _providedNetwork : null);
     if (network == null) {
       final validator = NetworkClient();
       try {

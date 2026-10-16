@@ -409,13 +409,13 @@ class LegacySourceImporter {
         );
       }
     }
-    if (input.containsKey('enabledCookieJar') &&
-        input['enabledCookieJar'] != true) {
+    if (input['enabledCookieJar'] != null &&
+        input['enabledCookieJar'] is! bool) {
       issues.add(
         const LegacyIssue(
           'enabledCookieJar',
           'legacy.cookie_policy_requires_review',
-          'Disabled legacy cookie jar must not silently use the new automatic jar.',
+          'A non-boolean legacy cookie policy requires explicit review.',
         ),
       );
     }
@@ -448,6 +448,9 @@ class LegacySourceImporter {
         headers: requestHeaders,
         metadata: {
           'legacy': true,
+          'cookieJarEnabled':
+              !input.containsKey('enabledCookieJar') ||
+              input['enabledCookieJar'] == true,
           if (hasMainJs) 'legacyMainJs': true,
           if (legacyBaseUrlUnavailable) 'legacyBaseUrlUnavailable': true,
           'legacyOriginal': original,
@@ -616,8 +619,9 @@ String _normalizeExploreArray(String value) {
         if (next < value.length &&
             value[next] == ']' &&
             previous != '[' &&
-            previous != ',')
+            previous != ',') {
           continue;
+        }
       }
     }
     out.write(c);
