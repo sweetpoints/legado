@@ -1,0 +1,113 @@
+name: Flutter Linux app
+
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-linux-app.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-linux-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep completed work and let an already running acceptance finish.
+concurrency:
+  group: flutter-linux-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x64-app:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    env:
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GDK_BACKEND: x11
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install official Flutter Linux and headless display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev g++ \
+            xvfb xauth dbus-x11 fonts-noto-cjk libegl1-mesa-dev libgl1-mesa-dev
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - uses: actions/cache@v5
+        with:
+          path: |
+            flutter/packages/source_v8/.cache/source_sdk
+            flutter/packages/source_v8/.cache/toolchains
+            flutter/packages/source_v8/.cache/linux-sysroots
+            flutter/packages/source_v8/.cache/linux-consumer
+          key: linux-app-v8-x64-${{ hashFiles('flutter/tool/v8/linux*', 'flutter/tool/v8/prebuilt.py', 'flutter/tool/v8/link_sdk.py', 'flutter/tool/v8/toolchains.py', 'flutter/tool/v8/toolchain-pins.json', 'flutter/packages/source_v8/src/**') }}
+          restore-keys: linux-app-v8-x64-
+      - name: Record the native host and Flutter Linux toolchain
+        run: |
+          mkdir -p build/linux-app-acceptance
+          test "$(uname -m)" = x86_64
+          {
+            uname -a
+            python3 --version
+            flutter --version
+            clang --version
+            g++ --version
+            pkg-config --modversion gtk+-3.0
+            flutter doctor -v
+          } | tee build/linux-app-acceptance/toolchain.log
+      - name: Resolve the locked application workspace
+        working-directory: flutter
+        run: flutter pub get --enforce-lockfile
+      - name: Verify authenticated SDK consumer boundaries
+        run: |
+          python3 -m unittest discover -s flutter/tool/v8 -p test_linux_sdk.py -v
+          python3 -m unittest discover -s flutter/tool -p test_verify_linux_app_bundle.py -v
+      - name: Run actual native-hook V8 and artifact contracts
+        working-directory: flutter/packages/source_v8
+        run: |
+          set -euo pipefail
+          dart analyze hook test
+          dart test test/ --reporter expanded 2>&1 | tee "$GITHUB_WORKSPACE/build/linux-app-acceptance/v8-tests.log"
+      - name: Build the Linux application in Release mode
+        working-directory: flutter/apps/legado
+        run: |
+          set -euo pipefail
+          flutter build linux --release --no-pub 2>&1 | tee "$GITHUB_WORKSPACE/build/linux-app-acceptance/release-build.log"
+      - name: Run the main application integration suite under Xvfb
+        working-directory: flutter/apps/legado
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s '-screen 0 1440x1000x24' \
+            dbus-run-session -- flutter test integration_test/native_app_test.dart \
+            -d linux --no-pub --reporter expanded 2>&1 \
+            | tee "$GITHUB_WORKSPACE/build/linux-app-acceptance/native-app-tests.log"
+      - name: Package the Release bundle and authenticated V8 notices
+        run: |
+          python3 flutter/tool/verify-linux-app-bundle.py \
+            --bundle flutter/apps/legado/build/linux/x64/release/bundle \
+            --output build/linux-app-acceptance/release-bundle.json
+          tar -czf build/linux-app-acceptance/legado-linux-x64-release.tar.gz \
+            -C flutter/apps/legado/build/linux/x64/release bundle
+      - name: Upload Linux application acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: flutter-linux-x64-app-${{ github.sha }}
+          path: |
+            build/linux-app-acceptance/
+            flutter/apps/legado/build/linux/x64/debug/logs/
+            flutter/packages/source_v8/.cache/linux-consumer/**/manifest.json
+            flutter/packages/source_v8/.cache/linux-consumer/**/provenance.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
