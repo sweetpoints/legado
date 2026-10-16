@@ -124,7 +124,7 @@ abstract final class LegacyBackupArchive {
             chapter['title'] is! String ||
             chapter['index'] is! int ||
             (chapter['index'] as int) < 0 ||
-            (chapter.containsKey('isVolume') && chapter['isVolume'] is! bool)) {
+            (chapter['isVolume'] != null && chapter['isVolume'] is! bool)) {
           throw const FormatException('Invalid library backup chapter');
         }
       }
