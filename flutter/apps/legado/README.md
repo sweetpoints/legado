@@ -4,7 +4,7 @@ Flutter 3.47.6 官方五平台 app 工程。当前已有 Drift 书架/分组/排
 
 TXT 支持严格 UTF-8、带 BOM 的 UTF-16 与 GBK；自动判定不确定时可使用编码选择入口，不支持 GB18030 四字节编码。
 
-统一技术栈：Drift + Riverpod、Freezed、Dio、go_router ^18.1.0、material_ui ^1.7.0、官方 ARB/gen_l10n 中英国际化。
+统一技术栈：Drift + Riverpod（官方注解与代码生成）、Freezed、Dio、go_router ^18.1.0、material_ui ^1.7.0、官方 ARB/gen_l10n 中英国际化。
 
 在工作区 `flutter pub get`，再执行 `python3 tool/merge-app-localizations.py`；进入本目录运行 `flutter gen-l10n`、`dart run build_runner build`、`flutter run -d macos`。V8 消费固定预编译 SDK，禁止在此工程构建 V8。App 测试目前使用支持 V8 的 macOS；Windows/Linux 的数据包测试与整个 App 原生支持是不同证据。
 

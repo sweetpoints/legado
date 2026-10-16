@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-应用状态与依赖使用 Riverpod 3.4.3，持久化使用 Drift ^2.35.2（SQLite），业务模型使用 Freezed，应用请求使用 Dio，路由使用 go_router ^18.1.0，组件使用 material_ui ^1.7.0。旧书源引擎保留已有网络语义；不因应用层采用 Dio 重写其 Cookie/编码/重定向契约。Freezed 4.0.1 与 build_runner 2.16.1 固定以兼容当前 ffigen/analyzer 13；无 dependency override。国际化使用官方 ARB/gen_l10n，各功能 fragment 汇总并检查中英键一致。
+应用状态与依赖使用 Riverpod 3.4.3，通过 riverpod_annotation 4.0.7 / riverpod_generator 4.0.9 自动生成 Provider；持久服务显式 keepAlive，页面级 family 按原生命周期自动释放。持久化使用 Drift ^2.35.2（SQLite），业务模型使用 Freezed，应用请求使用 Dio，路由使用 go_router ^18.1.0，组件使用 material_ui ^1.7.0。旧书源引擎保留已有网络语义；不因应用层采用 Dio 重写其 Cookie/编码/重定向契约。Freezed 4.0.1 与 build_runner 2.16.1 固定以兼容当前 ffigen/analyzer 13；无 dependency override。国际化使用官方 ARB/gen_l10n，各功能 fragment 汇总并检查中英键一致。
 
 ## 工程边界
 
@@ -32,7 +32,9 @@
 | 下载、缓存、导出、自动任务 | 并发限制、取消、断点恢复、后台寿命、网络变化、失败重试 | 待迁移 |
 | 备份、恢复、同步和数据升级 | 原文件与未知字段保留、全部备份项、媒体、加密配置、事务、回滚、重启恢复 | ZIP 校验、Drift 文本与媒体原子恢复/导出、本地导入原子事务及明确资源所有权回收已实现；旧 RSS/分组/书签语义已接入；其他旧配置应用与同步待迁移 |
 | 主题、配置、字体、背景、快捷入口 | Material 3、亮暗色与对比度、动态字号、屏幕阅读器、触屏/鼠标/键盘 | material_ui 亮暗主题、中英国际化/语言设置已实现；完整配置待迁移 |
-| 文件关联、分享、二维码、Web/MCP 服务、小组件 | 平台可提供的入口；其他平台提供语义等价流程并记录差异 | 待迁移 |
+| 文件关联、分享、二维码、MCP 服务、小组件 | 平台可提供的入口；其他平台提供语义等价流程并记录差异 | 待迁移 |
+
+Web Server（浏览器远程管理、HTTP/WebSocket 服务及其启动入口）按用户要求移除，不再列入五平台迁移范围；MCP、WebDAV 同步、书源 HTTP 请求与 WebView 验证仍分别保留。
 
 ## 数据兼容约束
 
