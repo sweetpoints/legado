@@ -125,3 +125,105 @@ The runtime probe is ready for a real runner, but cannot replace that runner.
 ```text
 python -m unittest discover -s flutter/tool/v8 -p test_windows_sdk.py -v
 ```
+
+## Collecting a reviewable lock on GitHub Windows runners
+
+`windows_toolchain_receipt.py` closes the missing-input gap without trusting an
+arbitrary runner toolchain automatically. Its operations are separated:
+
+1. `fetch-clang` downloads only the official Chromium Windows archive pinned in
+   `windows-pins.json`, validates its 51,467,544-byte size and SHA-256, extracts
+   with bounded safe paths, and validates the complete 346-file inventory.
+2. `collect` reads only the explicitly supplied Clang, MSVC and Windows SDK roots,
+   hashes the relevant target headers/libraries, checks required CRT inputs and
+   the already authenticated compiler version, and writes `candidate-lock.json`
+   and `receipt.json`. It does not modify the installed toolchain, enumerate the
+   environment or credentials, compile a bridge, or approve its own candidate.
+3. After independent review, `stage` copies only the approved lock's files into a
+   new task directory and verifies the exact inventory. Changed source files,
+   changed lock bytes and existing output directories are rejected. The consumer
+   then receives that independent reviewed digest, as before.
+
+The fixed Release production record is materially more specific than a moving
+`windows-2025` label:
+
+- [Production run 37449592798, Windows x64 job 112223133670](https://github.com/sweetpoints/v8-prebuilt/actions/runs/37449592798/job/112223133670)
+  identifies `windows-2025-vs2026`, image `20260925.250.1`.
+- The [matching official image metadata](https://github.com/actions/runner-images/blob/win25-vs2026/20260925.250/images/windows/Windows2025-VS2026-Readme.md)
+  identifies VS Enterprise 2026 `18.10.12217.157`. The Release manifest does **not**
+  record the exact MSVC tools subdirectory version; collect its explicit version
+  file and hashes instead of inferring it from the Visual Studio product version.
+- The [producer's fixed workflow](https://github.com/sweetpoints/v8-prebuilt/blob/32c52a8fafcee88e8ad989810cdeb24310597c14/.github/workflows/release.yml#L140)
+  requires Windows SDK `10.0.28000.0` and pins Microsoft's installer SHA-256 to
+  `e8e264aca8bc34abdf592352bf09f986a85cdb96db0efba405ca9e149181fe61`,
+  with a valid Microsoft Authenticode signature. Installing that SDK is a separate
+  runner setup action; the receipt collector never performs system installation.
+- The ordinary Windows 2025 [metadata at reviewed commit ee1ff4569e381a9649b400338bdc8ceb7e18a80e](https://github.com/actions/runner-images/blob/ee1ff4569e381a9649b400338bdc8ceb7e18a80e/images/windows/Windows2025-Readme.md)
+  identifies image `20261013.288.2`, VS 2022 `17.14.37710.0`, and installed SDK
+  `10.0.26100.0`. This is a candidate **compatibility toolchain**, not proof of an
+  identical producer environment.
+
+The following steps can be added to the existing Windows storage CI job. They
+collect its installed SDK `10.0.26100.0` for review and upload only JSON metadata.
+They do not write a trusted lock back to the repository or claim V8 compatibility.
+Select `10.0.28000.0` explicitly instead if the separately reviewed producer SDK
+installation step has been used; missing versions fail without choosing another.
+Reuse the workflow's already reviewed upload-artifact action pin.
+
+```yaml
+- name: Collect candidate Windows V8 toolchain receipt
+  shell: pwsh
+  run: |
+    $ErrorActionPreference = 'Stop'
+    $collector = 'flutter/tool/v8/windows_toolchain_receipt.py'
+    $clangRoot = Join-Path $env:RUNNER_TEMP 'legado-reviewed-windows-clang'
+    python $collector fetch-clang --output $clangRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Fixed Clang download verification failed' }
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ([string]::IsNullOrWhiteSpace($vsRoot)) { throw 'No candidate MSVC installation' }
+    $versionFile = Join-Path $vsRoot 'VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt'
+    $msvcVersion = (Get-Content $versionFile -Raw).Trim()
+    $msvcRoot = Join-Path $vsRoot "VC/Tools/MSVC/$msvcVersion"
+    $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10'
+    python $collector collect --target windows-x64 `
+      --clang-root $clangRoot --msvc-root $msvcRoot --msvc-version $msvcVersion `
+      --msvc-version-file $versionFile `
+      --sdk-root $sdkRoot --sdk-version '10.0.26100.0' `
+      --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' `
+      --output 'build/windows-v8-toolchain-candidate'
+    if ($LASTEXITCODE -ne 0) { throw 'Candidate toolchain receipt failed' }
+- name: Upload candidate Windows toolchain metadata
+  # Use the workflow's existing SHA-pinned actions/upload-artifact.
+  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+  with:
+    name: windows-v8-toolchain-candidate
+    path: build/windows-v8-toolchain-candidate/
+    if-no-files-found: error
+```
+
+Independent review must check the receipt against that exact CI run/commit and
+its official runner image record, confirm the numeric MSVC tools and SDK versions,
+confirm the fixed Clang archive/version, inspect the selected root mappings and
+expected target CRT/import library families, and compare the complete inventory
+for unexpected changes. Record the exact reviewed `candidate-lock.json` SHA-256
+as an immutable consumer input. A candidate from SDK 26100 must pass real linkage
+and native runtime acceptance before treating it as compatible with the producer's
+SDK 28000. Do not change the consumer to accept `receipt.approved=false` as proof.
+
+After reviewing an exact lock, materialization and compilation are explicit:
+
+```powershell
+$reviewedSha = '<independently-reviewed-candidate-lock-sha256>'
+python flutter/tool/v8/windows_toolchain_receipt.py stage `
+  --receipt-dir build/windows-v8-toolchain-candidate `
+  --expected-lock-sha256 $reviewedSha --output C:\legado-toolchain-staged
+python flutter/tool/v8/windows_sdk.py --target windows-x64 `
+  --toolchain-root C:\legado-toolchain-staged `
+  --toolchain-lock build/windows-v8-toolchain-candidate/candidate-lock.json `
+  --toolchain-lock-sha256 $reviewedSha --output C:\legado-output\windows-x64
+python flutter/tool/v8/windows_sdk.py --verify-runtime C:\legado-output\windows-x64
+```
+
+A future job running on a different image must revalidate every approved hash;
+image drift causes failure and a new candidate review, not silent adoption.
