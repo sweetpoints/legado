@@ -9,6 +9,11 @@ Apple application builds additionally use SwiftPM's fixed XCFramework checksum.
 import argparse
 import hashlib
 import json
+import io
+import os
+import tarfile
+import tempfile
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,15 +42,45 @@ def check_binary(path, target):
     return target
 
 
+def prepare(target):
+    pin = PINS["targets"][target]
+    cache = ROOT / ".dart_tool/hooks_runner/shared/pdfium_dart/build/chromium_7811" / target
+    destination = cache / Path(pin["member"]).name
+    if destination.exists():
+        return check_binary(destination, target)
+    with urllib.request.urlopen(pin["archive"], timeout=60) as response:
+        archive = response.read(40 * 1024 * 1024 + 1)
+    if len(archive) > 40 * 1024 * 1024:
+        raise ValueError("PDFium archive exceeds the bounded download limit")
+    if hashlib.sha256(archive).hexdigest() != pin["archiveSha256"]:
+        raise ValueError("PDFium release archive SHA256 mismatch")
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
+        member = bundle.getmember(pin["member"])
+        if not member.isfile() or member.size > 100 * 1024 * 1024:
+            raise ValueError("Invalid PDFium release binary member")
+        binary = bundle.extractfile(member).read()
+    if hashlib.sha256(binary).hexdigest() != pin["binarySha256"]:
+        raise ValueError("PDFium release binary SHA256 mismatch")
+    cache.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=cache, delete=False) as output:
+        temporary = Path(output.name)
+        output.write(binary)
+    os.replace(temporary, destination)
+    return check_binary(destination, target)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hooks-dir", type=Path)
     parser.add_argument("--library", type=Path)
     parser.add_argument("--target", choices=PINS["targets"])
+    parser.add_argument("--prepare-target", choices=PINS["targets"])
     args = parser.parse_args()
     check_notices()
     checked = set()
-    if args.library:
+    if args.prepare_target:
+        checked.add(prepare(args.prepare_target))
+    elif args.library:
         if not args.target:
             parser.error("--library requires --target")
         checked.add(check_binary(args.library, args.target))
@@ -64,7 +99,7 @@ def main():
         if not checked:
             raise ValueError("No consumed PDFium build-hook binary found")
     else:
-        parser.error("Provide --hooks-dir or --library and --target")
+        parser.error("Provide --prepare-target, --hooks-dir, or --library and --target")
     print("Verified native PDFium: " + ", ".join(sorted(checked)))
     print("Verified 16 exact upstream license payloads (PDFium and third parties)")
 
