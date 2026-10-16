@@ -227,3 +227,37 @@ python flutter/tool/v8/windows_sdk.py --verify-runtime C:\legado-output\windows-
 
 A future job running on a different image must revalidate every approved hash;
 image drift causes failure and a new candidate review, not silent adoption.
+
+## Reviewed x64 compatibility build and native CI
+
+The candidate captured by run `38945901818`, job `117124818232`, has now been
+independently reviewed for **compilation and compatibility testing**. Its exact
+lock is committed as `windows-reviewed-x64-lock.json`, SHA-256
+`36c9e96bc7121600be930cb7700599a9864a4e6d5a5a4e5288357cee0c8d3fb5`.
+The review record is `windows-reviewed-toolchain.json`. The artifact's source SHA
+`167e259e2d9d674e4fe45d049426cd34fa65595c` is the GitHub PR merge commit whose
+second parent is reviewed branch HEAD `475093507764b233397e7574a721beebec0e24f1`;
+the API parent record and job checkout log were checked independently.
+
+The review covered all **6,123 files**: official Clang 346, target MSVC 517,
+Windows SDK 5,260, including exact lowercase SHA-256 format, relative-path safety,
+case-insensitive name uniqueness, architecture-specific CRT directories, and all
+27 system libraries recorded by the fixed Windows V8 SDK. The actual MSVC tools
+version is `14.51.36231`; the SDK is `10.0.26100.0`. Approval authorizes attempting
+the real build. It does not claim ABI compatibility, runtime or release acceptance
+before those tests execute; the producer used SDK `10.0.28000.0`.
+
+`windows_ci.py --prepare-dynamic windows-x64` authenticates that exact installed
+payload, materializes it without changing the installed toolchain, and builds only
+the bridge. Any image drift fails against the reviewed lock. The Dart native hook
+can consume the resulting DLL with current source digest, consumer inputs,
+reviewed toolchain hash, fixed SDK provenance and DLL checksum validation. Windows
+path containment uses URI directory boundaries, preserving checks on native
+backslash paths. ARM64 remains excluded from the hook until its separate target
+library inventory has been reviewed and actually cross-linked.
+
+The separate `.github/workflows/flutter-windows-v8.yml` job performs x64 DLL
+compilation, the real native FFI probe with normal process exit, all Dart
+`source_v8` tests and the complete `source_conformance` suite, preserving exact
+native artifact/evidence. A second job collects ARM64 target libraries on the x64
+host for independent review. It does not claim ARM64 execution or compilation.
