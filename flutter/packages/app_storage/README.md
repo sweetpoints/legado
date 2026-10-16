@@ -148,3 +148,28 @@ subset into its current slots and leaves other books in place. Shared projection
 implement the six Android sort ids using numeric timestamps, and filter known
 built-in ids. Name and author ordering currently use deterministic Unicode order;
 Android's locale-specific Chinese collation is not replicated here.
+
+## Atomic local books
+
+`LocalBookRepository.importLocalBook` commits a complete book, its chapter list,
+its chapter-content map and optional small native assets in one Drift transaction.
+A late SQLite failure rolls back every row. Re-importing an existing book identity
+is idempotent and preserves its user edits/progress. Caller maps, lists and bytes
+are snapshotted. Non-volume chapters require corresponding content; extra content
+keys are rejected. Asset-only PDF books may use empty chapter/content collections.
+
+New local identities use `local:<format>:<sha256-lowercase64>`. Assets use
+`flutter/local-books/<same-sha256>/<safe-relative-path>`. At most 1024 assets,
+32 MiB per asset and 64 MiB in one import are accepted, with length checks before
+buffer copies. Traversal, URI punctuation, control characters and wrong identity
+namespaces are rejected. Existing opaque text/BLOB entries are never overwritten
+with different bytes; a collision aborts the entire import. No legacy archive key
+is renamed, interpreted or deleted by this capability.
+
+`localAsset(key)` retrieves a single BLOB using a typed Drift expression. SQLite
+checks its length with a `CASE` expression before returning its bytes, so a large
+restored opaque entry cannot bypass the 32 MiB read limit. Assets are preserved by
+`backupSnapshot`/`restoreArchive` byte-for-byte. This change reuses schema-3 tables
+and does not require another schema upgrade. Deleting a shelf book currently
+retains opaque archive entries, including its assets; asset garbage collection
+needs explicit ownership and reference tracking before it can safely be added.
