@@ -124,6 +124,23 @@
   "readerEpubUnsupported": "此 EPUB 含有文本阅读器暂不支持的章节格式。",
   "readerEpubEmpty": "此 EPUB 没有可阅读的文本。",
   "readerEpubImport": "导入 EPUB",
+  "readerBookmarks": "书签",
+  "readerAddBookmark": "添加当前位置",
+  "readerBookmarkNote": "备注（可选）",
+  "readerBookmarkCancel": "取消",
+  "readerBookmarkSave": "保存",
+  "readerBookmarkAdded": "书签已保存",
+  "readerBookmarkFailed": "书签操作失败：{error}",
+  "readerBookmarksEmpty": "暂无书签",
+  "readerBookmarkUnavailable": "此书签无法与当前图书和章节匹配。",
+  "readerDeleteBookmark": "删除书签",
+  "@readerBookmarkFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "rssTitle": "订阅",
   "rssAddTooltip": "添加订阅 / 导入旧订阅",
   "rssEmpty": "添加 RSS/Atom 地址，或导入旧版订阅 JSON",
@@ -159,6 +176,21 @@
   "rssPageLimit": "分页超过 20 页，已停止请求；请缩小分类范围。",
   "rssInvalidArticleLink": "文章链接无效，请检查链接提取规则。",
   "rssImageError": "图片加载失败，可复制原文链接查看。",
+  "rssDelete": "删除订阅",
+  "rssDeleteHelp": "删除后不会因旧备份记录再次出现。原备份、离线文章和收藏仍保留；显式导入同地址可重新添加。",
+  "rssRestoreSummary": "来自旧备份：{restored} 个订阅可用；{conflicts} 个同地址冲突保留当前配置。原备份保持不变。",
+  "@rssRestoreSummary": {
+    "placeholders": {
+      "restored": {
+        "type": "int"
+      },
+      "conflicts": {
+        "type": "int"
+      }
+    }
+  },
+  "rssInvalidRestore": "旧订阅备份格式无效，原数据已保留；请检查 rssSources.json。",
+  "rssDuplicateRestoreSource": "旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。",
   "sourcesManage": "书源管理",
   "sourcesImport": "导入",
   "sourcesImportJson": "导入书源 JSON",

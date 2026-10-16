@@ -554,6 +554,66 @@ abstract class AppLocalizations {
   /// **'Import EPUB'**
   String get readerEpubImport;
 
+  /// No description provided for @readerBookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get readerBookmarks;
+
+  /// No description provided for @readerAddBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark this position'**
+  String get readerAddBookmark;
+
+  /// No description provided for @readerBookmarkNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get readerBookmarkNote;
+
+  /// No description provided for @readerBookmarkCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get readerBookmarkCancel;
+
+  /// No description provided for @readerBookmarkSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get readerBookmarkSave;
+
+  /// No description provided for @readerBookmarkAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark saved'**
+  String get readerBookmarkAdded;
+
+  /// No description provided for @readerBookmarkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update bookmarks: {error}'**
+  String readerBookmarkFailed(String error);
+
+  /// No description provided for @readerBookmarksEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No bookmarks yet'**
+  String get readerBookmarksEmpty;
+
+  /// No description provided for @readerBookmarkUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This bookmark cannot be matched to the current book and chapter.'**
+  String get readerBookmarkUnavailable;
+
+  /// No description provided for @readerDeleteBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete bookmark'**
+  String get readerDeleteBookmark;
+
   /// No description provided for @rssTitle.
   ///
   /// In en, this message translates to:
@@ -763,6 +823,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Image could not load. Copy the original article link to view it.'**
   String get rssImageError;
+
+  /// No description provided for @rssDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete subscription'**
+  String get rssDelete;
+
+  /// No description provided for @rssDeleteHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The subscription will stay deleted across restarts. Original backups, offline articles and bookmarks are kept. Explicitly importing the same URL adds it back.'**
+  String get rssDeleteHelp;
+
+  /// No description provided for @rssRestoreSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy backup: {restored} subscriptions available; {conflicts} URL conflicts keep the current configuration. Original backup data is unchanged.'**
+  String rssRestoreSummary(int restored, int conflicts);
+
+  /// No description provided for @rssInvalidRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'The legacy subscription backup is invalid. Original data is preserved; check rssSources.json.'**
+  String get rssInvalidRestore;
+
+  /// No description provided for @rssDuplicateRestoreSource.
+  ///
+  /// In en, this message translates to:
+  /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
+  String get rssDuplicateRestoreSource;
 
   /// No description provided for @sourcesManage.
   ///
