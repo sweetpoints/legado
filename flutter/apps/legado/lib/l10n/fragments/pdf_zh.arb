@@ -1,0 +1,24 @@
+{
+  "pdfTitle": "PDF 阅读",
+  "pdfImportTitle": "导入 PDF",
+  "pdfImportDescription": "导入不超过 32 MiB 的本地 PDF，文档将保存在书库中供离线阅读。",
+  "pdfChooseFile": "选择 PDF",
+  "pdfTooLarge": "PDF 超过 32 MiB 大小限制。",
+  "pdfEncrypted": "暂不支持加密 PDF，请导入未加密副本。",
+  "pdfUnsupportedStorage": "当前书库不支持本地 PDF 存储。",
+  "pdfOpenFailed": "PDF 缺失、损坏或格式不受支持。",
+  "pdfSaveFailed": "阅读进度保存失败。",
+  "pdfPreviousPage": "上一页",
+  "pdfNextPage": "下一页",
+  "pdfPagePosition": "第 {page} 页 / 共 {total} 页",
+  "@pdfPagePosition": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
+}

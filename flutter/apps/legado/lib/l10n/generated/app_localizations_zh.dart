@@ -291,6 +291,44 @@ class AppLocalizationsZh extends AppLocalizations {
       '当前文件适配器不支持按指定编码导入，已停止操作，请更换支持此功能的文件适配器。';
 
   @override
+  String get pdfTitle => 'PDF 阅读';
+
+  @override
+  String get pdfImportTitle => '导入 PDF';
+
+  @override
+  String get pdfImportDescription => '导入不超过 32 MiB 的本地 PDF，文档将保存在书库中供离线阅读。';
+
+  @override
+  String get pdfChooseFile => '选择 PDF';
+
+  @override
+  String get pdfTooLarge => 'PDF 超过 32 MiB 大小限制。';
+
+  @override
+  String get pdfEncrypted => '暂不支持加密 PDF，请导入未加密副本。';
+
+  @override
+  String get pdfUnsupportedStorage => '当前书库不支持本地 PDF 存储。';
+
+  @override
+  String get pdfOpenFailed => 'PDF 缺失、损坏或格式不受支持。';
+
+  @override
+  String get pdfSaveFailed => '阅读进度保存失败。';
+
+  @override
+  String get pdfPreviousPage => '上一页';
+
+  @override
+  String get pdfNextPage => '下一页';
+
+  @override
+  String pdfPagePosition(int page, int total) {
+    return '第 $page 页 / 共 $total 页';
+  }
+
+  @override
   String get readerTitle => '阅读';
 
   @override

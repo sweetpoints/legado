@@ -105,6 +105,28 @@
   "shelfEncodingUtf16Be": "UTF-16 Big Endian",
   "shelfEncodingConflict": "The selected encoding conflicts with this file’s BOM. Choose the encoding indicated by the BOM, or use automatic TXT import.",
   "shelfEncodingUnavailable": "This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.",
+  "pdfTitle": "PDF reader",
+  "pdfImportTitle": "Import PDF",
+  "pdfImportDescription": "Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.",
+  "pdfChooseFile": "Choose PDF",
+  "pdfTooLarge": "This PDF exceeds the 32 MiB limit.",
+  "pdfEncrypted": "Encrypted PDFs are not supported. Import an unencrypted copy.",
+  "pdfUnsupportedStorage": "This library does not support local PDF storage.",
+  "pdfOpenFailed": "The PDF is missing, damaged, or unsupported.",
+  "pdfSaveFailed": "Reading progress could not be saved.",
+  "pdfPreviousPage": "Previous page",
+  "pdfNextPage": "Next page",
+  "pdfPagePosition": "Page {page} of {total}",
+  "@pdfPagePosition": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "readerTitle": "Read",
   "readerSettings": "Reading settings",
   "readerFontSize": "Font size",

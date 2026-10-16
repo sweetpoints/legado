@@ -1,0 +1,3 @@
+# Preserve the original native license payloads byte for byte.
+licenses/* -whitespace -text
+LICENSE -whitespace -text
