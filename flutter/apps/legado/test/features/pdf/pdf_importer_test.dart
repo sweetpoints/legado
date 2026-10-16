@@ -120,6 +120,7 @@ void main() {
       name: 'Original.pdf',
       bytes: bytes,
     );
+    await first.close();
     final restored = await SqliteLibraryRepository.inMemory();
     await restored.putBook(
       LegacyBookRecord({
@@ -139,7 +140,6 @@ void main() {
     expect(repaired.chapterIndex, 1);
     expect(repaired.toJson()['futureField'], {'keep': true});
     expect(repaired.name, 'Original');
-    await first.close();
     await restored.close();
   });
 
