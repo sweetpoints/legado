@@ -6,15 +6,20 @@ import 'package:source_engine/source_engine.dart';
 /// The script suffix is opaque after its first delimiter; JS strings containing
 /// rule punctuation never re-enter the rule parser.
 class PortableLegacyRuleEvaluator implements LegacyTocFanOutEvaluator {
-  const PortableLegacyRuleEvaluator(this.runtime);
+  const PortableLegacyRuleEvaluator(this.runtime, {this.scriptCapability});
+  final bool Function(String)? scriptCapability;
   final ScriptRuntime runtime;
 
   @override
-  bool supportsRule(String rule) => canEvaluate(rule);
+  bool supportsRule(String rule) =>
+      canEvaluate(rule, scriptCapability: scriptCapability);
 
-  static bool canEvaluate(String rule) {
+  static bool canEvaluate(
+    String rule, {
+    bool Function(String)? scriptCapability,
+  }) {
     try {
-      _Plan.parse(rule);
+      _Plan.parse(rule, scriptCapability: scriptCapability);
       return true;
     } on EngineException {
       return false;
@@ -37,7 +42,7 @@ class PortableLegacyRuleEvaluator implements LegacyTocFanOutEvaluator {
     bool unescape = true,
     CancellationToken? cancellation,
   }) async {
-    final plan = _Plan.parse(rule);
+    final plan = _Plan.parse(rule, scriptCapability: scriptCapability);
     cancellation?.throwIfCancelled();
     var values = plan.selector.isEmpty
         ? <Object?>[input]
@@ -52,14 +57,17 @@ class PortableLegacyRuleEvaluator implements LegacyTocFanOutEvaluator {
       values = [values.map(RuleEvaluator.text).join('\n')];
     }
     if (plan.pattern != null) {
-      values = values
-          .map(
-            (value) => RuleEvaluator.text(value).replaceAllMapped(
-              plan.pattern!,
-              (match) => _replacement(plan.replacement, match),
-            ),
-          )
-          .toList();
+      values = values.map((value) {
+        final text = RuleEvaluator.text(value);
+        if (plan.firstMatch) {
+          final match = plan.pattern!.firstMatch(text);
+          return match == null ? '' : _replacement(plan.replacement, match);
+        }
+        return text.replaceAllMapped(
+          plan.pattern!,
+          (match) => _replacement(plan.replacement, match),
+        );
+      }).toList();
     }
     if (plan.script != null) {
       final value = values.length == 1 ? values.single : values;
@@ -113,7 +121,14 @@ class PortableLegacyRuleEvaluator implements LegacyTocFanOutEvaluator {
 }
 
 class _Plan {
-  const _Plan(this.selector, this.pattern, this.replacement, this.script);
+  const _Plan(
+    this.selector,
+    this.pattern,
+    this.replacement,
+    this.script, {
+    this.firstMatch = false,
+  });
+  final bool firstMatch;
   final String selector;
   final RegExp? pattern;
   final String replacement;
@@ -121,13 +136,18 @@ class _Plan {
 
   static Never invalid(String message) =>
       throw EngineException('unsupported_legacy_rule', message);
-  static _Plan parse(String raw) {
+  static _Plan parse(String raw, {bool Function(String)? scriptCapability}) {
     var rule = raw.trim();
     if (rule.startsWith('@legacy:')) rule = rule.substring(8);
     if (rule.startsWith('@css:')) rule = rule.substring(5);
     if (rule.startsWith('<js>')) {
       if (!rule.endsWith('</js>')) invalid('Missing </js> rule terminator');
-      return _Plan('', null, '', _script(rule.substring(4, rule.length - 5)));
+      return _Plan(
+        '',
+        null,
+        '',
+        _script(rule.substring(4, rule.length - 5), scriptCapability),
+      );
     }
     var scriptAt = -1;
     String? quote;
@@ -169,7 +189,7 @@ class _Plan {
     }
     String? script;
     if (scriptAt >= 0) {
-      script = _script(rule.substring(scriptAt + 4));
+      script = _script(rule.substring(scriptAt + 4), scriptCapability);
       rule = rule.substring(0, scriptAt).trimRight();
     }
     if (RegExp(
@@ -210,10 +230,13 @@ class _Plan {
       }
     }
     parts.add(rule.substring(start));
-    if (parts.length > 3) {
+    if (parts.length > 3 && !(parts.length == 4 && parts.last == '#')) {
       invalid(
         'First-match/extra replacement delimiters require separate implementation',
       );
+    }
+    if (parts.length == 4 && RegExp(r'\(\?(?:[=!]|<[=!])').hasMatch(parts[1])) {
+      invalid('First-match lookaround requires original Java matcher context');
     }
     final selector = parts.first.trim();
     if (selector.startsWith('@') &&
@@ -251,11 +274,21 @@ class _Plan {
       pattern,
       parts.length > 2 ? parts[2] : '',
       script,
+      firstMatch: parts.length == 4,
     );
   }
 
-  static String _script(String script) {
+  static String _script(
+    String script,
+    bool Function(String)? scriptCapability,
+  ) {
     if (script.trim().isEmpty) invalid('Empty JavaScript rule');
+    if (scriptCapability != null) {
+      if (!scriptCapability(script)) {
+        invalid('Script requires unavailable hosted capabilities');
+      }
+      return script;
+    }
     // This first portable stage supports pure V8 transforms; host-dependent
     // scripts retain their importer issue instead of silently losing bindings.
     final outside = StringBuffer();

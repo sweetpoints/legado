@@ -99,3 +99,15 @@ Android 的六个旧 HTTP 方法已委派原 AnalyzeUrl/Jsoup，使用真实任�
 Android 旧 HTTP 已接入同所有者请求续传、Header eval 和 URL/body 变量恢复；microtask 内同步等待仍 pending Promise 的嵌套明确拒绝，不能据此承诺一般 async 完全兼容。旧 source 状态 facade 和 cache 13方法已接入原宿主；cache 保留全局共享键、秒 TTL 与文本/Java字节区别，现代每源隔离 API 不变。签名及边界见 [host.md](host.md)。
 
 Android org.jsoup 的 parse/Parser、Document/Element 构造、Connection/Response 已接入真实 Jsoup；Element 第二参数为 namespace，execute/response 不提前读正文。DOM mutations 更新同节点别名，列表写操作返回原列表；Connection owner/recipe/clear/dispose 边界与 Jsoup 默认网络配置见 [宿主 Reference](host.md#android-orgjsoup-显式兼容入口)。现代 runtime 无 org，未实现 JavaImporter/JCE 等能力不能由此推导为支持；本次新 Android 验收尚未执行，公开四源严格验收仍未全部通过。
+
+## Flutter App hosted legacy 路径
+
+`BookSourceService` 对声明 org.jsoup 或脚本生成 search/explore URL 的旧源使用明确能力审核的 `HostedLegacyRuleEvaluator`、`PortableLegacyPageFetcher` 和[只读 DOM](html.md#flutter-独立-v8-的-orgjsoup-只读对象)。保留原 JSON、未知字段和不透明 bookSourceUrl；仅已实现 token 对应 review issue 可解除。候选状态不是全源 verified；其他旧源保留既有 portable 路径。
+
+该路径提供 `source.getKey/getTag/getVariable/setVariable/putVariable` 及原 JSON 字段。可空字符串源变量随每源 session 保存恢复；非法类型报 `session_restore_failed`。`java.put/get` 保持实体变量层与每源 fallback。只允许可识别并审核内嵌注释内容的 `eval(String(source.bookSourceComment))`；递归动态 eval、任意 Java 类及浏览器全局对象仍被拒绝。headers/Cookie 仍走同一 NetworkClient，禁用 CookieJar 时不发送、保存或恢复自动 Cookie。
+
+完整 `<js>...</js>` / `@js:` URL 脚本可返回旧字面量请求描述，再由现有 adaptLegacyRequest 校验和同一 HTTP 宿主发送。只实现已知 scalar/page 模板，不执行任意嵌入表达式。动态发现菜单返回数组或其 JSON 字符串，title/url 必须为字符串，最多 1000 项；空 URL 标题保留配置但不作为点击分类。WebView 和未实现选项保持明确拒绝。
+
+规则增加有限 `@get:{name}`、`{{@selector}}` 拼接和 `selector##pattern##replacement###` 首次匹配提取。没有匹配返回空字符串；需要 Java matcher 上下文的首次匹配 lookaround、Java 专有正则仍拒绝。JS 字符串、注释、已识别正则字面量中的宿主名不当作能力 token，未闭合字面量保留审核错误。
+
+固定回归使用用户原始疯情书库 JSON，只替换 bootstrap 地址为本机 HTTP fixture，覆盖分类、搜索、详情 init、目录 DOM 列表、正文二次请求、源变量恢复及禁用 Cookie。此证据不代表真实网站可达、各平台 UI 验收或全部旧源兼容。
