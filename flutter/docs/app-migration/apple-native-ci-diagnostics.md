@@ -66,3 +66,33 @@ iOS 27 simulator without booting, installing or changing it.
 
 The helper is diagnostic and has not itself been claimed as a successful hosted
 job. The older job's final logs remain the evidence for its actual root cause.
+
+## Completed hosted-run evidence and scoped follow-up
+
+The final log of job `117127054458` in run `38946559159` records simulator boot
+finishing after 1 minute 47 seconds. Xcode then completed its build in 260 seconds
+at `2026-10-16T18:33:24Z`. No integration test case started before cancellation
+at `18:56:22Z`. The check annotation explicitly states: `The job has exceeded the
+maximum execution time of 35m0s`. This was GitHub's automatic job deadline; the
+investigation did not cancel or retry the job. The remaining unknown is the phase
+after compilation: installation, application launch, or Flutter VM service
+attachment. These logs do not establish a Dart, Drift or V8 test failure.
+
+The runner image was `macos-26-arm64` version `20261013.0424.1`, on macOS 26.6.2
+build 25G83. The old step selected an iPhone 17 Pro, but did not log its actual
+runtime or selected Xcode version. A device model alone does not establish the
+iOS runtime version. The local successful run used iOS 27.0 with SDK 27.1; those
+versions must not be attributed to the hosted job.
+
+The helper now logs `xcodebuild -version`, installed runtime versions/builds and
+Flutter's `--verbose` execution. It samples application state after three minutes
+and again sixty seconds before its test deadline, and collects state after test
+failure. Each sampling command is bounded. Diagnostic launch messages match only
+`io.legado.legadoApp`; process records match the exact selected simulator App
+container path. Host process listings are filtered in memory before persistence,
+with executable paths and PIDs only, without command arguments. Recent host crash
+reports are inspected in memory and only summaries whose bundle identifier
+matches this application are retained. A matching host crash summary is not
+proof that it came from the selected simulator; its timestamp and PID must be
+correlated with the selected App process and Flutter log. Other applications'
+crash reports and simulator system logs are not retained.
