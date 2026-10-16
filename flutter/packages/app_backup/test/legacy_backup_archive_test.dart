@@ -36,6 +36,50 @@ List<int> centralOffsets(Uint8List bytes) {
   return result;
 }
 
+Uint8List descriptorZip({required bool signature}) {
+  final original = textZip({'bookshelf.json': '[]'});
+  final central = centralOffsets(original).single;
+  final data = ByteData.sublistView(original);
+  final descriptor = ByteData(signature ? 16 : 12);
+  var at = 0;
+  if (signature) {
+    descriptor.setUint32(0, 0x08074b50, Endian.little);
+    at = 4;
+  }
+  descriptor.setUint32(at, data.getUint32(14, Endian.little), Endian.little);
+  descriptor.setUint32(
+    at + 4,
+    data.getUint32(18, Endian.little),
+    Endian.little,
+  );
+  descriptor.setUint32(
+    at + 8,
+    data.getUint32(22, Endian.little),
+    Endian.little,
+  );
+  final result = Uint8List.fromList([
+    ...original.sublist(0, central),
+    ...descriptor.buffer.asUint8List(),
+    ...original.sublist(central),
+  ]);
+  final output = ByteData.sublistView(result);
+  output.setUint16(6, data.getUint16(6, Endian.little) | 8, Endian.little);
+  output.setUint16(
+    central + descriptor.lengthInBytes + 8,
+    data.getUint16(central + 8, Endian.little) | 8,
+    Endian.little,
+  );
+  for (final offset in [14, 18, 22]) {
+    output.setUint32(offset, 0, Endian.little);
+  }
+  output.setUint32(
+    result.length - 6,
+    central + descriptor.lengthInBytes,
+    Endian.little,
+  );
+  return result;
+}
+
 void main() {
   const shelf =
       '[{"bookUrl":"book:1","name":"Test","durChapterPos":8,"future":{"v":1}}]';
@@ -310,4 +354,80 @@ void main() {
       throwsFormatException,
     );
   });
+  test('signed and unsigned stream ZIP data descriptors validated', () {
+    for (final signature in [true, false]) {
+      final bytes = descriptorZip(signature: signature);
+      expect(LegacyBackupArchive.decode(bytes).document.books, isEmpty);
+      final corrupted = Uint8List.fromList(bytes);
+      final central = centralOffsets(bytes).single;
+      corrupted[central - 1] ^= 1;
+      expect(
+        () => LegacyBackupArchive.decode(corrupted),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('explicit directories before or after children accepted without exporting phantom files', () {
+    for (final after in [true, false]) {
+      final archive = Archive();
+      final directory = ArchiveFile.directory('covers/');
+      if (!after) archive.add(directory);
+      archive.add(ArchiveFile.string('bookshelf.json', '[]'));
+      archive.add(ArchiveFile.bytes('covers/a.png', [0, 1, 2]));
+      if (after) archive.add(directory);
+      final staged = LegacyBackupArchive.decode(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+      );
+      expect(staged.entries.keys, ['bookshelf.json', 'covers/a.png']);
+      expect(
+        LegacyBackupArchive.decode(LegacyBackupArchive.encode(staged)).entries,
+        staged.entries,
+      );
+    }
+  });
+
+  test(
+    'overlapping or missing local records rejected despite valid directory',
+    () {
+      for (var variant = 0; variant < 3; variant++) {
+        final bytes = textZip({'bookshelf.json': '[]', 'extra': 'data'});
+        final offsets = centralOffsets(bytes);
+        final data = ByteData.sublistView(bytes);
+        if (variant == 0) {
+          data.setUint32(offsets.last + 42, 0, Endian.little);
+        } else if (variant == 1) {
+          data.setUint16(bytes.length - 12, 1, Endian.little);
+          data.setUint16(bytes.length - 14, 1, Endian.little);
+        } else {
+          data.setUint32(bytes.length - 6, offsets.first + 1, Endian.little);
+        }
+        expect(() => LegacyBackupArchive.decode(bytes), throwsFormatException);
+      }
+    },
+  );
+
+  test('very deep or long paths fail before prefix expansion', () {
+    for (final name in ['${'p/' * 65}file', '${'x' * 256}.json']) {
+      expect(
+        () => LegacyBackupArchive.decode(
+          textZip({'bookshelf.json': '[]', name: 'x'}),
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test(
+    'invalid limits are caller errors rather than malformed input errors',
+    () {
+      expect(
+        () => LegacyBackupArchive.decode(
+          textZip({'bookshelf.json': '[]'}),
+          limits: const BackupArchiveLimits(maxEntries: 0),
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
 }
