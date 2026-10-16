@@ -2,7 +2,6 @@
   "appTitle": "阅读",
   "bookshelfTitle": "书架",
   "exploreTitle": "发现",
-  "rssTitle": "订阅",
   "settingsTitle": "设置",
   "searchTitle": "搜索图书",
   "sourcesTitle": "书源管理",
@@ -62,5 +61,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "navigationRssTitle": "订阅"
 }

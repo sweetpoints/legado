@@ -5,7 +5,7 @@ workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$workspace_root"
 flutter pub get
 
-for package in app_core source_engine source_legacy source_migration source_v8 source_tools source_conformance; do
+for package in app_core app_storage app_backup source_engine source_legacy source_migration source_v8 source_tools source_conformance; do
     (
         cd "packages/$package"
         dart analyze
@@ -22,3 +22,4 @@ for project in packages/source_platform modules/source_host apps/legado; do
 done
 
 python3 tool/app-migration-inventory.py
+python3 tool/merge-app-localizations.py --check

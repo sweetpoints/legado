@@ -3,7 +3,6 @@
   "appTitle": "阅读",
   "bookshelfTitle": "书架",
   "exploreTitle": "发现",
-  "rssTitle": "订阅",
   "settingsTitle": "设置",
   "searchTitle": "搜索图书",
   "sourcesTitle": "书源管理",
@@ -60,6 +59,149 @@
   "@chapterProgress": {
     "placeholders": {
       "chapter": {
+        "type": "int"
+      }
+    }
+  },
+  "navigationRssTitle": "订阅",
+  "readerTitle": "阅读",
+  "readerSettings": "阅读设置",
+  "readerFontSize": "字号",
+  "readerSystemTheme": "跟随系统",
+  "readerLightTheme": "浅色",
+  "readerDarkTheme": "深色",
+  "readerDone": "完成",
+  "readerRetry": "重试",
+  "readerPreviousChapter": "上一章",
+  "readerNextChapter": "下一章",
+  "readerCatalogue": "目录",
+  "readerCatalogueCount": "目录（{count}章）",
+  "readerChapterPosition": "{current}/{total} · {title}",
+  "readerBookMissing": "书籍不存在，请返回书架重新打开",
+  "readerTocMissing": "尚无目录，请先在详情页获取目录",
+  "readerTocEmpty": "目录中没有可阅读的章节",
+  "readerContentMissing": "本章正文尚未缓存，请返回详情页下载或重试",
+  "readerProgressSaveFailed": "阅读进度保存失败：{error}",
+  "readerSettingsSaveFailed": "阅读设置保存失败：{error}",
+  "@readerCatalogueCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@readerChapterPosition": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerProgressSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@readerSettingsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "rssTitle": "订阅",
+  "rssAddTooltip": "添加订阅 / 导入旧订阅",
+  "rssEmpty": "添加 RSS/Atom 地址，或导入旧版订阅 JSON",
+  "rssLegacySubtitle": "CSS/DOM 网页订阅",
+  "rssAdd": "添加订阅",
+  "rssImportHelp": "粘贴 RSS/Atom 地址或旧版 rssSources.json。支持 CSS/DOM 网页规则；JavaScript 规则会保留并明确提示所需能力。",
+  "rssInput": "地址或订阅 JSON",
+  "rssCancel": "取消",
+  "rssSaving": "保存中…",
+  "rssSave": "保存",
+  "rssCancelRefresh": "取消刷新",
+  "rssRefresh": "刷新订阅",
+  "rssLegacyHelp": "支持 HTML 列表、CSS/DOM 规则与安全模板；JavaScript 和浏览器验证需要单独宿主。",
+  "rssFetch": "获取订阅文章",
+  "rssArticle": "文章",
+  "rssMissingArticle": "文章不存在，请返回订阅并刷新",
+  "rssUnstar": "取消收藏",
+  "rssStar": "收藏文章",
+  "rssCopyLink": "复制原文链接",
+  "rssCopied": "已复制原文链接",
+  "rssRetry": "重试",
+  "rssInvalidUrl": "订阅地址必须是 HTTP 或 HTTPS 链接",
+  "rssCorruptStorage": "订阅数据损坏，请从备份恢复；原数据已保留",
+  "rssInvalidSource": "订阅源必须是 JSON 对象",
+  "rssEmptyResponse": "订阅响应为空",
+  "rssTooLarge": "订阅文件超过 5 MiB 上限",
+  "rssInvalidFeed": "无法解析 RSS/Atom，请检查地址和数据格式",
+  "rssNetworkError": "订阅请求失败，请检查网络和地址后重试",
+  "rssOperationError": "订阅操作失败，请重试；已有数据仍保留",
+  "rssScriptCapability": "此规则需要 JavaScript 或浏览器宿主，当前未接入；原规则仍保留，可使用原 Android App。",
+  "rssUnsupportedRule": "当前规则格式尚未支持；请使用 CSS/Legado DOM 规则或原 Android App。",
+  "rssPaginationCycle": "分页链接形成循环，已停止请求；请修正下一页规则。",
+  "rssPageLimit": "分页超过 20 页，已停止请求；请缩小分类范围。",
+  "rssInvalidArticleLink": "文章链接无效，请检查链接提取规则。",
+  "rssImageError": "图片加载失败，可复制原文链接查看。",
+  "sourcesManage": "书源管理",
+  "sourcesImport": "导入",
+  "sourcesImportJson": "导入书源 JSON",
+  "sourcesEdit": "编辑书源",
+  "sourcesJsonHint": "单个书源对象或书源数组",
+  "sourcesCancel": "取消",
+  "sourcesSave": "保存",
+  "sourcesCopy": "复制全部书源 JSON",
+  "sourcesCopied": "书源 JSON 已复制",
+  "sourcesEmpty": "暂无书源，点击导入添加 JSON 书源",
+  "sourcesDelete": "删除书源",
+  "sourcesDeleteConfirm": "删除书源？",
+  "sourcesDeleteAction": "删除",
+  "sourcesSearchTitle": "搜索图书",
+  "sourcesSourceLabel": "书源",
+  "sourcesKeyword": "书名或作者",
+  "sourcesSearch": "搜索",
+  "sourcesNeedSource": "请先在书源管理中导入并启用书源",
+  "sourcesSearchPrompt": "输入关键词开始搜索",
+  "sourcesNoResults": "没有搜索结果",
+  "sourcesRefresh": "刷新目录",
+  "sourcesAdd": "加入书架",
+  "sourcesAdded": "已加入书架",
+  "sourcesEmptyToc": "书源没有返回目录，请检查书源规则与站点状态。",
+  "sourcesIdentityImmutable": "编辑时不能更改书源标识，请使用导入新增书源",
+  "sourcesChapterCount": "目录 · {count} 章",
+  "@sourcesChapterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesDetailError": "获取详情或目录失败\n{error}",
+  "@sourcesDetailError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesBrowse": "发现分类",
+  "sourcesCategory": "分类",
+  "sourcesNoCategories": "书源没有静态发现分类",
+  "sourcesPrevious": "上一页",
+  "sourcesNext": "下一页",
+  "sourcesPage": "第 {page} 页",
+  "@sourcesPage": {
+    "placeholders": {
+      "page": {
         "type": "int"
       }
     }

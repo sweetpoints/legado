@@ -5,6 +5,11 @@ on:
     paths:
       - 'flutter/apps/**'
       - 'flutter/packages/app_core/**'
+      - 'flutter/packages/app_storage/**'
+      - 'flutter/packages/app_backup/**'
+      - 'flutter/packages/source_*/**'
+      - 'flutter/tool/v8/**'
+      - 'flutter/tool/merge-app-localizations.py'
       - 'flutter/pubspec.*'
       - 'flutter/docs/app-migration/**'
       - 'flutter/tool/app-migration-inventory.py'
@@ -20,8 +25,8 @@ permissions:
 
 jobs:
   contracts:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -29,11 +34,22 @@ jobs:
           flutter-version: '3.47.6'
           channel: stable
           cache: true
+      - uses: actions/cache@v5
+        with:
+          path: flutter/packages/source_v8/.cache
+          key: app-v8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flutter/tool/v8/**', 'flutter/packages/source_v8/src/**') }}
       - name: Resolve workspace
         working-directory: flutter
         run: flutter pub get
       - name: Check Android migration scope
         run: python3 flutter/tool/app-migration-inventory.py
+      - name: Check localized messages
+        run: python3 flutter/tool/merge-app-localizations.py --check
+      - name: Regenerate application contracts
+        working-directory: flutter/apps/legado
+        run: |
+          bash ../../tool/generate-app.sh
+          git diff --exit-code -- lib
       - name: Check formatting
         working-directory: flutter
         run: dart format --output=none --set-exit-if-changed apps/legado/lib apps/legado/test packages/app_core/lib packages/app_core/test
@@ -47,3 +63,28 @@ jobs:
         run: |
           flutter analyze
           flutter test
+
+  storage-contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04, macos-26, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Verify portable data and archive contracts
+        run: |
+          for package in app_core app_storage app_backup; do
+            (cd "packages/$package" && dart analyze && dart run test:test)
+          done

@@ -36,8 +36,8 @@ class SourceManagementPage extends ConsumerWidget {
         builder: (context, setState) => AlertDialog(
           title: Text(
             source == null
-                ? AppLocalizations.of(context)!.sourcesImportJson
-                : AppLocalizations.of(context)!.sourcesEdit,
+                ? AppLocalizations.of(context).sourcesImportJson
+                : AppLocalizations.of(context).sourcesEdit,
           ),
           content: SizedBox(
             width: 720,
@@ -46,7 +46,7 @@ class SourceManagementPage extends ConsumerWidget {
               minLines: 8,
               maxLines: 20,
               decoration: InputDecoration(
-                hintText: AppLocalizations.of(context)!.sourcesJsonHint,
+                hintText: AppLocalizations.of(context).sourcesJsonHint,
                 errorText: error,
                 errorMaxLines: 4,
                 border: const OutlineInputBorder(),
@@ -56,7 +56,7 @@ class SourceManagementPage extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: () => context.pop(),
-              child: Text(AppLocalizations.of(context)!.sourcesCancel),
+              child: Text(AppLocalizations.of(context).sourcesCancel),
             ),
             FilledButton(
               onPressed: () async {
@@ -67,7 +67,7 @@ class SourceManagementPage extends ConsumerWidget {
                           BookSourceService.sourceId(parsed.single) !=
                               BookSourceService.sourceId(source))) {
                     throw FormatException(
-                      AppLocalizations.of(context)!.sourcesIdentityImmutable,
+                      AppLocalizations.of(context).sourcesIdentityImmutable,
                     );
                   }
                   await service.importJson(input.text);
@@ -76,7 +76,7 @@ class SourceManagementPage extends ConsumerWidget {
                   if (context.mounted) setState(() => error = e.toString());
                 }
               },
-              child: Text(AppLocalizations.of(context)!.sourcesSave),
+              child: Text(AppLocalizations.of(context).sourcesSave),
             ),
           ],
         ),
@@ -97,10 +97,10 @@ class SourceManagementPage extends ConsumerWidget {
     final service = ref.watch(bookSourceServiceProvider(repository));
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.sourcesManage),
+        title: Text(AppLocalizations.of(context).sourcesManage),
         actions: [
           IconButton(
-            tooltip: AppLocalizations.of(context)!.sourcesCopy,
+            tooltip: AppLocalizations.of(context).sourcesCopy,
             icon: const Icon(Icons.copy_all),
             onPressed: () async {
               try {
@@ -110,9 +110,7 @@ class SourceManagementPage extends ConsumerWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!.sourcesCopied,
-                      ),
+                      content: Text(AppLocalizations.of(context).sourcesCopied),
                     ),
                   );
                 }
@@ -126,13 +124,13 @@ class SourceManagementPage extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(context, ref),
         icon: const Icon(Icons.add),
-        label: Text(AppLocalizations.of(context)!.sourcesImport),
+        label: Text(AppLocalizations.of(context).sourcesImport),
       ),
       body: sources.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: SelectableText(e.toString())),
         data: (items) => items.isEmpty
-            ? Center(child: Text(AppLocalizations.of(context)!.sourcesEmpty))
+            ? Center(child: Text(AppLocalizations.of(context).sourcesEmpty))
             : ListView.builder(
                 padding: const EdgeInsets.only(bottom: 96),
                 itemCount: items.length,
@@ -165,14 +163,14 @@ class SourceManagementPage extends ConsumerWidget {
                           },
                         ),
                         IconButton(
-                          tooltip: AppLocalizations.of(context)!.sourcesDelete,
+                          tooltip: AppLocalizations.of(context).sourcesDelete,
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () async {
                             final confirmed = await showDialog<bool>(
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: Text(
-                                  AppLocalizations.of(context)!
+                                  AppLocalizations.of(context)
                                       .sourcesDeleteConfirm,
                                 ),
                                 content: Text(
@@ -182,14 +180,14 @@ class SourceManagementPage extends ConsumerWidget {
                                   TextButton(
                                     onPressed: () => context.pop(false),
                                     child: Text(
-                                      AppLocalizations.of(context)!
+                                      AppLocalizations.of(context)
                                           .sourcesCancel,
                                     ),
                                   ),
                                   FilledButton(
                                     onPressed: () => context.pop(true),
                                     child: Text(
-                                      AppLocalizations.of(context)!
+                                      AppLocalizations.of(context)
                                           .sourcesDeleteAction,
                                     ),
                                   ),

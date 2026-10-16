@@ -2,7 +2,6 @@
   "appTitle": "Legado",
   "bookshelfTitle": "Bookshelf",
   "exploreTitle": "Explore",
-  "rssTitle": "Feeds",
   "settingsTitle": "Settings",
   "searchTitle": "Search books",
   "sourcesTitle": "Book sources",
@@ -62,5 +61,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "navigationRssTitle": "Feeds"
 }

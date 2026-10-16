@@ -215,7 +215,7 @@ return $default(_that.url,_that.name,_that.original);case _:
 
 class _RssSource extends RssSource {
   const _RssSource({required this.url, required this.name,  Map<String, Object?> original = const <String, Object?>{}}): _original = original,super._();
-  
+
 
 @override final  String url;
 @override final  String name;
@@ -496,7 +496,7 @@ return $default(_that.id,_that.title,_that.link,_that.content,_that.published,_t
 
 class _RssArticle extends RssArticle {
   const _RssArticle({required this.id, required this.title, required this.link, required this.content, this.published = '', this.read = false, this.starred = false,  Map<String, Object?> original = const <String, Object?>{}}): _original = original,super._();
-  
+
 
 @override final  String id;
 @override final  String title;

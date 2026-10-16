@@ -47,7 +47,7 @@ class _BookDetailPageState extends ConsumerState<BookDetailPage> {
         title: Text(widget.book.name),
         actions: [
           IconButton(
-            tooltip: AppLocalizations.of(context)!.sourcesRefresh,
+            tooltip: AppLocalizations.of(context).sourcesRefresh,
             icon: const Icon(Icons.refresh),
             onPressed: _busy
                 ? null
@@ -60,7 +60,7 @@ class _BookDetailPageState extends ConsumerState<BookDetailPage> {
         error: (e, _) => SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: SelectableText(
-            AppLocalizations.of(context)!.sourcesDetailError(e.toString()),
+            AppLocalizations.of(context).sourcesDetailError(e.toString()),
           ),
         ),
         data: (preview) => ListView(
@@ -87,23 +87,23 @@ class _BookDetailPageState extends ConsumerState<BookDetailPage> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    AppLocalizations.of(context)!.sourcesAdded,
+                                    AppLocalizations.of(context).sourcesAdded,
                                   ),
                                 ),
                               );
                             }
                           }),
                     icon: const Icon(Icons.library_add),
-                    label: Text(AppLocalizations.of(context)!.sourcesAdd),
+                    label: Text(AppLocalizations.of(context).sourcesAdd),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    AppLocalizations.of(context)!
+                    AppLocalizations.of(context)
                         .sourcesChapterCount(preview.chapters.length),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   if (preview.chapters.isEmpty)
-                    Text(AppLocalizations.of(context)!.sourcesEmptyToc),
+                    Text(AppLocalizations.of(context).sourcesEmptyToc),
                   if (_busy) const LinearProgressIndicator(),
                 ],
               ),

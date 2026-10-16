@@ -19,9 +19,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exploreTitle => 'Explore';
 
   @override
-  String get rssTitle => 'Feeds';
-
-  @override
   String get settingsTitle => 'Settings';
 
   @override
@@ -167,5 +164,304 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String chapterProgress(int chapter) {
     return 'Chapter $chapter';
+  }
+
+  @override
+  String get navigationRssTitle => 'Feeds';
+
+  @override
+  String get readerTitle => 'Read';
+
+  @override
+  String get readerSettings => 'Reading settings';
+
+  @override
+  String get readerFontSize => 'Font size';
+
+  @override
+  String get readerSystemTheme => 'System';
+
+  @override
+  String get readerLightTheme => 'Light';
+
+  @override
+  String get readerDarkTheme => 'Dark';
+
+  @override
+  String get readerDone => 'Done';
+
+  @override
+  String get readerRetry => 'Retry';
+
+  @override
+  String get readerPreviousChapter => 'Previous chapter';
+
+  @override
+  String get readerNextChapter => 'Next chapter';
+
+  @override
+  String get readerCatalogue => 'Chapters';
+
+  @override
+  String readerCatalogueCount(int count) {
+    return 'Chapters ($count)';
+  }
+
+  @override
+  String readerChapterPosition(int current, int total, String title) {
+    return '$current/$total · $title';
+  }
+
+  @override
+  String get readerBookMissing =>
+      'This book is missing. Return to the library and reopen it.';
+
+  @override
+  String get readerTocMissing =>
+      'No chapter catalogue is available. Load it from the book details first.';
+
+  @override
+  String get readerTocEmpty => 'The catalogue contains no readable chapters.';
+
+  @override
+  String get readerContentMissing =>
+      'This chapter is not cached. Download it from book details or retry.';
+
+  @override
+  String readerProgressSaveFailed(String error) {
+    return 'Could not save reading progress: $error';
+  }
+
+  @override
+  String readerSettingsSaveFailed(String error) {
+    return 'Could not save reading settings: $error';
+  }
+
+  @override
+  String get rssTitle => 'Subscriptions';
+
+  @override
+  String get rssAddTooltip => 'Add or import subscriptions';
+
+  @override
+  String get rssEmpty =>
+      'Add an RSS/Atom URL or import legacy subscription JSON';
+
+  @override
+  String get rssLegacySubtitle => 'CSS/DOM HTML subscription';
+
+  @override
+  String get rssAdd => 'Add subscription';
+
+  @override
+  String get rssImportHelp =>
+      'Paste an RSS/Atom URL or legacy rssSources.json. CSS/DOM HTML rules are supported; JavaScript rules are preserved with explicit capability errors.';
+
+  @override
+  String get rssInput => 'URL or subscription JSON';
+
+  @override
+  String get rssCancel => 'Cancel';
+
+  @override
+  String get rssSaving => 'Saving…';
+
+  @override
+  String get rssSave => 'Save';
+
+  @override
+  String get rssCancelRefresh => 'Cancel refresh';
+
+  @override
+  String get rssRefresh => 'Refresh feed';
+
+  @override
+  String get rssLegacyHelp =>
+      'HTML lists, CSS/DOM rules and safe templates are supported. JavaScript and browser verification require a separate host.';
+
+  @override
+  String get rssFetch => 'Fetch articles';
+
+  @override
+  String get rssArticle => 'Article';
+
+  @override
+  String get rssMissingArticle =>
+      'Article unavailable. Go back and refresh the subscription.';
+
+  @override
+  String get rssUnstar => 'Remove bookmark';
+
+  @override
+  String get rssStar => 'Bookmark article';
+
+  @override
+  String get rssCopyLink => 'Copy original link';
+
+  @override
+  String get rssCopied => 'Original link copied';
+
+  @override
+  String get rssRetry => 'Retry';
+
+  @override
+  String get rssInvalidUrl => 'Subscription URL must use HTTP or HTTPS';
+
+  @override
+  String get rssCorruptStorage =>
+      'Subscription data is invalid. Restore a backup; the original data is preserved.';
+
+  @override
+  String get rssInvalidSource => 'Each subscription must be a JSON object';
+
+  @override
+  String get rssEmptyResponse => 'The feed returned an empty response';
+
+  @override
+  String get rssTooLarge => 'The feed exceeds the 5 MiB limit';
+
+  @override
+  String get rssInvalidFeed =>
+      'Cannot parse RSS/Atom. Check the URL and feed format.';
+
+  @override
+  String get rssNetworkError =>
+      'Feed request failed. Check the network and URL, then retry.';
+
+  @override
+  String get rssOperationError =>
+      'Subscription operation failed. Retry; existing data is preserved.';
+
+  @override
+  String get rssScriptCapability =>
+      'This rule requires a JavaScript or browser host which is not connected yet. The original rules are preserved; use the existing Android app.';
+
+  @override
+  String get rssUnsupportedRule =>
+      'This rule format is not supported yet. Use CSS/Legado DOM rules or the existing Android app.';
+
+  @override
+  String get rssPaginationCycle =>
+      'Pagination contains a cycle. Requests stopped; fix the next-page rule.';
+
+  @override
+  String get rssPageLimit =>
+      'Pagination exceeded 20 pages. Requests stopped; narrow the category.';
+
+  @override
+  String get rssInvalidArticleLink =>
+      'The article link is invalid. Check the link extraction rule.';
+
+  @override
+  String get rssImageError =>
+      'Image could not load. Copy the original article link to view it.';
+
+  @override
+  String get sourcesManage => 'Source management';
+
+  @override
+  String get sourcesImport => 'Import';
+
+  @override
+  String get sourcesImportJson => 'Import source JSON';
+
+  @override
+  String get sourcesEdit => 'Edit source';
+
+  @override
+  String get sourcesJsonHint => 'A source object or array of sources';
+
+  @override
+  String get sourcesCancel => 'Cancel';
+
+  @override
+  String get sourcesSave => 'Save';
+
+  @override
+  String get sourcesCopy => 'Copy all sources as JSON';
+
+  @override
+  String get sourcesCopied => 'Sources copied as JSON';
+
+  @override
+  String get sourcesEmpty => 'No sources. Import source JSON to get started.';
+
+  @override
+  String get sourcesDelete => 'Delete source';
+
+  @override
+  String get sourcesDeleteConfirm => 'Delete this source?';
+
+  @override
+  String get sourcesDeleteAction => 'Delete';
+
+  @override
+  String get sourcesSearchTitle => 'Search books';
+
+  @override
+  String get sourcesSourceLabel => 'Source';
+
+  @override
+  String get sourcesKeyword => 'Book title or author';
+
+  @override
+  String get sourcesSearch => 'Search';
+
+  @override
+  String get sourcesNeedSource =>
+      'Import and enable a source in source management first.';
+
+  @override
+  String get sourcesSearchPrompt => 'Enter a keyword to search';
+
+  @override
+  String get sourcesNoResults => 'No results';
+
+  @override
+  String get sourcesRefresh => 'Refresh chapters';
+
+  @override
+  String get sourcesAdd => 'Add to bookshelf';
+
+  @override
+  String get sourcesAdded => 'Added to bookshelf';
+
+  @override
+  String get sourcesEmptyToc =>
+      'The source returned no chapters. Check its rules and website status.';
+
+  @override
+  String get sourcesIdentityImmutable =>
+      'Source identity cannot be changed while editing. Import it as a new source instead.';
+
+  @override
+  String sourcesChapterCount(int count) {
+    return 'Contents · $count chapters';
+  }
+
+  @override
+  String sourcesDetailError(String error) {
+    return 'Could not load details or chapters\n$error';
+  }
+
+  @override
+  String get sourcesBrowse => 'Browse categories';
+
+  @override
+  String get sourcesCategory => 'Category';
+
+  @override
+  String get sourcesNoCategories =>
+      'This source has no static browse categories.';
+
+  @override
+  String get sourcesPrevious => 'Previous page';
+
+  @override
+  String get sourcesNext => 'Next page';
+
+  @override
+  String sourcesPage(int page) {
+    return 'Page $page';
   }
 }

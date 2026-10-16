@@ -116,12 +116,6 @@ abstract class AppLocalizations {
   /// **'Explore'**
   String get exploreTitle;
 
-  /// No description provided for @rssTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Feeds'**
-  String get rssTitle;
-
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:
@@ -397,6 +391,534 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chapter {chapter}'**
   String chapterProgress(int chapter);
+
+  /// No description provided for @navigationRssTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Feeds'**
+  String get navigationRssTitle;
+
+  /// No description provided for @readerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get readerTitle;
+
+  /// No description provided for @readerSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading settings'**
+  String get readerSettings;
+
+  /// No description provided for @readerFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size'**
+  String get readerFontSize;
+
+  /// No description provided for @readerSystemTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get readerSystemTheme;
+
+  /// No description provided for @readerLightTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get readerLightTheme;
+
+  /// No description provided for @readerDarkTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get readerDarkTheme;
+
+  /// No description provided for @readerDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get readerDone;
+
+  /// No description provided for @readerRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get readerRetry;
+
+  /// No description provided for @readerPreviousChapter.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous chapter'**
+  String get readerPreviousChapter;
+
+  /// No description provided for @readerNextChapter.
+  ///
+  /// In en, this message translates to:
+  /// **'Next chapter'**
+  String get readerNextChapter;
+
+  /// No description provided for @readerCatalogue.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get readerCatalogue;
+
+  /// No description provided for @readerCatalogueCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters ({count})'**
+  String readerCatalogueCount(int count);
+
+  /// No description provided for @readerChapterPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'{current}/{total} · {title}'**
+  String readerChapterPosition(int current, int total, String title);
+
+  /// No description provided for @readerBookMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'This book is missing. Return to the library and reopen it.'**
+  String get readerBookMissing;
+
+  /// No description provided for @readerTocMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'No chapter catalogue is available. Load it from the book details first.'**
+  String get readerTocMissing;
+
+  /// No description provided for @readerTocEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The catalogue contains no readable chapters.'**
+  String get readerTocEmpty;
+
+  /// No description provided for @readerContentMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'This chapter is not cached. Download it from book details or retry.'**
+  String get readerContentMissing;
+
+  /// No description provided for @readerProgressSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save reading progress: {error}'**
+  String readerProgressSaveFailed(String error);
+
+  /// No description provided for @readerSettingsSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save reading settings: {error}'**
+  String readerSettingsSaveFailed(String error);
+
+  /// No description provided for @rssTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions'**
+  String get rssTitle;
+
+  /// No description provided for @rssAddTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add or import subscriptions'**
+  String get rssAddTooltip;
+
+  /// No description provided for @rssEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an RSS/Atom URL or import legacy subscription JSON'**
+  String get rssEmpty;
+
+  /// No description provided for @rssLegacySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'CSS/DOM HTML subscription'**
+  String get rssLegacySubtitle;
+
+  /// No description provided for @rssAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add subscription'**
+  String get rssAdd;
+
+  /// No description provided for @rssImportHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste an RSS/Atom URL or legacy rssSources.json. CSS/DOM HTML rules are supported; JavaScript rules are preserved with explicit capability errors.'**
+  String get rssImportHelp;
+
+  /// No description provided for @rssInput.
+  ///
+  /// In en, this message translates to:
+  /// **'URL or subscription JSON'**
+  String get rssInput;
+
+  /// No description provided for @rssCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get rssCancel;
+
+  /// No description provided for @rssSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get rssSaving;
+
+  /// No description provided for @rssSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get rssSave;
+
+  /// No description provided for @rssCancelRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel refresh'**
+  String get rssCancelRefresh;
+
+  /// No description provided for @rssRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh feed'**
+  String get rssRefresh;
+
+  /// No description provided for @rssLegacyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'HTML lists, CSS/DOM rules and safe templates are supported. JavaScript and browser verification require a separate host.'**
+  String get rssLegacyHelp;
+
+  /// No description provided for @rssFetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch articles'**
+  String get rssFetch;
+
+  /// No description provided for @rssArticle.
+  ///
+  /// In en, this message translates to:
+  /// **'Article'**
+  String get rssArticle;
+
+  /// No description provided for @rssMissingArticle.
+  ///
+  /// In en, this message translates to:
+  /// **'Article unavailable. Go back and refresh the subscription.'**
+  String get rssMissingArticle;
+
+  /// No description provided for @rssUnstar.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove bookmark'**
+  String get rssUnstar;
+
+  /// No description provided for @rssStar.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark article'**
+  String get rssStar;
+
+  /// No description provided for @rssCopyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy original link'**
+  String get rssCopyLink;
+
+  /// No description provided for @rssCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Original link copied'**
+  String get rssCopied;
+
+  /// No description provided for @rssRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get rssRetry;
+
+  /// No description provided for @rssInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription URL must use HTTP or HTTPS'**
+  String get rssInvalidUrl;
+
+  /// No description provided for @rssCorruptStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription data is invalid. Restore a backup; the original data is preserved.'**
+  String get rssCorruptStorage;
+
+  /// No description provided for @rssInvalidSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Each subscription must be a JSON object'**
+  String get rssInvalidSource;
+
+  /// No description provided for @rssEmptyResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The feed returned an empty response'**
+  String get rssEmptyResponse;
+
+  /// No description provided for @rssTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The feed exceeds the 5 MiB limit'**
+  String get rssTooLarge;
+
+  /// No description provided for @rssInvalidFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot parse RSS/Atom. Check the URL and feed format.'**
+  String get rssInvalidFeed;
+
+  /// No description provided for @rssNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed request failed. Check the network and URL, then retry.'**
+  String get rssNetworkError;
+
+  /// No description provided for @rssOperationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription operation failed. Retry; existing data is preserved.'**
+  String get rssOperationError;
+
+  /// No description provided for @rssScriptCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'This rule requires a JavaScript or browser host which is not connected yet. The original rules are preserved; use the existing Android app.'**
+  String get rssScriptCapability;
+
+  /// No description provided for @rssUnsupportedRule.
+  ///
+  /// In en, this message translates to:
+  /// **'This rule format is not supported yet. Use CSS/Legado DOM rules or the existing Android app.'**
+  String get rssUnsupportedRule;
+
+  /// No description provided for @rssPaginationCycle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pagination contains a cycle. Requests stopped; fix the next-page rule.'**
+  String get rssPaginationCycle;
+
+  /// No description provided for @rssPageLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Pagination exceeded 20 pages. Requests stopped; narrow the category.'**
+  String get rssPageLimit;
+
+  /// No description provided for @rssInvalidArticleLink.
+  ///
+  /// In en, this message translates to:
+  /// **'The article link is invalid. Check the link extraction rule.'**
+  String get rssInvalidArticleLink;
+
+  /// No description provided for @rssImageError.
+  ///
+  /// In en, this message translates to:
+  /// **'Image could not load. Copy the original article link to view it.'**
+  String get rssImageError;
+
+  /// No description provided for @sourcesManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Source management'**
+  String get sourcesManage;
+
+  /// No description provided for @sourcesImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get sourcesImport;
+
+  /// No description provided for @sourcesImportJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Import source JSON'**
+  String get sourcesImportJson;
+
+  /// No description provided for @sourcesEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit source'**
+  String get sourcesEdit;
+
+  /// No description provided for @sourcesJsonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A source object or array of sources'**
+  String get sourcesJsonHint;
+
+  /// No description provided for @sourcesCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get sourcesCancel;
+
+  /// No description provided for @sourcesSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get sourcesSave;
+
+  /// No description provided for @sourcesCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy all sources as JSON'**
+  String get sourcesCopy;
+
+  /// No description provided for @sourcesCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources copied as JSON'**
+  String get sourcesCopied;
+
+  /// No description provided for @sourcesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No sources. Import source JSON to get started.'**
+  String get sourcesEmpty;
+
+  /// No description provided for @sourcesDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete source'**
+  String get sourcesDelete;
+
+  /// No description provided for @sourcesDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this source?'**
+  String get sourcesDeleteConfirm;
+
+  /// No description provided for @sourcesDeleteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get sourcesDeleteAction;
+
+  /// No description provided for @sourcesSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search books'**
+  String get sourcesSearchTitle;
+
+  /// No description provided for @sourcesSourceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get sourcesSourceLabel;
+
+  /// No description provided for @sourcesKeyword.
+  ///
+  /// In en, this message translates to:
+  /// **'Book title or author'**
+  String get sourcesKeyword;
+
+  /// No description provided for @sourcesSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get sourcesSearch;
+
+  /// No description provided for @sourcesNeedSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Import and enable a source in source management first.'**
+  String get sourcesNeedSource;
+
+  /// No description provided for @sourcesSearchPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a keyword to search'**
+  String get sourcesSearchPrompt;
+
+  /// No description provided for @sourcesNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No results'**
+  String get sourcesNoResults;
+
+  /// No description provided for @sourcesRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh chapters'**
+  String get sourcesRefresh;
+
+  /// No description provided for @sourcesAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to bookshelf'**
+  String get sourcesAdd;
+
+  /// No description provided for @sourcesAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to bookshelf'**
+  String get sourcesAdded;
+
+  /// No description provided for @sourcesEmptyToc.
+  ///
+  /// In en, this message translates to:
+  /// **'The source returned no chapters. Check its rules and website status.'**
+  String get sourcesEmptyToc;
+
+  /// No description provided for @sourcesIdentityImmutable.
+  ///
+  /// In en, this message translates to:
+  /// **'Source identity cannot be changed while editing. Import it as a new source instead.'**
+  String get sourcesIdentityImmutable;
+
+  /// No description provided for @sourcesChapterCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Contents · {count} chapters'**
+  String sourcesChapterCount(int count);
+
+  /// No description provided for @sourcesDetailError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load details or chapters\n{error}'**
+  String sourcesDetailError(String error);
+
+  /// No description provided for @sourcesBrowse.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse categories'**
+  String get sourcesBrowse;
+
+  /// No description provided for @sourcesCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get sourcesCategory;
+
+  /// No description provided for @sourcesNoCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'This source has no static browse categories.'**
+  String get sourcesNoCategories;
+
+  /// No description provided for @sourcesPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous page'**
+  String get sourcesPrevious;
+
+  /// No description provided for @sourcesNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next page'**
+  String get sourcesNext;
+
+  /// No description provided for @sourcesPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {page}'**
+  String sourcesPage(int page);
 }
 
 class _AppLocalizationsDelegate
