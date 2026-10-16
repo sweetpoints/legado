@@ -43,9 +43,9 @@ void main() {
     'native file-backed Drift closes and reopens book and UTF-16 progress',
     (tester) async {
       expect(
-        Platform.isIOS || Platform.isMacOS,
+        Platform.isIOS || Platform.isMacOS || Platform.isLinux,
         isTrue,
-        reason: 'Run on the actual iOS/macOS application, not flutter_tester',
+        reason: 'Run on the actual native application, not flutter_tester',
       );
       final directory = await Directory.systemTemp.createTemp(
         'legado-native-drift-',
@@ -232,7 +232,10 @@ function getContent(chapter) { return java.ajax(chapter.url); }
       );
       await waitFor(tester, () => find.text('原生验收书').evaluate().isNotEmpty);
       await tester.tap(find.text('原生验收书'));
-      await waitFor(tester, () => textContent('这里是第一段真实正文').evaluate().isNotEmpty);
+      await waitFor(
+        tester,
+        () => textContent('这里是第一段真实正文').evaluate().isNotEmpty,
+      );
       await tester.tap(find.byTooltip('下一章'));
       await waitFor(
         tester,

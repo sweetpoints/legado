@@ -61,29 +61,41 @@ final preferencesProvider =
     );
 
 class PreferencesController extends AsyncNotifier<AppPreferences> {
+  Future<void> _pending = Future.value();
+
   @override
   Future<AppPreferences> build() async {
-    final repository = ref.watch(libraryProvider);
+    final repository = await ref.watch(persistentLibraryProvider.future);
     final locale = await repository.setting('app.locale') ?? '';
     final theme = await repository.setting('app.theme') ?? 'system';
     return AppPreferences(localeTag: locale, themeTag: theme);
   }
 
-  Future<void> setLocale(String locale) async {
+  Future<void> _update(
+    String key,
+    String value,
+    AppPreferences Function(AppPreferences) change,
+  ) {
+    final next = _pending.then((_) async {
+      final current = await future;
+      await ref.read(libraryProvider).setSetting(key, value);
+      if (ref.mounted) state = AsyncData(change(current));
+    });
+    _pending = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return next;
+  }
+
+  Future<void> setLocale(String locale) {
     if (!{'', 'zh', 'en'}.contains(locale)) {
       throw ArgumentError.value(locale, 'locale');
     }
-    final current = await future;
-    await ref.read(libraryProvider).setSetting('app.locale', locale);
-    state = AsyncData(current.copyWith(localeTag: locale));
+    return _update('app.locale', locale, (p) => p.copyWith(localeTag: locale));
   }
 
-  Future<void> setTheme(String theme) async {
+  Future<void> setTheme(String theme) {
     if (!{'system', 'light', 'dark'}.contains(theme)) {
       throw ArgumentError.value(theme, 'theme');
     }
-    final current = await future;
-    await ref.read(libraryProvider).setSetting('app.theme', theme);
-    state = AsyncData(current.copyWith(themeTag: theme));
+    return _update('app.theme', theme, (p) => p.copyWith(themeTag: theme));
   }
 }

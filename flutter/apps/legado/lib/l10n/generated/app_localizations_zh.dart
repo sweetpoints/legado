@@ -250,6 +250,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get readerEpubImport => '导入 EPUB';
 
   @override
+  String get readerBookmarks => '书签';
+
+  @override
+  String get readerAddBookmark => '添加当前位置';
+
+  @override
+  String get readerBookmarkNote => '备注（可选）';
+
+  @override
+  String get readerBookmarkCancel => '取消';
+
+  @override
+  String get readerBookmarkSave => '保存';
+
+  @override
+  String get readerBookmarkAdded => '书签已保存';
+
+  @override
+  String readerBookmarkFailed(String error) {
+    return '书签操作失败：$error';
+  }
+
+  @override
+  String get readerBookmarksEmpty => '暂无书签';
+
+  @override
+  String get readerBookmarkUnavailable => '此书签无法与当前图书和章节匹配。';
+
+  @override
+  String get readerDeleteBookmark => '删除书签';
+
+  @override
   String get rssTitle => '订阅';
 
   @override
@@ -357,6 +389,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rssImageError => '图片加载失败，可复制原文链接查看。';
+
+  @override
+  String get rssDelete => '删除订阅';
+
+  @override
+  String get rssDeleteHelp => '删除后不会因旧备份记录再次出现。原备份、离线文章和收藏仍保留；显式导入同地址可重新添加。';
+
+  @override
+  String rssRestoreSummary(int restored, int conflicts) {
+    return '来自旧备份：$restored 个订阅可用；$conflicts 个同地址冲突保留当前配置。原备份保持不变。';
+  }
+
+  @override
+  String get rssInvalidRestore => '旧订阅备份格式无效，原数据已保留；请检查 rssSources.json。';
+
+  @override
+  String get rssDuplicateRestoreSource =>
+      '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
   String get sourcesManage => '书源管理';

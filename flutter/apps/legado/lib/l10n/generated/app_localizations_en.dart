@@ -263,6 +263,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readerEpubImport => 'Import EPUB';
 
   @override
+  String get readerBookmarks => 'Bookmarks';
+
+  @override
+  String get readerAddBookmark => 'Bookmark this position';
+
+  @override
+  String get readerBookmarkNote => 'Note (optional)';
+
+  @override
+  String get readerBookmarkCancel => 'Cancel';
+
+  @override
+  String get readerBookmarkSave => 'Save';
+
+  @override
+  String get readerBookmarkAdded => 'Bookmark saved';
+
+  @override
+  String readerBookmarkFailed(String error) {
+    return 'Could not update bookmarks: $error';
+  }
+
+  @override
+  String get readerBookmarksEmpty => 'No bookmarks yet';
+
+  @override
+  String get readerBookmarkUnavailable =>
+      'This bookmark cannot be matched to the current book and chapter.';
+
+  @override
+  String get readerDeleteBookmark => 'Delete bookmark';
+
+  @override
   String get rssTitle => 'Subscriptions';
 
   @override
@@ -380,6 +413,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get rssImageError =>
       'Image could not load. Copy the original article link to view it.';
+
+  @override
+  String get rssDelete => 'Delete subscription';
+
+  @override
+  String get rssDeleteHelp =>
+      'The subscription will stay deleted across restarts. Original backups, offline articles and bookmarks are kept. Explicitly importing the same URL adds it back.';
+
+  @override
+  String rssRestoreSummary(int restored, int conflicts) {
+    return 'Legacy backup: $restored subscriptions available; $conflicts URL conflicts keep the current configuration. Original backup data is unchanged.';
+  }
+
+  @override
+  String get rssInvalidRestore =>
+      'The legacy subscription backup is invalid. Original data is preserved; check rssSources.json.';
+
+  @override
+  String get rssDuplicateRestoreSource =>
+      'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
   String get sourcesManage => 'Source management';
