@@ -1,11 +1,12 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:app_core/app_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:legado_app/services/book_source_service.dart';
 import 'package:source_engine/source_engine.dart';
+import 'package:source_legacy/source_legacy.dart';
+
+import 'source_test_repository.dart';
 
 class _NoScript implements ScriptRuntime {
   @override
@@ -20,95 +21,9 @@ class _NoScript implements ScriptRuntime {
   Future<void> close() async {}
 }
 
-class _Repository implements LibraryRepository {
-  final sourceRows = <String, Map<String, Object?>>{};
-  final bookRows = <String, LegacyBookRecord>{};
-  final chapterRows = <String, List<ReaderChapter>>{};
-  final contentRows = <String, String>{};
-  final settings = <String, String>{};
-  final controller = StreamController<void>.broadcast();
-  @override
-  Stream<void> get changes => controller.stream;
-  @override
-  Future<List<LegacyBookRecord>> books() async => bookRows.values.toList();
-  @override
-  Future<LegacyBookRecord?> book(String url) async => bookRows[url];
-  @override
-  Future<void> putBook(LegacyBookRecord book) async {
-    bookRows[book.url] = book;
-    controller.add(null);
-  }
-
-  @override
-  Future<void> removeBook(String url) async => bookRows.remove(url);
-  @override
-  Future<void> updateProgress(String url, int index, int offset) async {
-    final b = bookRows[url]!;
-    bookRows[url] = LegacyBookRecord({
-      ...b.toJson(),
-      'durChapterIndex': index,
-      'durChapterPos': offset,
-    });
-  }
-
-  @override
-  Future<List<ReaderChapter>> chapters(String bookUrl) async =>
-      chapterRows[bookUrl] ?? [];
-  @override
-  Future<void> putChapters(String bookUrl, List<ReaderChapter> chapters) async {
-    chapterRows[bookUrl] = chapters;
-  }
-
-  @override
-  Future<String?> content(String bookUrl, String chapterUrl) async =>
-      contentRows['$bookUrl|$chapterUrl'];
-  @override
-  Future<void> putContent(
-    String bookUrl,
-    String chapterUrl,
-    String content,
-  ) async {
-    contentRows['$bookUrl|$chapterUrl'] = content;
-  }
-
-  @override
-  Future<List<Map<String, Object?>>> sources() async =>
-      sourceRows.values.toList();
-  @override
-  Future<void> putSource(Map<String, Object?> source) async {
-    sourceRows[BookSourceService.sourceId(source)] = source;
-    controller.add(null);
-  }
-
-  @override
-  Future<void> removeSource(String id) async {
-    sourceRows.remove(id);
-    controller.add(null);
-  }
-
-  @override
-  Future<String?> setting(String key) async => settings[key];
-  @override
-  Future<void> setSetting(String key, String? value) async {
-    if (value == null) {
-      settings.remove(key);
-    } else {
-      settings[key] = value;
-    }
-  }
-
-  @override
-  Future<Map<String, String>> backupFiles() async => {};
-  @override
-  Future<void> restoreBackup(LegacyBackupDocument document) async =>
-      throw UnimplementedError();
-  @override
-  Future<void> close() => controller.close();
-}
-
 void main() {
   test('import preserves opaque ID, nested unknown fields and rejects malformed batch before storage', () async {
-    final repo = _Repository();
+    final repo = SourceTestRepository();
     final service = BookSourceService(repo);
     const legacy = {
       'bookSourceUrl': '歪歪斜斜的字眼',
@@ -166,7 +81,7 @@ void main() {
       }
       await request.response.close();
     });
-    final repo = _Repository();
+    final repo = SourceTestRepository();
     final source = {
       'id': 'opaque-source',
       'name': 'Fixture',
@@ -198,7 +113,7 @@ void main() {
       },
     };
     SourceEngine factory(SourceDefinition _) =>
-        SourceEngine(runtime: _NoScript());
+        SourceEngine(runtime: _NoScript(), requestAdapter: adaptLegacyRequest);
     var service = BookSourceService(repo, engineFactory: factory);
     try {
       await service.importJson(jsonEncode(source));
@@ -221,6 +136,33 @@ void main() {
       await service.addToShelf(preview);
       expect((await repo.book(added.url))!.characterOffset, 4);
       expect(received, ['/search', '/book', '/toc', '/chapter']);
+      await service.importJson(
+        jsonEncode({
+          'bookSourceUrl': base,
+          'bookSourceName': 'Static legacy browse',
+          'enabledCookieJar': true,
+          'header': jsonEncode({'X-Source': 'header-value'}),
+          'exploreUrl': jsonEncode([
+            {'title': 'Category', 'url': '$base/search?page={{page}}'},
+          ]),
+          'ruleExplore': {
+            'bookList': 'article',
+            'bookUrl': 'a@href',
+            'name': 'a@text',
+            'author': 'em@text',
+          },
+        }),
+      );
+      final menu = await service.exploreMenu(base);
+      expect(menu.single['title'], 'Category');
+      final browsed = await service.explore(
+        base,
+        menu.single['url'] as String,
+        page: 2,
+      );
+      expect(browsed.single.name, 'Book');
+      expect(browsed.single.url, '$base/book');
+
       await service.setEnabled(source, false);
       await expectLater(
         service.search('opaque-source', 'book'),
@@ -248,7 +190,7 @@ void main() {
         request.response.write('{"value":"from HTTP"}');
         await request.response.close();
       });
-      final repo = _Repository();
+      final repo = SourceTestRepository();
       var service = BookSourceService(repo);
       try {
         await service.importJson(
@@ -284,7 +226,7 @@ void main() {
   test(
     'unsupported legacy pipelines are explicit and source is still exportable',
     () async {
-      final repo = _Repository();
+      final repo = SourceTestRepository();
       final service = BookSourceService(
         repo,
         engineFactory: (_) => throw StateError('must not create engine'),

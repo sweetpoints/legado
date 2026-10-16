@@ -16,6 +16,17 @@ class BookPreview {
   const BookPreview(this.book, this.chapters);
   final NetworkBook book;
   final List<ReaderChapter> chapters;
+
+  LegacyBookRecord toLegacyBookRecord({LegacyBookRecord? existing}) =>
+      LegacyBookRecord({
+        ...?existing?.toJson(),
+        ...book.metadata,
+        'bookUrl': book.url,
+        'name': book.name,
+        'origin': book.sourceId,
+        if (existing != null) 'durChapterIndex': existing.chapterIndex,
+        if (existing != null) 'durChapterPos': existing.characterOffset,
+      });
 }
 
 /// Independent Dart/V8 composition. No dependency on the Android App bridge.
@@ -176,15 +187,7 @@ class BookSourceService {
 
   Future<LegacyBookRecord> addToShelf(BookPreview preview) async {
     final existing = await repository.book(preview.book.url);
-    final record = LegacyBookRecord({
-      ...?existing?.toJson(),
-      ...preview.book.metadata,
-      'bookUrl': preview.book.url,
-      'name': preview.book.name,
-      'origin': preview.book.sourceId,
-      if (existing != null) 'durChapterIndex': existing.chapterIndex,
-      if (existing != null) 'durChapterPos': existing.characterOffset,
-    });
+    final record = preview.toLegacyBookRecord(existing: existing);
     // Store the catalogue first; a failed write never advertises a ready shelf row.
     await repository.putChapters(record.url, preview.chapters);
     await repository.putBook(record);
