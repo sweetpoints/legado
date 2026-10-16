@@ -18,7 +18,7 @@ this package. Always close a repository before deleting or moving its database.
 
 ## Durability and identity
 
-Schema version 1 is stored using SQLite `user_version`. Schema installation and
+Schema version 2 is stored using SQLite `user_version`. Schema installation and
 restores are transactions. Opening a future schema refuses it without rewriting
 its data. SQLite serializes writes and a 5-second busy timeout permits short
 concurrent accesses; each repository processes its own requests in FIFO order.
@@ -61,12 +61,32 @@ information; callers must store them in private directories and only expose an
 export through an explicit user action. Encryption and cross-device sync are not
 implemented here.
 
+## Complete archive retention
+
+The repository also implements `ArchiveLibraryRepository`. `backupSnapshot()`
+reads the current text export and opaque BLOB entries in one SQLite transaction.
+`restoreArchive(document, retainedEntries)` atomically restores text data and
+replaces the complete retained-entry set. An empty retained-entry map explicitly
+clears that set. Text-only `restoreBackup` preserves existing retained entries.
+Byte buffers are copied on entry and snapshots are immutable. Images, unknown
+binary files and opaque encrypted `servers` data are preserved byte-for-byte;
+this package never decrypts or interprets them.
+
+Retained archive names must be safe relative entry names and cannot collide with
+this restore's text files or managed JSON entries. Invalid names, invalid byte
+values or a late text/SQL error roll back text and BLOB changes together. A
+text-only restore colliding with an existing opaque entry is rejected rather than
+silently replacing its bytes. In a full archive restore, a retained entry replaces
+an older opaque text entry of the same name. Callers should use the snapshot API
+when constructing ZIP exports; `backupFiles()` intentionally returns only text.
+
 ## Drift schema and generation
 
 `LibraryDatabase` extends the generated Drift `GeneratedDatabase` implementation.
-Six typed tables and generated companions implement every repository query and
+Seven typed tables and generated companions implement every repository query and
 write. `MigrationStrategy` creates the schema transactionally, adopts the
-pre-Drift version-1 layout without rewriting records, and refuses unsupported
+pre-Drift version-1 layout without rewriting records, adds the opaque BLOB
+entry table in the 1-to-2 migration, and refuses unsupported
 schema transitions. No custom hand-written SQLite RPC layer remains.
 
 Generate the checked-in table implementation with:
@@ -100,6 +120,9 @@ asset build and source. Five-platform app builds still require their respective
 CI runners; local package tests are macOS ARM64 evidence only.
 
 ## Verification
+
+17 tests cover the repository, including BLOB reopen, version-1-to-2 migration,
+migration rollback, and atomic text/BLOB rollback.
 
 `dart analyze` and `dart test` exercise real SQLite files, reopen, worker FIFO,
 commit visibility from another connection, pre-Drift schema adoption, atomic

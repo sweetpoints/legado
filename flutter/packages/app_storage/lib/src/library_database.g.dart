@@ -1403,6 +1403,213 @@ class StoredBackupFilesCompanion extends UpdateCompanion<LibraryBackupFileRow> {
   }
 }
 
+class $StoredArchiveEntriesTable extends StoredArchiveEntries
+    with TableInfo<$StoredArchiveEntriesTable, LibraryArchiveEntryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoredArchiveEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<Uint8List> value = GeneratedColumn<Uint8List>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'archive_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LibraryArchiveEntryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LibraryArchiveEntryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LibraryArchiveEntryRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $StoredArchiveEntriesTable createAlias(String alias) {
+    return $StoredArchiveEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class LibraryArchiveEntryRow extends DataClass
+    implements Insertable<LibraryArchiveEntryRow> {
+  final String id;
+  final Uint8List value;
+  const LibraryArchiveEntryRow({required this.id, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['value'] = Variable<Uint8List>(value);
+    return map;
+  }
+
+  StoredArchiveEntriesCompanion toCompanion(bool nullToAbsent) {
+    return StoredArchiveEntriesCompanion(id: Value(id), value: Value(value));
+  }
+
+  factory LibraryArchiveEntryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LibraryArchiveEntryRow(
+      id: serializer.fromJson<String>(json['id']),
+      value: serializer.fromJson<Uint8List>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'value': serializer.toJson<Uint8List>(value),
+    };
+  }
+
+  LibraryArchiveEntryRow copyWith({String? id, Uint8List? value}) =>
+      LibraryArchiveEntryRow(id: id ?? this.id, value: value ?? this.value);
+  LibraryArchiveEntryRow copyWithCompanion(StoredArchiveEntriesCompanion data) {
+    return LibraryArchiveEntryRow(
+      id: data.id.present ? data.id.value : this.id,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryArchiveEntryRow(')
+          ..write('id: $id, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, $driftBlobEquality.hash(value));
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LibraryArchiveEntryRow &&
+          other.id == this.id &&
+          $driftBlobEquality.equals(other.value, this.value));
+}
+
+class StoredArchiveEntriesCompanion
+    extends UpdateCompanion<LibraryArchiveEntryRow> {
+  final Value<String> id;
+  final Value<Uint8List> value;
+  final Value<int> rowid;
+  const StoredArchiveEntriesCompanion({
+    this.id = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoredArchiveEntriesCompanion.insert({
+    required String id,
+    required Uint8List value,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       value = Value(value);
+  static Insertable<LibraryArchiveEntryRow> custom({
+    Expression<String>? id,
+    Expression<Uint8List>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoredArchiveEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<Uint8List>? value,
+    Value<int>? rowid,
+  }) {
+    return StoredArchiveEntriesCompanion(
+      id: id ?? this.id,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<Uint8List>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredArchiveEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$LibraryDatabase extends GeneratedDatabase {
   _$LibraryDatabase(QueryExecutor e) : super(e);
   $LibraryDatabaseManager get managers => $LibraryDatabaseManager(this);
@@ -1413,6 +1620,8 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
   late final $StoredContentTable storedContent = $StoredContentTable(this);
   late final $StoredBackupFilesTable storedBackupFiles =
       $StoredBackupFilesTable(this);
+  late final $StoredArchiveEntriesTable storedArchiveEntries =
+      $StoredArchiveEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1424,6 +1633,7 @@ abstract class _$LibraryDatabase extends GeneratedDatabase {
     storedChapters,
     storedContent,
     storedBackupFiles,
+    storedArchiveEntries,
   ];
 }
 
@@ -2425,6 +2635,177 @@ typedef $$StoredBackupFilesTableProcessedTableManager =
       LibraryBackupFileRow,
       PrefetchHooks Function()
     >;
+typedef $$StoredArchiveEntriesTableCreateCompanionBuilder =
+    StoredArchiveEntriesCompanion Function({
+      required String id,
+      required Uint8List value,
+      Value<int> rowid,
+    });
+typedef $$StoredArchiveEntriesTableUpdateCompanionBuilder =
+    StoredArchiveEntriesCompanion Function({
+      Value<String> id,
+      Value<Uint8List> value,
+      Value<int> rowid,
+    });
+
+class $$StoredArchiveEntriesTableFilterComposer
+    extends Composer<_$LibraryDatabase, $StoredArchiveEntriesTable> {
+  $$StoredArchiveEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StoredArchiveEntriesTableOrderingComposer
+    extends Composer<_$LibraryDatabase, $StoredArchiveEntriesTable> {
+  $$StoredArchiveEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StoredArchiveEntriesTableAnnotationComposer
+    extends Composer<_$LibraryDatabase, $StoredArchiveEntriesTable> {
+  $$StoredArchiveEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$StoredArchiveEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$LibraryDatabase,
+          $StoredArchiveEntriesTable,
+          LibraryArchiveEntryRow,
+          $$StoredArchiveEntriesTableFilterComposer,
+          $$StoredArchiveEntriesTableOrderingComposer,
+          $$StoredArchiveEntriesTableAnnotationComposer,
+          $$StoredArchiveEntriesTableCreateCompanionBuilder,
+          $$StoredArchiveEntriesTableUpdateCompanionBuilder,
+          (
+            LibraryArchiveEntryRow,
+            BaseReferences<
+              _$LibraryDatabase,
+              $StoredArchiveEntriesTable,
+              LibraryArchiveEntryRow
+            >,
+          ),
+          LibraryArchiveEntryRow,
+          PrefetchHooks Function()
+        > {
+  $$StoredArchiveEntriesTableTableManager(
+    _$LibraryDatabase db,
+    $StoredArchiveEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoredArchiveEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StoredArchiveEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StoredArchiveEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<Uint8List> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredArchiveEntriesCompanion(
+                id: id,
+                value: value,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required Uint8List value,
+                Value<int> rowid = const Value.absent(),
+              }) => StoredArchiveEntriesCompanion.insert(
+                id: id,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $StoredArchiveEntriesTable,
+                    LibraryArchiveEntryRow
+                  >(table),
+                  BaseReferences<
+                    _$LibraryDatabase,
+                    $StoredArchiveEntriesTable,
+                    LibraryArchiveEntryRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StoredArchiveEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LibraryDatabase,
+      $StoredArchiveEntriesTable,
+      LibraryArchiveEntryRow,
+      $$StoredArchiveEntriesTableFilterComposer,
+      $$StoredArchiveEntriesTableOrderingComposer,
+      $$StoredArchiveEntriesTableAnnotationComposer,
+      $$StoredArchiveEntriesTableCreateCompanionBuilder,
+      $$StoredArchiveEntriesTableUpdateCompanionBuilder,
+      (
+        LibraryArchiveEntryRow,
+        BaseReferences<
+          _$LibraryDatabase,
+          $StoredArchiveEntriesTable,
+          LibraryArchiveEntryRow
+        >,
+      ),
+      LibraryArchiveEntryRow,
+      PrefetchHooks Function()
+    >;
 
 class $LibraryDatabaseManager {
   final _$LibraryDatabase _db;
@@ -2441,4 +2822,6 @@ class $LibraryDatabaseManager {
       $$StoredContentTableTableManager(_db, _db.storedContent);
   $$StoredBackupFilesTableTableManager get storedBackupFiles =>
       $$StoredBackupFilesTableTableManager(_db, _db.storedBackupFiles);
+  $$StoredArchiveEntriesTableTableManager get storedArchiveEntries =>
+      $$StoredArchiveEntriesTableTableManager(_db, _db.storedArchiveEntries);
 }
