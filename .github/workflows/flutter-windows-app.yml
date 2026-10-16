@@ -61,45 +61,26 @@ jobs:
           $ErrorActionPreference = 'Stop'
           flutter build windows --release 2>&1 | Tee-Object ../../../build/windows-app-acceptance/release-build.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows Release build failed' }
-      - name: Start Release app and require graceful process exit
+      - name: Package app-local Microsoft CRT and test isolated portable Release
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $evidence = (Resolve-Path build/windows-app-acceptance).Path
           $release = (Resolve-Path flutter/apps/legado/build/windows/x64/runner/Release).Path
           $executable = Join-Path $release 'legado_app.exe'
           if (-not (Test-Path $executable)) { throw 'Release executable missing' }
-          if (-not (Test-Path "$release/flutter_windows.dll")) { throw 'Flutter engine DLL missing from release bundle' }
-          if (-not (Test-Path "$release/data/flutter_assets")) { throw 'Flutter asset directory missing from release bundle' }
+          if (-not (Test-Path "$release/flutter_windows.dll")) { throw 'Flutter engine DLL missing' }
+          if (-not (Test-Path "$release/data/flutter_assets")) { throw 'Flutter assets missing' }
           $bridge = @(Get-ChildItem $release -Recurse -File -Filter source_v8.dll)
-          if ($bridge.Count -ne 1) { throw 'Expected exactly one bundled V8 native bridge' }
+          if ($bridge.Count -ne 1) { throw 'Expected exactly one bundled V8 bridge' }
           $bytes = [System.IO.File]::ReadAllBytes($executable)
           $pe = [BitConverter]::ToInt32($bytes, 60)
           if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 34404) { throw 'Expected x64 Release executable' }
           $prepared = Get-Content build-windows-app-v8.json -Raw | ConvertFrom-Json
           $nativeManifest = Get-Content "$($prepared.artifactRoot)/manifest.json" -Raw | ConvertFrom-Json
           if ((Get-FileHash $bridge[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $nativeManifest.binary.sha256) { throw 'Bundled V8 bridge differs from reviewed native artifact' }
-          Compress-Archive -Path "$release/*" -DestinationPath "$evidence/legado-windows-x64-release.zip"
-          Get-FileHash "$evidence/legado-windows-x64-release.zip" -Algorithm SHA256 |
-            Format-List | Out-File "$evidence/release-bundle-sha256.txt"
-          $process = Start-Process $executable -WorkingDirectory $release -PassThru `
-            -RedirectStandardOutput "$evidence/release.stdout.log" -RedirectStandardError "$evidence/release.stderr.log"
-          try {
-            Start-Sleep -Seconds 8
-            $process.Refresh()
-            if ($process.HasExited) { throw "Release app exited during startup: $($process.ExitCode)" }
-            if (-not $process.CloseMainWindow()) { throw 'Release native window did not accept close request' }
-            if (-not $process.WaitForExit(15000)) { throw 'Release app did not exit gracefully after closing its window' }
-            if ($process.ExitCode -ne 0) { throw "Release app shutdown failed: $($process.ExitCode)" }
-            @{
-              platform = 'windows-x64'; sourceSha = '${{ github.sha }}'; buildType = 'Release';
-              startupProcessStayedAlive = $true; gracefulWindowClose = $true; exitCode = $process.ExitCode;
-              executableSha256 = (Get-FileHash $executable -Algorithm SHA256).Hash.ToLower();
-              nativeBridgeSha256 = (Get-FileHash $bridge[0].FullName -Algorithm SHA256).Hash.ToLower()
-            } | ConvertTo-Json | Set-Content "$evidence/release-startup.json" -Encoding utf8
-          } finally {
-            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-          }
+          & ./flutter/tool/windows/package-portable.ps1 -BundleDirectory $release `
+            -OutputDirectory build/windows-portable-release `
+            -EvidenceDirectory build/windows-app-acceptance -SourceSha '${{ github.sha }}'
       - name: Preserve native application bundle and test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
