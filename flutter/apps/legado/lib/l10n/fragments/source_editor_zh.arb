@@ -62,5 +62,6 @@
   "sourceEditorLargeField": "内容较长或包含复杂组合字符，请使用规则编辑器。",
   "sourceEditorFailed": "无法加载书源编辑器",
   "sourceEditorOptions": "书源选项",
-  "sourceEditorType": "书源类型"
+  "sourceEditorType": "书源类型",
+  "sourceEditorEditRejected": "修改未被接受，字段已恢复。请重试或重新编辑该字段后再保存。"
 }

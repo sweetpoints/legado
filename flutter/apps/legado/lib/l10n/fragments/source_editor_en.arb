@@ -62,5 +62,6 @@
   "sourceEditorLargeField": "This field contains long or complex text. Open the rule editor to edit it.",
   "sourceEditorFailed": "Unable to load source editor",
   "sourceEditorOptions": "Source options",
-  "sourceEditorType": "Source type"
+  "sourceEditorType": "Source type",
+  "sourceEditorEditRejected": "The edit was rejected and the field was restored. Retry or edit that field again before saving."
 }

@@ -68,6 +68,80 @@ void main() {
       await bridge.close();
     },
   );
+  test(
+    'rejected field blocks an already queued save until that field succeeds',
+    () async {
+      final calls = <Map>[];
+      final barrier = Completer<void>();
+      var reject = true;
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        final args = call.arguments as Map;
+        calls.add(args);
+        if (args['op'] == 'field' && reject) {
+          await barrier.future;
+          throw PlatformException(code: 'invalid_request');
+        }
+        return null;
+      });
+      final bridge = SourceEditorBridge();
+      final failed = expectLater(
+        bridge.command('field', {'tab': 0, 'key': 'name', 'value': 'rejected'}),
+        throwsA(isA<PlatformException>()),
+      );
+      final blocked = expectLater(
+        bridge.command('save', {'action': 'FINISH'}),
+        throwsA(isA<SourceEditorWriteBlocked>()),
+      );
+      barrier.complete();
+      await failed;
+      await blocked;
+      expect(calls.map((c) => c['op']), ['field']);
+      expect(bridge.hasRejectedFields, true);
+      reject = false;
+      await bridge.command('field', {
+        'tab': 0,
+        'key': 'other',
+        'value': 'accepted',
+      });
+      await expectLater(
+        bridge.command('save'),
+        throwsA(isA<SourceEditorWriteBlocked>()),
+      );
+      await bridge.command('field', {
+        'tab': 0,
+        'key': 'name',
+        'value': 'corrected',
+      });
+      await bridge.command('save', {'action': 'FINISH'});
+      expect(bridge.hasRejectedFields, false);
+      expect(calls.last['op'], 'save');
+      await bridge.close();
+    },
+  );
+  test(
+    'explicit successful retry clears rejected-field save barrier',
+    () async {
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if ((call.arguments as Map)['op'] == 'field') {
+          throw PlatformException(code: 'invalid_request');
+        }
+        return null;
+      });
+      final bridge = SourceEditorBridge();
+      await expectLater(
+        bridge.command('field', {'tab': 0, 'key': 'name'}),
+        throwsA(isA<PlatformException>()),
+      );
+      await bridge.command('retry');
+      await bridge.command('save');
+      expect(bridge.hasRejectedFields, false);
+      await bridge.close();
+    },
+  );
   test('freezes nested arguments before queued platform invocation', () async {
     final barrier = Completer<void>();
     final calls = <Map>[];
