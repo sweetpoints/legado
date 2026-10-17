@@ -1544,6 +1544,12 @@ abstract class AppLocalizations {
   /// **'Source type'**
   String get sourceEditorType;
 
+  /// No description provided for @sourceEditorEditRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The edit was rejected and the field was restored. Retry or edit that field again before saving.'**
+  String get sourceEditorEditRejected;
+
   /// No description provided for @sourceManagerTitle.
   ///
   /// In en, this message translates to:

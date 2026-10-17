@@ -792,6 +792,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourceEditorType => 'Source type';
 
   @override
+  String get sourceEditorEditRejected =>
+      'The edit was rejected and the field was restored. Retry or edit that field again before saving.';
+
+  @override
   String get sourceManagerTitle => 'Source manager';
 
   @override
