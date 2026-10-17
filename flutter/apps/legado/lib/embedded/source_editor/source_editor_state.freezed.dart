@@ -219,7 +219,7 @@ return $default(_that.key,_that.value,_that.label,_that.external,_that.originalL
 
 class _SourceEditorField extends SourceEditorField {
   const _SourceEditorField({required this.key, required this.value, required this.label, this.external = false, this.originalLength = 0, this.selectionStart = 0, this.selectionEnd = 0}): super._();
-  
+
 
 @override final  String key;
 @override final  String value;
@@ -501,7 +501,7 @@ return $default(_that.enabled,_that.enabledExplore,_that.enabledCookieJar,_that.
 
 class _SourceEditorOptions extends SourceEditorOptions {
   const _SourceEditorOptions({required this.enabled, required this.enabledExplore, required this.enabledCookieJar, required this.enabledReview, required this.type, required this.eventListener, required this.customButton}): super._();
-  
+
 
 @override final  bool enabled;
 @override final  bool enabledExplore;
@@ -652,7 +652,7 @@ as List<List<SourceEditorField>>,
 @override
 @pragma('vm:prefer-inline')
 $SourceEditorOptionsCopyWith<$Res> get options {
-  
+
   return $SourceEditorOptionsCopyWith<$Res>(_self.options, (value) {
     return _then(_self.copyWith(options: value));
   });
@@ -795,7 +795,7 @@ return $default(_that.revision,_that.selectedTab,_that.focusedKey,_that.optionsE
 
 class _SourceEditorDocument extends SourceEditorDocument {
   const _SourceEditorDocument({required this.revision, required this.selectedTab, this.focusedKey, required this.optionsExpanded, required this.autoComplete, required this.finished, required this.dirty, required this.hasLogin, required this.options, required  List<List<SourceEditorField>> tabs}): _tabs = tabs,super._();
-  
+
 
 @override final  int revision;
 @override final  int selectedTab;
@@ -884,7 +884,7 @@ as List<List<SourceEditorField>>,
 @override
 @pragma('vm:prefer-inline')
 $SourceEditorOptionsCopyWith<$Res> get options {
-  
+
   return $SourceEditorOptionsCopyWith<$Res>(_self.options, (value) {
     return _then(_self.copyWith(options: value));
   });
@@ -1096,7 +1096,7 @@ return $default(_that.revision,_that.status,_that.requiresManualWork,_that.canAp
 
 class _SourceEditorMigration extends SourceEditorMigration {
   const _SourceEditorMigration({required this.revision, required this.status, required this.requiresManualWork, required this.canApply, required  List<Map<String, Object?>> issues}): _issues = issues,super._();
-  
+
 
 @override final  int revision;
 @override final  String status;
@@ -1411,7 +1411,7 @@ return $default(_that.document,_that.busy,_that.error,_that.confirmDiscard,_that
 
 class _SourceEditorSnapshot extends SourceEditorSnapshot {
   const _SourceEditorSnapshot({this.document, this.busy = false, this.error, this.confirmDiscard = false,  List<String>? groups, this.variable, this.variableComment, this.maxLines = 6, this.keyboardRows = 1,  List<Map<String, String>> assists = const [], this.migrationAvailable = false, this.migrationRunning = false, this.migrationError, this.migrationReport}): _groups = groups,_assists = assists,super._();
-  
+
 
 @override final  SourceEditorDocument? document;
 @override@JsonKey() final  bool busy;
