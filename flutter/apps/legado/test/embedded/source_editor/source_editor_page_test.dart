@@ -79,6 +79,46 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test(
+    'inline safety matches native limits without rejecting ordinary Unicode',
+    () {
+      expect(isSourceEditorInlineUnsafe('x' * 12000), false);
+      expect(isSourceEditorInlineUnsafe('x' * 12001), true);
+      expect(isSourceEditorInlineUnsafe('a${'\u0301' * 8}'), true);
+      expect(isSourceEditorInlineUnsafe('a${'\u20dd' * 8}'), true);
+      expect(isSourceEditorInlineUnsafe(('a\u0301') * 16), true);
+      expect(isSourceEditorInlineUnsafe('中文 é हिंदी 👩‍💻 '), false);
+      expect(isSourceEditorInlineUnsafe('❤\ufe0f' * 40), false);
+    },
+  );
+  for (final modal in [
+    'variable',
+    'groups',
+    'confirmDiscard',
+    'migrationError',
+  ]) {
+    testWidgets('system Back dismisses $modal before leaving editor', (
+      tester,
+    ) async {
+      await app(tester);
+      await publish(tester, {
+        ...native,
+        modal: switch (modal) {
+          'groups' => ['Group'],
+          'confirmDiscard' => true,
+          _ => 'value',
+        },
+      });
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(commands.last['op'], switch (modal) {
+        'variable' => 'dismissVariable',
+        'groups' => 'dismissGroups',
+        'confirmDiscard' => 'keepEditing',
+        _ => 'dismissMigration',
+      });
+    });
+  }
   testWidgets(
     'bootstrap selects full editor with seven tabs and native field labels',
     (tester) async {
