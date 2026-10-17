@@ -19,6 +19,7 @@ class PrepareMemoryContractTest(unittest.TestCase):
             shutil.copyfile(Path(__file__).with_name('prepare-android-aar.sh'), tool / 'prepare-android-aar.sh')
             (tool / 'source-host-min-sdk.gradle').write_text('// fixture')
             (tool / 'verify-android-aar.py').write_text('import sys\nif "--print-source-digest" in sys.argv: print("fixed-source-sha")\n')
+            (tool / 'verify-pdfium.py').write_text('import sys\nassert sys.argv[1:] == ["--prepare-target", "android-arm64"]\n')
             binaries = root / 'bin'
             binaries.mkdir()
             (binaries / 'java').write_text('#!/bin/sh\necho \'openjdk version "21.0.11"\' >&2\n')

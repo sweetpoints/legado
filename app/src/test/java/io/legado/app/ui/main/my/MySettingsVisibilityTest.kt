@@ -41,6 +41,20 @@ class MySettingsVisibilityTest {
     }
 
     @Test
+    fun sourceManagerReplacementKeepsOneCustomizableEntryAndIgnoresRetiredKey() {
+        val manager = mySettingItems.filter { it.key == "bookSourceManage" }
+        assertEquals(1, manager.size)
+        assertEquals(MySettingKind.Action, manager.single().kind)
+        assertFalse(mySettingItems.any { it.key == "flutterBookSourceManage" })
+        val restored = defaultMyMoreItems + "flutterBookSourceManage"
+        assertEquals(visibleMySettings(defaultMyMoreItems, false), visibleMySettings(restored, false))
+        assertEquals(visibleMySettings(defaultMyMoreItems, true), visibleMySettings(restored, true))
+        val moved = defaultMyMoreItems + "bookSourceManage"
+        assertTrue(visibleMySettings(moved, true).any { it.key == "bookSourceManage" })
+        assertFalse(visibleMySettings(moved, false).any { it.key == "bookSourceManage" })
+    }
+
+    @Test
     fun unknownRestoredKeysDoNotCreateRowsOrLoseExistingRows() {
         assertEquals(
             visibleMySettings(defaultMyMoreItems, false),

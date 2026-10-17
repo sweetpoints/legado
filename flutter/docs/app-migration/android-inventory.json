@@ -175,8 +175,6 @@
       "app/src/main/java/io/legado/app/ui/book/source/edit/BookSourceEditScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditRoute.kt",
       "app/src/main/java/io/legado/app/ui/book/source/edit/JsSourceEditScreen.kt",
-      "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceManagerRoute.kt",
-      "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceManagerScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/toc/TocBookmarksRoute.kt",
       "app/src/main/java/io/legado/app/ui/book/toc/TocBookmarksScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/toc/TocChapterRoute.kt",

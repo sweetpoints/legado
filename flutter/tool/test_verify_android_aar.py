@@ -43,6 +43,30 @@ class AarContractTest(unittest.TestCase):
                 output.writestr(name, data)
         return aar
 
+    def test_embedded_ui_inputs_invalidate_aar_but_widget_tests_do_not(self):
+        workspace = self.repo / 'flutter'
+        inputs = ['pubspec.yaml', 'pubspec.lock',
+                  'modules/source_host/pubspec.yaml',
+                  'modules/source_host/lib/main.dart',
+                  'apps/legado/pubspec.yaml',
+                  'apps/legado/lib/embedded/page.dart',
+                  'apps/legado/assets/notice.txt']
+        for name in inputs:
+            path = workspace / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('original')
+        with patch.object(verifier.builder, 'ROOT', self.repo):
+            baseline = verifier.source_digest()
+            for name in inputs:
+                path = workspace / name
+                path.write_text('changed')
+                self.assertNotEqual(baseline, verifier.source_digest(), name)
+                path.write_text('original')
+            widget_test = workspace / 'apps/legado/test/page_test.dart'
+            widget_test.parent.mkdir(parents=True)
+            widget_test.write_text('test-only change')
+            self.assertEqual(baseline, verifier.source_digest())
+
     def test_valid_arm64_aar_has_reproducible_hash(self):
         aar = self.fixture()
         result = verifier.check_aar(self.repo, 'debug', self.digest)

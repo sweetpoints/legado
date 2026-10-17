@@ -135,6 +135,9 @@ if (gradle.startParameter.taskNames.any {
         sourceFiles += packageDir.resolve("lib").walkTopDown().filter { it.isFile && it.extension == "dart" }.toList()
         sourceFiles += packageDir.resolve("pubspec.yaml")
     }
+    sourceFiles += workspace.resolve("apps/legado/lib").walkTopDown().filter { it.isFile && it.extension == "dart" }.toList()
+    sourceFiles += workspace.resolve("apps/legado/assets").walkTopDown().filter { it.isFile }.toList()
+    sourceFiles += workspace.resolve("apps/legado/pubspec.yaml")
     sourceFiles += listOf(workspace.resolve("pubspec.yaml"), workspace.resolve("pubspec.lock"),
         workspace.resolve("modules/source_host/pubspec.yaml"))
     val sourceDigest = MessageDigest.getInstance("SHA-256")

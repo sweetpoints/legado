@@ -27,6 +27,12 @@ esac
 task_android_targets="${SOURCE_ENGINE_ANDROID_TARGETS:-android-arm64,android-x64}"
 # The verifier rejects unknown, duplicate and empty target names before compilation.
 SOURCE_ENGINE_ANDROID_TARGETS="$task_android_targets" python3 "$workspace_root/tool/verify-android-aar.py" --native-only
+# Shared UI brings the fixed PDFium native hook into the module dependency graph.
+# Authenticate its cache before Flutter can run dependency hooks.
+IFS=',' read -r -a task_pdfium_targets <<< "$task_android_targets"
+for task_pdfium_target in "${task_pdfium_targets[@]}"; do
+    python3 "$workspace_root/tool/verify-pdfium.py" --prepare-target "$task_pdfium_target"
+done
 task_source_sha="$(python3 "$workspace_root/tool/verify-android-aar.py" --print-source-digest)"
 # Use Gradle's supported init.d mechanism without changing generated .android
 # files or the user's global initialization scripts/properties.

@@ -17,6 +17,17 @@ on:
       - '.github/scripts/prepare-pdf-zoom-fixture.py'
       - '.github/scripts/prepare-reported-rss-fixture.py'
       - 'app/build.gradle.kts'
+      # Embedded Flutter UI shares the existing Android host, source backend and
+      # the App's theme/localizations. Rebuild the authenticated AAR via setup-android.
+      - 'app/src/flutterSource/**'
+      - 'flutter/modules/source_host/**'
+      - 'flutter/apps/legado/lib/**'
+      - 'flutter/apps/legado/assets/**'
+      - 'flutter/apps/legado/pubspec*'
+      - 'flutter/apps/legado/l10n.yaml'
+      - 'flutter/pubspec*'
+      - 'flutter/tool/prepare-android-aar.sh'
+      - 'flutter/tool/verify-android-aar.py'
       - 'app/src/main/java/io/legado/app/ui/**'
       - 'app/src/main/java/io/legado/app/base/**'
       - 'app/src/androidTest/**'
@@ -177,7 +188,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Verify source browser, discovery and content editor on Android 16
+      - name: Verify native UI and embedded Flutter on Android 16
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 36

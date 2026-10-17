@@ -231,11 +231,64 @@ def progress_diagnostics(runner, uuid, timeout):
     return tick
 
 
+
+def simulator_service_processes(text):
+    allowed = {'com.apple.CoreSimulator.CoreSimulatorService', 'simdiskimaged'}
+    result = []
+    for line in text.splitlines():
+        fields = line.strip().split(None, 3)
+        if len(fields) == 4 and fields[0].isdigit() and Path(fields[3]).name in allowed:
+            result.append({'pid': int(fields[0]), 'elapsed': fields[1],
+                           'state': fields[2], 'executable': fields[3]})
+    return result
+
+
+def simulator_service_diagnostics(runner, label):
+    # Do not start another simctl request while its first inventory is pending.
+    # Filter host executable metadata in memory, without arguments/environment.
+    summary = {}
+    try:
+        result = subprocess.run(['ps', '-axo', 'pid=,etime=,stat=,comm='],
+                                capture_output=True, text=True, timeout=5, check=False)
+        summary = {'exitCode': result.returncode,
+                   'processes': simulator_service_processes(result.stdout)}
+    except (OSError, subprocess.TimeoutExpired) as error:
+        summary['queryError'] = type(error).__name__
+    (runner.output / (label + '.json')).write_text(json.dumps(summary, indent=2) + '\n')
+
+
+def cold_service_progress(runner):
+    previous = 0
+    sampled = False
+    def tick(elapsed):
+        nonlocal previous, sampled
+        if elapsed - previous >= 15:
+            previous = elapsed
+            print(f'Waiting for initial CoreSimulator inventory: elapsedSeconds={int(elapsed)}', flush=True)
+        if elapsed >= 30 and not sampled:
+            sampled = True
+            simulator_service_diagnostics(runner, 'simulator-service-startup')
+    return tick
+
+
+def installed_runtimes(runner, seconds):
+    if not 1 <= seconds <= 300:
+        raise PhaseFailure('Discovery timeout must be between 1 and 300 seconds')
+    # The first simctl IPC also initializes CoreSimulator and enumerates mounted
+    # runtime images. Hosted run 38958152603 was usable after ~44s, beyond the old
+    # 30s budget. Allow one bounded cold discovery; do not retry failed commands.
+    return json.loads(runner.command('installed-runtimes',
+        ['xcrun', 'simctl', 'list', 'runtimes', '--json'], seconds,
+        on_tick=cold_service_progress(runner)))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--device')
     parser.add_argument('--flutter', default='flutter')
+    parser.add_argument('--discovery-timeout', type=int, default=120,
+                        help='First CoreSimulator inventory budget in seconds (1..300)')
     parser.add_argument('--boot-timeout', type=int, default=180)
     parser.add_argument('--test-timeout', type=int, default=1200)
     parser.add_argument('--list-only', action='store_true')
@@ -251,6 +304,8 @@ def main():
     try:
         if platform.system() != 'Darwin' or platform.machine().lower() not in ('arm64', 'aarch64'):
             raise PhaseFailure('iOS native acceptance requires a macOS ARM64 host')
+        if not 1 <= args.discovery_timeout <= 300:
+            raise PhaseFailure('Discovery timeout must be between 1 and 300 seconds')
         if args.boot_timeout < 1 or args.test_timeout < 1:
             raise PhaseFailure('Phase timeouts must be positive')
         if not args.list_only and not args.device and os.environ.get('GITHUB_ACTIONS') != 'true':
@@ -260,7 +315,7 @@ def main():
         # Preserve setup-python's actual executable through Xcode's reduced PATH.
         os.environ.setdefault('SOURCE_V8_PYTHON', sys.executable)
         runner.command('xcode-version', ['xcodebuild', '-version'], 30)
-        runner.command('installed-runtimes', ['xcrun', 'simctl', 'list', 'runtimes', '--json'], 30)
+        installed_runtimes(runner, args.discovery_timeout)
         sdk = runner.command('xcode-sdk', ['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], 30).strip()
         snapshot = json.loads(runner.command('available-devices',
                                             ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], 30))
@@ -282,6 +337,8 @@ def main():
                        on_tick=progress_diagnostics(runner, uuid, args.test_timeout))
     except (PhaseFailure, OSError, ValueError) as error:
         (runner.output / 'failure.txt').write_text(str(error) + '\n')
+        if platform.system() == 'Darwin':
+            simulator_service_diagnostics(runner, 'simulator-service-failure')
         if selected is not None:
             app_diagnostics(runner, selected['udid'], 'failure')
         for name, command in ([] if platform.system() != 'Darwin' else [

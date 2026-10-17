@@ -571,6 +571,250 @@ class AppLocalizationsZh extends AppLocalizations {
       '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
+  String get sourceManagerTitle => '书源管理';
+
+  @override
+  String get sourceManagerQuery => '搜索书源';
+
+  @override
+  String get sourceManagerMenu => '菜单';
+
+  @override
+  String get sourceManagerSelectionMenu => '选中操作';
+
+  @override
+  String get sourceManagerBack => '返回';
+
+  @override
+  String get sourceManagerSelectAll => '全选';
+
+  @override
+  String get sourceManagerInvert => '反选';
+
+  @override
+  String get sourceManagerDelete => '删除';
+
+  @override
+  String get sourceManagerEdit => '编辑';
+
+  @override
+  String get sourceManagerEnabled => '启用书源';
+
+  @override
+  String get sourceManagerSelect => '选择书源';
+
+  @override
+  String get sourceManagerCancel => '取消';
+
+  @override
+  String get sourceManagerConfirm => '确认';
+
+  @override
+  String get sourceManagerRetry => '重试';
+
+  @override
+  String get sourceManagerDraft => '输入内容';
+
+  @override
+  String get sourceManagerJsBadge => 'JS源';
+
+  @override
+  String get sourceManagerExploreOnBadge => '发现已启用';
+
+  @override
+  String get sourceManagerExploreOffBadge => '发现已停用';
+
+  @override
+  String get sourceManagerDrag => '长按拖动排序';
+
+  @override
+  String get sourceManagerSlide => '长按滑动选择';
+
+  @override
+  String get sourceManagerEmpty => '没有符合条件的书源';
+
+  @override
+  String get sourceManagerGroups => '分组';
+
+  @override
+  String get sourceManagerAdd => '添加书源';
+
+  @override
+  String get sourceManagerAddJs => '添加JS书源';
+
+  @override
+  String get sourceManagerQr => '二维码导入';
+
+  @override
+  String get sourceManagerLocal => '本地导入';
+
+  @override
+  String get sourceManagerOnline => '网络导入';
+
+  @override
+  String get sourceManagerGroupManage => '管理分组';
+
+  @override
+  String get sourceManagerFilterEnabled => '已启用';
+
+  @override
+  String get sourceManagerFilterDisabled => '已禁用';
+
+  @override
+  String get sourceManagerFilterLogin => '需要登录';
+
+  @override
+  String get sourceManagerFilterNoGroup => '无分组';
+
+  @override
+  String get sourceManagerFilterExplore => '已启用发现';
+
+  @override
+  String get sourceManagerFilterNoExplore => '未启用发现';
+
+  @override
+  String get sourceManagerDescending => '降序';
+
+  @override
+  String get sourceManagerDomain => '按域名分组';
+
+  @override
+  String get sourceManagerShowStatus => '显示校验状态';
+
+  @override
+  String get sourceManagerBlockNavigation => '阻止源站跳转';
+
+  @override
+  String get sourceManagerRefresh => '刷新';
+
+  @override
+  String get sourceManagerHelp => '帮助';
+
+  @override
+  String get sourceManagerSortDefault => '手动排序';
+
+  @override
+  String get sourceManagerSortWeight => '自动排序（权重）';
+
+  @override
+  String get sourceManagerSortName => '按名称排序';
+
+  @override
+  String get sourceManagerSortUrl => '按地址排序';
+
+  @override
+  String get sourceManagerSortUpdate => '按更新时间排序';
+
+  @override
+  String get sourceManagerSortRespond => '按响应时间排序';
+
+  @override
+  String get sourceManagerSortEnable => '按启用状态排序';
+
+  @override
+  String get sourceManagerEnableSelection => '启用选中';
+
+  @override
+  String get sourceManagerDisableSelection => '禁用选中';
+
+  @override
+  String get sourceManagerAddGroup => '添加分组';
+
+  @override
+  String get sourceManagerRemoveGroup => '移除分组';
+
+  @override
+  String get sourceManagerEnableExplore => '启用发现';
+
+  @override
+  String get sourceManagerDisableExplore => '禁用发现';
+
+  @override
+  String get sourceManagerTopSelection => '选中置顶';
+
+  @override
+  String get sourceManagerBottomSelection => '选中置底';
+
+  @override
+  String get sourceManagerExport => '导出选中';
+
+  @override
+  String get sourceManagerShare => '分享选中';
+
+  @override
+  String get sourceManagerCheck => '校验选中';
+
+  @override
+  String get sourceManagerInterval => '选择区间';
+
+  @override
+  String get sourceManagerTop => '置顶';
+
+  @override
+  String get sourceManagerBottom => '置底';
+
+  @override
+  String get sourceManagerUp => '上移';
+
+  @override
+  String get sourceManagerDown => '下移';
+
+  @override
+  String get sourceManagerLogin => '登录';
+
+  @override
+  String get sourceManagerSearch => '搜索';
+
+  @override
+  String get sourceManagerDebug => '调试';
+
+  @override
+  String get sourceManagerExplore => '切换发现';
+
+  @override
+  String get sourceManagerStatusAll => '全部';
+
+  @override
+  String get sourceManagerStatusNeeded => '待校验';
+
+  @override
+  String get sourceManagerStatusPassed => '校验通过';
+
+  @override
+  String get sourceManagerStatusFailed => '校验失败';
+
+  @override
+  String get sourceManagerDeletePrompt => '确定删除选中的书源？';
+
+  @override
+  String get sourceManagerCheckKeyword => '校验关键词';
+
+  @override
+  String get sourceManagerExportSuccess => '导出成功';
+
+  @override
+  String get sourceManagerPassphrase => '分享口令';
+
+  @override
+  String get sourceManagerCheckConfig => '校验设置';
+
+  @override
+  String get sourceManagerForgetImport => '删除导入记录';
+
+  @override
+  String get sourceManagerLoadFailed => '无法获取原生书源管理状态，请重试';
+
+  @override
+  String sourceManagerCount(int selected, int total) {
+    return '已选 $selected/$total';
+  }
+
+  @override
+  String sourceManagerBookCount(int count) {
+    return '书架 $count 本';
+  }
+
+  @override
   String get sourcesManage => '书源管理';
 
   @override

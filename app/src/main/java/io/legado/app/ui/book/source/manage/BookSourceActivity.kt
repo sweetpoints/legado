@@ -1,16 +1,19 @@
 package io.legado.app.ui.book.source.manage
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.R
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CheckSource
@@ -36,7 +39,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** Native launchers and the existing check service are the only activity-owned effects. */
-class BookSourceActivity : BaseComposeActivity() {
+class BookSourceActivity : BaseThemedActivity() {
     internal val managerModel by
         viewModels<BookSourceManagerViewModel> {
             viewModelFactory {
@@ -50,6 +53,9 @@ class BookSourceActivity : BaseComposeActivity() {
             }
         }
     private var checkSessionId: Long? = null
+    private val managerBackCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = handleManagerBack()
+    }
     private val qrResult =
         registerForActivityResult(QrCodeResult()) { result ->
             result?.let { managerModel.effect("import", it) }
@@ -65,7 +71,39 @@ class BookSourceActivity : BaseComposeActivity() {
             }
         }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply {
+            id = R.id.source_manager_flutter_container
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+        })
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        // Register below the Fragment's lifecycle-enabled callback. Dart receives
+        // dialog/route back first; bootstrap and root fallback still use the VM.
+        onBackPressedDispatcher.addCallback(managerBackCallback)
+        if (sourceManagerFragment == null) {
+            supportFragmentManager.beginTransaction()
+                .add(
+                    R.id.source_manager_flutter_container,
+                    SourceManagerFlutterFragment(),
+                    FLUTTER_FRAGMENT_TAG,
+                )
+                .commitNow()
+        }
+        lifecycleScope.launch {
+            dispatchSourceManagerEffects(
+                model = managerModel,
+                lifecycle = lifecycle,
+                canHandleEffect = {
+                    !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
+                },
+                onEffect = ::handleEffect,
+            )
+        }
         if (!LocalConfig.bookSourcesHelpVersionIsLast) showHelp("SourceMBookHelp")
         if (Debug.isChecking) {
             checkSessionId = Debug.currentCheckSession()
@@ -86,15 +124,57 @@ class BookSourceActivity : BaseComposeActivity() {
         }
     }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        BookSourceManagerRoute(
-            model = managerModel,
-            onEffect = ::handleEffect,
-            canHandleEffect = {
-                !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
-            },
-        )
+    internal fun handleManagerBack() {
+        val current = managerModel.state.value
+        when {
+            current.busy -> Unit
+            current.dialog != null -> managerModel.dismiss()
+            current.selected.isNotEmpty() -> managerModel.slide(emptySet(), emptySet())
+            else -> managerModel.effect("back")
+        }
+    }
+
+    private val sourceManagerFragment: SourceManagerFlutterFragment?
+        get() = supportFragmentManager.findFragmentByTag(FLUTTER_FRAGMENT_TAG)
+            as? SourceManagerFlutterFragment
+
+    // FlutterFragment requires the containing Activity to forward these hooks.
+    override fun onPostResume() {
+        super.onPostResume()
+        sourceManagerFragment?.onPostResume()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        sourceManagerFragment?.onNewIntent(intent)
+        super.onNewIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        sourceManagerFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        sourceManagerFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        sourceManagerFragment?.onUserLeaveHint()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        sourceManagerFragment?.onTrimMemory(level)
+    }
+
+    companion object {
+        internal const val FLUTTER_FRAGMENT_TAG = "source-manager-flutter"
     }
 
     private fun handleEffect(prepared: PreparedSourceManagerEffect) {
@@ -173,6 +253,7 @@ class BookSourceActivity : BaseComposeActivity() {
     }
 
     override fun onDestroy() {
+        managerBackCallback.remove()
         super.onDestroy()
         if (!Debug.isChecking) Debug.debugMessageMap.clear()
     }

@@ -26,6 +26,7 @@ internal fun AppCompatActivity.openMyItem(key: String) {
         "check_update" -> checkAppUpdate()
         "check_beta_update" -> checkAppUpdate(beta = true)
         "bookSourceManage" -> startActivity<BookSourceActivity>()
+        "flutterBookSourceManage" -> startActivity<BookSourceActivity>()
         "autoTaskManage" -> startActivity<AutoTaskActivity>()
         "replaceManage" -> startActivity<ReplaceRuleActivity>()
         "dictRuleManage" -> startActivity<DictRuleActivity>()

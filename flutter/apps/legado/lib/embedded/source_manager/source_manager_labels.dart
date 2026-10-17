@@ -1,0 +1,95 @@
+import '../../l10n/generated/app_localizations.dart';
+
+const sourceManagerMainActions = [
+  'add',
+  'add-js',
+  'qr',
+  'local',
+  'online',
+  'groups',
+  'filter-enabled',
+  'filter-disabled',
+  'filter-login',
+  'filter-no-group',
+  'filter-explore',
+  'filter-no-explore',
+  'descending',
+  'domain',
+  'show-status',
+  'block-navigation',
+  'retry',
+  'help',
+];
+const sourceManagerBulkMutations = [
+  'ENABLE',
+  'DISABLE',
+  'ADD_GROUP',
+  'REMOVE_GROUP',
+  'ENABLE_EXPLORE',
+  'DISABLE_EXPLORE',
+  'TOP',
+  'BOTTOM',
+];
+const sourceManagerBulkActions = ['export', 'share', 'check', 'interval'];
+
+String managerActionLabel(AppLocalizations s, String action) =>
+    switch (action) {
+      'add' => s.sourceManagerAdd,
+      'add-js' => s.sourceManagerAddJs,
+      'qr' => s.sourceManagerQr,
+      'local' => s.sourceManagerLocal,
+      'online' => s.sourceManagerOnline,
+      'groups' => s.sourceManagerGroupManage,
+      'filter-enabled' => s.sourceManagerFilterEnabled,
+      'filter-disabled' => s.sourceManagerFilterDisabled,
+      'filter-login' => s.sourceManagerFilterLogin,
+      'filter-no-group' => s.sourceManagerFilterNoGroup,
+      'filter-explore' => s.sourceManagerFilterExplore,
+      'filter-no-explore' => s.sourceManagerFilterNoExplore,
+      'descending' => s.sourceManagerDescending,
+      'domain' => s.sourceManagerDomain,
+      'show-status' => s.sourceManagerShowStatus,
+      'block-navigation' => s.sourceManagerBlockNavigation,
+      'retry' => s.sourceManagerRefresh,
+      'help' => s.sourceManagerHelp,
+      'export' => s.sourceManagerExport,
+      'share' => s.sourceManagerShare,
+      'check' => s.sourceManagerCheck,
+      'interval' => s.sourceManagerInterval,
+      'top' => s.sourceManagerTop,
+      'bottom' => s.sourceManagerBottom,
+      'up' => s.sourceManagerUp,
+      'down' => s.sourceManagerDown,
+      'login' => s.sourceManagerLogin,
+      'search' => s.sourceManagerSearch,
+      'debug' => s.sourceManagerDebug,
+      'delete' => s.sourceManagerDelete,
+      'explore' => s.sourceManagerExplore,
+      'edit' => s.sourceManagerEdit,
+      _ => throw ArgumentError.value(action),
+    };
+
+String managerMutationLabel(AppLocalizations s, String value) =>
+    switch (value) {
+      'ENABLE' => s.sourceManagerEnableSelection,
+      'DISABLE' => s.sourceManagerDisableSelection,
+      'ADD_GROUP' => s.sourceManagerAddGroup,
+      'REMOVE_GROUP' => s.sourceManagerRemoveGroup,
+      'ENABLE_EXPLORE' => s.sourceManagerEnableExplore,
+      'DISABLE_EXPLORE' => s.sourceManagerDisableExplore,
+      'TOP' => s.sourceManagerTopSelection,
+      'BOTTOM' => s.sourceManagerBottomSelection,
+      'DELETE' => s.sourceManagerDelete,
+      _ => throw ArgumentError.value(value),
+    };
+
+String managerSortLabel(AppLocalizations s, String value) => switch (value) {
+  'Default' => s.sourceManagerSortDefault,
+  'Weight' => s.sourceManagerSortWeight,
+  'Name' => s.sourceManagerSortName,
+  'Url' => s.sourceManagerSortUrl,
+  'Update' => s.sourceManagerSortUpdate,
+  'Respond' => s.sourceManagerSortRespond,
+  'Enable' => s.sourceManagerSortEnable,
+  _ => throw ArgumentError.value(value),
+};

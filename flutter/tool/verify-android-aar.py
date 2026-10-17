@@ -19,6 +19,11 @@ def source_digest():
     files = list((workspace / 'modules/source_host/lib').rglob('*.dart'))
     files += list((workspace / 'packages').glob('*/lib/**/*.dart'))
     files += list((workspace / 'packages').glob('*/pubspec.yaml'))
+    # The Android module now embeds reusable Flutter App pages as a dependency.
+    # Changes to UI Dart/assets must invalidate prepared AARs as engine changes do.
+    files += list((workspace / 'apps/legado/lib').rglob('*.dart'))
+    files += [path for path in (workspace / 'apps/legado/assets').rglob('*') if path.is_file()]
+    files += [workspace / 'apps/legado/pubspec.yaml']
     files += [workspace / 'pubspec.yaml', workspace / 'pubspec.lock',
               workspace / 'modules/source_host/pubspec.yaml']
     return builder.bridge_digest({str(path.relative_to(builder.ROOT)): path for path in files})

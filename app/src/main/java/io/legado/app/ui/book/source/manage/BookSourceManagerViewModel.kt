@@ -464,7 +464,12 @@ internal class BookSourceManagerViewModel(
     }
 
     fun effect(action: String, key: String = "", keys: List<String> = emptyList()) = edit {
-        if (it.effect != null) it
+        val pending = it.effect
+        // Only an error recovery back may cancel an unaccepted request. Normal pending work,
+        // accepted receipts, and an already pending back retain their original identity.
+        val replaceFailedRequest = action == "back" && it.error != null &&
+            pending != null && pending.action != "back" && pending.id !in session.receipts
+        if (pending != null && !replaceFailedRequest) it
         else
             it.copy(
                 dialog = if (action == "check-config") it.dialog else null,
