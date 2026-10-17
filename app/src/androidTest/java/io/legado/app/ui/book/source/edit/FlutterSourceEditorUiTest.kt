@@ -259,6 +259,10 @@ class FlutterSourceEditorUiTest {
     private fun selectTab(tab: Int) {
         revealIn("source-tab-$tab", "source-tabs", backwards = tab == 0)
         driver.click("source-tab-$tab")
+        // ACTION_CLICK only queues the Dart/native round trip. Do not scroll a
+        // newly appearing container before its first field semantics are ready.
+        val first = projectBookSourceEditForm(source).tabs[tab].first().key
+        driver.awaitIdentifier("source-field-$tab-$first")
     }
 
     private fun revealField(tab: Int, key: String) = revealIn("source-field-$tab-$key", "source-fields-$tab")
