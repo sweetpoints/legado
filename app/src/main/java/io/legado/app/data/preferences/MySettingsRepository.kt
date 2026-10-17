@@ -11,7 +11,6 @@ data class MyPreferences(
     val moreItems: Set<String>,
     val themeMode: String,
     val autoTaskEnabled: Boolean,
-    val webEnabled: Boolean,
     val mcpEnabled: Boolean,
 )
 
@@ -28,7 +27,6 @@ class MySettingsRepository(context: Context) {
                     .toSet(),
             themeMode = preferences.getString(PreferKey.themeMode, "0") ?: "0",
             autoTaskEnabled = preferences.getBooleanCompat(PreferKey.autoTaskService, false),
-            webEnabled = preferences.getBooleanCompat(PreferKey.webService, false),
             mcpEnabled = preferences.getBooleanCompat(PreferKey.mcpService, false),
         )
 

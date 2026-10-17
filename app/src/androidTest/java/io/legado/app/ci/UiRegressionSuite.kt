@@ -24,7 +24,6 @@ import org.junit.runners.Suite
     io.legado.app.ui.about.ReadingHistoryUiTest::class,
     io.legado.app.data.ReadRecordAuthorIdentityTest::class,
     io.legado.app.data.BookSourceCheckStateTest::class,
-    io.legado.app.data.BookSourceCheckApiTest::class,
     io.legado.app.ui.book.source.BookSourceCheckUiTest::class,
     io.legado.app.help.source.SourceNavigationUiTest::class,
     io.legado.app.model.localBook.PdfOutlineTest::class,

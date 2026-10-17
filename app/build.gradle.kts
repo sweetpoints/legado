@@ -744,9 +744,8 @@ dependencies {
     // Glide svg plugin
     implementation(libs.glide.svg)
 
-    // webServer
+    // LAN backup transfer (also used by local HTTP test fixtures)
     implementation(libs.nanohttpd.nanohttpd)
-    implementation(libs.nanohttpd.websocket)
 
     // MCP server (Streamable HTTP)
     implementation(libs.mcp.sdk.server) {

@@ -105,7 +105,6 @@ on:
       - 'app/src/main/java/io/legado/app/model/CheckSource.kt'
       - 'app/src/main/java/io/legado/app/service/CheckSourceService.kt'
       - 'app/src/main/java/io/legado/app/ui/book/source/manage/**'
-      - 'app/src/main/java/io/legado/app/api/controller/BookSourceCheckController.kt'
       - 'app/src/androidTest/java/io/legado/app/data/**'
       - 'app/src/androidTest/java/io/legado/app/ui/book/source/**'
       - 'app/src/main/java/io/legado/app/model/localBook/PdfOutline.kt'

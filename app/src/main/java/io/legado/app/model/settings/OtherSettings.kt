@@ -9,7 +9,6 @@ internal enum class OtherSwitch(val key: String, val default: Boolean) {
     Discovery(PreferKey.showDiscovery, true),
     DiscoveryScroller(PreferKey.showDiscoveryFastScroller, false),
     Rss(PreferKey.showRss, true),
-    WebWake(PreferKey.webServiceWakeLock, false),
     Cronet(PreferKey.cronet, false),
     AntiAlias(PreferKey.antiAlias, false),
     ReplaceDefault(PreferKey.replaceEnableDefault, true),
@@ -36,7 +35,6 @@ internal enum class OtherNumber(
 ) {
     PreDownload(PreferKey.preDownloadNum, 2, 0, 9999),
     Threads(PreferKey.threadCount, 32, 1, 999),
-    WebPort(PreferKey.webPort, 1122, 1024, 60000),
     McpPort(PreferKey.mcpPort, 1236, 1024, 65530),
     BitmapCache(PreferKey.bitmapCacheSize, 50, 1, 1024),
     ImageRetain(PreferKey.imageRetainNum, 0, 0, 999),
@@ -57,7 +55,6 @@ internal enum class OtherChoice(val key: String, val default: String) {
 
 internal enum class OtherEffect {
     ThreadsChanged,
-    RestartWeb,
     RestartMcp,
     StopMcp,
     LogConfiguration,

@@ -10,7 +10,6 @@ import io.legado.app.data.preferences.MySettingsRepository
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.service.AutoTaskScheduler
 import io.legado.app.service.McpService
-import io.legado.app.service.WebService
 import io.legado.app.utils.LogUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +20,6 @@ import kotlinx.coroutines.launch
 data class MyUiState(
     val preferences: MyPreferences,
     val customizationDraft: Set<String>? = null,
-    val webAddress: String = "",
     val mcpAddress: String = "",
 )
 
@@ -48,9 +46,6 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
             if (!syncingRuntime) {
                 val prefs = repository.read()
                 when (key) {
-                    PreferKey.webService ->
-                        if (prefs.webEnabled) WebService.start(context)
-                        else WebService.stop(context)
                     PreferKey.mcpService ->
                         if (prefs.mcpEnabled) McpService.start(context)
                         else McpService.stop(context)
@@ -80,7 +75,6 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
         // Service status notifications must not restart/stop services themselves.
         syncingRuntime = true
         try {
-            repository.setSwitch(PreferKey.webService, WebService.isRun)
             repository.setSwitch(PreferKey.mcpService, McpService.isRun)
         } finally {
             syncingRuntime = false
@@ -88,14 +82,13 @@ class MyViewModel(application: Application, private val savedStateHandle: SavedS
         _uiState.update {
             it.copy(
                 preferences = repository.read(),
-                webAddress = WebService.hostAddress,
                 mcpAddress = McpService.hostAddress,
             )
         }
     }
 
     fun setSwitch(key: String, enabled: Boolean) {
-        if (key !in setOf(PreferKey.webService, PreferKey.mcpService, PreferKey.autoTaskService))
+        if (key !in setOf(PreferKey.mcpService, PreferKey.autoTaskService))
             return
         repository.setSwitch(key, enabled)
         refreshPreferences()

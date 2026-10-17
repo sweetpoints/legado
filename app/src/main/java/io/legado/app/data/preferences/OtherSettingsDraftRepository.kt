@@ -2,6 +2,7 @@ package io.legado.app.data.preferences
 
 import android.content.Context
 import android.util.AtomicFile
+import com.google.gson.JsonParser
 import io.legado.app.model.settings.OtherSettingsDraft
 import io.legado.app.utils.GSON
 import java.io.File
@@ -37,7 +38,7 @@ internal class FileOtherSettingsDraftRepository(context: Context) : OtherSetting
 
     private fun read(file: File): OtherSettingsDraft =
         AtomicFile(file).openRead().bufferedReader().use {
-            GSON.fromJson(it, OtherSettingsDraft::class.java)
+            decodeOtherSettingsDraft(it.readText())
         }
 
     private fun save(file: File, value: OtherSettingsDraft) {
@@ -102,4 +103,36 @@ internal class FileOtherSettingsDraftRepository(context: Context) : OtherSetting
     private companion object {
         val locks = Array(64) { Mutex() }
     }
+}
+
+/** Old unfinished Web Server controls cannot be applied after the feature has been removed. */
+internal fun decodeOtherSettingsDraft(json: String): OtherSettingsDraft {
+    val value = JsonParser.parseString(json).asJsonObject
+    val removedControls = setOf("WebPort", "WebWake")
+    if (value.get("editor")?.takeIf { it.isJsonPrimitive }?.asString in removedControls) {
+        value.remove("editor")
+        value.addProperty("text", "")
+        value.addProperty("selectionStart", 0)
+        value.addProperty("selectionEnd", 0)
+    }
+    val mutation = value.get("mutation")?.takeIf { it.isJsonObject }?.asJsonObject
+    if (mutation?.get("key")?.asString in removedControls) {
+        value.remove("mutation")
+    } else {
+        mutation?.get("effects")?.takeIf { it.isJsonArray }?.asJsonArray?.let { effects ->
+            for (index in effects.size() - 1 downTo 0) {
+                val effect = effects[index]
+                if (effect.isJsonPrimitive && effect.asString == "RestartWeb") effects.remove(index)
+            }
+        }
+    }
+    value.get("effects")?.takeIf { it.isJsonArray }?.asJsonArray?.let { effects ->
+        for (index in effects.size() - 1 downTo 0) {
+            val effect = effects[index]
+            if (effect.isJsonObject && effect.asJsonObject.get("effect")?.asString == "RestartWeb") {
+                effects.remove(index)
+            }
+        }
+    }
+    return GSON.fromJson(value, OtherSettingsDraft::class.java)
 }

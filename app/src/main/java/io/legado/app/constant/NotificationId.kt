@@ -10,7 +10,6 @@ object NotificationId {
     const val AudioPlayService = 102
     const val CacheBookService = 103
     const val ExportBookService = 104
-    const val WebService = 105
     const val DownloadService = 106
     const val CheckSourceService = 107
     const val VideoPlayService = 108

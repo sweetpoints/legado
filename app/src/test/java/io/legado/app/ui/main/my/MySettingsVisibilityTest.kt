@@ -19,7 +19,7 @@ class MySettingsVisibilityTest {
             listOf(
                 emptySet(),
                 defaultMyMoreItems,
-                setOf("webService", "mcpService", "autoTaskService"),
+                setOf("mcpService", "autoTaskService"),
                 customizableMySettings.map { it.key }.toSet(),
                 setOf("unknown", "exit", "myMore", "autoTaskManage"),
             )
@@ -30,6 +30,14 @@ class MySettingsVisibilityTest {
             assertEquals(mySettingItems.map { it.key }.toSet(), main + more)
             assertTrue("exit" !in more && "myMore" !in more)
         }
+    }
+
+    @Test
+    fun removedWebServerNeverReturnsFromRestoredCustomization() {
+        val restored = setOf("webService", "webServiceWakeLock", "webPort")
+        assertFalse(mySettingItems.any { it.key in restored })
+        assertFalse(visibleMySettings(restored, true).any { it.key in restored })
+        assertTrue(mySettingItems.any { it.key == "mcpService" })
     }
 
     @Test

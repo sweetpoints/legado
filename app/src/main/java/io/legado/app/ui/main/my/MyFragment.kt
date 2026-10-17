@@ -58,7 +58,7 @@ class MyFragment() : Fragment(), MainFragmentInterface {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) {
+        observeEventSticky<String>(EventBus.MCP_SERVICE) {
             viewModel.refreshRuntimeState()
         }
     }

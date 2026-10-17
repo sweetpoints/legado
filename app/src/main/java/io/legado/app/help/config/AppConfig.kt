@@ -532,12 +532,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefString(PreferKey.ttsEngine, value)
         }
 
-    var webPort: Int
-        get() = appCtx.getPrefInt(PreferKey.webPort, 1122)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.webPort, value)
-        }
-
     var mcpPort: Int
         get() = appCtx.getPrefInt(PreferKey.mcpPort, 1236)
         set(value) {

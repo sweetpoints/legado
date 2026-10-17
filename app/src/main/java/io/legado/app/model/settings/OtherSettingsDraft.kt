@@ -6,7 +6,6 @@ internal enum class OtherEditor {
     Token,
     PreDownload,
     Threads,
-    WebPort,
     McpPort,
     BitmapCache,
     ImageRetain,

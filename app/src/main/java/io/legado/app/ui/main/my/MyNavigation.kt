@@ -3,9 +3,7 @@ package io.legado.app.ui.main.my
 import androidx.appcompat.app.AppCompatActivity
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.service.McpService
-import io.legado.app.service.WebService
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.about.ReadRecordActivity
 import io.legado.app.ui.about.checkAppUpdate
@@ -18,7 +16,6 @@ import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.startActivity
 
@@ -48,15 +45,6 @@ internal fun AppCompatActivity.openMyItem(key: String) {
 
 internal fun AppCompatActivity.showMyServiceActions(key: String) {
     when (key) {
-        PreferKey.webService ->
-            if (WebService.isRun) {
-                selector(
-                    arrayListOf(getString(R.string.copy_url), getString(R.string.open_in_browser))
-                ) { _, index ->
-                    if (index == 0) sendToClip(WebService.hostAddress)
-                    else openUrl(WebService.hostAddress)
-                }
-            }
         PreferKey.mcpService -> if (McpService.isRun) sendToClip(McpService.hostAddress)
     }
 }

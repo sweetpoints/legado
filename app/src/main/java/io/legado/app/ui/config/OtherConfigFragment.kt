@@ -30,7 +30,6 @@ import io.legado.app.help.http.Cronet
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.settings.*
 import io.legado.app.service.McpService
-import io.legado.app.service.WebService
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoComposeTheme
 import io.legado.app.ui.video.config.SettingsDialog
@@ -127,11 +126,6 @@ class OtherConfigFragment : Fragment(), ConfigSearchPage {
                     .onError { AppLog.put("同步系统文本处理设置失败", it) }
             }
             OtherEffect.ThreadsChanged -> postEvent(PreferKey.threadCount, "")
-            OtherEffect.RestartWeb ->
-                if (WebService.isRun) {
-                    WebService.stop(application)
-                    WebService.start(application)
-                }
             OtherEffect.RestartMcp -> if (McpService.isRun) McpService.restart(application)
             OtherEffect.StopMcp -> if (McpService.isRun) McpService.stop(application)
             OtherEffect.NotifyMain -> postEvent(EventBus.NOTIFY_MAIN, true)

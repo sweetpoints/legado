@@ -4,10 +4,6 @@
           - 'app/**'
           - 'modules/book/**'
           - 'modules/rhino/**'
-'platform: web':
-  - changed-files:
-      - any-glob-to-any-file: 'modules/web/**'
-
 'area: reader':
   - changed-files:
       - any-glob-to-any-file:
@@ -38,9 +34,6 @@
           - 'app/src/main/java/io/legado/app/model/analyzeRule/**'
           - 'app/src/main/java/io/legado/app/model/webBook/**'
           - 'app/src/main/java/io/legado/app/data/entities/BookSource.kt'
-'area: web':
-  - changed-files:
-      - any-glob-to-any-file: 'modules/web/**'
 'area: data':
   - changed-files:
       - any-glob-to-any-file:
@@ -69,7 +62,6 @@ tests:
       - any-glob-to-any-file:
           - '**/src/test/**'
           - '**/src/androidTest/**'
-          - 'modules/web/tests/**'
           - '.github/scripts/test-*'
 kotlin:
   - changed-files:
@@ -77,9 +69,3 @@ kotlin:
 java:
   - changed-files:
       - any-glob-to-any-file: '**/*.java'
-javascript:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'modules/web/**/*.js'
-          - 'modules/web/**/*.ts'
-          - 'modules/web/**/*.vue'

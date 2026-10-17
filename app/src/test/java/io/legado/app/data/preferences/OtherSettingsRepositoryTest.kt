@@ -76,8 +76,8 @@ class OtherSettingsRepositoryTest {
     fun defaultsVisibilityAndProcessInitializationDoNotRunMutationsOrEffects() =
         test { store, repo ->
             val value = repo.observe().first()
-            assertEquals(23, value.switches.size)
-            assertEquals(7, value.numbers.size)
+            assertEquals(22, value.switches.size)
+            assertEquals(6, value.numbers.size)
             assertFalse(value.visible(OtherSwitch.OnlyRead))
             assertFalse(value.visible(OtherSwitch.LiveNotifications))
             assertTrue(value.switches.getValue(OtherSwitch.ProcessText))
@@ -89,8 +89,8 @@ class OtherSettingsRepositoryTest {
     @Test
     fun numbersClampToOriginalPickerBoundsAndReturnOnlyTheirPlatformEffects() =
         test { store, repo ->
-            assertEquals(listOf(OtherEffect.RestartWeb), repo.number(OtherNumber.WebPort, 0))
-            assertEquals(1024, store.snapshot.numbers.getValue(OtherNumber.WebPort))
+            assertEquals(listOf(OtherEffect.RestartMcp), repo.number(OtherNumber.McpPort, 0))
+            assertEquals(1024, store.snapshot.numbers.getValue(OtherNumber.McpPort))
             assertEquals(
                 listOf(OtherEffect.RestartMcp),
                 repo.number(OtherNumber.McpPort, Int.MAX_VALUE),
@@ -113,7 +113,7 @@ class OtherSettingsRepositoryTest {
         repo.boolean(OtherSwitch.OnlyRead, true)
         assertTrue(store.snapshot.switches.getValue(OtherSwitch.OnlyRead))
         assertEquals(
-            listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp),
+            listOf(OtherEffect.RestartMcp),
             repo.boolean(OtherSwitch.TokenRequired, false),
         )
         assertEquals(listOf(OtherEffect.DownloadCronet), repo.boolean(OtherSwitch.Cronet, true))

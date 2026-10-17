@@ -80,14 +80,6 @@ val mySettingItems =
             MySettingKind.ThemeChoice,
         ),
         MySettingItem(
-            "webService",
-            R.string.web_service,
-            R.string.web_service_desc,
-            R.drawable.ic_cfg_web,
-            null,
-            MySettingKind.Switch,
-        ),
-        MySettingItem(
             "mcpService",
             R.string.mcp_service,
             R.string.mcp_service_desc,

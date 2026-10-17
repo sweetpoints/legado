@@ -136,7 +136,7 @@ class OtherSettingsComposeTest {
         assertEquals(Int.MAX_VALUE.toString(), values.last())
         compose.runOnIdle {
             state =
-                state.copy(draft = OtherSettingsDraft(editor = OtherEditor.WebPort, text = "1024"))
+                state.copy(draft = OtherSettingsDraft(editor = OtherEditor.McpPort, text = "1024"))
         }
         compose.onNodeWithTag("other-number-minus").performClick()
         assertEquals("1024", values.last())

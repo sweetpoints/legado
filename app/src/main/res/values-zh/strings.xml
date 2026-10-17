@@ -92,11 +92,9 @@
     <string name="import_books_count">共 %s 个文本文件</string>
     <string name="is_loading">加载中…</string>
     <string name="retry">重试</string>
-    <string name="web_service">Web 服务</string>
-    <string name="web_service_desc">用浏览器写源或看书</string>
     <string name="mcp_service">MCP 服务</string>
     <string name="mcp_service_desc">书源开发工具</string>
-    <string name="mcp_service_token_required">请先配置 Web 与 MCP 访问令牌</string>
+    <string name="mcp_service_token_required">请先配置 MCP 访问令牌</string>
     <string name="mcp_service_token_invalid">MCP 访问令牌未配置或不正确</string>
     <string name="mcp_service_start_failed">MCP 服务启动失败</string>
     <string name="web_edit_source">Web 编辑书源</string>
@@ -295,8 +293,6 @@
     <string name="download_live_update_completed">待安装</string>
     <string name="download_live_canceled">已取消</string>
     <string name="download_live_failed">下载失败</string>
-    <string name="web_service_live_started">Web已开启</string>
-    <string name="web_service_live_stopped">Web已关闭</string>
     <string name="mcp_service_live_started">MCP已开启</string>
     <string name="mcp_service_live_stopped">MCP已关闭</string>
     <string name="no_download">暂无任务</string>
@@ -717,14 +713,12 @@
 
     <string name="e_ink_mode">E-Ink 模式</string>
     <string name="e_ink_mode_detail">去除动画，优化电纸书使用体验</string>
-    <string name="web_menu">Web 服务</string>
-    <string name="web_port_title">Web 端口</string>
-    <string name="web_port_summary">当前端口 %s</string>
+
     <string name="mcp_port_title">MCP 端口</string>
     <string name="mcp_port_summary">当前端口 %s</string>
     <string name="js_source_api_token_required_title">访问令牌保护</string>
-    <string name="js_source_api_token_required_summary">开启时 Web 书源与 MCP 接口必须提供令牌；仅在可信网络中关闭</string>
-    <string name="js_source_api_token_title">Web 与 MCP 访问令牌</string>
+    <string name="js_source_api_token_required_summary">开启时 书源与 MCP 接口必须提供令牌；仅在可信网络中关闭</string>
+    <string name="js_source_api_token_title">MCP 访问令牌</string>
     <string name="js_source_api_token_summary">开启访问令牌保护时使用</string>
     <string name="js_source_api_token_configured">已配置</string>
     <string name="qr_share">二维码分享</string>
@@ -1371,8 +1365,6 @@
     <string name="webdav_device_name">设备名称</string>
     <string name="webdav_book_auto_restore_t">恢复缺失的本地书</string>
     <string name="webdav_book_auto_restore_s">本地书文件缺失时，从 WebDAV 的 books 目录恢复同名文件</string>
-    <string name="web_service_wake_lock">WebService唤醒锁</string>
-    <string name="web_service_wake_lock_summary">开启web服务的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="read_aloud_wake_lock">朗读服务唤醒锁</string>
     <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="audio_play_wake_lock">音频服务唤醒锁</string>
@@ -1725,4 +1717,5 @@
     <string name="reimport_book_source">重新导入本书书源</string>
     <string name="customize_my">自定义我的页面</string>
     <string name="my_more_items">将选中的功能放入更多</string>
+    <string name="background_services">后台服务</string>
 </resources>

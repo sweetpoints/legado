@@ -725,7 +725,7 @@ class MainActivity : BaseComposeActivity(), MainViewModel.CallBack, MainBookshel
         observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
             refreshBookshelfBookUpdates()
         }
-        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) {
+        observeEventSticky<String>(EventBus.MCP_SERVICE) {
             myViewModel.refreshRuntimeState()
         }
     }

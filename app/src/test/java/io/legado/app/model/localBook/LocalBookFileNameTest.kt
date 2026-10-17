@@ -1,6 +1,5 @@
 package io.legado.app.model.localBook
 
-import io.legado.app.api.controller.requireSafeUploadedBookFileName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assume.assumeNoException
@@ -9,49 +8,6 @@ import java.io.File
 import java.nio.file.Files
 
 class LocalBookFileNameTest {
-
-    @Test
-    fun `web upload accepts ordinary leaf file names`() {
-        val fileNames = listOf(
-            "book.txt",
-            "My Book.epub",
-            "三体 全集.mobi",
-            "archive.tar.gz",
-            "...txt",
-        )
-
-        fileNames.forEach { fileName ->
-            assertEquals(fileName, requireSafeUploadedBookFileName(fileName))
-        }
-    }
-
-    @Test
-    fun `web upload rejects paths blank names and control characters`() {
-        val fileNames = listOf(
-            "",
-            "   ",
-            ".",
-            "..",
-            "/book.epub",
-            "\\book.epub",
-            "folder/book.epub",
-            "folder\\book.epub",
-            "../book.epub",
-            "..\\book.epub",
-            "C:book.epub",
-            "C:\\book.epub",
-            "\\\\server\\share\\book.epub",
-            "book\u0000.epub",
-            "book\n.epub",
-            "book\u007f.epub",
-        )
-
-        fileNames.forEach { fileName ->
-            assertThrows(IllegalArgumentException::class.java) {
-                requireSafeUploadedBookFileName(fileName)
-            }
-        }
-    }
 
     @Test
     fun `file storage writes nested child and rejects traversal`() = withTempDirectory { root ->
