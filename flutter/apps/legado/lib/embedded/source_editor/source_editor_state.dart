@@ -11,6 +11,8 @@ abstract class SourceEditorField with _$SourceEditorField {
     required String key,
     required String value,
     required String label,
+    @Default(false) bool external,
+    @Default(0) int originalLength,
     @Default(0) int selectionStart,
     @Default(0) int selectionEnd,
   }) = _SourceEditorField;
@@ -19,10 +21,14 @@ abstract class SourceEditorField with _$SourceEditorField {
       key: m['key'] as String,
       value: m['value'] as String,
       label: m['label'] as String,
+      external: (m['external'] as bool?) ?? false,
+      originalLength:
+          (m['originalLength'] as int?) ?? (m['value'] as String).length,
       selectionStart: m['selectionStart'] as int,
       selectionEnd: m['selectionEnd'] as int,
     );
     if (field.key.isEmpty ||
+        field.originalLength < 0 ||
         field.selectionStart < 0 ||
         field.selectionEnd < 0 ||
         field.selectionStart > field.value.length ||

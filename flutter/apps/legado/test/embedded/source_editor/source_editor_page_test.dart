@@ -316,6 +316,52 @@ void main() {
     expect(commands.last, {'op': 'save', 'action': 'DEBUG'});
   });
   testWidgets(
+    'external long-field placeholder never sends empty text back to native',
+    (tester) async {
+      native = editorFixture(value: '');
+      final field =
+          ((((native['document'] as Map)['form'] as Map)['tabs'] as List)[0]
+                  as List)[0]
+              as Map;
+      field.addAll(<String, Object>{
+        'external': true,
+        'originalLength': 4000000,
+      });
+      await app(tester);
+      expect(find.byType(TextField), findsNothing);
+      await click(tester, 'source-field-0-bookSourceName');
+      expect(commands, [
+        {'op': 'focus', 'tab': 0, 'key': 'bookSourceName'},
+        {'op': 'native', 'action': 'EDITOR'},
+      ]);
+      await click(tester, 'source-save');
+      expect(commands.last, {'op': 'save', 'action': 'FINISH'});
+      expect(commands.where((c) => c['op'] == 'field'), isEmpty);
+    },
+  );
+  testWidgets(
+    'inline to external projection does not echo placeholder or retain IME editing',
+    (tester) async {
+      await app(tester);
+      await tester.enterText(find.byType(TextField), 'normal draft');
+      commands.clear();
+      final field =
+          ((((native['document'] as Map)['form'] as Map)['tabs'] as List)[0]
+                  as List)[0]
+              as Map;
+      field.addAll(<String, Object>{
+        'external': true,
+        'originalLength': 20000,
+        'value': '',
+        'selectionStart': 0,
+        'selectionEnd': 0,
+      });
+      await publish(tester, native);
+      expect(find.byType(TextField), findsNothing);
+      expect(commands.where((c) => c['op'] == 'field'), isEmpty);
+    },
+  );
+  testWidgets(
     'long or combining-heavy fields open native rule editor without inline layout',
     (tester) async {
       native = editorFixture(value: 'x' * 20001);

@@ -754,9 +754,14 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
   }
 
   void _requestFocus() {
-    if (widget.focused && widget.enabled) {
+    if (widget.focused && widget.enabled && !widget.field.external) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && widget.focused && widget.enabled) _focus.requestFocus();
+        if (mounted &&
+            widget.focused &&
+            widget.enabled &&
+            !widget.field.external) {
+          _focus.requestFocus();
+        }
       });
     }
   }
@@ -770,7 +775,7 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
   }
 
   void _changed() {
-    if (_reflecting || !widget.enabled) return;
+    if (_reflecting || !widget.enabled || widget.field.external) return;
     final value = _controller.value;
     // IMEs temporarily publish an invalid selection before attaching input.
     if (!value.selection.isValid) return;
@@ -789,6 +794,7 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
   @override
   void didUpdateWidget(covariant SourceEditorTextField old) {
     super.didUpdateWidget(old);
+    if (widget.field.external) _pending.clear();
     final next = _value(widget.field);
     final at = _pending.lastIndexWhere(
       (v) => v.text == next.text && v.selection == next.selection,
@@ -814,7 +820,8 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
   @override
   Widget build(BuildContext context) {
     // Avoid platform text-layout stalls on untrusted, very long rule fields.
-    final unsafe = isSourceEditorInlineUnsafe(widget.field.value);
+    final unsafe =
+        widget.field.external || isSourceEditorInlineUnsafe(widget.field.value);
     if (unsafe) {
       return editorTag(
         'source-field-${widget.tab}-${widget.field.key}',
