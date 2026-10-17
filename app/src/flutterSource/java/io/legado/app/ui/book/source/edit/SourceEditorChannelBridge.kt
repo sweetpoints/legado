@@ -111,14 +111,26 @@ internal fun sourceEditorSnapshot(
                 "enabled" to it.enabled, "enabledExplore" to it.enabledExplore,
                 "enabledCookieJar" to it.enabledCookieJar, "enabledReview" to it.enabledReview,
                 "type" to it.type, "eventListener" to it.eventListener, "customButton" to it.customButton) },
-                "tabs" to doc.form.tabs.map { fields -> fields.map { mapOf(
-                    "key" to it.key, "value" to it.value, "label" to label(it),
-                    "selectionStart" to it.selectionStart, "selectionEnd" to it.selectionEnd) } })
+                "tabs" to doc.form.tabs.map { fields -> fields.map {
+                    sourceEditorFieldSnapshot(it, label(it))
+                } })
         ) },
     )
     // Stop as soon as the wire budget is exhausted, without allocating UTF-8 copies.
     requireSourceEditorBudget(result)
     return result
+}
+
+/** Long rules remain exclusively in the private draft/native full-screen editor. */
+internal fun sourceEditorFieldSnapshot(field: BookSourceEditField, label: String): Map<String, Any?> {
+    val external = field.value.length > 12000
+    return mapOf(
+        "key" to field.key, "label" to label,
+        "external" to external, "originalLength" to field.value.length,
+        "value" to if (external) "" else field.value,
+        "selectionStart" to if (external) 0 else field.selectionStart,
+        "selectionEnd" to if (external) 0 else field.selectionEnd,
+    )
 }
 
 private const val PRIVATE_EDITOR_ERROR = "私有编辑数据读写失败"
