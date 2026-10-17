@@ -76,6 +76,7 @@ class FlutterSourceEditorUiTest {
     fun editsEveryFormFieldAndOptionThroughFlutterAndSavesActualRoomRow() {
         launch()
         driver.click("source-options-toggle")
+        driver.awaitIdentifier("source-option-enabled")
         listOf("enabled", "enabledExplore", "enabledCookieJar", "enabledReview", "eventListener", "customButton")
             .forEach { key ->
                 revealIn("source-option-$key", "source-options")
