@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -16,7 +15,6 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import io.flutter.embedding.android.FlutterFragment
 import io.flutter.embedding.engine.FlutterEngine
-import io.legado.app.R
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -177,32 +175,22 @@ class EmbeddedFlutterActivityTest {
     }
 
     @Test
-    fun normalManagerKeepsNativeEditorAndReturnsToTheSameFlutterPage() = runBlocking {
+    fun normalManagerOpensFlutterEditorAndReturnsToTheSameFlutterPage() = runBlocking {
         assertEquals(17, (DartSourceEngine.evaluate(source, "globalThis.__managerEditProbe=17") as Number).toInt())
         nativeScenario!!.onActivity { it.openMyItem("bookSourceManage") }
         val manager = awaitManager()
         awaitRendered(source.bookSourceName)
         setRenderedText("source-manager-query", source.bookSourceName)
         clickIdentifier("source-manager-action:edit:${source.bookSourceUrl}")
-        awaitCondition("Flutter row action did not open the existing native editor") {
+        awaitCondition("Flutter row action did not open the source editor host") {
             resumed().any { it is BookSourceEditActivity }
         }
         assertEquals(18, (DartSourceEngine.evaluate(source, "__managerEditProbe+1") as Number).toInt())
-        val editor = resumed().filterIsInstance<BookSourceEditActivity>().single()
-        val closeLabel = AtomicReference<String>()
-        instrumentation.runOnMainSync { closeLabel.set(editor.getString(R.string.close)) }
-        // RESUMED alone does not mean the editor document has finished loading.
-        // Its real Close control stays disabled until the document is ready;
-        // clicking it also avoids treating an IME-dismiss Back as an Activity pop.
-        awaitCondition("Native editor did not expose an enabled Close action") {
-            val close = renderedNode(text = closeLabel.get()) ?: return@awaitCondition false
-            if (!close.isEnabled) {
-                @Suppress("DEPRECATION")
-                close.recycle()
-                false
-            } else {
-                clickNode(close)
-            }
+        FlutterUiTestDriver(instrumentation).use { driver ->
+            driver.enableAccessibility()
+            driver.awaitIdentifier("source-field-0-bookSourceName")
+            assertEquals(source.bookSourceName, driver.text("source-field-0-bookSourceName"))
+            driver.click("source-close")
         }
         assertSame(manager, awaitManager())
         awaitRendered(source.bookSourceName)
@@ -273,24 +261,11 @@ class EmbeddedFlutterActivityTest {
         matches
     }
 
-    @Suppress("DEPRECATION")
     private fun setRenderedText(identifier: String, text: String) {
-        // RenderEditable only installs onSetText while focused. Android may
-        // optimistically update an unfocused node even without a Dart callback.
-        clickIdentifier(identifier)
-        awaitCondition("Flutter text field did not gain input focus: $identifier") {
-            val focused = renderedNode(identifier = identifier) ?: return@awaitCondition false
-            val ready = focused.isFocused
-            focused.recycle()
-            ready
+        FlutterUiTestDriver(instrumentation).use { driver ->
+            driver.enableAccessibility()
+            driver.setText(identifier, text)
         }
-        val node = requireNotNull(renderedNode(identifier = identifier))
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        }
-        assertTrue("Flutter search must accept actual accessibility text input",
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments))
-        node.recycle()
     }
 
     private fun clickIdentifier(identifier: String) {
