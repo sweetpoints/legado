@@ -181,6 +181,7 @@ class EmbeddedFlutterActivityTest {
         val manager = awaitManager()
         awaitRendered(source.bookSourceName)
         setRenderedText("source-manager-query", source.bookSourceName)
+        closeSoftKeyboard()
         clickIdentifier("source-manager-action:edit:${source.bookSourceUrl}")
         awaitCondition("Flutter row action did not open the source editor host") {
             resumed().any { it is BookSourceEditActivity }
