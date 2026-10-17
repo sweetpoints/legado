@@ -63,6 +63,13 @@ class BookSourceEditActivity : BaseThemedActivity() {
         override fun handleOnBackPressed() = handleEditorBack()
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Fragment restoration runs inside super.onCreate. Register the fallback
+        // first so Flutter's later callback owns dialog/menu pops after recreation.
+        onBackPressedDispatcher.addCallback(editorBackCallback)
+        super.onCreate(savedInstanceState)
+    }
+
     override fun createContentView() {
         setContentView(FrameLayout(this).apply {
             id = R.id.source_editor_flutter_container
@@ -76,7 +83,6 @@ class BookSourceEditActivity : BaseThemedActivity() {
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         observeEvent<Int>(PreferKey.showBoardLine) { rows -> model.keyboardRows(rows) }
         model.keyboardRows(AppConfig.showBoardLine)
-        onBackPressedDispatcher.addCallback(editorBackCallback)
         if (editorFragment == null) {
             supportFragmentManager.beginTransaction()
                 .add(R.id.source_editor_flutter_container, SourceEditorFlutterFragment(), FLUTTER_FRAGMENT_TAG)
