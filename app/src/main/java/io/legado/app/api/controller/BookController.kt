@@ -8,9 +8,7 @@ import io.legado.app.api.ReturnData
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookProgress
-import io.legado.app.data.entities.BookSource
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.CacheManager
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
@@ -18,7 +16,6 @@ import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.model.BookCover
-import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
@@ -30,33 +27,11 @@ import io.legado.app.utils.stackTraceStr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
-import java.io.File
 import java.util.WeakHashMap
 import java.util.concurrent.TimeUnit
 
-private val windowsDrivePrefix = Regex("^[A-Za-z]:")
-
-internal fun requireSafeUploadedBookFileName(fileName: String): String {
-    val isUnsafe = fileName.isBlank() ||
-            fileName == "." ||
-            fileName == ".." ||
-            fileName.indexOfAny(charArrayOf('/', '\\')) >= 0 ||
-            windowsDrivePrefix.containsMatchIn(fileName) ||
-            fileName.any { Character.isISOControl(it) }
-    require(!isUnsafe) { "Invalid uploaded book file name" }
-    return fileName
-}
-
 object BookController {
 
-    private data class ImageContext(
-        val bookUrl: String,
-        val book: Book,
-        val bookSource: BookSource?,
-    )
-
-    @Volatile
-    private var cachedImageContext: ImageContext? = null
     private val defaultCoverCache by lazy { WeakHashMap<Drawable, Bitmap>() }
 
     /**
@@ -110,33 +85,6 @@ object BookController {
                 returnData.setErrorMsg(e.localizedMessage ?: "getCover error")
             }
         }
-    }
-
-    /**
-     * 获取正文图片
-     */
-    fun getImg(parameters: Map<String, List<String>>): ReturnData {
-        val returnData = ReturnData()
-        val bookUrl = parameters["url"]?.firstOrNull()
-        if (bookUrl.isNullOrBlank()) {
-            return returnData.setErrorMsg("bookUrl为空")
-        }
-        val src = parameters["path"]?.firstOrNull()
-            ?: return returnData.setErrorMsg("图片链接为空")
-        val width = parameters["width"]?.firstOrNull()?.toInt() ?: 640
-        val cachedContext = cachedImageContext
-        val imageContext = cachedContext?.takeIf { it.bookUrl == bookUrl }
-            ?: appDb.bookDao.getBook(bookUrl)?.let { book ->
-                val bookSource = appDb.bookSourceDao.getBookSource(book.origin)
-                ImageContext(bookUrl, book, bookSource).also {
-                    cachedImageContext = it
-                }
-            } ?: return returnData.setErrorMsg("bookUrl不对")
-        val bitmap = runBlocking {
-            ImageProvider.cacheImage(imageContext.book, src, imageContext.bookSource)
-            ImageProvider.getImage(imageContext.book, src, width)
-        }
-        return returnData.setData(bitmap)
     }
 
     /**
@@ -259,18 +207,6 @@ object BookController {
     }
 
     /**
-     * 删除书籍
-     */
-    fun deleteBook(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        GSON.fromJsonObject<Book>(postData).getOrNull()?.let { book ->
-            book.delete()
-            return returnData.setData("")
-        }
-        return returnData.setErrorMsg("格式不对")
-    }
-
-    /**
      * 保存进度
      */
     suspend fun saveBookProgress(postData: String?): ReturnData {
@@ -298,56 +234,6 @@ object BookController {
                 }
             }
         return returnData.setErrorMsg("格式不对")
-    }
-
-    /**
-     * 添加本地书籍
-     */
-    fun addLocalBook(
-        parameters: Map<String, List<String>>,
-        files: Map<String, String>
-    ): ReturnData {
-        val returnData = ReturnData()
-        val rawFileName = parameters["fileName"]?.firstOrNull()
-            ?: return returnData.setErrorMsg("fileName 不能为空")
-        val fileName = kotlin.runCatching {
-            requireSafeUploadedBookFileName(rawFileName)
-        }.getOrElse {
-            return returnData.setErrorMsg("fileName 格式不正确")
-        }
-        val fileData = files["fileData"]
-            ?: return returnData.setErrorMsg("fileData 不能为空")
-        kotlin.runCatching {
-            val uri = LocalBook.saveBookFile(File(fileData).inputStream(), fileName)
-            LocalBook.importFile(uri)
-        }.onFailure {
-            return when (it) {
-                is SecurityException -> returnData.setErrorMsg("需重新设置书籍保存位置!")
-                else -> returnData.setErrorMsg("保存书籍错误\n${it.localizedMessage}")
-            }
-        }
-        return returnData.setData(true)
-    }
-
-    /**
-     * 保存web阅读界面配置
-     */
-    fun saveWebReadConfig(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        postData?.let {
-            CacheManager.put("webReadConfig", postData)
-        } ?: CacheManager.delete("webReadConfig")
-        return returnData.setData("")
-    }
-
-    /**
-     * 获取web阅读界面配置
-     */
-    fun getWebReadConfig(): ReturnData {
-        val returnData = ReturnData()
-        val data = CacheManager.get("webReadConfig")
-            ?: return returnData.setErrorMsg("没有配置")
-        return returnData.setData(data)
     }
 
 }

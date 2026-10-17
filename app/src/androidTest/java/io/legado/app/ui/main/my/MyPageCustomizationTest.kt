@@ -26,7 +26,6 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.storage.Restore
 import io.legado.app.help.storage.writePreferenceSnapshot
 import io.legado.app.service.McpService
-import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
@@ -88,7 +87,6 @@ class MyPageCustomizationTest {
 
     @Test
     fun actualPickerMovesOnlySelectedItemsAndMoreKeepsExistingActions() {
-        val webRunning = WebService.isRun
         val mcpRunning = McpService.isRun
         val scheduled = prefs.getBoolean(PreferKey.autoTaskService, false)
         openPicker()
@@ -105,7 +103,6 @@ class MyPageCustomizationTest {
             listOf(
                 "autoTaskManage",
                 PreferKey.autoTaskService,
-                PreferKey.webService,
                 PreferKey.mcpService,
                 "txtTocRuleManage",
                 "replaceManage",
@@ -123,7 +120,6 @@ class MyPageCustomizationTest {
             setOf(
                 "autoTaskManage",
                 PreferKey.autoTaskService,
-                PreferKey.webService,
                 PreferKey.mcpService,
                 "txtTocRuleManage",
                 "replaceManage",
@@ -133,7 +129,6 @@ class MyPageCustomizationTest {
         assertEquals(selected, prefs.getStringSet(PreferKey.myMoreItems, emptySet()))
         compose.onNodeWithTag("my-setting-autoTaskManage").assertDoesNotExist()
         setting("check_update")
-        assertEquals(webRunning, WebService.isRun)
         assertEquals(mcpRunning, McpService.isRun)
         assertEquals(scheduled, prefs.getBoolean(PreferKey.autoTaskService, false))
         screenshot("my-customization-main")

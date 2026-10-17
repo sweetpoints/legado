@@ -179,23 +179,23 @@ class OtherSettingsViewModelTest {
             val f = Fixture()
             try {
                 runCurrent()
-                f.model.edit(OtherEditor.WebPort)
+                f.model.edit(OtherEditor.McpPort)
                 runCurrent()
                 f.model.text("")
                 f.model.confirm()
                 assertTrue(f.model.state.value.invalidNumber)
                 assertTrue(f.store.writes.isEmpty())
-                f.model.text("60001")
+                f.model.text("65531")
                 f.model.confirm()
                 assertTrue(f.model.state.value.invalidNumber)
                 assertTrue(f.store.writes.isEmpty())
-                f.model.text("60000")
+                f.model.text("65530")
                 f.model.confirm()
                 runCurrent()
-                assertEquals(listOf("number:WebPort:60000"), f.store.writes)
+                assertEquals(listOf("number:McpPort:65530"), f.store.writes)
                 assertNull(f.model.state.value.draft!!.editor)
                 assertEquals(
-                    listOf(OtherEffect.RestartWeb),
+                    listOf(OtherEffect.RestartMcp),
                     f.model.state.value.draft!!.effects.map { it.effect },
                 )
             } finally {
@@ -302,7 +302,7 @@ class OtherSettingsViewModelTest {
     @Test
     fun savedConsumptionPrunesOlderDurableEffectsAndRestoresRemainingReceiptInOrder() =
         runTest(dispatcher) {
-            val first = OtherEffectReceipt("first", OtherEffect.RestartWeb)
+            val first = OtherEffectReceipt("first", OtherEffect.ThreadsChanged)
             val second = OtherEffectReceipt("second", OtherEffect.RestartMcp)
             val f =
                 Fixture(
@@ -434,7 +434,6 @@ class OtherSettingsViewModelTest {
                 assertEquals(2, f.model.state.value.draft!!.selectionStart)
                 assertEquals(
                     listOf(
-                        OtherEffect.RestartWeb,
                         OtherEffect.RestartMcp,
                         OtherEffect.ProcessTextConfiguration,
                         OtherEffect.ThreadsChanged,
@@ -511,7 +510,7 @@ class OtherSettingsViewModelTest {
                 runCurrent()
                 f.store.state.value =
                     f.store.state.value.copy(
-                        numbers = f.store.state.value.numbers + (OtherNumber.WebPort to 6000)
+                        numbers = f.store.state.value.numbers + (OtherNumber.McpPort to 6000)
                     )
                 runCurrent()
                 assertTrue(f.model.state.value.effectsWriting)
@@ -543,7 +542,7 @@ class OtherSettingsViewModelTest {
                                 state.value.switches +
                                     (OtherSwitch.Log to true) +
                                     (OtherSwitch.LiveNotifications to true),
-                            numbers = state.value.numbers + (OtherNumber.WebPort to 5000),
+                            numbers = state.value.numbers + (OtherNumber.McpPort to 5000),
                         )
                 }
             val f = Fixture(store)

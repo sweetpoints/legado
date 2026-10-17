@@ -70,14 +70,12 @@ fun MyScreen(
             .map { item ->
                 val checked =
                     when (item.key) {
-                        PreferKey.webService -> state.preferences.webEnabled
                         PreferKey.mcpService -> state.preferences.mcpEnabled
                         PreferKey.autoTaskService -> state.preferences.autoTaskEnabled
                         else -> false
                     }
                 val summary =
                     when {
-                        item.key == PreferKey.webService && checked -> state.webAddress
                         item.key == PreferKey.mcpService && checked -> state.mcpAddress
                         else -> item.summaryRes?.let { stringResource(it) }
                     }

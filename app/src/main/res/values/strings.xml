@@ -94,11 +94,9 @@
     <string name="import_books_count">%s text file(s) in total</string>
     <string name="is_loading">Loading…</string>
     <string name="retry">Retry</string>
-    <string name="web_service">Web service</string>
-    <string name="web_service_desc">Web edit source and read book</string>
     <string name="mcp_service">MCP service</string>
     <string name="mcp_service_desc">Source development tools</string>
-    <string name="mcp_service_token_required">Configure the Web and MCP access token before starting MCP</string>
+    <string name="mcp_service_token_required">Configure the MCP access token before starting MCP</string>
     <string name="mcp_service_token_invalid">MCP access token is missing or incorrect</string>
     <string name="mcp_service_start_failed">MCP service failed to start</string>
     <string name="web_edit_source">Edit book sources on the web</string>
@@ -298,8 +296,6 @@
     <string name="download_live_update_completed">Install</string>
     <string name="download_live_canceled">Canceled</string>
     <string name="download_live_failed">Download failed</string>
-    <string name="web_service_live_started">Web service started</string>
-    <string name="web_service_live_stopped">Web service stopped</string>
     <string name="mcp_service_live_started">MCP service started</string>
     <string name="mcp_service_live_stopped">MCP service stopped</string>
     <string name="no_download">No download</string>
@@ -719,14 +715,12 @@
 
     <string name="e_ink_mode">E-Ink mode</string>
     <string name="e_ink_mode_detail">Remove animations and optimize the experience of using E-paper books</string>
-    <string name="web_menu">Web service</string>
-    <string name="web_port_title">Web port</string>
-    <string name="web_port_summary">Current port %s</string>
+
     <string name="mcp_port_title">MCP port</string>
     <string name="mcp_port_summary">Current port %s</string>
     <string name="js_source_api_token_required_title">Require access token</string>
-    <string name="js_source_api_token_required_summary">When enabled, Web source and MCP APIs require the token. Only disable this on a trusted network.</string>
-    <string name="js_source_api_token_title">Web and MCP access token</string>
+    <string name="js_source_api_token_required_summary">When enabled, Source and MCP APIs require the token. Only disable this on a trusted network.</string>
+    <string name="js_source_api_token_title">MCP access token</string>
     <string name="js_source_api_token_summary">Used when access token protection is enabled</string>
     <string name="js_source_api_token_configured">Configured</string>
     <string name="qr_share">QR code sharing</string>
@@ -1376,8 +1370,6 @@
     <string name="webdav_device_name">Device name</string>
     <string name="webdav_book_auto_restore_t">Restore missing local books</string>
     <string name="webdav_book_auto_restore_s">Restore an exact-name match from the WebDAV books directory when a local book file is missing</string>
-    <string name="web_service_wake_lock">WebService Wake up Lock</string>
-    <string name="web_service_wake_lock_summary">The wake-up lock is enabled when the web service is enabled, and some phones will be killed when the wake-up lock is enabled.</string>
     <string name="read_aloud_wake_lock">Read aloud service wake-up lock</string>
     <string name="read_aloud_wake_lock_summary">The wake-up lock is enabled when reading aloud is enabled, and the wake-up lock on some mobile phones will be killed in the background.</string>
     <string name="audio_play_wake_lock">Audio service wake-up lock</string>
@@ -1847,4 +1839,5 @@
     <string name="welcome_title">阅\n读</string>
     <string name="welcome_subtitle">享\n受\n美\n好\n时\n光</string>
     <string name="welcome_tagline">品读万千故事</string>
+    <string name="background_services">Background services</string>
 </resources>

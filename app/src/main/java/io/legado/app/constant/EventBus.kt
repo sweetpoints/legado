@@ -25,7 +25,6 @@ object EventBus {
     const val AUDIO_SPEED = "audioSpeed"
     const val AUDIO_CACHE_CHANGED = "audioCacheChanged"
     const val NOTIFY_MAIN = "notifyMain"
-    const val WEB_SERVICE = "webService"
     const val MCP_SERVICE = "mcpService"
     const val UP_DOWNLOAD = "upDownload"
     const val UP_DOWNLOAD_STATE = "upDownloadState"

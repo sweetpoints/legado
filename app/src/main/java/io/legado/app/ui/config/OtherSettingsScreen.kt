@@ -162,14 +162,6 @@ private fun otherRows(settings: OtherSettingsSnapshot): List<OtherRow> {
         )
     rows +=
         OtherRow(
-            "webServiceWakeLock",
-            stringResource(R.string.web_service_wake_lock),
-            stringResource(R.string.web_service_wake_lock_summary),
-            stringResource(R.string.other_setting),
-            boolean = OtherSwitch.WebWake,
-        )
-    rows +=
-        OtherRow(
             "defaultBookTreeUri",
             stringResource(R.string.book_tree_uri_t),
             settings.texts.getValue(OtherText.BookTree).ifEmpty {
@@ -333,17 +325,6 @@ private fun otherRows(settings: OtherSettingsSnapshot): List<OtherRow> {
             stringResource(R.string.video_setting_summary),
             stringResource(R.string.other_setting),
             destination = OtherDestination.Video,
-        )
-    rows +=
-        OtherRow(
-            "webPort",
-            stringResource(R.string.web_port_title),
-            stringResource(
-                R.string.web_port_summary,
-                settings.numbers.getValue(OtherNumber.WebPort).toString(),
-            ),
-            stringResource(R.string.other_setting),
-            editor = OtherEditor.WebPort,
         )
     rows +=
         OtherRow(

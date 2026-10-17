@@ -25,8 +25,6 @@ body:
       label: 目标平台
       options:
         - Android
-        - Web
-        - Android 与 Web
     validations:
       required: true
 
@@ -40,7 +38,6 @@ body:
         - 朗读与音频
         - 书架与书籍管理
         - 书源与规则解析
-        - Web 服务与前端
         - 备份、同步与数据
         - 构建、安装与更新
         - 其他或不确定

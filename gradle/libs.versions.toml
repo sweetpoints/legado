@@ -161,7 +161,6 @@ markwon-html = { module = "io.noties.markwon:html", version.ref = "markwon" }
 
 
 nanohttpd-nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanoHttpd" }
-nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.ref = "nanoHttpd" }
 
 
 preference-preference = { module = "androidx.preference:preference", version.ref = "preference" }

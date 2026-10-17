@@ -98,7 +98,7 @@ class OtherSettingsRouteTest {
             assertEquals(1, repository.writes)
             compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
             compose.waitUntil(timeoutMillis = 10000) { received.size == 2 }
-            assertEquals(listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp), received)
+            assertEquals(listOf(OtherEffect.RestartMcp), received)
             compose.runOnIdle {
                 owner.registry.currentState = Lifecycle.State.STARTED
                 attached = false

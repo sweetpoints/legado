@@ -36,7 +36,7 @@ class MyMoreActivity : BaseComposeActivity() {
 
     override fun observeLiveBus() {
         observeEvent<String>(EventBus.RECREATE) { recreate() }
-        observeEventSticky<String>(EventBus.WEB_SERVICE, EventBus.MCP_SERVICE) {
+        observeEventSticky<String>(EventBus.MCP_SERVICE) {
             viewModel.refreshRuntimeState()
         }
     }

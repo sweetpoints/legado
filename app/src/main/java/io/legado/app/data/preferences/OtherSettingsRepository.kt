@@ -81,7 +81,7 @@ internal class DefaultOtherSettingsRepository(
             return@accepted emptyList()
         store.boolean(key, value)
         when (key) {
-            OtherSwitch.TokenRequired -> listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp)
+            OtherSwitch.TokenRequired -> listOf(OtherEffect.RestartMcp)
             OtherSwitch.Log -> listOf(OtherEffect.LogConfiguration)
             OtherSwitch.Cronet -> if (value) listOf(OtherEffect.DownloadCronet) else emptyList()
             OtherSwitch.Discovery,
@@ -98,7 +98,6 @@ internal class DefaultOtherSettingsRepository(
         store.number(key, number)
         when (key) {
             OtherNumber.Threads -> listOf(OtherEffect.ThreadsChanged)
-            OtherNumber.WebPort -> listOf(OtherEffect.RestartWeb)
             OtherNumber.McpPort -> listOf(OtherEffect.RestartMcp)
             OtherNumber.BitmapCache -> listOf(OtherEffect.ResizeBitmapCache)
             else -> emptyList()

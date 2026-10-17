@@ -209,7 +209,7 @@ class App : Application() {
 
         val webChannel = NotificationChannel(
             channelIdWeb,
-            getString(R.string.web_service),
+            getString(R.string.background_services),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             enableLights(false)

@@ -1,5 +1,7 @@
 # Legado Compose 渐进式迁移方案（Android）
 
+> 当前范围调整：内置 Web Server 与浏览器远程管理功能已决定移除，不再作为迁移目标；下文保留的 Web 服务讨论是历史记录，MCP 独立保留。当前 Flutter 迁移验收以 `flutter/docs/app-migration/README.md` 为准。
+
 > 状态：草案 v1　|　**当前范围：Android 端 Compose 迁移（KMP / 跨平台已暂缓）**
 > 适用仓库：`sweetpoints/legado`（上游 `gedoor/legado`），`master` 分支
 > 本文所有规模数据均为在本仓库实测所得，非估算。

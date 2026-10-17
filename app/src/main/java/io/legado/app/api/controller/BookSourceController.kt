@@ -5,7 +5,6 @@ import android.text.TextUtils
 import io.legado.app.api.ReturnData
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.jsSource.JsSourceUpsert
 import io.legado.app.model.jsSource.JsSourceUpsert.PayloadIssue
@@ -14,16 +13,11 @@ import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
-import okio.ByteString.Companion.encodeUtf8
 import java.security.MessageDigest
 
 object BookSourceController {
 
     private const val JS_SOURCE_SAVE_TIMEOUT_MILLIS = 30_000L
-    private const val JS_SOURCE_TOKEN_HEADER = "x-legado-token"
-    private const val JS_SOURCE_WEBSOCKET_PROTOCOL_HEADER = "sec-websocket-protocol"
-    private const val JS_SOURCE_WEBSOCKET_PROTOCOL = "legado"
-    private const val JS_SOURCE_WEBSOCKET_PROTOCOL_PREFIX = "legado.token."
 
     val sources: ReturnData
         get() {
@@ -95,102 +89,12 @@ object BookSourceController {
         }
     }
 
-    fun validateJsSourceRequest(headers: Map<String, String>): ReturnData? =
-        validateJsSourceRequest(
-            headers,
-            AppConfig.jsSourceApiToken,
-            AppConfig.jsSourceApiTokenRequired,
-        )
-
-    internal fun validateJsSourceRequest(
-        headers: Map<String, String>,
-        configuredToken: String?,
-        tokenRequired: Boolean = true,
-    ): ReturnData? {
-        val returnData = ReturnData()
-        if (!hasValidJsSourceApiToken(headers, configuredToken, tokenRequired)) {
-            return returnData.setErrorMsg("Web 书源访问令牌未配置或不正确")
-        }
-        if (headers.header("transfer-encoding") != null) {
-            return returnData.setErrorMsg("JS源请求不支持 Transfer-Encoding")
-        }
-        val contentType = headers.header("content-type")
-            ?.substringBefore(';')
-            ?.trim()
-        if (!contentType.equals("text/plain", ignoreCase = true)) {
-            return returnData.setErrorMsg("JS源请求 Content-Type 必须为 text/plain")
-        }
-        val contentLength = headers.header("content-length")?.trim()?.toLongOrNull()
-            ?: return returnData.setErrorMsg("JS源请求必须提供 Content-Length")
-        if (contentLength < 0 || contentLength > JsSourceUpsert.MAX_SOURCE_BYTES) {
-            return returnData.setErrorMsg("JS源脚本不能超过 1 MiB")
-        }
-        return null
-    }
-
-    fun hasValidJsSourceApiToken(headers: Map<String, String>): Boolean =
-        hasValidJsSourceApiToken(
-            headers,
-            AppConfig.jsSourceApiToken,
-            AppConfig.jsSourceApiTokenRequired,
-        )
-
-    internal fun hasValidJsSourceApiToken(
-        headers: Map<String, String>,
-        configuredToken: String?,
-        tokenRequired: Boolean = true,
-    ): Boolean {
-        if (!tokenRequired) return true
-        return matchesJsSourceApiToken(configuredToken, headers.header(JS_SOURCE_TOKEN_HEADER))
-    }
-
-    fun hasValidJsSourceWebSocketProtocol(headers: Map<String, String>): Boolean =
-        hasValidJsSourceWebSocketProtocol(
-            headers,
-            AppConfig.jsSourceApiToken,
-            AppConfig.jsSourceApiTokenRequired,
-        )
-
-    internal fun hasValidJsSourceWebSocketProtocol(
-        headers: Map<String, String>,
-        configuredToken: String?,
-        tokenRequired: Boolean = true,
-    ): Boolean {
-        val protocols = headers.header(JS_SOURCE_WEBSOCKET_PROTOCOL_HEADER)
-            ?.split(',')
-            ?.map(String::trim)
-            ?: return false
-        if (!tokenRequired) return protocols.firstOrNull() == JS_SOURCE_WEBSOCKET_PROTOCOL
-        val expected = jsSourceWebSocketProtocol(configuredToken) ?: return false
-        if (protocols.size != 2 || protocols.first() != JS_SOURCE_WEBSOCKET_PROTOCOL) {
-            return false
-        }
-        val actual = protocols.last()
-        return MessageDigest.isEqual(
-            expected.toByteArray(Charsets.UTF_8),
-            actual.toByteArray(Charsets.UTF_8),
-        )
-    }
-
-    internal fun jsSourceWebSocketProtocol(token: String?): String? {
-        val normalizedToken = token?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val encodedToken = normalizedToken.encodeUtf8().base64Url().trimEnd('=')
-        return JS_SOURCE_WEBSOCKET_PROTOCOL_PREFIX + encodedToken
-    }
-
     internal fun matchesJsSourceApiToken(expected: String?, actual: String?): Boolean {
         if (expected.isNullOrBlank() || actual == null) return false
         return MessageDigest.isEqual(
             expected.toByteArray(Charsets.UTF_8),
             actual.toByteArray(Charsets.UTF_8),
         )
-    }
-
-    val isJsSourceApiTokenRequired: ReturnData
-        get() = ReturnData().setData(AppConfig.jsSourceApiTokenRequired)
-
-    private fun Map<String, String>.header(name: String): String? {
-        return entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
     }
 
     fun getSource(parameters: Map<String, List<String>>): ReturnData {

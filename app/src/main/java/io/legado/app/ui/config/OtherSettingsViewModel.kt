@@ -259,7 +259,7 @@ internal class OtherSettingsViewModel(
         if (old.switches.getValue(key) == value) return
         val effects =
             when (key) {
-                OtherSwitch.TokenRequired -> listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp)
+                OtherSwitch.TokenRequired -> listOf(OtherEffect.RestartMcp)
                 OtherSwitch.Log -> listOf(OtherEffect.LogConfiguration)
                 OtherSwitch.Cronet -> if (value) listOf(OtherEffect.DownloadCronet) else emptyList()
                 OtherSwitch.Discovery,
@@ -316,7 +316,6 @@ internal class OtherSettingsViewModel(
                     else
                         when (key) {
                             OtherNumber.Threads -> listOf(OtherEffect.ThreadsChanged)
-                            OtherNumber.WebPort -> listOf(OtherEffect.RestartWeb)
                             OtherNumber.McpPort -> listOf(OtherEffect.RestartMcp)
                             OtherNumber.BitmapCache -> listOf(OtherEffect.ResizeBitmapCache)
                             else -> emptyList()
@@ -571,7 +570,7 @@ internal class OtherSettingsViewModel(
             ) {
                 when (key) {
                     OtherSwitch.TokenRequired ->
-                        result.addAll(listOf(OtherEffect.RestartWeb, OtherEffect.RestartMcp))
+                        result.addAll(listOf(OtherEffect.RestartMcp))
                     OtherSwitch.Log -> result += OtherEffect.LogConfiguration
                     OtherSwitch.Cronet ->
                         if (after.switches.getValue(key)) result += OtherEffect.DownloadCronet
@@ -596,7 +595,6 @@ internal class OtherSettingsViewModel(
             ) {
                 when (key) {
                     OtherNumber.Threads -> result += OtherEffect.ThreadsChanged
-                    OtherNumber.WebPort -> result += OtherEffect.RestartWeb
                     OtherNumber.McpPort -> result += OtherEffect.RestartMcp
                     else -> Unit
                 }

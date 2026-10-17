@@ -600,9 +600,7 @@
       "app/src/main/java/io/legado/app/service/McpService.kt",
       "app/src/main/java/io/legado/app/service/SpeechFollowState.kt",
       "app/src/main/java/io/legado/app/service/TTSReadAloudService.kt",
-      "app/src/main/java/io/legado/app/service/VideoPlayService.kt",
-      "app/src/main/java/io/legado/app/service/WebService.kt",
-      "app/src/main/java/io/legado/app/service/WebTileService.kt"
+      "app/src/main/java/io/legado/app/service/VideoPlayService.kt"
     ],
     "formatImplementations": [
       "modules/book/src/main/java/me/ag2s/base/PfdHelper.java",

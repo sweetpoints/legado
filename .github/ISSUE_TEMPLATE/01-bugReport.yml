@@ -21,8 +21,6 @@ body:
       label: 运行平台
       options:
         - Android
-        - Web
-        - Android 与 Web
     validations:
       required: true
 
@@ -36,7 +34,6 @@ body:
         - 朗读与音频
         - 书架与书籍管理
         - 书源与规则解析
-        - Web 服务与前端
         - 备份、同步与数据
         - 构建、安装与更新
         - 其他或不确定
@@ -70,7 +67,7 @@ body:
     id: environment
     attributes:
       label: 运行环境
-      description: Android 请填写系统版本和机型；Web 请填写操作系统和浏览器版本。
+      description: 请填写系统版本和设备型号。
       placeholder: Android 15 / Pixel 8，或 Windows 11 / Edge 138
     validations:
       required: true
@@ -111,4 +108,4 @@ body:
     id: additions
     attributes:
       label: 其他信息
-      description: Web 问题请补充服务部署方式；仅特定书源出现时请说明是否可公开复现。
+      description: 仅特定书源出现时请说明是否可公开复现。
