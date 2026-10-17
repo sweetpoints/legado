@@ -8,9 +8,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.lifecycle.createSavedStateHandle
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -85,32 +83,16 @@ class BookSourceEditActivity : BaseThemedActivity() {
                 .commitNow()
         }
         lifecycleScope.launch {
-            var finished = false
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                model.state.collect { current ->
-                    if (!canHandleEditorEffect()) return@collect
-                    val document = current.document ?: return@collect
-                    registerNative(document.nativeRequest)
-                    document.savedUrl?.let(::recordSaved)
-                    if (document.finished) {
-                        if (!finished) {
-                            finished = true
-                            complete(document.savedUrl)
-                        }
-                    } else if (!current.busy && current.error == null) {
-                        val request = document.nativeRequest
-                        if (request != null && !request.delivered) {
-                            model.deliverNative(
-                                request.id,
-                                { canHandleEditorEffect() && lifecycle.currentState == Lifecycle.State.RESUMED },
-                                ::launchNative,
-                            )
-                        } else if (request == null && !document.helpShown) {
-                            model.showInitialHelp(!LocalConfig.ruleHelpVersionIsLast)
-                        }
-                    }
-                }
-            }
+            dispatchBookSourceEditorEffects(
+                model = model,
+                lifecycle = lifecycle,
+                canHandle = ::canHandleEditorEffect,
+                onNative = ::launchNative,
+                onRegister = ::registerNative,
+                onFinish = ::complete,
+                onSaved = ::recordSaved,
+                initialHelpNeeded = !LocalConfig.ruleHelpVersionIsLast,
+            )
         }
     }
 
