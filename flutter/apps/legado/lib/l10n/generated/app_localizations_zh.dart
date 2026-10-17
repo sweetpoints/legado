@@ -571,6 +571,195 @@ class AppLocalizationsZh extends AppLocalizations {
       '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
+  String get sourceEditorTitle => '编辑书源';
+
+  @override
+  String get sourceEditorClose => '关闭';
+
+  @override
+  String get sourceEditorSave => '保存';
+
+  @override
+  String get sourceEditorFullScreen => '规则编辑';
+
+  @override
+  String get sourceEditorMenu => '更多操作';
+
+  @override
+  String get sourceEditorBase => '基本';
+
+  @override
+  String get sourceEditorSearch => '搜索';
+
+  @override
+  String get sourceEditorExplore => '发现';
+
+  @override
+  String get sourceEditorInfo => '详情';
+
+  @override
+  String get sourceEditorToc => '目录';
+
+  @override
+  String get sourceEditorContent => '正文';
+
+  @override
+  String get sourceEditorReview => '段评';
+
+  @override
+  String get sourceEditorEnabled => '启用';
+
+  @override
+  String get sourceEditorExploreEnabled => '发现';
+
+  @override
+  String get sourceEditorCookie => '自动保存 Cookie';
+
+  @override
+  String get sourceEditorReviewEnabled => '段评';
+
+  @override
+  String get sourceEditorListener => '事件监听';
+
+  @override
+  String get sourceEditorCustomButton => '自定义按钮';
+
+  @override
+  String get sourceEditorText => '文字';
+
+  @override
+  String get sourceEditorAudio => '音频';
+
+  @override
+  String get sourceEditorImage => '图片';
+
+  @override
+  String get sourceEditorFile => '文件';
+
+  @override
+  String get sourceEditorVideo => '视频';
+
+  @override
+  String get sourceEditorDebug => '调试书源';
+
+  @override
+  String get sourceEditorLogin => '登录';
+
+  @override
+  String get sourceEditorClearCookie => '清除 Cookie';
+
+  @override
+  String get sourceEditorAutoComplete => '自动补全';
+
+  @override
+  String get sourceEditorCopy => '复制书源';
+
+  @override
+  String get sourceEditorPaste => '粘贴书源';
+
+  @override
+  String get sourceEditorQr => '扫码导入';
+
+  @override
+  String get sourceEditorShare => '分享书源';
+
+  @override
+  String get sourceEditorQrShare => '二维码分享';
+
+  @override
+  String get sourceEditorVariable => '设置源变量';
+
+  @override
+  String get sourceEditorLog => '日志';
+
+  @override
+  String get sourceEditorHelp => '书源 Reference';
+
+  @override
+  String get sourceEditorRetry => '重试';
+
+  @override
+  String get sourceEditorDiscardTitle => '放弃未保存的修改？';
+
+  @override
+  String get sourceEditorDiscardBody => '修改尚未保存。退出将丢弃本次编辑内容。';
+
+  @override
+  String get sourceEditorDiscard => '放弃修改';
+
+  @override
+  String get sourceEditorKeepEditing => '继续编辑';
+
+  @override
+  String get sourceEditorGroups => '书源分组';
+
+  @override
+  String get sourceEditorCancel => '取消';
+
+  @override
+  String get sourceEditorUndo => '撤销';
+
+  @override
+  String get sourceEditorRedo => '重做';
+
+  @override
+  String get sourceEditorKeyboardHelp => '辅助输入';
+
+  @override
+  String get sourceEditorKeyboardConfig => '辅助按键配置';
+
+  @override
+  String get sourceEditorUrlOptions => '插入 URL 参数';
+
+  @override
+  String get sourceEditorJsHelp => 'JavaScript Reference';
+
+  @override
+  String get sourceEditorRegexHelp => '正则 Reference';
+
+  @override
+  String get sourceEditorInsertGroup => '插入分组';
+
+  @override
+  String get sourceEditorChooseFile => '选择文件';
+
+  @override
+  String get sourceEditorEngine => '书源引擎：Flutter / V8';
+
+  @override
+  String get sourceEditorEngineBody => '旧书源由新引擎兼容解析，可预览需要调整的规则。';
+
+  @override
+  String get sourceEditorMigration => '预览迁移';
+
+  @override
+  String get sourceEditorMigrationRunning => '正在分析书源…';
+
+  @override
+  String get sourceEditorMigrationTitle => '书源迁移预览';
+
+  @override
+  String get sourceEditorMigrationApply => '应用迁移候选';
+
+  @override
+  String get sourceEditorMigrationManual => '部分规则需要手动调整。';
+
+  @override
+  String get sourceEditorMigrationNone => '未发现需要调整的规则。';
+
+  @override
+  String get sourceEditorLargeField => '内容较长或包含复杂组合字符，请使用规则编辑器。';
+
+  @override
+  String get sourceEditorFailed => '无法加载书源编辑器';
+
+  @override
+  String get sourceEditorOptions => '书源选项';
+
+  @override
+  String get sourceEditorType => '书源类型';
+
+  @override
   String get sourceManagerTitle => '书源管理';
 
   @override

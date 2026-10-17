@@ -1166,6 +1166,384 @@ abstract class AppLocalizations {
   /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
   String get rssDuplicateRestoreSource;
 
+  /// No description provided for @sourceEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit book source'**
+  String get sourceEditorTitle;
+
+  /// No description provided for @sourceEditorClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get sourceEditorClose;
+
+  /// No description provided for @sourceEditorSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get sourceEditorSave;
+
+  /// No description provided for @sourceEditorFullScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule editor'**
+  String get sourceEditorFullScreen;
+
+  /// No description provided for @sourceEditorMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get sourceEditorMenu;
+
+  /// No description provided for @sourceEditorBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic'**
+  String get sourceEditorBase;
+
+  /// No description provided for @sourceEditorSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get sourceEditorSearch;
+
+  /// No description provided for @sourceEditorExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get sourceEditorExplore;
+
+  /// No description provided for @sourceEditorInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get sourceEditorInfo;
+
+  /// No description provided for @sourceEditorToc.
+  ///
+  /// In en, this message translates to:
+  /// **'Contents'**
+  String get sourceEditorToc;
+
+  /// No description provided for @sourceEditorContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get sourceEditorContent;
+
+  /// No description provided for @sourceEditorReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviews'**
+  String get sourceEditorReview;
+
+  /// No description provided for @sourceEditorEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get sourceEditorEnabled;
+
+  /// No description provided for @sourceEditorExploreEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery'**
+  String get sourceEditorExploreEnabled;
+
+  /// No description provided for @sourceEditorCookie.
+  ///
+  /// In en, this message translates to:
+  /// **'Save cookies'**
+  String get sourceEditorCookie;
+
+  /// No description provided for @sourceEditorReviewEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviews'**
+  String get sourceEditorReviewEnabled;
+
+  /// No description provided for @sourceEditorListener.
+  ///
+  /// In en, this message translates to:
+  /// **'Event listener'**
+  String get sourceEditorListener;
+
+  /// No description provided for @sourceEditorCustomButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom button'**
+  String get sourceEditorCustomButton;
+
+  /// No description provided for @sourceEditorText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get sourceEditorText;
+
+  /// No description provided for @sourceEditorAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get sourceEditorAudio;
+
+  /// No description provided for @sourceEditorImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get sourceEditorImage;
+
+  /// No description provided for @sourceEditorFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get sourceEditorFile;
+
+  /// No description provided for @sourceEditorVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get sourceEditorVideo;
+
+  /// No description provided for @sourceEditorDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug source'**
+  String get sourceEditorDebug;
+
+  /// No description provided for @sourceEditorLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get sourceEditorLogin;
+
+  /// No description provided for @sourceEditorClearCookie.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cookies'**
+  String get sourceEditorClearCookie;
+
+  /// No description provided for @sourceEditorAutoComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto complete'**
+  String get sourceEditorAutoComplete;
+
+  /// No description provided for @sourceEditorCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy source'**
+  String get sourceEditorCopy;
+
+  /// No description provided for @sourceEditorPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste source'**
+  String get sourceEditorPaste;
+
+  /// No description provided for @sourceEditorQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR code'**
+  String get sourceEditorQr;
+
+  /// No description provided for @sourceEditorShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share source'**
+  String get sourceEditorShare;
+
+  /// No description provided for @sourceEditorQrShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share QR code'**
+  String get sourceEditorQrShare;
+
+  /// No description provided for @sourceEditorVariable.
+  ///
+  /// In en, this message translates to:
+  /// **'Source variable'**
+  String get sourceEditorVariable;
+
+  /// No description provided for @sourceEditorLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Log'**
+  String get sourceEditorLog;
+
+  /// No description provided for @sourceEditorHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Source reference'**
+  String get sourceEditorHelp;
+
+  /// No description provided for @sourceEditorRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get sourceEditorRetry;
+
+  /// No description provided for @sourceEditorDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved changes?'**
+  String get sourceEditorDiscardTitle;
+
+  /// No description provided for @sourceEditorDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your changes have not been saved. Closing will discard this draft.'**
+  String get sourceEditorDiscardBody;
+
+  /// No description provided for @sourceEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get sourceEditorDiscard;
+
+  /// No description provided for @sourceEditorKeepEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get sourceEditorKeepEditing;
+
+  /// No description provided for @sourceEditorGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Source groups'**
+  String get sourceEditorGroups;
+
+  /// No description provided for @sourceEditorCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get sourceEditorCancel;
+
+  /// No description provided for @sourceEditorUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get sourceEditorUndo;
+
+  /// No description provided for @sourceEditorRedo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get sourceEditorRedo;
+
+  /// No description provided for @sourceEditorKeyboardHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Input tools'**
+  String get sourceEditorKeyboardHelp;
+
+  /// No description provided for @sourceEditorKeyboardConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure input keys'**
+  String get sourceEditorKeyboardConfig;
+
+  /// No description provided for @sourceEditorUrlOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert URL options'**
+  String get sourceEditorUrlOptions;
+
+  /// No description provided for @sourceEditorJsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'JavaScript reference'**
+  String get sourceEditorJsHelp;
+
+  /// No description provided for @sourceEditorRegexHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression reference'**
+  String get sourceEditorRegexHelp;
+
+  /// No description provided for @sourceEditorInsertGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert group'**
+  String get sourceEditorInsertGroup;
+
+  /// No description provided for @sourceEditorChooseFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose file'**
+  String get sourceEditorChooseFile;
+
+  /// No description provided for @sourceEditorEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Source engine: Flutter / V8'**
+  String get sourceEditorEngine;
+
+  /// No description provided for @sourceEditorEngineBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The engine supports legacy sources. Preview rule changes before applying migration.'**
+  String get sourceEditorEngineBody;
+
+  /// No description provided for @sourceEditorMigration.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview migration'**
+  String get sourceEditorMigration;
+
+  /// No description provided for @sourceEditorMigrationRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing source…'**
+  String get sourceEditorMigrationRunning;
+
+  /// No description provided for @sourceEditorMigrationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source migration preview'**
+  String get sourceEditorMigrationTitle;
+
+  /// No description provided for @sourceEditorMigrationApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply migration candidate'**
+  String get sourceEditorMigrationApply;
+
+  /// No description provided for @sourceEditorMigrationManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Some rules need manual changes.'**
+  String get sourceEditorMigrationManual;
+
+  /// No description provided for @sourceEditorMigrationNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No rule changes were identified.'**
+  String get sourceEditorMigrationNone;
+
+  /// No description provided for @sourceEditorLargeField.
+  ///
+  /// In en, this message translates to:
+  /// **'This field contains long or complex text. Open the rule editor to edit it.'**
+  String get sourceEditorLargeField;
+
+  /// No description provided for @sourceEditorFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load source editor'**
+  String get sourceEditorFailed;
+
+  /// No description provided for @sourceEditorOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Source options'**
+  String get sourceEditorOptions;
+
+  /// No description provided for @sourceEditorType.
+  ///
+  /// In en, this message translates to:
+  /// **'Source type'**
+  String get sourceEditorType;
+
   /// No description provided for @sourceManagerTitle.
   ///
   /// In en, this message translates to:
