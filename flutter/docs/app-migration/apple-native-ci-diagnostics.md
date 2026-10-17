@@ -19,9 +19,15 @@ or cancelling the existing hosted run.
   SDK. Within that runtime it prefers a booted iPhone over a shutdown device.
 - Requires an explicit UUID for local execution; automatic selection is limited
   to the disposable GitHub runner. `--list-only` is read-only on either host.
-- Separately bounds boot command (60s), full boot readiness (180s), Flutter device
-  discovery (60s) and native application tests (1200s). Boot and test limits can be
-  adjusted explicitly with `--boot-timeout` and `--test-timeout`.
+- On disposable CI runners, creates its own empty simulator using the selected
+  runtime/device type, avoiding migration of runner-provisioned device data.
+  Only this owned device is shut down and deleted after acceptance; local explicit
+  device selections and `--list-only` never create, erase or delete a device.
+- Separately bounds boot command (60s), full boot readiness (180s) and native App
+  tests (1200s). A terminal migration failure is rejected even if `simctl` exits
+  zero. The already selected UUID goes directly to the actual Flutter App test,
+  avoiding a redundant global device scan. Boot and test limits can be adjusted
+  explicitly with `--boot-timeout` and `--test-timeout`.
 - Streams stdout/stderr while preserving distinct machine stdout for JSON parsing.
   Commands that exit while a descendant retains their pipe cannot hang the helper.
 - Writes host metadata, selected runtime, phase timestamps, command exit/timeout

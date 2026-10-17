@@ -27,7 +27,8 @@ class FlutterNdkPreparationTest(unittest.TestCase):
         base = self.sdk / 'ndk' / version
         base.mkdir(parents=True, exist_ok=True)
         (base / 'source.properties').write_text(f'Pkg.Revision = {version}\n')
-        for relative in ['ndk-build', 'toolchains/llvm/prebuilt/linux-x86_64/bin/clang']:
+        for relative in ['ndk-build', 'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+                         'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip']:
             tool = base / relative
             tool.parent.mkdir(parents=True, exist_ok=True)
             tool.write_text('#!/bin/sh\n')
@@ -47,6 +48,14 @@ class FlutterNdkPreparationTest(unittest.TestCase):
         self.complete()
         self.invoke([])
         self.assertEqual(self.calls, [])
+
+    def test_missing_packaging_strip_tool_requires_repair_even_when_clang_exists(self):
+        self.complete()
+        (self.sdk / 'ndk' / VERSION / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip').unlink()
+        self.assertFalse(ndk.installed(self.sdk, VERSION))
+        self.invoke([(0, 'repaired')], install_at=1)
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(ndk.installed(self.sdk, VERSION))
 
     def test_install_uses_configured_cli_and_flutter_sdk_version(self):
         self.invoke([(0, 'installed\n')], install_at=1)

@@ -55,7 +55,9 @@ From a Windows runner after a successful Release build:
 ```
 
 The `.github/workflows/flutter-windows-app.yml` workflow runs the real application
-integration suite before this packaging/startup gate. Its artifact contains the
+integration suite before this packaging/startup gate. It also owns the native V8
+conformance and ARM64 cross-link gates; the x64 bridge is prepared once for all
+x64 checks. Its application artifact contains the
 portable ZIP, CRT vendor provenance, bundle hash, isolated startup outcome, loaded
 module paths and stdout/stderr. Windows x64 V8 runtime, ARM64 cross-link, desktop
 UI integration and portable packaging remain distinct evidence layers.

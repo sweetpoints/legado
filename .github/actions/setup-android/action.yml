@@ -30,7 +30,18 @@ runs:
         flutter-version: '3.47.6'
         channel: stable
         cache: true
+    - name: Fingerprint the embedded Flutter source and assets
+      id: aar-inputs
+      shell: bash
+      run: echo "source=$(python3 flutter/tool/verify-android-aar.py --print-source-digest)" >> "$GITHUB_OUTPUT"
+    - name: Restore exact dual-ABI Debug and Release Flutter AARs
+      id: aar-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: flutter/modules/source_host/build/host/outputs/repo
+        key: flutter-aar-v1-${{ runner.os }}-${{ runner.arch }}-3.47.6-${{ steps.aar-inputs.outputs.source }}-${{ hashFiles('flutter/tool/v8/*.py', 'flutter/tool/v8/*.json', 'flutter/tool/v8/*.gni', 'flutter/packages/*/src/**', 'flutter/packages/*/hook/**', 'flutter/packages/*/android/**', 'flutter/tool/verify-pdfium.py', 'flutter/tool/prepare-android-aar.sh', 'flutter/tool/verify-android-aar.py', 'flutter/tool/source-host-min-sdk.gradle', '.github/scripts/prepare-ci-android-aar.sh') }}
     - name: Prepare and verify the pinned Flutter NDK before Gradle
+      # The host APK still needs llvm-strip when its Flutter AAR is cached.
       shell: bash
       run: |
         python3 -m unittest discover -s .github/scripts -p test_prepare_flutter_ndk.py
@@ -80,6 +91,33 @@ runs:
       with:
         path: flutter/packages/source_v8/.cache/ci-artifacts/android-x64
         key: ${{ steps.native-x64.outputs.cache-primary-key }}
+    - name: Restore the private AAR Gradle dependency downloads
+      if: steps.aar-cache.outputs.cache-hit != 'true'
+      id: aar-gradle-cache
+      uses: actions/cache/restore@v5
+      with:
+        # Only downloaded dependencies: never init scripts, credentials or daemon state.
+        path: flutter/.gradle-source-host/caches/modules-2
+        key: flutter-aar-deps-v1-${{ runner.os }}-${{ runner.arch }}-3.47.6-${{ hashFiles('flutter/pubspec.lock', 'flutter/tool/source-host-min-sdk.gradle') }}
+        restore-keys: |
+          flutter-aar-deps-v1-${{ runner.os }}-${{ runner.arch }}-3.47.6-
+    - name: Authenticate the restored Flutter AARs before use
+      if: steps.aar-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: python3 flutter/tool/verify-android-aar.py debug release
     - name: Prepare verified Debug and Release Flutter AARs for both ABIs
+      if: steps.aar-cache.outputs.cache-hit != 'true'
       shell: bash
       run: bash .github/scripts/prepare-ci-android-aar.sh
+    - name: Save authenticated dual-ABI Flutter AARs immediately
+      if: steps.aar-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: flutter/modules/source_host/build/host/outputs/repo
+        key: ${{ steps.aar-cache.outputs.cache-primary-key }}
+    - name: Save private AAR dependency downloads
+      if: steps.aar-cache.outputs.cache-hit != 'true' && steps.aar-gradle-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: flutter/.gradle-source-host/caches/modules-2
+        key: ${{ steps.aar-gradle-cache.outputs.cache-primary-key }}

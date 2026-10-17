@@ -16,7 +16,7 @@ def main():
     parser.add_argument("package")
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    if not re.fullmatch(r"com\.legado\.app\.(debug|release|releaseA)", args.package):
+    if not re.fullmatch(r"com\.legado\.app\.(debug|release)", args.package):
         parser.error("Unexpected application package")
     args.output.mkdir(parents=True, exist_ok=True)
 

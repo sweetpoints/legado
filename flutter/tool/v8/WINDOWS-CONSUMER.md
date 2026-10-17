@@ -256,11 +256,13 @@ path containment uses URI directory boundaries, preserving checks on native
 backslash paths. ARM64 remains excluded from the hook until its separate target
 library inventory has been reviewed and actually cross-linked.
 
-The separate `.github/workflows/flutter-windows-v8.yml` job performs x64 DLL
-compilation, the real native FFI probe with normal process exit, all Dart
-`source_v8` tests and the complete `source_conformance` suite, preserving exact
-native artifact/evidence. A second job collects ARM64 target libraries on the x64
-host for independent review. It does not claim ARM64 execution or compilation.
+The `.github/workflows/flutter-windows-app.yml` workflow prepares the x64
+bridge once and reuses it for the real native FFI probe, all Dart `source_v8`
+tests, the complete `source_conformance` suite, application integration and the
+Release bundle. Native contracts and the independent x64-host ARM64 cross-link
+job run for engine/toolchain changes or manual dispatch; ordinary application UI
+changes still run the complete x64 application acceptance. Both native artifacts
+and their acceptance evidence remain separate from the application bundle.
 
 The separate ARM64 library candidate from run `38947282697`, job `117129497294`,
 was subsequently reviewed with the same criteria. It contains 6,099 files (Clang

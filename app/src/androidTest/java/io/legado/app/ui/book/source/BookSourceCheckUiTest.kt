@@ -5,13 +5,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.PixelCopy
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performTextReplacement
 import androidx.core.net.toUri
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PreferKey
@@ -26,6 +23,7 @@ import io.legado.app.help.storage.Restore
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
 import io.legado.app.ui.book.source.manage.BookSourceActivity
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
 import java.util.UUID
@@ -38,15 +36,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BookSourceCheckUiTest {
-    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private val flutter = FlutterUiTestDriver(instrumentation)
     private val id = UUID.randomUUID().toString()
     private val group = "Check UI $id"
     private val sources =
@@ -78,6 +75,7 @@ class BookSourceCheckUiTest {
 
     @Before
     fun setup() {
+        flutter.enableAccessibility()
         preferences.edit().remove(PreferKey.showSourceCheckStatus).commit()
         preferences.edit().remove(PreferKey.blockSourceNavigation).commit()
         LocalConfig.edit().putInt("bookSourceHelpVersion", 1).commit()
@@ -90,6 +88,7 @@ class BookSourceCheckUiTest {
         Debug.currentCheckSession()?.let { CheckSource.stop(context, it) }
         waitUntil { !Debug.isChecking }
         scenario?.close()
+        flutter.close()
         archive?.parentFile?.deleteRecursively()
         appDb.bookSourceDao.delete(*sources.toTypedArray())
         LocalConfig.edit()
@@ -179,8 +178,10 @@ class BookSourceCheckUiTest {
 
     private fun awaitBookshelfCounts(vararg expected: Int) = waitUntil {
         var matches = false
+        var keys = emptyList<String>()
         scenario!!.onActivity { activity ->
             val state = activity.managerModel.state.value
+            keys = state.rows.map { it.url }
             matches =
                 expected.indices.all { index ->
                     state.rows.getOrNull(index)?.let { row ->
@@ -188,7 +189,11 @@ class BookSourceCheckUiTest {
                     } == true
                 }
         }
-        matches
+        matches && expected.indices.all { index ->
+            val row = "source-manager-row:${keys[index]}"
+            flutter.containsText(row, "${expected[index]} books in library") ||
+                flutter.containsText(row, "书架 ${expected[index]} 本")
+        }
     }
 
     @Test
@@ -320,18 +325,18 @@ class BookSourceCheckUiTest {
             loaded && actual == expected
         }
         expected.forEach { key ->
-            compose.onNodeWithTag("source-manager-row:$key").assertIsDisplayed()
+            flutter.awaitIdentifier("source-manager-row:$key")
         }
     }
 
     @Test
-    fun composeSearchAndHiddenSelectionKeepVisibleBatchCount() {
-        compose.onNodeWithTag("source-manager-search").performTextReplacement("group:$group")
+    fun flutterSearchAndHiddenSelectionKeepVisibleBatchCount() {
+        flutter.setText("source-manager-query", "group:$group")
+        closeSoftKeyboard()
         awaitItems(sources.take(2).map { it.bookSourceUrl })
         scenario!!.onActivity { it.managerModel.toggle(sources[0].bookSourceUrl) }
-        compose
-            .onNodeWithTag("source-manager-search")
-            .performTextReplacement(sources[1].bookSourceUrl)
+        flutter.setText("source-manager-query", sources[1].bookSourceUrl)
+        closeSoftKeyboard()
         awaitItems(listOf(sources[1].bookSourceUrl))
         scenario!!.onActivity {
             assertEquals(setOf(sources[0].bookSourceUrl), it.managerModel.state.value.selected)

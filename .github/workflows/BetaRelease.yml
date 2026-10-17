@@ -59,13 +59,12 @@ jobs:
     strategy:
       matrix:
         product: [app]
-        type: [release, releaseA]
       fail-fast: false
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
       product: ${{ matrix.product }}
-      type: ${{ matrix.type }}
+      type: release
       VERSION: ${{ needs.prepare.outputs.version }}
       VERSIONL: ${{ needs.prepare.outputs.versionL }}
     steps:
@@ -103,16 +102,7 @@ jobs:
           echo "当前版本号: $VERSION"
           sed -i "s|^val appVersion = .*|val appVersion = \"$VERSION\"|" "$GITHUB_WORKSPACE/app/build.gradle.kts"
 
-          if [ "$type" == "release" ]; then
-            typeName="新包名"
-          else
-            typeName="新共存"
-            # 替换 releaseA 相关包名（防止冲突）
-            sed -i 's/".release"/".releaseA"/' "$GITHUB_WORKSPACE/app/build.gradle.kts"
-            if [ -f "$GITHUB_WORKSPACE/app/google-services.json" ]; then
-              sed -i 's/.release/.releaseA/' "$GITHUB_WORKSPACE/app/google-services.json"
-            fi
-          fi
+          typeName="新包名"
 
           chmod +x gradlew
           echo "开始构建 ARM APK: $product - $typeName"
@@ -234,11 +224,7 @@ jobs:
           mv */*.apk . || true
           rm -rf */
           for file in *.apk; do
-            if [[ "$file" == *新包名* ]]; then
-              mv "$file" "${file/新包名/release}"
-            else
-              mv "$file" "${file/新共存/releaseA}"
-            fi
+            mv "$file" "${file/新包名/release}"
           done
 
       - name: Prepare Release Notes
@@ -281,11 +267,7 @@ jobs:
           mv */*.apk . || true
           rm -rf */
           for file in *.apk; do
-            if [[ "$file" == *新包名* ]]; then
-              mv "$file" "${file/新包名/release}"
-            else
-              mv "$file" "${file/新共存/releaseA}"
-            fi
+            mv "$file" "${file/新包名/release}"
           done
       - name: Deploy apk to server
         uses: easingthemes/ssh-deploy@v6.0.1

@@ -23,9 +23,10 @@ def installed(sdk_root: Path, version: str) -> bool:
     if not properties.is_file():
         return False
     revision = re.search(r'^Pkg.Revision\s*=\s*(\S+)\s*$', properties.read_text(), re.MULTILINE)
-    clang = ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin/clang'
-    return bool(revision and revision[1] == version and os.access(ndk / 'ndk-build', os.X_OK)
-                and os.access(clang, os.X_OK))
+    binaries = ['ndk-build', 'toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+                'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip']
+    return bool(revision and revision[1] == version
+                and all(os.access(ndk / binary, os.X_OK) for binary in binaries))
 
 
 def prepare(sdk_root: Path, flutter_root: Path, sdkmanager: str, *, run=subprocess.run, sleep=time.sleep):

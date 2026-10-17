@@ -95,6 +95,34 @@ def check_aar(repo, mode, native_shas):
             'abis': sorted(native_shas), 'nativeSha256ByAbi': native_shas}
 
 
+def maven_payload(repo):
+    excluded = {repo / 'source-engine-artifacts.json', repo / 'source-engine-artifacts.json.publishing'}
+    result = {}
+    for path in sorted(repo.rglob('*')):
+        if path in excluded:
+            continue
+        if path.is_symlink() or not path.resolve().is_relative_to(repo.resolve()):
+            raise ValueError('Prepared Maven payload must contain only regular files')
+        if path.is_dir():
+            continue
+        result[path.relative_to(repo).as_posix()] = builder.sha(path)
+    return result
+
+
+def verify_prepared_stamp(stamp, manifest, source_sha, native_shas, entries, repo):
+    """An exact cache key is insufficient: authenticate the restored payload too."""
+    expected = {'schemaVersion': 1, 'v8': manifest['v8'],
+                'depotTools': manifest['depotTools'], 'bridge': manifest['bridge'],
+                'sourceSha256': source_sha, 'abis': sorted(native_shas)}
+    if any(stamp.get(key) != value for key, value in expected.items()):
+        raise ValueError('Prepared AAR stamp differs from current source, SDK or ABI inputs')
+    for mode, entry in entries.items():
+        if stamp.get('artifacts', {}).get(mode) != entry:
+            raise ValueError(f'Prepared {mode} AAR differs from its authenticated stamp')
+    if stamp.get('mavenPayloadSha256') != maven_payload(repo):
+        raise ValueError('Prepared Maven dependencies or metadata differ from their authenticated stamp')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-only', action='store_true')
@@ -132,13 +160,16 @@ def main():
                 and previous.get('abis') == sorted(native_shas)):
             entries = previous.get('artifacts', {}) | entries
         data = {'schemaVersion': 1, 'v8': manifest['v8'], 'depotTools': manifest['depotTools'], 'bridge': bridge,
-                'sourceSha256': source_sha, 'abis': sorted(native_shas), 'artifacts': entries}
+                'sourceSha256': source_sha, 'abis': sorted(native_shas), 'artifacts': entries,
+                'mavenPayloadSha256': maven_payload(REPO)}
         temporary = stamp.with_suffix('.json.publishing')
         temporary.write_text(json.dumps(data, indent=2) + '\n')
         if source_digest() != source_sha:
             temporary.unlink()
             raise ValueError("Flutter source inputs changed before AAR publication")
         temporary.replace(stamp)
+    else:
+        verify_prepared_stamp(json.loads(stamp.read_text()), manifest, source_digest(), native_shas, entries, REPO)
     print(json.dumps({'validatedModes': args.modes, 'nativeSha256ByAbi': native_shas}))
 
 

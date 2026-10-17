@@ -1,4 +1,4 @@
-name: Flutter Windows application acceptance
+name: Flutter Windows acceptance
 on:
   workflow_dispatch:
   pull_request:
@@ -13,7 +13,42 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.paths.outputs.native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Select native contracts only for engine and toolchain changes
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          native=true
+          if [[ "$EVENT_NAME" != workflow_dispatch && "$BASE_SHA" =~ ^[0-9a-f]{40}$ &&
+                ! "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "${BASE_SHA}^{commit}"; then
+            if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+              .github/workflows/flutter-windows-app.yml \
+              flutter/tool/v8/ flutter/packages/source_v8/ \
+              flutter/packages/source_engine/ flutter/packages/source_conformance/ \
+              flutter/packages/source_platform/ flutter/packages/source_legacy/ \
+              flutter/packages/source_migration/ 'flutter/pubspec*'; then
+              native=false
+            else
+              result=$?
+              if [[ "$result" != 1 ]]; then exit "$result"; fi
+            fi
+          fi
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+
   windows-application:
+    needs: changes
     runs-on: windows-2025
     timeout-minutes: 45
     env:
@@ -38,6 +73,10 @@ jobs:
         run: |
           python flutter/tool/verify-pdfium.py --prepare-target win-x64
           if ($LASTEXITCODE -ne 0) { throw 'Native PDFium authentication failed' }
+      - name: Validate native consumer contracts
+        if: needs.changes.outputs.native == 'true'
+        shell: pwsh
+        run: python -m unittest discover -s flutter/tool/v8 -p 'test_windows*.py' -v
       - name: Prepare and authenticate reviewed Windows V8 bridge
         shell: pwsh
         run: |
@@ -45,6 +84,28 @@ jobs:
           python flutter/tool/v8/windows_ci.py --prepare-dynamic windows-x64 `
             --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' > build-windows-app-v8.json
           if ($LASTEXITCODE -ne 0) { throw 'Reviewed V8 bridge preparation failed' }
+      - name: Execute native FFI probe and require normal process exit
+        if: needs.changes.outputs.native == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $receipt = Get-Content build-windows-app-v8.json -Raw | ConvertFrom-Json
+          python flutter/tool/v8/windows_sdk.py --verify-runtime $receipt.artifactRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Native V8 FFI probe or normal process exit failed' }
+      - name: Run real Dart V8 worker transport and source conformance
+        if: needs.changes.outputs.native == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force build/windows-v8-acceptance | Out-Null
+          Push-Location flutter/packages/source_v8
+          dart test test/ --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/source-v8.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Dart V8 transport or normal process exit failed' }
+          Pop-Location
+          Push-Location flutter/packages/source_conformance
+          dart test test/ --reporter expanded 2>&1 | Tee-Object ../../../build/windows-v8-acceptance/conformance.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows V8 source conformance or normal process exit failed' }
+          Pop-Location
       - name: Run actual Windows application integration
         shell: pwsh
         working-directory: flutter/apps/legado
@@ -89,4 +150,52 @@ jobs:
           path: |
             build-windows-app-v8.json
             build/windows-app-acceptance/
+          if-no-files-found: warn
+
+      - name: Preserve exact native artifact and acceptance evidence
+        if: ${{ always() && needs.changes.outputs.native == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-x64-v8-native-acceptance
+          include-hidden-files: true
+          path: |
+            build-windows-app-v8.json
+            build/windows-v8-acceptance/
+            flutter/packages/source_v8/.cache/windows-built/
+          if-no-files-found: warn
+
+  windows-arm64-cross-link:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    # Both compiler and runner stay x64. Cross-link success is not ARM64 execution.
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Validate reviewed target inventories
+        shell: pwsh
+        run: python -m unittest discover -s flutter/tool/v8 -p 'test_windows*.py' -v
+      - name: Cross-compile ARM64 bridge using reviewed ARM64 CRT and SDK libraries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python flutter/tool/v8/windows_ci.py --prepare-dynamic windows-arm64 `
+            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' > build-windows-arm64-receipt.json
+          if ($LASTEXITCODE -ne 0) { throw 'Windows x64 to ARM64 bridge cross-link failed' }
+          $receipt = Get-Content build-windows-arm64-receipt.json -Raw | ConvertFrom-Json
+          $manifest = Get-Content "$($receipt.artifactRoot)/manifest.json" -Raw | ConvertFrom-Json
+          if ($manifest.target -ne 'windows-arm64' -or $manifest.inspection.machine -ne 43620) { throw 'Expected PE32+ ARM64 bridge' }
+          if ($manifest.validation.runtimeTested) { throw 'Cross-build must not claim ARM64 runtime testing' }
+      - name: Preserve exact ARM64 cross-link artifact and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-arm64-v8-cross-link
+          include-hidden-files: true
+          path: |
+            build-windows-arm64-receipt.json
+            flutter/packages/source_v8/.cache/windows-built/
           if-no-files-found: warn

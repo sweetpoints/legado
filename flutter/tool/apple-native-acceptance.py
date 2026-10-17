@@ -2,6 +2,7 @@
 """Run main-app acceptance with explicit, bounded iOS simulator phases.
 
 Does not edit the application, erase simulators, cancel GitHub jobs or retry tests.
+An acceptance-owned CI device may reboot once after terminal OS migration failure.
 Automatic device selection is allowed only on GitHub's disposable runner; local
 execution requires an explicit --device. --list-only is entirely read-only.
 """
@@ -24,6 +25,10 @@ APP_BUNDLE = 'io.legado.legadoApp'
 
 
 class PhaseFailure(RuntimeError):
+    pass
+
+
+class PhaseTimeout(PhaseFailure):
     pass
 
 
@@ -134,7 +139,7 @@ class Runner:
             result['finishedAt'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             self.save()
         if result.get('timedOut'):
-            raise PhaseFailure(f'{phase} timed out after {seconds}s; see {log}')
+            raise PhaseTimeout(f'{phase} timed out after {seconds}s; see {log}')
         if result['exitCode'] != 0:
             raise PhaseFailure(f'{phase} exited {result["exitCode"]}; see {log}')
         return b''.join(output).decode('utf-8')
@@ -282,6 +287,76 @@ def installed_runtimes(runner, seconds):
         on_tick=cold_service_progress(runner)))
 
 
+
+def create_ci_device(runner, selected):
+    # Runner-provisioned device data can require a broken OS migration (run
+    # 39010987456). Create our own empty device; never erase an existing one.
+    name = 'LegadoCI-' + str(os.getpid())
+    identifier = runner.command('create-ci-device', ['xcrun', 'simctl', 'create', name,
+        selected['deviceTypeIdentifier'], selected['runtime']], 60).strip()
+    if not re.fullmatch(r'[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}', identifier):
+        raise PhaseFailure('simctl create did not return a valid owned device UUID')
+    return {'udid': identifier, 'runtime': selected['runtime'],
+            'sdkVersion': selected['sdkVersion'], 'deviceTypeIdentifier': selected['deviceTypeIdentifier'],
+            'name': name, 'state': 'Shutdown', 'isAvailable': True, 'createdForAcceptance': True}
+
+
+def shutdown_for_migration_recovery(runner, identifier):
+    try:
+        runner.command('migration-recovery-shutdown', ['xcrun', 'simctl', 'shutdown', identifier], 60)
+    except PhaseTimeout:
+        # Hosted job 117350249917 timed out waiting for shutdown's process even
+        # though that same device had reached Shutdown. Preserve the timeout,
+        # then confirm the postcondition once; never assume a timeout succeeded.
+        snapshot = json.loads(runner.command('migration-recovery-state',
+            ['xcrun', 'simctl', 'list', 'devices', '--json'], 30))
+        matches = [device for devices in snapshot['devices'].values() for device in devices
+                   if device.get('udid') == identifier]
+        if len(matches) != 1 or matches[0].get('state') != 'Shutdown':
+            raise
+        print('Timed-out shutdown confirmed Shutdown for the same owned CI device', flush=True)
+
+
+def run_selected_device(runner, selected, flutter, boot_timeout, test_timeout):
+    identifier = selected['udid']
+    if selected['state'] not in ('Booted', 'Booting'):
+        runner.command('boot', ['xcrun', 'simctl', 'boot', identifier], 60)
+    boot = runner.command('boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b', '-d'], boot_timeout)
+    # simctl can exit zero even when its terminal boot status is failure.
+    def migration_failed(output):
+        return 'Data Migration Failed' in output or re.search(r'Status=3\b', output)
+
+    if migration_failed(boot) and selected.get('createdForAcceptance'):
+        # Hosted run 39012704277 failed OS migration even on a newly created
+        # device, before any app was installed. Preserve boot-ready.log, then
+        # allow one bounded reboot of this owned UUID. Never retry app tests,
+        # choose an older runtime, erase data or restart another simulator.
+        print('Owned CI simulator migration failed; attempting one bounded reboot before app tests', flush=True)
+        shutdown_for_migration_recovery(runner, identifier)
+        runner.command('migration-recovery-boot', ['xcrun', 'simctl', 'boot', identifier], 60)
+        boot = runner.command('migration-recovery-ready',
+            ['xcrun', 'simctl', 'bootstatus', identifier, '-b', '-d'], boot_timeout)
+    if migration_failed(boot):
+        raise PhaseFailure('Selected iOS simulator failed data migration during boot')
+    # The UUID is already selected and booted. Avoid an extra all-platform
+    # Flutter scan (including physical/wireless devices); the actual test below
+    # still has to discover this UUID, launch the app and execute every test.
+    runner.command('flutter-test', [flutter, 'test', 'integration_test/native_app_test.dart',
+        '-d', identifier, '--verbose'], test_timeout,
+        on_tick=progress_diagnostics(runner, identifier, test_timeout))
+
+
+def dispose_ci_device(runner, identifier):
+    errors = []
+    for phase, action in [('shutdown-owned-device', 'shutdown'), ('delete-owned-device', 'delete')]:
+        try:
+            runner.command(phase, ['xcrun', 'simctl', action, identifier], 30)
+        except (PhaseFailure, OSError) as error:
+            errors.append(str(error))
+    if errors and sys.exc_info()[0] is None:
+        raise PhaseFailure('Could not clean up the acceptance-owned simulator: ' + '; '.join(errors))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
@@ -300,6 +375,7 @@ def main():
         'githubActions': os.environ.get('GITHUB_ACTIONS') == 'true',
     }, indent=2) + '\n')
     selected = None
+    owned_device = None
     runner.save()
     try:
         if platform.system() != 'Darwin' or platform.machine().lower() not in ('arm64', 'aarch64'):
@@ -320,21 +396,14 @@ def main():
         snapshot = json.loads(runner.command('available-devices',
                                             ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], 30))
         selected = choose_device(snapshot, sdk, args.device)
+        if not args.list_only and not args.device and os.environ.get('GITHUB_ACTIONS') == 'true':
+            selected = create_ci_device(runner, selected)
+            owned_device = selected['udid']
         (runner.output / 'selected-device.json').write_text(json.dumps(selected, indent=2) + '\n')
         print('Selected simulator: ' + json.dumps(selected), flush=True)
         if args.list_only:
             return
-        uuid = selected['udid']
-        if selected['state'] not in ('Booted', 'Booting'):
-            runner.command('boot', ['xcrun', 'simctl', 'boot', uuid], 60)
-        runner.command('boot-ready', ['xcrun', 'simctl', 'bootstatus', uuid, '-b'], args.boot_timeout)
-        listing = json.loads(runner.command('flutter-devices',
-            [args.flutter, 'devices', '--machine', '--device-timeout', '30'], 60))
-        if not any(item.get('id') == uuid and item.get('isSupported') is True for item in listing):
-            raise PhaseFailure('Booted simulator is not discoverable as a supported Flutter device')
-        runner.command('flutter-test', [args.flutter, 'test', 'integration_test/native_app_test.dart',
-                                      '-d', uuid, '--verbose'], args.test_timeout,
-                       on_tick=progress_diagnostics(runner, uuid, args.test_timeout))
+        run_selected_device(runner, selected, args.flutter, args.boot_timeout, args.test_timeout)
     except (PhaseFailure, OSError, ValueError) as error:
         (runner.output / 'failure.txt').write_text(str(error) + '\n')
         if platform.system() == 'Darwin':
@@ -350,6 +419,9 @@ def main():
             except (PhaseFailure, OSError):
                 pass
         raise
+    finally:
+        if owned_device is not None:
+            dispose_ci_device(runner, owned_device)
 
 
 if __name__ == '__main__':

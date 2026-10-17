@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import copy
 from pathlib import Path
 import tempfile
 import unittest
@@ -123,6 +124,62 @@ class AarContractTest(unittest.TestCase):
         for value in ['android-x86', 'android-arm64,', 'android-x64,android-x64']:
             with self.assertRaises(ValueError):
                 verifier.configured_targets(value)
+
+    def prepared_cache(self):
+        self.fixture(x64=True)
+        self.fixture(x64=True, mode='release')
+        native = {'arm64-v8a': self.digest, 'x86_64': self.digest}
+        manifest = {'v8': {'revision': 'pinned'}, 'depotTools': {}, 'bridge': {'abi': 1}}
+        entries = {mode: verifier.check_aar(self.repo, mode, native) for mode in ('debug', 'release')}
+        stamp = {'schemaVersion': 1, **manifest, 'sourceSha256': 'current',
+                 'abis': sorted(native), 'artifacts': entries,
+                 'mavenPayloadSha256': verifier.maven_payload(self.repo)}
+        return stamp, manifest, native, entries
+
+    def test_exact_restored_cache_verifies_without_rebuilding_or_rewriting(self):
+        stamp, manifest, native, entries = self.prepared_cache()
+        before = verifier.maven_payload(self.repo)
+        verifier.verify_prepared_stamp(stamp, manifest, 'current', native, entries, self.repo)
+        self.assertEqual(before, verifier.maven_payload(self.repo))
+
+    def test_cached_source_sdk_bridge_and_abi_drift_are_rejected(self):
+        stamp, manifest, native, entries = self.prepared_cache()
+        for key, value in [('schemaVersion', 2), ('sourceSha256', 'stale'),
+                           ('v8', {}), ('depotTools', {'revision': 'stale'}),
+                           ('bridge', {}), ('abis', ['arm64-v8a'])]:
+            changed = copy.deepcopy(stamp)
+            changed[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'current source'):
+                verifier.verify_prepared_stamp(changed, manifest, 'current', native, entries, self.repo)
+
+    def test_cached_missing_mode_and_wrong_aar_checksum_are_rejected(self):
+        stamp, manifest, native, entries = self.prepared_cache()
+        for corrupt in ('missing', 'checksum'):
+            changed = copy.deepcopy(stamp)
+            if corrupt == 'missing':
+                changed['artifacts'].pop('release')
+            else:
+                changed['artifacts']['release']['sha256'] = 'corrupt'
+            with self.subTest(corrupt=corrupt), self.assertRaisesRegex(ValueError, 'authenticated stamp'):
+                verifier.verify_prepared_stamp(changed, manifest, 'current', native, entries, self.repo)
+
+    def test_cached_maven_metadata_tampering_and_injected_files_are_rejected(self):
+        stamp, manifest, native, entries = self.prepared_cache()
+        pom = next(self.repo.rglob('*.pom'))
+        original = pom.read_bytes()
+        pom.write_text('<project>changed dependency</project>')
+        with self.assertRaisesRegex(ValueError, 'Maven dependencies'):
+            verifier.verify_prepared_stamp(stamp, manifest, 'current', native, entries, self.repo)
+        pom.write_bytes(original)
+        (self.repo / 'unexpected-plugin.jar').write_bytes(b'extra payload')
+        with self.assertRaisesRegex(ValueError, 'Maven dependencies'):
+            verifier.verify_prepared_stamp(stamp, manifest, 'current', native, entries, self.repo)
+
+    def test_cache_cannot_add_a_symlink_to_an_unverified_plugin(self):
+        stamp, manifest, native, entries = self.prepared_cache()
+        (self.repo / 'external-plugin').symlink_to(self.repo.parent, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'regular files'):
+            verifier.verify_prepared_stamp(stamp, manifest, 'current', native, entries, self.repo)
 
     def test_stamp_requires_precompile_source_digest(self):
         with patch('sys.argv', ['verify', '--write-stamp', 'debug']):

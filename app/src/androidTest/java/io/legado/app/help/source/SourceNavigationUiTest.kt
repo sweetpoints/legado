@@ -445,6 +445,12 @@ class SourceNavigationUiTest {
             )
             assertTrue(starts.isEmpty())
 
+            // The manager owns a permanent FlutterFragment. Suppressed source
+            // navigation must leave this existing host unchanged, not remove it.
+            val fragmentBaseline = mutableSetOf<androidx.fragment.app.Fragment>()
+            scenario!!.onActivity {
+                fragmentBaseline.addAll(it.supportFragmentManager.fragments)
+            }
             withContext(SuppressSourceNavigation) {
                 val result =
                     DartSourceEngine.evaluate(
@@ -465,7 +471,9 @@ class SourceNavigationUiTest {
                     )
                 assertEquals(true, result)
                 assertTrue(starts.isEmpty())
-                scenario!!.onActivity { assertTrue(it.supportFragmentManager.fragments.isEmpty()) }
+                scenario!!.onActivity {
+                    assertEquals(fragmentBaseline, it.supportFragmentManager.fragments.toSet())
+                }
                 for (blocked in listOf(true, false)) {
                     AppConfig.blockSourceNavigation = blocked
                     val response =
