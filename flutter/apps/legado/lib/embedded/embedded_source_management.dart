@@ -11,6 +11,7 @@ import '../features/sources/source_management_page.dart';
 import '../l10n/generated/app_localizations.dart';
 import 'source_management_backend.dart';
 import 'source_manager/source_manager_page.dart';
+import 'source_editor/source_editor_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -30,7 +31,11 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
   final result = await const MethodChannel('legado/embedded_ui')
       .invokeMapMethod<String, Object?>('bootstrap');
   if (result == null ||
-      !['/sources', '/source-manager'].contains(result['route']) ||
+      ![
+        '/sources',
+        '/source-manager',
+        '/source-editor',
+      ].contains(result['route']) ||
       !['zh', 'en'].contains(result['locale']) ||
       !['system', 'light', 'dark'].contains(result['theme'])) {
     throw const FormatException('invalid_embedded_bootstrap');
@@ -58,6 +63,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
   final router = GoRouter(
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/source-editor',
+        builder: (_, _) => const SourceEditorPage(),
+      ),
       GoRoute(
         path: '/source-manager',
         builder: (_, _) => const SourceManagerPage(),

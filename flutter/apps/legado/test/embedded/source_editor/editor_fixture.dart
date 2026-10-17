@@ -1,0 +1,55 @@
+Map<String, Object?> editorFixture({
+  int tab = 0,
+  String value = 'Original',
+  int revision = 0,
+}) => {
+  'schemaVersion': 1,
+  'busy': false,
+  'error': null,
+  'confirmDiscard': false,
+  'groups': null,
+  'variable': null,
+  'variableComment': null,
+  'maxLines': 6,
+  'keyboardRows': 1,
+  'assists': [
+    {'key': '@', 'value': '@'},
+  ],
+  'migrationAvailable': true,
+  'migrationRunning': false,
+  'migrationError': null,
+  'migrationReport': null,
+  'document': {
+    'revision': revision,
+    'selectedTab': tab,
+    'focusedKey': null,
+    'optionsExpanded': false,
+    'autoComplete': false,
+    'finished': false,
+    'dirty': false,
+    'hasLogin': true,
+    'form': {
+      'options': {
+        'enabled': true,
+        'enabledExplore': true,
+        'enabledCookieJar': false,
+        'enabledReview': false,
+        'type': 0,
+        'eventListener': false,
+        'customButton': false,
+      },
+      'tabs': List.generate(
+        7,
+        (i) => [
+          {
+            'key': i == 0 ? 'bookSourceName' : 'rule$i',
+            'label': i == 0 ? 'Source name' : 'Rule $i',
+            'value': i == 0 ? value : '',
+            'selectionStart': 0,
+            'selectionEnd': 0,
+          },
+        ],
+      ),
+    },
+  },
+};
