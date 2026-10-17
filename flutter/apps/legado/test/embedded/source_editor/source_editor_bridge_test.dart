@@ -19,6 +19,10 @@ void main() {
     final m = editorFixture();
     expect(SourceEditorSnapshot.fromMap(m).document!.tabs.length, 7);
     expect(
+      SourceEditorSnapshot.fromMap(m).document!.tabs[0][0].external,
+      false,
+    );
+    expect(
       () => SourceEditorSnapshot.fromMap({...m, 'schemaVersion': 2}),
       throwsFormatException,
     );
