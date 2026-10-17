@@ -81,7 +81,8 @@ class FlutterSourceEditorUiTest {
                 revealIn("source-option-$key", "source-options")
                 driver.click("source-option-$key")
             }
-        revealIn("source-type", "source-options", backwards = true)
+        // Type follows the six option chips at the trailing edge of the row.
+        revealIn("source-type", "source-options")
         driver.click("source-type")
         driver.click("source-type-2")
         driver.click("source-options-toggle")
