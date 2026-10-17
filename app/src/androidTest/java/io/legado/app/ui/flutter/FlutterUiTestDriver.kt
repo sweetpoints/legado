@@ -93,22 +93,47 @@ internal class FlutterUiTestDriver(private val instrumentation: Instrumentation)
     /** Scroll the rendered popup/list until its requested semantic action becomes visible. */
     fun clickScrollable(id: String) {
         val deadline = SystemClock.uptimeMillis() + 30_000
-        repeat(24) {
+        var scrolls = 0
+        while (SystemClock.uptimeMillis() < deadline) {
             val target = node(id)
             if (target != null) {
                 target.recycle()
                 click(id)
                 return
             }
-            if (SystemClock.uptimeMillis() >= deadline) {
-                assertTrue("Flutter scroll deadline exceeded while finding $id", false)
+            assertTrue("Flutter scroll limit exceeded while finding $id", scrolls < 24)
+            // Wait for the popup's own scroll semantics. Scrolling the underlying
+            // source list cannot reveal a menu action, and absent semantics must
+            // not consume the finite budget of actual scroll actions.
+            if (scrollForward()) {
+                scrolls++
+                SystemClock.sleep(200)
+            } else {
+                SystemClock.sleep(50)
             }
-            scrollForward()
-            // A freshly opened popup may not have published its scroll node yet.
-            // Failed actions still consume the finite retry budget.
-            SystemClock.sleep(200)
         }
-        assertTrue("Flutter scroll limit exceeded while finding $id", false)
+        assertTrue("Flutter scroll deadline exceeded while finding $id", false)
+    }
+    private fun containsMenuAction(root: AccessibilityNodeInfo): Boolean {
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(AccessibilityNodeInfo.obtain(root))
+        while (pending.isNotEmpty()) {
+            val current = pending.removeFirst()
+            val action = current.viewIdResourceName
+                ?.takeIf { it.startsWith("source-manager-action:") }
+                ?.removePrefix("source-manager-action:")
+            // Inline row actions include a URL suffix (edit:<url>); they belong
+            // to the source list and must not identify it as the popup scroller.
+            val matches = current.isVisibleToUser && action != null && ':' !in action
+            if (matches) {
+                current.recycle()
+                pending.forEach { it.recycle() }
+                return true
+            }
+            for (i in 0 until current.childCount) current.getChild(i)?.let(pending::add)
+            current.recycle()
+        }
+        return false
     }
     private fun scrollForward(): Boolean {
         val pending = ArrayDeque<AccessibilityNodeInfo>()
@@ -116,6 +141,7 @@ internal class FlutterUiTestDriver(private val instrumentation: Instrumentation)
         while (pending.isNotEmpty()) {
             val current = pending.removeFirst()
             if (current.isVisibleToUser && current.isEnabled && current.isScrollable &&
+                containsMenuAction(current) &&
                 current.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
                 current.recycle()
                 pending.forEach { it.recycle() }
