@@ -600,6 +600,198 @@ class AppLocalizationsEn extends AppLocalizations {
       'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
+  String get sourceEditorTitle => 'Edit book source';
+
+  @override
+  String get sourceEditorClose => 'Close';
+
+  @override
+  String get sourceEditorSave => 'Save';
+
+  @override
+  String get sourceEditorFullScreen => 'Rule editor';
+
+  @override
+  String get sourceEditorMenu => 'More actions';
+
+  @override
+  String get sourceEditorBase => 'Basic';
+
+  @override
+  String get sourceEditorSearch => 'Search';
+
+  @override
+  String get sourceEditorExplore => 'Explore';
+
+  @override
+  String get sourceEditorInfo => 'Details';
+
+  @override
+  String get sourceEditorToc => 'Contents';
+
+  @override
+  String get sourceEditorContent => 'Content';
+
+  @override
+  String get sourceEditorReview => 'Reviews';
+
+  @override
+  String get sourceEditorEnabled => 'Enabled';
+
+  @override
+  String get sourceEditorExploreEnabled => 'Discovery';
+
+  @override
+  String get sourceEditorCookie => 'Save cookies';
+
+  @override
+  String get sourceEditorReviewEnabled => 'Reviews';
+
+  @override
+  String get sourceEditorListener => 'Event listener';
+
+  @override
+  String get sourceEditorCustomButton => 'Custom button';
+
+  @override
+  String get sourceEditorText => 'Text';
+
+  @override
+  String get sourceEditorAudio => 'Audio';
+
+  @override
+  String get sourceEditorImage => 'Image';
+
+  @override
+  String get sourceEditorFile => 'File';
+
+  @override
+  String get sourceEditorVideo => 'Video';
+
+  @override
+  String get sourceEditorDebug => 'Debug source';
+
+  @override
+  String get sourceEditorLogin => 'Log in';
+
+  @override
+  String get sourceEditorClearCookie => 'Clear cookies';
+
+  @override
+  String get sourceEditorAutoComplete => 'Auto complete';
+
+  @override
+  String get sourceEditorCopy => 'Copy source';
+
+  @override
+  String get sourceEditorPaste => 'Paste source';
+
+  @override
+  String get sourceEditorQr => 'Scan QR code';
+
+  @override
+  String get sourceEditorShare => 'Share source';
+
+  @override
+  String get sourceEditorQrShare => 'Share QR code';
+
+  @override
+  String get sourceEditorVariable => 'Source variable';
+
+  @override
+  String get sourceEditorLog => 'Log';
+
+  @override
+  String get sourceEditorHelp => 'Source reference';
+
+  @override
+  String get sourceEditorRetry => 'Retry';
+
+  @override
+  String get sourceEditorDiscardTitle => 'Discard unsaved changes?';
+
+  @override
+  String get sourceEditorDiscardBody =>
+      'Your changes have not been saved. Closing will discard this draft.';
+
+  @override
+  String get sourceEditorDiscard => 'Discard changes';
+
+  @override
+  String get sourceEditorKeepEditing => 'Keep editing';
+
+  @override
+  String get sourceEditorGroups => 'Source groups';
+
+  @override
+  String get sourceEditorCancel => 'Cancel';
+
+  @override
+  String get sourceEditorUndo => 'Undo';
+
+  @override
+  String get sourceEditorRedo => 'Redo';
+
+  @override
+  String get sourceEditorKeyboardHelp => 'Input tools';
+
+  @override
+  String get sourceEditorKeyboardConfig => 'Configure input keys';
+
+  @override
+  String get sourceEditorUrlOptions => 'Insert URL options';
+
+  @override
+  String get sourceEditorJsHelp => 'JavaScript reference';
+
+  @override
+  String get sourceEditorRegexHelp => 'Regular expression reference';
+
+  @override
+  String get sourceEditorInsertGroup => 'Insert group';
+
+  @override
+  String get sourceEditorChooseFile => 'Choose file';
+
+  @override
+  String get sourceEditorEngine => 'Source engine: Flutter / V8';
+
+  @override
+  String get sourceEditorEngineBody =>
+      'The engine supports legacy sources. Preview rule changes before applying migration.';
+
+  @override
+  String get sourceEditorMigration => 'Preview migration';
+
+  @override
+  String get sourceEditorMigrationRunning => 'Analyzing source…';
+
+  @override
+  String get sourceEditorMigrationTitle => 'Source migration preview';
+
+  @override
+  String get sourceEditorMigrationApply => 'Apply migration candidate';
+
+  @override
+  String get sourceEditorMigrationManual => 'Some rules need manual changes.';
+
+  @override
+  String get sourceEditorMigrationNone => 'No rule changes were identified.';
+
+  @override
+  String get sourceEditorLargeField =>
+      'This field contains long or complex text. Open the rule editor to edit it.';
+
+  @override
+  String get sourceEditorFailed => 'Unable to load source editor';
+
+  @override
+  String get sourceEditorOptions => 'Source options';
+
+  @override
+  String get sourceEditorType => 'Source type';
+
+  @override
   String get sourceManagerTitle => 'Source manager';
 
   @override
