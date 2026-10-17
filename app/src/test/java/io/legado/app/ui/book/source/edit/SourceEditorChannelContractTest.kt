@@ -141,4 +141,46 @@ class SourceEditorChannelContractTest {
         catch (_: SourceEditorInvalidCommand) { }
     }
 
+
+    @Test fun longRuleProjectionDoesNotTransferOrMutatePrivateDraftContent() {
+        // This single field alone exceeds the channel's 16 MiB budget in UTF-8.
+        val longRule = "中".repeat(6 * 1024 * 1024)
+        val source = BookSource(bookSourceComment = longRule, bookSourceName = "large fixture")
+        val document = BookSourceEditDocument.from(source)
+        val originalJson = document.originalJson
+        val originalField = document.form.field(0, "bookSourceComment")!!
+        val projected = sourceEditorSnapshot(BookSourceComposeState(document = document))
+        val projectedDocument = projected["document"] as Map<*, *>
+        val form = projectedDocument["form"] as Map<*, *>
+        val tabs = form["tabs"] as List<*>
+        val field = (tabs[0] as List<*>).map { it as Map<*, *> }.first { it["key"] == "bookSourceComment" }
+        assertEquals(true, field["external"])
+        assertEquals(longRule.length, field["originalLength"])
+        assertEquals("", field["value"])
+        assertEquals(0, field["selectionStart"])
+        assertEquals(0, field["selectionEnd"])
+        assertSame(originalField, document.form.field(0, "bookSourceComment"))
+        assertSame(originalJson, document.originalJson)
+        assertEquals(longRule, document.form.field(0, "bookSourceComment")!!.value)
+        assertEquals(longRule, document.source().bookSourceComment)
+        assertEquals(false, document.dirty())
+    }
+
+    @Test fun externalRuleBoundaryUsesUtf16UnitsAndNeverAFalsePreview() {
+        val exact = "😀".repeat(6000)
+        val original = BookSourceEditField("content", exact, selectionStart = 12000, selectionEnd = 2)
+        val inline = sourceEditorFieldSnapshot(original, "Content")
+        assertEquals(false, inline["external"])
+        assertSame(exact, inline["value"])
+        assertEquals(12000, inline["originalLength"])
+        assertEquals(12000, inline["selectionStart"])
+        assertEquals(2, inline["selectionEnd"])
+        val external = sourceEditorFieldSnapshot(original.copy(value = exact + "x"), "Content")
+        assertEquals(true, external["external"])
+        assertEquals(12001, external["originalLength"])
+        assertEquals("", external["value"])
+        assertEquals(0, external["selectionStart"])
+        assertEquals(0, external["selectionEnd"])
+    }
+
 }
