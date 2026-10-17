@@ -181,7 +181,22 @@ class SourceDragOrderUiTest {
                         scenario.onActivity { finished = it.managerModel.state.value.draggingKey == null }
                         finished
                     }
-                    if (returnToStart) waitRows(keys)
+                    if (returnToStart) {
+                        waitRows(keys)
+                        // onReorderEnd publishes native cancellation before Flutter's
+                        // return animation removes its proxy. Starting another pointer
+                        // on that proxy cannot start a new reorder gesture.
+                        flutter.await("Flutter return animation restores the original row bounds") {
+                            fun matches(key: String, expected: android.graphics.Rect): Boolean =
+                                flutter.node("source-manager-row-menu:$key")?.let { node ->
+                                    val actual = android.graphics.Rect()
+                                    node.getBoundsInScreen(actual)
+                                    node.recycle()
+                                    actual == expected
+                                } ?: false
+                            matches(keys.first(), first) && matches(keys.last(), last)
+                        }
+                    }
                 }
                 drag(true) {
                     appDb.bookDao.insert(countBook)

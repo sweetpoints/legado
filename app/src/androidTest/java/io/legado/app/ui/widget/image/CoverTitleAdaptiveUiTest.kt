@@ -368,6 +368,8 @@ class CoverTitleAdaptiveUiTest {
                     .putExtra("configTag", ConfigTag.COVER_CONFIG)
             )
             .use { settings ->
+                var originalSettings: ConfigActivity? = null
+                settings.onActivity { originalSettings = it }
                 compose.waitUntil(timeoutMillis = 10000) {
                     compose
                         .onAllNodesWithTag("cover-settings-list")
@@ -423,6 +425,18 @@ class CoverTitleAdaptiveUiTest {
                 }
                 screenshot("cover-font-settings-restored")
                 instrumentation.runOnMainSync { restored!!.finish() }
+                // The font picker is a second ConfigActivity. Let its parent finish
+                // restarting before ActivityScenario.close() requests DESTROYED;
+                // RESTARTED is a transient stage without a Lifecycle.State mapping.
+                compose.waitUntil(timeoutMillis = 10000) {
+                    var parentResumed = false
+                    instrumentation.runOnMainSync {
+                        parentResumed = ActivityLifecycleMonitorRegistry.getInstance()
+                            .getActivitiesInStage(Stage.RESUMED)
+                            .any { it === originalSettings }
+                    }
+                    parentResumed
+                }
             }
     }
 
