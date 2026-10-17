@@ -21,16 +21,13 @@ bash "$script_dir/collect-apks.sh" \
 test -f "$destination_dir/legado_app_3.26071312_universal_release.apk"
 test "$(find "$destination_dir" -type f -name '*.apk' | wc -l)" -eq 2
 
-cp "$destination_dir/legado_app_3.26071312_release.apk" \
-  "$destination_dir/legado_app_3.26071312_releaseA.apk"
 cp "$destination_dir/legado_app_3.26071312_universal_release.apk" \
   "$destination_dir/legado_app_3.26071312_universal.apk"
 
 bash "$script_dir/remove-universal-apks.sh" "$destination_dir"
 test -f "$destination_dir/legado_app_3.26071312_release.apk"
-test -f "$destination_dir/legado_app_3.26071312_releaseA.apk"
 test "$(find "$destination_dir" -type f -name '*_universal*.apk' | wc -l)" -eq 0
-test "$(find "$destination_dir" -type f -name '*.apk' | wc -l)" -eq 2
+test "$(find "$destination_dir" -type f -name '*.apk' | wc -l)" -eq 1
 
 duplicate_dir="$temp_dir/duplicate"
 mkdir -p "$duplicate_dir"

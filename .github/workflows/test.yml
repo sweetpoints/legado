@@ -53,7 +53,6 @@ jobs:
     strategy:
       matrix:
         product: [app]
-        type: [release, releaseA]
         package: [arm, universal]
       fail-fast: false
     runs-on: ubuntu-latest
@@ -61,7 +60,7 @@ jobs:
     env:
       package: ${{ matrix.package }}
       product: ${{ matrix.product }}
-      type: ${{ matrix.type }}
+      type: release
       VERSION: ${{ needs.prepare.outputs.version }}
       VERSIONL: ${{ needs.prepare.outputs.versionL }}
     steps:
@@ -78,30 +77,30 @@ jobs:
             > "$RUNNER_TEMP/ci-resources-sampler.log" 2>&1 &
 
       - name: Verify resource telemetry
-        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
+        if: ${{ matrix.package == 'arm' }}
         run: |
           python3 -m unittest discover -s .github/scripts -p test_sample_ci_resources.py
           python3 -m unittest discover -s .github/scripts -p test_prepare_ci_android_aar.py
 
       - name: Verify Beta Release Notes
-        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
+        if: ${{ matrix.package == 'arm' }}
         run: bash .github/scripts/test-extract-latest-update.sh
 
       - name: Verify Help Highlight Bundle
-        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
+        if: ${{ matrix.package == 'arm' }}
         run: node .github/scripts/test-help-highlight.js
 
       - name: Setup Android build
         uses: ./.github/actions/setup-android
 
       - name: Verify Cronet Bundle
-        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
+        if: ${{ matrix.package == 'arm' }}
         run: |
           chmod +x .github/scripts/verify-cronet.sh
           .github/scripts/verify-cronet.sh
 
       - name: Verify APK Collector
-        if: ${{ matrix.type == 'release' && matrix.package == 'arm' }}
+        if: ${{ matrix.package == 'arm' }}
         run: bash .github/scripts/test-collect-apks.sh
 
       - name: Prepare Assets
@@ -130,16 +129,7 @@ jobs:
           echo "当前版本号: $VERSION"
           sed -i "s|^val appVersion = .*|val appVersion = \"$VERSION\"|" "$GITHUB_WORKSPACE/app/build.gradle.kts"
 
-          if [ "$type" == "release" ]; then
-            typeName="新包名"
-          else
-            typeName="新共存"
-            # 替换 releaseA 相关包名（防止冲突）
-            sed -i 's/".release"/".releaseA"/' "$GITHUB_WORKSPACE/app/build.gradle.kts"
-            if [ -f "$GITHUB_WORKSPACE/app/google-services.json" ]; then
-              sed -i 's/.release/.releaseA/' "$GITHUB_WORKSPACE/app/google-services.json"
-            fi
-          fi
+          typeName="新包名"
 
           chmod +x gradlew
           gradle_args=()
@@ -250,7 +240,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: build-logs-${{ matrix.type }}-${{ matrix.package }}
+          name: build-logs-release-${{ matrix.package }}
           path: |
             ${{ runner.temp }}/gradle-*.log
             ${{ runner.temp }}/ci-resources.jsonl

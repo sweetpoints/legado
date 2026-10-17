@@ -554,4 +554,152 @@ void main() {
       await stop(tester);
     },
   );
+  testWidgets(
+    'held drag proxy renders live count and renamed source by stable identity',
+    (tester) async {
+      await app(tester);
+      final row = find.byKey(const ValueKey('a'));
+      final rowBox = tester
+          .widgetList<SizedBox>(
+            find.descendant(of: row, matching: find.byType(SizedBox)),
+          )
+          .firstWhere((w) => w.key is GlobalKey)
+          .key;
+      final gesture = await tester.startGesture(
+        tester.getCenter(
+          find.byKey(const ValueKey('source-manager-row-menu:a')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(0, 8));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(commands.first, {'op': 'beginDrag', 'key': 'a'});
+      await publish(tester, {
+        ...native,
+        'counts': {'a': 1},
+        'rows': [
+          {...managerRow('a', hasJs: true), 'name': 'Renamed while held'},
+          managerRow('b'),
+          managerRow('c'),
+        ],
+      });
+      expect(
+        find.descendant(of: row, matching: find.text('1 books in library')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.text('Renamed while held (Group A)'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(rowBox!), findsOneWidget);
+      expect(commands.where((e) => e['op'] == 'finishDrag'), isEmpty);
+      await gesture.moveTo(
+        tester.getCenter(
+              find.byKey(const ValueKey('source-manager-row-menu:c')),
+            ) +
+            const Offset(0, 140),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(commands.where((e) => e['op'] == 'previewDrag').single, {
+        'op': 'previewDrag',
+        'index': 2,
+      });
+      expect(commands.last, {'op': 'finishDrag', 'cancelled': false});
+      expect(tester.takeException(), isNull);
+      await stop(tester);
+    },
+  );
+  for (final (change, remaining) in [
+    ('dragged source deletion', ['b', 'c']),
+    ('destination deletion', ['a', 'b']),
+    ('same-count replacement', ['a', 'b', 'd']),
+    ('external reordering', ['c', 'b', 'a']),
+  ]) {
+    testWidgets('held drag safely cancels on native $change', (tester) async {
+      await app(tester);
+      final gesture = await tester.startGesture(
+        tester.getCenter(
+          find.byKey(const ValueKey('source-manager-row-menu:a')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(0, 8));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(commands.first, {'op': 'beginDrag', 'key': 'a'});
+      await publish(tester, {
+        ...native,
+        'rows': [for (final id in remaining) managerRow(id)],
+        'draggingKey': null,
+      });
+      await gesture.up();
+      await tester.pumpAndSettle();
+      for (final id in ['a', 'b', 'c', 'd']) {
+        expect(
+          find.byKey(ValueKey(id)),
+          remaining.contains(id) ? findsOneWidget : findsNothing,
+        );
+      }
+      expect(commands.where((e) => e['op'] == 'previewDrag'), isEmpty);
+      expect(commands.where((e) => e['op'] == 'finishDrag').toList(), [
+        {'op': 'finishDrag', 'cancelled': true},
+      ]);
+      expect(tester.takeException(), isNull);
+      await stop(tester);
+    });
+  }
+  testWidgets(
+    'held drag cancellation preserves current source data and permits the next drag',
+    (tester) async {
+      await app(tester);
+      final gesture = await tester.startGesture(
+        tester.getCenter(
+          find.byKey(const ValueKey('source-manager-row-menu:a')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(0, 8));
+      await tester.pump(const Duration(milliseconds: 300));
+      await publish(tester, {
+        ...native,
+        'counts': {'a': 2},
+        'rows': [
+          {...managerRow('a', hasJs: true), 'name': 'Cancelled live name'},
+          managerRow('b'),
+          managerRow('c'),
+        ],
+      });
+      expect(find.text('Cancelled live name (Group A)'), findsOneWidget);
+      expect(find.text('2 books in library'), findsOneWidget);
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(commands.where((e) => e['op'] == 'previewDrag'), isEmpty);
+      expect(commands.last, {'op': 'finishDrag', 'cancelled': true});
+      expect(find.text('Cancelled live name (Group A)'), findsOneWidget);
+      commands.clear();
+      final next = await tester.startGesture(
+        tester.getCenter(
+          find.byKey(const ValueKey('source-manager-row-menu:a')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await next.moveTo(
+        tester.getCenter(
+              find.byKey(const ValueKey('source-manager-row-menu:c')),
+            ) +
+            const Offset(0, 140),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await next.up();
+      await tester.pumpAndSettle();
+      expect(commands.first, {'op': 'beginDrag', 'key': 'a'});
+      expect(commands.last, {'op': 'finishDrag', 'cancelled': false});
+      expect(tester.takeException(), isNull);
+      await stop(tester);
+    },
+  );
 }

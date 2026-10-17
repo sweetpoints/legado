@@ -5,6 +5,8 @@ ksp = "2.3.11"
 # AGP 9.x：Compose 1.12.x（BOM 2026.08.00+）要求 AGP >= 9.1.0 且 compileSdk >= 37。
 # 注意：Kotlin 2.4.10 官方支持的 AGP 上限是 9.1.0，当前 9.4.1 已超出该矩阵（可正常构建，但不在官方支持区间内）。
 agp = "9.4.1"
+# Match the NDK shipped by the pinned Flutter 3.47.6 SDK for host APK stripping.
+ndk = "28.2.13676358"
 # Compose BOM 统一管理 androidx.compose.* 版本
 composeBom = "2026.09.00"
 # compileSdk 统一在此声明，替代原先根 build.gradle 的 ext.compile_sdk_version

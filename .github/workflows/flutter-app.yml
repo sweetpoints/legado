@@ -10,6 +10,8 @@ on:
       - 'flutter/packages/source_*/**'
       - 'flutter/tool/v8/**'
       - 'flutter/tool/merge-app-localizations.py'
+      - 'flutter/tool/apple-native-acceptance.py'
+      - 'flutter/tool/test_apple_native_acceptance.py'
       - 'flutter/pubspec.*'
       - 'flutter/docs/app-migration/**'
       - 'flutter/tool/app-migration-inventory.py'
@@ -93,39 +95,6 @@ jobs:
           for package in app_core app_storage app_backup; do
             (cd "packages/$package" && dart analyze && dart run test:test)
           done
-
-  windows-toolchain-review:
-    runs-on: windows-2025
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - name: Collect candidate Windows V8 toolchain receipt
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $collector = 'flutter/tool/v8/windows_toolchain_receipt.py'
-          $clangRoot = Join-Path $env:RUNNER_TEMP 'legado-reviewed-windows-clang'
-          python $collector fetch-clang --output $clangRoot
-          if ($LASTEXITCODE -ne 0) { throw 'Fixed Clang download verification failed' }
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          if ([string]::IsNullOrWhiteSpace($vsRoot)) { throw 'No candidate MSVC installation' }
-          $versionFile = Join-Path $vsRoot 'VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt'
-          $msvcVersion = (Get-Content $versionFile -Raw).Trim()
-          $msvcRoot = Join-Path $vsRoot "VC/Tools/MSVC/$msvcVersion"
-          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10'
-          python $collector collect --target windows-x64 `
-            --clang-root $clangRoot --msvc-root $msvcRoot --msvc-version $msvcVersion `
-            --msvc-version-file $versionFile --sdk-root $sdkRoot --sdk-version '10.0.26100.0' `
-            --image-version "$env:ImageVersion" --source-sha '${{ github.sha }}' `
-            --output 'build/windows-v8-toolchain-candidate'
-          if ($LASTEXITCODE -ne 0) { throw 'Candidate toolchain receipt failed' }
-      - name: Upload candidate Windows toolchain metadata
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: windows-v8-toolchain-candidate
-          path: build/windows-v8-toolchain-candidate/
-          if-no-files-found: error
 
   apple-native-app:
     runs-on: macos-26

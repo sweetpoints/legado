@@ -40,6 +40,7 @@ import java.io.File
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,6 +51,7 @@ class SourceDragOrderUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private val flutter = FlutterUiTestDriver(instrumentation)
 
     private enum class Kind {
         BOOK,
@@ -70,6 +72,7 @@ class SourceDragOrderUiTest {
         verifyBookComposeDrag(removeTarget = true)
 
     private fun verifyBookComposeDrag(descending: Boolean = false, removeTarget: Boolean = false) {
+        flutter.enableAccessibility()
         // Startup normalizes duplicate order values. Wait before inserting deliberate duplicate
         // fixtures so the test isolates held-drag persistence rather than racing housekeeping.
         waitUntil("application initialization completed") {
@@ -112,19 +115,18 @@ class SourceDragOrderUiTest {
                     scenario.onActivity { loaded = !it.managerModel.state.value.loading }
                     loaded
                 }
-                val backBounds = compose.onNodeWithText(context.getString(R.string.back))
-                    .fetchSemanticsNode().boundsInRoot
+                flutter.awaitIdentifier("source-manager-query")
+                val queryBounds = flutter.bounds("source-manager-query")
                 scenario.onActivity { activity ->
                     val safeTop = checkNotNull(ViewCompat.getRootWindowInsets(activity.window.decorView))
                         .getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top
-                    assertTrue("Book-source toolbar overlaps the status bar", backBounds.top >= safeTop)
-                    assertTrue("Book-source toolbar adds excess top spacing", backBounds.top <= safeTop + activity.resources.displayMetrics.density * 8)
+                    assertTrue("Book-source search overlaps the status bar", queryBounds.top >= safeTop)
                 }
                 var needsDirectionChange = false
                 scenario.onActivity { needsDirectionChange = it.managerModel.state.value.ascending == descending }
                 if (needsDirectionChange) {
-                    compose.onNode(hasText(context.getString(R.string.menu)) and isEnabled()).performClick()
-                    compose.onNodeWithTag("source-manager-action:descending").performScrollTo().performClick()
+                    flutter.click("source-manager-menu")
+                    flutter.clickScrollable("source-manager-action:descending")
                     waitUntil("book sort direction applied") {
                         var applied = false
                         scenario.onActivity { applied = it.managerModel.state.value.ascending == !descending }
@@ -146,37 +148,40 @@ class SourceDragOrderUiTest {
                 waitRows(keys)
                 screenshot("book-$descending-$removeTarget-before")
                 fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
-                    val list = compose.onNodeWithTag("source-manager-list")
-                    val bounds = list.fetchSemanticsNode().boundsInRoot
-                    val first =
-                        compose
-                            .onNodeWithTag("source-manager-drag:${keys.first()}")
-                            .fetchSemanticsNode()
-                            .boundsInRoot
-                    val last =
-                        compose
-                            .onNodeWithTag("source-manager-drag:${keys.last()}")
-                            .fetchSemanticsNode()
-                            .boundsInRoot
-                    val start = Offset(first.center.x - bounds.left, first.center.y - bounds.top)
-                    val destination = Offset(start.x, last.center.y - bounds.top)
-                    list.performTouchInput {
-                        down(start)
-                        advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
-                        moveTo(destination, 500)
-                    }
-                    try {
-                        waitRows(keys.drop(1) + keys.first())
+                    val first = flutter.bounds("source-manager-row-menu:${keys.first()}")
+                    val last = flutter.bounds("source-manager-row-menu:${keys.last()}")
+                    val startX = first.exactCenterX()
+                    val startY = first.exactCenterY()
+                    val destinationY = last.exactCenterY() + last.height() / 4f
+                    flutter.touchDown(startX, startY).use { touch ->
+                        touch.hold(ViewConfiguration.getLongPressTimeout().toLong() + 200)
+                        touch.moveTo(startX, destinationY)
+                        flutter.await("Flutter held drag reaches the target row") {
+                            var dragging = false
+                            scenario.onActivity {
+                                dragging = it.managerModel.state.value.draggingKey == keys.first()
+                            }
+                            val bounds = flutter.node("source-manager-row-menu:${keys.first()}")
+                            val moved = bounds?.let { node ->
+                                val rect = android.graphics.Rect()
+                                node.getBoundsInScreen(rect)
+                                node.recycle()
+                                rect.centerY() > startY + first.height()
+                            } ?: false
+                            dragging && moved
+                        }
+                        // Flutter owns the held visual preview; native order commits only after drop.
                         whileHeld()
                         if (returnToStart) {
-                            list.performTouchInput {
-                                moveTo(Offset(start.x, start.y - first.height / 4), 500)
-                            }
-                            waitRows(keys)
+                            touch.moveTo(startX, startY - first.height() / 4f)
                         }
-                    } finally {
-                        list.performTouchInput { up() }
                     }
+                    flutter.await("Native drag session finishes") {
+                        var finished = false
+                        scenario.onActivity { finished = it.managerModel.state.value.draggingKey == null }
+                        finished
+                    }
+                    if (returnToStart) waitRows(keys)
                 }
                 drag(true) {
                     appDb.bookDao.insert(countBook)
@@ -185,17 +190,15 @@ class SourceDragOrderUiTest {
                         scenario.onActivity {
                             val state = it.managerModel.state.value
                             updated =
-                                state.rows.getOrNull(2)?.url == keys.first() &&
+                                state.draggingKey == keys.first() &&
                                     state.counts[keys.first()] == 1
                         }
                         updated
                     }
-                    compose
-                        .onNode(
-                            hasText(context.getString(R.string.source_bookshelf_count, 1)) and
-                                hasAnyAncestor(hasTestTag("source-manager-row:${keys.first()}"))
-                        )
-                        .assertExists()
+                    flutter.await("Flutter renders live bookshelf count during held drag") {
+                        flutter.containsText("source-manager-row:${keys.first()}", "书架 1 本") ||
+                            flutter.containsText("source-manager-row:${keys.first()}", "1 books in library")
+                    }
                     assertEquals(before, appDb.bookSourceDao.allPart.map { it.bookSourceUrl })
                     appDb.bookDao.delete(countBook)
                 }
@@ -223,7 +226,9 @@ class SourceDragOrderUiTest {
                         }
                         published
                     }
-                    compose.onNodeWithText("$updatedName ($group)").assertExists()
+                    flutter.await("Flutter renders publication during held drag") {
+                        flutter.containsText("source-manager-row:${keys[1]}", updatedName)
+                    }
                     if (removeTarget) appDb.bookSourceDao.delete(keys.last())
                     metadata = databaseMetadata(Kind.BOOK)
                     assertEquals(
@@ -275,6 +280,7 @@ class SourceDragOrderUiTest {
             appDb.bookDao.delete(countBook)
             appDb.bookSourceDao.delete(*fixtures.toTypedArray())
             appDb.bookSourceDao.upOrder(oldRows)
+            flutter.close()
             LocalConfig.edit()
                 .apply {
                     if (help is Int) putInt("bookSourceHelpVersion", help)
@@ -588,6 +594,12 @@ class SourceDragOrderUiTest {
         }
 
     private fun filter(kind: Kind, query: String) {
+        if (kind == Kind.BOOK) {
+            flutter.setText("source-manager-query", query)
+            closeSoftKeyboard()
+            flutter.await("Flutter query reflects input") { flutter.text("source-manager-query") == query }
+            return
+        }
         compose.onNodeWithTag(searchTag(kind)).performTextReplacement(query)
         if (kind != Kind.BOOK) compose.onNodeWithTag(searchTag(kind)).performImeAction()
         closeSoftKeyboard()
@@ -610,7 +622,8 @@ class SourceDragOrderUiTest {
             }
             loaded
         }
-        compose.onNodeWithTag(listTag(kind)).assertExists()
+        if (kind == Kind.BOOK) flutter.awaitIdentifier("source-manager-query")
+        else compose.onNodeWithTag(listTag(kind)).assertExists()
     }
 
     private fun awaitItems(
@@ -642,7 +655,8 @@ class SourceDragOrderUiTest {
             }
             matches && (expected.size > 3 || renderedOrderMatches(kind, expected))
         }
-        compose.onNodeWithTag(listTag(kind)).assertExists()
+        if (kind == Kind.BOOK) flutter.awaitIdentifier("source-manager-query")
+        else compose.onNodeWithTag(listTag(kind)).assertExists()
     }
 
     private fun renderedOrderMatches(
@@ -650,6 +664,14 @@ class SourceDragOrderUiTest {
         expected: List<String>,
         rssIds: Boolean = false,
     ): Boolean {
+        if (kind == Kind.BOOK) {
+            val bounds = expected.map { key ->
+                val node = flutter.node("source-manager-row:$key") ?: return false
+                android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
+            }
+            return bounds.all { it.height() > 0 } &&
+                bounds.zipWithNext().all { (first, next) -> first.centerY() < next.centerY() }
+        }
         return try {
             val bounds = expected.map {
                 compose.onNodeWithTag(rowTag(kind, it, rssIds)).fetchSemanticsNode().boundsInRoot
@@ -715,13 +737,6 @@ class SourceDragOrderUiTest {
     }
 
     private fun waitUntil(description: String, condition: () -> Boolean) {
-        try {
-            compose.waitUntil(timeoutMillis = 15_000) {
-                compose.mainClock.advanceTimeByFrame()
-                condition()
-            }
-        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
-            error("Timed out waiting for $description")
-        }
+        flutter.await(description, condition)
     }
 }

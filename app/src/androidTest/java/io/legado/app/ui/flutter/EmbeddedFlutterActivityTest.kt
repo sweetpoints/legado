@@ -15,6 +15,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import io.flutter.embedding.android.FlutterFragment
 import io.flutter.embedding.engine.FlutterEngine
+import io.legado.app.R
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -72,6 +73,7 @@ class EmbeddedFlutterActivityTest {
             .putLong("appVersionCode", appInfo.versionCode)
             .putString("password", "")
             .putInt("bookSourceHelpVersion", 1)
+            .putInt("ruleHelpVersion", 1)
             .commit()
         appDb.bookSourceDao.insert(source)
         nativeScenario = ActivityScenario.launch(MainActivity::class.java)
@@ -182,7 +184,22 @@ class EmbeddedFlutterActivityTest {
             resumed().any { it is BookSourceEditActivity }
         }
         assertEquals(18, (DartSourceEngine.evaluate(source, "__managerEditProbe+1") as Number).toInt())
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        val editor = resumed().filterIsInstance<BookSourceEditActivity>().single()
+        val closeLabel = AtomicReference<String>()
+        instrumentation.runOnMainSync { closeLabel.set(editor.getString(R.string.close)) }
+        // RESUMED alone does not mean the editor document has finished loading.
+        // Its real Close control stays disabled until the document is ready;
+        // clicking it also avoids treating an IME-dismiss Back as an Activity pop.
+        awaitCondition("Native editor did not expose an enabled Close action") {
+            val close = renderedNode(text = closeLabel.get()) ?: return@awaitCondition false
+            if (!close.isEnabled) {
+                @Suppress("DEPRECATION")
+                close.recycle()
+                false
+            } else {
+                clickNode(close)
+            }
+        }
         assertSame(manager, awaitManager())
         awaitRendered(source.bookSourceName)
         assertEquals(source.bookSourceName, appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.bookSourceName)

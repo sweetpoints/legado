@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -25,6 +26,8 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
   SourceManagerBridge? _bridge;
   BuildContext? _dialogContext;
   int _reorderOrigin = 0;
+  SliverReorderableListState? _activeReorderList;
+  List<String> _reorderUrls = const [];
   bool _dialogOpen = false, _dialogClosing = false, _reordering = false;
   Timer? _slideTimer;
   Offset? _pointer;
@@ -121,6 +124,19 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
     ref.listen(sourceManagerStateProvider, (_, next) {
       final state = next.asData?.value;
       if (state != null) {
+        if (_reordering &&
+            !listEquals(
+              _reorderUrls,
+              state.rows.map((row) => row.url).toList(),
+            )) {
+          // Cancel before layout replaces rows: the framework's item-count
+          // cancellation happens during layout, too late to reparent row keys safely.
+          _reordering = false;
+          _activeReorderList?.cancelReorder();
+          _activeReorderList = null;
+          _reorderUrls = const [];
+          unawaited(_send('finishDrag', {'cancelled': true}));
+        }
         _latest = state;
         _syncDialog(state);
       }
@@ -275,6 +291,15 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
                                     onReorderStart: (index) {
                                       _reordering = true;
                                       _reorderOrigin = index;
+                                      _activeReorderList =
+                                          _rowBoxes[state.rows[index].url]
+                                              ?.currentContext
+                                              ?.findAncestorStateOfType<
+                                                SliverReorderableListState
+                                              >();
+                                      _reorderUrls = state.rows
+                                          .map((row) => row.url)
+                                          .toList();
                                       unawaited(
                                         _send('beginDrag', {
                                           'key': state.rows[index].url,
@@ -285,6 +310,8 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
                                     onReorderItem: (_, target) {
                                       if (!_reordering) return;
                                       _reordering = false;
+                                      _activeReorderList = null;
+                                      _reorderUrls = const [];
                                       unawaited(() async {
                                         await _send('previewDrag', {
                                           'index': target,
@@ -302,6 +329,8 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
                                       if (_reordering &&
                                           target == _reorderOrigin) {
                                         _reordering = false;
+                                        _activeReorderList = null;
+                                        _reorderUrls = const [];
                                         unawaited(
                                           _send('finishDrag', {
                                             'cancelled': true,
@@ -310,7 +339,7 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
                                       }
                                     },
                                     itemBuilder: (context, index) =>
-                                        _row(state, index),
+                                        _liveRow(state.rows[index].url),
                                   ),
                           ),
                         ),
@@ -474,6 +503,19 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
     );
   }
 
+  Widget _liveRow(String url) => Consumer(
+    key: ValueKey(url),
+    builder: (context, ref, child) {
+      // Flutter's drag overlay retains the item widget captured at drag start.
+      // Subscribe inside that retained widget instead of capturing its snapshot.
+      final state = ref.watch(sourceManagerStateProvider).asData?.value;
+      if (state == null) return const SizedBox.shrink();
+      final index = state.rows.indexWhere((row) => row.url == url);
+      if (index < 0) return const SizedBox.shrink();
+      return _row(state, index);
+    },
+  );
+
   Widget _row(SourceManagerSnapshot state, int index) {
     final row = state.rows[index];
     final s = AppLocalizations.of(context);
@@ -487,7 +529,6 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
       if (row.hasExplore) 'explore',
     ];
     return Column(
-      key: ValueKey(row.url),
       children: [
         if (state.byDomain &&
             (index == 0 || state.rows[index - 1].host != row.host))
@@ -608,6 +649,8 @@ class _SourceManagerPageState extends ConsumerState<SourceManagerPage> {
                       onPointerCancel: (_) {
                         if (_reordering) {
                           _reordering = false;
+                          _activeReorderList = null;
+                          _reorderUrls = const [];
                           unawaited(_send('finishDrag', {'cancelled': true}));
                         }
                       },

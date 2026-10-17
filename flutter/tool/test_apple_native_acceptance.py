@@ -1,11 +1,12 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location('ios_ci_runner', Path(__file__).with_name('apple-native-acceptance.py'))
 module = importlib.util.module_from_spec(SPEC)
@@ -48,11 +49,201 @@ class DeviceSelectionTests(unittest.TestCase):
         with self.assertRaises(module.PhaseFailure):
             module.choose_device(self.devices(), '26.0', 'missing')
 
+    def test_ci_device_is_new_and_does_not_inherit_runner_device_data(self):
+        identifier = '12345678-1234-1234-1234-123456789ABC'
+        runner = Mock()
+        runner.command.return_value = identifier + '\n'
+        selected = {'udid': 'runner-existing', 'runtime': 'ios-26', 'sdkVersion': '26.5',
+                    'deviceTypeIdentifier': 'iphone', 'dataPath': '/runner/existing-data'}
+        created = module.create_ci_device(runner, selected)
+        self.assertEqual(created['udid'], identifier)
+        self.assertNotIn('dataPath', created)
+        self.assertEqual(selected['udid'], 'runner-existing')
+        self.assertEqual(runner.command.call_args.args[1][-2:], ['iphone', 'ios-26'])
+        self.assertTrue(created['createdForAcceptance'])
+
+    def test_invalid_created_uuid_cannot_be_used_for_boot_or_cleanup(self):
+        runner = Mock()
+        runner.command.return_value = 'unexpected output'
+        with self.assertRaisesRegex(module.PhaseFailure, 'valid owned device UUID'):
+            module.create_ci_device(runner, {'deviceTypeIdentifier': 'iphone', 'runtime': 'ios'})
+        self.assertEqual(runner.command.call_count, 1)
+
+    def test_known_uuid_runs_real_app_tests_without_redundant_global_discovery(self):
+        runner = Mock()
+        runner.command.return_value = 'Status=4, isTerminal=YES, Finished'
+        module.run_selected_device(runner, {'udid': 'owned', 'state': 'Shutdown'}, 'flutter', 180, 1200)
+        self.assertEqual([x.args[0] for x in runner.command.call_args_list], ['boot', 'boot-ready', 'flutter-test'])
+        self.assertIn('integration_test/native_app_test.dart', runner.command.call_args.args[1])
+        self.assertEqual(runner.command.call_args.args[1][-3:], ['-d', 'owned', '--verbose'])
+
+    def test_terminal_migration_failure_with_exit_zero_never_reaches_app_test(self):
+        for output in ['Data Migration Failed', 'Status=3, isTerminal=YES']:
+            runner = Mock()
+            runner.command.return_value = output
+            with self.subTest(output=output), self.assertRaisesRegex(module.PhaseFailure, 'failed data migration'):
+                module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted'}, 'flutter', 180, 1200)
+            self.assertEqual([x.args[0] for x in runner.command.call_args_list], ['boot-ready'])
+
+    def test_ci_owned_migration_failure_reboots_same_uuid_before_running_tests_once(self):
+        runner = Mock()
+        runner.command.side_effect = [
+            'Status=3, isTerminal=YES, Data Migration Failed', '', '',
+            'Status=4294967295, isTerminal=YES, Finished', 'All tests passed']
+        module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+            'createdForAcceptance': True}, 'flutter', 180, 1200)
+        calls = runner.command.call_args_list
+        self.assertEqual([x.args[0] for x in calls], ['boot-ready',
+            'migration-recovery-shutdown', 'migration-recovery-boot',
+            'migration-recovery-ready', 'flutter-test'])
+        for call in calls[:-1]:
+            self.assertIn('owned', call.args[1])
+            self.assertNotIn('all', call.args[1])
+            self.assertNotIn('erase', call.args[1])
+        self.assertEqual(calls[3].args[2], 180)
+        self.assertEqual(calls[-1].args[2], 1200)
+
+    def test_timed_out_owned_shutdown_requires_exact_device_postcondition_before_boot(self):
+        runner = Mock()
+        snapshot = {'devices': {'ios': [{'udid': 'owned', 'state': 'Shutdown'}]}}
+        runner.command.side_effect = ['Data Migration Failed', module.PhaseTimeout('shutdown timed out'),
+            json.dumps(snapshot), '', 'Finished', 'All tests passed']
+        module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+            'createdForAcceptance': True}, 'flutter', 180, 1200)
+        calls = runner.command.call_args_list
+        self.assertEqual([x.args[0] for x in calls], ['boot-ready',
+            'migration-recovery-shutdown', 'migration-recovery-state',
+            'migration-recovery-boot', 'migration-recovery-ready', 'flutter-test'])
+        self.assertEqual(calls[2].args[2], 30)
+        self.assertEqual(calls[3].args[1][-1], 'owned')
+
+    def test_shutdown_timeout_does_not_boot_a_missing_different_or_not_shutdown_device(self):
+        for devices in [[], [{'udid': 'other', 'state': 'Shutdown'}],
+                        [{'udid': 'owned', 'state': 'Booted'}],
+                        [{'udid': 'owned', 'state': 'Shutting Down'}],
+                        [{'udid': 'owned', 'state': 'Shutdown'}] * 2]:
+            runner = Mock()
+            runner.command.side_effect = ['Data Migration Failed', module.PhaseTimeout('shutdown timed out'),
+                json.dumps({'devices': {'ios': devices}})]
+            with self.subTest(devices=devices), self.assertRaisesRegex(module.PhaseTimeout, 'shutdown timed out'):
+                module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+                    'createdForAcceptance': True}, 'flutter', 180, 1200)
+            self.assertEqual(runner.command.call_count, 3)
+
+    def test_shutdown_exit_error_never_becomes_a_timeout_recovery(self):
+        runner = Mock()
+        runner.command.side_effect = module.PhaseFailure('shutdown exited 7')
+        with self.assertRaisesRegex(module.PhaseFailure, 'exited 7'):
+            module.shutdown_for_migration_recovery(runner, 'owned')
+        self.assertEqual(runner.command.call_count, 1)
+
+    def test_shutdown_state_probe_failure_stays_fatal_without_reboot(self):
+        for failure in (module.PhaseTimeout('state probe timed out'),
+                        module.PhaseFailure('state probe exited 7')):
+            runner = Mock()
+            runner.command.side_effect = [module.PhaseTimeout('shutdown timed out'), failure]
+            with self.subTest(failure=failure), self.assertRaises(module.PhaseFailure):
+                module.shutdown_for_migration_recovery(runner, 'owned')
+            self.assertEqual(runner.command.call_count, 2)
+
+    def test_corrupt_shutdown_state_probe_stays_fatal_without_reboot(self):
+        runner = Mock()
+        runner.command.side_effect = [module.PhaseTimeout('shutdown timed out'), '{broken']
+        with self.assertRaises(ValueError):
+            module.shutdown_for_migration_recovery(runner, 'owned')
+        self.assertEqual(runner.command.call_count, 2)
+
+    def test_second_owned_migration_failure_stays_red_without_running_app(self):
+        runner = Mock()
+        runner.command.side_effect = ['Data Migration Failed', '', '', 'Status=3, isTerminal=YES']
+        with self.assertRaisesRegex(module.PhaseFailure, 'failed data migration'):
+            module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+                'createdForAcceptance': True}, 'flutter', 180, 1200)
+        self.assertEqual(runner.command.call_count, 4)
+        self.assertNotIn('flutter-test', [x.args[0] for x in runner.command.call_args_list])
+
+    def test_owned_boot_timeout_is_not_treated_as_recoverable_migration(self):
+        runner = Mock()
+        runner.command.side_effect = module.PhaseFailure('boot-ready timed out')
+        with self.assertRaisesRegex(module.PhaseFailure, 'timed out'):
+            module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+                'createdForAcceptance': True}, 'flutter', 180, 1200)
+        self.assertEqual(runner.command.call_count, 1)
+
+    def test_app_failure_after_boot_recovery_is_not_retried(self):
+        runner = Mock()
+        runner.command.side_effect = ['Data Migration Failed', '', '', 'Finished',
+            module.PhaseFailure('flutter-test exited 1')]
+        with self.assertRaisesRegex(module.PhaseFailure, 'flutter-test exited 1'):
+            module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+                'createdForAcceptance': True}, 'flutter', 180, 1200)
+        self.assertEqual([x.args[0] for x in runner.command.call_args_list].count('flutter-test'), 1)
+
+    def test_only_the_acceptance_owned_device_is_shutdown_and_deleted(self):
+        runner = Mock()
+        module.dispose_ci_device(runner, 'owned')
+        self.assertEqual([x.args[1] for x in runner.command.call_args_list], [
+            ['xcrun', 'simctl', 'shutdown', 'owned'], ['xcrun', 'simctl', 'delete', 'owned']])
+
+    def test_cleanup_error_does_not_replace_original_test_failure(self):
+        runner = Mock()
+        runner.command.side_effect = module.PhaseFailure('cleanup failed')
+        with self.assertRaisesRegex(module.PhaseFailure, 'original test failed'):
+            try:
+                raise module.PhaseFailure('original test failed')
+            finally:
+                module.dispose_ci_device(runner, 'owned')
+        self.assertEqual(runner.command.call_count, 2)
+        with self.assertRaisesRegex(module.PhaseFailure, 'Could not clean up'):
+            module.dispose_ci_device(runner, 'owned')
+
+    def exercise_main(self, directory, extra, ci):
+        identifier = '12345678-1234-1234-1234-123456789ABC'
+        snapshot = self.devices()
+        for devices in snapshot['devices'].values():
+            for device in devices:
+                device['deviceTypeIdentifier'] = 'iphone'
+        def command(phase, *_args, **_kwargs):
+            return {'installed-runtimes': '{"runtimes": []}', 'xcode-sdk': '26.5',
+                    'available-devices': json.dumps(snapshot), 'create-ci-device': identifier,
+                    'boot-ready': 'Status=4, isTerminal=YES, Finished'}.get(phase, '')
+        with patch.object(module.platform, 'system', return_value='Darwin'), \
+             patch.object(module.platform, 'machine', return_value='arm64'), \
+             patch.object(module.sys, 'version_info', (3, 13)), \
+             patch.object(module.sys, 'argv', ['runner', '--output', directory, *extra]), \
+             patch.dict(os.environ, {'GITHUB_ACTIONS': 'true' if ci else 'false'}), \
+             patch.object(module.Runner, 'command', side_effect=command) as calls:
+            module.main()
+        return calls.call_args_list, identifier
+
+    def test_ci_main_creates_and_cleans_only_its_new_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls, identifier = self.exercise_main(directory, [], True)
+            phases = [call.args[0] for call in calls]
+            self.assertIn('create-ci-device', phases)
+            self.assertIn('flutter-test', phases)
+            self.assertEqual(phases[-2:], ['shutdown-owned-device', 'delete-owned-device'])
+            self.assertEqual(calls[-1].args[1][-1], identifier)
+            self.assertEqual(json.loads((Path(directory) / 'selected-device.json').read_text())['udid'], identifier)
+
+    def test_local_explicit_device_is_never_created_or_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls, _ = self.exercise_main(directory, ['--device', 'old'], False)
+            phases = [call.args[0] for call in calls]
+            self.assertIn('flutter-test', phases)
+            self.assertFalse(any('owned' in name or name == 'create-ci-device' for name in phases))
+
+    def test_list_only_on_ci_never_creates_boots_tests_or_deletes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls, _ = self.exercise_main(directory, ['--list-only'], True)
+            phases = [call.args[0] for call in calls]
+            self.assertEqual(phases, ['xcode-version', 'installed-runtimes', 'xcode-sdk', 'available-devices'])
+
     def test_silent_child_is_bounded_and_failure_phase_is_persisted(self):
         with tempfile.TemporaryDirectory() as directory:
             runner = module.Runner(directory, directory)
             start = time.monotonic()
-            with self.assertRaisesRegex(module.PhaseFailure, 'timed out'):
+            with self.assertRaisesRegex(module.PhaseTimeout, 'timed out'):
                 runner.command('boot-ready', [sys.executable, '-c', 'import time; time.sleep(30)'], 0.1)
             self.assertLess(time.monotonic() - start, 5)
             result = json.loads((Path(directory) / 'phases.json').read_text())

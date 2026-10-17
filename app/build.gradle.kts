@@ -434,6 +434,8 @@ val adaptCronetLoader =
     }
 
 android {
+    // Host packaging still needs llvm-strip when Flutter AARs come from cache.
+    ndkVersion = libs.versions.ndk.get()
     compileSdk = libs.versions.compileSdk.get().toInt()
     namespace = "io.legado.app"
     kotlin {
@@ -531,11 +533,7 @@ android {
                 signingConfig = signingConfigs.getByName("myConfig")
             }
             applicationIdSuffix = ".release"
-            if (applicationIdSuffix == ".releaseA") {
-                manifestPlaceholders["app_name"] = "@string/app_name_a"
-            } else {
-                manifestPlaceholders["app_name"] = "@string/app_name"
-            }
+            manifestPlaceholders["app_name"] = "@string/app_name"
 
             isMinifyEnabled = true
             isShrinkResources = true
