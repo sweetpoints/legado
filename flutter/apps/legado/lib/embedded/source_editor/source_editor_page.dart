@@ -80,7 +80,23 @@ class _SourceEditorPageState extends ConsumerState<SourceEditorPage> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) unawaited(_command('cancel'));
+        if (didPop) return;
+        if (_help) {
+          setState(() => _help = false);
+        } else if (state != null &&
+            (state.migrationRunning ||
+                state.migrationError != null ||
+                state.migrationReport != null)) {
+          unawaited(_command('dismissMigration'));
+        } else if (state?.variable != null) {
+          unawaited(_command('dismissVariable'));
+        } else if (state?.groups != null) {
+          unawaited(_command('dismissGroups'));
+        } else if (state?.confirmDiscard ?? false) {
+          unawaited(_command('keepEditing'));
+        } else {
+          unawaited(_command('cancel'));
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -412,8 +428,10 @@ class _SourceEditorPageState extends ConsumerState<SourceEditorPage> {
                           'ruleHelp': l.sourceEditorHelp,
                           'jsHelp': l.sourceEditorJsHelp,
                           'regexHelp': l.sourceEditorRegexHelp,
-                          'GROUP': l.sourceEditorInsertGroup,
-                          'FILE': l.sourceEditorChooseFile,
+                          if (doc?.focusedKey == 'bookSourceGroup')
+                            'GROUP': l.sourceEditorInsertGroup
+                          else
+                            'FILE': l.sourceEditorChooseFile,
                         }.entries)
                           TextButton(
                             onPressed: () {
@@ -796,13 +814,7 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
   @override
   Widget build(BuildContext context) {
     // Avoid platform text-layout stalls on untrusted, very long rule fields.
-    final unsafe =
-        widget.field.value.length > 20000 ||
-        RegExp(r'[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff]')
-                .allMatches(widget.field.value)
-                .take(129)
-                .length >
-            128;
+    final unsafe = isSourceEditorInlineUnsafe(widget.field.value);
     if (unsafe) {
       return editorTag(
         'source-field-${widget.tab}-${widget.field.key}',
@@ -904,4 +916,29 @@ class _VariableDialogState extends State<_VariableDialog> {
       ],
     );
   }
+}
+
+/// Mirrors the existing native editor's layout guard, including all Unicode
+/// combining-mark categories while permitting emoji variation selectors.
+bool isSourceEditorInlineUnsafe(String text) {
+  if (text.length > 12000) return true;
+  final marks = RegExp(r'\p{Mark}', unicode: true);
+  final window = <bool>[];
+  var run = 0;
+  var count = 0;
+  for (final point in text.runes) {
+    final variation =
+        (point >= 0xfe00 && point <= 0xfe0f) ||
+        (point >= 0xe0100 && point <= 0xe01ef);
+    final mark = !variation && marks.hasMatch(String.fromCharCode(point));
+    run = mark ? run + 1 : 0;
+    if (run >= 8) return true;
+    if (window.length == 64) {
+      if (window.removeAt(0)) count--;
+    }
+    window.add(mark);
+    if (mark) count++;
+    if (count >= 16 && count * 10 >= window.length * 3) return true;
+  }
+  return false;
 }
