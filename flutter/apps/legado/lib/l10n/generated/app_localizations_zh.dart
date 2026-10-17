@@ -760,6 +760,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceEditorType => '书源类型';
 
   @override
+  String get sourceEditorEditRejected => '修改未被接受，字段已恢复。请重试或重新编辑该字段后再保存。';
+
+  @override
   String get sourceManagerTitle => '书源管理';
 
   @override
