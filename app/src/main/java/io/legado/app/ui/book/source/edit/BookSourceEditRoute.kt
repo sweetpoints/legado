@@ -8,10 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 
 @Composable
 internal fun BookSourceEditRoute(
@@ -36,34 +34,16 @@ internal fun BookSourceEditRoute(
     val ready by rememberUpdatedState(canHandle)
     BackHandler(enabled = !state.busy) { model.cancel() }
     LaunchedEffect(model, lifecycle) {
-        var finished = false
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            model.state.collect { current ->
-                if (!ready()) return@collect
-                val document = current.document ?: return@collect
-                register(document.nativeRequest)
-                document.savedUrl?.let(saved)
-                if (document.finished) {
-                    if (!finished) {
-                        finished = true
-                        finish(document.savedUrl)
-                    }
-                } else if (!current.busy && current.error == null) {
-                    val request = document.nativeRequest
-                    if (request != null && !request.delivered) {
-                        model.deliverNative(
-                            request.id,
-                            {
-                                ready() && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-                            },
-                            launch,
-                        )
-                    } else if (request == null && !document.helpShown) {
-                        model.showInitialHelp(initialHelpNeeded)
-                    }
-                }
-            }
-        }
+        dispatchBookSourceEditorEffects(
+            model = model,
+            lifecycle = lifecycle,
+            canHandle = { ready() },
+            onNative = { launch(it) },
+            onRegister = { register(it) },
+            onFinish = { finish(it) },
+            onSaved = { saved(it) },
+            initialHelpNeeded = initialHelpNeeded,
+        )
     }
     val actions =
         BookSourceScreenActions(
