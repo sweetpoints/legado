@@ -18,8 +18,12 @@ SourceEditorBridge sourceEditorBridge(Ref ref) {
 Stream<SourceEditorSnapshot> sourceEditorState(Ref ref) =>
     ref.watch(sourceEditorBridgeProvider).snapshots();
 
-/// Native BookSourceComposeViewModel is authoritative. Commands never modify a Dart copy
-/// of business state, and are delivered in order including every draft keystroke.
+/// A previously rejected edit must be explicitly recovered before saving.
+class SourceEditorWriteBlocked implements Exception {
+  const SourceEditorWriteBlocked();
+}
+
+/// Native draft state is authoritative; every edit precedes later navigation.
 class SourceEditorBridge {
   SourceEditorBridge({
     this.channel = const MethodChannel('legado/source_editor'),
@@ -28,6 +32,10 @@ class SourceEditorBridge {
   final MethodChannel channel;
   final EventChannel events;
   bool _closed = false;
+  // Checked inside the queue so even a save tapped before the rejection
+  // returns cannot silently persist the older native draft.
+  final _rejectedFields = <String>{};
+  bool get hasRejectedFields => _rejectedFields.isNotEmpty;
   Future<void> _commands = Future.value();
   final _lifetime = StreamController<void>.broadcast();
   Future<void> command(String op, [Map<String, Object?> arguments = const {}]) {
@@ -38,7 +46,18 @@ class SourceEditorBridge {
     );
     final next = _commands.then((_) async {
       if (_closed) throw StateError('source_editor_closed');
-      await channel.invokeMethod<void>('command', immutable);
+      if (op == 'save' && hasRejectedFields) {
+        throw const SourceEditorWriteBlocked();
+      }
+      final fieldKey = '${(immutable as Map)['tab']}:${immutable['key']}';
+      try {
+        await channel.invokeMethod<void>('command', immutable);
+      } catch (_) {
+        if (op == 'field') _rejectedFields.add(fieldKey);
+        rethrow;
+      }
+      if (op == 'field') _rejectedFields.remove(fieldKey);
+      if (op == 'retry') _rejectedFields.clear();
     });
     _commands = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return next;

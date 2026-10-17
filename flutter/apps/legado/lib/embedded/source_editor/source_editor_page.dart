@@ -25,17 +25,34 @@ class SourceEditorPage extends ConsumerStatefulWidget {
 class _SourceEditorPageState extends ConsumerState<SourceEditorPage> {
   final _fieldKeys = <String, GlobalKey>{};
   bool _help = false;
-  Future<void> _command(
+  bool _rejectedInput = false;
+  Future<void> _command(String op, [Map<String, Object?> args = const {}]) =>
+      _send(op, args);
+  Future<void> _fieldCommand(
     String op, [
     Map<String, Object?> args = const {},
-  ]) async {
+  ]) => _send(op, args, propagate: op == 'field');
+  Future<void> _send(
+    String op,
+    Map<String, Object?> args, {
+    bool propagate = false,
+  }) async {
+    final bridge = ref.read(sourceEditorBridgeProvider);
     try {
-      await ref.read(sourceEditorBridgeProvider).command(op, args);
+      await bridge.command(op, args);
+      if (mounted && _rejectedInput != bridge.hasRejectedFields) {
+        setState(() => _rejectedInput = bridge.hasRejectedFields);
+      }
     } catch (error) {
       if (mounted) {
+        setState(() => _rejectedInput = bridge.hasRejectedFields);
+        final message = op == 'field' || error is SourceEditorWriteBlocked
+            ? AppLocalizations.of(context).sourceEditorEditRejected
+            : error.toString();
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(message)));
       }
+      if (propagate) rethrow;
     }
   }
 
@@ -61,7 +78,10 @@ class _SourceEditorPageState extends ConsumerState<SourceEditorPage> {
       l.sourceEditorReview,
     ];
     final failure =
-        state?.error ?? (async.hasError ? l.sourceEditorFailed : null);
+        state?.error ??
+        (_rejectedInput
+            ? l.sourceEditorEditRejected
+            : (async.hasError ? l.sourceEditorFailed : null));
     final menu = <String, String>{
       if (doc?.hasLogin ?? false) 'LOGIN': l.sourceEditorLogin,
       'DEBUG': l.sourceEditorDebug,
@@ -334,7 +354,7 @@ class _SourceEditorPageState extends ConsumerState<SourceEditorPage> {
                                   focused: doc.focusedKey == field.key,
                                   enabled: enabled,
                                   maxLines: state!.maxLines,
-                                  command: _command,
+                                  command: _fieldCommand,
                                   onEditor: () => _native('EDITOR'),
                                 ),
                               );
@@ -672,7 +692,9 @@ class _EditorOptionsState extends State<_EditorOptions> {
                         selected: values[entry.key] == true,
                         onSelected: widget.enabled
                             ? (value) {
-                                final updated = {...values, entry.key: value};
+                                final updated = _options.toMap();
+                                updated[entry.key] =
+                                    !(updated[entry.key] as bool);
                                 _update(SourceEditorOptions.fromMap(updated));
                               }
                             : null,
@@ -781,13 +803,23 @@ class _SourceEditorTextFieldState extends State<SourceEditorTextField> {
     if (!value.selection.isValid) return;
     _pending.add(value);
     unawaited(
-      widget.command('field', {
-        'tab': widget.tab,
-        'key': widget.field.key,
-        'value': value.text,
-        'start': value.selection.baseOffset,
-        'end': value.selection.extentOffset,
-      }),
+      widget
+          .command('field', {
+            'tab': widget.tab,
+            'key': widget.field.key,
+            'value': value.text,
+            'start': value.selection.baseOffset,
+            'end': value.selection.extentOffset,
+          })
+          .catchError((Object error, StackTrace stack) {
+            if (!mounted) return;
+            // Failed edits were never accepted by the VM. Drop their optimistic
+            // echoes and restore its latest authoritative value and cursor.
+            _pending.clear();
+            _reflecting = true;
+            _controller.value = _value(widget.field);
+            _reflecting = false;
+          }),
     );
   }
 

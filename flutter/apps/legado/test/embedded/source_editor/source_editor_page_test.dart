@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -153,6 +155,71 @@ void main() {
     expect(commands.last, {'op': 'save', 'action': 'FINISH'});
   });
   testWidgets(
+    'rejected field rolls back and immediate save cannot persist older native draft',
+    (tester) async {
+      final barrier = Completer<void>();
+      var reject = true;
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'snapshot') return native;
+        final args = Map<String, Object?>.from(call.arguments as Map);
+        commands.add(args);
+        if (args['op'] == 'field' && reject) {
+          await barrier.future;
+          throw PlatformException(code: 'invalid_request');
+        }
+        return null;
+      });
+      await app(tester);
+      await tester.enterText(find.byType(TextField), 'rejected draft');
+      await tester.tap(tag('source-save'));
+      await tester.pump();
+      barrier.complete();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Original',
+      );
+      expect(commands.where((c) => c['op'] == 'save'), isEmpty);
+      expect(find.textContaining('The edit was rejected'), findsWidgets);
+      expect(tag('source-retry'), findsOneWidget);
+      reject = false;
+      await tester.enterText(find.byType(TextField), 'accepted draft');
+      await click(tester, 'source-save');
+      expect(commands.last, {'op': 'save', 'action': 'FINISH'});
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'accepted draft',
+      );
+    },
+  );
+  testWidgets('retry after rejection restores an explicit save path', (
+    tester,
+  ) async {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      if (call.method == 'snapshot') return native;
+      final args = Map<String, Object?>.from(call.arguments as Map);
+      commands.add(args);
+      if (args['op'] == 'field') {
+        throw PlatformException(code: 'invalid_request');
+      }
+      return null;
+    });
+    await app(tester);
+    await tester.enterText(find.byType(TextField), 'rejected');
+    await tester.pumpAndSettle();
+    await click(tester, 'source-retry');
+    await click(tester, 'source-save');
+    expect(commands.last, {'op': 'save', 'action': 'FINISH'});
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'Original',
+    );
+  });
+  testWidgets(
     'tabs send native selection without replacing the draft in Dart',
     (tester) async {
       await app(tester);
@@ -177,6 +244,55 @@ void main() {
       expect(last['enabled'], false);
       expect(last['enabledExplore'], false);
       expect(last.length, 7);
+    },
+  );
+  testWidgets('rapid chip callbacks use current options before a rebuild', (
+    tester,
+  ) async {
+    await app(tester);
+    (native['document'] as Map)['optionsExpanded'] = true;
+    await publish(tester, native);
+    final enabled = tester.widget<FilterChip>(
+      find.descendant(
+        of: tag('source-option-enabled'),
+        matching: find.byType(FilterChip),
+      ),
+    );
+    final explore = tester.widget<FilterChip>(
+      find.descendant(
+        of: tag('source-option-enabledExplore'),
+        matching: find.byType(FilterChip),
+      ),
+    );
+    enabled.onSelected!(false);
+    explore.onSelected!(false);
+    enabled.onSelected!(false);
+    await tester.pumpAndSettle();
+    final options = commands
+        .where((c) => c['op'] == 'options')
+        .map((c) => c['value'] as Map)
+        .toList();
+    expect(options.length, 3);
+    expect(options[0]['enabled'], false);
+    expect(options[1]['enabled'], false);
+    expect(options[1]['enabledExplore'], false);
+    expect(options[2]['enabled'], true);
+    expect(options[2]['enabledExplore'], false);
+  });
+  testWidgets(
+    'rapid option taps preserve all flags without intervening frames',
+    (tester) async {
+      await app(tester);
+      (native['document'] as Map)['optionsExpanded'] = true;
+      await publish(tester, native);
+      await tester.tap(tag('source-option-enabled'));
+      await tester.tap(tag('source-option-enabledExplore'));
+      await tester.tap(tag('source-option-enabled'));
+      await tester.pumpAndSettle();
+      final last =
+          commands.where((c) => c['op'] == 'options').last['value'] as Map;
+      expect(last['enabled'], true);
+      expect(last['enabledExplore'], false);
     },
   );
   testWidgets(
