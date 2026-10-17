@@ -10,6 +10,7 @@ import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.Stage
 import io.flutter.embedding.android.FlutterFragment
 import io.legado.app.constant.AppConst.appInfo
@@ -196,23 +197,30 @@ class FlutterSourceEditorUiTest {
         launch()
         selectTab(1)
         revealField(1, "name")
-        driver.click("source-field-1-name")
-
         val nativeEditor = AtomicReference<CodeEditActivity>()
-        driver.await("Real native editor receives oversized Flutter field") {
-            instrumentation.runOnMainSync {
-                ActivityLifecycleMonitorRegistry.getInstance()
-                    .getActivitiesInStage(Stage.RESUMED)
-                    .filterIsInstance<CodeEditActivity>()
-                    .singleOrNull()?.let(nativeEditor::set)
-            }
-            nativeEditor.get() != null
-        }
         val nativeIntent = AtomicReference<Intent>()
-        try {
-            instrumentation.runOnMainSync {
-                nativeIntent.set(Intent(nativeEditor.get().intent))
+        val lifecycle = ActivityLifecycleMonitorRegistry.getInstance()
+        // The real code editor clears its launch payload after accepting ownership.
+        // Capture the original handoff before onCreate rather than racing that cleanup.
+        val captureLaunch = ActivityLifecycleCallback { activity, stage ->
+            if (activity is CodeEditActivity && stage == Stage.PRE_ON_CREATE) {
+                nativeIntent.compareAndSet(null, Intent(activity.intent))
+                nativeEditor.compareAndSet(null, activity)
             }
+        }
+        instrumentation.runOnMainSync { lifecycle.addLifecycleCallback(captureLaunch) }
+        try {
+            driver.click("source-field-1-name")
+            driver.await("Real native editor receives oversized Flutter field") {
+                var resumed = false
+                instrumentation.runOnMainSync {
+                    resumed = lifecycle.getActivitiesInStage(Stage.RESUMED)
+                        .any { it is CodeEditActivity && it === nativeEditor.get() }
+                }
+                resumed
+            }
+            assertNotNull("Native transfer must be captured before editor initialization",
+                nativeIntent.get())
             assertTrue("Large rule must use the private file transport",
                 nativeIntent.get().getBooleanExtra("useTextFile", false))
             assertNull("Large rule must not be duplicated into a Binder text extra",
@@ -222,7 +230,10 @@ class FlutterSourceEditorUiTest {
             assertEquals("Native transfer must contain the complete 30k rule",
                 originalRule, textFile.readText(Charsets.UTF_8))
         } finally {
-            instrumentation.runOnMainSync { nativeEditor.get().finish() }
+            instrumentation.runOnMainSync {
+                lifecycle.removeLifecycleCallback(captureLaunch)
+                nativeEditor.get()?.finish()
+            }
         }
         driver.awaitIdentifier("source-field-1-name")
         assertEquals(originalRule,
