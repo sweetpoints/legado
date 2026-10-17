@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -116,6 +117,9 @@ class EmbeddedFlutterActivityTest {
             first.managerModel.state.value.query == source.bookSourceName &&
                 renderedValue("source-manager-query").contains(source.bookSourceName)
         }
+        // Query input opens the real IME. Close it before testing the dialog's
+        // Back handling; otherwise Android correctly consumes Back to hide it.
+        closeSoftKeyboard()
         clickIdentifier("select:${source.bookSourceUrl}")
         awaitChecked("select:${source.bookSourceUrl}", true)
         clickIdentifier("enabled:${source.bookSourceUrl}")
