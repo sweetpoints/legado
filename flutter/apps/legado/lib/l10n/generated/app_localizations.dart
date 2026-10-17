@@ -1166,6 +1166,486 @@ abstract class AppLocalizations {
   /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
   String get rssDuplicateRestoreSource;
 
+  /// No description provided for @sourceManagerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source manager'**
+  String get sourceManagerTitle;
+
+  /// No description provided for @sourceManagerQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Search sources'**
+  String get sourceManagerQuery;
+
+  /// No description provided for @sourceManagerMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Menu'**
+  String get sourceManagerMenu;
+
+  /// No description provided for @sourceManagerSelectionMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Selection actions'**
+  String get sourceManagerSelectionMenu;
+
+  /// No description provided for @sourceManagerBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get sourceManagerBack;
+
+  /// No description provided for @sourceManagerSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get sourceManagerSelectAll;
+
+  /// No description provided for @sourceManagerInvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Invert selection'**
+  String get sourceManagerInvert;
+
+  /// No description provided for @sourceManagerDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get sourceManagerDelete;
+
+  /// No description provided for @sourceManagerEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get sourceManagerEdit;
+
+  /// No description provided for @sourceManagerEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable source'**
+  String get sourceManagerEnabled;
+
+  /// No description provided for @sourceManagerSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select source'**
+  String get sourceManagerSelect;
+
+  /// No description provided for @sourceManagerCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get sourceManagerCancel;
+
+  /// No description provided for @sourceManagerConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get sourceManagerConfirm;
+
+  /// No description provided for @sourceManagerRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get sourceManagerRetry;
+
+  /// No description provided for @sourceManagerDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get sourceManagerDraft;
+
+  /// No description provided for @sourceManagerJsBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'JS source'**
+  String get sourceManagerJsBadge;
+
+  /// No description provided for @sourceManagerExploreOnBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse enabled'**
+  String get sourceManagerExploreOnBadge;
+
+  /// No description provided for @sourceManagerExploreOffBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse disabled'**
+  String get sourceManagerExploreOffBadge;
+
+  /// No description provided for @sourceManagerDrag.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to reorder'**
+  String get sourceManagerDrag;
+
+  /// No description provided for @sourceManagerSlide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold and slide to select'**
+  String get sourceManagerSlide;
+
+  /// No description provided for @sourceManagerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching sources'**
+  String get sourceManagerEmpty;
+
+  /// No description provided for @sourceManagerGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Groups'**
+  String get sourceManagerGroups;
+
+  /// No description provided for @sourceManagerAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add source'**
+  String get sourceManagerAdd;
+
+  /// No description provided for @sourceManagerAddJs.
+  ///
+  /// In en, this message translates to:
+  /// **'Add JavaScript source'**
+  String get sourceManagerAddJs;
+
+  /// No description provided for @sourceManagerQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Import QR code'**
+  String get sourceManagerQr;
+
+  /// No description provided for @sourceManagerLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Import local file'**
+  String get sourceManagerLocal;
+
+  /// No description provided for @sourceManagerOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Import online'**
+  String get sourceManagerOnline;
+
+  /// No description provided for @sourceManagerGroupManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage groups'**
+  String get sourceManagerGroupManage;
+
+  /// No description provided for @sourceManagerFilterEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get sourceManagerFilterEnabled;
+
+  /// No description provided for @sourceManagerFilterDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get sourceManagerFilterDisabled;
+
+  /// No description provided for @sourceManagerFilterLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires login'**
+  String get sourceManagerFilterLogin;
+
+  /// No description provided for @sourceManagerFilterNoGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped'**
+  String get sourceManagerFilterNoGroup;
+
+  /// No description provided for @sourceManagerFilterExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse enabled sources'**
+  String get sourceManagerFilterExplore;
+
+  /// No description provided for @sourceManagerFilterNoExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse disabled sources'**
+  String get sourceManagerFilterNoExplore;
+
+  /// No description provided for @sourceManagerDescending.
+  ///
+  /// In en, this message translates to:
+  /// **'Descending'**
+  String get sourceManagerDescending;
+
+  /// No description provided for @sourceManagerDomain.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by domain'**
+  String get sourceManagerDomain;
+
+  /// No description provided for @sourceManagerShowStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Show check status'**
+  String get sourceManagerShowStatus;
+
+  /// No description provided for @sourceManagerBlockNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Block source navigation'**
+  String get sourceManagerBlockNavigation;
+
+  /// No description provided for @sourceManagerRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get sourceManagerRefresh;
+
+  /// No description provided for @sourceManagerHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get sourceManagerHelp;
+
+  /// No description provided for @sourceManagerSortDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual order'**
+  String get sourceManagerSortDefault;
+
+  /// No description provided for @sourceManagerSortWeight.
+  ///
+  /// In en, this message translates to:
+  /// **'Weight order'**
+  String get sourceManagerSortWeight;
+
+  /// No description provided for @sourceManagerSortName.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by name'**
+  String get sourceManagerSortName;
+
+  /// No description provided for @sourceManagerSortUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by URL'**
+  String get sourceManagerSortUrl;
+
+  /// No description provided for @sourceManagerSortUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by update time'**
+  String get sourceManagerSortUpdate;
+
+  /// No description provided for @sourceManagerSortRespond.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by response time'**
+  String get sourceManagerSortRespond;
+
+  /// No description provided for @sourceManagerSortEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by enabled state'**
+  String get sourceManagerSortEnable;
+
+  /// No description provided for @sourceManagerEnableSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable selected'**
+  String get sourceManagerEnableSelection;
+
+  /// No description provided for @sourceManagerDisableSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable selected'**
+  String get sourceManagerDisableSelection;
+
+  /// No description provided for @sourceManagerAddGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Add group'**
+  String get sourceManagerAddGroup;
+
+  /// No description provided for @sourceManagerRemoveGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove group'**
+  String get sourceManagerRemoveGroup;
+
+  /// No description provided for @sourceManagerEnableExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable browse'**
+  String get sourceManagerEnableExplore;
+
+  /// No description provided for @sourceManagerDisableExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable browse'**
+  String get sourceManagerDisableExplore;
+
+  /// No description provided for @sourceManagerTopSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Move selected to top'**
+  String get sourceManagerTopSelection;
+
+  /// No description provided for @sourceManagerBottomSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Move selected to bottom'**
+  String get sourceManagerBottomSelection;
+
+  /// No description provided for @sourceManagerExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export selected'**
+  String get sourceManagerExport;
+
+  /// No description provided for @sourceManagerShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share selected'**
+  String get sourceManagerShare;
+
+  /// No description provided for @sourceManagerCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check selected'**
+  String get sourceManagerCheck;
+
+  /// No description provided for @sourceManagerInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Select interval'**
+  String get sourceManagerInterval;
+
+  /// No description provided for @sourceManagerTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to top'**
+  String get sourceManagerTop;
+
+  /// No description provided for @sourceManagerBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to bottom'**
+  String get sourceManagerBottom;
+
+  /// No description provided for @sourceManagerUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get sourceManagerUp;
+
+  /// No description provided for @sourceManagerDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get sourceManagerDown;
+
+  /// No description provided for @sourceManagerLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Login'**
+  String get sourceManagerLogin;
+
+  /// No description provided for @sourceManagerSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get sourceManagerSearch;
+
+  /// No description provided for @sourceManagerDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug'**
+  String get sourceManagerDebug;
+
+  /// No description provided for @sourceManagerExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle browse'**
+  String get sourceManagerExplore;
+
+  /// No description provided for @sourceManagerStatusAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All statuses'**
+  String get sourceManagerStatusAll;
+
+  /// No description provided for @sourceManagerStatusNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs check'**
+  String get sourceManagerStatusNeeded;
+
+  /// No description provided for @sourceManagerStatusPassed.
+  ///
+  /// In en, this message translates to:
+  /// **'Passed'**
+  String get sourceManagerStatusPassed;
+
+  /// No description provided for @sourceManagerStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get sourceManagerStatusFailed;
+
+  /// No description provided for @sourceManagerDeletePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the selected sources?'**
+  String get sourceManagerDeletePrompt;
+
+  /// No description provided for @sourceManagerCheckKeyword.
+  ///
+  /// In en, this message translates to:
+  /// **'Check keyword'**
+  String get sourceManagerCheckKeyword;
+
+  /// No description provided for @sourceManagerExportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Export complete'**
+  String get sourceManagerExportSuccess;
+
+  /// No description provided for @sourceManagerPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Share passphrase'**
+  String get sourceManagerPassphrase;
+
+  /// No description provided for @sourceManagerCheckConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Check settings'**
+  String get sourceManagerCheckConfig;
+
+  /// No description provided for @sourceManagerForgetImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget import history'**
+  String get sourceManagerForgetImport;
+
+  /// No description provided for @sourceManagerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot read the native source manager. Retry to reconnect.'**
+  String get sourceManagerLoadFailed;
+
+  /// No description provided for @sourceManagerCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected {selected}/{total}'**
+  String sourceManagerCount(int selected, int total);
+
+  /// No description provided for @sourceManagerBookCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} books in library'**
+  String sourceManagerBookCount(int count);
+
   /// No description provided for @sourcesManage.
   ///
   /// In en, this message translates to:

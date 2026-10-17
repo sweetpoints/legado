@@ -10,18 +10,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/book_source_service.dart';
-import 'source_providers.dart';
+import '../../embedded/source_management_backend.dart';
 
 class SourceManagementPage extends ConsumerWidget {
-  const SourceManagementPage({super.key, required this.repository});
-  final LibraryRepository repository;
+  const SourceManagementPage({
+    super.key,
+    required LibraryRepository this.repository,
+  }) : backend = null,
+       onClose = null;
+  const SourceManagementPage.withBackend({
+    super.key,
+    required SourceManagementBackend this.backend,
+    this.onClose,
+  }) : repository = null;
+  final LibraryRepository? repository;
+  final SourceManagementBackend? backend;
+  final Future<void> Function()? onClose;
+  SourceManagementBinding get _binding =>
+      (repository: repository, backend: backend);
 
   Future<void> _edit(
     BuildContext context,
     WidgetRef ref, [
     Map<String, Object?>? source,
   ]) async {
-    final service = ref.read(bookSourceServiceProvider(repository));
+    final service = ref.read(sourceManagementBackendProvider(_binding));
     final input = TextEditingController(
       text: source == null ? '' : await _encode(source),
     );
@@ -30,6 +43,8 @@ class SourceManagementPage extends ConsumerWidget {
       return;
     }
     String? error;
+    bool saving = false;
+    bool dialogOpen = true;
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -55,33 +70,60 @@ class SourceManagementPage extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => context.pop(),
+              onPressed: saving ? null : () => context.pop(),
               child: Text(AppLocalizations.of(context).sourcesCancel),
             ),
             FilledButton(
-              onPressed: () async {
-                try {
-                  final parsed = BookSourceService.parseImport(input.text);
-                  if (source != null &&
-                      (parsed.length != 1 ||
-                          BookSourceService.sourceId(parsed.single) !=
-                              BookSourceService.sourceId(source))) {
-                    throw FormatException(
-                      AppLocalizations.of(context).sourcesIdentityImmutable,
-                    );
-                  }
-                  await service.importJson(input.text);
-                  if (context.mounted) context.pop();
-                } catch (e) {
-                  if (context.mounted) setState(() => error = e.toString());
-                }
-              },
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        final parsed = BookSourceService.parseImport(
+                          input.text,
+                        );
+                        if (source != null &&
+                            (parsed.length != 1 ||
+                                BookSourceService.sourceId(parsed.single) !=
+                                    BookSourceService.sourceId(source))) {
+                          throw FormatException(
+                            AppLocalizations.of(context)
+                                .sourcesIdentityImmutable,
+                          );
+                        }
+                        if (source == null) {
+                          await service.importJson(input.text);
+                        } else {
+                          await service.update(
+                            input.text,
+                            expectedId: BookSourceService.sourceId(source),
+                          );
+                        }
+                        if (dialogOpen &&
+                            context.mounted &&
+                            (ModalRoute.of(context)?.isCurrent ?? false)) {
+                          context.pop();
+                        }
+                      } catch (e) {
+                        if (dialogOpen &&
+                            context.mounted &&
+                            (ModalRoute.of(context)?.isCurrent ?? false)) {
+                          setState(() {
+                            saving = false;
+                            error = e.toString();
+                          });
+                        }
+                      }
+                    },
               child: Text(AppLocalizations.of(context).sourcesSave),
             ),
           ],
         ),
       ),
-    );
+    ).whenComplete(() => dialogOpen = false);
     // Dialog route may animate after pop; dispose on a later frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => input.dispose());
   }
@@ -93,10 +135,21 @@ class SourceManagementPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sources = ref.watch(sourceListProvider(repository));
-    final service = ref.watch(bookSourceServiceProvider(repository));
+    final sources = ref.watch(sourceManagementListProvider(_binding));
+    final service = ref.watch(sourceManagementBackendProvider(_binding));
     return Scaffold(
       appBar: AppBar(
+        leading: onClose == null
+            ? null
+            : BackButton(
+                onPressed: () async {
+                  try {
+                    await onClose!();
+                  } catch (e) {
+                    if (context.mounted) _error(context, e);
+                  }
+                },
+              ),
         title: Text(AppLocalizations.of(context).sourcesManage),
         actions: [
           IconButton(
@@ -128,7 +181,25 @@ class SourceManagementPage extends ConsumerWidget {
       ),
       body: sources.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: SelectableText(e.toString())),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(AppLocalizations.of(context).startupFailed),
+                const SizedBox(height: 12),
+                SelectableText(e.toString()),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () =>
+                      ref.invalidate(sourceManagementListProvider(_binding)),
+                  child: Text(AppLocalizations.of(context).retry),
+                ),
+              ],
+            ),
+          ),
+        ),
         data: (items) => items.isEmpty
             ? Center(child: Text(AppLocalizations.of(context).sourcesEmpty))
             : ListView.builder(

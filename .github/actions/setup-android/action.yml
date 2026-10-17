@@ -30,6 +30,11 @@ runs:
         flutter-version: '3.47.6'
         channel: stable
         cache: true
+    - name: Prepare and verify the pinned Flutter NDK before Gradle
+      shell: bash
+      run: |
+        python3 -m unittest discover -s .github/scripts -p test_prepare_flutter_ndk.py
+        python3 .github/scripts/prepare-flutter-ndk.py
     - name: Restore exact official Android ARM64 artifact
       id: native-arm64
       uses: actions/cache/restore@v5

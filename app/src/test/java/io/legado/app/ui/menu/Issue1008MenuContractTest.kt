@@ -8,38 +8,22 @@ class Issue1008MenuContractTest {
 
     @Test
     fun sourceIconsAndRssOverflowFollowReportedMenuContract() {
-        val source =
-            readProjectFile(
-                "src/main/java/io/legado/app/ui/book/source/manage/BookSourceManagerScreen.kt"
-            )
-        assertTrue(source.contains("R.drawable.ic_add_online"))
-        assertTrue(source.contains("action == \"domain\""))
+        val manager = sequenceOf(
+            File("../flutter/apps/legado/lib/embedded/source_manager"),
+            File("flutter/apps/legado/lib/embedded/source_manager"),
+        ).first { it.isDirectory }
+        val source = manager.walkTopDown().filter { it.extension == "dart" }
+            .map(File::readText).joinToString("\n")
+        // The existing manager route now renders Flutter, so preserve the actual
+        // reported menu contract against its production actions and domain icon.
+        assertTrue("Online import remains reachable in the manager menu",
+            source.contains("'online'") && source.contains("source-manager-action:"))
+        assertTrue("Domain grouping remains an actual manager action",
+            source.contains("'domain'"))
+        assertTrue("Domain grouping retains a recognizable public/domain icon",
+            source.contains("Icons.public"))
 
-        // RSS overflow behavior is covered by RssReaderScreenTest using the real Compose menu.
-
+        // RSS overflow behavior remains covered by RssReaderScreenTest using
+        // the real Compose menu; changing source manager does not remove it.
     }
-
-    private fun assertItemIcon(path: String, id: String, drawable: String) {
-        val item = itemBlock(readProjectFile(path), id)
-        assertContains(path, item, """android:icon="@drawable/$drawable"""")
-    }
-
-    private fun itemBlock(source: String, id: String): String {
-        val marker = """android:id="@+id/$id""""
-        val start = source.indexOf(marker)
-        assertTrue("$id should exist", start >= 0)
-        val end = source.indexOf("/>", start)
-        assertTrue("$id should have a complete item", end > start)
-        return source.substring(start, end)
-    }
-
-    private fun assertContains(path: String, source: String, expected: String) {
-        assertTrue("$path should contain $expected", source.contains(expected))
-    }
-
-    private fun readProjectFile(pathInApp: String): String =
-        sequenceOf(File(pathInApp), File("app/$pathInApp"))
-            .firstOrNull(File::isFile)
-            ?.readText()
-            .orEmpty()
 }

@@ -600,6 +600,251 @@ class AppLocalizationsEn extends AppLocalizations {
       'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
+  String get sourceManagerTitle => 'Source manager';
+
+  @override
+  String get sourceManagerQuery => 'Search sources';
+
+  @override
+  String get sourceManagerMenu => 'Menu';
+
+  @override
+  String get sourceManagerSelectionMenu => 'Selection actions';
+
+  @override
+  String get sourceManagerBack => 'Back';
+
+  @override
+  String get sourceManagerSelectAll => 'Select all';
+
+  @override
+  String get sourceManagerInvert => 'Invert selection';
+
+  @override
+  String get sourceManagerDelete => 'Delete';
+
+  @override
+  String get sourceManagerEdit => 'Edit';
+
+  @override
+  String get sourceManagerEnabled => 'Enable source';
+
+  @override
+  String get sourceManagerSelect => 'Select source';
+
+  @override
+  String get sourceManagerCancel => 'Cancel';
+
+  @override
+  String get sourceManagerConfirm => 'Confirm';
+
+  @override
+  String get sourceManagerRetry => 'Retry';
+
+  @override
+  String get sourceManagerDraft => 'Value';
+
+  @override
+  String get sourceManagerJsBadge => 'JS source';
+
+  @override
+  String get sourceManagerExploreOnBadge => 'Browse enabled';
+
+  @override
+  String get sourceManagerExploreOffBadge => 'Browse disabled';
+
+  @override
+  String get sourceManagerDrag => 'Hold to reorder';
+
+  @override
+  String get sourceManagerSlide => 'Hold and slide to select';
+
+  @override
+  String get sourceManagerEmpty => 'No matching sources';
+
+  @override
+  String get sourceManagerGroups => 'Groups';
+
+  @override
+  String get sourceManagerAdd => 'Add source';
+
+  @override
+  String get sourceManagerAddJs => 'Add JavaScript source';
+
+  @override
+  String get sourceManagerQr => 'Import QR code';
+
+  @override
+  String get sourceManagerLocal => 'Import local file';
+
+  @override
+  String get sourceManagerOnline => 'Import online';
+
+  @override
+  String get sourceManagerGroupManage => 'Manage groups';
+
+  @override
+  String get sourceManagerFilterEnabled => 'Enabled';
+
+  @override
+  String get sourceManagerFilterDisabled => 'Disabled';
+
+  @override
+  String get sourceManagerFilterLogin => 'Requires login';
+
+  @override
+  String get sourceManagerFilterNoGroup => 'Ungrouped';
+
+  @override
+  String get sourceManagerFilterExplore => 'Browse enabled sources';
+
+  @override
+  String get sourceManagerFilterNoExplore => 'Browse disabled sources';
+
+  @override
+  String get sourceManagerDescending => 'Descending';
+
+  @override
+  String get sourceManagerDomain => 'Group by domain';
+
+  @override
+  String get sourceManagerShowStatus => 'Show check status';
+
+  @override
+  String get sourceManagerBlockNavigation => 'Block source navigation';
+
+  @override
+  String get sourceManagerRefresh => 'Refresh';
+
+  @override
+  String get sourceManagerHelp => 'Help';
+
+  @override
+  String get sourceManagerSortDefault => 'Manual order';
+
+  @override
+  String get sourceManagerSortWeight => 'Weight order';
+
+  @override
+  String get sourceManagerSortName => 'Sort by name';
+
+  @override
+  String get sourceManagerSortUrl => 'Sort by URL';
+
+  @override
+  String get sourceManagerSortUpdate => 'Sort by update time';
+
+  @override
+  String get sourceManagerSortRespond => 'Sort by response time';
+
+  @override
+  String get sourceManagerSortEnable => 'Sort by enabled state';
+
+  @override
+  String get sourceManagerEnableSelection => 'Enable selected';
+
+  @override
+  String get sourceManagerDisableSelection => 'Disable selected';
+
+  @override
+  String get sourceManagerAddGroup => 'Add group';
+
+  @override
+  String get sourceManagerRemoveGroup => 'Remove group';
+
+  @override
+  String get sourceManagerEnableExplore => 'Enable browse';
+
+  @override
+  String get sourceManagerDisableExplore => 'Disable browse';
+
+  @override
+  String get sourceManagerTopSelection => 'Move selected to top';
+
+  @override
+  String get sourceManagerBottomSelection => 'Move selected to bottom';
+
+  @override
+  String get sourceManagerExport => 'Export selected';
+
+  @override
+  String get sourceManagerShare => 'Share selected';
+
+  @override
+  String get sourceManagerCheck => 'Check selected';
+
+  @override
+  String get sourceManagerInterval => 'Select interval';
+
+  @override
+  String get sourceManagerTop => 'Move to top';
+
+  @override
+  String get sourceManagerBottom => 'Move to bottom';
+
+  @override
+  String get sourceManagerUp => 'Move up';
+
+  @override
+  String get sourceManagerDown => 'Move down';
+
+  @override
+  String get sourceManagerLogin => 'Login';
+
+  @override
+  String get sourceManagerSearch => 'Search';
+
+  @override
+  String get sourceManagerDebug => 'Debug';
+
+  @override
+  String get sourceManagerExplore => 'Toggle browse';
+
+  @override
+  String get sourceManagerStatusAll => 'All statuses';
+
+  @override
+  String get sourceManagerStatusNeeded => 'Needs check';
+
+  @override
+  String get sourceManagerStatusPassed => 'Passed';
+
+  @override
+  String get sourceManagerStatusFailed => 'Failed';
+
+  @override
+  String get sourceManagerDeletePrompt => 'Delete the selected sources?';
+
+  @override
+  String get sourceManagerCheckKeyword => 'Check keyword';
+
+  @override
+  String get sourceManagerExportSuccess => 'Export complete';
+
+  @override
+  String get sourceManagerPassphrase => 'Share passphrase';
+
+  @override
+  String get sourceManagerCheckConfig => 'Check settings';
+
+  @override
+  String get sourceManagerForgetImport => 'Forget import history';
+
+  @override
+  String get sourceManagerLoadFailed =>
+      'Cannot read the native source manager. Retry to reconnect.';
+
+  @override
+  String sourceManagerCount(int selected, int total) {
+    return 'Selected $selected/$total';
+  }
+
+  @override
+  String sourceManagerBookCount(int count) {
+    return '$count books in library';
+  }
+
+  @override
   String get sourcesManage => 'Source management';
 
   @override

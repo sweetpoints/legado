@@ -10,7 +10,11 @@ or cancelling the existing hosted run.
 
 `flutter/tool/apple-native-acceptance.py`:
 
-- Records current SDK and simulator runtime/UUID/state before boot.
+- Records current SDK and simulator runtime/UUID/state before boot. The first
+  CoreSimulator inventory has one 120s deadline (explicit `--discovery-timeout`
+  accepts 1..300s); subsequent inventory requests keep their 30s budgets. A 15s
+  heartbeat distinguishes service startup from silent application execution,
+  and a scoped service-process snapshot is collected after 30s of waiting.
 - Chooses the newest available iOS 15+ runtime compatible with the selected Xcode
   SDK. Within that runtime it prefers a booted iPhone over a shutdown device.
 - Requires an explicit UUID for local execution; automatic selection is limited
@@ -106,3 +110,19 @@ state and that the bundle-filtered `log show` command succeeds. Flutter's verbos
 log explicitly records uninstalling this App after tests, so an absent container
 after successful test completion is expected, not a launch failure. These local
 results still do not replace hosted-run acceptance.
+
+
+Hosted run `38958152603` failed before selecting or booting a simulator: its first
+`simctl list runtimes --json` was terminated at 30s. The failure diagnostics
+subsequently listed devices in 13.2s and runtimes in 0.58s. That demonstrates that
+the service was available approximately 44s after the initial request, beyond
+the former cold-start budget. Xcode was 26.6 build 17F113. The revised budget
+applies to that first request only; a genuinely stalled discovery still fails
+and persists its timeout, and application tests are never retried. Diagnostics
+retain only CoreSimulatorService/simdiskimaged PID, elapsed time, state and
+executable metadata, filtering the host process listing before persistence.
+Nineteen helper tests include delayed real-child discovery, bounded stuck-child
+failure without retries, cold/default budget selection and scoped process
+filtering. A local read-only inventory passed; the existing local service was
+already warm and was not restarted to simulate a cold hosted runner. Hosted
+cold-start acceptance still requires a fresh CI run at the final commit.

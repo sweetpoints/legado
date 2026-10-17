@@ -1,3 +1,4 @@
+import 'package:legado_app/embedded/embedded_source_management.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:source_engine/source_engine.dart';
@@ -8,6 +9,13 @@ import 'package:source_v8/source_v8.dart';
 import 'source_host.dart';
 import 'session_store.dart';
 import 'task_host.dart';
+
+// A separate UI isolate: the existing background source-engine entrypoint stays intact.
+@pragma('vm:entry-point')
+void embeddedUiMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runEmbeddedSourceManagement();
+}
 
 @pragma('vm:entry-point')
 Future<void> main() async {

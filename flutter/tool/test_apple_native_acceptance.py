@@ -136,3 +136,68 @@ class DeviceSelectionTests(unittest.TestCase):
                                0.2, on_tick=calls.append)
             self.assertTrue(calls)
             self.assertLess(calls[-1], 1)
+
+    def test_first_inventory_has_cold_budget_without_retrying_app_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def reply(phase, argv, seconds, **kwargs):
+                return {'xcode-version': 'Xcode 26.6\n', 'installed-runtimes': '{}',
+                        'xcode-sdk': '26.5', 'available-devices': json.dumps(self.devices())}[phase]
+            with patch.object(module.platform, 'system', return_value='Darwin'), \
+                 patch.object(module.platform, 'machine', return_value='arm64'), \
+                 patch.object(module.sys, 'argv', ['runner', '--output', directory, '--list-only']), \
+                 patch.object(module.Runner, 'command', side_effect=reply) as command:
+                module.main()
+            calls = [call for call in command.call_args_list if call.args[0] == 'installed-runtimes']
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0].args[2], 120)
+            self.assertTrue(callable(calls[0].kwargs['on_tick']))
+            self.assertFalse(any(call.args[0] == 'flutter-test' for call in command.call_args_list))
+
+    def test_cold_inventory_allows_delayed_real_child_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = module.Runner(directory, directory)
+            execute = runner.command
+            def fixture(phase, argv, seconds, **kwargs):
+                return execute(phase, [sys.executable, '-c',
+                    'import time; time.sleep(0.15); print("{\\"runtimes\\": []}")'], seconds, **kwargs)
+            with patch.object(runner, 'command', side_effect=fixture) as command:
+                self.assertEqual(module.installed_runtimes(runner, 1), {'runtimes': []})
+                self.assertEqual(command.call_count, 1)
+            self.assertEqual(json.loads((Path(directory) / 'phases.json').read_text())[0]['exitCode'], 0)
+
+    def test_cold_inventory_timeout_remains_failure_without_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = module.Runner(directory, directory)
+            execute = runner.command
+            def fixture(phase, argv, seconds, **kwargs):
+                return execute(phase, [sys.executable, '-c', 'import time; time.sleep(5)'], seconds, **kwargs)
+            with patch.object(runner, 'command', side_effect=fixture) as command:
+                with self.assertRaisesRegex(module.PhaseFailure, 'installed-runtimes timed out'):
+                    module.installed_runtimes(runner, 1)
+                self.assertEqual(command.call_count, 1)
+            self.assertTrue(json.loads((Path(directory) / 'phases.json').read_text())[0]['timedOut'])
+
+    def test_discovery_override_remains_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = module.Runner(directory, directory)
+            with patch.object(runner, 'command') as command:
+                for invalid in (0, -1, 301):
+                    with self.assertRaises(module.PhaseFailure):
+                        module.installed_runtimes(runner, invalid)
+                command.assert_not_called()
+
+    def test_service_diagnostics_exclude_other_host_executables(self):
+        output = ('101 00:45 S /Library/PrivateFrameworks/CoreSimulator.framework/com.apple.CoreSimulator.CoreSimulatorService\n'
+                  '102 00:10 S /Library/PrivateFrameworks/CoreSimulator.framework/simdiskimaged\n'
+                  '103 01:00 R /Applications/PrivateApp.app/PrivateApp\n')
+        self.assertEqual([item['pid'] for item in module.simulator_service_processes(output)], [101, 102])
+
+    def test_cold_service_progress_samples_once_without_extra_simctl_queries(self):
+        with patch.object(module, 'simulator_service_diagnostics') as diagnostic:
+            tick = module.cold_service_progress(object())
+            tick(15)
+            diagnostic.assert_not_called()
+            tick(30)
+            tick(45)
+            self.assertEqual(diagnostic.call_count, 1)
+            self.assertEqual(diagnostic.call_args.args[1], 'simulator-service-startup')

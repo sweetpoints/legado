@@ -1,5 +1,6 @@
 package io.legado.app.data.entities
 
+import io.legado.app.ui.book.source.manage.SourceManagerRow
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,9 +11,6 @@ class BookSourcePartHasJsTest {
     private val partSource =
         projectFile("src/main/java/io/legado/app/data/entities/BookSourcePart.kt").readText()
     private val normalizedPartSource = partSource.replace(Regex("\\s+"), " ")
-    private val adapterSource =
-        projectFile("src/main/java/io/legado/app/ui/book/source/manage/BookSourceManagerScreen.kt")
-            .readText()
     private val databaseSource =
         projectFile("src/main/java/io/legado/app/data/AppDatabase.kt").readText()
     private val schemaSource =
@@ -42,9 +40,25 @@ class BookSourcePartHasJsTest {
     }
 
     @Test
-    fun `compose source row emits js badge conditionally without hidden spacing`() {
-        assertTrue(adapterSource.contains("if (row.hasJs)"))
-        assertTrue(adapterSource.contains("R.string.js_source_badge"))
+    fun `native manager row preserves js projection for Flutter state`() {
+        val ordinary = BookSourcePart(bookSourceUrl = "https://plain.example", hasJs = false)
+        val scripted = BookSourcePart(bookSourceUrl = "https://script.example", hasJs = true)
+        assertFalse(SourceManagerRow.from(ordinary).hasJs)
+        assertTrue(SourceManagerRow.from(scripted).hasJs)
+    }
+
+    @Test
+    fun `Flutter source row emits js badge conditionally without hidden spacing`() {
+        val manager = sequenceOf(
+            File("../flutter/apps/legado/lib/embedded/source_manager"),
+            File("flutter/apps/legado/lib/embedded/source_manager"),
+        ).first { it.isDirectory }
+        val rows = manager.walkTopDown().filter { it.extension == "dart" }
+            .map(File::readText).joinToString("\n")
+        assertTrue("Flutter must conditionally insert the JS badge using the projected flag",
+            Regex("""if\s*\(row\.hasJs\)\s*""").containsMatchIn(rows))
+        assertTrue("JS flag must render the localized JS source badge",
+            Regex("""\b\w+\.sourceManagerJsBadge\b""").containsMatchIn(rows))
     }
 
     private fun projectFile(pathInApp: String): File {
