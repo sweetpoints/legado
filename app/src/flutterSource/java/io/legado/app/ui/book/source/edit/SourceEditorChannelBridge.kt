@@ -92,17 +92,17 @@ internal fun sourceEditorSnapshot(
     label: (BookSourceEditField) -> String = { it.label ?: it.key },
 ): Map<String, Any?> {
     val result = linkedMapOf<String, Any?>(
-        "schemaVersion" to 1, "maxLines" to maxLines, "busy" to state.busy, "error" to state.error,
+        "schemaVersion" to 1, "maxLines" to maxLines, "busy" to state.busy, "error" to sourceEditorSafeError(state.error),
         "confirmDiscard" to state.confirmDiscard, "groups" to state.groups,
         "variable" to state.variable, "variableComment" to state.variableComment,
         "keyboardRows" to state.keyboardRows,
         "assists" to state.assists.map { mapOf("key" to it.key, "value" to it.value) },
         "migrationAvailable" to state.migrationAvailable, "migrationRunning" to state.migrationRunning,
-        "migrationError" to state.migrationError,
+        "migrationError" to sourceEditorSafeError(state.migrationError),
         "migrationReport" to state.migrationReport?.let { report -> mapOf(
             "revision" to report.revision, "status" to report.preview.status,
             "requiresManualWork" to report.preview.requiresManualWork, "canApply" to report.preview.canApply,
-            "issues" to report.preview.issues.map { mapOf("path" to it.path, "code" to it.code, "message" to it.message) }) },
+            "issues" to report.preview.issues.map { mapOf("path" to it.path, "code" to it.code, "message" to sourceEditorSafeError(it.message)) }) },
         "document" to state.document?.let { doc -> mapOf(
             "revision" to doc.revision, "selectedTab" to doc.selectedTab, "focusedKey" to doc.focusedKey,
             "optionsExpanded" to doc.optionsExpanded, "autoComplete" to doc.autoComplete,
@@ -116,15 +116,68 @@ internal fun sourceEditorSnapshot(
                     "selectionStart" to it.selectionStart, "selectionEnd" to it.selectionEnd) } })
         ) },
     )
-    // Count the entire projected graph before StandardMessageCodec allocates its output buffer.
-    fun size(value: Any?): Long = when (value) {
-        is String -> value.toByteArray(Charsets.UTF_8).size.toLong() + 8
-        is Map<*, *> -> value.entries.sumOf { size(it.key) + size(it.value) } + 8
-        is List<*> -> value.sumOf { size(it) } + 8
-        else -> 8L
-    }
-    if (size(result) > MAX_EDITOR_STATE) invalidEditor("Source editor state exceeds 16 MiB")
+    // Stop as soon as the wire budget is exhausted, without allocating UTF-8 copies.
+    requireSourceEditorBudget(result)
     return result
+}
+
+private const val PRIVATE_EDITOR_ERROR = "私有编辑数据读写失败"
+private const val SESSION_UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+private val privateAndroidPath = Regex(
+    """(?<![A-Za-z0-9:/])(?:/data/(?:user(?:_de)?/[0-9]+|data)/[^/\s]+|""" +
+        """/mnt/expand/[^/\s]+/user(?:_de)?/[0-9]+/[^/\s]+)/""" +
+        """(?:files|cache|code_cache|no_backup|databases|shared_prefs)(?:/[^\s"'<>():,;]*)?""",
+)
+private val editorSessionPath = Regex(
+    """(?<![A-Za-z0-9:/])(?:/[^\s"'<>():,;]*/)?(?:book-source-edit-drafts/""" + SESSION_UUID +
+        """(?:-save)?\.json(?:\.bak|\.new)?|code-text-""" + SESSION_UUID + """\.txt)""",
+)
+
+/** Keep useful parser/network text, but never transport private draft/transfer identities. */
+internal fun sourceEditorSafeError(message: String?): String? = message
+    ?.replace(privateAndroidPath, PRIVATE_EDITOR_ERROR)
+    ?.replace(editorSessionPath, PRIVATE_EDITOR_ERROR)
+
+/** Mirrors Java's UTF-8 encoder: unpaired UTF-16 surrogates are replaced with one '?' byte. */
+internal fun sourceEditorUtf8Size(value: String, limit: Long = Long.MAX_VALUE): Long {
+    var bytes = 0L
+    var index = 0
+    while (index < value.length) {
+        val code = value[index].code
+        bytes += when {
+            code < 0x80 -> 1
+            code < 0x800 -> 2
+            code in 0xD800..0xDBFF && index + 1 < value.length &&
+                value[index + 1].code in 0xDC00..0xDFFF -> { index++; 4 }
+            code in 0xD800..0xDFFF -> 1
+            else -> 3
+        }
+        if (bytes > limit) return bytes
+        index++
+    }
+    return bytes
+}
+
+internal fun requireSourceEditorBudget(value: Any?, limit: Long = MAX_EDITOR_STATE.toLong()) {
+    var remaining = limit
+    fun debit(bytes: Long) {
+        remaining -= bytes
+        if (remaining < 0) invalidEditor("Source editor state exceeds 16 MiB")
+    }
+    fun visit(item: Any?) {
+        debit(8)
+        when (item) {
+            is String -> {
+                // Every UTF-16 code unit costs at least one encoded byte except a pair,
+                // which still costs four bytes, so length is a cheap lower bound.
+                if (item.length.toLong() > remaining) invalidEditor("Source editor state exceeds 16 MiB")
+                debit(sourceEditorUtf8Size(item, remaining))
+            }
+            is Map<*, *> -> item.entries.forEach { visit(it.key); visit(it.value) }
+            is List<*> -> item.forEach(::visit)
+        }
+    }
+    visit(value)
 }
 
 internal data class SourceEditorCommand(
