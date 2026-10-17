@@ -8,6 +8,9 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     io.legado.app.ui.flutter.EmbeddedFlutterActivityTest::class,
     io.legado.app.ui.book.source.edit.FlutterSourceEditorUiTest::class,
+    io.legado.app.ui.book.source.edit.BookSourceEditorRepositoryTest::class,
+    io.legado.app.ui.book.source.edit.BookSourceNativeOwnershipTest::class,
+    io.legado.app.ui.book.source.edit.BookSourceEditRouteTest::class,
     io.legado.app.ui.book.source.manage.SourceManagerChannelBridgeTest::class,
     io.legado.app.ui.widget.dialog.BottomWebViewDialogShowTest::class,
     io.legado.app.ui.book.explore.ExploreCategoriesTest::class,
