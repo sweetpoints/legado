@@ -9,16 +9,22 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import io.flutter.embedding.android.FlutterFragment
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.ui.flutter.FlutterUiTestDriver
+import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.utils.defaultSharedPreferences
+import java.io.File
 import java.util.ArrayDeque
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -180,6 +186,51 @@ class FlutterSourceEditorUiTest {
         assertEquals("moved source", saved.bookSourceName)
         assertEquals(source.weight, saved.weight)
         assertEquals(source.customOrder, saved.customOrder)
+    }
+
+    @Test
+    fun oversizedRuleOpensNativeEditorWithCompletePrivateFileAndCancelKeepsRoomUnchanged() {
+        val originalRule = "a".repeat(30_000)
+        source.ruleSearch = SearchRule(name = originalRule)
+        appDb.bookSourceDao.insert(source)
+        launch()
+        selectTab(1)
+        revealField(1, "name")
+        driver.click("source-field-1-name")
+
+        val nativeEditor = AtomicReference<CodeEditActivity>()
+        driver.await("Real native editor receives oversized Flutter field") {
+            instrumentation.runOnMainSync {
+                ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .filterIsInstance<CodeEditActivity>()
+                    .singleOrNull()?.let(nativeEditor::set)
+            }
+            nativeEditor.get() != null
+        }
+        val nativeIntent = AtomicReference<Intent>()
+        try {
+            instrumentation.runOnMainSync {
+                nativeIntent.set(Intent(nativeEditor.get().intent))
+            }
+            assertTrue("Large rule must use the private file transport",
+                nativeIntent.get().getBooleanExtra("useTextFile", false))
+            assertNull("Large rule must not be duplicated into a Binder text extra",
+                nativeIntent.get().getStringExtra("text"))
+            val textFile = File(requireNotNull(nativeIntent.get().getStringExtra("textFile")))
+            assertTrue("Native editor transfer file must exist", textFile.isFile)
+            assertEquals("Native transfer must contain the complete 30k rule",
+                originalRule, textFile.readText(Charsets.UTF_8))
+        } finally {
+            instrumentation.runOnMainSync { nativeEditor.get().finish() }
+        }
+        driver.awaitIdentifier("source-field-1-name")
+        assertEquals(originalRule,
+            appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.ruleSearch?.name)
+        driver.click("source-close")
+        awaitFinished()
+        assertEquals("Canceling external editing must leave the persisted rule untouched",
+            originalRule, appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.ruleSearch?.name)
     }
 
     private fun launch() {
