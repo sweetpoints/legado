@@ -3,6 +3,7 @@ package io.legado.app.ui.book.source.edit
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -149,6 +150,17 @@ class FlutterSourceEditorUiTest {
             driver.text("source-field-0-bookSourceName") == "retained draft"
         }
         assertEquals(source.bookSourceName, appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.bookSourceName)
+        driver.click("source-menu")
+        driver.awaitIdentifier("source-menu-DEBUG")
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        driver.await("Restored editor Back closes only the popup") {
+            val popup = driver.node("source-menu-DEBUG")
+            val popupClosed = popup == null
+            popup?.recycle()
+            popupClosed
+        }
+        assertNull("Popup Back must not request draft discard", driver.node("source-discard-confirm"))
+        driver.awaitIdentifier("source-field-0-bookSourceName")
         driver.click("source-close")
         driver.click("source-discard-confirm")
         awaitFinished()
