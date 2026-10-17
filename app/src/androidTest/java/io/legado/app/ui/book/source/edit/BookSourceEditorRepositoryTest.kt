@@ -5,6 +5,7 @@ import android.os.Looper
 import android.util.AtomicFile
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.google.gson.JsonParser
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.BookSource
 import io.legado.app.utils.GSON
@@ -266,8 +267,10 @@ class BookSourceEditorRepositoryTest {
         )
         val document = BookSourceEditDocument.from(source)
         val exported = repository.export(document)
-        assertTrue(exported.contains("\"customOrder\":37"))
-        assertTrue(exported.contains("\"lastUpdateTime\":91"))
+        // Production GSON pretty-prints JSON. Verify values, independent of whitespace.
+        val exportedObject = JsonParser.parseString(exported).asJsonObject
+        assertEquals(source.customOrder, exportedObject.get("customOrder").asInt)
+        assertEquals(source.lastUpdateTime, exportedObject.get("lastUpdateTime").asLong)
         assertTrue(runCatching { repository.parse("invalid") }.isFailure)
         assertTrue(runCatching { repository.readDraft("../outside") }.isFailure)
     }
