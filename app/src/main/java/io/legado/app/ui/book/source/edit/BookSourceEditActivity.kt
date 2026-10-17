@@ -3,19 +3,23 @@ package io.legado.app.ui.book.source.edit
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
@@ -35,8 +39,8 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 
 /** Platform results and effects only. Source payloads and edit ownership live in private drafts. */
-class BookSourceEditActivity : BaseComposeActivity() {
-    private val model by
+class BookSourceEditActivity : BaseThemedActivity() {
+    internal val editorModel by
         viewModels<BookSourceComposeViewModel> {
             viewModelFactory {
                 initializer {
@@ -55,30 +59,107 @@ class BookSourceEditActivity : BaseComposeActivity() {
         val unregister: () -> Unit,
     )
 
+    private val model get() = editorModel
     private var registered: RegisteredNative? = null
+    private val editorBackCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = handleEditorBack()
+    }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply {
+            id = R.id.source_editor_flutter_container
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+        })
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
         observeEvent<Int>(PreferKey.showBoardLine) { rows -> model.keyboardRows(rows) }
+        model.keyboardRows(AppConfig.showBoardLine)
+        onBackPressedDispatcher.addCallback(editorBackCallback)
+        if (editorFragment == null) {
+            supportFragmentManager.beginTransaction()
+                .add(R.id.source_editor_flutter_container, SourceEditorFlutterFragment(), FLUTTER_FRAGMENT_TAG)
+                .commitNow()
+        }
+        lifecycleScope.launch {
+            var finished = false
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                model.state.collect { current ->
+                    if (!canHandleEditorEffect()) return@collect
+                    val document = current.document ?: return@collect
+                    registerNative(document.nativeRequest)
+                    document.savedUrl?.let(::recordSaved)
+                    if (document.finished) {
+                        if (!finished) {
+                            finished = true
+                            complete(document.savedUrl)
+                        }
+                    } else if (!current.busy && current.error == null) {
+                        val request = document.nativeRequest
+                        if (request != null && !request.delivered) {
+                            model.deliverNative(
+                                request.id,
+                                { canHandleEditorEffect() && lifecycle.currentState == Lifecycle.State.RESUMED },
+                                ::launchNative,
+                            )
+                        } else if (request == null && !document.helpShown) {
+                            model.showInitialHelp(!LocalConfig.ruleHelpVersionIsLast)
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        BookSourceEditRoute(
-            model,
-            ::launchNative,
-            ::registerNative,
-            ::complete,
-            ::recordSaved,
-            ::paste,
-            canHandle = { !isFinishing && !isDestroyed },
-            initialHelpNeeded = !LocalConfig.ruleHelpVersionIsLast,
-            maxLines = AppConfig.sourceEditMaxLine,
-            keyboardRows = AppConfig.showBoardLine,
-            transparentBackground = transparentNavBar && !AppConfig.isEInkMode,
-        )
+    private fun canHandleEditorEffect(): Boolean =
+        !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
+
+    internal fun handleEditorBack() {
+        if (!model.state.value.busy) model.cancel()
     }
 
-    private fun paste() {
+    private val editorFragment: SourceEditorFlutterFragment?
+        get() = supportFragmentManager.findFragmentByTag(FLUTTER_FRAGMENT_TAG)
+            as? SourceEditorFlutterFragment
+
+    override fun onPostResume() {
+        super.onPostResume()
+        editorFragment?.onPostResume()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        editorFragment?.onNewIntent(intent)
+        super.onNewIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        editorFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        editorFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        editorFragment?.onUserLeaveHint()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        editorFragment?.onTrimMemory(level)
+    }
+
+    companion object {
+        internal const val FLUTTER_FRAGMENT_TAG = "source-editor-flutter"
+    }
+
+    internal fun paste() {
         model.importText(getClipText().orEmpty())
     }
 
