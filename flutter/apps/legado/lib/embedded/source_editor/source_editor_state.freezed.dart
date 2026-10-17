@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SourceEditorField {
 
- String get key; String get value; String get label; int get selectionStart; int get selectionEnd;
+ String get key; String get value; String get label; bool get external; int get originalLength; int get selectionStart; int get selectionEnd;
 /// Create a copy of SourceEditorField
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -27,20 +27,20 @@ $SourceEditorFieldCopyWith<SourceEditorField> get copyWith => _$SourceEditorFiel
 @override
 bool operator ==(Object other) {
   final _this = this as SourceEditorField;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SourceEditorField&&(identical(other.key, _this.key) || other.key == _this.key)&&(identical(other.value, _this.value) || other.value == _this.value)&&(identical(other.label, _this.label) || other.label == _this.label)&&(identical(other.selectionStart, _this.selectionStart) || other.selectionStart == _this.selectionStart)&&(identical(other.selectionEnd, _this.selectionEnd) || other.selectionEnd == _this.selectionEnd));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SourceEditorField&&(identical(other.key, _this.key) || other.key == _this.key)&&(identical(other.value, _this.value) || other.value == _this.value)&&(identical(other.label, _this.label) || other.label == _this.label)&&(identical(other.external, _this.external) || other.external == _this.external)&&(identical(other.originalLength, _this.originalLength) || other.originalLength == _this.originalLength)&&(identical(other.selectionStart, _this.selectionStart) || other.selectionStart == _this.selectionStart)&&(identical(other.selectionEnd, _this.selectionEnd) || other.selectionEnd == _this.selectionEnd));
 }
 
 
 @override
 int get hashCode {
   final _this = this as SourceEditorField;
-  return Object.hash(runtimeType,_this.key,_this.value,_this.label,_this.selectionStart,_this.selectionEnd);
+  return Object.hash(runtimeType,_this.key,_this.value,_this.label,_this.external,_this.originalLength,_this.selectionStart,_this.selectionEnd);
 }
 
 @override
 String toString() {
   final _this = this as SourceEditorField;
-  return 'SourceEditorField(key: ${_this.key}, value: ${_this.value}, label: ${_this.label}, selectionStart: ${_this.selectionStart}, selectionEnd: ${_this.selectionEnd})';
+  return 'SourceEditorField(key: ${_this.key}, value: ${_this.value}, label: ${_this.label}, external: ${_this.external}, originalLength: ${_this.originalLength}, selectionStart: ${_this.selectionStart}, selectionEnd: ${_this.selectionEnd})';
 }
 
 
@@ -51,7 +51,7 @@ abstract mixin class $SourceEditorFieldCopyWith<$Res>  {
   factory $SourceEditorFieldCopyWith(SourceEditorField value, $Res Function(SourceEditorField) _then) = _$SourceEditorFieldCopyWithImpl;
 @useResult
 $Res call({
- String key, String value, String label, int selectionStart, int selectionEnd
+ String key, String value, String label, bool external, int originalLength, int selectionStart, int selectionEnd
 });
 
 
@@ -68,12 +68,14 @@ class _$SourceEditorFieldCopyWithImpl<$Res>
 
 /// Create a copy of SourceEditorField
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? key = null,Object? value = null,Object? label = null,Object? selectionStart = null,Object? selectionEnd = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? key = null,Object? value = null,Object? label = null,Object? external = null,Object? originalLength = null,Object? selectionStart = null,Object? selectionEnd = null,}) {
   return _then(SourceEditorField(
 key: null == key ? _self.key : key // ignore: cast_nullable_to_non_nullable
 as String,value: null == value ? _self.value : value // ignore: cast_nullable_to_non_nullable
 as String,label: null == label ? _self.label : label // ignore: cast_nullable_to_non_nullable
-as String,selectionStart: null == selectionStart ? _self.selectionStart : selectionStart // ignore: cast_nullable_to_non_nullable
+as String,external: null == external ? _self.external : external // ignore: cast_nullable_to_non_nullable
+as bool,originalLength: null == originalLength ? _self.originalLength : originalLength // ignore: cast_nullable_to_non_nullable
+as int,selectionStart: null == selectionStart ? _self.selectionStart : selectionStart // ignore: cast_nullable_to_non_nullable
 as int,selectionEnd: null == selectionEnd ? _self.selectionEnd : selectionEnd // ignore: cast_nullable_to_non_nullable
 as int,
   ));
@@ -160,10 +162,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String key,  String value,  String label,  int selectionStart,  int selectionEnd)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String key,  String value,  String label,  bool external,  int originalLength,  int selectionStart,  int selectionEnd)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SourceEditorField() when $default != null:
-return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.selectionEnd);case _:
+return $default(_that.key,_that.value,_that.label,_that.external,_that.originalLength,_that.selectionStart,_that.selectionEnd);case _:
   return orElse();
 
 }
@@ -181,10 +183,10 @@ return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.sel
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String key,  String value,  String label,  int selectionStart,  int selectionEnd)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String key,  String value,  String label,  bool external,  int originalLength,  int selectionStart,  int selectionEnd)  $default,) {final _that = this;
 switch (_that) {
 case _SourceEditorField():
-return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.selectionEnd);case _:
+return $default(_that.key,_that.value,_that.label,_that.external,_that.originalLength,_that.selectionStart,_that.selectionEnd);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -201,10 +203,10 @@ return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.sel
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String key,  String value,  String label,  int selectionStart,  int selectionEnd)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String key,  String value,  String label,  bool external,  int originalLength,  int selectionStart,  int selectionEnd)?  $default,) {final _that = this;
 switch (_that) {
 case _SourceEditorField() when $default != null:
-return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.selectionEnd);case _:
+return $default(_that.key,_that.value,_that.label,_that.external,_that.originalLength,_that.selectionStart,_that.selectionEnd);case _:
   return null;
 
 }
@@ -216,12 +218,14 @@ return $default(_that.key,_that.value,_that.label,_that.selectionStart,_that.sel
 
 
 class _SourceEditorField extends SourceEditorField {
-  const _SourceEditorField({required this.key, required this.value, required this.label, this.selectionStart = 0, this.selectionEnd = 0}): super._();
+  const _SourceEditorField({required this.key, required this.value, required this.label, this.external = false, this.originalLength = 0, this.selectionStart = 0, this.selectionEnd = 0}): super._();
   
 
 @override final  String key;
 @override final  String value;
 @override final  String label;
+@override@JsonKey() final  bool external;
+@override@JsonKey() final  int originalLength;
 @override@JsonKey() final  int selectionStart;
 @override@JsonKey() final  int selectionEnd;
 
@@ -235,18 +239,18 @@ _$SourceEditorFieldCopyWith<_SourceEditorField> get copyWith => __$SourceEditorF
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SourceEditorField&&(identical(other.key, key) || other.key == key)&&(identical(other.value, value) || other.value == value)&&(identical(other.label, label) || other.label == label)&&(identical(other.selectionStart, selectionStart) || other.selectionStart == selectionStart)&&(identical(other.selectionEnd, selectionEnd) || other.selectionEnd == selectionEnd));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SourceEditorField&&(identical(other.key, key) || other.key == key)&&(identical(other.value, value) || other.value == value)&&(identical(other.label, label) || other.label == label)&&(identical(other.external, external) || other.external == external)&&(identical(other.originalLength, originalLength) || other.originalLength == originalLength)&&(identical(other.selectionStart, selectionStart) || other.selectionStart == selectionStart)&&(identical(other.selectionEnd, selectionEnd) || other.selectionEnd == selectionEnd));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,key,value,label,selectionStart,selectionEnd);
+    return Object.hash(runtimeType,key,value,label,external,originalLength,selectionStart,selectionEnd);
 }
 
 @override
 String toString() {
-    return 'SourceEditorField(key: $key, value: $value, label: $label, selectionStart: $selectionStart, selectionEnd: $selectionEnd)';
+    return 'SourceEditorField(key: $key, value: $value, label: $label, external: $external, originalLength: $originalLength, selectionStart: $selectionStart, selectionEnd: $selectionEnd)';
 }
 
 
@@ -257,7 +261,7 @@ abstract mixin class _$SourceEditorFieldCopyWith<$Res> implements $SourceEditorF
   factory _$SourceEditorFieldCopyWith(_SourceEditorField value, $Res Function(_SourceEditorField) _then) = __$SourceEditorFieldCopyWithImpl;
 @override @useResult
 $Res call({
- String key, String value, String label, int selectionStart, int selectionEnd
+ String key, String value, String label, bool external, int originalLength, int selectionStart, int selectionEnd
 });
 
 
@@ -274,12 +278,14 @@ class __$SourceEditorFieldCopyWithImpl<$Res>
 
 /// Create a copy of SourceEditorField
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? key = null,Object? value = null,Object? label = null,Object? selectionStart = null,Object? selectionEnd = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? key = null,Object? value = null,Object? label = null,Object? external = null,Object? originalLength = null,Object? selectionStart = null,Object? selectionEnd = null,}) {
   return _then(_SourceEditorField(
 key: null == key ? _self.key : key // ignore: cast_nullable_to_non_nullable
 as String,value: null == value ? _self.value : value // ignore: cast_nullable_to_non_nullable
 as String,label: null == label ? _self.label : label // ignore: cast_nullable_to_non_nullable
-as String,selectionStart: null == selectionStart ? _self.selectionStart : selectionStart // ignore: cast_nullable_to_non_nullable
+as String,external: null == external ? _self.external : external // ignore: cast_nullable_to_non_nullable
+as bool,originalLength: null == originalLength ? _self.originalLength : originalLength // ignore: cast_nullable_to_non_nullable
+as int,selectionStart: null == selectionStart ? _self.selectionStart : selectionStart // ignore: cast_nullable_to_non_nullable
 as int,selectionEnd: null == selectionEnd ? _self.selectionEnd : selectionEnd // ignore: cast_nullable_to_non_nullable
 as int,
   ));
