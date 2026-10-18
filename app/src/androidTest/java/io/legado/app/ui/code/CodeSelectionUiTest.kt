@@ -779,7 +779,7 @@ class CodeSelectionUiTest {
                 try {
                     compose.launchAssociation<FileAssociationActivity>(intent).use { host ->
                         var parent: DialogFragment? = null
-                        await {
+                        awaitCompose {
                             host.onActivity { activity ->
                                 parent =
                                     activity.supportFragmentManager.fragments
@@ -825,7 +825,7 @@ class CodeSelectionUiTest {
                             .assertIsEnabled()
                             .performClick()
                         var preview: CodeDialog? = null
-                        await {
+                        awaitCompose {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 preview =
@@ -2129,6 +2129,15 @@ class CodeSelectionUiTest {
             SystemClock.sleep(25)
         }
         assertTrue(message(), condition())
+    }
+
+    /** Import/preview hosts still run Compose effects on its test clock. Only use
+     * this when awaiting those actual Compose hosts, never the Flutter editor. */
+    private fun awaitCompose(condition: () -> Boolean) {
+        compose.waitUntil(timeoutMillis = 15_000) {
+            compose.mainClock.advanceTimeByFrame()
+            condition()
+        }
     }
 
     private fun closeEditorScenario() {
