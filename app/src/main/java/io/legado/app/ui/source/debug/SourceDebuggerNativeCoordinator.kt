@@ -28,6 +28,8 @@ class SourceDebuggerNativeCoordinator private constructor(
     private var binding: Any? = null
     private var retired = false
     private var finished = false
+    private var lastProjection: Map<String, Any?>? = null
+    private var revision = 0L
     private val effects = scope.launch {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             state.collect(::completeIfReady)
@@ -49,10 +51,16 @@ class SourceDebuggerNativeCoordinator private constructor(
 
     fun snapshot(owner: Any): Map<String, Any?> {
         requireOwner(owner)
-        return current()
+        val projection = current()
+        if (projection != lastProjection) {
+            check(revision < Long.MAX_VALUE) { "Debugger revision exhausted" }
+            revision++
+            lastProjection = projection
+        }
+        return projection + ("revision" to revision)
     }
 
-    fun command(owner: Any, arguments: Any?) {
+    fun command(owner: Any, arguments: Any?): Map<String, Any?>? {
         requireOwner(owner)
         val command = parseSourceDebuggerCommand(arguments, kind, generation)
         check(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
@@ -61,6 +69,9 @@ class SourceDebuggerNativeCoordinator private constructor(
             check(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && canHandle())
         }
         execute(command)
+        // A selection/composing update can leave StateFlow equal and emit nothing. A direct
+        // query acknowledgement releases Dart's pending input without waiting for an event.
+        return if (command.op == "query") snapshot(owner) else null
     }
 
     private fun requireOwner(owner: Any) { check(!retired && binding === owner) { "Stale debugger binding" } }

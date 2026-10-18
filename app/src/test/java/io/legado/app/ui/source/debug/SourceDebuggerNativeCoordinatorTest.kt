@@ -169,6 +169,52 @@ class SourceDebuggerNativeCoordinatorTest {
         assertTrue(model.state.value.running)
     }
 
+    @Test fun snapshotRevisionIsPositiveLongStableForEqualProjectionAndIncreasesForVisibleChanges() = runTest(dispatcher) {
+        val model = model(Repository())
+        val host = Host().apply { registry.currentState = Lifecycle.State.RESUMED }
+        val coordinator = coordinator(model, host, backgroundScope)
+        val owner = coordinator.bind()
+        runCurrent()
+        val first = coordinator.snapshot(owner)
+        val firstRevision = first["revision"] as Long
+        assertTrue(firstRevision > 0)
+        assertEquals(first, coordinator.snapshot(owner))
+        model.query("same text", 2, 4)
+        val changed = coordinator.snapshot(owner)
+        assertTrue(changed["revision"] as Long > firstRevision)
+        model.query("same text", 2, 4) // Private record revision changes, presentation does not.
+        assertEquals(changed["revision"], coordinator.snapshot(owner)["revision"])
+        model.query("same text", 4, 4)
+        assertTrue(coordinator.snapshot(owner)["revision"] as Long > changed["revision"] as Long)
+    }
+
+    @Test fun equalQueryCommandReturnsAckWithoutNeedingStateFlowEmissionAndOtherCommandsReturnNull() = runTest(dispatcher) {
+        val model = model(Repository())
+        val host = Host().apply { registry.currentState = Lifecycle.State.RESUMED }
+        val coordinator = coordinator(model, host, backgroundScope)
+        val owner = coordinator.bind()
+        runCurrent()
+        val initial = coordinator.snapshot(owner)
+        val equalAck = coordinator.command(owner, mapOf("generation" to coordinator.generation,
+            "op" to "query", "text" to "", "start" to 0, "end" to 0))
+        assertEquals(initial, equalAck)
+        val changedAck = coordinator.command(owner, mapOf("generation" to coordinator.generation,
+            "op" to "query", "text" to "query", "start" to 1, "end" to 3))!!
+        assertEquals("query", changedAck["query"])
+        assertEquals(1, changedAck["queryStart"])
+        assertEquals(3, changedAck["queryEnd"])
+        assertTrue(changedAck["revision"] as Long > initial["revision"] as Long)
+        assertEquals(changedAck, coordinator.snapshot(owner))
+        assertNull(coordinator.command(owner, mapOf("generation" to coordinator.generation,
+            "op" to "help", "value" to false)))
+        val beforeRejected = coordinator.snapshot(owner)
+        assertThrows(IllegalArgumentException::class.java) {
+            coordinator.command(owner, mapOf("generation" to coordinator.generation,
+                "op" to "query", "text" to "rejected", "start" to -1, "end" to 0))
+        }
+        assertEquals(beforeRejected, coordinator.snapshot(owner))
+    }
+
     private class Repository : BookSourceDebugRepository {
         var missing = false
         var loadGate: CompletableDeferred<Unit>? = null
