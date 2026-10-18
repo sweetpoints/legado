@@ -948,7 +948,7 @@ class CodeSelectionUiTest {
                             ready
                         }
                         flutter.click("code-save")
-                        await {
+                        awaitCompose {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 val expected =
@@ -1019,7 +1019,7 @@ class CodeSelectionUiTest {
                             editorActivity!!.finish()
                         }
                         flutter.click("code-discard-confirm")
-                        await {
+                        awaitCompose {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 ready =
@@ -1059,7 +1059,7 @@ class CodeSelectionUiTest {
                                     editor.text.replace(0, editor.text.length, draft)
                                 }
                                 flutter.click("code-save")
-                                await {
+                                awaitCompose {
                                     var ready = false
                                     instrumentation.runOnMainSync {
                                         val expected =
@@ -1125,7 +1125,7 @@ class CodeSelectionUiTest {
                         }
                         compose.onNodeWithTag("code-save").performClick()
                         val expectedUrl = urls[1] + if (replacements) "#edited-once" else "#edited"
-                        await {
+                        awaitCompose {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 if (rss) {
@@ -1161,7 +1161,7 @@ class CodeSelectionUiTest {
                             // Saving updates the candidate before the child dialog's removal
                             // transaction finishes. Wait for the parent to own input again.
                             var parentReadyState = "No parent state sample"
-                            await(message = { "Saved preview was not ready to reopen: $parentReadyState" }) {
+                            awaitCompose(message = { "Saved preview was not ready to reopen: $parentReadyState" }) {
                                 var ready = false
                                 instrumentation.runOnMainSync {
                                     val parentState = ViewModelProvider(parent!!)[RssImportViewModel::class.java].state.value
@@ -1204,7 +1204,7 @@ class CodeSelectionUiTest {
                                 }
                             }
                             var previewGeometry = "readonly Compose nodes not yet available"
-                            await(message = {
+                            awaitCompose(message = {
                                 savePreviewFailure()
                                 "Read-only preview UI not ready: $previewGeometry"
                             }) {
@@ -1312,7 +1312,7 @@ class CodeSelectionUiTest {
                                 ready
                             }
                             instrumentation.runOnMainSync { editorActivity!!.finish() }
-                            await {
+                            awaitCompose {
                                 var ready = false
                                 instrumentation.runOnMainSync {
                                     ready =
@@ -2201,11 +2201,12 @@ class CodeSelectionUiTest {
 
     /** Import/preview hosts still run Compose effects on its test clock. Only use
      * this when awaiting those actual Compose hosts, never the Flutter editor. */
-    private fun awaitCompose(condition: () -> Boolean) {
-        compose.waitUntil(timeoutMillis = 15_000) {
-            compose.mainClock.advanceTimeByFrame()
-            condition()
-        }
+    private fun awaitCompose(
+        message: () -> String = { "Compose import/preview host did not reach the expected state" },
+        condition: () -> Boolean,
+    ) = await(message) {
+        compose.mainClock.advanceTimeByFrame()
+        condition()
     }
 
     private fun closeEditorScenario() {
