@@ -1,5 +1,6 @@
 package io.legado.app.ui.flutter
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
@@ -67,6 +68,8 @@ class FlutterSourceDebuggerHostTest {
                     }
                     lateinit var root: View
                     scenario.onActivity { root = it.window.decorView }
+                    driver.awaitIdentifier("source-debug-query")
+                    screenshot("book-help")
                     ImeBarrier(root).use { ime ->
                         driver.setText("source-debug-query", "fixture query") { ime.settled(true) }
                         val field = requireNotNull(driver.node("source-debug-query"))
@@ -85,6 +88,7 @@ class FlutterSourceDebuggerHostTest {
                             }
                             matches
                         }
+                        screenshot("book-query-ime-selection")
                         assertTrue(server.paths.isEmpty())
                         closeSoftKeyboard()
                         ime.settled(false)
@@ -109,6 +113,10 @@ class FlutterSourceDebuggerHostTest {
                         }
                         done
                     }
+                    driver.await("Flutter renders completed book output") {
+                        driver.containsText("source-debug-output", "Fixture body")
+                    }
+                    screenshot("book-completed-output")
                     assertNull(Debug.callback)
                     assertEquals(listOf("/search", "/info", "/toc", "/content"), server.paths.toList())
                     driver.await("private book checkpoint") {
@@ -160,12 +168,18 @@ class FlutterSourceDebuggerHostTest {
                     closeSoftKeyboard()
                     // Use the visible category chooser, then its real Flutter row.
                     driver.click("source-debug-sorts")
+                    driver.awaitIdentifier("source-debug-sort-0")
+                    screenshot("rss-category-chooser")
                     driver.click("source-debug-sort-0")
                     driver.await("rss fixture parsed") {
                         var done = false
                         scenario.onActivity { done = !it.viewModel.state.value.running && it.viewModel.state.value.output.contains("Fixture body") }
                         done
                     }
+                    driver.await("Flutter renders completed RSS output") {
+                        driver.containsText("source-debug-output", "Fixture body")
+                    }
+                    screenshot("rss-completed-output")
                     assertNull(Debug.callback)
                     val requests = server.paths.toList()
                     assertEquals(listOf("/search", "/info"), requests)
@@ -252,6 +266,20 @@ class FlutterSourceDebuggerHostTest {
                 runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
             }
         }
+    }
+
+    /** Fixture-only screenshots for inspecting the actual composed Flutter/IME colors and layout. */
+    private fun screenshot(name: String) {
+        val directory = File(requireNotNull(context.getExternalFilesDir(null)), "source-debugger-acceptance")
+        check(directory.isDirectory || directory.mkdirs())
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot()) {
+            "Debugger acceptance screenshot unavailable"
+        }
+        try {
+            File(directory, "$name.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { bitmap.recycle() }
     }
 
     private fun deleteOwned(files: List<File>) {
