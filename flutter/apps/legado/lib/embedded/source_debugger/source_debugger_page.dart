@@ -54,6 +54,16 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
         !_query.selection.isValid) {
       return;
     }
+    final pending = _lastSubmitted;
+    // Composing range is Flutter/IME state, not a native query edit. Creating
+    // pending work for an unchanged wire value cannot receive a StateFlow echo.
+    if (_query.text == (pending?.text ?? state.query) &&
+        _query.selection.baseOffset ==
+            (pending?.selection.baseOffset ?? state.queryStart) &&
+        _query.selection.extentOffset ==
+            (pending?.selection.extentOffset ?? state.queryEnd)) {
+      return;
+    }
     _lastSubmitted = _query.value;
     unawaited(
       _send('query', {
