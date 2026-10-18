@@ -26,6 +26,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.*
 import org.junit.Assert.*
 
@@ -106,13 +107,30 @@ class FlutterSourceDebuggerHostTest {
                     scenario.onActivity { assertTrue(it.viewModel.state.value.running) }
                     assertEquals(1, server.paths.count { it == "/search" })
                     server.release.countDown()
-                    driver.await("four stage parser completed") {
-                        var done = false
+                    try {
+                        driver.await("four stage parser completed") {
+                            var done = false
+                            scenario.onActivity {
+                                val state = it.viewModel.state.value
+                                done = !state.running && state.output.contains("Fixture body")
+                            }
+                            done
+                        }
+                    } catch (failure: AssertionError) {
+                        // This Activity owns only the in-process HTTP fixture. Preserve bounded
+                        // diagnostics before ActivityScenario cleanup closes its private draft.
+                        val diagnostic = JSONObject().put("paths", server.paths.toList())
                         scenario.onActivity {
                             val state = it.viewModel.state.value
-                            done = !state.running && state.output.contains("Fixture body")
+                            diagnostic.put("running", state.running)
+                                .put("issue", state.issue?.name ?: JSONObject.NULL)
+                                .put("error", state.error?.take(2_000) ?: JSONObject.NULL)
+                                .put("output", state.output.takeLast(6_000))
                         }
-                        done
+                        val directory = File(requireNotNull(context.getExternalFilesDir(null)), "source-debugger-acceptance")
+                        check(directory.isDirectory || directory.mkdirs())
+                        File(directory, "book-http-failure.json").writeText(diagnostic.toString(2))
+                        throw failure
                     }
                     driver.await("Flutter renders completed book output") {
                         driver.containsText("source-debug-output", "Fixture body")
