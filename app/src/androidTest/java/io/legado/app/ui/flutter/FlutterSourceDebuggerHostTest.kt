@@ -197,8 +197,12 @@ class FlutterSourceDebuggerHostTest {
                         scenario.onActivity { done = !it.viewModel.state.value.running && it.viewModel.state.value.output.contains("Fixture body") }
                         done
                     }
-                    driver.await("Flutter renders completed RSS output") {
-                        driver.containsText("source-debug-output", "Fixture body")
+                    captureRssOutputDiagnostic(scenario, "rss-before-output")
+                    try {
+                        awaitOutputText("Fixture body")
+                    } catch (failure: AssertionError) {
+                        captureRssOutputDiagnostic(scenario, "rss-output-failure")
+                        throw failure
                     }
                     screenshot("rss-completed-output")
                     assertNull(Debug.callback)
@@ -290,6 +294,45 @@ class FlutterSourceDebuggerHostTest {
         }
     }
 
+    private fun captureRssOutputDiagnostic(scenario: ActivityScenario<RssSourceDebugActivity>, name: String) {
+        val diagnostic = JSONObject()
+        scenario.onActivity {
+            val state = it.viewModel.state.value
+            diagnostic.put("help", state.help).put("running", state.running)
+                .put("loading", state.loading).put("closed", state.closed)
+                .put("outputLength", state.output.length)
+        }
+        val nodes = org.json.JSONArray()
+        val output = driver.node("source-debug-output")
+        diagnostic.put("outputIdentifierPresent", output != null)
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        output?.let(pending::add)
+        if (output == null) {
+            listOf("source-debug-query", "source-debug-help", "source-debug-sorts").forEach { id ->
+                driver.node(id)?.let(pending::add)
+            }
+        }
+        while (pending.isNotEmpty() && nodes.length() < 300) {
+            val current = pending.removeFirst()
+            val bounds = android.graphics.Rect().also(current::getBoundsInScreen)
+            nodes.put(JSONObject().put("identifier", current.viewIdResourceName ?: JSONObject.NULL)
+                .put("bounds", bounds.toShortString()).put("visible", current.isVisibleToUser)
+                .put("className", current.className?.toString() ?: JSONObject.NULL)
+                .put("focused", current.isFocused).put("scrollable", current.isScrollable)
+                .put("textLength", current.text?.length ?: 0)
+                .put("containsFixtureBody", current.text?.contains("Fixture body") == true ||
+                    current.contentDescription?.contains("Fixture body") == true))
+            for (i in 0 until current.childCount) current.getChild(i)?.let(pending::add)
+            current.recycle()
+        }
+        pending.forEach { it.recycle() }
+        diagnostic.put("nodes", nodes)
+        val directory = File(requireNotNull(context.getExternalFilesDir(null)), "source-debugger-acceptance")
+        check(directory.isDirectory || directory.mkdirs())
+        File(directory, "$name.json").writeText(diagnostic.toString(2))
+        screenshot(name)
+    }
+
     private fun awaitOutputText(expected: String) {
         val deadline = android.os.SystemClock.uptimeMillis() + 30_000
         var scrolls = 0
@@ -298,6 +341,21 @@ class FlutterSourceDebuggerHostTest {
             val output = driver.node("source-debug-output")
             var scrolling: AccessibilityNodeInfo? = output
             var didScroll = false
+            val descendants = java.util.ArrayDeque<AccessibilityNodeInfo>()
+            output?.let { descendants.add(AccessibilityNodeInfo.obtain(it)) }
+            while (descendants.isNotEmpty()) {
+                val node = descendants.removeFirst()
+                if (node.isVisibleToUser && node.isScrollable) {
+                    assertTrue("Debugger output exceeded 24 real scrolls", scrolls < 24)
+                    didScroll = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    if (didScroll) scrolls++
+                }
+                if (!didScroll) for (i in 0 until node.childCount) node.getChild(i)?.let(descendants::add)
+                node.recycle()
+                if (didScroll) break
+            }
+            descendants.forEach { it.recycle() }
+            if (didScroll) { scrolling?.recycle(); scrolling = null }
             while (scrolling != null) {
                 if (scrolling.isVisibleToUser && scrolling.isScrollable) {
                     assertTrue("Debugger output exceeded 24 real scrolls", scrolls < 24)
