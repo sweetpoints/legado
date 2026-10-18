@@ -3,12 +3,13 @@ package io.legado.app.ui.code
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
+import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.about.AppLogDialog
@@ -25,7 +26,7 @@ import kotlinx.coroutines.launch
 
 /** Platform launch values, public result contract and existing Compose dialog hosts only. */
 class CodeEditActivity :
-    BaseComposeActivity(),
+    BaseThemedActivity(),
     ChangeThemeDialog.CallBack,
     SettingsDialog.CallBack,
     CurlAnalyzeUrlDialog.Callback {
@@ -72,7 +73,26 @@ class CodeEditActivity :
             useTextFile = intent.getBooleanExtra("useTextFile", false),
         )
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
+    internal val nativeCoordinator by lazy {
+        CodeEditorNativeCoordinator(model, controller, lifecycle, lifecycleScope,
+            ::platformAction, ::returnResult, ::closeHost, { !isFinishing && !isDestroyed })
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        onBackPressedDispatcher.addCallback(object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = nativeCoordinator.exit()
+        })
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply { id = io.legado.app.R.id.code_editor_flutter_container })
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        nativeCoordinator
+        if (editorFragment == null) supportFragmentManager.beginTransaction()
+            .add(io.legado.app.R.id.code_editor_flutter_container, CodeEditorFlutterFragment(), "code-editor-flutter").commitNow()
         model.keyboardRows(AppConfig.showBoardLine)
         observeEvent<Int>(PreferKey.showBoardLine) { model.keyboardRows(it) }
         lifecycleScope.launch {
@@ -88,17 +108,19 @@ class CodeEditActivity :
         }
     }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        CodeEditorRoute(
-            model,
-            controller,
-            ::platformAction,
-            ::returnResult,
-            ::closeHost,
-            canReturn = { !isFinishing && !isDestroyed },
-        )
+    private val editorFragment get() = supportFragmentManager.findFragmentByTag("code-editor-flutter") as? CodeEditorFlutterFragment
+    override fun onPostResume() { super.onPostResume(); editorFragment?.onPostResume() }
+    override fun onNewIntent(intent: Intent) { editorFragment?.onNewIntent(intent); super.onNewIntent(intent) }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        editorFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data); editorFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); editorFragment?.onUserLeaveHint() }
+    override fun onTrimMemory(level: Int) { super.onTrimMemory(level); editorFragment?.onTrimMemory(level) }
+    override fun onDestroy() { nativeCoordinator.close(); super.onDestroy() }
 
     private fun returnResult(payload: CodeEditorResultPayload) {
         val result =
@@ -144,6 +166,7 @@ class CodeEditActivity :
             CodeEditorAction.RSS_HELP -> showHelp("rssRuleHelp")
             CodeEditorAction.JS_HELP -> showHelp("jsHelp")
             CodeEditorAction.REGEX_HELP -> showHelp("regexHelp")
+            CodeEditorAction.HELP -> showHelp("ruleHelp")
             else -> Unit
         }
     }
