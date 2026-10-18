@@ -41,7 +41,13 @@ internal class SoraCodeEditorEngine(
         ::replaceCodeEditorMatches,
 ) : CodeEditorEngine {
     override val safe = false
-    override val view = CodeEditor(context)
+    override val view = object : CodeEditor(context) {
+        override fun hideSoftInput() {
+            // Sora disables input during transactions even when Flutter's search field
+            // owns this window's IME. Keep native editing locks without hiding that IME.
+            if (hasFocus()) super.hideSoftInput()
+        }
+    }
     private val language = languageEngine.attachLanguage()
     private val searcher = view.searcher
     private var disposed = false
