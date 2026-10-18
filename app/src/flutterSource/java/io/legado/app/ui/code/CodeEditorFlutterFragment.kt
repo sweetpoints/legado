@@ -3,6 +3,8 @@ package io.legado.app.ui.code
 import android.content.Context
 import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterFragment
+import io.flutter.embedding.android.RenderMode
+import io.flutter.embedding.android.TransparencyMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.plugins.util.GeneratedPluginRegister
 
@@ -16,6 +18,12 @@ class CodeEditorFlutterFragment : FlutterFragment() {
         requireArguments().putBoolean(ARG_SHOULD_AUTOMATICALLY_HANDLE_ON_BACK_PRESSED, true)
         super.onAttach(context)
     }
+
+    // Hybrid Composition interleaves Sora/Safe native views with Flutter chrome.
+    // A transparent SurfaceView renders above native siblings; TextureView obeys
+    // the normal Android view ordering and preserves platform-view transparent holes.
+    override fun getRenderMode(): RenderMode = RenderMode.texture
+    override fun getTransparencyMode(): TransparencyMode = TransparencyMode.transparent
 
     // Ignore external arguments, cached engines and Intent/deep-link routes.
     override fun getDartEntrypointFunctionName(): String = "embeddedUiMain"
