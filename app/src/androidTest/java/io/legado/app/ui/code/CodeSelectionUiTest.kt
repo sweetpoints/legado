@@ -17,6 +17,7 @@ import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.webkit.WebView
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsDisplayed
@@ -94,6 +95,7 @@ import io.legado.app.ui.widget.dialog.CodePreviewInputMetrics
 import io.legado.app.utils.GSON
 import java.io.File
 import java.util.UUID
+import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -619,12 +621,12 @@ class CodeSelectionUiTest {
         flutter.setText("code-replacement", "let")
         flutter.click("code-replace-all")
         val replaced = source.replace("const", "let")
-        awaitEditor { it.text.toString() == replaced }
+        awaitEditor("replace-all result") { it.text.toString() == replaced }
         // Keep the actual IME open: undo/redo live in the keyboard-assistance toolbar.
         flutter.click("code-undo")
-        awaitEditor { it.text.toString() == source }
+        awaitEditor("undo result") { it.text.toString() == source }
         flutter.click("code-redo")
-        awaitEditor { it.text.toString() == replaced }
+        awaitEditor("redo result") { it.text.toString() == replaced }
         closeSoftKeyboard()
         flutter.click("code-save")
         await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
@@ -1958,7 +1960,7 @@ class CodeSelectionUiTest {
             } else {
                 onView(withId(R.id.code_share_selection)).inRoot(isPlatformPopup()).perform(click())
             }
-            await { chooser.get() != null }
+            await(message = { "Share chooser was not launched: ${editorDiagnostic()}; visible=${visibleFeedback()}" }) { chooser.get() != null }
             val send = chooser.get()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
             assertEquals(Intent.ACTION_SEND, send.action)
             assertEquals("text/plain", send.type)
@@ -2085,9 +2087,9 @@ class CodeSelectionUiTest {
         scenario!!.onActivity { action(it.findViewById(R.id.editText)) }
     }
 
-    private fun awaitEditor(condition: (CodeEditor) -> Boolean) {
+    private fun awaitEditor(phase: String = "native editor condition", condition: (CodeEditor) -> Boolean) {
         var diagnostic = "native editor missing"
-        await(message = { "Code editor did not reach the expected state: $diagnostic" }) {
+        await(message = { "Code editor did not reach $phase: $diagnostic; ${editorDiagnostic()}; visible=${visibleFeedback()}" }) {
             var ready = false
             scenario!!.onActivity { activity ->
                 activity.findViewById<CodeEditor>(R.id.editText)?.let {
@@ -2097,6 +2099,49 @@ class CodeSelectionUiTest {
             }
             ready
         }
+    }
+
+    /** Failure evidence only: never focuses a control, changes document state, or retries input. */
+    private fun editorDiagnostic(): String {
+        var result = "no live editor scenario"
+        val current = scenario ?: return result
+        if (current.state == androidx.lifecycle.Lifecycle.State.DESTROYED) return "editor destroyed"
+        current.onActivity { activity ->
+            val state = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java].state.value
+            val editor = activity.findViewById<CodeEditor>(R.id.editText)
+            result = "activity=${activity.javaClass.name}, nativeContext=${editor?.context?.javaClass?.name}, " +
+                "canUndo=${editor?.canUndo()}, canRedo=${editor?.canRedo()}, " +
+                "attached=${editor?.isAttachedToWindow}, cursorSelected=${editor?.cursor?.isSelected}, " +
+                "cursor=${editor?.cursor?.left}..${editor?.cursor?.right}, " +
+                "actionsEnabled=${editor?.let { actions(it).isEnabled }}, " +
+                "actionsShowing=${editor?.let { actions(it).isShowing }}, " +
+                "editorReady=${state.editorReady}, busy=${state.busy}, finished=${state.session?.finished}, " +
+                "engineOwner=${state.engineOwner}, receipt=${state.session?.returnReceipt}, " +
+                "query=${state.session?.search?.query}, replacement=${state.session?.search?.replacement}, " +
+                "error=${state.error}"
+        }
+        return result
+    }
+
+    @Suppress("DEPRECATION")
+    private fun visibleFeedback(): String {
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add) ?: return "no active window"
+        val labels = mutableListOf<String>()
+        var visited = 0
+        while (pending.isNotEmpty() && visited++ < 200) {
+            val node = pending.removeFirst()
+            if (node.isVisibleToUser) {
+                listOf(node.text, node.contentDescription).filterNotNull()
+                    .map { it.toString() }.filter { it.isNotBlank() }.forEach { text ->
+                        labels.add("${node.viewIdResourceName.orEmpty()}:${text.take(160)}")
+                    }
+            }
+            for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+            node.recycle()
+        }
+        pending.forEach { it.recycle() }
+        return labels.distinct().joinToString(" | ").take(4000)
     }
 
     private fun nativeWebViews(view: View): List<WebView> =
