@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import io.flutter.embedding.android.FlutterFragment
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,6 +20,8 @@ class CodeEditorSavedStateHostTest {
     fun largeLaunchPayloadLeavesIntentAndActualSavedBundleAfterPrivateAcceptance() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val raw = "// 😀\r\n".repeat(20_000)
+        val flutter = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+        flutter.enableAccessibility()
         val scenario =
             ActivityScenario.launch<CodeEditActivity>(
                 Intent(context, CodeEditActivity::class.java).apply {
@@ -28,7 +32,10 @@ class CodeEditorSavedStateHostTest {
             )
         try {
             awaitPrivateSession(scenario, raw)
+            flutter.awaitIdentifier("code-search-toggle")
             scenario.onActivity { activity ->
+                assertTrue("Normal editor must render a real FlutterFragment",
+                    activity.supportFragmentManager.fragments.any { it is FlutterFragment })
                 assertFalse(activity.intent.hasExtra("text"))
                 assertFalse(activity.intent.hasExtra("title"))
                 val saved = Bundle()
@@ -48,6 +55,7 @@ class CodeEditorSavedStateHostTest {
             }
             scenario.recreate()
             awaitPrivateSession(scenario, raw)
+            flutter.awaitIdentifier("code-search-toggle")
             scenario.onActivity {
                 assertFalse(it.intent.hasExtra("text"))
                 assertEquals(
@@ -61,6 +69,7 @@ class CodeEditorSavedStateHostTest {
             }
         } finally {
             scenario.close()
+            flutter.close()
         }
     }
 

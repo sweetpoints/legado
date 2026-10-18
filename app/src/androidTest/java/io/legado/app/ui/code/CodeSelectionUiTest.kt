@@ -5,7 +5,6 @@ import android.app.Instrumentation
 import android.app.SearchManager
 import android.content.ClipData
 import android.content.ClipboardManager
-import io.legado.app.ci.closeAfterComposeExit
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -90,6 +89,7 @@ import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.RssImportViewModel
 import io.legado.app.ui.widget.dialog.CodeDialog
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import io.legado.app.ui.widget.dialog.CodePreviewInputMetrics
 import io.legado.app.utils.GSON
 import java.io.File
@@ -99,6 +99,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.hamcrest.Matchers.allOf
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -115,6 +116,10 @@ class CodeSelectionUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private val flutter = FlutterUiTestDriver(instrumentation)
+
+    @Before
+    fun enableFlutterSemantics() = flutter.enableAccessibility()
     private val cacheKey = "code-selection-${UUID.randomUUID()}"
     private val source =
         "const before = 1;\nfunction example() {\n  const message = \"你好 🌍\";\n  return message;\n}\nconst after = 2;"
@@ -138,8 +143,9 @@ class CodeSelectionUiTest {
                     ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java].discard()
                 }
         }
-        scenario?.closeAfterComposeExit(compose)
+        closeEditorScenario()
         CacheManager.deleteMemory(cacheKey)
+        flutter.close()
     }
 
     @Test
@@ -276,8 +282,8 @@ class CodeSelectionUiTest {
     @Test
     fun searchResultLongPressThenOutsideReselects() {
         launchEditor()
-        compose.onNodeWithTag("code-search-toggle").performClick()
-        compose.onNodeWithTag("code-query").performTextReplacement("function")
+        flutter.click("code-search-toggle")
+        flutter.setText("code-query", "function")
         closeSoftKeyboard()
         awaitEditor { it.searcher.hasQuery() && it.searcher.matchedPositionCount > 0 }
         withEditor { assertTrue(it.searcher.gotoNext()) }
@@ -412,7 +418,7 @@ class CodeSelectionUiTest {
                 setDisableSoftKbdIfHardKbdAvailable(false)
             }
         }
-        compose.onNodeWithTag("code-search-toggle").performClick()
+        flutter.click("code-search-toggle")
         onView(withId(R.id.editText)).perform(click())
         withEditor { it.showSoftInput() }
         awaitEditor {
@@ -604,6 +610,52 @@ class CodeSelectionUiTest {
     }
 
     @Test
+    fun flutterSearchReplacementUndoRedoAndSaveUseTheRealNativeDocument() {
+        launchEditor(forResult = true)
+        flutter.click("code-search-toggle")
+        flutter.setText("code-query", "const")
+        awaitEditor { it.searcher.hasQuery() && it.searcher.matchedPositionCount == 3 }
+        flutter.click("code-replace")
+        flutter.setText("code-replacement", "let")
+        flutter.click("code-replace-all")
+        val replaced = source.replace("const", "let")
+        awaitEditor { it.text.toString() == replaced }
+        // Keep the actual IME open: undo/redo live in the keyboard-assistance toolbar.
+        flutter.click("code-undo")
+        awaitEditor { it.text.toString() == source }
+        flutter.click("code-redo")
+        awaitEditor { it.text.toString() == replaced }
+        closeSoftKeyboard()
+        flutter.click("code-save")
+        await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
+        val result = scenario!!.result
+        assertEquals(Activity.RESULT_OK, result.resultCode)
+        assertEquals(replaced, result.resultData?.getStringExtra("text"))
+        assertFalse(result.resultData?.hasExtra("textFile") == true)
+    }
+
+    @Test
+    fun flutterDirtyExitCanResumeThenDiscardWithoutReturningTheEditedPayload() {
+        launchEditor(forResult = true, fileMode = true)
+        withEditor {
+            it.text.replace(0, it.text.length, "discarded private draft")
+            it.setSelection(0, 0)
+        }
+        awaitEditor { it.text.toString() == "discarded private draft" }
+        flutter.click("code-close")
+        flutter.click("code-discard-cancel")
+        awaitEditor { it.text.toString() == "discarded private draft" }
+        flutter.click("code-close")
+        flutter.click("code-discard-confirm")
+        await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
+        val result = scenario!!.result
+        assertEquals(Activity.RESULT_CANCELED, result.resultCode)
+        assertFalse(result.resultData?.hasExtra("text") == true)
+        assertFalse(result.resultData?.hasExtra("textFile") == true)
+        assertFalse(result.resultData?.hasExtra(CodeEditActivity.EXTRA_RESULT_ACTION) == true)
+    }
+
+    @Test
     fun savedDraftUsesTheCallersRequestedTransport() {
         val large = "中文 draft 🌍\n".repeat(2_000)
         for ((fileMode, expected) in listOf(true to large, false to large, true to "短文本")) {
@@ -612,7 +664,7 @@ class CodeSelectionUiTest {
                 launchEditor(forResult = true, fileMode = fileMode)
                 withEditor { it.setText(expected) }
                 awaitEditor { it.text.toString() == expected }
-                compose.onNodeWithTag("code-save").performClick()
+                flutter.click("code-save")
                 await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
                 val result = scenario!!.result
                 assertEquals(Activity.RESULT_OK, result.resultCode)
@@ -631,7 +683,7 @@ class CodeSelectionUiTest {
                 }
             } finally {
                 CodeTextTransfer.delete(context, returnedFile)
-                scenario?.closeAfterComposeExit(compose)
+                closeEditorScenario()
                 scenario = null
             }
         }
@@ -857,7 +909,7 @@ class CodeSelectionUiTest {
                             }
                             ready
                         }
-                        compose.onNodeWithTag("code-save").performClick()
+                        flutter.click("code-save")
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -927,7 +979,7 @@ class CodeSelectionUiTest {
                                 .replace(insertion, insertion, "discarded")
                             editorActivity!!.finish()
                         }
-                        compose.onNodeWithTag("code-discard-confirm").performClick()
+                        flutter.click("code-discard-confirm")
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -966,7 +1018,7 @@ class CodeSelectionUiTest {
                                         editorActivity!!.findViewById<CodeEditor>(R.id.editText)
                                     editor.text.replace(0, editor.text.length, draft)
                                 }
-                                compose.onNodeWithTag("code-save").performClick()
+                                flutter.click("code-save")
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
@@ -1264,7 +1316,9 @@ class CodeSelectionUiTest {
                 )
             awaitEditor { it.isShown && it.text.toString() == code }
             withEditor { assertFalse(it.isEditable) }
-            scenario!!.onActivity { it.finish() }
+            flutter.awaitIdentifier("code-close")
+            assertNull("Read-only Flutter chrome must not expose a save action", flutter.node("code-save"))
+            flutter.click("code-close")
             await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
             assertEquals(Activity.RESULT_CANCELED, scenario!!.result.resultCode)
             assertEquals(code, CodeTextTransfer.read(context, path))
@@ -1348,7 +1402,7 @@ class CodeSelectionUiTest {
                 it.text == edited && it.cursorPosition == cursor && it.dirty
             } == true
         }
-        compose.onNodeWithTag("code-save").performClick()
+        flutter.click("code-save")
         await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
         val resultData = checkNotNull(scenario!!.result.resultData)
@@ -1790,7 +1844,7 @@ class CodeSelectionUiTest {
         awaitEditor { it.isShown && it.width > 0 && it.text.toString() == source && it.hasFocus() }
         closeSoftKeyboard()
         val actionBounds = Rect()
-        composeScreenBounds("code-search-toggle", actionBounds)
+        flutterScreenBounds("code-search-toggle", actionBounds)
         scenario!!.onActivity { activity ->
             val safeTop = checkNotNull(ViewCompat.getRootWindowInsets(activity.window.decorView))
                 .getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top
@@ -1941,13 +1995,13 @@ class CodeSelectionUiTest {
             visibleScreenBounds(panel, menuBounds)
         }
         val toolBounds = Rect()
-        composeScreenBounds("code-keyboard", toolBounds)
+        flutterScreenBounds("code-keyboard", toolBounds)
         assertFalse(
             "Native menu $menuBounds overlaps keyboard tools $toolBounds",
             Rect.intersects(menuBounds, toolBounds),
         )
         val keyboardBounds = Rect(toolBounds)
-        composeScreenBounds("code-search", toolBounds)
+        flutterScreenBounds("code-search", toolBounds)
         assertFalse(
             "Native menu $menuBounds overlaps search tools $toolBounds",
             Rect.intersects(menuBounds, toolBounds),
@@ -2027,22 +2081,9 @@ class CodeSelectionUiTest {
     private fun nativeWebView(activity: CodeEditActivity): WebView =
         nativeWebViews(activity.window.decorView).single()
 
-    private fun composeScreenBounds(tag: String, bounds: Rect) {
-        val rootBounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-        scenario!!.onActivity { activity ->
-            val composeView =
-                nativeViews(activity.window.decorView).first {
-                    it.javaClass.name == "androidx.compose.ui.platform.AndroidComposeView"
-                }
-            val origin = IntArray(2)
-            composeView.getLocationOnScreen(origin)
-            bounds.set(
-                rootBounds.left.toInt() + origin[0],
-                rootBounds.top.toInt() + origin[1],
-                rootBounds.right.toInt() + origin[0],
-                rootBounds.bottom.toInt() + origin[1],
-            )
-        }
+    private fun flutterScreenBounds(tag: String, bounds: Rect) {
+        // The normal editor chrome is Flutter; native text/selection surfaces remain Android.
+        bounds.set(flutter.bounds(tag))
     }
 
     private fun nativeViews(view: View): List<View> =
@@ -2054,18 +2095,25 @@ class CodeSelectionUiTest {
         message: () -> String = { "Code editor did not reach the expected state" },
         condition: () -> Boolean,
     ) {
-        try {
-            compose.waitUntil(timeoutMillis = 15_000) {
-                compose.mainClock.advanceTimeByFrame()
-                condition()
-            }
-        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
-            assertTrue(message(), condition())
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (condition()) return
+            SystemClock.sleep(25)
         }
+        assertTrue(message(), condition())
+    }
+
+    private fun closeEditorScenario() {
+        val current = scenario ?: return
+        if (current.state != androidx.lifecycle.Lifecycle.State.DESTROYED) {
+            current.onActivity { it.finish() }
+            await { current.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
+        }
+        current.close()
     }
 
     private fun screenshot(name: String) {
-        compose.waitForIdle()
+        instrumentation.waitForIdleSync()
         // FloatingActionMode briefly hides the toolbar while the selection geometry moves.
         instrumentation.uiAutomation.waitForIdle(500, 5_000)
         val committed = CountDownLatch(1)

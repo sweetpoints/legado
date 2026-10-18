@@ -14,6 +14,8 @@ import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.Stage
 import io.flutter.embedding.android.FlutterFragment
 import io.legado.app.constant.AppConst.appInfo
+import io.legado.app.R
+import io.github.rosemoe.sora.widget.CodeEditor
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -244,6 +246,54 @@ class FlutterSourceEditorUiTest {
         awaitFinished()
         assertEquals("Canceling external editing must leave the persisted rule untouched",
             originalRule, appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.ruleSearch?.name)
+    }
+
+    @Test
+    fun sourceRuleFullscreenSaveReturnsToFlutterDraftThenCommitsOnlyOnSourceSave() {
+        val originalRule = "a@text"
+        val editedRule = "h1@text"
+        source.ruleSearch = SearchRule(name = originalRule)
+        appDb.bookSourceDao.insert(source)
+        launch()
+        selectTab(1)
+        revealField(1, "name")
+        driver.click("source-field-1-name")
+        closeSoftKeyboard()
+        driver.click("source-fullscreen")
+        val nativeEditor = AtomicReference<CodeEditActivity>()
+        try {
+            driver.await("Fullscreen rule loads in actual native text surface") {
+                var ready = false
+                instrumentation.runOnMainSync {
+                    val activity = ActivityLifecycleMonitorRegistry.getInstance()
+                        .getActivitiesInStage(Stage.RESUMED)
+                        .filterIsInstance<CodeEditActivity>().singleOrNull()
+                    val text = activity?.findViewById<CodeEditor>(R.id.editText)
+                    ready = text?.isShown == true && text.isEditable && text.text.toString() == originalRule
+                    if (ready) nativeEditor.set(activity)
+                }
+                ready
+            }
+            driver.awaitIdentifier("code-search-toggle")
+            instrumentation.runOnMainSync {
+                val editor = nativeEditor.get().findViewById<CodeEditor>(R.id.editText)
+                editor.text.replace(0, editor.text.length, editedRule)
+            }
+            driver.click("code-save")
+            driver.await("Fullscreen result updates the visible Flutter rule draft") {
+                driver.text("source-field-1-name") == editedRule
+            }
+            assertEquals("Fullscreen return must not prematurely save the whole source", originalRule,
+                appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.ruleSearch?.name)
+            driver.click("source-save")
+            awaitFinished()
+            assertEquals(editedRule,
+                appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.ruleSearch?.name)
+        } finally {
+            instrumentation.runOnMainSync {
+                nativeEditor.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.finish()
+            }
+        }
     }
 
     private fun launch() {

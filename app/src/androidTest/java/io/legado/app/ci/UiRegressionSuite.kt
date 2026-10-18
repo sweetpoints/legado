@@ -52,6 +52,7 @@ import org.junit.runners.Suite
     io.legado.app.help.storage.BackupOptionsTest::class,
     io.legado.app.help.storage.CoverTitleAdaptiveBackupRestoreTest::class,
     io.legado.app.ui.code.CodeSelectionUiTest::class,
+    io.legado.app.ui.code.CodeEditorSavedStateHostTest::class,
     io.legado.app.ui.book.read.ReadAloudMenuUiTest::class,
     io.legado.app.ui.book.read.TocReverseNavigationTest::class,
     io.legado.app.ui.book.read.ReadAloudScaleUiTest::class,
