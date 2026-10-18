@@ -1,7 +1,9 @@
 package io.legado.app.ui.rss.source.debug
 
 import android.content.Intent
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.onNodeWithText
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -19,6 +21,11 @@ import org.junit.Assert.*
 
 class RssSourceDebugHostTest {
     @get:Rule val compose = createEmptyComposeRule()
+    private val driver = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+
+    @Before fun enableFlutterAccessibility() = driver.enableAccessibility()
+    @After fun restoreAccessibility() = driver.close()
+
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -47,7 +54,8 @@ class RssSourceDebugHostTest {
                     assertFalse(it.viewModel.state.value.running)
                     assertEquals("", it.viewModel.state.value.output)
                 }
-                compose.onNodeWithTag("rss-debug-example-my").performClick()
+                driver.setText("source-debug-query", "我的")
+                driver.click("source-debug-run")
                 compose.waitUntil {
                     var done = false
                     scenario.onActivity {
@@ -93,10 +101,8 @@ class RssSourceDebugHostTest {
         try {
             ActivityScenario.launch<RssSourceDebugActivity>(intent(key)).use { scenario ->
                 loaded(scenario)
-                compose
-                    .onNodeWithTag("rss-debug-query")
-                    .performTextReplacement("https://example.invalid/content")
-                compose.onNodeWithTag("rss-debug-search").performClick()
+                driver.setText("source-debug-query", "https://example.invalid/content")
+                driver.click("source-debug-run")
                 compose.waitUntil {
                     var done = false
                     scenario.onActivity {
@@ -106,8 +112,8 @@ class RssSourceDebugHostTest {
                     }
                     done
                 }
-                compose.onNodeWithTag("rss-debug-menu").performClick()
-                compose.onNodeWithTag("rss-debug-content-html").performClick()
+                driver.click("source-debug-menu")
+                driver.click("source-debug-html-content")
                 compose.waitUntil {
                     var opened = false
                     scenario.onActivity {
@@ -118,6 +124,7 @@ class RssSourceDebugHostTest {
                     }
                     opened
                 }
+
                 compose.onNodeWithText("Html").assertExists()
                 assertNull(Debug.callback)
                 scenario.onActivity {

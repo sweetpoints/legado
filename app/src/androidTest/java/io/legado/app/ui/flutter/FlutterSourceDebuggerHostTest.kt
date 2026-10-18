@@ -1,0 +1,341 @@
+package io.legado.app.ui.flutter
+
+import android.os.Bundle
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
+import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.data.appDb
+import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssSource
+import io.legado.app.data.entities.rule.*
+import io.legado.app.model.Debug
+import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
+import io.legado.app.ui.rss.source.debug.RssSourceDebugActivity
+import io.legado.app.utils.GSON
+import java.io.File
+import java.net.ServerSocket
+import java.net.SocketException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import org.junit.*
+import org.junit.Assert.*
+
+/** Normal Android entry points, rendered Flutter semantics, real HTTP/parser/Room and owned tasks. */
+class FlutterSourceDebuggerHostTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context get() = instrumentation.targetContext
+    private val driver = FlutterUiTestDriver(instrumentation)
+
+    @Before fun before() = driver.enableAccessibility()
+    @After fun after() = driver.close()
+
+    @Test
+    fun bookQueryImeSelectionAndRunningRecreationKeepOneRequestThenCloseWritesTombstone() {
+        FixtureServer().use { server ->
+            val source = BookSource(
+                bookSourceUrl = server.url + "/book-source",
+                bookSourceName = "Flutter HTTP fixture",
+                enabled = false,
+                searchUrl = server.url + "/search",
+                ruleSearch = SearchRule(bookList = ".entry", name = "a@text", bookUrl = "a@href"),
+                ruleBookInfo = BookInfoRule(name = "h1@text", tocUrl = "a@href"),
+                ruleToc = TocRule(chapterList = ".chapter", chapterName = "a@text", chapterUrl = "a@href"),
+                ruleContent = ContentRule(content = ".body@text"),
+            )
+            val directory = File(context.filesDir, "book-source-debug")
+            val before = directory.listFiles().orEmpty().map { it.name }.toSet()
+            var owned = emptyList<File>()
+            runBlocking(Dispatchers.IO) { appDb.bookSourceDao.insert(source) }
+            try {
+                ActivityScenario.launch<BookSourceDebugActivity>(
+                    android.content.Intent(context, BookSourceDebugActivity::class.java)
+                        .putExtra("key", source.bookSourceUrl)
+                ).use { scenario ->
+                    driver.await("book snapshot loaded") {
+                        var loaded = false
+                        scenario.onActivity { loaded = it.viewModel.state.value.loaded }
+                        loaded
+                    }
+                    lateinit var root: View
+                    scenario.onActivity { root = it.window.decorView }
+                    ImeBarrier(root).use { ime ->
+                        driver.setText("source-debug-query", "fixture query") { ime.settled(true) }
+                        val field = requireNotNull(driver.node("source-debug-query"))
+                        try {
+                            assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,
+                                Bundle().apply {
+                                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 1)
+                                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 7)
+                                }))
+                        } finally { field.recycle() }
+                        driver.await("native query and selection acknowledgement") {
+                            var matches = false
+                            scenario.onActivity {
+                                val state = it.viewModel.state.value
+                                matches = state.query == "fixture query" && state.queryStart == 1 && state.queryEnd == 7
+                            }
+                            matches
+                        }
+                        assertTrue(server.paths.isEmpty())
+                        closeSoftKeyboard()
+                        ime.settled(false)
+                    }
+                    driver.click("source-debug-run")
+                    assertTrue("HTTP search was not reached", server.entered.await(10, TimeUnit.SECONDS))
+                    assertNotNull(Debug.callback)
+                    scenario.moveToState(Lifecycle.State.CREATED)
+                    assertEquals(1, server.paths.count { it == "/search" })
+                    assertNotNull(Debug.callback)
+                    scenario.moveToState(Lifecycle.State.RESUMED)
+                    scenario.recreate()
+                    driver.awaitIdentifier("source-debug-query")
+                    scenario.onActivity { assertTrue(it.viewModel.state.value.running) }
+                    assertEquals(1, server.paths.count { it == "/search" })
+                    server.release.countDown()
+                    driver.await("four stage parser completed") {
+                        var done = false
+                        scenario.onActivity {
+                            val state = it.viewModel.state.value
+                            done = !state.running && state.output.contains("Fixture body")
+                        }
+                        done
+                    }
+                    assertNull(Debug.callback)
+                    assertEquals(listOf("/search", "/info", "/toc", "/content"), server.paths.toList())
+                    driver.await("private book checkpoint") {
+                        owned = directory.listFiles().orEmpty().filter { it.name.endsWith(".json") && it.name !in before }
+                        owned.isNotEmpty()
+                    }
+                    assertTrue(owned.all { it.exists() })
+                    driver.click("source-debug-close")
+                    driver.await("closed book checkpoint and tombstone") {
+                        owned.all { !it.exists() && File(it.parentFile, it.name.removeSuffix(".json") + ".closed").exists() }
+                    }
+                    assertNull(Debug.callback)
+                }
+                runBlocking(Dispatchers.IO) {
+                    assertEquals(GSON.toJson(source), GSON.toJson(appDb.bookSourceDao.getBookSource(source.bookSourceUrl)))
+                }
+            } finally {
+                server.release.countDown()
+                deleteOwned(owned)
+                runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
+            }
+        }
+    }
+
+    @Test
+    fun rssCategoryRunsHttpThenRecreationAndExplicitCloseRetainPrivateRecordWithoutRerun() {
+        FixtureServer().use { server ->
+            server.release.countDown()
+            val source = RssSource(
+                sourceUrl = server.url + "/rss-source", sourceName = "Flutter RSS fixture", enabled = false,
+                sortUrl = "Fixture::${server.url}/search",
+                searchUrl = server.url + "/search", ruleArticles = ".entry", ruleTitle = "a@text",
+                ruleLink = "a@href", ruleContent = ".body@html",
+            )
+            val directory = File(context.filesDir, "rss-source-debug")
+            val before = directory.listFiles().orEmpty().map { it.name }.toSet()
+            var owned = emptyList<File>()
+            runBlocking(Dispatchers.IO) { appDb.rssSourceDao.insert(source) }
+            try {
+                ActivityScenario.launch<RssSourceDebugActivity>(
+                    android.content.Intent(context, RssSourceDebugActivity::class.java).putExtra("key", source.sourceUrl)
+                ).use { scenario ->
+                    driver.await("rss categories loaded") {
+                        var loaded = false
+                        scenario.onActivity { loaded = it.viewModel.state.value.loaded && it.viewModel.state.value.sorts.size == 1 }
+                        loaded
+                    }
+                    assertTrue(server.paths.isEmpty())
+                    closeSoftKeyboard()
+                    // Use the visible category chooser, then its real Flutter row.
+                    driver.click("source-debug-sorts")
+                    driver.click("source-debug-sort-0")
+                    driver.await("rss fixture parsed") {
+                        var done = false
+                        scenario.onActivity { done = !it.viewModel.state.value.running && it.viewModel.state.value.output.contains("Fixture body") }
+                        done
+                    }
+                    assertNull(Debug.callback)
+                    val requests = server.paths.toList()
+                    assertEquals(listOf("/search", "/info"), requests)
+                    var output = ""
+                    scenario.onActivity { output = it.viewModel.state.value.output }
+                    scenario.recreate()
+                    driver.awaitIdentifier("source-debug-query")
+                    scenario.onActivity {
+                        assertEquals(output, it.viewModel.state.value.output)
+                        assertEquals("Fixture::${server.url}/search", it.viewModel.state.value.query)
+                        assertFalse(it.viewModel.state.value.running)
+                    }
+                    assertEquals(requests, server.paths.toList())
+                    driver.await("private rss checkpoint") {
+                        owned = directory.listFiles().orEmpty().filter { it.name.endsWith(".json") && it.name !in before }
+                        owned.isNotEmpty()
+                    }
+                    driver.click("source-debug-close")
+                }
+                assertNull(Debug.callback)
+                assertTrue("RSS close keeps its historical private record", owned.isNotEmpty() && owned.all { it.exists() })
+                assertTrue(owned.none { File(it.parentFile, it.name.removeSuffix(".json") + ".closed").exists() })
+                runBlocking(Dispatchers.IO) {
+                    assertEquals(GSON.toJson(source), GSON.toJson(appDb.rssSourceDao.getByKey(source.sourceUrl)))
+                }
+            } finally {
+                deleteOwned(owned)
+                runBlocking(Dispatchers.IO) { appDb.rssSourceDao.delete(source.sourceUrl) }
+            }
+        }
+    }
+
+    @Test
+    fun bookCategoryChooserStartsOwnedRunAndBackCancelsItWithoutDeletingOtherDrafts() {
+        FixtureServer().use { server ->
+            val source = BookSource(
+                bookSourceUrl = server.url + "/category-source", bookSourceName = "Category fixture",
+                exploreUrl = "Fixture::${server.url}/search", enabled = false,
+                ruleExplore = ExploreRule(bookList = ".entry", name = "a@text", bookUrl = "a@href"),
+            )
+            val directory = File(context.filesDir, "book-source-debug")
+            val before = directory.listFiles().orEmpty().map { it.name }.toSet()
+            var owned = emptyList<File>()
+            runBlocking(Dispatchers.IO) { appDb.bookSourceDao.insert(source) }
+            try {
+                ActivityScenario.launch<BookSourceDebugActivity>(
+                    android.content.Intent(context, BookSourceDebugActivity::class.java)
+                        .putExtra("key", source.bookSourceUrl)
+                ).use { scenario ->
+                    driver.await("book category loaded") {
+                        var loaded = false
+                        scenario.onActivity { loaded = it.viewModel.state.value.loaded && it.viewModel.state.value.sorts.size == 1 }
+                        loaded
+                    }
+                    assertTrue(server.paths.isEmpty())
+                    closeSoftKeyboard()
+                    driver.click("source-debug-sorts")
+                    driver.click("source-debug-sort-0")
+                    assertTrue("Category HTTP request not reached", server.entered.await(10, TimeUnit.SECONDS))
+                    assertNotNull(Debug.callback)
+                    scenario.onActivity {
+                        assertTrue(it.viewModel.state.value.running)
+                        assertEquals("Fixture::${server.url}/search", it.viewModel.state.value.query)
+                    }
+                    driver.await("running category checkpoint") {
+                        owned = directory.listFiles().orEmpty().filter { it.name.endsWith(".json") && it.name !in before }
+                        owned.isNotEmpty()
+                    }
+                    // The system Back reaches the real Flutter/Android host, not a direct VM call.
+                    androidx.test.espresso.Espresso.pressBack()
+                    driver.await("Back releases owned global execution") { Debug.callback == null }
+                    driver.await("Back tombstones only this book debug record") {
+                        owned.all { !it.exists() && File(it.parentFile, it.name.removeSuffix(".json") + ".closed").exists() }
+                    }
+                    assertEquals(1, server.paths.size)
+                    assertTrue(before.filter { it.endsWith(".json") }.all { File(directory, it).exists() })
+                }
+                runBlocking(Dispatchers.IO) {
+                    assertEquals(GSON.toJson(source), GSON.toJson(appDb.bookSourceDao.getBookSource(source.bookSourceUrl)))
+                }
+            } finally {
+                server.release.countDown()
+                deleteOwned(owned)
+                runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
+            }
+        }
+    }
+
+    private fun deleteOwned(files: List<File>) {
+        files.forEach { body ->
+            listOf(".json", ".json.bak", ".json.new", ".closed").forEach { suffix ->
+                File(body.parentFile, body.name.removeSuffix(".json") + suffix).delete()
+            }
+        }
+    }
+
+    private inner class ImeBarrier(private val root: View) : AutoCloseable {
+        private val running = mutableSetOf<WindowInsetsAnimationCompat>()
+        init {
+            instrumentation.runOnMainSync {
+                ViewCompat.setWindowInsetsAnimationCallback(root,
+                    object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) running.add(animation)
+                        }
+                        override fun onProgress(insets: WindowInsetsCompat, runningAnimations: MutableList<WindowInsetsAnimationCompat>) = insets
+                        override fun onEnd(animation: WindowInsetsAnimationCompat) { running.remove(animation) }
+                    })
+            }
+        }
+        fun settled(visible: Boolean) {
+            driver.await("debugger IME=$visible settled") {
+                var ready = false
+                instrumentation.runOnMainSync {
+                    ready = ViewCompat.getRootWindowInsets(root)?.isVisible(WindowInsetsCompat.Type.ime()) == visible && running.isEmpty()
+                }
+                ready
+            }
+            val committed = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+                root.postInvalidateOnAnimation()
+            }
+            assertTrue("Debugger viewport frame not committed", committed.await(5, TimeUnit.SECONDS))
+            instrumentation.uiAutomation.waitForIdle(100, 5_000)
+        }
+        override fun close() {
+            instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
+        }
+    }
+
+    private class FixtureServer : AutoCloseable {
+        private val socket = ServerSocket(0)
+        val url = "http://127.0.0.1:${socket.localPort}"
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val paths = CopyOnWriteArrayList<String>()
+        private val worker = Thread {
+            try {
+                while (!socket.isClosed) socket.accept().use { client ->
+                    client.soTimeout = 5000
+                    val input = client.getInputStream().bufferedReader()
+                    val path = input.readLine().orEmpty().split(" ").getOrNull(1)?.substringBefore('?').orEmpty()
+                    while (!input.readLine().isNullOrEmpty()) {}
+                    paths += path
+                    if (path == "/search") {
+                        entered.countDown()
+                        check(release.await(30, TimeUnit.SECONDS)) { "Fixture response was not released" }
+                    }
+                    val html = when (path) {
+                        "/search" -> "<html><div class='entry'><a href='/info'>Fixture book</a></div></html>"
+                        "/info" -> "<html><h1>Fixture book</h1><a href='/toc'>Table of contents</a><div class='body'>Fixture body</div></html>"
+                        "/toc" -> "<html><div class='chapter'><a href='/content'>Fixture chapter</a></div></html>"
+                        "/content" -> "<html><div class='body'>Fixture body</div></html>"
+                        else -> error("Unexpected fixture request: $path")
+                    }
+                    val body = html.toByteArray(Charsets.UTF_8)
+                    client.getOutputStream().apply {
+                        write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray(Charsets.UTF_8))
+                        write(body)
+                        flush()
+                    }
+                }
+            } catch (failure: SocketException) { if (!socket.isClosed) throw failure }
+        }.apply { isDaemon = true; start() }
+        override fun close() {
+            release.countDown()
+            socket.close()
+            worker.join(5000)
+            check(!worker.isAlive)
+        }
+    }
+}
