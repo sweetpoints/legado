@@ -302,17 +302,30 @@ def create_ci_device(runner, selected):
 
 
 def shutdown_for_migration_recovery(runner, identifier):
+    def device_state(phase):
+        snapshot = json.loads(runner.command(phase,
+            ['xcrun', 'simctl', 'list', 'devices', '--json'], 30))
+        matches = [device for devices in snapshot['devices'].values() for device in devices
+                   if device.get('udid') == identifier]
+        return matches[0].get('state') if len(matches) == 1 else None
+
     try:
         runner.command('migration-recovery-shutdown', ['xcrun', 'simctl', 'shutdown', identifier], 60)
     except PhaseTimeout:
         # Hosted job 117350249917 timed out waiting for shutdown's process even
         # though that same device had reached Shutdown. Preserve the timeout,
         # then confirm the postcondition once; never assume a timeout succeeded.
-        snapshot = json.loads(runner.command('migration-recovery-state',
-            ['xcrun', 'simctl', 'list', 'devices', '--json'], 30))
-        matches = [device for devices in snapshot['devices'].values() for device in devices
-                   if device.get('udid') == identifier]
-        if len(matches) != 1 or matches[0].get('state') != 'Shutdown':
+        state = device_state('migration-recovery-state')
+        if state == 'Booted':
+            # Job 117620727771 remained Booted after its timed-out shutdown,
+            # but the same UUID's cleanup shutdown then succeeded in 4.8s.
+            # Move that one bounded compensation before the reboot. Require
+            # both command success and the exact owned device's postcondition;
+            # a second timeout or ambiguous state still fails this acceptance.
+            runner.command('migration-recovery-shutdown-confirm',
+                ['xcrun', 'simctl', 'shutdown', identifier], 30)
+            state = device_state('migration-recovery-state-confirm')
+        if state != 'Shutdown':
             raise
         print('Timed-out shutdown confirmed Shutdown for the same owned CI device', flush=True)
 
