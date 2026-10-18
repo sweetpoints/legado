@@ -172,6 +172,13 @@ internal class CodeEditorNativeCoordinator(
     fun exit() {
         if (closed) return
         val current = model.state.value
+        // Activity.finish/Back may repeat after discard or while a durable return is being
+        // delivered. Never reopen an already closed session or snapshot its retiring engine.
+        if (current.session?.finished == true) {
+            if (canReturn()) onClose()
+            return
+        }
+        if (current.session?.returnReceipt != null) return
         val engine = controller.engine.takeIf { controller.owner == current.engineOwner }
         if (engine?.dismissActions() == true) return
         when {
