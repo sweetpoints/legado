@@ -72,6 +72,8 @@ class FlutterSourceDebuggerHostTest {
                     screenshot("book-help")
                     ImeBarrier(root).use { ime ->
                         driver.setText("source-debug-query", "fixture query") { ime.settled(true) }
+                        // Commit text/IME semantics before dispatching selection exactly once.
+                        ime.settled(true)
                         val field = requireNotNull(driver.node("source-debug-query"))
                         try {
                             assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,
@@ -80,13 +82,39 @@ class FlutterSourceDebuggerHostTest {
                                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 7)
                                 }))
                         } finally { field.recycle() }
-                        driver.await("native query and selection acknowledgement") {
+                        fun selectionMatches(): Boolean {
                             var matches = false
                             scenario.onActivity {
                                 val state = it.viewModel.state.value
                                 matches = state.query == "fixture query" && state.queryStart == 1 && state.queryEnd == 7
                             }
-                            matches
+                            val current = driver.node("source-debug-query") ?: return false
+                            try {
+                                return matches && current.isFocused && current.isEditable &&
+                                    current.textSelectionStart == 1 && current.textSelectionEnd == 7
+                            } finally { current.recycle() }
+                        }
+                        try {
+                            driver.await("visible focused Flutter query and native selection both 1..7", ::selectionMatches)
+                            ime.settled(true)
+                            assertTrue("Selection changed after the committed IME/Flutter frame", selectionMatches())
+                        } catch (failure: AssertionError) {
+                            val diagnostic = JSONObject()
+                            scenario.onActivity {
+                                val state = it.viewModel.state.value
+                                diagnostic.put("nativeStart", state.queryStart).put("nativeEnd", state.queryEnd)
+                            }
+                            driver.node("source-debug-query")?.let { current ->
+                                diagnostic.put("focused", current.isFocused).put("editable", current.isEditable)
+                                    .put("visible", current.isVisibleToUser).put("start", current.textSelectionStart)
+                                    .put("end", current.textSelectionEnd)
+                                current.recycle()
+                            }
+                            val directory = File(requireNotNull(context.getExternalFilesDir(null)), "source-debugger-acceptance")
+                            check(directory.isDirectory || directory.mkdirs())
+                            File(directory, "book-query-selection-failure.json").writeText(diagnostic.toString(2))
+                            screenshot("book-query-selection-failure")
+                            throw failure
                         }
                         screenshot("book-query-ime-selection")
                         assertTrue(server.paths.isEmpty())
