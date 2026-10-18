@@ -2292,10 +2292,9 @@ class CodeSelectionUiTest {
 
     private fun closeEditorScenario() {
         val current = scenario ?: return
-        if (current.state != androidx.lifecycle.Lifecycle.State.DESTROYED) {
-            current.onActivity { it.finish() }
-            await { current.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
-        }
+        // discard() can finish the owner between a separate state check and onActivity's
+        // main-thread dispatch. ActivityScenario.close() already handles DESTROYED and
+        // otherwise finishes its own retained Activity before waiting for destruction.
         current.close()
     }
 
