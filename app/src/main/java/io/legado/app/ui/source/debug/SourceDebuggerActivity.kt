@@ -41,7 +41,11 @@ abstract class SourceDebuggerActivity : BaseThemedActivity() {
     }
 
     private val debuggerFragment get() = supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? SourceDebuggerFlutterFragment
-    override fun onPostResume() { super.onPostResume(); debuggerFragment?.onPostResume() }
+    override fun onPostResume() {
+        super.onPostResume()
+        debuggerFragment?.onPostResume()
+        debuggerCoordinator.onHostReady()
+    }
     override fun onNewIntent(intent: Intent) { debuggerFragment?.onNewIntent(intent); super.onNewIntent(intent) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)

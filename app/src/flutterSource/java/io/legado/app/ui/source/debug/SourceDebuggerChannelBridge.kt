@@ -54,7 +54,9 @@ internal class SourceDebuggerChannelBridge(
                         try { sink.success(coordinator.snapshot(owner)) }
                         catch (_: Exception) {
                             sink.error("invalid_state", "Debugger view unavailable", null)
-                            observation?.cancel()
+                            // Main.immediate may emit before observation receives this Job.
+                            // End this collector itself rather than canceling a previous one.
+                            throw CancellationException("Debugger binding retired")
                         }
                     }
                 }
