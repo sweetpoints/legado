@@ -78,7 +78,6 @@ abstract class SourceDebuggerSnapshot with _$SourceDebuggerSnapshot {
       );
       if (state.generation <= 0 ||
           !const ['book', 'rss'].contains(state.kind) ||
-          state.query.length > 65536 ||
           state.output.length > 20000 ||
           state.queryStart < 0 ||
           state.queryStart > state.query.length ||
