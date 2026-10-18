@@ -208,6 +208,47 @@ void main() {
     expect(tag('code-login'), findsNothing);
     expect(tag('code-menu-FORMAT'), findsNothing);
   });
+  testWidgets('restored readonly replacement panel focuses searchable query', (
+    tester,
+  ) async {
+    native = {...codeFixture(visible: true), 'writable': false};
+    (native['search'] as Map)['replaceVisible'] = true;
+    await app(tester);
+    expect(
+      tester.widget<TextField>(input('code-query')).focusNode!.hasFocus,
+      true,
+    );
+    expect(tester.widget<TextField>(input('code-replacement')).enabled, false);
+    expect(
+      tester.widget<TextField>(input('code-replacement')).focusNode!.hasFocus,
+      false,
+    );
+    expect(tester.testTextInput.hasAnyClients, true);
+    tester.testTextInput.enterText('read only search');
+    await tester.pumpAndSettle();
+    final search =
+        commands.where((c) => c['op'] == 'search').last['value'] as Map;
+    expect(search['query'], 'read only search');
+    expect(search['replaceVisible'], true);
+    expect(tag('code-save'), findsNothing);
+    expect(
+      tester
+          .widget<TextButton>(
+            find.descendant(
+              of: tag('code-replace-all'),
+              matching: find.byType(TextButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      commands.where(
+        (c) => c['name'] == 'REPLACE' || c['name'] == 'REPLACE_ALL',
+      ),
+      isEmpty,
+    );
+  });
   testWidgets('safe editor omits Sora-only search and menu actions', (
     tester,
   ) async {

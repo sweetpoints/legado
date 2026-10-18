@@ -507,7 +507,7 @@ class CodeEditorSearchPanelState extends State<CodeEditorSearchPanel> {
   void _requestFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !widget.enabled) return;
-      if (_draft.replaceVisible) {
+      if (_draft.replaceVisible && widget.writable) {
         _replacementFocus.requestFocus();
       } else {
         _queryFocus.requestFocus();
