@@ -635,6 +635,34 @@ class CodeSelectionUiTest {
     }
 
     @Test
+    fun restoredFlutterSearchReceivesActualKeyInputWithoutChangingTheNativeDocument() {
+        launchEditor()
+        flutter.click("code-search-toggle")
+        flutter.setText("code-query", "const")
+        awaitEditor { it.searcher.hasQuery() && it.searcher.matchedPositionCount == 3 }
+        scenario!!.recreate()
+        awaitEditor { it.isShown && it.text.toString() == source }
+        flutter.await("Restored search becomes ready and owns real input focus") {
+            val field = flutter.node("code-query") ?: return@await false
+            try {
+                field.isEnabled && field.isEditable && field.isFocused && field.text?.toString() == "const"
+            } finally { @Suppress("DEPRECATION") field.recycle() }
+        }
+        // Do not click or use ACTION_SET_TEXT after recreation: either would focus
+        // the field and conceal a broken automatic restoration of the input target.
+        instrumentation.sendStringSync("x")
+        flutter.await("Actual key input reaches the restored Flutter query") {
+            val query = flutter.text("code-query")
+            query.count { it == 'x' } == 1 && query.replace("x", "") == "const"
+        }
+        withEditor {
+            assertEquals("Restoring search must never route typing into the native document",
+                source, it.text.toString())
+        }
+        closeSoftKeyboard()
+    }
+
+    @Test
     fun flutterDirtyExitCanResumeThenDiscardWithoutReturningTheEditedPayload() {
         launchEditor(forResult = true, fileMode = true)
         withEditor {
