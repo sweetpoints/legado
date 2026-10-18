@@ -3,10 +3,10 @@ package io.legado.app.ui.book.source.debug
 import android.content.Intent
 import androidx.compose.ui.test.onNodeWithText
 import io.legado.app.ui.flutter.FlutterUiTestDriver
+import io.legado.app.ui.flutter.hideDebuggerIme
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.closeSoftKeyboard
-import androidx.test.espresso.Espresso.pressBack
+import androidx.test.espresso.Espresso.pressBackUnconditionally
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -123,8 +123,8 @@ class BookSourceDebugHostTest {
                         }
                         compose.waitForIdle()
                     }
-                    closeSoftKeyboard()
-                    pressBack()
+                    hideDebuggerIme(scenario, driver)
+                    pressBackUnconditionally()
                     compose.waitUntil(10_000) {
                         ownedFiles.all {
                             !it.exists() &&

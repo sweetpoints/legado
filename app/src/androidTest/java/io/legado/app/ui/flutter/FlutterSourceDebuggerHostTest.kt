@@ -9,7 +9,6 @@ import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -90,7 +89,9 @@ class FlutterSourceDebuggerHostTest {
                         }
                         screenshot("book-query-ime-selection")
                         assertTrue(server.paths.isEmpty())
-                        closeSoftKeyboard()
+                        instrumentation.runOnMainSync {
+                            requireNotNull(ViewCompat.getWindowInsetsController(root)).hide(WindowInsetsCompat.Type.ime())
+                        }
                         ime.settled(false)
                     }
                     driver.click("source-debug-run")
@@ -165,7 +166,7 @@ class FlutterSourceDebuggerHostTest {
                         loaded
                     }
                     assertTrue(server.paths.isEmpty())
-                    closeSoftKeyboard()
+                    hideDebuggerIme(scenario, driver)
                     // Use the visible category chooser, then its real Flutter row.
                     driver.click("source-debug-sorts")
                     driver.awaitIdentifier("source-debug-sort-0")
@@ -235,7 +236,7 @@ class FlutterSourceDebuggerHostTest {
                         loaded
                     }
                     assertTrue(server.paths.isEmpty())
-                    closeSoftKeyboard()
+                    hideDebuggerIme(scenario, driver)
                     driver.click("source-debug-sorts")
                     driver.click("source-debug-sort-0")
                     assertTrue("Category HTTP request not reached", server.entered.await(10, TimeUnit.SECONDS))
@@ -249,7 +250,8 @@ class FlutterSourceDebuggerHostTest {
                         owned.isNotEmpty()
                     }
                     // The system Back reaches the real Flutter/Android host, not a direct VM call.
-                    androidx.test.espresso.Espresso.pressBack()
+                    server.allowClientDisconnect()
+                    androidx.test.espresso.Espresso.pressBackUnconditionally()
                     driver.await("Back releases owned global execution") { Debug.callback == null }
                     driver.await("Back tombstones only this book debug record") {
                         owned.all { !it.exists() && File(it.parentFile, it.name.removeSuffix(".json") + ".closed").exists() }
@@ -331,6 +333,9 @@ class FlutterSourceDebuggerHostTest {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val paths = CopyOnWriteArrayList<String>()
+        @Volatile private var disconnectAllowed = false
+        @Volatile private var failure: Throwable? = null
+        fun allowClientDisconnect() { disconnectAllowed = true }
         private val worker = Thread {
             try {
                 while (!socket.isClosed) socket.accept().use { client ->
@@ -357,13 +362,19 @@ class FlutterSourceDebuggerHostTest {
                         flush()
                     }
                 }
-            } catch (failure: SocketException) { if (!socket.isClosed) throw failure }
+            } catch (error: SocketException) {
+                if (!socket.isClosed && !disconnectAllowed) failure = error
+            } catch (error: Throwable) {
+                failure = error
+            }
         }.apply { isDaemon = true; start() }
         override fun close() {
+            disconnectAllowed = true
             release.countDown()
             socket.close()
             worker.join(5000)
             check(!worker.isAlive)
+            failure?.let { throw AssertionError("Debugger fixture server failed", it) }
         }
     }
 }
