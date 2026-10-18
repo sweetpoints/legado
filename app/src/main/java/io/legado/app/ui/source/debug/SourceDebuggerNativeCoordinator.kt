@@ -31,8 +31,10 @@ class SourceDebuggerNativeCoordinator private constructor(
     private val effects = scope.launch {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             state.collect { value ->
-                if (!finished && canHandle() && value["loading"] == false &&
-                    (value["missing"] == true || value["closed"] == true)) {
+                // Explicit Back can close while initialization is still loading. The ViewModel
+                // cancels that load, so waiting for loading=false would strand the closed host.
+                if (!finished && canHandle() && (value["closed"] == true ||
+                    (value["loading"] == false && value["missing"] == true))) {
                     finished = true
                     closeModel()
                     onFinish()
