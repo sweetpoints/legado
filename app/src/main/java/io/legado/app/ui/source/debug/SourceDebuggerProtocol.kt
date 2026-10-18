@@ -2,6 +2,7 @@ package io.legado.app.ui.source.debug
 
 import io.legado.app.ui.book.source.debug.BookSourceDebugState
 import io.legado.app.ui.rss.source.debug.RssSourceDebugState
+import java.net.URI
 
 /** UI commands carry a binding generation, never a source snapshot or private session identity. */
 data class SourceDebuggerCommand(
@@ -13,6 +14,7 @@ data class SourceDebuggerCommand(
     val value: Boolean? = null,
     val index: Int? = null,
     val stage: String? = null,
+    val url: String? = null,
 )
 
 fun parseSourceDebuggerCommand(arguments: Any?, kind: String, generation: Int): SourceDebuggerCommand {
@@ -24,6 +26,7 @@ fun parseSourceDebuggerCommand(arguments: Any?, kind: String, generation: Int): 
         "help", "prefix" -> setOf("value")
         "sort" -> setOf("index")
         "html" -> setOf("stage")
+        "openUrl" -> setOf("url")
         "run", "retry", "close" -> emptySet()
         "scan", "refreshExplore", "instructions", "detail" -> {
             require(kind == "book")
@@ -61,6 +64,14 @@ fun parseSourceDebuggerCommand(arguments: Any?, kind: String, generation: Int): 
             val stage = arguments["stage"] as? String ?: error("Invalid stage")
             require(stage in if (kind == "book") setOf("search", "book", "toc", "content") else setOf("list", "content"))
             SourceDebuggerCommand(incoming, op, stage = stage)
+        }
+        "openUrl" -> {
+            val url = arguments["url"] as? String ?: error("Invalid URL")
+            require(url.none { it.isISOControl() || it == '\\' })
+            val uri = URI(url)
+            require(uri.scheme?.lowercase() in setOf("http", "https") && !uri.rawAuthority.isNullOrBlank())
+            require(!uri.host.isNullOrBlank())
+            SourceDebuggerCommand(incoming, op, url = url)
         }
         else -> SourceDebuggerCommand(incoming, op)
     }
