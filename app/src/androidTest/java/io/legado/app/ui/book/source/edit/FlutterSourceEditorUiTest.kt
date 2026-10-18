@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -28,6 +32,8 @@ import java.io.File
 import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -77,53 +83,103 @@ class FlutterSourceEditorUiTest {
     @Test
     fun editsEveryFormFieldAndOptionThroughFlutterAndSavesActualRoomRow() {
         launch()
-        driver.click("source-options-toggle")
-        driver.awaitIdentifier("source-option-enabled")
-        listOf("enabled", "enabledExplore", "enabledCookieJar", "enabledReview", "eventListener", "customButton")
-            .forEach { key ->
-                revealIn("source-option-$key", "source-options")
-                driver.click("source-option-$key")
-            }
-        // Type follows the six option chips at the trailing edge of the row.
-        revealIn("source-type", "source-options")
-        driver.click("source-type")
-        driver.click("source-type-2")
-        driver.click("source-options-toggle")
-        val expected = projectBookSourceEditForm(source)
-        val values = mutableMapOf<Pair<Int, String>, String>()
-        expected.tabs.forEachIndexed { tab, fields ->
-            selectTab(tab)
-            fields.forEach { field ->
-                val value = when (field.key) {
-                    "bookSourceUrl" -> source.bookSourceUrl
-                    "maxBatchSize" -> "17"
-                    else -> "fixture-$tab-${field.key}"
+        val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
+        lateinit var root: View
+        scenario!!.onActivity { activity ->
+            root = activity.window.decorView
+            ViewCompat.setWindowInsetsAnimationCallback(root,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                            runningImeAnimations.add(animation)
+                    }
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                    ): WindowInsetsCompat = insets
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        runningImeAnimations.remove(animation)
+                    }
+                })
+        }
+        fun awaitImeSettled(visible: Boolean) {
+            driver.await("IME visible=$visible and viewport animation completed") {
+                var settled = false
+                instrumentation.runOnMainSync {
+                    val insets = ViewCompat.getRootWindowInsets(root)
+                    settled = root.isAttachedToWindow && root.isLaidOut &&
+                        insets?.isVisible(WindowInsetsCompat.Type.ime()) == visible &&
+                        runningImeAnimations.isEmpty()
                 }
-                revealField(tab, field.key)
-                driver.setText("source-field-$tab-${field.key}", value)
-                values[tab to field.key] = value
-                closeSoftKeyboard()
+                settled
             }
         }
-        driver.click("source-save")
-        awaitFinished()
-        val saved = requireNotNull(appDb.bookSourceDao.getBookSource(source.bookSourceUrl))
-        val actual = projectBookSourceEditForm(saved)
-        values.forEach { (field, value) ->
-            assertEquals("Saved field ${field.first}/${field.second}", value,
-                actual.field(field.first, field.second)?.value)
+        fun committedViewportFrame() {
+            val committed = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
+                root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+                root.postInvalidateOnAnimation()
+            }
+            assertTrue("Editor viewport frame was not committed", committed.await(5, TimeUnit.SECONDS))
+            instrumentation.uiAutomation.waitForIdle(100, 5_000)
         }
-        assertFalse(actual.options.enabled)
-        assertFalse(actual.options.enabledExplore)
-        assertFalse(actual.options.enabledCookieJar)
-        assertTrue(actual.options.enabledReview)
-        assertTrue(actual.options.eventListener)
-        assertTrue(actual.options.customButton)
-        assertEquals(2, actual.options.type)
-        // These fields are absent from the edit form and must survive a UI round trip.
-        assertEquals(source.weight, saved.weight)
-        assertEquals(source.customOrder, saved.customOrder)
-        assertEquals(source.respondTime, saved.respondTime)
+        try {
+            driver.click("source-options-toggle")
+            driver.awaitIdentifier("source-option-enabled")
+            listOf("enabled", "enabledExplore", "enabledCookieJar", "enabledReview", "eventListener", "customButton")
+                .forEach { key ->
+                    revealIn("source-option-$key", "source-options")
+                    driver.click("source-option-$key")
+                }
+            // Type follows the six option chips at the trailing edge of the row.
+            revealIn("source-type", "source-options")
+            driver.click("source-type")
+            driver.click("source-type-2")
+            driver.click("source-options-toggle")
+            val expected = projectBookSourceEditForm(source)
+            val values = mutableMapOf<Pair<Int, String>, String>()
+            expected.tabs.forEachIndexed { tab, fields ->
+                selectTab(tab)
+                fields.forEach { field ->
+                    val value = when (field.key) {
+                        "bookSourceUrl" -> source.bookSourceUrl
+                        "maxBatchSize" -> "17"
+                        else -> "fixture-$tab-${field.key}"
+                    }
+                    revealField(tab, field.key)
+                    driver.setText("source-field-$tab-${field.key}", value) {
+                        awaitImeSettled(true)
+                        committedViewportFrame()
+                    }
+                    values[tab to field.key] = value
+                    closeSoftKeyboard()
+                    awaitImeSettled(false)
+                    committedViewportFrame()
+                }
+            }
+            driver.click("source-save")
+            awaitFinished()
+            val saved = requireNotNull(appDb.bookSourceDao.getBookSource(source.bookSourceUrl))
+            val actual = projectBookSourceEditForm(saved)
+            values.forEach { (field, value) ->
+                assertEquals("Saved field ${field.first}/${field.second}", value,
+                    actual.field(field.first, field.second)?.value)
+            }
+            assertFalse(actual.options.enabled)
+            assertFalse(actual.options.enabledExplore)
+            assertFalse(actual.options.enabledCookieJar)
+            assertTrue(actual.options.enabledReview)
+            assertTrue(actual.options.eventListener)
+            assertTrue(actual.options.customButton)
+            assertEquals(2, actual.options.type)
+            // These fields are absent from the edit form and must survive a UI round trip.
+            assertEquals(source.weight, saved.weight)
+            assertEquals(source.customOrder, saved.customOrder)
+            assertEquals(source.respondTime, saved.respondTime)
+        } finally {
+            instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
+        }
     }
 
     @Test
