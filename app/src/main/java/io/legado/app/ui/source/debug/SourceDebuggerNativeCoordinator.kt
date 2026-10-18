@@ -22,7 +22,7 @@ class SourceDebuggerNativeCoordinator private constructor(
     private val lifecycle: Lifecycle,
     scope: CoroutineScope,
     private val canHandle: () -> Boolean,
-    onFinish: () -> Unit,
+    private val onFinish: () -> Unit,
     flush: suspend () -> Unit,
 ) : AutoCloseable {
     private var binding: Any? = null
@@ -30,16 +30,7 @@ class SourceDebuggerNativeCoordinator private constructor(
     private var finished = false
     private val effects = scope.launch {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            state.collect { value ->
-                // Explicit Back can close while initialization is still loading. The ViewModel
-                // cancels that load, so waiting for loading=false would strand the closed host.
-                if (!finished && canHandle() && (value["closed"] == true ||
-                    (value["loading"] == false && value["missing"] == true))) {
-                    finished = true
-                    closeModel()
-                    onFinish()
-                }
-            }
+            state.collect(::completeIfReady)
         }
     }
     private val checkpoint = scope.launch {
@@ -75,6 +66,20 @@ class SourceDebuggerNativeCoordinator private constructor(
     private fun requireOwner(owner: Any) { check(!retired && binding === owner) { "Stale debugger binding" } }
 
     fun requestClose() { if (!retired) closeModel() }
+
+    /** FragmentManager's saved-state gate is independent from the model's StateFlow. */
+    fun onHostReady() { if (!retired) completeIfReady(current()) }
+
+    private fun completeIfReady(value: Map<String, Any?>) {
+        // Explicit Back cancels initialization, which can leave loading=true indefinitely.
+        if (!retired && !finished && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            canHandle() && (value["closed"] == true ||
+                (value["loading"] == false && value["missing"] == true))) {
+            finished = true
+            closeModel()
+            onFinish()
+        }
+    }
 
     /** Detaching UI does not stop the ViewModel's task or delete its private checkpoint. */
     override fun close() {
