@@ -126,6 +126,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test('native debugger bootstrap is accepted without opening the source repository', () async {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+      call,
+    ) async {
+      expect(call.method, 'bootstrap');
+      return {'route': '/source-debugger', 'locale': 'zh', 'theme': 'system'};
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final config = await container.read(
+      embeddedSourceConfigurationProvider.future,
+    );
+    expect(config.route, '/source-debugger');
+    expect(config.locale, 'zh');
+    expect(config.theme, 'system');
+  });
+
   test('standalone repository adapter retains complete records and leaves the shared service owner in control', () async {
     final repository = SourceTestRepository();
     final service = BookSourceService(repository);
