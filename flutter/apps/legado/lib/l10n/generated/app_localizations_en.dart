@@ -727,6 +727,100 @@ class AppLocalizationsEn extends AppLocalizations {
       'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
+  String get debuggerTitle => 'Source debugger';
+
+  @override
+  String get debuggerSearch => 'Search';
+
+  @override
+  String get debuggerClose => 'Back';
+
+  @override
+  String get debuggerMenu => 'More options';
+
+  @override
+  String get debuggerScan => 'Scan QR code';
+
+  @override
+  String get debuggerRefresh => 'Refresh explore categories';
+
+  @override
+  String get debuggerInstructions => 'Help';
+
+  @override
+  String get debuggerRetry => 'Retry';
+
+  @override
+  String get debuggerSearchHtml => 'Search HTML';
+
+  @override
+  String get debuggerBookHtml => 'Book details HTML';
+
+  @override
+  String get debuggerTocHtml => 'Table of contents HTML';
+
+  @override
+  String get debuggerContentHtml => 'Content HTML';
+
+  @override
+  String get debuggerListHtml => 'List HTML';
+
+  @override
+  String get debuggerCategories => 'Choose category';
+
+  @override
+  String get debuggerSearchHelp =>
+      'Debug search: enter a keyword, for example:';
+
+  @override
+  String get debuggerBookCategoryHelp =>
+      'Debug explore: enter an explore URL, for example:';
+
+  @override
+  String get debuggerRssCategoryHelp =>
+      'Debug category: enter a category URL, for example:';
+
+  @override
+  String get debuggerDetailsHelp =>
+      'Debug book information: enter the details URL:';
+
+  @override
+  String get debuggerTocHelp =>
+      'Debug table of contents: enter a URL prefixed with ++:';
+
+  @override
+  String get debuggerContentHelp =>
+      'Debug chapter content: enter a URL prefixed with --:';
+
+  @override
+  String get debuggerRssContentHelp =>
+      'Debug content: enter a content page URL:';
+
+  @override
+  String get debuggerBusy => 'Debug channel is busy. Try again later.';
+
+  @override
+  String get debuggerInterrupted =>
+      'The previous debug run was interrupted. Run again to continue.';
+
+  @override
+  String get debuggerConnectionError =>
+      'Unable to connect to the source debugger.';
+
+  @override
+  String get debuggerCommandError =>
+      'The action could not be completed. Please try again.';
+
+  @override
+  String get debuggerNoCategories => 'No categories are available.';
+
+  @override
+  String get debuggerLoading => 'Loading source…';
+
+  @override
+  String get debuggerLinkError => 'Unable to open this link.';
+
+  @override
   String get sourceEditorTitle => 'Edit book source';
 
   @override
