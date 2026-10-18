@@ -291,6 +291,129 @@ class AppLocalizationsZh extends AppLocalizations {
       '当前文件适配器不支持按指定编码导入，已停止操作，请更换支持此功能的文件适配器。';
 
   @override
+  String get codeEditorTitle => '规则编辑';
+
+  @override
+  String get codeEditorClose => '关闭';
+
+  @override
+  String get codeEditorSave => '保存';
+
+  @override
+  String get codeEditorSearch => '搜索';
+
+  @override
+  String get codeEditorDebug => '调试书源';
+
+  @override
+  String get codeEditorLogin => '登录';
+
+  @override
+  String get codeEditorMenu => '更多操作';
+
+  @override
+  String get codeEditorTheme => '编辑器主题';
+
+  @override
+  String get codeEditorSelectAll => '全选';
+
+  @override
+  String get codeEditorFormat => '格式化代码';
+
+  @override
+  String get codeEditorSyntax => '检查 JavaScript 语法';
+
+  @override
+  String get codeEditorCurl => '转换 cURL';
+
+  @override
+  String get codeEditorSettings => '编辑器设置';
+
+  @override
+  String get codeEditorWrap => '自动换行';
+
+  @override
+  String get codeEditorLog => '日志';
+
+  @override
+  String get codeEditorQuery => '搜索';
+
+  @override
+  String get codeEditorReplace => '替换';
+
+  @override
+  String get codeEditorRegex => '正则表达式';
+
+  @override
+  String get codeEditorIgnoreCase => '忽略大小写';
+
+  @override
+  String get codeEditorPrevious => '上一匹配';
+
+  @override
+  String get codeEditorNext => '下一匹配';
+
+  @override
+  String get codeEditorReplaceAll => '全部替换';
+
+  @override
+  String get codeEditorHelp => '帮助';
+
+  @override
+  String get codeEditorKeyboardConfig => '辅助按键配置';
+
+  @override
+  String get codeEditorRuleHelp => '书源 Reference';
+
+  @override
+  String get codeEditorRssHelp => '订阅源 Reference';
+
+  @override
+  String get codeEditorJsHelp => 'JavaScript Reference';
+
+  @override
+  String get codeEditorRegexHelp => '正则 Reference';
+
+  @override
+  String get codeEditorUndo => '撤销';
+
+  @override
+  String get codeEditorRedo => '重做';
+
+  @override
+  String get codeEditorRetry => '重试';
+
+  @override
+  String get codeEditorRestart => '重启编辑器';
+
+  @override
+  String get codeEditorLoadingFailed => '无法加载编辑器';
+
+  @override
+  String get codeEditorLoadFailed => '无法加载此文档，请重启编辑器后重试。';
+
+  @override
+  String get codeEditorReplacementFailed => '替换失败';
+
+  @override
+  String get codeEditorDiscardTitle => '放弃未保存的修改？';
+
+  @override
+  String get codeEditorDiscardBody => '修改尚未保存。退出将丢弃本次编辑内容。';
+
+  @override
+  String get codeEditorDiscard => '放弃修改';
+
+  @override
+  String get codeEditorKeepEditing => '继续编辑';
+
+  @override
+  String get codeEditorPlatformUnavailable => '此嵌入式编辑区域仅支持 Android。';
+
+  @override
+  String get codeEditorSearchRejected => '搜索修改未被接受，已恢复。请重试或重新编辑搜索后再保存或替换。';
+
+  @override
   String get pdfTitle => 'PDF 阅读';
 
   @override
