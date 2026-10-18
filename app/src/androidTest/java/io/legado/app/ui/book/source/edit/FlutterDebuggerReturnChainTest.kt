@@ -7,6 +7,8 @@ import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
+import androidx.test.runner.lifecycle.ActivityLifecycleCallback
+import io.legado.app.utils.GSON
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.config.LocalConfig
@@ -102,20 +104,41 @@ class FlutterDebuggerReturnChainTest {
 
     @Test
     fun jsEditorDebugActionReturnsThroughRealDebuggerResultAndReopensActualFlutterCodeEditor() {
-        val source = fixture()
+        val original = fixture()
+        val source = original.copy(mainJs = """
+            var config = {
+              bookSourceUrl: ${GSON.toJson(original.bookSourceUrl)},
+              bookSourceName: ${GSON.toJson(original.bookSourceName)},
+              bookSourceType: 0
+            };
+            async function search(key, page) { return []; }
+            async function getChapters(book) { return []; }
+            async function getContent(chapter, book, nextChapterUrl) { return 'Fixture body'; }
+        """.trimIndent())
         runBlocking(Dispatchers.IO) { appDb.bookSourceDao.insert(source) }
-        var child: Activity? = null
+        var owner: JsSourceEditActivity? = null
+        val ownedChildren = mutableListOf<Activity>()
+        val monitor = ActivityLifecycleCallback { activity, stage ->
+            if (stage == Stage.CREATED) {
+                if (activity is JsSourceEditActivity && activity.intent.getStringExtra("sourceUrl") == source.bookSourceUrl) {
+                    owner = activity
+                } else if (owner != null &&
+                    activity.callingActivity?.className == JsSourceEditActivity::class.java.name &&
+                    (activity is CodeEditActivity || activity is BookSourceDebugActivity)) {
+                    ownedChildren += activity
+                }
+            }
+        }
+        instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(monitor) }
         try {
             ActivityScenario.launch<JsSourceEditActivity>(
                 Intent(context, JsSourceEditActivity::class.java).putExtra("sourceUrl", source.bookSourceUrl)
             ).use { scenario ->
                 driver.awaitIdentifier("code-debug")
                 val firstEditor = requireNotNull(resumed<CodeEditActivity>())
-                child = firstEditor
                 driver.click("code-debug")
                 driver.awaitIdentifier("source-debug-query")
                 val debugger = awaitLoadedDebugger()
-                child = debugger
                 instrumentation.runOnMainSync {
                     assertEquals(source.bookSourceUrl, debugger.intent.getStringExtra("key"))
                     assertFalse(debugger.viewModel.state.value.running)
@@ -125,7 +148,7 @@ class FlutterDebuggerReturnChainTest {
                 driver.click("source-debug-close")
                 driver.await("JS DEBUG_OPEN return launches a fresh actual code editor") {
                     val editor = resumed<CodeEditActivity>()
-                    if (editor != null && editor !== firstEditor) { child = editor; true } else false
+                    editor != null && editor !== firstEditor
                 }
                 driver.awaitIdentifier("code-debug")
                 scenario.onActivity { assertFalse(it.isFinishing || it.isDestroyed) }
@@ -137,10 +160,16 @@ class FlutterDebuggerReturnChainTest {
                 driver.await("JS coordinator finishes after unchanged editor cancellation") {
                     resumed<CodeEditActivity>() == null && resumed<JsSourceEditActivity>() == null
                 }
-                child = null
             }
         } finally {
-            instrumentation.runOnMainSync { child?.takeUnless { it.isDestroyed || it.isFinishing }?.finish() }
+            instrumentation.runOnMainSync {
+                // Close this coordinator first: finishing a child cannot reopen another editor.
+                owner?.takeUnless { it.isDestroyed || it.isFinishing }?.finish()
+                ownedChildren.asReversed().forEach { child ->
+                    child.takeUnless { it.isDestroyed || it.isFinishing }?.finish()
+                }
+                ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(monitor)
+            }
             runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
         }
     }
