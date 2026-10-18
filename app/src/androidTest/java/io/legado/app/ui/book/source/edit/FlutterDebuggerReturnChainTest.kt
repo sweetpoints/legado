@@ -61,7 +61,7 @@ class FlutterDebuggerReturnChainTest {
                 driver.click("source-menu")
                 driver.click("source-menu-DEBUG")
                 driver.awaitIdentifier("source-debug-query")
-                val debugger = requireNotNull(resumed<BookSourceDebugActivity>())
+                val debugger = awaitLoadedDebugger()
                 instrumentation.runOnMainSync {
                     assertEquals(source.bookSourceUrl, debugger.intent.getStringExtra("key"))
                     assertNull(debugger.intent.getStringExtra("text"))
@@ -72,11 +72,13 @@ class FlutterDebuggerReturnChainTest {
                 runBlocking(Dispatchers.IO) {
                     assertEquals("Saved before debugger", appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.bookSourceName)
                 }
-                scenario.onActivity {
-                    val request = requireNotNull(it.editorModel.state.value.document?.nativeRequest)
-                    assertEquals(BookSourceNativeAction.DEBUG, request.action)
-                    assertTrue(request.delivered)
-                    assertTrue(request.handedOff)
+                driver.await("original editor durably owns the handed-off debug request") {
+                    var handedOff = false
+                    scenario.onActivity {
+                        val request = it.editorModel.state.value.document?.nativeRequest
+                        handedOff = request?.action == BookSourceNativeAction.DEBUG && request.delivered && request.handedOff
+                    }
+                    handedOff
                 }
                 closeSoftKeyboard()
                 driver.click("source-debug-close")
@@ -112,7 +114,7 @@ class FlutterDebuggerReturnChainTest {
                 child = firstEditor
                 driver.click("code-debug")
                 driver.awaitIdentifier("source-debug-query")
-                val debugger = requireNotNull(resumed<BookSourceDebugActivity>())
+                val debugger = awaitLoadedDebugger()
                 child = debugger
                 instrumentation.runOnMainSync {
                     assertEquals(source.bookSourceUrl, debugger.intent.getStringExtra("key"))
@@ -141,6 +143,18 @@ class FlutterDebuggerReturnChainTest {
             instrumentation.runOnMainSync { child?.takeUnless { it.isDestroyed || it.isFinishing }?.finish() }
             runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
         }
+    }
+
+    private fun awaitLoadedDebugger(): BookSourceDebugActivity {
+        var result: BookSourceDebugActivity? = null
+        driver.await("actual debugger resumes and loads its Room snapshot") {
+            val candidate = resumed<BookSourceDebugActivity>() ?: return@await false
+            var loaded = false
+            instrumentation.runOnMainSync { loaded = candidate.viewModel.state.value.loaded }
+            if (loaded) result = candidate
+            loaded
+        }
+        return requireNotNull(result)
     }
 
     private fun fixture() = BookSource(
