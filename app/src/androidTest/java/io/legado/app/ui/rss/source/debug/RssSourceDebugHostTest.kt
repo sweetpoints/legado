@@ -3,10 +3,10 @@ package io.legado.app.ui.rss.source.debug
 import android.content.Intent
 import androidx.compose.ui.test.onNodeWithText
 import io.legado.app.ui.flutter.FlutterUiTestDriver
+import io.legado.app.ui.flutter.hideDebuggerIme
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.closeSoftKeyboard
-import androidx.test.espresso.Espresso.pressBack
+import androidx.test.espresso.Espresso.pressBackUnconditionally
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
@@ -75,8 +75,8 @@ class RssSourceDebugHostTest {
                     assertEquals("我的", it.viewModel.state.value.query)
                 }
                 assertNull(Debug.callback)
-                closeSoftKeyboard()
-                pressBack()
+                hideDebuggerIme(scenario, driver)
+                pressBackUnconditionally()
             }
             runBlocking(Dispatchers.IO) {
                 val row = appDb.rssSourceDao.getByKey(key)!!
@@ -132,8 +132,8 @@ class RssSourceDebugHostTest {
                         child.dismissAllowingStateLoss()
                     }
                 }
-                closeSoftKeyboard()
-                pressBack()
+                hideDebuggerIme(scenario, driver)
+                pressBackUnconditionally()
             }
         } finally {
             runBlocking(Dispatchers.IO) { appDb.rssSourceDao.delete(key) }
