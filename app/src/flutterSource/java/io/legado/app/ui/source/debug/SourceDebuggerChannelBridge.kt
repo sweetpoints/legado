@@ -38,7 +38,7 @@ internal class SourceDebuggerChannelBridge(
         methods.setMethodCallHandler { call, result -> reply(result) {
             when (call.method) {
                 "snapshot" -> { require(call.arguments == null); coordinator.snapshot(owner) }
-                "command" -> { coordinator.command(owner, call.arguments); null }
+                "command" -> coordinator.command(owner, call.arguments)
                 else -> error("Unknown debugger method")
             }
         } }
