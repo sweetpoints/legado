@@ -152,28 +152,51 @@ internal class FlutterUiTestDriver(private val instrumentation: Instrumentation)
         }
         return false
     }
-    fun setText(id: String, text: String) {
+    fun setText(id: String, text: String, afterFocus: () -> Unit = {}) {
         click(id)
-        var ready: AccessibilityNodeInfo? = null
-        await("Flutter field advertises editable ACTION_SET_TEXT: $id") {
-            val candidate = node(id) ?: return@await false
-            val acceptsText = candidate.isFocused && candidate.isEditable &&
-                candidate.isEnabled && candidate.actionList.any {
-                    it.id == AccessibilityNodeInfo.ACTION_SET_TEXT
-                }
-            if (acceptsText) ready = candidate else candidate.recycle()
-            acceptsText
+        fun focusedField(): AccessibilityNodeInfo {
+            var ready: AccessibilityNodeInfo? = null
+            await("Flutter field advertises editable ACTION_SET_TEXT: $id") {
+                val candidate = node(id) ?: return@await false
+                val acceptsText = candidate.isFocused && candidate.isEditable &&
+                    candidate.isEnabled && candidate.actionList.any {
+                        it.id == AccessibilityNodeInfo.ACTION_SET_TEXT
+                    }
+                if (acceptsText) ready = candidate else candidate.recycle()
+                acceptsText
+            }
+            return requireNotNull(ready)
         }
-        // Flutter's Android bridge can optimistically return true for SET_TEXT
-        // before Dart has installed onSetText. The advertised action above is
-        // the actual semantics capability, not merely Android's focus state.
-        val field = requireNotNull(ready)
+        focusedField().recycle()
+        afterFocus()
+        // IME/layout stabilization can replace the semantics snapshot. Never
+        // dispatch through the node retained before that platform boundary.
+        val field = focusedField()
         try {
             assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }))
         } finally { field.recycle() }
-        await("Flutter field value $id") { this.text(id) == text }
+        var diagnostic = "node missing"
+        fun actualValueMatches(): Boolean {
+            val current = node(id) ?: run { diagnostic = "node missing"; return false }
+            try {
+                val actual = current.text?.toString().orEmpty()
+                val bounds = Rect().also(current::getBoundsInScreen)
+                diagnostic = "actualLength=${actual.length}, expectedLength=${text.length}, " +
+                    "matches=${actual == text}, focused=${current.isFocused}, " +
+                    "editable=${current.isEditable}, enabled=${current.isEnabled}, " +
+                    "selection=${current.textSelectionStart}..${current.textSelectionEnd}, bounds=$bounds"
+                return actual == text
+            } finally { current.recycle() }
+        }
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (actualValueMatches()) return
+            SystemClock.sleep(50)
+        }
+        val matches = actualValueMatches()
+        assertTrue("Timed out waiting for Flutter field value $id; $diagnostic", matches)
     }
     fun containsText(id: String, text: String): Boolean {
         val pending = ArrayDeque<AccessibilityNodeInfo>()
