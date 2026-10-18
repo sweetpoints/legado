@@ -1412,6 +1412,174 @@ abstract class AppLocalizations {
   /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
   String get rssDuplicateRestoreSource;
 
+  /// No description provided for @debuggerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source debugger'**
+  String get debuggerTitle;
+
+  /// No description provided for @debuggerSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get debuggerSearch;
+
+  /// No description provided for @debuggerClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get debuggerClose;
+
+  /// No description provided for @debuggerMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get debuggerMenu;
+
+  /// No description provided for @debuggerScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR code'**
+  String get debuggerScan;
+
+  /// No description provided for @debuggerRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh explore categories'**
+  String get debuggerRefresh;
+
+  /// No description provided for @debuggerInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get debuggerInstructions;
+
+  /// No description provided for @debuggerRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get debuggerRetry;
+
+  /// No description provided for @debuggerSearchHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'Search HTML'**
+  String get debuggerSearchHtml;
+
+  /// No description provided for @debuggerBookHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'Book details HTML'**
+  String get debuggerBookHtml;
+
+  /// No description provided for @debuggerTocHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'Table of contents HTML'**
+  String get debuggerTocHtml;
+
+  /// No description provided for @debuggerContentHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'Content HTML'**
+  String get debuggerContentHtml;
+
+  /// No description provided for @debuggerListHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'List HTML'**
+  String get debuggerListHtml;
+
+  /// No description provided for @debuggerCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose category'**
+  String get debuggerCategories;
+
+  /// No description provided for @debuggerSearchHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug search: enter a keyword, for example:'**
+  String get debuggerSearchHelp;
+
+  /// No description provided for @debuggerBookCategoryHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug explore: enter an explore URL, for example:'**
+  String get debuggerBookCategoryHelp;
+
+  /// No description provided for @debuggerRssCategoryHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug category: enter a category URL, for example:'**
+  String get debuggerRssCategoryHelp;
+
+  /// No description provided for @debuggerDetailsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug book information: enter the details URL:'**
+  String get debuggerDetailsHelp;
+
+  /// No description provided for @debuggerTocHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug table of contents: enter a URL prefixed with ++:'**
+  String get debuggerTocHelp;
+
+  /// No description provided for @debuggerContentHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug chapter content: enter a URL prefixed with --:'**
+  String get debuggerContentHelp;
+
+  /// No description provided for @debuggerRssContentHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug content: enter a content page URL:'**
+  String get debuggerRssContentHelp;
+
+  /// No description provided for @debuggerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug channel is busy. Try again later.'**
+  String get debuggerBusy;
+
+  /// No description provided for @debuggerInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'The previous debug run was interrupted. Run again to continue.'**
+  String get debuggerInterrupted;
+
+  /// No description provided for @debuggerConnectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to the source debugger.'**
+  String get debuggerConnectionError;
+
+  /// No description provided for @debuggerCommandError.
+  ///
+  /// In en, this message translates to:
+  /// **'The action could not be completed. Please try again.'**
+  String get debuggerCommandError;
+
+  /// No description provided for @debuggerNoCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'No categories are available.'**
+  String get debuggerNoCategories;
+
+  /// No description provided for @debuggerLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading source…'**
+  String get debuggerLoading;
+
+  /// No description provided for @debuggerLinkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open this link.'**
+  String get debuggerLinkError;
+
   /// No description provided for @sourceEditorTitle.
   ///
   /// In en, this message translates to:

@@ -694,6 +694,90 @@ class AppLocalizationsZh extends AppLocalizations {
       '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
+  String get debuggerTitle => '调试源';
+
+  @override
+  String get debuggerSearch => '搜索';
+
+  @override
+  String get debuggerClose => '返回';
+
+  @override
+  String get debuggerMenu => '更多选项';
+
+  @override
+  String get debuggerScan => '扫描二维码';
+
+  @override
+  String get debuggerRefresh => '刷新发现';
+
+  @override
+  String get debuggerInstructions => '帮助';
+
+  @override
+  String get debuggerRetry => '重试';
+
+  @override
+  String get debuggerSearchHtml => '搜索源码';
+
+  @override
+  String get debuggerBookHtml => '详情源码';
+
+  @override
+  String get debuggerTocHtml => '目录源码';
+
+  @override
+  String get debuggerContentHtml => '正文源码';
+
+  @override
+  String get debuggerListHtml => '列表源码';
+
+  @override
+  String get debuggerCategories => '选择分类';
+
+  @override
+  String get debuggerSearchHelp => '调试搜索：输入关键字，例如：';
+
+  @override
+  String get debuggerBookCategoryHelp => '调试发现：输入发现 URL，例如：';
+
+  @override
+  String get debuggerRssCategoryHelp => '调试分类：输入分类 URL，例如：';
+
+  @override
+  String get debuggerDetailsHelp => '调试详情：输入详情页 URL：';
+
+  @override
+  String get debuggerTocHelp => '调试目录：输入以 ++ 开头的目录页 URL：';
+
+  @override
+  String get debuggerContentHelp => '调试正文：输入以 -- 开头的正文页 URL：';
+
+  @override
+  String get debuggerRssContentHelp => '调试内容：输入内容页 URL：';
+
+  @override
+  String get debuggerBusy => '调试通道占用中，请稍后重试';
+
+  @override
+  String get debuggerInterrupted => '上次调试已中断，请重新运行';
+
+  @override
+  String get debuggerConnectionError => '无法连接书源调试器';
+
+  @override
+  String get debuggerCommandError => '操作未完成，请重试';
+
+  @override
+  String get debuggerNoCategories => '暂无可用分类';
+
+  @override
+  String get debuggerLoading => '正在加载源…';
+
+  @override
+  String get debuggerLinkError => '无法打开此链接';
+
+  @override
   String get sourceEditorTitle => '编辑书源';
 
   @override
