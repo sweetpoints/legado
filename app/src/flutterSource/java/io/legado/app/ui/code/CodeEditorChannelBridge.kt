@@ -73,7 +73,7 @@ internal fun codeEditorSnapshot(value: CodeEditorPresentation): Map<String, Any?
         "finished" to (session?.finished == true), "showDebugSource" to (session?.showDebugSource == true),
         "showLoginSource" to (session?.showLoginSource == true),
         "checkJavaScriptSyntax" to (session?.checkJavaScriptSyntax == true),
-        "generation" to value.generation, "keyboardRows" to state.keyboardRows,
+        "generation" to if (session == null) 0 else value.generation, "keyboardRows" to state.keyboardRows.coerceIn(1, 5),
         "autoWrap" to value.autoWrap,
         "assists" to state.assists.map { mapOf("key" to it.key, "value" to it.value) },
         "search" to mapOf("query" to search.query, "replacement" to search.replacement,
@@ -132,9 +132,9 @@ internal fun parseCodeEditorCommand(arguments: Any?): CodeEditorCommand {
         }
         "search" -> {
             val value = arguments["value"] as? Map<*, *> ?: error("Invalid search")
-            val required = setOf("query", "replacement", "visible", "replaceVisible", "regex",
+            val required = setOf("query", "replacement", "visible", "replaceVisible", "regex", "ignoreCase",
                 "queryStart", "queryEnd", "replacementStart", "replacementEnd")
-            require(value.keys.containsAll(required) && value.keys.all { it in required || it == "ignoreCase" })
+            require(value.keys == required)
             fun text(key: String) = (value[key] as? String)?.also { require(it.length <= 65536) } ?: error("Invalid search text")
             fun flag(key: String) = value[key] as? Boolean ?: error("Invalid search flag")
             fun selection(prefix: String, text: String): CodeEditorSelection {
@@ -145,7 +145,7 @@ internal fun parseCodeEditorCommand(arguments: Any?): CodeEditorCommand {
             }
             val query = text("query"); val replacement = text("replacement")
             CodeEditorCommand(op, search = CodeEditorSearch(flag("visible"), flag("replaceVisible"), query,
-                replacement, flag("regex"), if (value.containsKey("ignoreCase")) flag("ignoreCase") else false,
+                replacement, flag("regex"), flag("ignoreCase"),
                 selection("query", query), selection("replacement", replacement)))
         }
         else -> CodeEditorCommand(op)
