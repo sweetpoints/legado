@@ -8,6 +8,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     io.legado.app.ui.flutter.EmbeddedFlutterActivityTest::class,
     io.legado.app.ui.flutter.FlutterSourceDebuggerHostTest::class,
+    io.legado.app.ui.book.source.edit.FlutterDebuggerReturnChainTest::class,
     io.legado.app.ui.book.source.debug.BookSourceDebugHostTest::class,
     io.legado.app.ui.rss.source.debug.RssSourceDebugHostTest::class,
     io.legado.app.ui.book.source.edit.FlutterSourceEditorUiTest::class,
