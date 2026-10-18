@@ -566,8 +566,9 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
   );
 }
 
-/// URL recognizers are disposed on every log update. Selection remains native
-/// Flutter text selection, including copy, while normal taps open web links.
+/// RenderParagraph provides the log's text/link semantics. SelectionArea keeps
+/// a single selectable document without the platform's rich RenderEditable
+/// fragment path, whose Android nodes can lose readable text during updates.
 class _DebuggerOutput extends StatefulWidget {
   const _DebuggerOutput({required this.text, required this.onUrl});
   final Future<void> Function(String) onUrl;
@@ -622,11 +623,13 @@ class _DebuggerOutputState extends State<_DebuggerOutput> {
       cursor = match.end;
     }
     spans.add(TextSpan(text: widget.text.substring(cursor)));
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: SelectableText.rich(
-        TextSpan(children: spans),
-        style: const TextStyle(fontFamily: 'monospace'),
+    return SelectionArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(12),
+        child: Text.rich(
+          TextSpan(children: spans),
+          style: const TextStyle(fontFamily: 'monospace'),
+        ),
       ),
     );
   }
