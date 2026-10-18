@@ -1,0 +1,82 @@
+package io.legado.app.ui.source.debug
+
+import android.content.Context
+import io.flutter.plugin.common.*
+import io.legado.app.help.config.AppConfig
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
+
+internal class SourceDebuggerChannelBridge(
+    context: Context,
+    messenger: BinaryMessenger,
+    private val coordinator: SourceDebuggerNativeCoordinator,
+) : AutoCloseable {
+    private val ui = MethodChannel(messenger, "legado/embedded_ui")
+    private val methods = MethodChannel(messenger, "legado/source_debugger")
+    private val events = EventChannel(messenger, "legado/source_debugger/state")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val owner = coordinator.bind()
+    private var observation: Job? = null
+    private var closed = false
+
+    init {
+        ui.setMethodCallHandler { call, result -> reply(result) {
+            when (call.method) {
+                "bootstrap" -> {
+                    coordinator.snapshot(owner)
+                    mapOf("route" to "/source-debugger",
+                        "locale" to if (context.resources.configuration.locales[0].language == "zh") "zh" else "en",
+                        "theme" to when (AppConfig.themeMode) { "1", "3" -> "light"; "2" -> "dark"; else -> "system" })
+                }
+                "navigation.close" -> {
+                    coordinator.command(owner, mapOf("op" to "close", "generation" to coordinator.generation))
+                    null
+                }
+                else -> error("Unknown embedded method")
+            }
+        } }
+        methods.setMethodCallHandler { call, result -> reply(result) {
+            when (call.method) {
+                "snapshot" -> { require(call.arguments == null); coordinator.snapshot(owner) }
+                "command" -> { coordinator.command(owner, call.arguments); null }
+                else -> error("Unknown debugger method")
+            }
+        } }
+        events.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink) {
+                observation?.cancel()
+                if (closed || arguments != null) {
+                    sink.error("invalid_request", "Debugger subscription unavailable", null)
+                    return
+                }
+                observation = scope.launch {
+                    coordinator.state.collect {
+                        try { sink.success(coordinator.snapshot(owner)) }
+                        catch (_: Exception) {
+                            sink.error("invalid_state", "Debugger view unavailable", null)
+                            observation?.cancel()
+                        }
+                    }
+                }
+            }
+            override fun onCancel(arguments: Any?) { observation?.cancel(); observation = null }
+        })
+    }
+
+    private inline fun reply(result: MethodChannel.Result, action: () -> Any?) {
+        if (closed) { result.error("closed", "Debugger view closed", null); return }
+        try { result.success(action()) }
+        catch (_: Exception) { result.error("invalid_request", "Debugger operation unavailable or invalid", null) }
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        coordinator.detach(owner)
+        observation?.cancel()
+        scope.cancel()
+        ui.setMethodCallHandler(null)
+        methods.setMethodCallHandler(null)
+        events.setStreamHandler(null)
+    }
+}
