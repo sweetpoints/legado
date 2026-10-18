@@ -31,6 +31,16 @@ void main() {
       final args = call.arguments as Map;
       commands.add(args);
       await handler?.call(args);
+      if (args['op'] == 'query') {
+        native = {
+          ...native,
+          'revision': (native['revision'] as int) + 1,
+          'query': args['text'],
+          'queryStart': args['start'],
+          'queryEnd': args['end'],
+        };
+        return native;
+      }
       return null;
     });
   });
@@ -73,8 +83,20 @@ void main() {
     }
   }
 
-  Future<void> emit(WidgetTester t, Map<String, Object?> value) async {
-    native = value;
+  Future<void> emit(
+    WidgetTester t,
+    Map<String, Object?> value, {
+    bool stale = false,
+  }) async {
+    if (!stale) {
+      value = {
+        ...value,
+        'revision': value['revision'] == native['revision']
+            ? (native['revision'] as int) + 1
+            : value['revision'],
+      };
+      native = value;
+    }
     await binding.defaultBinaryMessenger.handlePlatformMessage(
       events.name,
       const StandardMethodCodec().encodeSuccessEnvelope(value),
@@ -278,7 +300,12 @@ void main() {
     await t.pumpAndSettle();
     expect(commands.last['start'], 2);
     expect(commands.last['end'], 4);
-    await emit(t, {...native, 'queryStart': 5, 'queryEnd': 5});
+    await emit(t, {
+      ...native,
+      'revision': 1,
+      'queryStart': 5,
+      'queryEnd': 5,
+    }, stale: true);
     expect(
       field.controller!.selection,
       const TextSelection(baseOffset: 2, extentOffset: 4),
@@ -509,4 +536,94 @@ void main() {
       expect(commands.last['op'], 'detail');
     },
   );
+  testWidgets(
+    'conflated prefix event is applied when its older query acknowledgement arrives',
+    (t) async {
+      await app(t);
+      final ack = Completer<Object?>();
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'snapshot') return native;
+        final args = call.arguments as Map;
+        commands.add(args);
+        if (args['op'] == 'query') return ack.future;
+        return null;
+      });
+      await t.enterText(tag('source-debug-query'), 'abc');
+      await t.pump();
+      final queryAck = {
+        ...native,
+        'revision': 2,
+        'query': 'abc',
+        'queryStart': 3,
+        'queryEnd': 3,
+      };
+      // No intermediate query echo: StateFlow has conflated it with native prefix.
+      await emit(t, {
+        ...native,
+        'revision': 3,
+        'query': '++abc',
+        'queryStart': 5,
+        'queryEnd': 5,
+        'help': false,
+      });
+      final field = t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.controller!.text, 'abc');
+      ack.complete(queryAck);
+      await t.pumpAndSettle();
+      expect(field.controller!.text, '++abc');
+      expect(
+        field.controller!.selection,
+        const TextSelection.collapsed(offset: 5),
+      );
+      await emit(t, {...queryAck, 'revision': 2}, stale: true);
+      expect(field.controller!.text, '++abc');
+    },
+  );
+  testWidgets('query acknowledgement clears pending without an event echo', (
+    t,
+  ) async {
+    await app(t);
+    final ack = Completer<Object?>();
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      if (call.method == 'snapshot') return native;
+      final args = call.arguments as Map;
+      commands.add(args);
+      if (args['op'] == 'query') return ack.future;
+      return null;
+    });
+    await t.enterText(tag('source-debug-query'), 'abc');
+    await t.pump();
+    // Native accepted the query without publishing any intermediate event.
+    native = {
+      ...native,
+      'revision': 2,
+      'query': 'abc',
+      'queryStart': 3,
+      'queryEnd': 3,
+    };
+    ack.complete(native);
+    await t.pumpAndSettle();
+    await emit(t, {
+      ...native,
+      'query': 'Category::https://example.org',
+      'queryStart': 28,
+      'queryEnd': 28,
+    });
+    final field = t.widget<TextField>(
+      find.descendant(
+        of: tag('source-debug-query'),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.controller!.text, 'Category::https://example.org');
+  });
 }

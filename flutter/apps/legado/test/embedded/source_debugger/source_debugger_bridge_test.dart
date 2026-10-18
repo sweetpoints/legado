@@ -29,6 +29,16 @@ void main() {
       final args = call.arguments as Map;
       calls.add(args);
       await handler?.call(args);
+      if (args['op'] == 'query') {
+        native = {
+          ...native,
+          'revision': (native['revision'] as int) + 1,
+          'query': args['text'],
+          'queryStart': args['start'],
+          'queryEnd': args['end'],
+        };
+        return native;
+      }
       return null;
     });
   });
@@ -52,6 +62,7 @@ void main() {
       for (final patch in <Map<String, Object?>>[
         {'schemaVersion': 2},
         {'generation': 0},
+        {'revision': 0},
         {'kind': 'other'},
         {'queryStart': -1},
         {'queryEnd': 1},
@@ -156,4 +167,100 @@ void main() {
     await subscription.cancel();
     await bridge.close();
   });
+  test('older query acknowledgement confirms command without replacing a newer event', () async {
+    final ack = Completer<Object?>();
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      if (call.method == 'snapshot') return native;
+      return ack.future;
+    });
+    final bridge = SourceDebuggerBridge();
+    final snapshots = <SourceDebuggerSnapshot>[];
+    final subscription = bridge.snapshots().listen(snapshots.add);
+    await Future<void>.delayed(Duration.zero);
+    final query = bridge.command('query', 1, {
+      'text': 'abc',
+      'start': 3,
+      'end': 3,
+    });
+    await Future<void>.delayed(Duration.zero);
+    await emit({
+      ...native,
+      'revision': 3,
+      'query': '++abc',
+      'queryStart': 5,
+      'queryEnd': 5,
+    });
+    ack.complete({
+      ...native,
+      'revision': 2,
+      'query': 'abc',
+      'queryStart': 3,
+      'queryEnd': 3,
+    });
+    expect((await query)!.revision, 2);
+    expect(bridge.latestSnapshot!.query, '++abc');
+    expect(snapshots.map((s) => s.revision), [1, 3]);
+    await emit({
+      ...native,
+      'revision': 2,
+      'query': 'old',
+      'queryStart': 3,
+      'queryEnd': 3,
+    });
+    expect(bridge.latestSnapshot!.revision, 3);
+    await subscription.cancel();
+    await bridge.close();
+  });
+  test(
+    'equal revision query acknowledgement works without any state event',
+    () async {
+      final bridge = SourceDebuggerBridge();
+      final subscription = bridge.snapshots().listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => native,
+      );
+      final ack = await bridge.command('query', 1, {
+        'text': '',
+        'start': 0,
+        'end': 0,
+      });
+      expect(ack!.revision, 1);
+      expect(bridge.latestSnapshot!.revision, 1);
+      await subscription.cancel();
+      await bridge.close();
+    },
+  );
+  test(
+    'late acknowledgement of a retired generation cannot restore it',
+    () async {
+      final ack = Completer<Object?>();
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'snapshot') return native;
+        return ack.future;
+      });
+      final bridge = SourceDebuggerBridge();
+      final subscription = bridge.snapshots().listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+      final query = bridge.command('query', 1, {
+        'text': '',
+        'start': 0,
+        'end': 0,
+      });
+      await Future<void>.delayed(Duration.zero);
+      await emit({...native, 'generation': 2});
+      ack.complete(native);
+      expect((await query)!.generation, 1);
+      expect(bridge.latestSnapshot!.generation, 2);
+      await emit({...native, 'revision': 100});
+      expect(bridge.latestSnapshot!.generation, 2);
+      await subscription.cancel();
+      await bridge.close();
+    },
+  );
 }

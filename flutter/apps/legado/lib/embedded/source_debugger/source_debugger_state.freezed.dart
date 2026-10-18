@@ -285,7 +285,7 @@ as bool,
 /// @nodoc
 mixin _$SourceDebuggerSnapshot {
 
- int get generation; String get kind; String get name; String get keyword; String get query; int get queryStart; int get queryEnd; String get output; bool get help; bool get loading; bool get loaded; bool get running; bool get missing; bool get closed; List<SourceDebuggerSort> get sorts; int get selectedSort; List<String> get htmlStages; String? get error; String? get issue; bool get canRetry;
+ int get generation; int get revision; String get kind; String get name; String get keyword; String get query; int get queryStart; int get queryEnd; String get output; bool get help; bool get loading; bool get loaded; bool get running; bool get missing; bool get closed; List<SourceDebuggerSort> get sorts; int get selectedSort; List<String> get htmlStages; String? get error; String? get issue; bool get canRetry;
 /// Create a copy of SourceDebuggerSnapshot
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -297,20 +297,20 @@ $SourceDebuggerSnapshotCopyWith<SourceDebuggerSnapshot> get copyWith => _$Source
 @override
 bool operator ==(Object other) {
   final _this = this as SourceDebuggerSnapshot;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SourceDebuggerSnapshot&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.kind, _this.kind) || other.kind == _this.kind)&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.keyword, _this.keyword) || other.keyword == _this.keyword)&&(identical(other.query, _this.query) || other.query == _this.query)&&(identical(other.queryStart, _this.queryStart) || other.queryStart == _this.queryStart)&&(identical(other.queryEnd, _this.queryEnd) || other.queryEnd == _this.queryEnd)&&(identical(other.output, _this.output) || other.output == _this.output)&&(identical(other.help, _this.help) || other.help == _this.help)&&(identical(other.loading, _this.loading) || other.loading == _this.loading)&&(identical(other.loaded, _this.loaded) || other.loaded == _this.loaded)&&(identical(other.running, _this.running) || other.running == _this.running)&&(identical(other.missing, _this.missing) || other.missing == _this.missing)&&(identical(other.closed, _this.closed) || other.closed == _this.closed)&&const DeepCollectionEquality().equals(other.sorts, _this.sorts)&&(identical(other.selectedSort, _this.selectedSort) || other.selectedSort == _this.selectedSort)&&const DeepCollectionEquality().equals(other.htmlStages, _this.htmlStages)&&(identical(other.error, _this.error) || other.error == _this.error)&&(identical(other.issue, _this.issue) || other.issue == _this.issue)&&(identical(other.canRetry, _this.canRetry) || other.canRetry == _this.canRetry));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SourceDebuggerSnapshot&&(identical(other.generation, _this.generation) || other.generation == _this.generation)&&(identical(other.revision, _this.revision) || other.revision == _this.revision)&&(identical(other.kind, _this.kind) || other.kind == _this.kind)&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.keyword, _this.keyword) || other.keyword == _this.keyword)&&(identical(other.query, _this.query) || other.query == _this.query)&&(identical(other.queryStart, _this.queryStart) || other.queryStart == _this.queryStart)&&(identical(other.queryEnd, _this.queryEnd) || other.queryEnd == _this.queryEnd)&&(identical(other.output, _this.output) || other.output == _this.output)&&(identical(other.help, _this.help) || other.help == _this.help)&&(identical(other.loading, _this.loading) || other.loading == _this.loading)&&(identical(other.loaded, _this.loaded) || other.loaded == _this.loaded)&&(identical(other.running, _this.running) || other.running == _this.running)&&(identical(other.missing, _this.missing) || other.missing == _this.missing)&&(identical(other.closed, _this.closed) || other.closed == _this.closed)&&const DeepCollectionEquality().equals(other.sorts, _this.sorts)&&(identical(other.selectedSort, _this.selectedSort) || other.selectedSort == _this.selectedSort)&&const DeepCollectionEquality().equals(other.htmlStages, _this.htmlStages)&&(identical(other.error, _this.error) || other.error == _this.error)&&(identical(other.issue, _this.issue) || other.issue == _this.issue)&&(identical(other.canRetry, _this.canRetry) || other.canRetry == _this.canRetry));
 }
 
 
 @override
 int get hashCode {
   final _this = this as SourceDebuggerSnapshot;
-  return Object.hashAll([runtimeType,_this.generation,_this.kind,_this.name,_this.keyword,_this.query,_this.queryStart,_this.queryEnd,_this.output,_this.help,_this.loading,_this.loaded,_this.running,_this.missing,_this.closed,const DeepCollectionEquality().hash(_this.sorts),_this.selectedSort,const DeepCollectionEquality().hash(_this.htmlStages),_this.error,_this.issue,_this.canRetry]);
+  return Object.hashAll([runtimeType,_this.generation,_this.revision,_this.kind,_this.name,_this.keyword,_this.query,_this.queryStart,_this.queryEnd,_this.output,_this.help,_this.loading,_this.loaded,_this.running,_this.missing,_this.closed,const DeepCollectionEquality().hash(_this.sorts),_this.selectedSort,const DeepCollectionEquality().hash(_this.htmlStages),_this.error,_this.issue,_this.canRetry]);
 }
 
 @override
 String toString() {
   final _this = this as SourceDebuggerSnapshot;
-  return 'SourceDebuggerSnapshot(generation: ${_this.generation}, kind: ${_this.kind}, name: ${_this.name}, keyword: ${_this.keyword}, query: ${_this.query}, queryStart: ${_this.queryStart}, queryEnd: ${_this.queryEnd}, output: ${_this.output}, help: ${_this.help}, loading: ${_this.loading}, loaded: ${_this.loaded}, running: ${_this.running}, missing: ${_this.missing}, closed: ${_this.closed}, sorts: ${_this.sorts}, selectedSort: ${_this.selectedSort}, htmlStages: ${_this.htmlStages}, error: ${_this.error}, issue: ${_this.issue}, canRetry: ${_this.canRetry})';
+  return 'SourceDebuggerSnapshot(generation: ${_this.generation}, revision: ${_this.revision}, kind: ${_this.kind}, name: ${_this.name}, keyword: ${_this.keyword}, query: ${_this.query}, queryStart: ${_this.queryStart}, queryEnd: ${_this.queryEnd}, output: ${_this.output}, help: ${_this.help}, loading: ${_this.loading}, loaded: ${_this.loaded}, running: ${_this.running}, missing: ${_this.missing}, closed: ${_this.closed}, sorts: ${_this.sorts}, selectedSort: ${_this.selectedSort}, htmlStages: ${_this.htmlStages}, error: ${_this.error}, issue: ${_this.issue}, canRetry: ${_this.canRetry})';
 }
 
 
@@ -321,7 +321,7 @@ abstract mixin class $SourceDebuggerSnapshotCopyWith<$Res>  {
   factory $SourceDebuggerSnapshotCopyWith(SourceDebuggerSnapshot value, $Res Function(SourceDebuggerSnapshot) _then) = _$SourceDebuggerSnapshotCopyWithImpl;
 @useResult
 $Res call({
- int generation, String kind, String name, String keyword, String query, int queryStart, int queryEnd, String output, bool help, bool loading, bool loaded, bool running, bool missing, bool closed, List<SourceDebuggerSort> sorts, int selectedSort, List<String> htmlStages, String? error, String? issue, bool canRetry
+ int generation, int revision, String kind, String name, String keyword, String query, int queryStart, int queryEnd, String output, bool help, bool loading, bool loaded, bool running, bool missing, bool closed, List<SourceDebuggerSort> sorts, int selectedSort, List<String> htmlStages, String? error, String? issue, bool canRetry
 });
 
 
@@ -338,9 +338,10 @@ class _$SourceDebuggerSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of SourceDebuggerSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? generation = null,Object? kind = null,Object? name = null,Object? keyword = null,Object? query = null,Object? queryStart = null,Object? queryEnd = null,Object? output = null,Object? help = null,Object? loading = null,Object? loaded = null,Object? running = null,Object? missing = null,Object? closed = null,Object? sorts = null,Object? selectedSort = null,Object? htmlStages = null,Object? error = freezed,Object? issue = freezed,Object? canRetry = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? generation = null,Object? revision = null,Object? kind = null,Object? name = null,Object? keyword = null,Object? query = null,Object? queryStart = null,Object? queryEnd = null,Object? output = null,Object? help = null,Object? loading = null,Object? loaded = null,Object? running = null,Object? missing = null,Object? closed = null,Object? sorts = null,Object? selectedSort = null,Object? htmlStages = null,Object? error = freezed,Object? issue = freezed,Object? canRetry = null,}) {
   return _then(SourceDebuggerSnapshot(
 generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as int,revision: null == revision ? _self.revision : revision // ignore: cast_nullable_to_non_nullable
 as int,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,keyword: null == keyword ? _self.keyword : keyword // ignore: cast_nullable_to_non_nullable
@@ -445,10 +446,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int generation,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int generation,  int revision,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SourceDebuggerSnapshot() when $default != null:
-return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
+return $default(_that.generation,_that.revision,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
   return orElse();
 
 }
@@ -466,10 +467,10 @@ return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int generation,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int generation,  int revision,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)  $default,) {final _that = this;
 switch (_that) {
 case _SourceDebuggerSnapshot():
-return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
+return $default(_that.generation,_that.revision,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -486,10 +487,10 @@ return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int generation,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int generation,  int revision,  String kind,  String name,  String keyword,  String query,  int queryStart,  int queryEnd,  String output,  bool help,  bool loading,  bool loaded,  bool running,  bool missing,  bool closed,  List<SourceDebuggerSort> sorts,  int selectedSort,  List<String> htmlStages,  String? error,  String? issue,  bool canRetry)?  $default,) {final _that = this;
 switch (_that) {
 case _SourceDebuggerSnapshot() when $default != null:
-return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
+return $default(_that.generation,_that.revision,_that.kind,_that.name,_that.keyword,_that.query,_that.queryStart,_that.queryEnd,_that.output,_that.help,_that.loading,_that.loaded,_that.running,_that.missing,_that.closed,_that.sorts,_that.selectedSort,_that.htmlStages,_that.error,_that.issue,_that.canRetry);case _:
   return null;
 
 }
@@ -501,10 +502,11 @@ return $default(_that.generation,_that.kind,_that.name,_that.keyword,_that.query
 
 
 class _SourceDebuggerSnapshot extends SourceDebuggerSnapshot {
-  const _SourceDebuggerSnapshot({required this.generation, required this.kind, this.name = '', this.keyword = '', this.query = '', this.queryStart = 0, this.queryEnd = 0, this.output = '', this.help = true, this.loading = true, this.loaded = false, this.running = false, this.missing = false, this.closed = false,  List<SourceDebuggerSort> sorts = const [], this.selectedSort = 0,  List<String> htmlStages = const [], this.error, this.issue, this.canRetry = false}): _sorts = sorts,_htmlStages = htmlStages,super._();
+  const _SourceDebuggerSnapshot({required this.generation, required this.revision, required this.kind, this.name = '', this.keyword = '', this.query = '', this.queryStart = 0, this.queryEnd = 0, this.output = '', this.help = true, this.loading = true, this.loaded = false, this.running = false, this.missing = false, this.closed = false,  List<SourceDebuggerSort> sorts = const [], this.selectedSort = 0,  List<String> htmlStages = const [], this.error, this.issue, this.canRetry = false}): _sorts = sorts,_htmlStages = htmlStages,super._();
 
 
 @override final  int generation;
+@override final  int revision;
 @override final  String kind;
 @override@JsonKey() final  String name;
 @override@JsonKey() final  String keyword;
@@ -547,18 +549,18 @@ _$SourceDebuggerSnapshotCopyWith<_SourceDebuggerSnapshot> get copyWith => __$Sou
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SourceDebuggerSnapshot&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.name, name) || other.name == name)&&(identical(other.keyword, keyword) || other.keyword == keyword)&&(identical(other.query, query) || other.query == query)&&(identical(other.queryStart, queryStart) || other.queryStart == queryStart)&&(identical(other.queryEnd, queryEnd) || other.queryEnd == queryEnd)&&(identical(other.output, output) || other.output == output)&&(identical(other.help, help) || other.help == help)&&(identical(other.loading, loading) || other.loading == loading)&&(identical(other.loaded, loaded) || other.loaded == loaded)&&(identical(other.running, running) || other.running == running)&&(identical(other.missing, missing) || other.missing == missing)&&(identical(other.closed, closed) || other.closed == closed)&&const DeepCollectionEquality().equals(other.sorts, _sorts)&&(identical(other.selectedSort, selectedSort) || other.selectedSort == selectedSort)&&const DeepCollectionEquality().equals(other.htmlStages, _htmlStages)&&(identical(other.error, error) || other.error == error)&&(identical(other.issue, issue) || other.issue == issue)&&(identical(other.canRetry, canRetry) || other.canRetry == canRetry));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SourceDebuggerSnapshot&&(identical(other.generation, generation) || other.generation == generation)&&(identical(other.revision, revision) || other.revision == revision)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.name, name) || other.name == name)&&(identical(other.keyword, keyword) || other.keyword == keyword)&&(identical(other.query, query) || other.query == query)&&(identical(other.queryStart, queryStart) || other.queryStart == queryStart)&&(identical(other.queryEnd, queryEnd) || other.queryEnd == queryEnd)&&(identical(other.output, output) || other.output == output)&&(identical(other.help, help) || other.help == help)&&(identical(other.loading, loading) || other.loading == loading)&&(identical(other.loaded, loaded) || other.loaded == loaded)&&(identical(other.running, running) || other.running == running)&&(identical(other.missing, missing) || other.missing == missing)&&(identical(other.closed, closed) || other.closed == closed)&&const DeepCollectionEquality().equals(other.sorts, _sorts)&&(identical(other.selectedSort, selectedSort) || other.selectedSort == selectedSort)&&const DeepCollectionEquality().equals(other.htmlStages, _htmlStages)&&(identical(other.error, error) || other.error == error)&&(identical(other.issue, issue) || other.issue == issue)&&(identical(other.canRetry, canRetry) || other.canRetry == canRetry));
 }
 
 
 @override
 int get hashCode {
-    return Object.hashAll([runtimeType,generation,kind,name,keyword,query,queryStart,queryEnd,output,help,loading,loaded,running,missing,closed,const DeepCollectionEquality().hash(_sorts),selectedSort,const DeepCollectionEquality().hash(_htmlStages),error,issue,canRetry]);
+    return Object.hashAll([runtimeType,generation,revision,kind,name,keyword,query,queryStart,queryEnd,output,help,loading,loaded,running,missing,closed,const DeepCollectionEquality().hash(_sorts),selectedSort,const DeepCollectionEquality().hash(_htmlStages),error,issue,canRetry]);
 }
 
 @override
 String toString() {
-    return 'SourceDebuggerSnapshot(generation: $generation, kind: $kind, name: $name, keyword: $keyword, query: $query, queryStart: $queryStart, queryEnd: $queryEnd, output: $output, help: $help, loading: $loading, loaded: $loaded, running: $running, missing: $missing, closed: $closed, sorts: $sorts, selectedSort: $selectedSort, htmlStages: $htmlStages, error: $error, issue: $issue, canRetry: $canRetry)';
+    return 'SourceDebuggerSnapshot(generation: $generation, revision: $revision, kind: $kind, name: $name, keyword: $keyword, query: $query, queryStart: $queryStart, queryEnd: $queryEnd, output: $output, help: $help, loading: $loading, loaded: $loaded, running: $running, missing: $missing, closed: $closed, sorts: $sorts, selectedSort: $selectedSort, htmlStages: $htmlStages, error: $error, issue: $issue, canRetry: $canRetry)';
 }
 
 
@@ -569,7 +571,7 @@ abstract mixin class _$SourceDebuggerSnapshotCopyWith<$Res> implements $SourceDe
   factory _$SourceDebuggerSnapshotCopyWith(_SourceDebuggerSnapshot value, $Res Function(_SourceDebuggerSnapshot) _then) = __$SourceDebuggerSnapshotCopyWithImpl;
 @override @useResult
 $Res call({
- int generation, String kind, String name, String keyword, String query, int queryStart, int queryEnd, String output, bool help, bool loading, bool loaded, bool running, bool missing, bool closed, List<SourceDebuggerSort> sorts, int selectedSort, List<String> htmlStages, String? error, String? issue, bool canRetry
+ int generation, int revision, String kind, String name, String keyword, String query, int queryStart, int queryEnd, String output, bool help, bool loading, bool loaded, bool running, bool missing, bool closed, List<SourceDebuggerSort> sorts, int selectedSort, List<String> htmlStages, String? error, String? issue, bool canRetry
 });
 
 
@@ -586,9 +588,10 @@ class __$SourceDebuggerSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of SourceDebuggerSnapshot
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? generation = null,Object? kind = null,Object? name = null,Object? keyword = null,Object? query = null,Object? queryStart = null,Object? queryEnd = null,Object? output = null,Object? help = null,Object? loading = null,Object? loaded = null,Object? running = null,Object? missing = null,Object? closed = null,Object? sorts = null,Object? selectedSort = null,Object? htmlStages = null,Object? error = freezed,Object? issue = freezed,Object? canRetry = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? generation = null,Object? revision = null,Object? kind = null,Object? name = null,Object? keyword = null,Object? query = null,Object? queryStart = null,Object? queryEnd = null,Object? output = null,Object? help = null,Object? loading = null,Object? loaded = null,Object? running = null,Object? missing = null,Object? closed = null,Object? sorts = null,Object? selectedSort = null,Object? htmlStages = null,Object? error = freezed,Object? issue = freezed,Object? canRetry = null,}) {
   return _then(_SourceDebuggerSnapshot(
 generation: null == generation ? _self.generation : generation // ignore: cast_nullable_to_non_nullable
+as int,revision: null == revision ? _self.revision : revision // ignore: cast_nullable_to_non_nullable
 as int,kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,keyword: null == keyword ? _self.keyword : keyword // ignore: cast_nullable_to_non_nullable
