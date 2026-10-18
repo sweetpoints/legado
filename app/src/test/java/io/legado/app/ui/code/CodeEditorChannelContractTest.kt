@@ -27,7 +27,7 @@ class CodeEditorChannelContractTest {
     }
 
     private fun search() = mapOf<String, Any>("query" to "a😀", "replacement" to "中",
-        "visible" to true, "replaceVisible" to false, "regex" to true,
+        "visible" to true, "replaceVisible" to false, "regex" to true, "ignoreCase" to false,
         "queryStart" to 3, "queryEnd" to 1, "replacementStart" to 1, "replacementEnd" to 0)
 
     @Test fun fullSearchRoundTripsUtf16SelectionsAndIgnoreCase() {

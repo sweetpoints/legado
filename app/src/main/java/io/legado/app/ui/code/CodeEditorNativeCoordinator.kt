@@ -58,7 +58,13 @@ internal class CodeEditorNativeCoordinator(
                         safe = current.session?.let { EditSafety.isCombiningHeavy(it.text) } ?: false,
                         autoWrap = AppConfig.editAutoWrap,
                     )
-                } else mutable.value = mutable.value.copy(state = current)
+                } else mutable.value = mutable.value.copy(
+                    state = current,
+                    // Bootstrap publishes its fresh owner before publishing the accepted session.
+                    // Compute safety when that session first arrives, not from the empty owner state.
+                    safe = if (mutable.value.state.session == null && current.session != null)
+                        EditSafety.isCombiningHeavy(current.session.text) else mutable.value.safe,
+                )
                 surfaces.toList().forEach { it.update(current) }
             }
         }
