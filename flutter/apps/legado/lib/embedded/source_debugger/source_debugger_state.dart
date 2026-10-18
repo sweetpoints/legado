@@ -16,6 +16,7 @@ abstract class SourceDebuggerSnapshot with _$SourceDebuggerSnapshot {
   const SourceDebuggerSnapshot._();
   const factory SourceDebuggerSnapshot({
     required int generation,
+    required int revision,
     required String kind,
     @Default('') String name,
     @Default('') String keyword,
@@ -49,6 +50,7 @@ abstract class SourceDebuggerSnapshot with _$SourceDebuggerSnapshot {
       if (m['schemaVersion'] != 1) throw const FormatException();
       final state = SourceDebuggerSnapshot(
         generation: m['generation'] as int,
+        revision: m['revision'] as int,
         kind: m['kind'] as String,
         name: m['name'] as String,
         keyword: m['keyword'] as String,
@@ -77,6 +79,7 @@ abstract class SourceDebuggerSnapshot with _$SourceDebuggerSnapshot {
         canRetry: m['canRetry'] as bool,
       );
       if (state.generation <= 0 ||
+          state.revision <= 0 ||
           !const ['book', 'rss'].contains(state.kind) ||
           state.output.length > 20000 ||
           state.queryStart < 0 ||

@@ -90,9 +90,27 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
     final state = _state;
     if (state == null || state.closed) return;
     try {
-      await ref
-          .read(sourceDebuggerBridgeProvider)
-          .command(op, state.generation, args);
+      final bridge = ref.read(sourceDebuggerBridgeProvider);
+      final ack = await bridge.command(op, state.generation, args);
+      if (mounted &&
+          op == 'query' &&
+          ack != null &&
+          _generation == state.generation &&
+          _lastSubmitted?.text == args['text'] &&
+          _lastSubmitted?.selection.baseOffset == args['start'] &&
+          _lastSubmitted?.selection.extentOffset == args['end']) {
+        // StateFlow may conflate the query echo with a later native operation,
+        // and equal-value edits produce no event. The method reply is the ack.
+        _lastSubmitted = null;
+        final latest = bridge.latestSnapshot;
+        _sync(
+          latest != null &&
+                  latest.generation == ack.generation &&
+                  latest.revision >= ack.revision
+              ? latest
+              : ack,
+        );
+      }
     } catch (_) {
       if (mounted) {
         final authority = _state;

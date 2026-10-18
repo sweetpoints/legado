@@ -1,6 +1,7 @@
 Map<String, Object?> debuggerFixture({String kind = 'book'}) => {
   'schemaVersion': 1,
   'generation': 1,
+  'revision': 1,
   'kind': kind,
   'name': 'Fixture source',
   'keyword': kind == 'book' ? '我的' : '',

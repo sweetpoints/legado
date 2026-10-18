@@ -29,9 +29,13 @@ class SourceDebuggerBridge {
   bool _closed = false;
   int? _generation;
   bool _queryRejected = false;
+  SourceDebuggerSnapshot? _latest;
+  final _retiredGenerations = <int>{};
+  void Function(SourceDebuggerSnapshot)? _emit;
+  SourceDebuggerSnapshot? get latestSnapshot => _latest;
   Future<void> _commands = Future.value();
   final _lifetime = StreamController<void>.broadcast();
-  Future<void> command(
+  Future<SourceDebuggerSnapshot?> command(
     String op,
     int generation, [
     Map<String, Object?> arguments = const {},
@@ -51,12 +55,22 @@ class SourceDebuggerBridge {
         throw StateError('source_debugger_query_rejected');
       }
       try {
-        await channel.invokeMethod<void>('command', immutable);
+        final value = await channel.invokeMethod<Object?>('command', immutable);
+        if (op == 'query') {
+          final ack = _decode(value);
+          if (ack.generation != generation) {
+            throw const FormatException('invalid_source_debugger_ack');
+          }
+          if (_accept(ack)) _emit?.call(ack);
+          if (_generation == generation) _queryRejected = false;
+          return ack;
+        }
       } catch (_) {
-        if (op == 'query') _queryRejected = true;
+        if (op == 'query' && _generation == generation) _queryRejected = true;
         rethrow;
       }
-      if (op == 'query' || op == 'retry') _queryRejected = false;
+      if (op == 'retry') _queryRejected = false;
+      return null;
     });
     _commands = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return next;
@@ -64,15 +78,28 @@ class SourceDebuggerBridge {
 
   SourceDebuggerSnapshot _decode(Object? value) {
     try {
-      final snapshot = SourceDebuggerSnapshot.fromMap(value);
-      if (_generation != snapshot.generation) _queryRejected = false;
-      _generation = snapshot.generation;
-      return snapshot;
+      return SourceDebuggerSnapshot.fromMap(value);
     } on FormatException {
       rethrow;
     } catch (_) {
       throw const FormatException('invalid_source_debugger_snapshot');
     }
+  }
+
+  bool _accept(SourceDebuggerSnapshot snapshot) {
+    if (_retiredGenerations.contains(snapshot.generation)) return false;
+    if (_generation == snapshot.generation &&
+        _latest != null &&
+        snapshot.revision < _latest!.revision) {
+      return false;
+    }
+    if (_generation != snapshot.generation) {
+      if (_generation != null) _retiredGenerations.add(_generation!);
+      _queryRejected = false;
+    }
+    _generation = snapshot.generation;
+    _latest = snapshot;
+    return true;
   }
 
   Stream<SourceDebuggerSnapshot> snapshots() {
@@ -85,7 +112,8 @@ class SourceDebuggerBridge {
     void deliver(Object? value) {
       if (disposed) return;
       try {
-        controller.add(_decode(value));
+        final snapshot = _decode(value);
+        if (_accept(snapshot)) controller.add(snapshot);
       } catch (error, stack) {
         controller.addError(error, stack);
       }
@@ -94,12 +122,16 @@ class SourceDebuggerBridge {
     Future<void> stop() async {
       if (disposed) return;
       disposed = true;
+      _emit = null;
       await subscription?.cancel();
       await lifetime?.cancel();
     }
 
     controller = StreamController(
       onListen: () {
+        _emit = (snapshot) {
+          if (!disposed) controller.add(snapshot);
+        };
         lifetime = _lifetime.stream.listen(
           (_) => unawaited(stop().then((_) => controller.close())),
         );
