@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -31,6 +32,7 @@ import org.hamcrest.Matchers.allOf
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.repository.BookSourceDebugSort
@@ -303,21 +305,27 @@ class BookSourceDebugUiTest {
     }
 
     @Test
-    fun restoredQueryCursorAndOpenExploreChooserDeliverOnlyExplicitSelection() {
-        var state by
-            mutableStateOf(state().copy(query = "restored query", queryStart = 2, queryEnd = 4))
+    fun hostRestoredQueryCursorAndOpenExploreChooserDeliverOnlyExplicitSelection() {
+        var latestProjection: BookSourceDebugState? = null
         val selections = mutableListOf<Int>()
         val tester = StateRestorationTester(compose)
-        val actions =
-            BookSourceDebugActions(
-                query = { text, start, end ->
-                    state = state.copy(query = text, queryStart = start, queryEnd = end)
-                },
-                sort = { selections += it },
-            )
         tester.setContent {
             CaptureHost()
-            LegadoComposeTheme { BookSourceDebugScreen(state, actions) }
+            // This Screen is controlled: its caller owns query persistence. The tester saves
+            // this host before disposing children. Normal focus-loss callbacks then update the
+            // retired holder, while the new host consumes the saved query/range snapshot.
+            var input by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+                mutableStateOf(TextFieldValue("restored query", TextRange(2, 4)))
+            }
+            val projection = state().copy(query = input.text,
+                queryStart = input.selection.start, queryEnd = input.selection.end)
+            SideEffect { latestProjection = projection }
+            LegadoComposeTheme {
+                BookSourceDebugScreen(projection, BookSourceDebugActions(
+                    query = { text, start, end -> input = TextFieldValue(text, TextRange(start, end)) },
+                    sort = { selections += it },
+                ))
+            }
         }
         val query = compose.onNodeWithTag("book-debug-query")
         settleIme(visible = true) {
@@ -334,9 +342,9 @@ class BookSourceDebugUiTest {
             .assert(SemanticsMatcher.expectValue(
                 SemanticsProperties.TextSelectionRange, TextRange(1, 3)))
         compose.runOnIdle {
-            assertEquals("restored query", state.query)
-            assertEquals(1, state.queryStart)
-            assertEquals(3, state.queryEnd)
+            assertEquals("restored query", latestProjection?.query)
+            assertEquals(1, latestProjection?.queryStart)
+            assertEquals(3, latestProjection?.queryEnd)
         }
         // Current Compose intentionally collapses a range when the TextField loses focus.
         // Verify cursor restoration while focused, then independently restore the chooser.
