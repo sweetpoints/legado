@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -30,6 +29,7 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
   bool _suppressBlur = false;
   bool _applying = false;
   bool _closeSent = false;
+  bool _initialFocusApplied = false;
   @override
   String get restorationId => 'source_debugger';
   @override
@@ -58,8 +58,8 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
     unawaited(
       _send('query', {
         'text': _query.text,
-        'start': _query.selection.start,
-        'end': _query.selection.end,
+        'start': _query.selection.baseOffset,
+        'end': _query.selection.extentOffset,
       }),
     );
   }
@@ -99,13 +99,26 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
       _generation = state.generation;
       _lastSubmitted = null;
       _closeSent = false;
+      _initialFocusApplied = false;
+    }
+    if (!_initialFocusApplied && state.loaded && !state.closed) {
+      _initialFocusApplied = true;
+      if (state.help) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _generation == state.generation &&
+              _state?.help == true) {
+            _focus.requestFocus();
+          }
+        });
+      }
     }
     // Old native echoes must not replace text still being typed through the queue.
     if (!_focus.hasFocus ||
         _lastSubmitted == null ||
         (state.query == _lastSubmitted!.text &&
-            state.queryStart == _lastSubmitted!.selection.start &&
-            state.queryEnd == _lastSubmitted!.selection.end)) {
+            state.queryStart == _lastSubmitted!.selection.baseOffset &&
+            state.queryEnd == _lastSubmitted!.selection.extentOffset)) {
       final next = TextEditingValue(
         text: state.query,
         selection: TextSelection(
@@ -139,6 +152,18 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
     }
     _dismissKeyboard();
     unawaited(_send('run'));
+  }
+
+  void _prefix(String value) {
+    if (_query.text.trim().isEmpty || _query.text.length <= 2) {
+      // Match the native helper: insert a short prefix without starting a run
+      // or dismissing the query keyboard. Its authoritative echo updates text.
+      _lastSubmitted = null;
+      unawaited(_send('prefix', {'value': value}));
+      _focus.requestFocus();
+    } else {
+      _action('prefix', {'value': value});
+    }
   }
 
   void _action(String op, [Map<String, Object?> args = const {}]) {
@@ -239,9 +264,6 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
                                 focusNode: _focus,
                                 enabled: state.enabled,
                                 maxLines: 1,
-                                maxLength: 65536,
-                                maxLengthEnforcement:
-                                    MaxLengthEnforcement.enforced,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
                                   labelText: l.debuggerSearch,
@@ -429,13 +451,13 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
           example(
             'source-debug-prefix-plus',
             '++https://www.zhaishuyuan.com/read/30394',
-            () => _action('prefix', {'value': '++'}),
+            () => _prefix('++'),
           ),
           Text(l.debuggerContentHelp),
           example(
             'source-debug-prefix-minus',
             '--https://www.zhaishuyuan.com/chapter/30394/20940996',
-            () => _action('prefix', {'value': '--'}),
+            () => _prefix('--'),
           ),
         ] else ...[
           Text(l.debuggerRssContentHelp),

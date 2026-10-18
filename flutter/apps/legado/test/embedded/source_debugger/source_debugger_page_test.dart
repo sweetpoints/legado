@@ -65,7 +65,12 @@ void main() {
         ),
       ),
     );
-    await t.pumpAndSettle();
+    if (native['loading'] == true || native['running'] == true) {
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+    } else {
+      await t.pumpAndSettle();
+    }
   }
 
   Future<void> emit(WidgetTester t, Map<String, Object?> value) async {
@@ -230,6 +235,140 @@ void main() {
       expect(t.takeException(), null);
     },
   );
+  testWidgets(
+    'loaded help focuses query, short prefix keeps IME and native echo',
+    (t) async {
+      native = {...native, 'loaded': false, 'loading': true};
+      await app(t);
+      TextField field() => t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field().focusNode!.hasFocus, false);
+      await emit(t, {...native, 'loaded': true, 'loading': false});
+      expect(field().focusNode!.hasFocus, true);
+      await t.ensureVisible(tag('source-debug-prefix-plus'));
+      await t.tap(tag('source-debug-prefix-plus'));
+      await t.pumpAndSettle();
+      expect(commands.last['op'], 'prefix');
+      expect(field().focusNode!.hasFocus, true);
+      await emit(t, {...native, 'query': '++', 'queryStart': 2, 'queryEnd': 2});
+      expect(field().controller!.text, '++');
+      expect(field().focusNode!.hasFocus, true);
+      expect(commands.where((c) => c['op'] == 'run'), isEmpty);
+    },
+  );
+  testWidgets('old selection echoes do not undo a new UTF16 selection', (
+    t,
+  ) async {
+    native = {...native, 'query': '😀abc', 'queryStart': 5, 'queryEnd': 5};
+    await app(t);
+    final field = t.widget<TextField>(
+      find.descendant(
+        of: tag('source-debug-query'),
+        matching: find.byType(TextField),
+      ),
+    );
+    field.controller!.selection = const TextSelection(
+      baseOffset: 2,
+      extentOffset: 4,
+    );
+    await t.pumpAndSettle();
+    expect(commands.last['start'], 2);
+    expect(commands.last['end'], 4);
+    await emit(t, {...native, 'queryStart': 5, 'queryEnd': 5});
+    expect(
+      field.controller!.selection,
+      const TextSelection(baseOffset: 2, extentOffset: 4),
+    );
+  });
+  testWidgets(
+    'selectable URL log copies the full selected text without opening a link',
+    (t) async {
+      const log = 'https://example.org/path ordinary text';
+      native = {...native, 'help': false, 'output': log};
+      await app(t);
+      String? clipboard;
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboard = (call.arguments as Map)['text'] as String;
+          }
+          if (call.method == 'Clipboard.getData') return {'text': clipboard};
+          return null;
+        },
+      );
+      addTearDown(
+        () => binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final selectable = find.descendant(
+        of: find.byType(SelectableText),
+        matching: find.byType(EditableText),
+      );
+      final editable = t.state<EditableTextState>(selectable);
+      editable.selectAll(SelectionChangedCause.toolbar);
+      await t.pumpAndSettle();
+      editable.copySelection(SelectionChangedCause.toolbar);
+      await t.pumpAndSettle();
+      expect(clipboard, log);
+      expect(commands.where((c) => c['op'] == 'openUrl'), isEmpty);
+    },
+  );
+  testWidgets(
+    'reverse UTF16 selection retains anchor and extent through commands and echoes',
+    (t) async {
+      native = {...native, 'query': '😀abc', 'queryStart': 4, 'queryEnd': 2};
+      await app(t);
+      final field = t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(
+        field.controller!.selection,
+        const TextSelection(baseOffset: 4, extentOffset: 2),
+      );
+      field.controller!.selection = const TextSelection(
+        baseOffset: 5,
+        extentOffset: 2,
+      );
+      await t.pumpAndSettle();
+      expect(commands.last['start'], 5);
+      expect(commands.last['end'], 2);
+      await emit(t, {...native, 'queryStart': 5, 'queryEnd': 2});
+      expect(
+        field.controller!.selection,
+        const TextSelection(baseOffset: 5, extentOffset: 2),
+      );
+    },
+  );
+  testWidgets('long legacy queries are not truncated by Flutter', (t) async {
+    final text = 'q' * 65537;
+    await app(t);
+    await t.enterText(tag('source-debug-query'), text);
+    await t.pumpAndSettle();
+    expect(commands.lastWhere((c) => c['op'] == 'query')['text'], text);
+    await emit(t, {
+      ...native,
+      'query': text,
+      'queryStart': text.length,
+      'queryEnd': text.length,
+    });
+    final field = t.widget<TextField>(
+      find.descendant(
+        of: tag('source-debug-query'),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.controller!.text, text);
+  });
   testWidgets(
     'book examples preserve prefixes, detail and configured keyword',
     (t) async {
