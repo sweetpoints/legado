@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Rect
 import android.os.Parcel
 import android.os.SystemClock
@@ -126,6 +127,7 @@ class CodeSelectionUiTest {
     private val source =
         "const before = 1;\nfunction example() {\n  const message = \"你好 🌍\";\n  return message;\n}\nconst after = 2;"
     private var scenario: ActivityScenario<CodeEditActivity>? = null
+    private var latestSurfaceEvidence: String? = null
     private val selectedText =
         source.substring(source.indexOf("function"), source.indexOf("\nconst after"))
 
@@ -868,7 +870,9 @@ class CodeSelectionUiTest {
                         instrumentation.addMonitor(launchMonitor)
                         try {
                             compose.onNodeWithTag("code-fullscreen").performClick()
-                            await {
+                            awaitComposeFullscreenDelivery()
+                            var fullscreenReadiness = "native surface not observed"
+                            await(message = { "Fullscreen delivery completed, native readiness failed: $fullscreenReadiness" }) {
                                 var ready = false
                                 instrumentation.runOnMainSync {
                                     editorActivity =
@@ -877,6 +881,10 @@ class CodeSelectionUiTest {
                                             .filterIsInstance<CodeEditActivity>()
                                             .firstOrNull()
                                     val editor = editorActivity?.findViewById<CodeEditor>(R.id.editText)
+                                    fullscreenReadiness = "activity=${editorActivity?.javaClass?.name}, " +
+                                        "shown=${editor?.isShown}, editable=${editor?.isEditable}, " +
+                                        "length=${editor?.text?.length}/${original.length}, " +
+                                        "ready=${editorActivity?.nativeCoordinator?.state?.value?.state?.editorReady}"
                                     ready =
                                         editor != null &&
                                             editor.text.toString() == original &&
@@ -989,6 +997,7 @@ class CodeSelectionUiTest {
                         // Discard a second edit: only the cursor may return, never the discarded
                         // draft.
                         compose.onNodeWithTag("code-fullscreen").performClick()
+                        awaitComposeFullscreenDelivery()
                         await {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -1026,6 +1035,7 @@ class CodeSelectionUiTest {
                             val invalid = "] invalid source draft"
                             for (draft in listOf(invalid, edited)) {
                                 compose.onNodeWithTag("code-fullscreen").performClick()
+                                awaitComposeFullscreenDelivery()
                                 await {
                                     var ready = false
                                     instrumentation.runOnMainSync {
@@ -1251,6 +1261,7 @@ class CodeSelectionUiTest {
                                 )
                             }
                             compose.onNodeWithTag("code-fullscreen").performClick()
+                            awaitComposeFullscreenDelivery()
                             await(message = {
                                 savePreviewFailure()
                                 var diagnostic = ""
@@ -1881,6 +1892,7 @@ class CodeSelectionUiTest {
             assertTrue("Editor toolbar overlaps the system status bar", actionBounds.top >= safeTop)
             assertTrue("Editor toolbar adds excess top spacing", actionBounds.top <= safeTop + activity.resources.displayMetrics.density * 8)
         }
+        captureSurfaceEvidence("launch-ready")
     }
 
     private fun selectFunction(native: Boolean = false) {
@@ -2118,7 +2130,7 @@ class CodeSelectionUiTest {
                 "editorReady=${state.editorReady}, busy=${state.busy}, finished=${state.session?.finished}, " +
                 "engineOwner=${state.engineOwner}, receipt=${state.session?.returnReceipt}, " +
                 "query=${state.session?.search?.query}, replacement=${state.session?.search?.replacement}, " +
-                "error=${state.error}"
+                "error=${state.error}, surfaceEvidence=$latestSurfaceEvidence"
         }
         return result
     }
@@ -2176,6 +2188,17 @@ class CodeSelectionUiTest {
         assertTrue(message(), condition())
     }
 
+    /** Wait only for the retained Compose preview's fullscreen effect to be delivered.
+     * Flutter controls and the actual native document use their separate real-time readiness. */
+    private fun awaitComposeFullscreenDelivery() = awaitCompose {
+        var delivered = false
+        instrumentation.runOnMainSync {
+            delivered = ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED).any { it is CodeEditActivity }
+        }
+        delivered
+    }
+
     /** Import/preview hosts still run Compose effects on its test clock. Only use
      * this when awaiting those actual Compose hosts, never the Flutter editor. */
     private fun awaitCompose(condition: () -> Boolean) {
@@ -2194,6 +2217,52 @@ class CodeSelectionUiTest {
         current.close()
     }
 
+    @Suppress("DEPRECATION")
+    private fun captureSurfaceEvidence(name: String, screen: Bitmap? = null) {
+        val directory = File(context.getExternalFilesDir("ui-regression"), "code-surface-$name-${SystemClock.uptimeMillis()}")
+        assertTrue(directory.isDirectory || directory.mkdirs())
+        latestSurfaceEvidence = directory.absolutePath
+        val metadata = StringBuilder("captureStart=${SystemClock.uptimeMillis()}\n")
+        flutter.node("code-save")?.let { node ->
+            metadata.append("code-save enabled=${node.isEnabled} clickable=${node.isClickable} bounds=")
+            metadata.append(Rect().also(node::getBoundsInScreen)).append('\n')
+            node.recycle()
+        } ?: metadata.append("code-save absent\n")
+        scenario!!.onActivity { activity ->
+            val presentation = activity.nativeCoordinator.state.value
+            metadata.append("coordinator generation=${presentation.generation} safe=${presentation.safe} ")
+                .append("status=${presentation.status} ready=${presentation.state.editorReady} ")
+                .append("busy=${presentation.state.busy} owner=${presentation.state.engineOwner}\n")
+            val editor = requireNotNull(activity.findViewById<CodeEditor>(R.id.editText))
+            var ancestor: View? = editor
+            while (ancestor != null) {
+                val view = ancestor
+                val bounds = Rect()
+                val globallyVisible = view.getGlobalVisibleRect(bounds)
+                metadata.append("view=${view.javaClass.name} visibility=${view.visibility} alpha=${view.alpha} ")
+                    .append("shown=${view.isShown} attached=${view.isAttachedToWindow} ")
+                    .append("globalVisible=$globallyVisible bounds=$bounds size=${view.width}x${view.height}\n")
+                ancestor = view.parent as? View
+            }
+            metadata.append("nativeDrawAt=${SystemClock.uptimeMillis()}\n")
+            val bitmap = Bitmap.createBitmap(editor.width, editor.height, Bitmap.Config.ARGB_8888)
+            try {
+                editor.draw(Canvas(bitmap))
+                File(directory, "native.png").outputStream().use {
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            } finally { bitmap.recycle() }
+        }
+        val full = screen ?: requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            metadata.append("screenAt=${SystemClock.uptimeMillis()}\n")
+            File(directory, "screen.png").outputStream().use {
+                assertTrue(full.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { if (screen == null) full.recycle() }
+        File(directory, "surface.txt").writeText(metadata.toString())
+    }
+
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
         // FloatingActionMode briefly hides the toolbar while the selection geometry moves.
@@ -2208,6 +2277,7 @@ class CodeSelectionUiTest {
         assertTrue("Editor frame was not committed", committed.await(5, TimeUnit.SECONDS))
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
+            captureSurfaceEvidence(name, bitmap)
             File(context.getExternalFilesDir("ui-regression"), "$name.png").outputStream().use {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
