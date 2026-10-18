@@ -644,6 +644,252 @@ abstract class AppLocalizations {
   /// **'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.'**
   String get shelfEncodingUnavailable;
 
+  /// No description provided for @codeEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule editor'**
+  String get codeEditorTitle;
+
+  /// No description provided for @codeEditorClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get codeEditorClose;
+
+  /// No description provided for @codeEditorSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get codeEditorSave;
+
+  /// No description provided for @codeEditorSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get codeEditorSearch;
+
+  /// No description provided for @codeEditorDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug source'**
+  String get codeEditorDebug;
+
+  /// No description provided for @codeEditorLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get codeEditorLogin;
+
+  /// No description provided for @codeEditorMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get codeEditorMenu;
+
+  /// No description provided for @codeEditorTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor theme'**
+  String get codeEditorTheme;
+
+  /// No description provided for @codeEditorSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get codeEditorSelectAll;
+
+  /// No description provided for @codeEditorFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Format code'**
+  String get codeEditorFormat;
+
+  /// No description provided for @codeEditorSyntax.
+  ///
+  /// In en, this message translates to:
+  /// **'Check JavaScript syntax'**
+  String get codeEditorSyntax;
+
+  /// No description provided for @codeEditorCurl.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert cURL'**
+  String get codeEditorCurl;
+
+  /// No description provided for @codeEditorSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor settings'**
+  String get codeEditorSettings;
+
+  /// No description provided for @codeEditorWrap.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap lines'**
+  String get codeEditorWrap;
+
+  /// No description provided for @codeEditorLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Log'**
+  String get codeEditorLog;
+
+  /// No description provided for @codeEditorQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get codeEditorQuery;
+
+  /// No description provided for @codeEditorReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get codeEditorReplace;
+
+  /// No description provided for @codeEditorRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression'**
+  String get codeEditorRegex;
+
+  /// No description provided for @codeEditorIgnoreCase.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignore case'**
+  String get codeEditorIgnoreCase;
+
+  /// No description provided for @codeEditorPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous match'**
+  String get codeEditorPrevious;
+
+  /// No description provided for @codeEditorNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next match'**
+  String get codeEditorNext;
+
+  /// No description provided for @codeEditorReplaceAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace all'**
+  String get codeEditorReplaceAll;
+
+  /// No description provided for @codeEditorHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get codeEditorHelp;
+
+  /// No description provided for @codeEditorKeyboardConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure input keys'**
+  String get codeEditorKeyboardConfig;
+
+  /// No description provided for @codeEditorRuleHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Source reference'**
+  String get codeEditorRuleHelp;
+
+  /// No description provided for @codeEditorRssHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS reference'**
+  String get codeEditorRssHelp;
+
+  /// No description provided for @codeEditorJsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'JavaScript reference'**
+  String get codeEditorJsHelp;
+
+  /// No description provided for @codeEditorRegexHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression reference'**
+  String get codeEditorRegexHelp;
+
+  /// No description provided for @codeEditorUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get codeEditorUndo;
+
+  /// No description provided for @codeEditorRedo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get codeEditorRedo;
+
+  /// No description provided for @codeEditorRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get codeEditorRetry;
+
+  /// No description provided for @codeEditorRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart editor'**
+  String get codeEditorRestart;
+
+  /// No description provided for @codeEditorLoadingFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load editor'**
+  String get codeEditorLoadingFailed;
+
+  /// No description provided for @codeEditorLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The editor could not load this document. Restart to try again.'**
+  String get codeEditorLoadFailed;
+
+  /// No description provided for @codeEditorReplacementFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Replacement failed'**
+  String get codeEditorReplacementFailed;
+
+  /// No description provided for @codeEditorDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved changes?'**
+  String get codeEditorDiscardTitle;
+
+  /// No description provided for @codeEditorDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your changes have not been saved. Closing will discard this draft.'**
+  String get codeEditorDiscardBody;
+
+  /// No description provided for @codeEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get codeEditorDiscard;
+
+  /// No description provided for @codeEditorKeepEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get codeEditorKeepEditing;
+
+  /// No description provided for @codeEditorPlatformUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This embedded editing surface is available on Android.'**
+  String get codeEditorPlatformUnavailable;
+
+  /// No description provided for @codeEditorSearchRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The search update was rejected and restored. Retry or edit the search again before saving or replacing.'**
+  String get codeEditorSearchRejected;
+
   /// No description provided for @pdfTitle.
   ///
   /// In en, this message translates to:

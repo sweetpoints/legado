@@ -297,6 +297,133 @@ class AppLocalizationsEn extends AppLocalizations {
       'This file adapter cannot import a chosen encoding. Use a supported file adapter; automatic detection was not used.';
 
   @override
+  String get codeEditorTitle => 'Rule editor';
+
+  @override
+  String get codeEditorClose => 'Close';
+
+  @override
+  String get codeEditorSave => 'Save';
+
+  @override
+  String get codeEditorSearch => 'Search';
+
+  @override
+  String get codeEditorDebug => 'Debug source';
+
+  @override
+  String get codeEditorLogin => 'Log in';
+
+  @override
+  String get codeEditorMenu => 'More actions';
+
+  @override
+  String get codeEditorTheme => 'Editor theme';
+
+  @override
+  String get codeEditorSelectAll => 'Select all';
+
+  @override
+  String get codeEditorFormat => 'Format code';
+
+  @override
+  String get codeEditorSyntax => 'Check JavaScript syntax';
+
+  @override
+  String get codeEditorCurl => 'Convert cURL';
+
+  @override
+  String get codeEditorSettings => 'Editor settings';
+
+  @override
+  String get codeEditorWrap => 'Wrap lines';
+
+  @override
+  String get codeEditorLog => 'Log';
+
+  @override
+  String get codeEditorQuery => 'Search';
+
+  @override
+  String get codeEditorReplace => 'Replace';
+
+  @override
+  String get codeEditorRegex => 'Regular expression';
+
+  @override
+  String get codeEditorIgnoreCase => 'Ignore case';
+
+  @override
+  String get codeEditorPrevious => 'Previous match';
+
+  @override
+  String get codeEditorNext => 'Next match';
+
+  @override
+  String get codeEditorReplaceAll => 'Replace all';
+
+  @override
+  String get codeEditorHelp => 'Help';
+
+  @override
+  String get codeEditorKeyboardConfig => 'Configure input keys';
+
+  @override
+  String get codeEditorRuleHelp => 'Source reference';
+
+  @override
+  String get codeEditorRssHelp => 'RSS reference';
+
+  @override
+  String get codeEditorJsHelp => 'JavaScript reference';
+
+  @override
+  String get codeEditorRegexHelp => 'Regular expression reference';
+
+  @override
+  String get codeEditorUndo => 'Undo';
+
+  @override
+  String get codeEditorRedo => 'Redo';
+
+  @override
+  String get codeEditorRetry => 'Retry';
+
+  @override
+  String get codeEditorRestart => 'Restart editor';
+
+  @override
+  String get codeEditorLoadingFailed => 'Unable to load editor';
+
+  @override
+  String get codeEditorLoadFailed =>
+      'The editor could not load this document. Restart to try again.';
+
+  @override
+  String get codeEditorReplacementFailed => 'Replacement failed';
+
+  @override
+  String get codeEditorDiscardTitle => 'Discard unsaved changes?';
+
+  @override
+  String get codeEditorDiscardBody =>
+      'Your changes have not been saved. Closing will discard this draft.';
+
+  @override
+  String get codeEditorDiscard => 'Discard changes';
+
+  @override
+  String get codeEditorKeepEditing => 'Keep editing';
+
+  @override
+  String get codeEditorPlatformUnavailable =>
+      'This embedded editing surface is available on Android.';
+
+  @override
+  String get codeEditorSearchRejected =>
+      'The search update was rejected and restored. Retry or edit the search again before saving or replacing.';
+
+  @override
   String get pdfTitle => 'PDF reader';
 
   @override
