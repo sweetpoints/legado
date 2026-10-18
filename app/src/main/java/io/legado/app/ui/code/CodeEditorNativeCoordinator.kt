@@ -235,7 +235,11 @@ internal class CodeEditorPlatformSurface(
                 view.addView(created.view, FrameLayout.LayoutParams(-1, -1))
                 created.setInputEnabled(inputEnabled)
                 (created as? SoraCodeEditorEngine)?.search(model.state.value.session?.search ?: session.search)
-                created.view.doOnLayout { if (active()) created.focus() }
+                created.view.doOnLayout {
+                    // Flutter owns the restored search field's IME. A late native layout must
+                    // not redirect its keystrokes into the document below that search panel.
+                    if (active() && model.state.value.session?.search?.visible == false) created.focus()
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { if (active()) onStatus(CodeEditorEngineStatus(failed = true)) }
             finally { if (disposed) { language?.dispose(); language = null } }
