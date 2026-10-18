@@ -119,7 +119,7 @@ class DeviceSelectionTests(unittest.TestCase):
 
     def test_shutdown_timeout_does_not_boot_a_missing_different_or_not_shutdown_device(self):
         for devices in [[], [{'udid': 'other', 'state': 'Shutdown'}],
-                        [{'udid': 'owned', 'state': 'Booted'}],
+                        [{'udid': 'owned', 'state': 'Booting'}],
                         [{'udid': 'owned', 'state': 'Shutting Down'}],
                         [{'udid': 'owned', 'state': 'Shutdown'}] * 2]:
             runner = Mock()
@@ -129,6 +129,56 @@ class DeviceSelectionTests(unittest.TestCase):
                 module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
                     'createdForAcceptance': True}, 'flutter', 180, 1200)
             self.assertEqual(runner.command.call_count, 3)
+
+    def test_still_booted_owned_device_gets_one_confirmed_shutdown_before_one_reboot(self):
+        runner = Mock()
+        snapshot = lambda state: json.dumps({'devices': {'ios': [{'udid': 'owned', 'state': state}]}})
+        runner.command.side_effect = ['Data Migration Failed', module.PhaseTimeout('shutdown timed out'),
+            snapshot('Booted'), '', snapshot('Shutdown'), '', 'Finished', 'All tests passed']
+        module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+            'createdForAcceptance': True}, 'flutter', 180, 1200)
+        calls = runner.command.call_args_list
+        self.assertEqual([x.args[0] for x in calls], ['boot-ready',
+            'migration-recovery-shutdown', 'migration-recovery-state',
+            'migration-recovery-shutdown-confirm', 'migration-recovery-state-confirm',
+            'migration-recovery-boot', 'migration-recovery-ready', 'flutter-test'])
+        self.assertEqual(calls[3].args[1], ['xcrun', 'simctl', 'shutdown', 'owned'])
+        self.assertEqual(calls[3].args[2], 30)
+        self.assertEqual(calls[4].args[2], 30)
+        self.assertEqual(sum(call.args[0] == 'flutter-test' for call in calls), 1)
+
+    def test_compensating_shutdown_requires_success_before_its_state_probe(self):
+        for failure in [module.PhaseTimeout('confirm timed out'), module.PhaseFailure('confirm exited 7')]:
+            runner = Mock()
+            runner.command.side_effect = [module.PhaseTimeout('shutdown timed out'),
+                json.dumps({'devices': {'ios': [{'udid': 'owned', 'state': 'Booted'}]}}), failure]
+            with self.subTest(failure=failure), self.assertRaisesRegex(module.PhaseFailure, 'confirm'):
+                module.shutdown_for_migration_recovery(runner, 'owned')
+            self.assertEqual(runner.command.call_count, 3)
+
+    def test_compensating_shutdown_never_boots_without_exact_shutdown_postcondition(self):
+        for devices in [[], [{'udid': 'other', 'state': 'Shutdown'}],
+                        [{'udid': 'owned', 'state': 'Booted'}],
+                        [{'udid': 'owned', 'state': 'Shutting Down'}],
+                        [{'udid': 'owned', 'state': 'Shutdown'}] * 2]:
+            runner = Mock()
+            runner.command.side_effect = ['Data Migration Failed', module.PhaseTimeout('shutdown timed out'),
+                json.dumps({'devices': {'ios': [{'udid': 'owned', 'state': 'Booted'}]}}), '',
+                json.dumps({'devices': {'ios': devices}})]
+            with self.subTest(devices=devices), self.assertRaisesRegex(module.PhaseTimeout, 'shutdown timed out'):
+                module.run_selected_device(runner, {'udid': 'owned', 'state': 'Booted',
+                    'createdForAcceptance': True}, 'flutter', 180, 1200)
+            self.assertEqual(runner.command.call_count, 5)
+
+    def test_compensating_shutdown_probe_errors_remain_fatal(self):
+        for result in [module.PhaseTimeout('probe timed out'),
+                       module.PhaseFailure('probe exited 7'), '{broken']:
+            runner = Mock()
+            runner.command.side_effect = [module.PhaseTimeout('shutdown timed out'),
+                json.dumps({'devices': {'ios': [{'udid': 'owned', 'state': 'Booted'}]}}), '', result]
+            with self.subTest(result=result), self.assertRaises((module.PhaseFailure, ValueError)):
+                module.shutdown_for_migration_recovery(runner, 'owned')
+            self.assertEqual(runner.command.call_count, 4)
 
     def test_shutdown_exit_error_never_becomes_a_timeout_recovery(self):
         runner = Mock()
