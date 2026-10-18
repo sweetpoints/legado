@@ -457,6 +457,36 @@ void main() {
     },
   );
   testWidgets(
+    'IME composing-only changes do not leave pending input blocking native prefix',
+    (t) async {
+      native = {...native, 'query': 'abc', 'queryStart': 3, 'queryEnd': 3};
+      await app(t);
+      final field = t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      field.controller!.value = field.controller!.value.copyWith(
+        composing: const TextRange(start: 0, end: 3),
+      );
+      field.controller!.clearComposing();
+      await t.pumpAndSettle();
+      expect(commands.where((c) => c['op'] == 'query'), isEmpty);
+      await t.tap(tag('source-debug-prefix-plus'));
+      await t.pumpAndSettle();
+      expect(commands.last['op'], 'prefix');
+      await emit(t, {
+        ...native,
+        'query': '++abc',
+        'queryStart': 5,
+        'queryEnd': 5,
+        'help': false,
+      });
+      expect(field.controller!.text, '++abc');
+    },
+  );
+  testWidgets(
     'book examples preserve prefixes, detail and configured keyword',
     (t) async {
       native = {...native, 'keyword': 'configured'};
