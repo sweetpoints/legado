@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -221,19 +222,42 @@ void main() {
         'output': 'https://example.org/path @ignored.example.org ordinary text',
       };
       await app(t);
-      final text = t.widget<SelectableText>(find.byType(SelectableText));
-      final spans = text.textSpan!.children!.whereType<TextSpan>().toList();
+      final text = t.widget<Text>(
+        find.descendant(
+          of: tag('source-debug-output'),
+          matching: find.byType(Text),
+        ),
+      );
+      final spans = (text.textSpan! as TextSpan).children!
+          .whereType<TextSpan>()
+          .toList();
       final links = spans.where((s) => s.recognizer != null).toList();
       expect(links.length, 1);
       expect(links.single.text, 'https://example.org/path');
-      // Invoke the same recognizer callback used by the displayed selectable link.
-      (links.single.recognizer as dynamic).onTap();
+      final paragraph = t.renderObject<RenderParagraph>(
+        find.descendant(
+          of: tag('source-debug-output'),
+          matching: find.byType(RichText),
+        ),
+      );
+      final linkRect = paragraph
+          .getBoxesForSelection(
+            const TextSelection(baseOffset: 0, extentOffset: 24),
+          )
+          .first
+          .toRect();
+      await t.tapAt(paragraph.localToGlobal(linkRect.center));
       await t.pumpAndSettle();
       expect(commands.last['op'], 'openUrl');
       expect(commands.last['url'], 'https://example.org/path');
-      await t.longPress(find.byType(SelectableText));
+      await t.longPress(
+        find.descendant(
+          of: tag('source-debug-output'),
+          matching: find.byType(Text),
+        ),
+      );
       await t.pumpAndSettle();
-      expect(find.byType(SelectableText), findsOneWidget);
+      expect(find.byType(SelectionArea), findsOneWidget);
     },
   );
   testWidgets(
@@ -334,14 +358,14 @@ void main() {
           null,
         ),
       );
-      final selectable = find.descendant(
-        of: find.byType(SelectableText),
-        matching: find.byType(EditableText),
-      );
-      final editable = t.state<EditableTextState>(selectable);
+      final editable = t
+          .state<SelectionAreaState>(find.byType(SelectionArea))
+          .selectableRegion;
       editable.selectAll(SelectionChangedCause.toolbar);
       await t.pumpAndSettle();
-      editable.copySelection(SelectionChangedCause.toolbar);
+      editable.contextMenuButtonItems
+          .firstWhere((item) => item.type == ContextMenuButtonType.copy)
+          .onPressed!();
       await t.pumpAndSettle();
       expect(clipboard, log);
       expect(commands.where((c) => c['op'] == 'openUrl'), isEmpty);
@@ -626,4 +650,42 @@ void main() {
     );
     expect(field.controller!.text, 'Category::https://example.org');
   });
+  testWidgets(
+    'updated rich log exposes each real text fragment and link without duplicate full labels',
+    (t) async {
+      final semantics = t.ensureSemantics();
+      try {
+        native = {
+          ...native,
+          'help': false,
+          'output': 'https://example.org/start first',
+        };
+        await app(t);
+        const log =
+            'Header https://example.org/info\n<div class="body">Fixture body</div> tail';
+        await emit(t, {...native, 'output': log});
+        final fragments = <String>[];
+        void collect(SemanticsNode node) {
+          final data = node.getSemanticsData();
+          if (data.label.isNotEmpty) fragments.add(data.label);
+          if (data.value.isNotEmpty) fragments.add(data.value);
+          node.visitChildren((child) {
+            collect(child);
+            return true;
+          });
+        }
+
+        collect(t.getSemantics(tag('source-debug-output')));
+        final accessible = fragments.join();
+        expect(accessible, contains('Fixture body'));
+        expect('Fixture body'.allMatches(accessible).length, 1);
+        expect(accessible, contains('https://example.org/info'));
+        expect(accessible, contains('Header'));
+        expect(accessible, contains('tail'));
+        expect(fragments.where((value) => value == log), isEmpty);
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
 }
