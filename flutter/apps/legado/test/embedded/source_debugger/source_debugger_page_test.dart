@@ -370,6 +370,93 @@ void main() {
     expect(field.controller!.text, text);
   });
   testWidgets(
+    'blurred pending input survives an old echo then accepts later native prefix',
+    (t) async {
+      await app(t);
+      final barrier = Completer<void>();
+      handler = (a) async {
+        if (a['op'] == 'query') await barrier.future;
+      };
+      await t.enterText(tag('source-debug-query'), 'pending query');
+      await t.tap(tag('source-debug-run'));
+      await t.pump();
+      final field = t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.focusNode!.hasFocus, false);
+      await emit(t, {
+        ...native,
+        'query': 'old',
+        'queryStart': 3,
+        'queryEnd': 3,
+        'help': false,
+      });
+      expect(field.controller!.text, 'pending query');
+      barrier.complete();
+      await t.pumpAndSettle();
+      await emit(t, {
+        ...native,
+        'query': 'pending query',
+        'queryStart': 13,
+        'queryEnd': 13,
+      });
+      expect(field.controller!.text, 'pending query');
+      await emit(t, {
+        ...native,
+        'query': '++pending query',
+        'queryStart': 15,
+        'queryEnd': 15,
+      });
+      expect(field.controller!.text, '++pending query');
+      expect(
+        field.controller!.selection,
+        const TextSelection.collapsed(offset: 15),
+      );
+    },
+  );
+  testWidgets(
+    'rejected latest query rolls back, blocks queued run, then corrected input recovers',
+    (t) async {
+      native = {...native, 'query': 'saved', 'queryStart': 5, 'queryEnd': 5};
+      await app(t);
+      final barrier = Completer<void>();
+      handler = (a) async {
+        if (a['op'] == 'query') {
+          await barrier.future;
+          throw PlatformException(code: 'invalid_request');
+        }
+      };
+      await t.enterText(tag('source-debug-query'), 'rejected');
+      await t.tap(tag('source-debug-run'));
+      await t.pump();
+      barrier.complete();
+      await t.pumpAndSettle();
+      final field = t.widget<TextField>(
+        find.descendant(
+          of: tag('source-debug-query'),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.controller!.text, 'saved');
+      expect(commands.where((c) => c['op'] == 'run'), isEmpty);
+      await emit(t, {
+        ...native,
+        'query': 'native',
+        'queryStart': 6,
+        'queryEnd': 6,
+      });
+      expect(field.controller!.text, 'native');
+      handler = null;
+      await t.enterText(tag('source-debug-query'), 'corrected');
+      await t.tap(tag('source-debug-run'));
+      await t.pumpAndSettle();
+      expect(commands.last['op'], 'run');
+    },
+  );
+  testWidgets(
     'book examples preserve prefixes, detail and configured keyword',
     (t) async {
       native = {...native, 'keyword': 'configured'};
