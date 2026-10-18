@@ -157,10 +157,17 @@ internal class CodeEditorSurfaceFactory(private val coordinator: CodeEditorNativ
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
         require(args is Map<*, *> && args.keys == setOf("generation"))
         val generation = args["generation"] as? Int ?: error("Invalid editor generation")
-        val surface = coordinator.createSurface(context, generation)
+        require(generation > 0) { "Invalid editor generation" }
+        val surface = coordinator.tryCreateSurface(context, generation)
+        // A valid but retired generation is a lifecycle race, not a protocol failure.
+        val view = surface?.view ?: android.widget.FrameLayout(context).apply {
+            isFocusable = false
+            descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
         return object : PlatformView {
-            override fun getView() = surface.view
-            override fun dispose() = surface.close()
+            override fun getView() = view
+            override fun dispose() { surface?.close() }
         }
     }
 }

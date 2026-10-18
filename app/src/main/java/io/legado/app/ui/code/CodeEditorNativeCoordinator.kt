@@ -83,12 +83,15 @@ internal class CodeEditorNativeCoordinator(
         }
     }
 
-    internal fun createSurface(context: Context, requestedGeneration: Int): CodeEditorPlatformSurface {
-        check(!closed && requestedGeneration > 0 && requestedGeneration == state.value.generation) { "Stale editor surface" }
+    internal fun tryCreateSurface(context: Context, requestedGeneration: Int): CodeEditorPlatformSurface? {
+        require(requestedGeneration > 0) { "Invalid editor generation" }
+        // Flutter can deliver the previous frame's create after native finish or restart.
+        // Retired requests get no engine and must never dispose the replacement surface.
+        if (closed || requestedGeneration != state.value.generation) return null
         val current = model.state.value
-        val capturedOwner = checkNotNull(current.engineOwner)
-        val session = checkNotNull(current.session)
-        check(!session.finished && current.engineOwner == owner) { "Editor session is unavailable" }
+        val capturedOwner = current.engineOwner ?: return null
+        val session = current.session ?: return null
+        if (session.finished || capturedOwner != owner) return null
         surfaces.toList().forEach { it.close() }
         mutable.value = mutable.value.copy(status = CodeEditorEngineStatus())
         model.editorReady(capturedOwner, false)
