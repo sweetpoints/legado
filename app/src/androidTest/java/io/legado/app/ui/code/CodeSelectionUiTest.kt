@@ -1970,6 +1970,25 @@ class CodeSelectionUiTest {
             if (native) {
                 clickNativeAction(R.string.share)
             } else {
+                // Sora's nonfocusable PopupWindow can satisfy Espresso Root.isReady
+                // before its input window is committed. Keep the real touch click,
+                // but first observe a committed frame from this popup's own decor.
+                val popupCommitted = CountDownLatch(1)
+                withEditor { editor ->
+                    val popup = actions(editor).view.rootView
+                    assertTrue("Custom share popup must be attached", popup.isAttachedToWindow)
+                    assertTrue("Custom share popup must render hardware frames", popup.isHardwareAccelerated)
+                    popup.viewTreeObserver.registerFrameCommitCallback { popupCommitted.countDown() }
+                    popup.postInvalidateOnAnimation()
+                }
+                assertTrue("Custom share popup frame was not committed",
+                    popupCommitted.await(5, TimeUnit.SECONDS))
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
+                withEditor {
+                    assertEquals("Selection must survive popup input readiness", expected, selection(it))
+                    assertTrue(actions(it).isEnabled)
+                    assertTrue(actions(it).isShowing)
+                }
                 onView(withId(R.id.code_share_selection)).inRoot(isPlatformPopup()).perform(click())
             }
             await(message = { "Share chooser was not launched: ${editorDiagnostic()}; visible=${visibleFeedback()}" }) { chooser.get() != null }
