@@ -85,6 +85,18 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
           .command(op, state.generation, args);
     } catch (_) {
       if (mounted) {
+        final authority = _state;
+        if (op == 'query' &&
+            authority?.generation == state.generation &&
+            _lastSubmitted?.text == args['text'] &&
+            _lastSubmitted?.selection.baseOffset == args['start'] &&
+            _lastSubmitted?.selection.extentOffset == args['end']) {
+          // A rejected latest edit is visibly rolled back. The bridge still
+          // blocks a queued run until a new query command succeeds.
+          _lastSubmitted = null;
+          _sync(authority!);
+        }
+        if (op == 'close') _closeSent = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context).debuggerCommandError),
@@ -114,11 +126,13 @@ class _SourceDebuggerPageState extends ConsumerState<SourceDebuggerPage>
       }
     }
     // Old native echoes must not replace text still being typed through the queue.
-    if (!_focus.hasFocus ||
-        _lastSubmitted == null ||
+    if (_lastSubmitted == null ||
         (state.query == _lastSubmitted!.text &&
             state.queryStart == _lastSubmitted!.selection.baseOffset &&
             state.queryEnd == _lastSubmitted!.selection.extentOffset)) {
+      // The matching native echo acknowledges the newest queued edit. Native
+      // sort/prefix operations can then replace query and selection normally.
+      _lastSubmitted = null;
       final next = TextEditingValue(
         text: state.query,
         selection: TextSelection(
