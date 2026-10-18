@@ -422,25 +422,75 @@ class CodeSelectionUiTest {
                 setDisableSoftKbdIfHardKbdAvailable(false)
             }
         }
-        flutter.click("code-search-toggle")
-        onView(withId(R.id.editText)).perform(click())
-        withEditor { it.showSoftInput() }
-        awaitEditor {
-            ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        var keyboardRoot: View? = null
+        val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
+        scenario!!.onActivity { activity ->
+            keyboardRoot = activity.window.decorView
+            ViewCompat.setWindowInsetsAnimationCallback(checkNotNull(keyboardRoot),
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                            runningImeAnimations.add(animation)
+                    }
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                    ): WindowInsetsCompat = insets
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        runningImeAnimations.remove(animation)
+                    }
+                })
+        }
+        try {
+            flutter.click("code-search-toggle")
+            onView(withId(R.id.editText)).perform(click())
+            withEditor { it.showSoftInput() }
+            awaitEditor("IME animation and hosted editor layout") {
+                ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime()) == true &&
+                    runningImeAnimations.isEmpty()
+            }
+            // IME visibility precedes its final viewport metrics. Commit the real Android
+            // hierarchy after animation ends before choosing a bottom-of-viewport target.
+            val committed = CountDownLatch(1)
+            scenario!!.onActivity {
+                checkNotNull(keyboardRoot).apply {
+                    viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+                    postInvalidateOnAnimation()
+                }
+            }
+            assertTrue("IME viewport frame was not committed", committed.await(5, TimeUnit.SECONDS))
+            instrumentation.uiAutomation.waitForIdle(500, 5_000)
+        } finally {
+            scenario!!.onActivity {
+                ViewCompat.setWindowInsetsAnimationCallback(checkNotNull(keyboardRoot), null)
+            }
         }
         var selected = ""
         var offset = 0
         var selectedLine = 0
         withEditor {
-            val end = it.lastVisibleLine - 1
+            val visible = Rect()
+            assertTrue(it.getGlobalVisibleRect(visible))
+            val location = IntArray(2)
+            it.getLocationOnScreen(location)
+            // HC may clip the native view before its measured height changes. Use actual
+            // complete visible rows, not lastVisibleLine's partially visible boundary.
+            val fullyVisible = (it.firstVisibleLine..it.lastVisibleLine).filter { line ->
+                val bottom = location[1] + it.getCharOffsetY(line, 3)
+                val x = location[0] + it.getCharOffsetX(line, 3) + it.dpUnit
+                bottom - it.rowHeight >= visible.top + it.dpUnit &&
+                    bottom <= visible.bottom - it.dpUnit && x >= visible.left && x < visible.right
+            }.toSet()
+            val end = fullyVisible.lastOrNull { line -> line - 1 in fullyVisible && line - 2 in fullyVisible }
             assertTrue(
-                "The fixture must leave room for a multiline selection",
-                end >= it.firstVisibleLine + 2,
+                "The visible editor $visible must leave three complete rows: $fullyVisible",
+                end != null,
             )
-            it.setSelectionRegion(end - 2, 0, end, 10, false)
+            val last = checkNotNull(end)
+            it.setSelectionRegion(last - 2, 0, last, 10, false)
             selected = selection(it)
             offset = it.offsetY
-            selectedLine = end - 1
+            selectedLine = last - 1
         }
         assertEditorToolbar()
         dismissEditorToolbar()
@@ -456,13 +506,15 @@ class CodeSelectionUiTest {
         }
         fun scrollPoint(view: View, rowsFromBottom: Float): FloatArray {
             val editor = view as CodeEditor
-            val position = IntArray(2)
-            view.getLocationOnScreen(position)
+            val visible = Rect()
+            assertTrue(view.getGlobalVisibleRect(visible))
             val point =
                 floatArrayOf(
-                    position[0] + view.width * 0.9f,
-                    position[1] + view.height - editor.rowHeight * rowsFromBottom,
+                    visible.right - visible.width() * 0.1f,
+                    visible.bottom - editor.rowHeight * rowsFromBottom,
                 )
+            assertTrue("Scroll gesture must hit visible editor $visible",
+                visible.contains(point[0].toInt(), point[1].toInt()))
             assertFalse(
                 "The scroll gesture must avoid the visible native menu $nativeMenu",
                 nativeMenu.contains(point[0].toInt(), point[1].toInt()),
