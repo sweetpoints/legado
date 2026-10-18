@@ -163,7 +163,8 @@ internal class CodeEditorNativeCoordinator(
     fun search(search: CodeEditorSearch) {
         val engine = engine()
         check(engine is SoraCodeEditorEngine) { "Unavailable in safe editor" }
-        check(model.state.value.session?.writable == true || !search.replaceVisible) { "Read-only editor" }
+        // Legacy read-only sessions may retain an open replacement panel. Updating its
+        // query/visibility never edits the document; REPLACE/REPLACE_ALL remain guarded above.
         model.search(checkNotNull(owner), search)
         if (!search.visible) engine.focus()
     }
