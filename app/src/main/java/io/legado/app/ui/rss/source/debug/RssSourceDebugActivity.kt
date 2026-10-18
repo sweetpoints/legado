@@ -1,18 +1,18 @@
 package io.legado.app.ui.rss.source.debug
 
-import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.base.BaseComposeActivity
+import androidx.lifecycle.lifecycleScope
+import io.legado.app.ui.source.debug.SourceDebuggerActivity
+import io.legado.app.ui.source.debug.SourceDebuggerNativeCoordinator
+import io.legado.app.utils.openUrl
 import io.legado.app.data.repository.AppRssSourceDebugRepository
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.toastOnUi
 
-class RssSourceDebugActivity : BaseComposeActivity() {
+class RssSourceDebugActivity : SourceDebuggerActivity() {
     val viewModel by
         viewModels<RssSourceDebugViewModel> {
             viewModelFactory {
@@ -26,19 +26,11 @@ class RssSourceDebugActivity : BaseComposeActivity() {
             }
         }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        RssSourceDebugRoute(
-            viewModel,
-            { super.finish() },
+    override val debuggerCoordinator by lazy {
+        SourceDebuggerNativeCoordinator.rss(
+            viewModel, lifecycle, lifecycleScope, ::canHandleDebuggerEffect, ::completeDebugger,
             { showDialogFragment(TextDialog("Html", it)) },
-            { toastOnUi(it) },
-            { !supportFragmentManager.isStateSaved },
+            { openUrl(it) },
         )
-    }
-
-    override fun finish() {
-        viewModel.close()
-        super.finish()
     }
 }
