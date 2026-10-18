@@ -1478,23 +1478,33 @@ class CodeSelectionUiTest {
                         .value
                         .session
                         ?.text == edited &&
+                        ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                            .state.value.editorReady &&
                         nativeWebViews(it.window.decorView).any { web -> web.isShown }
             }
             ready
         }
         val restored = AtomicReference<String>()
-        await {
-            scenario!!.onActivity {
-                nativeWebView(it)
-                    .evaluateJavascript(
-                        "window.__getEditorState && window.__getEditorState();",
-                        restored::set,
-                    )
+        val snapshotReturned = CountDownLatch(1)
+        // This getter freezes/blurs the textarea, just like production snapshot().
+        // Read it once after onPageFinished readiness, then await its actual
+        // callback; polling it repeatedly can change the document under test.
+        scenario!!.onActivity {
+            nativeWebView(it).evaluateJavascript(
+                "window.__getEditorState && window.__getEditorState();",
+            ) { value ->
+                restored.set(value)
+                snapshotReturned.countDown()
             }
-            SafeEditorResultCodec.decode(restored.get())?.let {
-                it.text == edited && it.cursorPosition == cursor && it.dirty
-            } == true
         }
+        assertTrue("Restored Safe editor snapshot callback was not delivered",
+            snapshotReturned.await(15, TimeUnit.SECONDS))
+        val snapshot = SafeEditorResultCodec.decode(restored.get())
+        assertNotNull("Restored Safe editor returned an invalid snapshot", snapshot)
+        val restoredSnapshot = checkNotNull(snapshot)
+        assertEquals("Restored Safe editor text", edited, restoredSnapshot.text)
+        assertEquals("Restored Safe editor cursor", cursor, restoredSnapshot.cursorPosition)
+        assertTrue("Restored Safe editor must retain its dirty draft", restoredSnapshot.dirty)
         flutter.click("code-save")
         await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
