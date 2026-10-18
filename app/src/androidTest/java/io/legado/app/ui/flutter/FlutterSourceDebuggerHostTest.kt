@@ -112,7 +112,9 @@ class FlutterSourceDebuggerHostTest {
                             var done = false
                             scenario.onActivity {
                                 val state = it.viewModel.state.value
-                                done = !state.running && state.output.contains("Fixture body")
+                                done = !state.running && state.issue == null && state.error == null &&
+                                    listOf("︽搜索页解析完成", "︽详情页解析完成", "︽目录页解析完成", "︽正文页解析完成")
+                                        .all(state.output::contains)
                             }
                             done
                         }
@@ -132,9 +134,9 @@ class FlutterSourceDebuggerHostTest {
                         File(directory, "book-http-failure.json").writeText(diagnostic.toString(2))
                         throw failure
                     }
-                    driver.await("Flutter renders completed book output") {
-                        driver.containsText("source-debug-output", "Fixture body")
-                    }
+                    // Dart-backed WebBook content validates non-empty content before the
+                    // terminal stage; unlike RSS, Book Debug does not log the raw body.
+                    awaitOutputText("︽正文页解析完成")
                     screenshot("book-completed-output")
                     assertNull(Debug.callback)
                     assertEquals(listOf("/search", "/info", "/toc", "/content"), server.paths.toList())
@@ -286,6 +288,32 @@ class FlutterSourceDebuggerHostTest {
                 runBlocking(Dispatchers.IO) { appDb.bookSourceDao.delete(source.bookSourceUrl) }
             }
         }
+    }
+
+    private fun awaitOutputText(expected: String) {
+        val deadline = android.os.SystemClock.uptimeMillis() + 30_000
+        var scrolls = 0
+        while (android.os.SystemClock.uptimeMillis() < deadline) {
+            if (driver.containsText("source-debug-output", expected)) return
+            val output = driver.node("source-debug-output")
+            var scrolling: AccessibilityNodeInfo? = output
+            var didScroll = false
+            while (scrolling != null) {
+                if (scrolling.isVisibleToUser && scrolling.isScrollable) {
+                    assertTrue("Debugger output exceeded 24 real scrolls", scrolls < 24)
+                    didScroll = scrolling.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    if (didScroll) scrolls++
+                    scrolling.recycle()
+                    break
+                }
+                val parent = scrolling.parent
+                scrolling.recycle()
+                scrolling = parent
+            }
+            instrumentation.uiAutomation.waitForIdle(100, 5_000)
+            if (!didScroll) android.os.SystemClock.sleep(50)
+        }
+        assertTrue("Completed debugger output text was not visible", driver.containsText("source-debug-output", expected))
     }
 
     /** Fixture-only screenshots for inspecting the actual composed Flutter/IME colors and layout. */
