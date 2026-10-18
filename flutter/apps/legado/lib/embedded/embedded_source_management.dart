@@ -12,6 +12,7 @@ import '../l10n/generated/app_localizations.dart';
 import 'source_management_backend.dart';
 import 'source_manager/source_manager_page.dart';
 import 'source_editor/source_editor_page.dart';
+import 'code_editor/code_editor_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -35,6 +36,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
         '/sources',
         '/source-manager',
         '/source-editor',
+        '/code-editor',
       ].contains(result['route']) ||
       !['zh', 'en'].contains(result['locale']) ||
       !['system', 'light', 'dark'].contains(result['theme'])) {
@@ -63,6 +65,7 @@ GoRouter embeddedSourceRouter(Ref ref) {
   final router = GoRouter(
     initialLocation: configuration.route,
     routes: [
+      GoRoute(path: '/code-editor', builder: (_, _) => const CodeEditorPage()),
       GoRoute(
         path: '/source-editor',
         builder: (_, _) => const SourceEditorPage(),
