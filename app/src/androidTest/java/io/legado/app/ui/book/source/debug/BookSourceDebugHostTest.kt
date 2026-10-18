@@ -1,7 +1,9 @@
 package io.legado.app.ui.book.source.debug
 
 import android.content.Intent
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.onNodeWithText
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -22,6 +24,11 @@ import org.junit.Assert.*
 
 class BookSourceDebugHostTest {
     @get:Rule val compose = createEmptyComposeRule()
+    private val driver = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+
+    @Before fun enableFlutterAccessibility() = driver.enableAccessibility()
+    @After fun restoreAccessibility() = driver.close()
+
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -60,8 +67,9 @@ class BookSourceDebugHostTest {
                         assertFalse(it.viewModel.state.value.running)
                         assertEquals("", it.viewModel.state.value.output)
                     }
-                    compose.onNodeWithText("Custom fixture keyword").assertExists()
-                    compose.onNodeWithTag("book-debug-example-my").performClick()
+                    driver.awaitIdentifier("source-debug-query")
+                    driver.setText("source-debug-query", "Custom fixture keyword")
+                    driver.click("source-debug-run")
                     compose.waitUntil(10_000) {
                         var done = false
                         scenario.onActivity {
@@ -95,8 +103,8 @@ class BookSourceDebugHostTest {
                         ownedFiles.all { it.exists() }
                     ) // Configuration recreation retains private draft.
                     BookSourceDebugStage.entries.forEach { stage ->
-                        compose.onNodeWithTag("book-debug-menu").performClick()
-                        compose.onNodeWithTag("book-debug-html-${stage.name}").performClick()
+                        driver.click("source-debug-menu")
+                        driver.click("source-debug-html-${stage.name.lowercase()}")
                         compose.waitUntil {
                             var opened = false
                             scenario.onActivity {
@@ -107,6 +115,7 @@ class BookSourceDebugHostTest {
                             }
                             opened
                         }
+
                         compose.onNodeWithText("html").assertExists()
                         scenario.onActivity {
                             it.supportFragmentManager.fragments
