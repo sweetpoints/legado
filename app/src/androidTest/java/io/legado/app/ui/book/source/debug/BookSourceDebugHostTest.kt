@@ -68,8 +68,8 @@ class BookSourceDebugHostTest {
                         assertEquals("", it.viewModel.state.value.output)
                     }
                     driver.awaitIdentifier("source-debug-query")
-                    driver.setText("source-debug-query", "Custom fixture keyword")
-                    driver.click("source-debug-run")
+                    assertTrue(driver.containsText("source-debug-example-my", "Custom fixture keyword"))
+                    driver.click("source-debug-example-my")
                     compose.waitUntil(10_000) {
                         var done = false
                         scenario.onActivity {
