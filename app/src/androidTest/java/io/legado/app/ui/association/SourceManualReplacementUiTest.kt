@@ -43,6 +43,7 @@ import io.legado.app.ui.book.read.EffectiveReplacesDialog
 import io.legado.app.ui.book.read.ManualReplaceRulesDialog
 import io.legado.app.ui.book.read.ManualReplacementViewModel
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.CodeDialogAction
 import io.legado.app.utils.GSON
@@ -67,6 +68,7 @@ class SourceManualReplacementUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private val flutter = FlutterUiTestDriver(instrumentation)
     private val prefs = context.defaultSharedPreferences
     private val keys =
         listOf(
@@ -152,6 +154,7 @@ class SourceManualReplacementUiTest {
 
     @Before
     fun setup() {
+        flutter.enableAccessibility()
         prefs
             .edit()
             .remove(PreferKey.manualReplaceRule)
@@ -165,6 +168,7 @@ class SourceManualReplacementUiTest {
 
     @After
     fun cleanup() {
+        flutter.close()
         appDb.replaceRuleDao.delete(*rules.toTypedArray())
         appDb.replaceRuleDao.insert(*savedRules.toTypedArray())
         urls.forEach {
@@ -494,7 +498,7 @@ class SourceManualReplacementUiTest {
                 val index = text.toString().indexOf("Edited Seed0")
                 text.replace(index, index + "Edited".length, "Editor")
             }
-            compose.onNodeWithTag("code-save").performClick()
+            flutter.click("code-save")
             // The editor result updates its draft before the RESUMED route delivers EditorSaved.
             // Wait for that callback and the parent's refresh to finish before inspecting candidates.
             await("Native editor result delivered and candidate refresh completed") {
