@@ -83,48 +83,7 @@ class FlutterSourceEditorUiTest {
     @Test
     fun editsEveryFormFieldAndOptionThroughFlutterAndSavesActualRoomRow() {
         launch()
-        val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
-        lateinit var root: View
-        scenario!!.onActivity { activity ->
-            root = activity.window.decorView
-            ViewCompat.setWindowInsetsAnimationCallback(root,
-                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
-                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
-                            runningImeAnimations.add(animation)
-                    }
-                    override fun onProgress(
-                        insets: WindowInsetsCompat,
-                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
-                    ): WindowInsetsCompat = insets
-                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
-                        runningImeAnimations.remove(animation)
-                    }
-                })
-        }
-        fun awaitImeSettled(visible: Boolean) {
-            driver.await("IME visible=$visible and viewport animation completed") {
-                var settled = false
-                instrumentation.runOnMainSync {
-                    val insets = ViewCompat.getRootWindowInsets(root)
-                    settled = root.isAttachedToWindow && root.isLaidOut &&
-                        insets?.isVisible(WindowInsetsCompat.Type.ime()) == visible &&
-                        runningImeAnimations.isEmpty()
-                }
-                settled
-            }
-        }
-        fun committedViewportFrame() {
-            val committed = CountDownLatch(1)
-            instrumentation.runOnMainSync {
-                assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
-                root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
-                root.postInvalidateOnAnimation()
-            }
-            assertTrue("Editor viewport frame was not committed", committed.await(5, TimeUnit.SECONDS))
-            instrumentation.uiAutomation.waitForIdle(100, 5_000)
-        }
-        try {
+        EditorImeBarrier().use { ime ->
             driver.click("source-options-toggle")
             driver.awaitIdentifier("source-option-enabled")
             listOf("enabled", "enabledExplore", "enabledCookieJar", "enabledReview", "eventListener", "customButton")
@@ -149,13 +108,11 @@ class FlutterSourceEditorUiTest {
                     }
                     revealField(tab, field.key)
                     driver.setText("source-field-$tab-${field.key}", value) {
-                        awaitImeSettled(true)
-                        committedViewportFrame()
+                        ime.settled(true)
                     }
                     values[tab to field.key] = value
                     closeSoftKeyboard()
-                    awaitImeSettled(false)
-                    committedViewportFrame()
+                    ime.settled(false)
                 }
             }
             driver.click("source-save")
@@ -177,8 +134,6 @@ class FlutterSourceEditorUiTest {
             assertEquals(source.weight, saved.weight)
             assertEquals(source.customOrder, saved.customOrder)
             assertEquals(source.respondTime, saved.respondTime)
-        } finally {
-            instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
         }
     }
 
@@ -202,11 +157,29 @@ class FlutterSourceEditorUiTest {
     @Test
     fun recreatedHostRestoresUnsavedFlutterDraftAndTabWithoutWritingRoom() {
         launch()
-        driver.setText("source-field-0-bookSourceName", "retained draft")
-        closeSoftKeyboard()
-        selectTab(4)
-        driver.setText("source-field-4-preUpdateJs", "retainedToc()")
-        closeSoftKeyboard()
+        EditorImeBarrier().use { ime ->
+            fun input(tab: Int, key: String, text: String) {
+                val deadline = SystemClock.uptimeMillis() + 30_000
+                driver.setText("source-field-$tab-$key", text) { ime.settled(true) }
+                // ACTION_SET_TEXT can update Android's predicted semantics immediately.
+                // Confirm the real private draft before hiding the IME or recreating.
+                var acknowledged = false
+                while (SystemClock.uptimeMillis() < deadline) {
+                    scenario!!.onActivity {
+                        acknowledged = it.editorModel.state.value.document?.form?.field(tab, key)?.value == text
+                    }
+                    if (acknowledged) break
+                    SystemClock.sleep(50)
+                }
+                assertTrue("Native editor draft did not acknowledge field $tab/$key", acknowledged)
+                ime.settled(true)
+                closeSoftKeyboard()
+                ime.settled(false)
+            }
+            input(0, "bookSourceName", "retained draft")
+            selectTab(4)
+            input(4, "preUpdateJs", "retainedToc()")
+        }
         scenario!!.recreate()
         driver.awaitIdentifier("source-field-4-preUpdateJs")
         driver.await("Restored actual Flutter TOC field") {
@@ -349,6 +322,54 @@ class FlutterSourceEditorUiTest {
             instrumentation.runOnMainSync {
                 nativeEditor.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.finish()
             }
+        }
+    }
+
+    /** Local to the source editor tests; one text action follows a settled actual IME viewport. */
+    private inner class EditorImeBarrier : AutoCloseable {
+        private val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
+        private lateinit var root: View
+        init {
+            scenario!!.onActivity { activity ->
+                root = activity.window.decorView
+                ViewCompat.setWindowInsetsAnimationCallback(root,
+                    object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                                runningImeAnimations.add(animation)
+                        }
+                        override fun onProgress(
+                            insets: WindowInsetsCompat,
+                            runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                        ): WindowInsetsCompat = insets
+                        override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                            runningImeAnimations.remove(animation)
+                        }
+                    })
+            }
+        }
+        fun settled(visible: Boolean) {
+            driver.await("IME visible=$visible and viewport animation completed") {
+                var settled = false
+                instrumentation.runOnMainSync {
+                    val insets = ViewCompat.getRootWindowInsets(root)
+                    settled = root.isAttachedToWindow && root.isLaidOut &&
+                        insets?.isVisible(WindowInsetsCompat.Type.ime()) == visible &&
+                        runningImeAnimations.isEmpty()
+                }
+                settled
+            }
+            val committed = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
+                root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+                root.postInvalidateOnAnimation()
+            }
+            assertTrue("Editor viewport frame was not committed", committed.await(5, TimeUnit.SECONDS))
+            instrumentation.uiAutomation.waitForIdle(100, 5_000)
+        }
+        override fun close() {
+            instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
         }
     }
 
