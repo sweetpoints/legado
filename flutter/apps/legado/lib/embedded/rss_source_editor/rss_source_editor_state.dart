@@ -103,8 +103,9 @@ abstract class RssEditorSnapshot with _$RssEditorSnapshot {
   }) = _RssEditorSnapshot;
   factory RssEditorSnapshot.fromMap(Object? value) {
     final m = rssEditorMap(value);
-    if (m['schemaVersion'] != 1)
+    if (m['schemaVersion'] != 1) {
       throw const FormatException('unsupported_rss_editor_snapshot');
+    }
     final result = RssEditorSnapshot(
       generation: m['generation'] as int,
       revision: m['revision'] as int,
