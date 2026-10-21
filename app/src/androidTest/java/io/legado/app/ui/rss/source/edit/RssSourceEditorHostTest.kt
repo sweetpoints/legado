@@ -119,7 +119,9 @@ class RssSourceEditorHostTest {
         driver.awaitIdentifier("rss-field-startJs")
         val captured = AtomicReference<Intent>()
         val capture = ActivityLifecycleCallback { activity, stage ->
-            if (activity is CodeEditActivity && stage == Stage.PRE_ON_CREATE) captured.compareAndSet(null, Intent(activity.intent))
+            if (activity is CodeEditActivity && stage == Stage.PRE_ON_CREATE &&
+                activity.callingActivity?.className == RssSourceEditActivity::class.java.name)
+                captured.compareAndSet(null, Intent(activity.intent))
         }
         instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(capture) }
         try {
