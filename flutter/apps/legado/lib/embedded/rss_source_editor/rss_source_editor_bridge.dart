@@ -65,8 +65,9 @@ class RssEditorBridge {
             'insert',
             'undo',
             'redo',
-          }.contains(op))
+          }.contains(op)) {
         throw const RssEditorWriteBlocked();
+      }
       try {
         final value = await channel.invokeMethod<Object?>('command', immutable);
         if (const {
@@ -91,7 +92,6 @@ class RssEditorBridge {
         }
         rethrow;
       }
-      if (op == 'retry') _rejectedFields.clear();
       return null;
     });
     _commands = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});

@@ -26,7 +26,29 @@ class RssSourceEditorPage extends ConsumerStatefulWidget {
       _RssSourceEditorPageState();
 }
 
-class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage> {
+class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage>
+    with RestorationMixin {
+  final _scrollControllers = List.generate(
+    4,
+    (_) => _RestorableEditorScrollController(),
+  );
+  @override
+  String? get restorationId => 'rss-source-editor';
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    for (var i = 0; i < _scrollControllers.length; i++) {
+      registerForRestoration(_scrollControllers[i], 'rss-tab-scroll-$i');
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   final _fieldKeys = <String, GlobalKey>{};
   bool _help = false;
   bool _rejected = false;
@@ -215,7 +237,10 @@ class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage> {
                               ),
                             ),
                           ),
-                          if (failure != null)
+                          if (failure != null &&
+                              (async.hasError ||
+                                  state?.loaded != true ||
+                                  state?.editorPending == true))
                             rssEditorTag(
                               'rss-retry',
                               TextButton(
@@ -292,51 +317,54 @@ class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage> {
                         ),
                       ),
                     ],
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: fields
-                            .map(
-                              (f) => rssEditorTag(
-                                'rss-nav-${f.key}',
-                                TextButton(
-                                  onPressed: editable
-                                      ? () {
-                                          final target =
-                                              _fieldKeys[f.key]?.currentContext;
-                                          if (target != null)
-                                            unawaited(
-                                              Scrollable.ensureVisible(
-                                                target,
-                                                duration: const Duration(
-                                                  milliseconds: 180,
+                    rssEditorTag(
+                      'rss-navigation',
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: fields
+                              .map(
+                                (f) => rssEditorTag(
+                                  'rss-nav-${f.key}',
+                                  TextButton(
+                                    onPressed: editable
+                                        ? () {
+                                            final target = _fieldKeys[f.key]
+                                                ?.currentContext;
+                                            if (target != null) {
+                                              unawaited(
+                                                Scrollable.ensureVisible(
+                                                  target,
+                                                  duration: const Duration(
+                                                    milliseconds: 180,
+                                                  ),
+                                                  alignment: .1,
                                                 ),
-                                                alignment: .1,
-                                              ),
+                                              );
+                                            }
+                                            unawaited(
+                                              _send('focus', {'key': f.key}),
                                             );
-                                          unawaited(
-                                            _send('focus', {'key': f.key}),
-                                          );
-                                        }
-                                      : null,
-                                  child: Text(
-                                    f.key == 'shouldOverrideUrlLoading'
-                                        ? l.rssEditorUrlOverride
-                                        : f.label,
+                                          }
+                                        : null,
+                                    child: Text(
+                                      f.key == 'shouldOverrideUrlLoading'
+                                          ? l.rssEditorUrlOverride
+                                          : f.label,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList(),
+                        ),
                       ),
                     ),
                     Expanded(
                       child: rssEditorTag(
                         'rss-fields-${state.tab}',
                         SingleChildScrollView(
-                          key: ValueKey(
-                            'rss-fields-${state.generation}-${state.tab}',
-                          ),
+                          key: PageStorageKey('rss-fields-${state.tab}'),
+                          controller: _scrollControllers[state.tab].value,
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
@@ -564,7 +592,7 @@ class _RssOptionChips extends StatefulWidget {
 }
 
 class _RssOptionChipsState extends State<_RssOptionChips> {
-  late Map<String, Object?> _values = Map.of(widget.state.options);
+  late final Map<String, Object?> _values = Map.of(widget.state.options);
   final _pending = <String, int>{};
   int _serial = 0;
   @override
@@ -712,7 +740,7 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
   final _pending = <int>{};
   int _serial = 0;
   bool _reflecting = false;
-  late TextEditingValue _submitted = _controller.value;
+  late TextEditingValue _submitted;
   static TextEditingValue _value(RssEditorField f) => TextEditingValue(
     text: f.text ?? '',
     selection: TextSelection(baseOffset: f.start, extentOffset: f.end),
@@ -720,14 +748,16 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
   @override
   void initState() {
     super.initState();
+    _submitted = _controller.value;
     _controller.addListener(_changed);
     _focus.addListener(_focused);
     _requestFocus();
   }
 
   void _focused() {
-    if (_focus.hasFocus)
+    if (_focus.hasFocus) {
       unawaited(widget.command('focus', {'key': widget.field.key}));
+    }
   }
 
   void _requestFocus() {
@@ -736,8 +766,9 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
         if (mounted &&
             widget.focused &&
             widget.enabled &&
-            !widget.field.external)
+            !widget.field.external) {
           _focus.requestFocus();
+        }
       });
     }
   }
@@ -746,8 +777,9 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
     final value = _value(f);
     _submitted = value;
     if (_controller.text == value.text &&
-        _controller.selection == value.selection)
+        _controller.selection == value.selection) {
       return;
+    }
     _reflecting = true;
     _controller.value = value;
     _reflecting = false;
@@ -760,8 +792,9 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
         widget.field.external ||
         !value.selection.isValid ||
         (_submitted.text == value.text &&
-            _submitted.selection == value.selection))
+            _submitted.selection == value.selection)) {
       return;
+    }
     _submitted = value;
     final serial = ++_serial;
     _pending.add(serial);
@@ -777,18 +810,20 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
             (ack) {
               if (!mounted) return;
               _pending.remove(serial);
-              if (_pending.isEmpty)
+              if (_pending.isEmpty) {
                 _reflect(
                   widget.latestField() ??
                       ack?.field(widget.field.key) ??
                       widget.field,
                 );
+              }
             },
             onError: (Object error, StackTrace stack) {
               if (!mounted) return;
               _pending.remove(serial);
-              if (_pending.isEmpty)
+              if (_pending.isEmpty) {
                 _reflect(widget.latestField() ?? widget.field);
+              }
             },
           ),
     );
@@ -849,4 +884,18 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
             ),
     );
   }
+}
+
+/// ScrollController has no framework restorable wrapper. Serialize its actual
+/// attached offset and restore an owned controller for each independent tab.
+class _RestorableEditorScrollController
+    extends RestorableChangeNotifier<ScrollController> {
+  @override
+  ScrollController createDefaultValue() => ScrollController();
+  @override
+  ScrollController fromPrimitives(Object? data) =>
+      ScrollController(initialScrollOffset: (data! as num).toDouble());
+  @override
+  Object toPrimitives() =>
+      value.hasClients ? value.offset : value.initialScrollOffset;
 }
