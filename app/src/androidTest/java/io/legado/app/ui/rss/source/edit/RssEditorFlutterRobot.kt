@@ -158,7 +158,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
             scenario!!.onActivity { accepted = it.viewModel.state.value.draft[field].text == text }
             val node = driver.node("rss-field-${field.key}")
             val rendered = node?.let {
-                try { it.text?.toString() == text } finally { it.recycle() }
+                try { it.text?.toString().orEmpty() == text } finally { it.recycle() }
             } ?: false
             accepted && rendered
         }
