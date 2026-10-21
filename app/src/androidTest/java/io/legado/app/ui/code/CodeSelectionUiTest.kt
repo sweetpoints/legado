@@ -1112,12 +1112,38 @@ class CodeSelectionUiTest {
                             ready
                         }
                         flutter.click("code-save")
-                        awaitCompose {
+                        var previewReturnState = "No preview return snapshot"
+                        awaitCompose(message = {
+                            "Source preview return rss=$rss replacements=$replacements: $previewReturnState"
+                        }) {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 val expected =
                                     if (replacements) edited.replace("#edited", "#edited-once")
                                     else edited
+                                val value = preview!!.model.state.value
+                                val ownerRefreshPending = if (rss)
+                                    ViewModelProvider(parent!!)[RssImportViewModel::class.java]
+                                        .state.value.pendingRefresh
+                                else ViewModelProvider(parent!!)[BookImportViewModel::class.java]
+                                    .state.value.pendingRefresh
+                                previewReturnState =
+                                    "originalMatches=${preview!!.currentOriginalCode() == edited}, " +
+                                        "originalLength=${value.original.length}/${edited.length}, " +
+                                        "displayedMatches=${value.displayed == expected}, " +
+                                        "displayedLength=${value.displayed.length}/${expected.length}, " +
+                                        "alternateLength=${value.alternate?.length}, " +
+                                        "alternate=${value.showingAlternate}, loaded=${value.loaded}, " +
+                                        "editorPending=${value.editorPending}, refreshPending=${value.refreshPending}, " +
+                                        "busy=${value.busy}, errorPresent=${value.error != null}, " +
+                                        "effects=${value.effects.map { it.action }}, " +
+                                        "previewOwner=${System.identityHashCode(preview)}, " +
+                                        "added=${preview!!.isAdded}, viewPresent=${preview!!.view != null}, " +
+                                        "parentOwnsPreview=${parent!!.childFragmentManager.fragments.any { it === preview }}, " +
+                                        "windowFocus=${preview!!.dialog?.window?.decorView?.hasWindowFocus()}, " +
+                                        "parentRefreshPending=$ownerRefreshPending, " +
+                                        "parentState=${parent!!.lifecycle.currentState}, " +
+                                        "editorDestroyed=${editorActivity?.isDestroyed}"
                                 ready =
                                     preview!!.currentOriginalCode() == edited &&
                                         preview!!.model.state.value.displayed == expected &&
