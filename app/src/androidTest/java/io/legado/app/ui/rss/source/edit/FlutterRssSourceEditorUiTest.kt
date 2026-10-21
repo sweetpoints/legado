@@ -5,6 +5,10 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.content.SharedPreferences
 import android.view.KeyEvent
+import android.util.Log
+import io.flutter.embedding.android.FlutterFragment
+import io.flutter.plugin.common.StandardMessageCodec
+import java.nio.ByteBuffer
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -167,8 +171,14 @@ class FlutterRssSourceEditorUiTest {
         robot.selectTab(0)
         driver.awaitIdentifier("rss-field-jsLib")
         assertNull("Switching tabs must preserve the base tab scroll offset", driver.node("rss-field-sourceName"))
+        restorationEvidence("before-recreate")
         robot.recreate()
-        driver.awaitIdentifier("rss-field-jsLib")
+        restorationEvidence("after-recreate")
+        try {
+            driver.awaitIdentifier("rss-field-jsLib")
+        } finally {
+            restorationEvidence("after-visibility-check")
+        }
         assertNull("Recreated Flutter view must restore the actual scroll offset", driver.node("rss-field-sourceName"))
         assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
     }
@@ -289,6 +299,41 @@ class FlutterRssSourceEditorUiTest {
             robot.recreate()
             assertEquals(1, launches)
         } finally { instrumentation.removeMonitor(monitor) }
+    }
+
+    /** Log only the four known primitive offsets, never serialized buckets or source data. */
+    private fun restorationEvidence(phase: String) {
+        robot.scenario!!.onActivity { activity ->
+            val fragment = activity.supportFragmentManager.fragments.filterIsInstance<FlutterFragment>().single()
+            val channel = requireNotNull(fragment.flutterEngine).restorationChannel
+            val bytes = channel.restorationData
+            val offsets = sortedMapOf<String, MutableList<Number>>()
+            fun collectNumbers(value: Any?, output: MutableList<Number>) {
+                when (value) {
+                    is Number -> output.add(value)
+                    is Map<*, *> -> value.values.forEach { collectNumbers(it, output) }
+                    is List<*> -> value.forEach { collectNumbers(it, output) }
+                }
+            }
+            fun inspect(value: Any?) {
+                when (value) {
+                    is Map<*, *> -> value.forEach { (key, child) ->
+                        if (key is String && key.matches(Regex("rss-tab-scroll-[0-3]")))
+                            collectNumbers(child, offsets.getOrPut(key) { mutableListOf() })
+                        inspect(child)
+                    }
+                    is List<*> -> value.forEach(::inspect)
+                }
+            }
+            if (bytes != null && bytes.isNotEmpty())
+                inspect(StandardMessageCodec.INSTANCE.decodeMessage(ByteBuffer.wrap(bytes)))
+            val unique = offsets.mapValues { (_, values) -> values.map(Number::toDouble).distinct() }
+            val numbers = unique.filterValues { it.size == 1 }
+                .entries.joinToString(",") { (key, values) -> "$key=${values.single()}" }
+            Log.i("RssEditorRestoration", "phase=$phase byteCount=${bytes?.size ?: 0} " +
+                "restoreState=${fragment.shouldRestoreAndSaveState()} waitForData=${channel.waitForRestorationData} " +
+                "offsets=[$numbers] ambiguousOffsetCount=${unique.count { it.value.size != 1 }}")
+        }
     }
 
     private fun codeLaunch(action: () -> Unit): Intent {
