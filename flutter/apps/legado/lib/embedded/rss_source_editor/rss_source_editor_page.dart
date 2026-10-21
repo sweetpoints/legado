@@ -293,7 +293,14 @@ class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage>
                                         horizontal: 2,
                                       ),
                                       child: ChoiceChip(
-                                        label: Text(t.label),
+                                        label: Text(
+                                          [
+                                            l.sourceEditorBase,
+                                            l.rssEditorStart,
+                                            l.rssEditorList,
+                                            l.rssEditorWebView,
+                                          ][t.index],
+                                        ),
                                         selected: t.index == state.tab,
                                         onSelected: editable
                                             ? (_) {
@@ -674,15 +681,25 @@ class _RssOptionChipsState extends State<_RssOptionChips> {
                 ),
             if (widget.web == null)
               for (final entry in {
-                'type': widget.state.typeLabels,
-                'articleStyle': widget.state.articleStyleLabels,
+                'type': [
+                  l.rssEditorWebPage,
+                  l.sourceEditorImage,
+                  l.sourceEditorVideo,
+                ],
+                'articleStyle': [
+                  l.rssEditorLayoutList,
+                  l.rssEditorLayoutSingle,
+                  l.rssEditorLayoutDouble,
+                  l.rssEditorLayoutWaterfall,
+                  l.rssEditorLayoutTriple,
+                ],
               }.entries)
                 rssEditorTag(
                   entry.key == 'type' ? 'rss-type' : 'rss-article-style',
                   PopupMenuButton<int>(
                     enabled: widget.state.canEdit,
                     tooltip: entry.key == 'type'
-                        ? l.sourceEditorType
+                        ? l.rssEditorType
                         : l.rssEditorArticleStyle,
                     onSelected: (v) => _update(entry.key, v),
                     itemBuilder: (_) => List.generate(
@@ -698,7 +715,7 @@ class _RssOptionChipsState extends State<_RssOptionChips> {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Text(
-                        '${entry.key == 'type' ? l.sourceEditorType : l.rssEditorArticleStyle}: ${entry.value[_values[entry.key] as int]}',
+                        '${entry.key == 'type' ? l.rssEditorType : l.rssEditorArticleStyle}: ${entry.value[_values[entry.key] as int]}',
                       ),
                     ),
                   ),

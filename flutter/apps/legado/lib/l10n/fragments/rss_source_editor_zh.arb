@@ -15,5 +15,15 @@
   "rssEditorPreload": "启用预加载",
   "rssEditorArticleStyle": "文章布局",
   "rssEditorExternal": "请打开全屏编辑器以安全编辑此字段。",
-  "rssEditorUrlOverride": "URL 跳转拦截（JavaScript；返回 true 拦截，可通过 url 变量打开链接、搜索或添加书架）"
+  "rssEditorUrlOverride": "URL 跳转拦截（JavaScript；返回 true 拦截，可通过 url 变量打开链接、搜索或添加书架）",
+  "rssEditorStart": "启动",
+  "rssEditorList": "列表规则",
+  "rssEditorWebView": "WebView",
+  "rssEditorWebPage": "网页",
+  "rssEditorLayoutList": "列表",
+  "rssEditorLayoutSingle": "单列",
+  "rssEditorLayoutDouble": "双列",
+  "rssEditorLayoutWaterfall": "瀑布",
+  "rssEditorLayoutTriple": "三列",
+  "rssEditorType": "源类型"
 }
