@@ -5,18 +5,6 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.content.SharedPreferences
 import android.view.KeyEvent
-import android.os.Bundle
-import android.graphics.Rect
-import android.view.accessibility.AccessibilityNodeInfo
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import java.util.ArrayDeque
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
-import android.util.Log
-import io.flutter.embedding.android.FlutterFragment
-import io.flutter.plugin.common.StandardMessageCodec
-import java.nio.ByteBuffer
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -93,22 +81,13 @@ class FlutterRssSourceEditorUiTest {
 
     @Test fun normalFlutterEntryEditsAll33FieldsEightFlagsAndBothEnumsAndSavesRoom() {
         robot.launch(source.sourceUrl)
-        optionsViewportEvidence("before-toggle")
         driver.click("rss-options-toggle")
         robot.commitViewportFrame()
-        optionsViewportEvidence("after-toggle-frame")
-        listOf("enabled", "singleUrl", "cookieJar", "preload").forEach {
-            var revealed = false
-            try {
-                robot.reveal("rss-option-$it", "rss-options")
-                revealed = true
-            } finally {
-                if (!revealed) {
-                    optionsViewportEvidence("reveal-failed")
-                    optionsNodeEvidence()
-                }
-            }
-            driver.click("rss-option-$it")
+        // Wait for the first chip's real semantics before scrolling this new row.
+        driver.awaitIdentifier("rss-option-enabled")
+        driver.click("rss-option-enabled")
+        listOf("singleUrl", "cookieJar", "preload").forEach {
+            robot.reveal("rss-option-$it", "rss-options"); driver.click("rss-option-$it")
         }
         robot.reveal("rss-type", "rss-option-enums"); driver.click("rss-type"); driver.click("rss-type-2")
         robot.reveal("rss-article-style", "rss-option-enums"); driver.click("rss-article-style"); driver.click("rss-article-style-4")
@@ -183,54 +162,19 @@ class FlutterRssSourceEditorUiTest {
     }
 
     @Test fun eachTabScrollOffsetSurvivesSwitchingAndActualActivityRecreation() {
-        val observed = mutableListOf<Pair<FragmentManager, FragmentManager.FragmentLifecycleCallbacks>>()
-        val activityCallback = ActivityLifecycleCallback { activity, stage ->
-            if (stage == Stage.PRE_ON_CREATE && activity is RssSourceEditActivity &&
-                activity.intent.getStringExtra("sourceUrl") == source.sourceUrl) {
-                val ordinal = observed.size + 1
-                val callback = object : FragmentManager.FragmentLifecycleCallbacks() {
-                    override fun onFragmentPreCreated(fm: FragmentManager, fragment: Fragment, savedInstanceState: Bundle?) {
-                        if (fragment is FlutterFragment && fragment.activity === activity)
-                            restorationDataEvidence("fragment-pre-created-$ordinal", savedInstanceState?.getByteArray("framework"),
-                                fragment.shouldRestoreAndSaveState(), fragment.flutterEngine?.restorationChannel?.waitForRestorationData)
-                    }
-                    override fun onFragmentSaveInstanceState(fm: FragmentManager, fragment: Fragment, outState: Bundle) {
-                        if (fragment is FlutterFragment && fragment.activity === activity)
-                            restorationDataEvidence("fragment-save-instance-state-$ordinal", outState.getByteArray("framework"),
-                                fragment.shouldRestoreAndSaveState(), fragment.flutterEngine?.restorationChannel?.waitForRestorationData)
-                    }
-                }
-                activity.supportFragmentManager.registerFragmentLifecycleCallbacks(callback, false)
-                observed.add(activity.supportFragmentManager to callback)
-            }
-        }
-        instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(activityCallback) }
-        try {
-            robot.launch(source.sourceUrl)
-            robot.select(RssSourceEditorField.JsLib, 0, 0)
-            driver.awaitIdentifier("rss-field-jsLib")
-            assertNull("Top field must actually be offscreen before testing restored scroll", driver.node("rss-field-sourceName"))
-            robot.selectTab(1)
-            driver.awaitIdentifier("rss-field-startHtml")
-            robot.selectTab(0)
-            driver.awaitIdentifier("rss-field-jsLib")
-            assertNull("Switching tabs must preserve the base tab scroll offset", driver.node("rss-field-sourceName"))
-            restorationEvidence("before-recreate")
-            robot.recreate()
-            restorationEvidence("after-recreate")
-            try {
-                driver.awaitIdentifier("rss-field-jsLib")
-            } finally {
-                restorationEvidence("after-visibility-check")
-            }
-            assertNull("Recreated Flutter view must restore the actual scroll offset", driver.node("rss-field-sourceName"))
-            assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
-        } finally {
-            instrumentation.runOnMainSync {
-                ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(activityCallback)
-                observed.forEach { (manager, callback) -> manager.unregisterFragmentLifecycleCallbacks(callback) }
-            }
-        }
+        robot.launch(source.sourceUrl)
+        robot.select(RssSourceEditorField.JsLib, 0, 0)
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Top field must actually be offscreen before testing restored scroll", driver.node("rss-field-sourceName"))
+        robot.selectTab(1)
+        driver.awaitIdentifier("rss-field-startHtml")
+        robot.selectTab(0)
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Switching tabs must preserve the base tab scroll offset", driver.node("rss-field-sourceName"))
+        robot.recreate()
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Recreated Flutter view must restore the actual scroll offset", driver.node("rss-field-sourceName"))
+        assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
     }
 
     @Test fun oversizedRuleOpensCompletePrivateFileAndCancelPreservesDraftAndRoom() {
@@ -349,79 +293,6 @@ class FlutterRssSourceEditorUiTest {
             robot.recreate()
             assertEquals(1, launches)
         } finally { instrumentation.removeMonitor(monitor) }
-    }
-
-    private fun optionsViewportEvidence(phase: String) {
-        robot.scenario!!.onActivity { activity ->
-            val state = activity.viewModel.state.value
-            val root = activity.window.decorView
-            val insets = ViewCompat.getRootWindowInsets(root)
-            Log.i("RssEditorOptions", "phase=$phase expanded=${state.expanded} tab=${state.tab} " +
-                "busy=${state.busy} loading=${state.loading} imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime()) == true} " +
-                "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0} rootHeight=${root.height}")
-        }
-    }
-
-    /** Bounded semantics metadata only: never read text or contentDescription. */
-    @Suppress("DEPRECATION")
-    private fun optionsNodeEvidence() {
-        val pending = ArrayDeque<AccessibilityNodeInfo>()
-        instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add)
-        var reported = 0
-        var visited = 0
-        while (pending.isNotEmpty() && reported < 100 && visited < 4096) {
-            val node = pending.removeFirst()
-            visited++
-            val id = node.viewIdResourceName
-            if (id?.startsWith("rss-") == true) {
-                val bounds = Rect().also(node::getBoundsInScreen)
-                Log.i("RssEditorOptions", "node=${++reported} id=$id visible=${node.isVisibleToUser} " +
-                    "clickable=${node.isClickable} rect=${bounds.toShortString()}")
-            }
-            for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
-            node.recycle()
-        }
-        pending.forEach { it.recycle() }
-        Log.i("RssEditorOptions", "nodeCount=$reported visitedCount=$visited")
-    }
-
-    /** Log only the four known primitive offsets, never serialized buckets or source data. */
-    private fun restorationEvidence(phase: String) {
-        robot.scenario!!.onActivity { activity ->
-            val fragment = activity.supportFragmentManager.fragments.filterIsInstance<FlutterFragment>().single()
-            val channel = requireNotNull(fragment.flutterEngine).restorationChannel
-            restorationDataEvidence(phase, channel.restorationData,
-                fragment.shouldRestoreAndSaveState(), channel.waitForRestorationData)
-        }
-    }
-
-    private fun restorationDataEvidence(phase: String, bytes: ByteArray?, restoreState: Boolean?, waitForData: Boolean?) {
-        val offsets = sortedMapOf<String, MutableList<Number>>()
-        fun collectNumbers(value: Any?, output: MutableList<Number>) {
-            when (value) {
-                is Number -> output.add(value)
-                is Map<*, *> -> value.values.forEach { collectNumbers(it, output) }
-                is List<*> -> value.forEach { collectNumbers(it, output) }
-            }
-        }
-        fun inspect(value: Any?) {
-            when (value) {
-                is Map<*, *> -> value.forEach { (key, child) ->
-                    if (key is String && key.matches(Regex("rss-tab-scroll-[0-3]")))
-                        collectNumbers(child, offsets.getOrPut(key) { mutableListOf() })
-                    inspect(child)
-                }
-                is List<*> -> value.forEach(::inspect)
-            }
-        }
-        if (bytes != null && bytes.isNotEmpty())
-            inspect(StandardMessageCodec.INSTANCE.decodeMessage(ByteBuffer.wrap(bytes)))
-        val unique = offsets.mapValues { (_, values) -> values.map(Number::toDouble).distinct() }
-        val numbers = unique.filterValues { it.size == 1 }
-            .entries.joinToString(",") { (key, values) -> "$key=${values.single()}" }
-        Log.i("RssEditorRestoration", "phase=$phase byteCount=${bytes?.size ?: 0} " +
-            "restoreState=$restoreState waitForData=$waitForData " +
-            "offsets=[$numbers] ambiguousOffsetCount=${unique.count { it.value.size != 1 }}")
     }
 
     private fun codeLaunch(action: () -> Unit): Intent {
