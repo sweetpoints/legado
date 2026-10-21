@@ -6,6 +6,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.view.KeyEvent
 import android.os.Bundle
+import android.graphics.Rect
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import java.util.ArrayDeque
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import android.util.Log
@@ -88,9 +93,22 @@ class FlutterRssSourceEditorUiTest {
 
     @Test fun normalFlutterEntryEditsAll33FieldsEightFlagsAndBothEnumsAndSavesRoom() {
         robot.launch(source.sourceUrl)
+        optionsViewportEvidence("before-toggle")
         driver.click("rss-options-toggle")
+        robot.commitViewportFrame()
+        optionsViewportEvidence("after-toggle-frame")
         listOf("enabled", "singleUrl", "cookieJar", "preload").forEach {
-            robot.reveal("rss-option-$it", "rss-options"); driver.click("rss-option-$it")
+            var revealed = false
+            try {
+                robot.reveal("rss-option-$it", "rss-options")
+                revealed = true
+            } finally {
+                if (!revealed) {
+                    optionsViewportEvidence("reveal-failed")
+                    optionsNodeEvidence()
+                }
+            }
+            driver.click("rss-option-$it")
         }
         robot.reveal("rss-type", "rss-option-enums"); driver.click("rss-type"); driver.click("rss-type-2")
         robot.reveal("rss-article-style", "rss-option-enums"); driver.click("rss-article-style"); driver.click("rss-article-style-4")
@@ -331,6 +349,40 @@ class FlutterRssSourceEditorUiTest {
             robot.recreate()
             assertEquals(1, launches)
         } finally { instrumentation.removeMonitor(monitor) }
+    }
+
+    private fun optionsViewportEvidence(phase: String) {
+        robot.scenario!!.onActivity { activity ->
+            val state = activity.viewModel.state.value
+            val root = activity.window.decorView
+            val insets = ViewCompat.getRootWindowInsets(root)
+            Log.i("RssEditorOptions", "phase=$phase expanded=${state.expanded} tab=${state.tab} " +
+                "busy=${state.busy} loading=${state.loading} imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime()) == true} " +
+                "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0} rootHeight=${root.height}")
+        }
+    }
+
+    /** Bounded semantics metadata only: never read text or contentDescription. */
+    @Suppress("DEPRECATION")
+    private fun optionsNodeEvidence() {
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add)
+        var reported = 0
+        var visited = 0
+        while (pending.isNotEmpty() && reported < 100 && visited < 4096) {
+            val node = pending.removeFirst()
+            visited++
+            val id = node.viewIdResourceName
+            if (id?.startsWith("rss-") == true) {
+                val bounds = Rect().also(node::getBoundsInScreen)
+                Log.i("RssEditorOptions", "node=${++reported} id=$id visible=${node.isVisibleToUser} " +
+                    "clickable=${node.isClickable} rect=${bounds.toShortString()}")
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+            node.recycle()
+        }
+        pending.forEach { it.recycle() }
+        Log.i("RssEditorOptions", "nodeCount=$reported visitedCount=$visited")
     }
 
     /** Log only the four known primitive offsets, never serialized buckets or source data. */
