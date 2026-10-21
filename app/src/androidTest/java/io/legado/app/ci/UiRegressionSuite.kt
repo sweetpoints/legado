@@ -12,6 +12,7 @@ import org.junit.runners.Suite
     io.legado.app.ui.book.source.debug.BookSourceDebugHostTest::class,
     io.legado.app.ui.rss.source.debug.RssSourceDebugHostTest::class,
     io.legado.app.ui.book.source.edit.FlutterSourceEditorUiTest::class,
+    io.legado.app.ui.rss.source.edit.FlutterRssSourceEditorUiTest::class,
     io.legado.app.ui.book.source.edit.BookSourceEditorRepositoryTest::class,
     io.legado.app.ui.book.source.edit.BookSourceNativeOwnershipTest::class,
     io.legado.app.ui.book.source.edit.BookSourceEditRouteTest::class,
