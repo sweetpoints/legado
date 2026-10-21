@@ -100,7 +100,8 @@ class FlutterRssSourceEditorUiTest {
             if (field == RssSourceEditorField.SourceUrl) source.sourceUrl else "fixture-${field.key}"
         }
         assertEquals(33, values.size)
-        values.forEach { (field, value) -> robot.input(field, value) }
+        values.forEach { (field, value) -> robot.input(field, value, bulk = true) }
+        robot.hideIme()
         driver.click("rss-save"); robot.finished()
         val saved = requireNotNull(appDb.rssSourceDao.getByKey(source.sourceUrl))
         val actual = RssSourceEditorDraft.from(saved)

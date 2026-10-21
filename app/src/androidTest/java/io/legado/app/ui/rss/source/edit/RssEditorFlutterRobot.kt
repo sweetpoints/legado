@@ -131,10 +131,17 @@ internal class RssEditorFlutterRobot : AutoCloseable {
         scenario!!.onActivity { root = it.window.decorView }
         committedFrame(root, deadline)
     }
-    fun input(field: RssSourceEditorField, text: String) {
+    fun input(field: RssSourceEditorField, text: String, bulk: Boolean = false) {
         val deadline = SystemClock.uptimeMillis() + 30_000
+        if (bulk) {
+            var changingTab = false
+            scenario!!.onActivity { changingTab = it.viewModel.state.value.tab != field.tab }
+            if (changingTab) hideIme(deadline)
+        }
         field(field, deadline, requireEditable = true)
-        clickWithin("rss-field-${field.key}", deadline)
+        // Bulk navigation already requests the real Flutter FocusNode and awaits its
+        // native/a11y receipt. Do not tap it again or churn a shown IME between fields.
+        if (!bulk) clickWithin("rss-field-${field.key}", deadline)
         ime!!.settled(true, deadline)
         // The viewport barrier can replace the semantics node. Acquire a fresh focused
         // node, dispatch exactly one input, then require both platform and native receipt.
@@ -162,7 +169,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
             } ?: false
             accepted && rendered
         }
-        hideIme(deadline)
+        if (!bulk) hideIme(deadline)
     }
     fun hideIme(deadline: Long = SystemClock.uptimeMillis() + 30_000) { closeSoftKeyboard(); ime!!.settled(false, deadline) }
     fun select(field: RssSourceEditorField, start: Int, end: Int) {
