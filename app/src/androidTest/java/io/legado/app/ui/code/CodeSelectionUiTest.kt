@@ -28,6 +28,7 @@ import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -58,10 +59,13 @@ import androidx.test.espresso.action.Press
 import androidx.test.espresso.action.Swipe
 import androidx.test.espresso.action.Tap
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.pressImeActionButton
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.RootMatchers.withDecorView
 import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
+import androidx.test.espresso.matcher.ViewMatchers.hasFocus
 import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
@@ -101,6 +105,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.hamcrest.Matchers.allOf
+import org.hamcrest.Matchers.sameInstance
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
@@ -108,6 +113,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -880,7 +886,7 @@ class CodeSelectionUiTest {
                         val imeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
                         fun remainingViewportMs() =
                             (viewportDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0)
-                        fun importViewportReady(): Boolean {
+                        fun importViewportReady(imeVisible: Boolean = false): Boolean {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 val insets = ViewCompat.getRootWindowInsets(importRoot)
@@ -888,7 +894,7 @@ class CodeSelectionUiTest {
                                 ready = parent!!.dialog?.window?.decorView === importRoot &&
                                     importRoot.isAttachedToWindow && importRoot.isLaidOut &&
                                     importRoot.hasWindowFocus() && insets != null &&
-                                    !insets.isVisible(WindowInsetsCompat.Type.ime()) &&
+                                    insets.isVisible(WindowInsetsCompat.Type.ime()) == imeVisible &&
                                     imeAnimations.isEmpty() &&
                                     importRoot.getGlobalVisibleRect(visible) && !visible.isEmpty
                             }
@@ -922,11 +928,43 @@ class CodeSelectionUiTest {
                                         imeAnimations.remove(animation)
                                     }
                                 })
-                            importRoot.findFocus()?.clearFocus()
-                            ViewCompat.getWindowInsetsController(importRoot)
-                                ?.hide(WindowInsetsCompat.Type.ime())
                         }
                         try {
+                            val search = compose.onNodeWithTag("$importPrefix-search")
+                            fun searchFocused() = search.fetchSemanticsNode().config
+                                .getOrNull(SemanticsProperties.Focused) == true
+                            while (remainingViewportMs() > 0 &&
+                                !(importViewportReady(imeVisible = true) && searchFocused())) {
+                                compose.mainClock.advanceTimeByFrame()
+                                SystemClock.sleep(25)
+                            }
+                            assertTrue("$importPrefix search IME did not become ready",
+                                remainingViewportMs() > 0 &&
+                                    importViewportReady(imeVisible = true) && searchFocused())
+                            val semanticAction = search.fetchSemanticsNode().config
+                                .getOrNull(SemanticsProperties.ImeAction)
+                            assertEquals(ImeAction.Default, semanticAction)
+                            var inputView: View? = null
+                            instrumentation.runOnMainSync {
+                                inputView = checkNotNull(importRoot.findFocus())
+                                assertSame(importRoot, inputView!!.rootView)
+                                assertEquals("androidx.compose.ui.platform.AndroidComposeView",
+                                    inputView!!.javaClass.name)
+                                assertTrue(inputView!!.onCheckIsTextEditor())
+                            }
+                            android.util.Log.i("CodeImportViewport",
+                                "$importPrefix focused=${searchFocused()} semantics=$semanticAction " +
+                                    "inputClass=${inputView!!.javaClass.name} " +
+                                    "owner=${System.identityHashCode(importRoot)} " +
+                                    "searchBounds=${search.fetchSemanticsNode().boundsInRoot} " +
+                                    "remainingMs=${remainingViewportMs()}")
+                            // Compose 1.12.1 keeps Default in semantics (performImeAction rejects
+                            // it), but singleLine maps it to native EditorInfo.IME_ACTION_DONE.
+                            // Espresso's EditorAction reads that EditorInfo and delivers its one
+                            // action through the current input connection; do not clear/refocus.
+                            onView(allOf(sameInstance(checkNotNull(inputView)), hasFocus()))
+                                .inRoot(withDecorView(sameInstance(importRoot)))
+                                .perform(pressImeActionButton())
                             while (remainingViewportMs() > 0 && !importViewportReady()) {
                                 compose.mainClock.advanceTimeByFrame()
                                 SystemClock.sleep(25)
