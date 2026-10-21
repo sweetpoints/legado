@@ -574,4 +574,44 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  for (final locale in ['en', 'zh']) {
+    testWidgets(
+      'fixed RSS enum and tab labels are localized for $locale even when native arrays are Chinese',
+      (tester) async {
+        native['typeLabels'] = ['网页', '图片', '视频'];
+        native['articleStyleLabels'] = ['列表', '单列', '双列', '瀑布', '三列'];
+        final tabs = native['tabs'] as List;
+        for (var i = 0; i < 4; i++) {
+          (tabs[i] as Map)['label'] = ['基本', '启动', '列表', 'WEB_VIEW'][i];
+        }
+        await app(tester, locale: locale);
+        expect(find.text(locale == 'en' ? 'Start' : '启动'), findsOneWidget);
+        expect(
+          find.text(locale == 'en' ? 'List rules' : '列表规则'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(locale == 'en' ? 'Source type: Web page' : '源类型: 网页'),
+          findsOneWidget,
+        );
+        await click(tester, 'rss-type');
+        expect(find.text(locale == 'en' ? 'Image' : '图片'), findsOneWidget);
+        expect(find.text(locale == 'en' ? 'Video' : '视频'), findsOneWidget);
+        await click(tester, 'rss-type-1');
+        await click(tester, 'rss-article-style');
+        expect(find.text(locale == 'en' ? 'Masonry' : '瀑布'), findsOneWidget);
+        expect(
+          find.text(locale == 'en' ? 'Three columns' : '三列'),
+          findsOneWidget,
+        );
+        if (locale == 'en') {
+          expect(find.text('单列'), findsNothing);
+          expect(find.text('双列'), findsNothing);
+        }
+        await click(tester, 'rss-article-style-4');
+        expect((native['options'] as Map)['type'], 1);
+        expect((native['options'] as Map)['articleStyle'], 4);
+      },
+    );
+  }
 }

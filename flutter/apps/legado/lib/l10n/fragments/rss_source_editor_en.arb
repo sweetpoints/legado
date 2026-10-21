@@ -15,5 +15,15 @@
   "rssEditorPreload": "Enable preload",
   "rssEditorArticleStyle": "Article layout",
   "rssEditorExternal": "Open the full screen editor to edit this field safely.",
-  "rssEditorUrlOverride": "URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)"
+  "rssEditorUrlOverride": "URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)",
+  "rssEditorStart": "Start",
+  "rssEditorList": "List rules",
+  "rssEditorWebView": "WebView",
+  "rssEditorWebPage": "Web page",
+  "rssEditorLayoutList": "List",
+  "rssEditorLayoutSingle": "Single column",
+  "rssEditorLayoutDouble": "Two columns",
+  "rssEditorLayoutWaterfall": "Masonry",
+  "rssEditorLayoutTriple": "Three columns",
+  "rssEditorType": "Source type"
 }
