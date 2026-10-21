@@ -931,6 +931,9 @@ class CodeSelectionUiTest {
                         }
                         try {
                             val search = compose.onNodeWithTag("$importPrefix-search")
+                            // Establish the actual search/IME session once instead of assuming
+                            // every device auto-focuses the import field when the dialog opens.
+                            search.assertIsDisplayed().assertIsEnabled().performClick()
                             fun searchFocused() = search.fetchSemanticsNode().config
                                 .getOrNull(SemanticsProperties.Focused) == true
                             while (remainingViewportMs() > 0 &&
