@@ -27,6 +27,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     var scenario: ActivityScenario<RssSourceEditActivity>? = null
     private var ime: ImeBarrier? = null
     private var owner: RssSourceEditActivity? = null
+    private var inputField: RssSourceEditorField? = null
 
     fun launch(key: String? = null, forResult: Boolean = false) {
         driver.enableAccessibility()
@@ -51,38 +52,121 @@ internal class RssEditorFlutterRobot : AutoCloseable {
         ime?.close()
         ime = ImeBarrier()
     }
-    fun selectTab(tab: Int) {
-        reveal("rss-tab-$tab", "rss-tabs", backwards = tab == 0)
-        driver.click("rss-tab-$tab")
-        driver.await("RSS native tab acknowledgement") {
-            var selected = false
+    private fun remaining(deadline: Long) = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)
+    private fun awaitWithin(deadline: Long, message: String, condition: () -> Boolean) {
+        while (remaining(deadline) > 0) {
+            if (condition()) return
+            SystemClock.sleep(minOf(25L, remaining(deadline)))
+        }
+        fail("$message; ${ime?.diagnostic()}")
+    }
+    private fun identifierWithin(id: String, deadline: Long) = awaitWithin(deadline, "Missing RSS control $id") {
+        driver.node(id)?.let { it.recycle(); true } ?: false
+    }
+    @Suppress("DEPRECATION")
+    private fun clickWithin(id: String, deadline: Long) {
+        var clickable: AccessibilityNodeInfo? = null
+        awaitWithin(deadline, "Missing clickable RSS control $id") {
+            val initial = driver.node(id) ?: return@awaitWithin false
+            val pending = ArrayDeque<AccessibilityNodeInfo>()
+            pending.add(AccessibilityNodeInfo.obtain(initial))
+            while (pending.isNotEmpty()) {
+                val node = pending.removeFirst()
+                if (node.isVisibleToUser && node.isEnabled && node.isClickable) {
+                    clickable = node; pending.forEach { it.recycle() }; initial.recycle()
+                    return@awaitWithin true
+                }
+                for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                node.recycle()
+            }
+            var ancestor: AccessibilityNodeInfo? = initial
+            while (ancestor != null) {
+                if (ancestor.isVisibleToUser && ancestor.isEnabled && ancestor.isClickable) {
+                    clickable = ancestor
+                    return@awaitWithin true
+                }
+                val parent = ancestor.parent
+                ancestor.recycle(); ancestor = parent
+            }
+            false
+        }
+        requireNotNull(clickable).let { node ->
+            try { assertTrue("Single RSS click rejected: $id", node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
+            finally { node.recycle() }
+        }
+    }
+    fun selectTab(tab: Int, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
+        var selected = false
+        scenario!!.onActivity { selected = it.viewModel.state.value.tab == tab }
+        if (!selected) {
+            reveal("rss-tab-$tab", "rss-tabs", backwards = tab == 0, deadline = deadline)
+            clickWithin("rss-tab-$tab", deadline)
+        }
+        // Re-selecting the same tab clears native focus. Do not enqueue that redundant
+        // command and then mistake its old tab value for acknowledgement of completion.
+        awaitWithin(deadline, "RSS native tab acknowledgement $tab") {
             scenario!!.onActivity { selected = it.viewModel.state.value.tab == tab }
             selected
         }
-        driver.awaitIdentifier("rss-fields-$tab")
+        identifierWithin("rss-fields-$tab", deadline)
     }
-    fun field(field: RssSourceEditorField) {
-        selectTab(field.tab)
-        reveal("rss-nav-${field.key}", "rss-navigation", backwards = field == RssSourceEditorField.entries.first { it.tab == field.tab })
-        driver.click("rss-nav-${field.key}")
-        driver.awaitIdentifier("rss-field-${field.key}")
+    fun field(field: RssSourceEditorField, deadline: Long = SystemClock.uptimeMillis() + 30_000,
+        requireEditable: Boolean = false) {
+        inputField = field
+        selectTab(field.tab, deadline)
+        reveal("rss-nav-${field.key}", "rss-navigation",
+            backwards = field == RssSourceEditorField.entries.first { it.tab == field.tab }, deadline = deadline)
+        clickWithin("rss-nav-${field.key}", deadline)
+        awaitWithin(deadline, "RSS native focus and rendered field acknowledgement ${field.key}") {
+            var focused = false
+            scenario!!.onActivity { focused = it.viewModel.state.value.focus == field }
+            val node = driver.node("rss-field-${field.key}")
+            val rendered = node?.let {
+                try { !requireEditable || (it.isFocused && it.isEditable && it.isEnabled) }
+                finally { it.recycle() }
+            } ?: false
+            focused && rendered
+        }
+        lateinit var root: View
+        scenario!!.onActivity { root = it.window.decorView }
+        committedFrame(root, deadline)
     }
     fun input(field: RssSourceEditorField, text: String) {
-        field(field)
         val deadline = SystemClock.uptimeMillis() + 30_000
-        driver.setText("rss-field-${field.key}", text) { ime!!.settled(true) }
-        var accepted = false
-        while (SystemClock.uptimeMillis() < deadline) {
-            scenario!!.onActivity { accepted = it.viewModel.state.value.draft[field].text == text }
-            if (accepted) break
-            SystemClock.sleep(50)
+        field(field, deadline, requireEditable = true)
+        clickWithin("rss-field-${field.key}", deadline)
+        ime!!.settled(true, deadline)
+        // The viewport barrier can replace the semantics node. Acquire a fresh focused
+        // node, dispatch exactly one input, then require both platform and native receipt.
+        var editable: AccessibilityNodeInfo? = null
+        awaitWithin(deadline, "RSS focused editable field ${field.key}") {
+            val node = driver.node("rss-field-${field.key}") ?: return@awaitWithin false
+            if (node.isFocused && node.isEditable && node.isEnabled && node.actionList.any {
+                    it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) {
+                editable = node; true
+            } else { node.recycle(); false }
         }
-        assertTrue("Private RSS draft did not acknowledge ${field.key}", accepted)
-        hideIme()
+        requireNotNull(editable).let { node ->
+            try { assertTrue("Single RSS SET_TEXT rejected: ${field.key}",
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                })) }
+            finally { node.recycle() }
+        }
+        awaitWithin(deadline, "Private RSS draft and actual field did not acknowledge ${field.key}") {
+            var accepted = false
+            scenario!!.onActivity { accepted = it.viewModel.state.value.draft[field].text == text }
+            val node = driver.node("rss-field-${field.key}")
+            val rendered = node?.let {
+                try { it.text?.toString() == text } finally { it.recycle() }
+            } ?: false
+            accepted && rendered
+        }
+        hideIme(deadline)
     }
-    fun hideIme() { closeSoftKeyboard(); ime!!.settled(false) }
+    fun hideIme(deadline: Long = SystemClock.uptimeMillis() + 30_000) { closeSoftKeyboard(); ime!!.settled(false, deadline) }
     fun select(field: RssSourceEditorField, start: Int, end: Int) {
-        field(field)
+        field(field, requireEditable = true)
         driver.click("rss-field-${field.key}")
         ime!!.settled(true)
         val node = requireNotNull(driver.node("rss-field-${field.key}"))
@@ -116,15 +200,17 @@ internal class RssEditorFlutterRobot : AutoCloseable {
         scenario!!.onActivity { root = it.window.decorView }
         committedFrame(root)
     }
-    private fun committedFrame(root: View) {
+    private fun committedFrame(root: View, deadline: Long = SystemClock.uptimeMillis() + 10_000) {
         val committed = CountDownLatch(1)
         instrumentation.runOnMainSync {
             assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
             root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
             root.postInvalidateOnAnimation()
         }
-        assertTrue("RSS viewport frame not committed", committed.await(5, TimeUnit.SECONDS))
-        instrumentation.uiAutomation.waitForIdle(100, 5_000)
+        assertTrue("RSS viewport frame not committed", committed.await(minOf(5_000L, remaining(deadline)), TimeUnit.MILLISECONDS))
+        val idleBudget = minOf(5_000L, remaining(deadline))
+        assertTrue("RSS viewport idle exceeded phase budget", idleBudget > 0)
+        instrumentation.uiAutomation.waitForIdle(100, idleBudget)
     }
     fun recreate() {
         ime?.close(); ime = null
@@ -132,8 +218,8 @@ internal class RssEditorFlutterRobot : AutoCloseable {
         loaded()
     }
     @Suppress("DEPRECATION")
-    fun reveal(target: String, container: String, backwards: Boolean = false) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
+    fun reveal(target: String, container: String, backwards: Boolean = false,
+        deadline: Long = SystemClock.uptimeMillis() + 30_000) {
         var scrolls = 0
         while (SystemClock.uptimeMillis() < deadline) {
             driver.node(target)?.let { it.recycle(); return }
@@ -150,8 +236,8 @@ internal class RssEditorFlutterRobot : AutoCloseable {
             }
             if (scrolled) {
                 assertTrue("RSS scroll bound for $target", ++scrolls <= 60)
-                SystemClock.sleep(100)
-            } else SystemClock.sleep(50)
+                SystemClock.sleep(minOf(100L, remaining(deadline)))
+            } else SystemClock.sleep(minOf(50L, remaining(deadline)))
         }
         fail("Missing rendered RSS control $target in $container")
     }
@@ -190,22 +276,44 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     private inner class ImeBarrier : AutoCloseable {
         private val running = mutableSetOf<WindowInsetsAnimationCompat>()
         private lateinit var root: View
+        private var prepared = 0
+        private var ended = 0
         init {
             scenario!!.onActivity {
                 root = it.window.decorView
                 ViewCompat.setWindowInsetsAnimationCallback(root,
                     object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
                         override fun onPrepare(animation: WindowInsetsAnimationCompat) {
-                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) running.add(animation)
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                                prepared++; running.add(animation)
+                            }
                         }
                         override fun onProgress(insets: WindowInsetsCompat,
                             runningAnimations: MutableList<WindowInsetsAnimationCompat>) = insets
-                        override fun onEnd(animation: WindowInsetsAnimationCompat) { running.remove(animation) }
+                        override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) ended++
+                            running.remove(animation)
+                        }
                     })
             }
         }
-        fun settled(visible: Boolean) {
-            driver.await("RSS IME visible=$visible and actual viewport animation finished") {
+        fun diagnostic(): String {
+            var state = ""
+            instrumentation.runOnMainSync {
+                val insets = ViewCompat.getRootWindowInsets(root)
+                state = "field=${inputField?.key},attached=${root.isAttachedToWindow},laidOut=${root.isLaidOut}," +
+                    "imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}," +
+                    "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}," +
+                    "running=${running.size},prepared=$prepared,ended=$ended"
+            }
+            val node = inputField?.let { driver.node("rss-field-${it.key}") }
+            return state + (node?.let {
+                try { ",focused=${it.isFocused},editable=${it.isEditable},enabled=${it.isEnabled}" }
+                finally { it.recycle() }
+            } ?: ",fieldNodeMissing=true")
+        }
+        fun settled(visible: Boolean, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
+            awaitWithin(deadline, "RSS IME visible=$visible and actual viewport animation finished") {
                 var settled = false
                 instrumentation.runOnMainSync {
                     settled = root.isAttachedToWindow && root.isLaidOut &&
@@ -214,7 +322,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
                 }
                 settled
             }
-            committedFrame(root)
+            committedFrame(root, deadline)
         }
         override fun close() {
             instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
