@@ -404,6 +404,60 @@ class RssSourceEditorViewModelTest {
             assertFalse(repo.files.containsKey("output"))
         }
 
+    @Test
+    fun delayedEditorResultCannotBorrowNewOwnerAndRecreationKeepsTheSameOwner() = runTest(dispatcher) {
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        val vm = model(repo, saved)
+        runCurrent()
+        vm.focus(RssSourceEditorField.StartJs)
+        vm.openEditor()
+        runCurrent()
+        val first = requireNotNull(vm.pendingEditorRequest)
+        vm.consume(first)
+        vm.editorReturned(first.id, false, null, null, 0)
+        runCurrent()
+        vm.openEditor()
+        runCurrent()
+        val second = requireNotNull(vm.pendingEditorRequest)
+        assertNotEquals(first.id, second.id)
+        vm.consume(second)
+        vm.editorReturned(first.id, true, "stale", null, 0)
+        runCurrent()
+        assertTrue(vm.state.value.editorPending)
+        assertEquals(second.id, vm.editorOwner)
+        val restored = model(repo, snapshot(saved))
+        runCurrent()
+        assertEquals(second.id, restored.editorOwner)
+        restored.editorReturned(second.id, true, "fresh", null, 3)
+        runCurrent()
+        assertEquals("fresh", restored.state.value.draft[RssSourceEditorField.StartJs].text)
+        assertFalse(restored.state.value.editorPending)
+    }
+
+    @Test
+    fun fileResultUsesItsOwnFieldAndIgnoresRetiredOwnerAfterRecreation() = runTest(dispatcher) {
+        val repo = Fake()
+        val saved = SavedStateHandle()
+        val vm = model(repo, saved)
+        runCurrent()
+        vm.focus(RssSourceEditorField.StartJs)
+        val effect = RssSourceEditorEffect("owner-1", RssSourceEditorEffectKind.File)
+        vm.ownNative(effect)
+        assertFalse(vm.state.value.canEdit)
+        vm.focus(RssSourceEditorField.Header)
+        vm.nativeReturned("stale-owner", "wrong")
+        assertTrue(vm.state.value.nativePending)
+        val restored = model(repo, snapshot(saved))
+        runCurrent()
+        restored.nativeReturned(effect.id, "file.js")
+        assertEquals("file.js", restored.state.value.draft[RssSourceEditorField.StartJs].text)
+        assertEquals("", restored.state.value.draft[RssSourceEditorField.Header].text)
+        assertTrue(restored.state.value.canEdit)
+        restored.nativeReturned(effect.id, "duplicate")
+        assertEquals("file.js", restored.state.value.draft[RssSourceEditorField.StartJs].text)
+    }
+
     private class Fake : RssSourceEditorRepository {
         var missing = false
         var failRead = false
