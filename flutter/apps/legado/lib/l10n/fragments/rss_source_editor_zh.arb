@@ -1,0 +1,19 @@
+{
+  "rssEditorTitle": "订阅源编辑",
+  "rssEditorEditRejected": "编辑未被接受，请修正字段后再保存。",
+  "rssEditorFailed": "无法更新订阅源编辑器。",
+  "rssEditorMissing": "订阅源已不存在。",
+  "rssEditorRequired": "源名称和 URL 不能为空。",
+  "rssEditorFormat": "源格式错误。",
+  "rssEditorFocus": "请先将光标移至文本框。",
+  "rssEditorNoLogin": "该源未配置登录。",
+  "rssEditorEnableJs": "启用 JavaScript",
+  "rssEditorBaseUrl": "使用基础 URL 加载",
+  "rssEditorWebLog": "显示 WebView 日志",
+  "rssEditorCacheFirst": "优先使用缓存",
+  "rssEditorSingleUrl": "单网址",
+  "rssEditorPreload": "启用预加载",
+  "rssEditorArticleStyle": "文章布局",
+  "rssEditorExternal": "请打开全屏编辑器以安全编辑此字段。",
+  "rssEditorUrlOverride": "URL 跳转拦截（JavaScript；返回 true 拦截，可通过 url 变量打开链接、搜索或添加书架）"
+}
