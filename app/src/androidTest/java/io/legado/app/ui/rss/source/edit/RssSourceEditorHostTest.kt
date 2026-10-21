@@ -94,8 +94,16 @@ class RssSourceEditorHostTest {
                 ready
             }
             assertEquals("Name", row(key)!!.sourceName); assertNull(row(renamed))
+            // The paste payload already contains Pasted with order 999. Replace that
+            // carrier only after the private draft acknowledged paste, so the copy
+            // assertion cannot accidentally inspect the earlier input payload.
+            val copySentinel = "rss-copy-sentinel-${UUID.randomUUID()}"
+            instrumentation.runOnMainSync { clipboard.setPrimaryClip(ClipData.newPlainText("copy pending", copySentinel)) }
             robot.menu("Clipboard")
-            driver.await("Actual copied RSS JSON reaches Android clipboard") { clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.contains("Pasted") == true }
+            driver.await("Actual copied RSS JSON replaces the independent clipboard sentinel") {
+                val copiedText = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+                copiedText != copySentinel && copiedText?.contains("Pasted") == true
+            }
             val copied = GSON.fromJsonObject<RssSource>(clipboard.primaryClip!!.getItemAt(0).text.toString()).getOrThrow()
             assertEquals(renamed, copied.sourceUrl); assertEquals(17, copied.customOrder)
             assertEquals("allow", copied.contentWhitelist); assertEquals("lib", copied.jsLib)

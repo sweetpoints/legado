@@ -24,7 +24,7 @@ class RssSourceEditorRouteTest {
                 it.stop()
                 it.viewModelScope.cancel()
             }
-            repos.forEach { it.exportGate?.complete(Unit) }
+            repos.forEach { repo -> repo.exportGates.forEach { it.complete(Unit) } }
         }
     }
 
@@ -117,7 +117,9 @@ class RssSourceEditorRouteTest {
     @Test
     fun nonCooperativePayloadCompletingAfterPauseResumeCannotDeliverFromCanceledCollector() {
         val repo = Fake()
-        repo.exportGate = CompletableDeferred()
+        val firstExport = CompletableDeferred<Unit>()
+        val secondExport = CompletableDeferred<Unit>()
+        repo.exportGates += listOf(firstExport, secondExport)
         val model = newModel(repo)
         val owner = Owner()
         var deliveries = 0
@@ -143,8 +145,17 @@ class RssSourceEditorRouteTest {
         compose.waitUntil { repo.exports == 1 }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
+        // Lifecycle 2.10 repeatOnLifecycle serializes blocks with a Mutex. The
+        // canceled collector still owns that lock while export is NonCancellable.
+        // Release its invocation first; the resumed collector must wait on its own gate.
+        compose.runOnIdle { firstExport.complete(Unit) }
         compose.waitUntil { repo.exports == 2 }
-        compose.runOnIdle { repo.exportGate!!.complete(Unit) }
+        compose.runOnIdle {
+            assertEquals("Canceled collector must not deliver its completed payload", 0, deliveries)
+            assertFalse(secondExport.isCompleted)
+            assertEquals(1, model.state.value.effects.count { it.kind == RssSourceEditorEffectKind.Clipboard })
+            secondExport.complete(Unit)
+        }
         compose.waitUntil { deliveries == 1 }
         compose.waitForIdle()
         assertTrue(model.state.value.effects.isEmpty())
@@ -160,7 +171,7 @@ class RssSourceEditorRouteTest {
     private class Fake : RssSourceEditorRepository {
         var saves = 0
         var exports = 0
-        var exportGate: CompletableDeferred<Unit>? = null
+        val exportGates = mutableListOf<CompletableDeferred<Unit>>()
         val documents = mutableMapOf<String, RssSourceEditorDocument>()
 
         override suspend fun load(key: String) =
@@ -197,8 +208,8 @@ class RssSourceEditorRouteTest {
             autoComplete: Boolean,
         ): String =
             withContext(NonCancellable) {
-                exports++
-                exportGate?.await()
+                val invocation = exports++
+                exportGates.getOrNull(invocation)?.await()
                 "payload"
             }
 
