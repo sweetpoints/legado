@@ -1425,27 +1425,45 @@ class CodeSelectionUiTest {
         val code = "\uFEFF// 中文 🌍\r\n" + "a" + "\u0301".repeat(12) + "\r\noriginal"
         val edited = code.replace("\r\n", "\n") + " 已修改"
         val cursor = edited.length - 2
-        // Temporary diagnostics: scalar state only, with no getter/focus/text mutation and
-        // no extra wait. Requests remain ordered on this WebView's normal JS queue.
-        fun scalarDiagnostic(phase: String, activity: CodeEditActivity) {
-            val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
-            val state = model.state.value
-            android.util.Log.i("SafeEditorDiagnostic",
-                "phase=$phase vmStart=${state.session?.selection?.start} " +
-                    "vmEnd=${state.session?.selection?.end} ready=${state.editorReady} " +
-                    "busy=${state.busy} readOnly=${state.session?.writable == false}")
-            nativeWebView(activity).evaluateJavascript(
-                "JSON.stringify({initialCursor:initialCursor,sel:editor.selectionStart," +
-                    "end:editor.selectionEnd,active:document.activeElement===editor," +
-                    "readOnly:editor.readOnly,ready:document.readyState})",
-            ) { value ->
-                val current = model.state.value
-                android.util.Log.i("SafeEditorDiagnostic",
-                    "phase=$phase js=$value vmStart=${current.session?.selection?.start} " +
-                        "vmEnd=${current.session?.selection?.end} ready=${current.editorReady} " +
-                        "busy=${current.busy}")
+        data class SafePage(val activity: CodeEditActivity, val web: WebView, val owner: String)
+        fun current(page: SafePage): Boolean =
+            !page.activity.isDestroyed && page.web.isAttachedToWindow && page.web.isShown &&
+                nativeWebViews(page.activity.window.decorView).any { it === page.web } &&
+                ViewModelProvider(page.activity)[CodeEditorComposeViewModel::class.java]
+                    .state.value.engineOwner == page.owner
+        fun remaining(deadline: Long) = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)
+        fun until(deadline: Long, message: String, condition: () -> Boolean) {
+            while (remaining(deadline) > 0) {
+                if (condition()) return
+                SystemClock.sleep(minOf(25L, remaining(deadline)))
             }
+            throw AssertionError(message)
         }
+        fun visual(page: SafePage, deadline: Long) {
+            val returned = CountDownLatch(1)
+            val accepted = AtomicReference(false)
+            scenario!!.onActivity { activity ->
+                assertTrue("Safe visual request must target its attached current owner",
+                    activity === page.activity && current(page))
+                page.web.postVisualStateCallback(1L, object : WebView.VisualStateCallback() {
+                    override fun onComplete(requestId: Long) {
+                        accepted.set(requestId == 1L && current(page))
+                        returned.countDown()
+                    }
+                })
+            }
+            assertTrue("Safe visual state callback exceeded the shared phase budget",
+                returned.await(remaining(deadline), TimeUnit.MILLISECONDS))
+            assertTrue("Retired Safe page cannot satisfy visual readiness", accepted.get())
+        }
+        fun nativeScalars(model: CodeEditorComposeViewModel): String {
+            val value = model.state.value
+            return "start=${value.session?.selection?.start},end=${value.session?.selection?.end}," +
+                "ready=${value.editorReady},busy=${value.busy},readOnly=${value.session?.writable == false}"
+        }
+        fun safeScalars(value: com.google.gson.JsonObject?): String =
+            listOf("initialCursor", "sel", "end", "active", "readOnly", "ready")
+                .joinToString(",") { key -> "$key=${value?.get(key)}" }
         scenario =
             ActivityScenario.launchActivityForResult(
                 Intent(context, CodeEditActivity::class.java).apply {
@@ -1458,77 +1476,98 @@ class CodeSelectionUiTest {
             scenario!!.onActivity {
                 ready =
                     ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
-                        .state
-                        .value
-                        .session
-                        ?.text == code &&
-                        ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
-                            .state.value.editorReady
+                        .state.value.let { state -> state.session?.text == code && state.editorReady } &&
+                        nativeWebViews(it.window.decorView).any { web -> web.isAttachedToWindow && web.isShown }
             }
             ready
         }
+        val inputDeadline = SystemClock.uptimeMillis() + 15_000
+        val inputReturned = CountDownLatch(1)
+        val inputAccepted = AtomicReference(false)
+        lateinit var oldPage: SafePage
         scenario!!.onActivity { activity ->
-            nativeWebView(activity)
-                .evaluateJavascript(
-                    "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
-                        "editor.dispatchEvent(new Event('input'));",
-                    null,
-                )
+            val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+            oldPage = SafePage(activity, nativeWebView(activity), checkNotNull(model.state.value.engineOwner))
+            oldPage.web.evaluateJavascript(
+                "editor.value = ${GSON.toJson(edited)}; editor.setSelectionRange($cursor, $cursor);" +
+                    "editor.dispatchEvent(new Event('input'));",
+            ) {
+                inputAccepted.set(current(oldPage))
+                inputReturned.countDown()
+            }
         }
-        await {
+        assertTrue("Safe input callback exceeded the shared input phase budget",
+            inputReturned.await(remaining(inputDeadline), TimeUnit.MILLISECONDS))
+        assertTrue("Safe input callback belongs to a retired page", inputAccepted.get())
+        until(inputDeadline, "Safe native draft did not accept the single input") {
             var ready = false
             scenario!!.onActivity {
-                ready =
-                    ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
-                        .state
-                        .value
-                        .session
-                        ?.let { draft ->
-                            draft.text == edited && draft.selection.start == cursor
-                        } == true
-                if (ready) scalarDiagnostic("before-recreate", it)
+                ready = current(oldPage) && ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
+                    .state.value.session?.let { draft ->
+                        draft.text == edited && draft.selection.start == cursor
+                    } == true
             }
             ready
         }
+        // onPageFinished does not promise that DOM updates are drawable. Wait once for
+        // the exact page's submitted visual state, without checking/reapplying its cursor.
+        visual(oldPage, inputDeadline)
         scenario!!.recreate()
-        await {
+        val restoreDeadline = SystemClock.uptimeMillis() + 15_000
+        lateinit var newPage: SafePage
+        until(restoreDeadline, "Restored Safe page did not become ready and attached") {
             var ready = false
-            scenario!!.onActivity {
-                ready =
-                    ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
-                        .state
-                        .value
-                        .session
-                        ?.text == edited &&
-                        ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
-                            .state.value.editorReady &&
-                        nativeWebViews(it.window.decorView).any { web -> web.isShown }
-                if (ready) scalarDiagnostic("ready-before-getter", it)
+            scenario!!.onActivity { activity ->
+                val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+                val web = nativeWebViews(activity.window.decorView)
+                    .firstOrNull { it.isAttachedToWindow && it.isShown }
+                ready = model.state.value.let { it.session?.text == edited && it.editorReady } && web != null
+                if (ready) newPage = SafePage(activity, checkNotNull(web), checkNotNull(model.state.value.engineOwner))
             }
             ready
         }
+        assertTrue("Recreation must provide a new Safe WebView", newPage.web !== oldPage.web)
+        visual(newPage, restoreDeadline)
         val restored = AtomicReference<String>()
+        val diagnostics = AtomicReference("No Safe scalar snapshot returned")
         val snapshotReturned = CountDownLatch(1)
-        // This getter freezes/blurs the textarea, just like production snapshot().
-        // Read it once after onPageFinished readiness, then await its actual
-        // callback; polling it repeatedly can change the document under test.
+        val snapshotAccepted = AtomicReference(false)
+        // The production getter freezes/blurs the textarea. Invoke it exactly once, with
+        // scalar before/after evidence in the same JS turn; a zero cursor fails this read.
         scenario!!.onActivity { activity ->
-            nativeWebView(activity).evaluateJavascript(
-                "window.__getEditorState && window.__getEditorState();",
+            assertTrue("Safe snapshot must target its attached current owner",
+                activity === newPage.activity && current(newPage))
+            val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+            val vmBefore = nativeScalars(model)
+            newPage.web.evaluateJavascript(
+                "(function(){function scalars(){return {initialCursor:initialCursor," +
+                    "sel:editor.selectionStart,end:editor.selectionEnd," +
+                    "active:document.activeElement===editor,readOnly:editor.readOnly,ready:document.readyState};}" +
+                    "var before=scalars();var state=window.__getEditorState && window.__getEditorState();" +
+                    "return JSON.stringify({before:before,state:state,after:scalars()});})();",
             ) { value ->
-                restored.set(value)
-                scalarDiagnostic("after-getter", activity)
+                snapshotAccepted.set(current(newPage))
+                // Never log the envelope: it contains private editor text. Only whitelist
+                // the scalar diagnostic objects, then pass state through the normal codec.
+                val envelope = runCatching {
+                    com.google.gson.JsonParser.parseString(GSON.fromJson(value, String::class.java)).asJsonObject
+                }.getOrNull()
+                diagnostics.set("vmBefore={$vmBefore};vmAfter={${nativeScalars(model)}};" +
+                    "before={${safeScalars(envelope?.getAsJsonObject("before"))}};" +
+                    "after={${safeScalars(envelope?.getAsJsonObject("after"))}}")
+                restored.set(runCatching { envelope?.get("state")?.asString?.let(GSON::toJson) }.getOrNull())
                 snapshotReturned.countDown()
             }
         }
-        assertTrue("Restored Safe editor snapshot callback was not delivered",
-            snapshotReturned.await(15, TimeUnit.SECONDS))
+        assertTrue("Restored Safe snapshot callback exceeded shared restore budget; ${diagnostics.get()}",
+            snapshotReturned.await(remaining(restoreDeadline), TimeUnit.MILLISECONDS))
+        assertTrue("Retired Safe page cannot satisfy snapshot; ${diagnostics.get()}", snapshotAccepted.get())
         val snapshot = SafeEditorResultCodec.decode(restored.get())
-        assertNotNull("Restored Safe editor returned an invalid snapshot", snapshot)
+        assertNotNull("Restored Safe editor returned an invalid snapshot; ${diagnostics.get()}", snapshot)
         val restoredSnapshot = checkNotNull(snapshot)
         assertEquals("Restored Safe editor text", edited, restoredSnapshot.text)
-        assertEquals("Restored Safe editor cursor", cursor, restoredSnapshot.cursorPosition)
-        assertTrue("Restored Safe editor must retain its dirty draft", restoredSnapshot.dirty)
+        assertEquals("Restored Safe editor cursor; ${diagnostics.get()}", cursor, restoredSnapshot.cursorPosition)
+        assertTrue("Restored Safe editor must retain its dirty draft; ${diagnostics.get()}", restoredSnapshot.dirty)
         flutter.click("code-save")
         await { scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED }
         assertEquals(Activity.RESULT_OK, scenario!!.result.resultCode)
