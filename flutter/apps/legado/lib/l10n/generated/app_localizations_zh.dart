@@ -694,6 +694,58 @@ class AppLocalizationsZh extends AppLocalizations {
       '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
+  String get rssEditorTitle => '订阅源编辑';
+
+  @override
+  String get rssEditorEditRejected => '编辑未被接受，请修正字段后再保存。';
+
+  @override
+  String get rssEditorFailed => '无法更新订阅源编辑器。';
+
+  @override
+  String get rssEditorMissing => '订阅源已不存在。';
+
+  @override
+  String get rssEditorRequired => '源名称和 URL 不能为空。';
+
+  @override
+  String get rssEditorFormat => '源格式错误。';
+
+  @override
+  String get rssEditorFocus => '请先将光标移至文本框。';
+
+  @override
+  String get rssEditorNoLogin => '该源未配置登录。';
+
+  @override
+  String get rssEditorEnableJs => '启用 JavaScript';
+
+  @override
+  String get rssEditorBaseUrl => '使用基础 URL 加载';
+
+  @override
+  String get rssEditorWebLog => '显示 WebView 日志';
+
+  @override
+  String get rssEditorCacheFirst => '优先使用缓存';
+
+  @override
+  String get rssEditorSingleUrl => '单网址';
+
+  @override
+  String get rssEditorPreload => '启用预加载';
+
+  @override
+  String get rssEditorArticleStyle => '文章布局';
+
+  @override
+  String get rssEditorExternal => '请打开全屏编辑器以安全编辑此字段。';
+
+  @override
+  String get rssEditorUrlOverride =>
+      'URL 跳转拦截（JavaScript；返回 true 拦截，可通过 url 变量打开链接、搜索或添加书架）';
+
+  @override
   String get debuggerTitle => '调试源';
 
   @override

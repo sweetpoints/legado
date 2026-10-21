@@ -1412,6 +1412,108 @@ abstract class AppLocalizations {
   /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
   String get rssDuplicateRestoreSource;
 
+  /// No description provided for @rssEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS source editor'**
+  String get rssEditorTitle;
+
+  /// No description provided for @rssEditorEditRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The edit was rejected. Correct the field before saving.'**
+  String get rssEditorEditRejected;
+
+  /// No description provided for @rssEditorFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to update the RSS source editor.'**
+  String get rssEditorFailed;
+
+  /// No description provided for @rssEditorMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The RSS source is no longer available.'**
+  String get rssEditorMissing;
+
+  /// No description provided for @rssEditorRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Source name and URL are required.'**
+  String get rssEditorRequired;
+
+  /// No description provided for @rssEditorFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid source format.'**
+  String get rssEditorFormat;
+
+  /// No description provided for @rssEditorFocus.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus a text field first.'**
+  String get rssEditorFocus;
+
+  /// No description provided for @rssEditorNoLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'This source has no login.'**
+  String get rssEditorNoLogin;
+
+  /// No description provided for @rssEditorEnableJs.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable JavaScript'**
+  String get rssEditorEnableJs;
+
+  /// No description provided for @rssEditorBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Load with base URL'**
+  String get rssEditorBaseUrl;
+
+  /// No description provided for @rssEditorWebLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Show WebView log'**
+  String get rssEditorWebLog;
+
+  /// No description provided for @rssEditorCacheFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer cache'**
+  String get rssEditorCacheFirst;
+
+  /// No description provided for @rssEditorSingleUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Single URL'**
+  String get rssEditorSingleUrl;
+
+  /// No description provided for @rssEditorPreload.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable preload'**
+  String get rssEditorPreload;
+
+  /// No description provided for @rssEditorArticleStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Article layout'**
+  String get rssEditorArticleStyle;
+
+  /// No description provided for @rssEditorExternal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the full screen editor to edit this field safely.'**
+  String get rssEditorExternal;
+
+  /// No description provided for @rssEditorUrlOverride.
+  ///
+  /// In en, this message translates to:
+  /// **'URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)'**
+  String get rssEditorUrlOverride;
+
   /// No description provided for @debuggerTitle.
   ///
   /// In en, this message translates to:

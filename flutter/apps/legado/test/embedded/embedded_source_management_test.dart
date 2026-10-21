@@ -143,6 +143,23 @@ void main() {
     expect(config.theme, 'system');
   });
 
+  test('native RSS editor bootstrap preserves its dedicated route without source repository access', () async {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+      call,
+    ) async {
+      expect(call.method, 'bootstrap');
+      return {'route': '/rss-source-editor', 'locale': 'en', 'theme': 'light'};
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final config = await container.read(
+      embeddedSourceConfigurationProvider.future,
+    );
+    expect(config.route, '/rss-source-editor');
+    expect(config.locale, 'en');
+    expect(config.theme, 'light');
+  });
+
   test('standalone repository adapter retains complete records and leaves the shared service owner in control', () async {
     final repository = SourceTestRepository();
     final service = BookSourceService(repository);
