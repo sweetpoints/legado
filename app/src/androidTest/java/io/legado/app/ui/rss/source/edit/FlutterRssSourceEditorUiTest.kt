@@ -132,6 +132,7 @@ class FlutterRssSourceEditorUiTest {
             assertEquals(1, state.tab); assertEquals(2, state.draft[RssSourceEditorField.StartJs].start)
             assertEquals(7, state.draft[RssSourceEditorField.StartJs].end)
         }
+        robot.hideIme()
         driver.click("rss-menu")
         driver.awaitIdentifier("rss-menu-Debug")
         instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -148,6 +149,22 @@ class FlutterRssSourceEditorUiTest {
         robot.finished()
         assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
         assertNull(appDb.rssSourceDao.getByKey(source.sourceUrl)?.startJs)
+    }
+
+    @Test fun eachTabScrollOffsetSurvivesSwitchingAndActualActivityRecreation() {
+        robot.launch(source.sourceUrl)
+        robot.select(RssSourceEditorField.JsLib, 0, 0)
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Top field must actually be offscreen before testing restored scroll", driver.node("rss-field-sourceName"))
+        robot.selectTab(1)
+        driver.awaitIdentifier("rss-field-startHtml")
+        robot.selectTab(0)
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Switching tabs must preserve the base tab scroll offset", driver.node("rss-field-sourceName"))
+        robot.recreate()
+        driver.awaitIdentifier("rss-field-jsLib")
+        assertNull("Recreated Flutter view must restore the actual scroll offset", driver.node("rss-field-sourceName"))
+        assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
     }
 
     @Test fun oversizedRuleOpensCompletePrivateFileAndCancelPreservesDraftAndRoom() {

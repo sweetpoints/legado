@@ -52,11 +52,18 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     fun selectTab(tab: Int) {
         reveal("rss-tab-$tab", "rss-tabs", backwards = tab == 0)
         driver.click("rss-tab-$tab")
-        driver.awaitIdentifier("rss-field-${RssSourceEditorField.entries.first { it.tab == tab }.key}")
+        driver.await("RSS native tab acknowledgement") {
+            var selected = false
+            scenario!!.onActivity { selected = it.viewModel.state.value.tab == tab }
+            selected
+        }
+        driver.awaitIdentifier("rss-fields-$tab")
     }
     fun field(field: RssSourceEditorField) {
         selectTab(field.tab)
-        reveal("rss-field-${field.key}", "rss-fields-${field.tab}")
+        reveal("rss-nav-${field.key}", "rss-navigation", backwards = field == RssSourceEditorField.entries.first { it.tab == field.tab })
+        driver.click("rss-nav-${field.key}")
+        driver.awaitIdentifier("rss-field-${field.key}")
     }
     fun input(field: RssSourceEditorField, text: String) {
         field(field)
