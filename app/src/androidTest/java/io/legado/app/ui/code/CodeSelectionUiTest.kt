@@ -872,14 +872,85 @@ class CodeSelectionUiTest {
                         }
                         val importPrefix = if (rss) "rss-import" else "book-import"
                         val codeTag = "$importPrefix-code-1"
-                        compose
-                            .onNodeWithTag("$importPrefix-list")
-                            .performScrollToNode(hasTestTag(codeTag))
-                        compose
-                            .onNodeWithTag(codeTag)
-                            .assertIsDisplayed()
-                            .assertIsEnabled()
-                            .performClick()
+                        // The import search can acquire IME focus while the VM becomes
+                        // interactive. Compose's scroll action does not settle that Android
+                        // window resize; commit the exact dialog's hidden-IME viewport first.
+                        val viewportDeadline = SystemClock.uptimeMillis() + 15_000
+                        val importRoot = checkNotNull(parent!!.dialog?.window?.decorView)
+                        val imeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
+                        fun remainingViewportMs() =
+                            (viewportDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0)
+                        fun importViewportReady(): Boolean {
+                            var ready = false
+                            instrumentation.runOnMainSync {
+                                val insets = ViewCompat.getRootWindowInsets(importRoot)
+                                val visible = Rect()
+                                ready = parent!!.dialog?.window?.decorView === importRoot &&
+                                    importRoot.isAttachedToWindow && importRoot.isLaidOut &&
+                                    importRoot.hasWindowFocus() && insets != null &&
+                                    !insets.isVisible(WindowInsetsCompat.Type.ime()) &&
+                                    imeAnimations.isEmpty() &&
+                                    importRoot.getGlobalVisibleRect(visible) && !visible.isEmpty
+                            }
+                            return ready
+                        }
+                        fun commitImportFrame() {
+                            compose.mainClock.advanceTimeByFrame()
+                            val committed = CountDownLatch(1)
+                            instrumentation.runOnMainSync {
+                                assertTrue("Import window must commit a hardware frame", importRoot.isHardwareAccelerated)
+                                importRoot.viewTreeObserver.registerFrameCommitCallback {
+                                    committed.countDown()
+                                }
+                                importRoot.postInvalidateOnAnimation()
+                            }
+                            assertTrue("$importPrefix viewport frame exceeded 15s budget",
+                                committed.await(remainingViewportMs(), TimeUnit.MILLISECONDS))
+                        }
+                        instrumentation.runOnMainSync {
+                            ViewCompat.setWindowInsetsAnimationCallback(importRoot,
+                                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                                            imeAnimations.add(animation)
+                                    }
+                                    override fun onProgress(
+                                        insets: WindowInsetsCompat,
+                                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                                    ): WindowInsetsCompat = insets
+                                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                                        imeAnimations.remove(animation)
+                                    }
+                                })
+                            importRoot.findFocus()?.clearFocus()
+                            ViewCompat.getWindowInsetsController(importRoot)
+                                ?.hide(WindowInsetsCompat.Type.ime())
+                        }
+                        try {
+                            while (remainingViewportMs() > 0 && !importViewportReady()) {
+                                compose.mainClock.advanceTimeByFrame()
+                                SystemClock.sleep(25)
+                            }
+                            assertTrue("$importPrefix IME viewport did not settle", importViewportReady())
+                            commitImportFrame()
+                            compose
+                                .onNodeWithTag("$importPrefix-list")
+                                .performScrollToNode(hasTestTag(codeTag))
+                            commitImportFrame()
+                            val item = compose.onNodeWithTag(codeTag)
+                            val list = compose.onNodeWithTag("$importPrefix-list")
+                            android.util.Log.i("CodeImportViewport",
+                                "$importPrefix item=${item.fetchSemanticsNode().boundsInRoot} " +
+                                    "list=${list.fetchSemanticsNode().boundsInRoot} " +
+                                    "imeHidden=${importViewportReady()} remainingMs=${remainingViewportMs()}")
+                            assertTrue("$importPrefix viewport changed after its single scroll",
+                                remainingViewportMs() > 0 && importViewportReady())
+                            item.assertIsDisplayed().assertIsEnabled().performClick()
+                        } finally {
+                            instrumentation.runOnMainSync {
+                                ViewCompat.setWindowInsetsAnimationCallback(importRoot, null)
+                            }
+                        }
                         var preview: CodeDialog? = null
                         awaitCompose {
                             var ready = false
