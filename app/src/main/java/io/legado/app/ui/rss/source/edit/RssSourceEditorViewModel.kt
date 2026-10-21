@@ -65,9 +65,10 @@ data class RssSourceEditorState(
     val finished: Boolean = false,
     val savedResult: Boolean = false,
     val effects: List<RssSourceEditorEffect> = emptyList(),
+    val nativePending: Boolean = false,
 ) {
     val canEdit
-        get() = loaded && !loading && !busy && !editorPending && !finished
+        get() = loaded && !loading && !busy && !editorPending && !nativePending && !finished
 }
 
 private const val EDITOR = "rss.source.editor."
@@ -93,6 +94,7 @@ class RssSourceEditorViewModel(
                 autoComplete = saved[EDITOR + "autoComplete"] ?: false,
                 exit = saved[EDITOR + "exit"] ?: false,
                 editorPending = saved.contains(EDITOR + "editorField"),
+                nativePending = saved.contains(EDITOR + "nativeOwner"),
                 finished = saved[EDITOR + "finished"] ?: false,
                 savedResult = saved[EDITOR + "savedResult"] ?: false,
                 effects =
@@ -148,6 +150,7 @@ class RssSourceEditorViewModel(
                         enqueue(
                             RssSourceEditorEffectKind.Editor,
                             path = saved[EDITOR + "editorPath"],
+                            token = editorOwner ?: UUID.randomUUID().toString().also { saved[EDITOR + "editorOwner"] = it },
                             field = field,
                             cursor = draft[field].start,
                         )
@@ -255,7 +258,7 @@ class RssSourceEditorViewModel(
     }
 
     fun requestExit() {
-        if (state.value.busy || state.value.editorPending) return
+        if (state.value.busy || state.value.editorPending || state.value.nativePending) return
         if (document?.let { !state.value.draft.sameContent(it.baseline) } == true) {
             saved[EDITOR + "exit"] = true
             mutable.value = state.value.copy(exit = true)
@@ -412,6 +415,7 @@ class RssSourceEditorViewModel(
             val path =
                 withContext(NonCancellable) {
                     repository.editorInput(text.text).also {
+                        saved[EDITOR + "editorOwner"] = UUID.randomUUID().toString()
                         saved[EDITOR + "editorField"] = field
                         saved[EDITOR + "editorPath"] = it
                         saved[EDITOR + "editorRevision"] = document!!.revision
@@ -422,6 +426,7 @@ class RssSourceEditorViewModel(
             mutable.value = state.value.copy(editorPending = true)
             enqueue(
                 RssSourceEditorEffectKind.Editor,
+                token = requireNotNull(editorOwner),
                 path = path,
                 field = field,
                 cursor = text.start,
@@ -431,7 +436,20 @@ class RssSourceEditorViewModel(
 
     private var inlineResult: String? = null
 
-    fun editorReturned(accepted: Boolean, text: String?, output: String?, cursor: Int) {
+    internal val editorOwner: String? get() = saved[EDITOR + "editorOwner"]
+    internal val pendingEditorRequest: RssSourceEditorEffect?
+        get() {
+            val owner = editorOwner ?: return null
+            val field = saved.get<RssSourceEditorField>(EDITOR + "editorField") ?: return null
+            return RssSourceEditorEffect(owner, RssSourceEditorEffectKind.Editor,
+                saved[EDITOR + "editorPath"], field, state.value.draft[field].start)
+        }
+
+    fun editorReturned(accepted: Boolean, text: String?, output: String?, cursor: Int) =
+        editorReturned(editorOwner, accepted, text, output, cursor)
+
+    internal fun editorReturned(owner: String?, accepted: Boolean, text: String?, output: String?, cursor: Int) {
+        if (owner == null || owner != editorOwner || stopped) return
         if (
             !saved.contains(EDITOR + "editorField") ||
                 saved.get<Boolean>(EDITOR + "returning") == true
@@ -503,8 +521,42 @@ class RssSourceEditorViewModel(
         }
     }
 
+    internal data class NativeOwner(val id: String, val kind: RssSourceEditorEffectKind, val field: RssSourceEditorField?)
+
+    internal val nativeOwner: NativeOwner?
+        get() {
+            val id = saved.get<String>(EDITOR + "nativeOwner") ?: return null
+            val kind = saved.get<RssSourceEditorEffectKind>(EDITOR + "nativeKind") ?: return null
+            return NativeOwner(id, kind, saved[EDITOR + "nativeField"])
+        }
+
+    internal fun ownNative(effect: RssSourceEditorEffect): NativeOwner {
+        check(nativeOwner == null && state.value.canEdit)
+        check(effect.kind in setOf(RssSourceEditorEffectKind.ScanQr, RssSourceEditorEffectKind.File, RssSourceEditorEffectKind.UrlOptions))
+        saved[EDITOR + "nativeOwner"] = effect.id
+        saved[EDITOR + "nativeKind"] = effect.kind
+        saved[EDITOR + "nativeField"] = state.value.focus
+        mutable.value = state.value.copy(nativePending = true)
+        return requireNotNull(nativeOwner)
+    }
+
+    internal fun nativeReturned(owner: String, value: String?) {
+        val request = nativeOwner ?: return
+        if (request.id != owner || stopped) return
+        listOf("nativeOwner", "nativeKind", "nativeField").forEach { saved.remove<Any>(EDITOR + it) }
+        mutable.value = state.value.copy(nativePending = false)
+        if (request.kind == RssSourceEditorEffectKind.ScanQr) {
+            if (value != null) paste(value)
+        } else if (value != null && request.field != null) {
+            // A result is bound to the field at launch, never a newer UI focus.
+            focus(request.field)
+            insert(value)
+        }
+    }
+
     private fun clearEditorState() {
         listOf(
+                "editorOwner",
                 "editorField",
                 "editorPath",
                 "editorRevision",
