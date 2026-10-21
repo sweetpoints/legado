@@ -133,6 +133,7 @@ class EmbeddedSourceManagementApp extends ConsumerWidget {
 
   Widget _bootstrapShell(BuildContext context, WidgetRef ref, bool failed) =>
       MaterialApp(
+        restorationScopeId: 'embedded-ui',
         debugShowCheckedModeBanner: false,
         theme: readerTheme(Brightness.light),
         darkTheme: readerTheme(Brightness.dark),

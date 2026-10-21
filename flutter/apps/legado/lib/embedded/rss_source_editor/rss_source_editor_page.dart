@@ -272,7 +272,10 @@ class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage>
                         ],
                       ),
                     ),
-                  if (state != null && !state.finished) ...[
+                  if (state != null &&
+                      state.loaded &&
+                      !state.loading &&
+                      !state.finished) ...[
                     if (!ime) ...[
                       _RssOptions(
                         key: ValueKey('options-${state.generation}'),
