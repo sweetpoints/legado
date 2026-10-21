@@ -141,4 +141,4 @@ final class EmbeddedSourceRouterProvider
 }
 
 String _$embeddedSourceRouterHash() =>
-    r'1b98b3866e56aa671dea634ef733522a3a8e57a3';
+    r'0b53d6ff9b4bc29c5f0c5aeea929ff2632c7099b';

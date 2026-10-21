@@ -67,6 +67,7 @@ GoRouter embeddedSourceRouter(Ref ref) {
       .watch(embeddedSourceConfigurationProvider)
       .requireValue;
   final router = GoRouter(
+    restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
       GoRoute(
