@@ -111,6 +111,21 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     fun finished() = driver.await("RSS durable save/discard finishes its own Activity") {
         scenario!!.state == androidx.lifecycle.Lifecycle.State.DESTROYED
     }
+    fun commitViewportFrame() {
+        lateinit var root: View
+        scenario!!.onActivity { root = it.window.decorView }
+        committedFrame(root)
+    }
+    private fun committedFrame(root: View) {
+        val committed = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
+            root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+            root.postInvalidateOnAnimation()
+        }
+        assertTrue("RSS viewport frame not committed", committed.await(5, TimeUnit.SECONDS))
+        instrumentation.uiAutomation.waitForIdle(100, 5_000)
+    }
     fun recreate() {
         ime?.close(); ime = null
         scenario!!.recreate()
@@ -199,14 +214,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
                 }
                 settled
             }
-            val committed = CountDownLatch(1)
-            instrumentation.runOnMainSync {
-                assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
-                root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
-                root.postInvalidateOnAnimation()
-            }
-            assertTrue("RSS viewport frame not committed", committed.await(5, TimeUnit.SECONDS))
-            instrumentation.uiAutomation.waitForIdle(100, 5_000)
+            committedFrame(root)
         }
         override fun close() {
             instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
