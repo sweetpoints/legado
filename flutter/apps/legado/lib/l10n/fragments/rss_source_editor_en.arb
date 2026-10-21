@@ -1,0 +1,19 @@
+{
+  "rssEditorTitle": "RSS source editor",
+  "rssEditorEditRejected": "The edit was rejected. Correct the field before saving.",
+  "rssEditorFailed": "Unable to update the RSS source editor.",
+  "rssEditorMissing": "The RSS source is no longer available.",
+  "rssEditorRequired": "Source name and URL are required.",
+  "rssEditorFormat": "Invalid source format.",
+  "rssEditorFocus": "Focus a text field first.",
+  "rssEditorNoLogin": "This source has no login.",
+  "rssEditorEnableJs": "Enable JavaScript",
+  "rssEditorBaseUrl": "Load with base URL",
+  "rssEditorWebLog": "Show WebView log",
+  "rssEditorCacheFirst": "Prefer cache",
+  "rssEditorSingleUrl": "Single URL",
+  "rssEditorPreload": "Enable preload",
+  "rssEditorArticleStyle": "Article layout",
+  "rssEditorExternal": "Open the full screen editor to edit this field safely.",
+  "rssEditorUrlOverride": "URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)"
+}
