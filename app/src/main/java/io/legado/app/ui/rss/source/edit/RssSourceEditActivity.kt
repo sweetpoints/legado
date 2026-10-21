@@ -107,7 +107,11 @@ class RssSourceEditActivity : BaseThemedActivity(), VariableDialog.Callback {
                     result.data?.getStringExtra("text"), result.data?.getStringExtra("textFile"),
                     result.data?.getIntExtra("cursorPosition", -1) ?: -1)
             }
-            registered = RegisteredNative(editor.id, { launcher.launch(editorIntent(editor)) }, launcher::unregister)
+            registered = RegisteredNative(editor.id, {
+                val current = requireNotNull(viewModel.pendingEditorRequest)
+                check(current.id == editor.id)
+                launcher.launch(editorIntent(current))
+            }, launcher::unregister)
         } else if (insertion != null) {
             when (insertion.kind) {
                 RssSourceEditorEffectKind.ScanQr -> {
