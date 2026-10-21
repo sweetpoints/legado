@@ -6,6 +6,14 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -298,10 +306,16 @@ class SourceImportFilterUiTest {
             host.query("Edited-$id", 1)
             host.rowClick(0, false)
             host.selection(false, true, false)
-            host.setGroup("Imported group", false)
-            host.click(ImportControl.Confirm)
-            await("Edited $rss source was not imported") {
-                storedGroup(rss, editedUrl) == "Imported group"
+            if (rss) {
+                host.confirmRssAfterGroup("Imported group", false, "Edited true source was not imported") {
+                    storedGroup(true, editedUrl) == "Imported group"
+                }
+            } else {
+                host.setGroup("Imported group", false)
+                host.click(ImportControl.Confirm)
+                await("Edited false source was not imported") {
+                    storedGroup(false, editedUrl) == "Imported group"
+                }
             }
             host.awaitFinished()
         }
@@ -803,6 +817,98 @@ class SourceImportFilterUiTest {
         fun cancelGroup() {
             if (rss) compose.onNodeWithTag("rss-import-group-cancel").performClick()
             else compose.onNodeWithTag("book-import-group-cancel").performClick()
+        }
+
+        /** One real Confirm touch after this RSS dialog's returning IME viewport settles. */
+        fun confirmRssAfterGroup(value: String, add: Boolean, message: String, stored: () -> Boolean) {
+            assertTrue(rss)
+            val model = main { feed }
+            val window = main { requireNotNull(parent.dialog?.window) }
+            val root = window.decorView
+            val runningIme = mutableSetOf<WindowInsetsAnimationCompat>()
+            var touchIssued = false
+            main {
+                ViewCompat.setWindowInsetsAnimationCallback(root,
+                    object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) runningIme.add(animation)
+                        }
+                        override fun onProgress(insets: WindowInsetsCompat,
+                            runningAnimations: MutableList<WindowInsetsAnimationCompat>) = insets
+                        override fun onEnd(animation: WindowInsetsAnimationCompat) { runningIme.remove(animation) }
+                    })
+            }
+            try {
+                setGroup(value, add)
+                // The original Room wait was 15 seconds. All post-group gates and the
+                // final Room assertion share that deadline rather than resetting it.
+                val deadline = SystemClock.uptimeMillis() + 15_000
+                fun remaining(): Long = (deadline - SystemClock.uptimeMillis()).also {
+                    assertTrue("RSS import confirmation exceeded its original deadline", it > 0)
+                }
+                fun withinBudget(condition: () -> Boolean) {
+                    compose.waitUntil(timeoutMillis = remaining()) {
+                        compose.mainClock.advanceTimeByFrame()
+                        condition()
+                    }
+                }
+                withinBudget {
+                    val modalGone = compose.onAllNodesWithTag("rss-import-group-name").fetchSemanticsNodes().isEmpty()
+                    modalGone && main {
+                        !model.state.value.groupOpen && model.state.value.interactive &&
+                            parent.dialog?.window?.decorView === root && root.hasWindowFocus()
+                    }
+                }
+                // Group dismissal reattaches the parent's focused search input and
+                // can start a fresh IME show. Clear this exact owner and hide once.
+                main {
+                    root.findFocus()?.clearFocus()
+                    WindowCompat.getInsetsController(window, root).hide(WindowInsetsCompat.Type.ime())
+                }
+                fun hiddenAndIdle() = main {
+                    parent.dialog?.window?.decorView === root && root.hasWindowFocus() &&
+                        root.isAttachedToWindow && root.isLaidOut &&
+                        ViewCompat.getRootWindowInsets(root)?.isVisible(WindowInsetsCompat.Type.ime()) == false &&
+                        runningIme.isEmpty()
+                }
+                withinBudget { hiddenAndIdle() }
+                val frame = CountDownLatch(1)
+                main {
+                    assertTrue(root.isHardwareAccelerated)
+                    root.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
+                    root.postInvalidateOnAnimation()
+                }
+                assertTrue("RSS import footer frame was not committed", frame.await(remaining(), TimeUnit.MILLISECONDS))
+                instrumentation.uiAutomation.waitForIdle(100, minOf(5_000, remaining()))
+                assertTrue("RSS parent viewport changed before its single Confirm touch", hiddenAndIdle())
+                compose.onNodeWithTag("rss-import-confirm").assertIsDisplayed().assertIsEnabled().performClick()
+                touchIssued = true
+                withinBudget(stored)
+                assertTrue(message, stored())
+            } catch (failure: Throwable) {
+                // Preserve the original failure even if diagnostic capture itself fails.
+                try {
+                    val bounds = compose.onAllNodesWithTag("rss-import-confirm").fetchSemanticsNodes()
+                        .singleOrNull()?.boundsInWindow
+                    main {
+                        val state = model.state.value
+                        val insets = ViewCompat.getRootWindowInsets(root)
+                        Log.i("RssImportConfirm", "touchIssued=$touchIssued interactive=${state.interactive} " +
+                            "groupOpen=${state.groupOpen} busy=${state.busy} finished=${state.finished} " +
+                            "selectedCount=${state.selected.size} errorPresent=${state.error != null} " +
+                            "parentWindow=${parent.dialog?.window?.decorView === root} focused=${root.hasWindowFocus()} " +
+                            "imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime()) == true} " +
+                            "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0} " +
+                            "runningIme=${runningIme.size} bounds=$bounds")
+                    }
+                    screenshot("source-filter-confirm-failure-true")
+                } catch (diagnosticFailure: Throwable) {
+                    failure.addSuppressed(diagnosticFailure)
+                }
+                throw failure
+            } finally {
+                main { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
+            }
         }
 
         fun setGroup(value: String, add: Boolean) {
