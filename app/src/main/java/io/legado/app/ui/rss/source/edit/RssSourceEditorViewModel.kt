@@ -535,7 +535,7 @@ class RssSourceEditorViewModel(
         check(effect.kind in setOf(RssSourceEditorEffectKind.ScanQr, RssSourceEditorEffectKind.File, RssSourceEditorEffectKind.UrlOptions))
         saved[EDITOR + "nativeOwner"] = effect.id
         saved[EDITOR + "nativeKind"] = effect.kind
-        saved[EDITOR + "nativeField"] = state.value.focus
+        saved[EDITOR + "nativeField"] = effect.field
         mutable.value = state.value.copy(nativePending = true)
         return requireNotNull(nativeOwner)
     }
@@ -604,7 +604,7 @@ class RssSourceEditorViewModel(
         get() = document?.originalKey
 
     fun action(kind: RssSourceEditorEffectKind) {
-        if (state.value.canEdit) enqueue(kind)
+        if (state.value.canEdit) enqueue(kind, field = state.value.focus)
     }
 
     fun clearCookie() {

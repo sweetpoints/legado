@@ -83,6 +83,12 @@ class RssSourceEditorNativeCoordinator(
         val current = model.state.value
         if (command.op !in setOf("retry", "retryEditor", "discardEditor", "cancel", "keepEditing", "discard"))
             check(current.canEdit) { "Editor is unavailable" }
+        if (command.op in setOf("insert", "undo", "redo")) {
+            current.focus?.let {
+                val text = current.draft[it].text
+                check(!EditSafety.isTooLongForInline(text) && !EditSafety.isCombiningHeavy(text))
+            }
+        }
         if (command.op in setOf("save", "native", "editor", "paste", "keyboardConfig"))
             check(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && canHandle())
         when (command.op) {

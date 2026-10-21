@@ -442,7 +442,7 @@ class RssSourceEditorViewModelTest {
         val vm = model(repo, saved)
         runCurrent()
         vm.focus(RssSourceEditorField.StartJs)
-        val effect = RssSourceEditorEffect("owner-1", RssSourceEditorEffectKind.File)
+        val effect = RssSourceEditorEffect("owner-1", RssSourceEditorEffectKind.File, field = RssSourceEditorField.StartJs)
         vm.ownNative(effect)
         assertFalse(vm.state.value.canEdit)
         vm.focus(RssSourceEditorField.Header)
