@@ -319,7 +319,11 @@ class _RssSourceEditorPageState extends ConsumerState<RssSourceEditorPage> {
                                           );
                                         }
                                       : null,
-                                  child: Text(f.key == 'shouldOverrideUrlLoading' ? l.rssEditorUrlOverride : f.label),
+                                  child: Text(
+                                    f.key == 'shouldOverrideUrlLoading'
+                                        ? l.rssEditorUrlOverride
+                                        : f.label,
+                                  ),
                                 ),
                               ),
                             )
@@ -814,7 +818,11 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
       'rss-field-${widget.field.key}',
       unsafe
           ? ListTile(
-              title: Text(widget.field.key == 'shouldOverrideUrlLoading' ? AppLocalizations.of(context).rssEditorUrlOverride : widget.field.label),
+              title: Text(
+                widget.field.key == 'shouldOverrideUrlLoading'
+                    ? AppLocalizations.of(context).rssEditorUrlOverride
+                    : widget.field.label,
+              ),
               subtitle: Text(AppLocalizations.of(context).rssEditorExternal),
               trailing: const Icon(Icons.open_in_full),
               onTap: widget.enabled
@@ -833,7 +841,9 @@ class _RssEditorTextFieldState extends State<RssEditorTextField> {
               keyboardType: TextInputType.multiline,
               style: const TextStyle(fontFamily: 'monospace'),
               decoration: InputDecoration(
-                labelText: widget.field.key == 'shouldOverrideUrlLoading' ? AppLocalizations.of(context).rssEditorUrlOverride : widget.field.label,
+                labelText: widget.field.key == 'shouldOverrideUrlLoading'
+                    ? AppLocalizations.of(context).rssEditorUrlOverride
+                    : widget.field.label,
                 border: const OutlineInputBorder(),
               ),
             ),

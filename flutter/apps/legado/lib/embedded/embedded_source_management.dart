@@ -14,6 +14,7 @@ import 'source_manager/source_manager_page.dart';
 import 'source_editor/source_editor_page.dart';
 import 'code_editor/code_editor_page.dart';
 import 'source_debugger/source_debugger_page.dart';
+import 'rss_source_editor/rss_source_editor_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -39,6 +40,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
         '/source-editor',
         '/code-editor',
         '/source-debugger',
+        '/rss-source-editor',
       ].contains(result['route']) ||
       !['zh', 'en'].contains(result['locale']) ||
       !['system', 'light', 'dark'].contains(result['theme'])) {
@@ -67,6 +69,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
   final router = GoRouter(
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/rss-source-editor',
+        builder: (_, _) => const RssSourceEditorPage(),
+      ),
       GoRoute(
         path: '/source-debugger',
         builder: (_, _) => const SourceDebuggerPage(),
@@ -100,6 +106,7 @@ class EmbeddedSourceManagementApp extends ConsumerWidget {
       .watch(embeddedSourceConfigurationProvider)
       .when(
         data: (config) => MaterialApp.router(
+          restorationScopeId: 'embedded-ui',
           debugShowCheckedModeBanner: false,
           theme: readerTheme(Brightness.light),
           darkTheme: readerTheme(Brightness.dark),

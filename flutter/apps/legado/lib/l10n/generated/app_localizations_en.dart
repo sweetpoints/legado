@@ -727,6 +727,60 @@ class AppLocalizationsEn extends AppLocalizations {
       'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
+  String get rssEditorTitle => 'RSS source editor';
+
+  @override
+  String get rssEditorEditRejected =>
+      'The edit was rejected. Correct the field before saving.';
+
+  @override
+  String get rssEditorFailed => 'Unable to update the RSS source editor.';
+
+  @override
+  String get rssEditorMissing => 'The RSS source is no longer available.';
+
+  @override
+  String get rssEditorRequired => 'Source name and URL are required.';
+
+  @override
+  String get rssEditorFormat => 'Invalid source format.';
+
+  @override
+  String get rssEditorFocus => 'Focus a text field first.';
+
+  @override
+  String get rssEditorNoLogin => 'This source has no login.';
+
+  @override
+  String get rssEditorEnableJs => 'Enable JavaScript';
+
+  @override
+  String get rssEditorBaseUrl => 'Load with base URL';
+
+  @override
+  String get rssEditorWebLog => 'Show WebView log';
+
+  @override
+  String get rssEditorCacheFirst => 'Prefer cache';
+
+  @override
+  String get rssEditorSingleUrl => 'Single URL';
+
+  @override
+  String get rssEditorPreload => 'Enable preload';
+
+  @override
+  String get rssEditorArticleStyle => 'Article layout';
+
+  @override
+  String get rssEditorExternal =>
+      'Open the full screen editor to edit this field safely.';
+
+  @override
+  String get rssEditorUrlOverride =>
+      'URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)';
+
+  @override
   String get debuggerTitle => 'Source debugger';
 
   @override
