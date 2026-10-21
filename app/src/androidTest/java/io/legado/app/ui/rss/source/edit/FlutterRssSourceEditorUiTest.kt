@@ -174,6 +174,8 @@ class FlutterRssSourceEditorUiTest {
         val launched = codeLaunch { robot.field(RssSourceEditorField.StartJs); driver.click("rss-field-startJs") }
         val child = awaitCode(original)
         assertTrue(launched.getBooleanExtra("useTextFile", false))
+        assertNull("Large rule must not be duplicated into a Binder text extra", launched.getStringExtra("text"))
+        assertTrue(launched.getBooleanExtra("returnUnchangedText", false))
         val path = requireNotNull(launched.getStringExtra("textFile"))
         assertEquals(original, File(path).readText())
         driver.click("code-close")
@@ -286,7 +288,9 @@ class FlutterRssSourceEditorUiTest {
     private fun codeLaunch(action: () -> Unit): Intent {
         val captured = AtomicReference<Intent>()
         val callback = ActivityLifecycleCallback { activity, stage ->
-            if (activity is CodeEditActivity && stage == Stage.PRE_ON_CREATE) captured.compareAndSet(null, Intent(activity.intent))
+            if (activity is CodeEditActivity && stage == Stage.PRE_ON_CREATE &&
+                activity.callingActivity?.className == RssSourceEditActivity::class.java.name)
+                captured.compareAndSet(null, Intent(activity.intent))
         }
         instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(callback) }
         try {
