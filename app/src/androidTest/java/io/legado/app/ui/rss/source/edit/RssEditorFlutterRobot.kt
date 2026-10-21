@@ -26,6 +26,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     val driver = FlutterUiTestDriver(instrumentation)
     var scenario: ActivityScenario<RssSourceEditActivity>? = null
     private var ime: ImeBarrier? = null
+    private var owner: RssSourceEditActivity? = null
 
     fun launch(key: String? = null, forResult: Boolean = false) {
         driver.enableAccessibility()
@@ -43,6 +44,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
             ready
         }
         scenario!!.onActivity {
+            owner = it
             assertTrue("Normal RSS editor renders a real FlutterFragment",
                 it.supportFragmentManager.fragments.any { fragment -> fragment is FlutterFragment })
         }
@@ -162,7 +164,12 @@ internal class RssEditorFlutterRobot : AutoCloseable {
     }
     override fun close() {
         ime?.close(); ime = null
-        scenario?.close(); scenario = null
+        // Only this scenario's retained owner is discarded. Never enumerate other editors,
+        // and do the lifecycle check and discard in the same main-thread turn.
+        instrumentation.runOnMainSync {
+            owner?.takeUnless { it.isFinishing || it.isDestroyed }?.viewModel?.discard()
+        }
+        scenario?.close(); scenario = null; owner = null
         driver.close()
     }
     private inner class ImeBarrier : AutoCloseable {

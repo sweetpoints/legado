@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.ViewModelProvider
+import io.legado.app.ui.code.CodeEditorComposeViewModel
 import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
@@ -61,7 +63,11 @@ class FlutterRssSourceEditorUiTest {
     }
     @After fun cleanup() {
         instrumentation.runOnMainSync {
-            children.reversed().forEach { if (!it.isFinishing && !it.isDestroyed) it.finish() }
+            children.reversed().filterNot { it.isFinishing || it.isDestroyed }.forEach { child ->
+                if (child is CodeEditActivity)
+                    ViewModelProvider(child)[CodeEditorComposeViewModel::class.java].discard()
+                else child.finish()
+            }
             ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycle)
         }
         robot.close()
@@ -302,7 +308,11 @@ class FlutterRssSourceEditorUiTest {
         var ready: CodeEditActivity? = null
         driver.await("Actual editable native code surface has complete text") {
             instrumentation.runOnMainSync {
-                val child = resumed<CodeEditActivity>()
+                // Already on main: read the lifecycle registry directly, not resumed(),
+                // which dispatches its own runOnMainSync for off-main callers.
+                val child = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>()
+                    .firstOrNull { it in children }
                 val editor = child?.findViewById<CodeEditor>(R.id.editText)
                 if (editor?.isShown == true && editor.isEditable && editor.text.toString() == text) ready = child
             }
