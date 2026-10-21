@@ -6,6 +6,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.lifecycle.ViewModelProvider
+import io.legado.app.ui.code.CodeEditorComposeViewModel
 import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
@@ -46,7 +48,11 @@ class RssSourceEditorHostTest {
     }
     @After fun after() {
         instrumentation.runOnMainSync {
-            children.reversed().forEach { if (!it.isFinishing && !it.isDestroyed) it.finish() }
+            children.reversed().filterNot { it.isFinishing || it.isDestroyed }.forEach { child ->
+                if (child is CodeEditActivity)
+                    ViewModelProvider(child)[CodeEditorComposeViewModel::class.java].discard()
+                else child.finish()
+            }
             ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycle)
         }
         robot.close()
@@ -134,7 +140,7 @@ class RssSourceEditorHostTest {
         var child: CodeEditActivity? = null
         driver.await("Complete input on real native code surface") {
             instrumentation.runOnMainSync {
-                val resumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
+                val resumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull { it in children }
                 val editor = resumed?.findViewById<CodeEditor>(R.id.editText)
                 if (editor?.isShown == true && editor.isEditable && editor.text.toString() == "initial body") child = resumed
             }
