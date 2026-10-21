@@ -1468,6 +1468,30 @@ class CodeSelectionUiTest {
             }
             ready
         }
+        // Temporary diagnostics: scalar state only, with no getter/focus/text mutation and
+        // no extra wait. Requests remain ordered on this WebView's normal JS queue.
+        fun scalarDiagnostic(phase: String) {
+            scenario!!.onActivity { activity ->
+                val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+                val state = model.state.value
+                android.util.Log.i("SafeEditorDiagnostic",
+                    "phase=$phase vmStart=${state.session?.selection?.start} " +
+                        "vmEnd=${state.session?.selection?.end} ready=${state.editorReady} " +
+                        "busy=${state.busy} readOnly=${state.session?.writable == false}")
+                nativeWebView(activity).evaluateJavascript(
+                    "JSON.stringify({initialCursor:initialCursor,sel:editor.selectionStart," +
+                        "end:editor.selectionEnd,active:document.activeElement===editor," +
+                        "readOnly:editor.readOnly,ready:document.readyState})",
+                ) { value ->
+                    val current = model.state.value
+                    android.util.Log.i("SafeEditorDiagnostic",
+                        "phase=$phase js=$value vmStart=${current.session?.selection?.start} " +
+                            "vmEnd=${current.session?.selection?.end} ready=${current.editorReady} " +
+                            "busy=${current.busy}")
+                }
+            }
+        }
+        scalarDiagnostic("before-recreate")
         scenario!!.recreate()
         await {
             var ready = false
@@ -1484,6 +1508,7 @@ class CodeSelectionUiTest {
             }
             ready
         }
+        scalarDiagnostic("ready-before-getter")
         val restored = AtomicReference<String>()
         val snapshotReturned = CountDownLatch(1)
         // This getter freezes/blurs the textarea, just like production snapshot().
@@ -1499,6 +1524,7 @@ class CodeSelectionUiTest {
         }
         assertTrue("Restored Safe editor snapshot callback was not delivered",
             snapshotReturned.await(15, TimeUnit.SECONDS))
+        scalarDiagnostic("after-getter")
         val snapshot = SafeEditorResultCodec.decode(restored.get())
         assertNotNull("Restored Safe editor returned an invalid snapshot", snapshot)
         val restoredSnapshot = checkNotNull(snapshot)
