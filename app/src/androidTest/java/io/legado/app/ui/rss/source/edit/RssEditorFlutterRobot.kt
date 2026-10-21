@@ -131,7 +131,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
         scenario!!.onActivity { root = it.window.decorView }
         committedFrame(root, deadline)
     }
-    fun input(field: RssSourceEditorField, text: String, bulk: Boolean = false) {
+    fun input(field: RssSourceEditorField, text: String, bulk: Boolean = false, finishBulk: Boolean = false) {
         val deadline = SystemClock.uptimeMillis() + 30_000
         if (bulk) {
             var changingTab = false
@@ -169,7 +169,7 @@ internal class RssEditorFlutterRobot : AutoCloseable {
             } ?: false
             accepted && rendered
         }
-        if (!bulk) hideIme(deadline)
+        if (!bulk || finishBulk) hideIme(deadline)
     }
     fun hideIme(deadline: Long = SystemClock.uptimeMillis() + 30_000) { closeSoftKeyboard(); ime!!.settled(false, deadline) }
     fun select(field: RssSourceEditorField, start: Int, end: Int) {
