@@ -458,6 +458,55 @@ class RssSourceEditorViewModelTest {
         assertEquals("file.js", restored.state.value.draft[RssSourceEditorField.StartJs].text)
     }
 
+    @Test
+    fun cachedFileAndQrResultsStayInRegistryUntilRestoredPrivateDraftLoads() = runTest(dispatcher) {
+        for (kind in listOf(RssSourceEditorEffectKind.File, RssSourceEditorEffectKind.ScanQr)) {
+            val repo = Fake()
+            val saved = SavedStateHandle()
+            val original = model(repo, saved)
+            runCurrent()
+            original.focus(RssSourceEditorField.StartJs)
+            val effect = RssSourceEditorEffect(UUID.randomUUID().toString(), kind,
+                field = RssSourceEditorField.StartJs)
+            original.ownNative(effect)
+            original.flush()
+            val restoredState = snapshot(saved)
+            original.stop()
+            repo.readGate = CompletableDeferred()
+            val restored = model(repo, restoredState)
+            runCurrent()
+            var cachedResult: String? = if (kind == RssSourceEditorEffectKind.ScanQr)
+                GSON.toJson(RssSource("imported", "Imported name")) else "owned-file.js"
+            var deliveries = 0
+            fun register() {
+                cachedResult?.let { value ->
+                    cachedResult = null
+                    deliveries++
+                    restored.nativeReturned(effect.id, value)
+                }
+            }
+            assertTrue(restored.state.value.loading)
+            registerRssEditorNativeWhenLoaded(restored.state.value, ::register)
+            assertEquals(0, deliveries)
+            assertNotNull(cachedResult)
+            assertEquals(effect.id, restored.nativeOwner?.id)
+            repo.readGate!!.complete(Unit)
+            runCurrent()
+            registerRssEditorNativeWhenLoaded(restored.state.value, ::register)
+            runCurrent()
+            registerRssEditorNativeWhenLoaded(restored.state.value, ::register)
+            restored.nativeReturned(effect.id, "duplicate")
+            runCurrent()
+            assertEquals(1, deliveries)
+            assertNull(restored.nativeOwner)
+            assertFalse(restored.state.value.nativePending)
+            if (kind == RssSourceEditorEffectKind.ScanQr)
+                assertEquals("Imported name", restored.state.value.draft[RssSourceEditorField.SourceName].text)
+            else assertEquals("owned-file.js", restored.state.value.draft[RssSourceEditorField.StartJs].text)
+            assertEquals(0, repo.saves)
+        }
+    }
+
     private class Fake : RssSourceEditorRepository {
         var missing = false
         var failRead = false

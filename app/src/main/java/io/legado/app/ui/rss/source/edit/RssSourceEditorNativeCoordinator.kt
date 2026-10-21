@@ -140,7 +140,7 @@ class RssSourceEditorNativeCoordinator(
 
     private suspend fun dispatch(value: RssSourceEditorState) {
         if (retired || !canHandle()) return
-        registerNative()
+        registerRssEditorNativeWhenLoaded(value, registerNative)
         if (value.loading || value.busy) return
         if (value.finished) { complete(); return }
         for (effect in value.effects) {
@@ -180,4 +180,10 @@ class RssSourceEditorNativeCoordinator(
     private fun complete() { if (!closedHost) { closedHost = true; finish(model.state.value.savedResult) } }
     override fun close() { if (!retired) { retired = true; binding = null; jobs.forEach { it.cancel() } } }
     private companion object { val generations = AtomicInteger() }
+}
+
+/** Registration can synchronously deliver a cached Activity result. Keep it in the registry
+ * until the authoritative private draft is loaded, including after process restoration. */
+internal fun registerRssEditorNativeWhenLoaded(state: RssSourceEditorState, register: () -> Unit) {
+    if (state.loaded && !state.loading) register()
 }
