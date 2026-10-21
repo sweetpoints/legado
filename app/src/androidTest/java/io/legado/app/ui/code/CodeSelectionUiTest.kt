@@ -1425,6 +1425,27 @@ class CodeSelectionUiTest {
         val code = "\uFEFF// 中文 🌍\r\n" + "a" + "\u0301".repeat(12) + "\r\noriginal"
         val edited = code.replace("\r\n", "\n") + " 已修改"
         val cursor = edited.length - 2
+        // Temporary diagnostics: scalar state only, with no getter/focus/text mutation and
+        // no extra wait. Requests remain ordered on this WebView's normal JS queue.
+        fun scalarDiagnostic(phase: String, activity: CodeEditActivity) {
+            val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
+            val state = model.state.value
+            android.util.Log.i("SafeEditorDiagnostic",
+                "phase=$phase vmStart=${state.session?.selection?.start} " +
+                    "vmEnd=${state.session?.selection?.end} ready=${state.editorReady} " +
+                    "busy=${state.busy} readOnly=${state.session?.writable == false}")
+            nativeWebView(activity).evaluateJavascript(
+                "JSON.stringify({initialCursor:initialCursor,sel:editor.selectionStart," +
+                    "end:editor.selectionEnd,active:document.activeElement===editor," +
+                    "readOnly:editor.readOnly,ready:document.readyState})",
+            ) { value ->
+                val current = model.state.value
+                android.util.Log.i("SafeEditorDiagnostic",
+                    "phase=$phase js=$value vmStart=${current.session?.selection?.start} " +
+                        "vmEnd=${current.session?.selection?.end} ready=${current.editorReady} " +
+                        "busy=${current.busy}")
+            }
+        }
         scenario =
             ActivityScenario.launchActivityForResult(
                 Intent(context, CodeEditActivity::class.java).apply {
@@ -1465,33 +1486,10 @@ class CodeSelectionUiTest {
                         ?.let { draft ->
                             draft.text == edited && draft.selection.start == cursor
                         } == true
+                if (ready) scalarDiagnostic("before-recreate", it)
             }
             ready
         }
-        // Temporary diagnostics: scalar state only, with no getter/focus/text mutation and
-        // no extra wait. Requests remain ordered on this WebView's normal JS queue.
-        fun scalarDiagnostic(phase: String) {
-            scenario!!.onActivity { activity ->
-                val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
-                val state = model.state.value
-                android.util.Log.i("SafeEditorDiagnostic",
-                    "phase=$phase vmStart=${state.session?.selection?.start} " +
-                        "vmEnd=${state.session?.selection?.end} ready=${state.editorReady} " +
-                        "busy=${state.busy} readOnly=${state.session?.writable == false}")
-                nativeWebView(activity).evaluateJavascript(
-                    "JSON.stringify({initialCursor:initialCursor,sel:editor.selectionStart," +
-                        "end:editor.selectionEnd,active:document.activeElement===editor," +
-                        "readOnly:editor.readOnly,ready:document.readyState})",
-                ) { value ->
-                    val current = model.state.value
-                    android.util.Log.i("SafeEditorDiagnostic",
-                        "phase=$phase js=$value vmStart=${current.session?.selection?.start} " +
-                            "vmEnd=${current.session?.selection?.end} ready=${current.editorReady} " +
-                            "busy=${current.busy}")
-                }
-            }
-        }
-        scalarDiagnostic("before-recreate")
         scenario!!.recreate()
         await {
             var ready = false
@@ -1505,26 +1503,26 @@ class CodeSelectionUiTest {
                         ViewModelProvider(it)[CodeEditorComposeViewModel::class.java]
                             .state.value.editorReady &&
                         nativeWebViews(it.window.decorView).any { web -> web.isShown }
+                if (ready) scalarDiagnostic("ready-before-getter", it)
             }
             ready
         }
-        scalarDiagnostic("ready-before-getter")
         val restored = AtomicReference<String>()
         val snapshotReturned = CountDownLatch(1)
         // This getter freezes/blurs the textarea, just like production snapshot().
         // Read it once after onPageFinished readiness, then await its actual
         // callback; polling it repeatedly can change the document under test.
-        scenario!!.onActivity {
-            nativeWebView(it).evaluateJavascript(
+        scenario!!.onActivity { activity ->
+            nativeWebView(activity).evaluateJavascript(
                 "window.__getEditorState && window.__getEditorState();",
             ) { value ->
                 restored.set(value)
+                scalarDiagnostic("after-getter", activity)
                 snapshotReturned.countDown()
             }
         }
         assertTrue("Restored Safe editor snapshot callback was not delivered",
             snapshotReturned.await(15, TimeUnit.SECONDS))
-        scalarDiagnostic("after-getter")
         val snapshot = SafeEditorResultCodec.decode(restored.get())
         assertNotNull("Restored Safe editor returned an invalid snapshot", snapshot)
         val restoredSnapshot = checkNotNull(snapshot)
