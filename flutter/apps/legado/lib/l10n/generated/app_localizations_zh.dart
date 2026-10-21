@@ -746,6 +746,36 @@ class AppLocalizationsZh extends AppLocalizations {
       'URL 跳转拦截（JavaScript；返回 true 拦截，可通过 url 变量打开链接、搜索或添加书架）';
 
   @override
+  String get rssEditorStart => '启动';
+
+  @override
+  String get rssEditorList => '列表规则';
+
+  @override
+  String get rssEditorWebView => 'WebView';
+
+  @override
+  String get rssEditorWebPage => '网页';
+
+  @override
+  String get rssEditorLayoutList => '列表';
+
+  @override
+  String get rssEditorLayoutSingle => '单列';
+
+  @override
+  String get rssEditorLayoutDouble => '双列';
+
+  @override
+  String get rssEditorLayoutWaterfall => '瀑布';
+
+  @override
+  String get rssEditorLayoutTriple => '三列';
+
+  @override
+  String get rssEditorType => '源类型';
+
+  @override
   String get debuggerTitle => '调试源';
 
   @override

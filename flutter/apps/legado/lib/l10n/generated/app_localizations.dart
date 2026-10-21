@@ -1514,6 +1514,66 @@ abstract class AppLocalizations {
   /// **'URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)'**
   String get rssEditorUrlOverride;
 
+  /// No description provided for @rssEditorStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get rssEditorStart;
+
+  /// No description provided for @rssEditorList.
+  ///
+  /// In en, this message translates to:
+  /// **'List rules'**
+  String get rssEditorList;
+
+  /// No description provided for @rssEditorWebView.
+  ///
+  /// In en, this message translates to:
+  /// **'WebView'**
+  String get rssEditorWebView;
+
+  /// No description provided for @rssEditorWebPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Web page'**
+  String get rssEditorWebPage;
+
+  /// No description provided for @rssEditorLayoutList.
+  ///
+  /// In en, this message translates to:
+  /// **'List'**
+  String get rssEditorLayoutList;
+
+  /// No description provided for @rssEditorLayoutSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Single column'**
+  String get rssEditorLayoutSingle;
+
+  /// No description provided for @rssEditorLayoutDouble.
+  ///
+  /// In en, this message translates to:
+  /// **'Two columns'**
+  String get rssEditorLayoutDouble;
+
+  /// No description provided for @rssEditorLayoutWaterfall.
+  ///
+  /// In en, this message translates to:
+  /// **'Masonry'**
+  String get rssEditorLayoutWaterfall;
+
+  /// No description provided for @rssEditorLayoutTriple.
+  ///
+  /// In en, this message translates to:
+  /// **'Three columns'**
+  String get rssEditorLayoutTriple;
+
+  /// No description provided for @rssEditorType.
+  ///
+  /// In en, this message translates to:
+  /// **'Source type'**
+  String get rssEditorType;
+
   /// No description provided for @debuggerTitle.
   ///
   /// In en, this message translates to:
