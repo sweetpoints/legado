@@ -153,6 +153,17 @@ class FlutterRssSourceEditorUiTest {
         assertEquals(source.sourceName, appDb.rssSourceDao.getByKey(source.sourceUrl)?.sourceName)
         driver.click("rss-close")
         driver.click("rss-discard-cancel")
+        // Android ACTION_CLICK queues Dart's method-channel command. Confirm both
+        // the native handler and the subsequent rendered state before another exit.
+        driver.await("Continue editing acknowledged by native draft and rendered modal") {
+            var kept = false
+            robot.scenario!!.onActivity { kept = !it.viewModel.state.value.exit }
+            val cancel = driver.node("rss-discard-cancel")
+            val confirm = driver.node("rss-discard-confirm")
+            val dismissed = cancel == null && confirm == null
+            cancel?.recycle(); confirm?.recycle()
+            kept && dismissed
+        }
         robot.scenario!!.onActivity { assertFalse(it.viewModel.state.value.exit) }
         driver.click("rss-close")
         driver.click("rss-discard-confirm")
