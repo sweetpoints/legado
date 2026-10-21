@@ -782,13 +782,17 @@ class CodeSelectionUiTest {
     @Test
     fun sourcePreviewEditsReturnToTheSameBookAndRssCandidateWithoutLosingLongCode() {
         val id = UUID.randomUUID().toString()
+        val editMarker = "#$id-edited"
+        // Retain the pattern in its output so duplicate application is still observable.
+        val replacedMarker = "$editMarker-once"
+        val manualMarker = "#$id-replacement-only"
         val script = "// 中文 🌍 original draft\n".repeat(2_000)
         val savedReplacement = AppConfig.importReplaceSource
         val rule =
             ReplaceRule(
                 name = "Preview editor $id",
-                pattern = "#edited",
-                replacement = "#edited-once",
+                pattern = editMarker,
+                replacement = replacedMarker,
                 isRegex = false,
                 scopeSource = true,
                 scopeContent = false,
@@ -1074,16 +1078,16 @@ class CodeSelectionUiTest {
                         assertTrue(insertion > urls[1].length)
                         val edited =
                             original.substring(0, insertion) +
-                                "#edited" +
+                                editMarker +
                                 original.substring(insertion)
                         instrumentation.runOnMainSync {
                             val editor = editorActivity!!.findViewById<CodeEditor>(R.id.editText)
-                            editor.text.replace(insertion, insertion, "#edited")
+                            editor.text.replace(insertion, insertion, editMarker)
                             val position =
-                                editor.cursor.indexer.getCharPosition(insertion + "#edited".length)
+                                editor.cursor.indexer.getCharPosition(insertion + editMarker.length)
                             editor.setSelection(position.line, position.column)
                             assertEquals(edited, editor.text.toString())
-                            assertEquals(insertion + "#edited".length, editor.cursor.left)
+                            assertEquals(insertion + editMarker.length, editor.cursor.left)
                         }
                         val beforeRecreation = editorActivity
                         instrumentation.runOnMainSync { editorActivity!!.recreate() }
@@ -1101,13 +1105,13 @@ class CodeSelectionUiTest {
                                     "newActivity=${editorActivity !== beforeRecreation}, " +
                                         "editable=${editor?.isEditable}, textMatches=${editor?.text?.toString() == edited}, " +
                                         "length=${editor?.text?.length}/${edited.length}, " +
-                                        "cursor=${editor?.cursor?.left}/${insertion + "#edited".length}"
+                                        "cursor=${editor?.cursor?.left}/${insertion + editMarker.length}"
                                 ready =
                                     editorActivity !== beforeRecreation &&
                                         editor != null &&
                                         editor.isEditable &&
                                         editor.text.toString() == edited &&
-                                        editor.cursor.left == insertion + "#edited".length
+                                        editor.cursor.left == insertion + editMarker.length
                             }
                             ready
                         }
@@ -1119,7 +1123,7 @@ class CodeSelectionUiTest {
                             var ready = false
                             instrumentation.runOnMainSync {
                                 val expected =
-                                    if (replacements) edited.replace("#edited", "#edited-once")
+                                    if (replacements) edited.replace(editMarker, replacedMarker)
                                     else edited
                                 val value = preview!!.model.state.value
                                 val ownerRefreshPending = if (rss)
@@ -1254,7 +1258,7 @@ class CodeSelectionUiTest {
                                     instrumentation.runOnMainSync {
                                         val expected =
                                             if (draft == invalid) draft
-                                            else edited.replace("#edited", "#edited-once")
+                                            else edited.replace(editMarker, replacedMarker)
                                         val settledHost =
                                             if (rss) {
                                                 val value =
@@ -1314,7 +1318,7 @@ class CodeSelectionUiTest {
                             }
                         }
                         compose.onNodeWithTag("code-save").performClick()
-                        val expectedUrl = urls[1] + if (replacements) "#edited-once" else "#edited"
+                        val expectedUrl = urls[1] + if (replacements) replacedMarker else editMarker
                         awaitCompose {
                             var ready = false
                             instrumentation.runOnMainSync {
@@ -1372,7 +1376,7 @@ class CodeSelectionUiTest {
                                 }
                                 ready
                             }
-                            val derived = edited.replace("#edited", "#replacement-only")
+                            val derived = edited.replace(editMarker, manualMarker)
                             val readOnlyPreview =
                                 CodeDialog(edited, false, "1", derived, showAlternate = true)
                             instrumentation.runOnMainSync {
