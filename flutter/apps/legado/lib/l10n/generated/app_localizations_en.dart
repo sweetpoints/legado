@@ -781,6 +781,36 @@ class AppLocalizationsEn extends AppLocalizations {
       'URL navigation interception (JavaScript; return true to intercept; url is available to open links, search, or add books)';
 
   @override
+  String get rssEditorStart => 'Start';
+
+  @override
+  String get rssEditorList => 'List rules';
+
+  @override
+  String get rssEditorWebView => 'WebView';
+
+  @override
+  String get rssEditorWebPage => 'Web page';
+
+  @override
+  String get rssEditorLayoutList => 'List';
+
+  @override
+  String get rssEditorLayoutSingle => 'Single column';
+
+  @override
+  String get rssEditorLayoutDouble => 'Two columns';
+
+  @override
+  String get rssEditorLayoutWaterfall => 'Masonry';
+
+  @override
+  String get rssEditorLayoutTriple => 'Three columns';
+
+  @override
+  String get rssEditorType => 'Source type';
+
+  @override
   String get debuggerTitle => 'Source debugger';
 
   @override
