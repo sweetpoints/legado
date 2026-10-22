@@ -1,6 +1,7 @@
 package io.legado.app.ui.rss.favorites
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -58,13 +59,46 @@ class RssFavoriteConfigReaderHostTest {
     }
     private fun open() {
         compose.onNodeWithTag("rss-reader-favorite").performClick()
-        driver.awaitIdentifier("favorite-config-title")
+        // The toolbar's Room mutation is asynchronous. Its result opens the dialog from
+        // RssReaderRoute.LaunchedEffect on the Compose test clock; plain Android polling
+        // does not advance that clock. Wait for the same actual Flutter field while giving
+        // the existing Compose effect its frames, with the original single 30s budget.
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        try {
+            compose.waitUntil(timeoutMillis = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(1)) {
+                val field = driver.node("favorite-config-title")
+                val shown = field != null
+                field?.recycle()
+                shown
+            }
+        } catch (failure: Exception) {
+            throw AssertionError("Reader favorite Flutter field did not appear; ${readerDiagnostic()}", failure)
+        }
         scenario.onActivity { activity ->
             val dialog = activity.supportFragmentManager.fragments.filterIsInstance<RssFavoritesDialog>().single()
             ids += dialog.requireArguments().getString("requestId")!!
             assertTrue(dialog.childFragmentManager.fragments.any { it is RssFavoriteConfigFlutterFragment })
         }
         assertNotNull(runBlocking(Dispatchers.IO) { appDb.rssStarDao.get(origin, link) })
+    }
+    private fun readerDiagnostic(): String {
+        var diagnostic = ""
+        scenario.onActivity { activity ->
+            val state = activity.readerModel.state.value
+            val dialog = activity.supportFragmentManager.fragments.filterIsInstance<RssFavoritesDialog>().firstOrNull()
+            val config = dialog?.model?.state?.value
+            diagnostic = "loaded=${state.loaded},busy=${state.busy},article=${state.article}," +
+                "favorite=${state.favorite},pending=${state.pending?.action?.name}," +
+                "documentReady=${state.document > 0},error=${state.error != null}," +
+                "resumed=${activity.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED}," +
+                "stateSaved=${activity.supportFragmentManager.isStateSaved}," +
+                "finishing=${activity.isFinishing},destroyed=${activity.isDestroyed}," +
+                "dialogAdded=${dialog?.isAdded == true},configLoaded=${config?.loaded}," +
+                "configBusy=${config?.busy},configFinished=${config?.finished},configError=${config?.error != null}," +
+                "flutterChild=${dialog?.childFragmentManager?.findFragmentByTag("rss-favorite-config-flutter") != null}"
+        }
+        val rowPresent = runBlocking(Dispatchers.IO) { appDb.rssStarDao.get(origin, link) != null }
+        return "$diagnostic,rowPresent=$rowPresent"
     }
     private fun closed() = driver.await("Favorite dialog closed after native receipt") {
         var closed = false
