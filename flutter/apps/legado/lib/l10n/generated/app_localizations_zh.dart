@@ -715,6 +715,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rssFavoritesConfirmDelete => '确认删除？';
 
   @override
+  String get rssFavoriteConfigHeading => '收藏';
+
+  @override
+  String get rssFavoriteConfigTitle => '标题';
+
+  @override
+  String get rssFavoriteConfigGroup => '分组名';
+
+  @override
+  String get rssFavoriteConfigConfirm => '确定';
+
+  @override
   String get rssEditorTitle => '订阅源编辑';
 
   @override
