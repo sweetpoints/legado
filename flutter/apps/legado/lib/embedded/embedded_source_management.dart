@@ -15,6 +15,7 @@ import 'source_editor/source_editor_page.dart';
 import 'code_editor/code_editor_page.dart';
 import 'source_debugger/source_debugger_page.dart';
 import 'rss_source_editor/rss_source_editor_page.dart';
+import 'rss_favorites/rss_favorites_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -41,6 +42,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
         '/code-editor',
         '/source-debugger',
         '/rss-source-editor',
+        '/rss-favorites',
       ].contains(result['route']) ||
       !['zh', 'en'].contains(result['locale']) ||
       !['system', 'light', 'dark'].contains(result['theme'])) {
@@ -70,6 +72,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
     restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/rss-favorites',
+        builder: (_, _) => const RssFavoritesPage(),
+      ),
       GoRoute(
         path: '/rss-source-editor',
         builder: (_, _) => const RssSourceEditorPage(),

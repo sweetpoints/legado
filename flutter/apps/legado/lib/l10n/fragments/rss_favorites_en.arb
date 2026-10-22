@@ -1,0 +1,9 @@
+{
+  "rssFavoritesTitle": "RSS favorites",
+  "rssFavoritesGroups": "Groups",
+  "rssFavoritesMenu": "Menu",
+  "rssFavoritesDeleteGroup": "Delete current group",
+  "rssFavoritesDeleteAll": "Delete all favorites",
+  "rssFavoritesError": "Favorites operation failed. Please retry.",
+  "rssFavoritesConfirmDelete": "Confirm deletion?"
+}

@@ -1412,6 +1412,48 @@ abstract class AppLocalizations {
   /// **'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.'**
   String get rssDuplicateRestoreSource;
 
+  /// No description provided for @rssFavoritesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS favorites'**
+  String get rssFavoritesTitle;
+
+  /// No description provided for @rssFavoritesGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Groups'**
+  String get rssFavoritesGroups;
+
+  /// No description provided for @rssFavoritesMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Menu'**
+  String get rssFavoritesMenu;
+
+  /// No description provided for @rssFavoritesDeleteGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete current group'**
+  String get rssFavoritesDeleteGroup;
+
+  /// No description provided for @rssFavoritesDeleteAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all favorites'**
+  String get rssFavoritesDeleteAll;
+
+  /// No description provided for @rssFavoritesError.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites operation failed. Please retry.'**
+  String get rssFavoritesError;
+
+  /// No description provided for @rssFavoritesConfirmDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm deletion?'**
+  String get rssFavoritesConfirmDelete;
+
   /// No description provided for @rssEditorTitle.
   ///
   /// In en, this message translates to:

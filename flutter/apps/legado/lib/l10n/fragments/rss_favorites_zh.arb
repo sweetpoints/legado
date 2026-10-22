@@ -1,0 +1,9 @@
+{
+  "rssFavoritesTitle": "RSS收藏",
+  "rssFavoritesGroups": "分组",
+  "rssFavoritesMenu": "菜单",
+  "rssFavoritesDeleteGroup": "删除当前分组",
+  "rssFavoritesDeleteAll": "删除全部收藏",
+  "rssFavoritesError": "收藏操作失败，请重试",
+  "rssFavoritesConfirmDelete": "确认删除？"
+}

@@ -1,5 +1,6 @@
 package io.legado.app.ui.rss.favorites
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup
 import androidx.fragment.app.FragmentContainerView
@@ -35,6 +36,44 @@ class RssFavoritesActivity : BaseThemedActivity() {
                         add(R.id.rss_favorites_compose_container, RssFavoritesFragment(), HOME)
                 }
                 .commitNow()
+    }
+
+    private val flutterView
+        get() =
+            (supportFragmentManager.findFragmentByTag(HOME) as? RssFavoritesFragment)?.flutterView
+
+    override fun onPostResume() {
+        super.onPostResume()
+        flutterView?.onPostResume()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        flutterView?.onNewIntent(intent)
+        super.onNewIntent(intent)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        flutterView?.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        flutterView?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        flutterView?.onUserLeaveHint()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        flutterView?.onTrimMemory(level)
     }
 
     companion object {

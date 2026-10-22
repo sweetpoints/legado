@@ -694,6 +694,27 @@ class AppLocalizationsZh extends AppLocalizations {
       '旧订阅备份有重复 sourceUrl，无法确定使用哪条；请修正备份后重新恢复。原数据已保留。';
 
   @override
+  String get rssFavoritesTitle => 'RSS收藏';
+
+  @override
+  String get rssFavoritesGroups => '分组';
+
+  @override
+  String get rssFavoritesMenu => '菜单';
+
+  @override
+  String get rssFavoritesDeleteGroup => '删除当前分组';
+
+  @override
+  String get rssFavoritesDeleteAll => '删除全部收藏';
+
+  @override
+  String get rssFavoritesError => '收藏操作失败，请重试';
+
+  @override
+  String get rssFavoritesConfirmDelete => '确认删除？';
+
+  @override
   String get rssEditorTitle => '订阅源编辑';
 
   @override
