@@ -34,6 +34,19 @@ internal class SafeCodeEditorEngine(
     private val active: Boolean
         get() = !disposed && isCurrentOwner()
 
+    private var pageFinished = false
+    private var bootstrapStarted = false
+    private var inputEnabled = true
+    private val bootstrapRequest = Runnable { bootstrapIfReady() }
+    private val attachListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) { view.post(bootstrapRequest) }
+        override fun onViewDetachedFromWindow(view: View) = Unit
+    }
+    private val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        // View.layout clears isLayoutRequested only after dispatching these listeners.
+        view.post(bootstrapRequest)
+    }
+
     private var readGeneration = 0
     private var loadTimeout: Runnable? = null
     private var readTimeout: Runnable? = null
@@ -56,6 +69,8 @@ internal class SafeCodeEditorEngine(
     @SuppressLint("SetJavaScriptEnabled")
     private fun load() {
         view.isSaveEnabled = false
+        view.addOnAttachStateChangeListener(attachListener)
+        view.addOnLayoutChangeListener(layoutListener)
         view.contentDescription = context.getString(R.string.safe_code_editor)
         view.setBackgroundColor(context.backgroundColor)
         view.settings.apply {
@@ -74,7 +89,7 @@ internal class SafeCodeEditorEngine(
                 @JavascriptInterface
                 fun changed(text: String, cursor: Int, dirty: Boolean) {
                     view.post {
-                        if (active && !destroyed) {
+                        if (active && !destroyed && !status.failed && bootstrapStarted) {
                             draft =
                                 SafeEditorContent(text, cursor, dirty)
                                     .resolveAgainst(session.initialText)
@@ -92,7 +107,7 @@ internal class SafeCodeEditorEngine(
                 @JavascriptInterface
                 fun selected(cursor: Int) {
                     view.post {
-                        if (active && !destroyed) {
+                        if (active && !destroyed && !status.failed && bootstrapStarted) {
                             draft =
                                 if (draft.dirty)
                                     draft.copy(
@@ -116,11 +131,9 @@ internal class SafeCodeEditorEngine(
         view.webViewClient =
             object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
-                    if (!active || destroyed) return
-                    loadTimeout?.let(view::removeCallbacks)
-                    loadTimeout = null
-                    publish(status.copy(ready = true, failed = false))
-                    view.requestFocus()
+                    if (!active || destroyed || status.failed) return
+                    pageFinished = true
+                    bootstrapIfReady()
                 }
 
                 override fun onReceivedError(
@@ -139,6 +152,7 @@ internal class SafeCodeEditorEngine(
                     cancelRead(restoreEditing = false)
                     loadTimeout?.let(view::removeCallbacks)
                     loadTimeout = null
+                    removeBootstrapListeners()
                     destroyed = true
                     view.visibility = View.GONE
                     view.destroy()
@@ -160,10 +174,45 @@ internal class SafeCodeEditorEngine(
         publish(status)
     }
 
+    private fun removeBootstrapListeners() {
+        view.removeCallbacks(bootstrapRequest)
+        view.removeOnAttachStateChangeListener(attachListener)
+        view.removeOnLayoutChangeListener(layoutListener)
+    }
+
+    private fun bootstrapIfReady() {
+        if (!active || destroyed || status.failed || bootstrapStarted || !pageFinished ||
+            !view.isAttachedToWindow || !view.isLaidOut || view.isLayoutRequested ||
+            view.width == 0 || view.height == 0) return
+        bootstrapStarted = true
+        removeBootstrapListeners()
+        // Page completion alone is not native attachment/layout readiness. Establish native
+        // focus before the one initial DOM selection, and publish ready only after its ACK.
+        if (!view.requestFocus()) {
+            markFailed()
+            return
+        }
+        view.evaluateJavascript("window.__bootstrapEditor && window.__bootstrapEditor($inputEnabled);") { value ->
+            if (!active || destroyed || status.failed) return@evaluateJavascript
+            if (!view.isAttachedToWindow) return@evaluateJavascript
+            if (value != "true") {
+                markFailed()
+                return@evaluateJavascript
+            }
+            loadTimeout?.let(view::removeCallbacks)
+            loadTimeout = null
+            publish(status.copy(ready = true))
+        }
+    }
+
     private fun markFailed() {
         if (status.failed || !active) return
         loadTimeout?.let(view::removeCallbacks)
         loadTimeout = null
+        removeBootstrapListeners()
+        // A queued bootstrap may finish after the shared load deadline. Freeze its page,
+        // while the failed/owner gates reject both late ACKs and draft callbacks.
+        view.evaluateJavascript("window.__setEditorReadOnly && window.__setEditorReadOnly(true);", null)
         publish(status.copy(ready = false, failed = true))
         context.toastOnUi(R.string.safe_code_editor_load_failed)
     }
@@ -176,7 +225,6 @@ internal class SafeCodeEditorEngine(
             )
         val background = ColorUtils.intToString(context.backgroundColor)
         val foreground = ColorUtils.intToString(context.primaryTextColor)
-        val readOnly = if (session.writable) "" else " readonly"
         val writable = session.writable
         val wrap = if (AppConfig.editAutoWrap) "soft" else "off"
         val cursorPosition =
@@ -221,7 +269,7 @@ internal class SafeCodeEditorEngine(
             </head>
             <body>
                 <textarea id="code" wrap="$wrap" spellcheck="false" autocomplete="off"
-                    autocorrect="off" autocapitalize="off"$readOnly></textarea>
+                    autocorrect="off" autocapitalize="off" readonly></textarea>
                 <script>
                     function decodeBase64(value) {
                         var binary = atob(value);
@@ -245,17 +293,26 @@ internal class SafeCodeEditorEngine(
                     var initialDraftDirty = ${session.dirty};
                     var editorWritable = $writable;
                     var initialCursor = Math.min(editor.value.length, $cursorPosition);
-                    editor.setSelectionRange(initialCursor, initialCursor);
-                    editor.focus();
+                    var bootstrapComplete = false;
                     function rememberDraft() {
+                        if (!bootstrapComplete) return;
                         EditorDraft.changed(editor.value, editor.selectionStart || 0,
                             editor.value !== initialValue || initialDraftDirty);
                     }
                     editor.addEventListener("input", rememberDraft);
                     document.addEventListener("selectionchange", function() {
-                        EditorDraft.selected(editor.selectionStart || 0);
+                        if (bootstrapComplete) EditorDraft.selected(editor.selectionStart || 0);
                     });
-                    rememberDraft();
+                    window.__bootstrapEditor = function(enabled) {
+                        if (bootstrapComplete) return false;
+                        editor.readOnly = !enabled || !editorWritable;
+                        editor.focus();
+                        editor.setSelectionRange(initialCursor, initialCursor);
+                        if (editor.selectionStart !== initialCursor || editor.selectionEnd !== initialCursor) return false;
+                        bootstrapComplete = true;
+                        rememberDraft();
+                        return true;
+                    };
 
                     window.__setEditorReadOnly = function(readOnly) {
                         if (readOnly) {
@@ -263,7 +320,7 @@ internal class SafeCodeEditorEngine(
                             editor.readOnly = true;
                         } else if (editorWritable) {
                             editor.readOnly = false;
-                            editor.focus();
+                            if (document.activeElement !== editor) editor.focus();
                         } else {
                             editor.readOnly = true;
                         }
@@ -350,7 +407,10 @@ internal class SafeCodeEditorEngine(
     }
 
     override fun setInputEnabled(enabled: Boolean) {
-        if (!active || destroyed || !status.ready) return
+        inputEnabled = enabled
+        // Updates racing the bootstrap ACK must follow its submitted JS turn too. Waiting
+        // for ready here would leave a newly disabled surface editable until another update.
+        if (!active || destroyed || status.failed || (!status.ready && !bootstrapStarted)) return
         val readOnly = !enabled || !session.writable || status.reading
         view.evaluateJavascript(
             "window.__setEditorReadOnly && window.__setEditorReadOnly($readOnly);",
@@ -391,6 +451,7 @@ internal class SafeCodeEditorEngine(
     override fun dispose() {
         if (disposed) return
         disposed = true
+        removeBootstrapListeners()
         cancelRead(restoreEditing = false)
         loadTimeout?.let(view::removeCallbacks)
         loadTimeout = null
