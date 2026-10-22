@@ -3,6 +3,8 @@ package io.legado.app.ui.rss.favorites
 import android.app.Dialog
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.Choreographer
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.appcompat.app.AlertDialog
@@ -14,6 +16,7 @@ import io.legado.app.data.entities.RssStar
 import io.legado.app.data.repository.RoomRssFavoriteListRepository
 import io.legado.app.ui.flutter.FlutterUiTestDriver
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.*
 import org.junit.*
 import org.junit.Assert.*
@@ -154,6 +157,80 @@ class RssFavoriteListRestoreTest {
             } ?: false
         }
         instrumentation.waitForIdleSync()
+    }
+
+    @Test
+    fun actualSlowDragsAndShortFlingsSwitchGroupsWhileShortRestingDragStaysPut() {
+        val a = "$prefix A"
+        val b = "$prefix B"
+        val first = add(a).single()
+        val second = add(b).single()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        fun frame() {
+            val rendered = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                Choreographer.getInstance().postFrameCallback { rendered.countDown() }
+            }
+            driver.await("favorites native frame") { rendered.count == 0L }
+            instrumentation.waitForIdleSync()
+        }
+        ActivityScenario.launch(RssFavoritesActivity::class.java).use { scenario ->
+            fun acknowledged(group: String, row: RssStar) {
+                await(scenario) { it.loaded && it.group == group }
+                val key = RoomRssFavoriteListRepository.key(row.origin, row.link)
+                driver.awaitIdentifier("rss-favorite-row-$key")
+                frame()
+            }
+            fun drag(group: String, fraction: Float, duration: Long, rest: Long) {
+                frame()
+                val list = driver.bounds("rss-favorites-list-$group")
+                val startX = list.left + list.width() * if (fraction < 0) .85f else .15f
+                val y = list.centerY().toFloat()
+                val started = SystemClock.uptimeMillis()
+                fun event(action: Int, x: Float) {
+                    val motion = MotionEvent.obtain(
+                        started, SystemClock.uptimeMillis(), action, x, y, 0
+                    )
+                    motion.source = InputDevice.SOURCE_TOUCHSCREEN
+                    try { instrumentation.sendPointerSync(motion) }
+                    finally { motion.recycle() }
+                }
+                event(MotionEvent.ACTION_DOWN, startX)
+                val steps = if (rest > 0) 20 else 8
+                for (step in 1..steps) {
+                    event(MotionEvent.ACTION_MOVE, startX + list.width() * fraction * step / steps)
+                    SystemClock.sleep(duration / steps)
+                }
+                if (rest > 0) SystemClock.sleep(rest)
+                event(MotionEvent.ACTION_UP, startX + list.width() * fraction)
+                frame()
+            }
+            await(scenario)
+            group(a)
+            acknowledged(a, first)
+            // Cross half the actual viewport and stop before release: velocity cannot
+            // substitute for the distance threshold under test.
+            drag(a, -.7f, 800, 400)
+            acknowledged(b, second)
+            drag(b, .7f, 800, 400)
+            acknowledged(a, first)
+            // These short, fast gestures must still navigate without crossing half a page.
+            drag(a, -.2f, 80, 0)
+            acknowledged(b, second)
+            drag(b, .2f, 80, 0)
+            acknowledged(a, first)
+            drag(a, -.2f, 800, 400)
+            val stableUntil = SystemClock.uptimeMillis() + 400
+            driver.await("short resting drag retains the current native group") {
+                scenario.onActivity { activity ->
+                    val home = activity.supportFragmentManager.findFragmentByTag(RssFavoritesActivity.HOME)
+                        as RssFavoritesFragment
+                    assertEquals(a, home.model.state.value.group)
+                }
+                SystemClock.uptimeMillis() >= stableUntil
+            }
+            acknowledged(a, first)
+        }
     }
 
     @Test
