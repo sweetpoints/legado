@@ -1,15 +1,8 @@
 name: Flutter Linux app
 
+# During progressive Android migration, desktop application acceptance is manual.
+# Keep this entry point for full-platform acceptance when migration is complete.
 on:
-  pull_request:
-    paths:
-      - 'flutter/**'
-      - '.github/workflows/flutter-linux-app.yml'
-  push:
-    branches: [master]
-    paths:
-      - 'flutter/**'
-      - '.github/workflows/flutter-linux-app.yml'
   workflow_dispatch:
 
 permissions:

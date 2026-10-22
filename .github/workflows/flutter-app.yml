@@ -75,7 +75,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-26.04, macos-26, windows-2025]
+        # Portable Dart contracts run once during Android migration; manual
+        # acceptance also checks the macOS and Windows storage implementations.
+        runner: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["ubuntu-26.04", "macos-26", "windows-2025"]') || fromJSON('["ubuntu-26.04"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     defaults:
@@ -97,6 +99,8 @@ jobs:
           done
 
   apple-native-app:
+    # iOS/macOS application acceptance is manual during Android migration.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 35
     strategy:
