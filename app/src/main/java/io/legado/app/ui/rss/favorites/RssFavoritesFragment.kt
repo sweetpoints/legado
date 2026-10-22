@@ -34,21 +34,23 @@ class RssFavoritesFragment() : Fragment() {
             }
         }
 
-    internal lateinit var coordinator: RssFavoritesNativeCoordinator
-        private set
+    internal val coordinator by lazy {
+        RssFavoritesNativeCoordinator(
+            model,
+            lifecycle,
+            lifecycleScope,
+            arguments?.containsKey("group") != true,
+            { isAdded && !parentFragmentManager.isStateSaved },
+            ::readRss,
+            ::dispatchNativeBack,
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Fragment.onCreate restores and attaches child FlutterFragments synchronously.
+        // SavedStateRegistry is already restored by Fragment's pre-attach listener.
+        coordinator
         super.onCreate(savedInstanceState)
-        coordinator =
-            RssFavoritesNativeCoordinator(
-                model,
-                lifecycle,
-                lifecycleScope,
-                arguments?.containsKey("group") != true,
-                { isAdded && !parentFragmentManager.isStateSaved },
-                ::readRss,
-                ::dispatchNativeBack,
-            )
     }
 
     override fun onCreateView(
