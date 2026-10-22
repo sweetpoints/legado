@@ -262,6 +262,7 @@ class _GroupList extends StatefulWidget {
 }
 
 class _GroupListState extends State<_GroupList> {
+  double dragDistance = 0;
   late final controller = ScrollController(
     initialScrollOffset: widget.snapshot.position(
       widget.snapshot.group!,
@@ -298,66 +299,74 @@ class _GroupListState extends State<_GroupList> {
   Widget build(BuildContext context) {
     final s = widget.snapshot;
     final rows = s.rows.where((r) => r.group == s.group).toList();
-    return GestureDetector(
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        final index = s.groups.indexOf(s.group!);
-        final target =
-            index +
-            (velocity < -100
-                ? 1
-                : velocity > 100
-                ? -1
-                : 0);
-        if (target >= 0 && target < s.groups.length && target != index) {
-          widget.send('group', {'group': s.groups[target]});
-        }
-      },
-      child: _tag(
-        'rss-favorites-list-${s.group}',
-        ListView.builder(
-          controller: controller,
-          itemExtent: widget.extent,
-          itemCount: rows.length,
-          itemBuilder: (_, index) {
-            final row = rows[index];
-            return Semantics(
-              identifier: 'rss-favorite-row-${row.id}',
-              customSemanticsActions: {
-                CustomSemanticsAction(
-                  label: AppLocalizations.of(context).delete,
-                ): () {
-                  if (!s.busy) widget.send('delete', {'id': row.id});
+    return LayoutBuilder(
+      builder: (context, constraints) => GestureDetector(
+        onHorizontalDragStart: (_) => dragDistance = 0,
+        onHorizontalDragUpdate: (details) => dragDistance += details.delta.dx,
+        onHorizontalDragCancel: () => dragDistance = 0,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          final distance = dragDistance;
+          dragDistance = 0;
+          // A slow drag can finish at rest after crossing most of the page.
+          // Preserve fling navigation while also settling by travelled distance.
+          final direction = velocity.abs() > 100
+              ? velocity.sign
+              : distance.abs() >= constraints.maxWidth / 2
+              ? distance.sign
+              : 0;
+          final index = s.groups.indexOf(s.group!);
+          final target = index - direction.toInt();
+          if (target >= 0 && target < s.groups.length && target != index) {
+            widget.send('group', {'group': s.groups[target]});
+          }
+        },
+        child: _tag(
+          'rss-favorites-list-${s.group}',
+          ListView.builder(
+            controller: controller,
+            itemExtent: widget.extent,
+            itemCount: rows.length,
+            itemBuilder: (_, index) {
+              final row = rows[index];
+              return Semantics(
+                identifier: 'rss-favorite-row-${row.id}',
+                customSemanticsActions: {
+                  CustomSemanticsAction(
+                    label: AppLocalizations.of(context).delete,
+                  ): () {
+                    if (!s.busy) widget.send('delete', {'id': row.id});
+                  },
                 },
-              },
-              child: ListTile(
-                key: ValueKey(row.id),
-                enabled: !s.busy,
-                title: Text(
-                  row.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                child: ListTile(
+                  key: ValueKey(row.id),
+                  enabled: !s.busy,
+                  title: Text(
+                    row.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: row.date == null
+                      ? null
+                      : Text(row.date!, maxLines: 1),
+                  onTap: () => widget.send('read', {'id': row.id}),
+                  onLongPress: () => widget.send('delete', {'id': row.id}),
+                  trailing: row.image
+                      ? SizedBox(
+                          width: 94,
+                          height: 68,
+                          child: AndroidView(
+                            key: ValueKey('image-${row.id}-${row.imageKey}'),
+                            viewType: 'legado/rss-favorite-image',
+                            creationParams: {'id': row.id},
+                            creationParamsCodec: const StandardMessageCodec(),
+                          ),
+                        )
+                      : null,
                 ),
-                subtitle: row.date == null
-                    ? null
-                    : Text(row.date!, maxLines: 1),
-                onTap: () => widget.send('read', {'id': row.id}),
-                onLongPress: () => widget.send('delete', {'id': row.id}),
-                trailing: row.image
-                    ? SizedBox(
-                        width: 94,
-                        height: 68,
-                        child: AndroidView(
-                          key: ValueKey('image-${row.id}-${row.imageKey}'),
-                          viewType: 'legado/rss-favorite-image',
-                          creationParams: {'id': row.id},
-                          creationParamsCodec: const StandardMessageCodec(),
-                        ),
-                      )
-                    : null,
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

@@ -180,9 +180,7 @@ void main() {
       expect(find.text('Confirm deletion?'), findsNothing);
     },
   );
-  testWidgets('group tab and swipe route only opaque row id for native read', (
-    t,
-  ) async {
+  testWidgets('group tab routes only opaque row id for native read', (t) async {
     await app(t);
     await t.pumpAndSettle();
     await t.tap(find.text('A'));
@@ -194,6 +192,69 @@ void main() {
     expect(commands.last['op'], 'read');
     expect(commands.last.keys, unorderedEquals(['generation', 'op', 'id']));
   });
+  Future<void> dragToRest(WidgetTester tester, double fraction) async {
+    final list = find.byType(ListView);
+    final size = tester.getSize(list);
+    final start = tester.getCenter(list);
+    final gesture = await tester.startGesture(start);
+    for (var step = 1; step <= 20; step++) {
+      await gesture.moveTo(
+        start + Offset(size.width * fraction * step / 20, 0),
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    // Release with negligible velocity, so only travelled distance can change groups.
+    await tester.pump(const Duration(milliseconds: 400));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'slow horizontal drags settle into the adjacent group in both directions',
+    (t) async {
+      native = fixture(group: 'A');
+      await app(t);
+      await t.pumpAndSettle();
+      await dragToRest(t, -.7);
+      expect(native['group'], 'B');
+      expect(commands.where((c) => c['op'] == 'group').single['group'], 'B');
+      commands.clear();
+      await dragToRest(t, .7);
+      expect(native['group'], 'A');
+      expect(commands.where((c) => c['op'] == 'group').single['group'], 'A');
+    },
+  );
+
+  testWidgets('short fast horizontal flings change groups in both directions', (
+    t,
+  ) async {
+    native = fixture(group: 'A');
+    await app(t);
+    await t.pumpAndSettle();
+    final distance = t.getSize(find.byType(ListView)).width * .2;
+    await t.fling(find.byType(ListView), Offset(-distance, 0), 1200);
+    await t.pumpAndSettle();
+    expect(native['group'], 'B');
+    commands.clear();
+    await t.fling(find.byType(ListView), Offset(distance, 0), 1200);
+    await t.pumpAndSettle();
+    expect(native['group'], 'A');
+    expect(commands.where((c) => c['op'] == 'group').single['group'], 'A');
+  });
+
+  testWidgets(
+    'short drags at rest and outward edge drags do not switch groups',
+    (t) async {
+      native = fixture(group: 'A');
+      await app(t);
+      await t.pumpAndSettle();
+      await dragToRest(t, -.2);
+      expect(native['group'], 'A');
+      await dragToRest(t, .7);
+      expect(native['group'], 'A');
+      expect(commands.where((c) => c['op'] == 'group'), isEmpty);
+    },
+  );
   testWidgets(
     'fixed group hides toolbar while native confirmation survives bootstrap',
     (t) async {
