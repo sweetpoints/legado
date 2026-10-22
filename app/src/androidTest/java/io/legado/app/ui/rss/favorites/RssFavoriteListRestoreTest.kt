@@ -212,7 +212,9 @@ class RssFavoriteListRestoreTest {
             scenario.recreate()
             await(scenario) { it.loaded && it.confirmation != null }
             driver.await("restored confirmation title") {
-                driver.text("rss-favorites-confirm-message").contains(original.title)
+                // Flutter exposes ordinary Text labels as Android contentDescription;
+                // node.text is reserved for editable text-field values.
+                driver.containsText("rss-favorites-confirm-message", original.title)
             }
             driver.click("rss-favorites-cancel-delete")
             runBlocking(Dispatchers.IO) {
