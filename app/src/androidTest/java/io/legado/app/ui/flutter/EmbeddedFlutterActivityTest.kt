@@ -7,6 +7,9 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,6 +25,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.sourceEngine.DartSourceEngine
 import io.legado.app.ui.book.source.manage.BookSourceActivity
+import io.legado.app.ui.book.source.manage.SourceManagerDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.my.openMyItem
@@ -29,6 +33,7 @@ import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
 import java.util.ArrayDeque
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -128,11 +133,7 @@ class EmbeddedFlutterActivityTest {
 
         clickIdentifier("source-manager-menu")
         clickIdentifier("source-manager-action:online")
-        awaitIdentifier("source-manager-dialog")
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        awaitCondition("Back did not dismiss the Flutter manager dialog") {
-            identifierExists("source-manager-query") && !identifierExists("source-manager-dialog")
-        }
+        dismissManagerDialogWithBack(first)
         assertSame(first, awaitManager())
         awaitChecked("select:${source.bookSourceUrl}", true)
         // Capture only the synthetic filtered row for visual acceptance.
@@ -344,6 +345,91 @@ class EmbeddedFlutterActivityTest {
             SystemClock.sleep(100)
         }
         fail(message)
+    }
+
+    /** One Back after the actual IME viewport settles; every phase shares the old 30s budget. */
+    private fun dismissManagerDialogWithBack(activity: BookSourceActivity) {
+        val deadline = SystemClock.elapsedRealtime() + 30_000
+        val root = activity.window.decorView
+        val running = mutableSetOf<WindowInsetsAnimationCompat>()
+        var diagnostic = "viewport not sampled"
+        fun nativeState(expected: SourceManagerDialog?): Boolean {
+            var matched = false
+            instrumentation.runOnMainSync {
+                val state = activity.managerModel.state.value
+                val insets = ViewCompat.getRootWindowInsets(root)
+                diagnostic = "imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}, " +
+                    "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}, " +
+                    "animations=${running.size}, attached=${root.isAttachedToWindow}, " +
+                    "laidOut=${root.isLaidOut}, windowFocus=${root.hasWindowFocus()}, " +
+                    "dialog=${state.dialog}, busy=${state.busy}"
+                matched = state.dialog == expected && !state.busy
+            }
+            return matched
+        }
+        fun awaitPhase(message: String, condition: () -> Boolean) {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(25)
+            }
+            fail("$message; $diagnostic")
+        }
+        fun viewportSettled(): Boolean {
+            val acknowledged = nativeState(SourceManagerDialog.IMPORT)
+            var settled = false
+            instrumentation.runOnMainSync {
+                val insets = ViewCompat.getRootWindowInsets(root)
+                settled = root.isAttachedToWindow && root.isLaidOut && root.hasWindowFocus() &&
+                    insets != null && !insets.isVisible(WindowInsetsCompat.Type.ime()) && running.isEmpty()
+            }
+            return acknowledged && settled
+        }
+        awaitPhase("Flutter manager dialog did not acknowledge IMPORT") {
+            nativeState(SourceManagerDialog.IMPORT) && identifierExists("source-manager-dialog")
+        }
+        val committed = CountDownLatch(1)
+        val frame = Runnable { committed.countDown() }
+        instrumentation.runOnMainSync {
+            ViewCompat.setWindowInsetsAnimationCallback(root,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) running.add(animation)
+                    }
+                    override fun onProgress(insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>): WindowInsetsCompat {
+                        running.clear()
+                        running.addAll(runningAnimations.filter { it.typeMask and WindowInsetsCompat.Type.ime() != 0 })
+                        return insets
+                    }
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) { running.remove(animation) }
+                })
+        }
+        try {
+            // The menu/dialog transition can restore query focus after the earlier hide.
+            closeSoftKeyboard()
+            awaitPhase("Manager dialog IME did not become hidden and idle before Back") {
+                viewportSettled()
+            }
+            instrumentation.runOnMainSync {
+                assertTrue("Manager viewport needs a hardware frame; $diagnostic", root.isHardwareAccelerated)
+                root.viewTreeObserver.registerFrameCommitCallback(frame)
+                root.postInvalidateOnAnimation()
+            }
+            awaitPhase("Manager dialog viewport frame did not commit before Back") {
+                viewportSettled() && committed.count == 0L
+            }
+            assertTrue("Back budget exhausted before injection; $diagnostic", SystemClock.elapsedRealtime() < deadline)
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            awaitPhase("Back did not dismiss the Flutter manager dialog") {
+                nativeState(null) && identifierExists("source-manager-query") &&
+                    !identifierExists("source-manager-dialog")
+            }
+        } finally {
+            instrumentation.runOnMainSync {
+                root.viewTreeObserver.unregisterFrameCommitCallback(frame)
+                ViewCompat.setWindowInsetsAnimationCallback(root, null)
+            }
+        }
     }
 
     private fun SharedPreferences.Editor.putValue(key: String, value: Any?) {
