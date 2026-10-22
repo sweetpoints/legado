@@ -1,15 +1,9 @@
 name: Flutter Windows acceptance
+# During progressive Android migration, desktop application acceptance is manual.
+# Keep this entry point for full-platform acceptance when migration is complete.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/flutter-windows-app.yml'
-      - 'flutter/**'
-  push:
-    branches: [master]
-    paths:
-      - '.github/workflows/flutter-windows-app.yml'
-      - 'flutter/**'
+
 permissions:
   contents: read
 jobs:
