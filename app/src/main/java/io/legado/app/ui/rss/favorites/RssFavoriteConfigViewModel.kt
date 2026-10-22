@@ -18,6 +18,7 @@ data class RssFavoriteConfigEffect(
 data class RssFavoriteConfigState(
     val title: String = "",
     val group: String = "",
+    val focus: String = "title",
     val titleStart: Int = 0,
     val titleEnd: Int = 0,
     val groupStart: Int = 0,
@@ -44,6 +45,7 @@ class RssFavoriteConfigViewModel(
     private val mutable =
         MutableStateFlow(
             RssFavoriteConfigState(
+                focus = saved.get<String>("rssFavorite.focus")?.takeIf { it == "group" } ?: "title",
                 finished = saved.get<Boolean>("rssFavorite.finished") == true,
                 loading = saved.get<Boolean>("rssFavorite.finished") != true,
             )
@@ -97,6 +99,13 @@ class RssFavoriteConfigViewModel(
                 failure(error)
             }
         }
+    }
+
+    fun focus(key: String) {
+        require(key == "title" || key == "group")
+        if (!state.value.canEdit) return
+        saved["rssFavorite.focus"] = key
+        mutable.value = state.value.copy(focus = key)
     }
 
     fun title(value: String, start: Int, end: Int) = updateText(true, value, start, end)

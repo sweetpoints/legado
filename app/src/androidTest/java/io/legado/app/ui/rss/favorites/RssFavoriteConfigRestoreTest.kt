@@ -1,9 +1,9 @@
 package io.legado.app.ui.rss.favorites
 
 import android.os.SystemClock
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.text.TextRange
+import android.os.Bundle
+import android.view.accessibility.AccessibilityNodeInfo
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.entities.RssArticle
@@ -16,12 +16,14 @@ import org.junit.*
 import org.junit.Assert.*
 
 class RssFavoriteConfigRestoreTest {
-    @get:Rule val compose = createEmptyComposeRule()
+    private val driver = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+    @Before fun setup() { driver.enableAccessibility() }
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val ids = mutableListOf<String>()
 
     @After
     fun cleanup() {
+        driver.close()
         ids.forEach { File(context.filesDir, "rss-favorite-config/$it.json").delete() }
     }
 
@@ -56,29 +58,38 @@ class RssFavoriteConfigRestoreTest {
                 dialog.showNow(activity.supportFragmentManager, "favorite-test")
             }
             await(scenario)
-            compose
-                .onNodeWithTag("favorite-config-title")
-                .performScrollTo()
-                .performTextReplacement("Draft title")
-            compose
-                .onNodeWithTag("favorite-config-group")
-                .performScrollTo()
-                .performTextReplacement("Draft group")
-            compose
-                .onNodeWithTag("favorite-config-group")
-                .performTextInputSelection(TextRange(2, 5))
+            driver.setText("favorite-config-title", "Draft title")
+            driver.setText("favorite-config-group", "Draft group")
+            val node = requireNotNull(driver.node("favorite-config-group"))
+            try {
+                assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 2)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 5)
+                }))
+            } finally { node.recycle() }
+            driver.await("Native private selection and group focus acknowledgement") {
+                var accepted = false
+                scenario.onActivity { activity ->
+                    val model = (activity.supportFragmentManager.findFragmentByTag("favorite-test") as RssFavoritesDialog).model
+                    accepted = model.state.value.let { it.group == "Draft group" && it.groupStart == 2 && it.groupEnd == 5 && it.focus == "group" }
+                }
+                accepted
+            }
             scenario.recreate()
             await(scenario)
-            compose.onNodeWithTag("favorite-config-title").assertTextContains("Draft title")
-            compose
-                .onNodeWithTag("favorite-config-group")
-                .assertTextContains("Draft group")
-                .assertIsFocused()
+            driver.await("Actual Flutter draft and group focus restored") {
+                val group = driver.node("favorite-config-group")
+                val focused = group?.isFocused == true
+                group?.recycle()
+                driver.text("favorite-config-title") == "Draft title" &&
+                    driver.text("favorite-config-group") == "Draft group" && focused
+            }
             scenario.onActivity { activity ->
                 val dialog =
                     activity.supportFragmentManager.findFragmentByTag("favorite-test")
                         as RssFavoritesDialog
                 assertEquals(ids.single(), dialog.requireArguments().getString("requestId"))
+                assertTrue(dialog.childFragmentManager.fragments.any { it is RssFavoriteConfigFlutterFragment })
                 assertEquals(2, dialog.model.state.value.groupStart)
                 assertEquals(5, dialog.model.state.value.groupEnd)
                 assertFalse(activity.isFinishing)
@@ -86,7 +97,7 @@ class RssFavoriteConfigRestoreTest {
             val disk = runBlocking { FileRssFavoriteConfigRepository(context).load(ids.single()) }
             assertEquals("Draft title", disk.title)
             assertEquals("Draft group", disk.group)
-            compose.onNodeWithTag("favorite-config-cancel").performClick()
+            driver.click("favorite-config-cancel")
         }
     }
 
@@ -100,8 +111,9 @@ class RssFavoriteConfigRestoreTest {
                 dialog.showNow(activity.supportFragmentManager, "favorite-test")
             }
             await(scenario)
-            compose.onNodeWithTag("favorite-config-title").assertTextContains("Star title")
-            compose.onNodeWithTag("favorite-config-group").assertTextContains("Star group")
+            driver.awaitIdentifier("favorite-config-title")
+            assertEquals("Star title", driver.text("favorite-config-title"))
+            assertEquals("Star group", driver.text("favorite-config-group"))
             scenario.onActivity { activity ->
                 (activity.supportFragmentManager.findFragmentByTag("favorite-test")
                         as RssFavoritesDialog)
@@ -118,8 +130,9 @@ class RssFavoriteConfigRestoreTest {
                 ids += legacy.requireArguments().getString("requestId")!!
             }
             await(scenario)
-            compose.onNodeWithTag("favorite-config-title").assertTextContains("")
-            compose.onNodeWithTag("favorite-config-group").assertTextContains("Legacy group")
+            driver.awaitIdentifier("favorite-config-title")
+            assertEquals("", driver.text("favorite-config-title"))
+            assertEquals("Legacy group", driver.text("favorite-config-group"))
             val loaded = runBlocking { FileRssFavoriteConfigRepository(context).load(ids.last()) }
             assertNull(loaded.originalTitle)
             assertEquals("Legacy group", loaded.originalGroup)

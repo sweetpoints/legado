@@ -748,6 +748,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rssFavoritesConfirmDelete => 'Confirm deletion?';
 
   @override
+  String get rssFavoriteConfigHeading => 'Favorite';
+
+  @override
+  String get rssFavoriteConfigTitle => 'Title';
+
+  @override
+  String get rssFavoriteConfigGroup => 'Group name';
+
+  @override
+  String get rssFavoriteConfigConfirm => 'OK';
+
+  @override
   String get rssEditorTitle => 'RSS source editor';
 
   @override

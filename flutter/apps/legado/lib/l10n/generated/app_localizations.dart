@@ -1454,6 +1454,30 @@ abstract class AppLocalizations {
   /// **'Confirm deletion?'**
   String get rssFavoritesConfirmDelete;
 
+  /// No description provided for @rssFavoriteConfigHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite'**
+  String get rssFavoriteConfigHeading;
+
+  /// No description provided for @rssFavoriteConfigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get rssFavoriteConfigTitle;
+
+  /// No description provided for @rssFavoriteConfigGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get rssFavoriteConfigGroup;
+
+  /// No description provided for @rssFavoriteConfigConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get rssFavoriteConfigConfirm;
+
   /// No description provided for @rssEditorTitle.
   ///
   /// In en, this message translates to:

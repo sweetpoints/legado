@@ -5,5 +5,9 @@
   "rssFavoritesDeleteGroup": "Delete current group",
   "rssFavoritesDeleteAll": "Delete all favorites",
   "rssFavoritesError": "Favorites operation failed. Please retry.",
-  "rssFavoritesConfirmDelete": "Confirm deletion?"
+  "rssFavoritesConfirmDelete": "Confirm deletion?",
+  "rssFavoriteConfigHeading": "Favorite",
+  "rssFavoriteConfigTitle": "Title",
+  "rssFavoriteConfigGroup": "Group name",
+  "rssFavoriteConfigConfirm": "OK"
 }
