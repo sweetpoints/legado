@@ -104,6 +104,40 @@ class RssFavoriteConfigRestoreTest {
     @Test
     fun starConstructorAndLegacyArgumentsPreserveOriginalNullableValuesAndPublicCallbackContract() {
         ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
+            fun awaitRendered(title: String, group: String) {
+                var rendered = "fieldsNotQueried"
+                try {
+                    // The initial Flutter page exposes empty disabled fields before its
+                    // asynchronous native snapshot arrives. Identifier presence alone is
+                    // not a loaded form. Keep the original identifier wait's 30s budget,
+                    // requiring both actual values; the nullable title cannot pass alone.
+                    driver.await("Actual Flutter favorite title and group from native snapshot") {
+                        val titleNode = driver.node("favorite-config-title")
+                        val groupNode = driver.node("favorite-config-group")
+                        try {
+                            val titleMatches = titleNode?.text?.toString().orEmpty() == title
+                            val groupMatches = groupNode?.text?.toString().orEmpty() == group
+                            val editable = titleNode?.isEnabled == true && titleNode.isEditable &&
+                                groupNode?.isEnabled == true && groupNode.isEditable
+                            rendered = "titlePresent=${titleNode != null},groupPresent=${groupNode != null}," +
+                                "titleMatches=$titleMatches,groupMatches=$groupMatches,editable=$editable"
+                            titleMatches && groupMatches && editable
+                        } finally { titleNode?.recycle(); groupNode?.recycle() }
+                    }
+                } catch (failure: AssertionError) {
+                    var native = "dialogMissing"
+                    scenario.onActivity { activity ->
+                        val model = (activity.supportFragmentManager.findFragmentByTag("favorite-test")
+                            as? RssFavoritesDialog)?.model
+                        model?.state?.value?.let {
+                            native = "loaded=${it.loaded},loading=${it.loading},busy=${it.busy}," +
+                                "canEdit=${it.canEdit},finished=${it.finished},error=${it.error != null}," +
+                                "titleMatches=${it.title == title},groupMatches=${it.group == group}"
+                        }
+                    }
+                    throw AssertionError("${failure.message}; native={$native}; rendered={$rendered}", failure)
+                }
+            }
             scenario.onActivity { activity ->
                 val dialog = RssFavoritesDialog(RssStar(title = "Star title", group = "Star group"))
                 ids += dialog.requireArguments().getString("requestId")!!
@@ -111,7 +145,7 @@ class RssFavoriteConfigRestoreTest {
                 dialog.showNow(activity.supportFragmentManager, "favorite-test")
             }
             await(scenario)
-            driver.awaitIdentifier("favorite-config-title")
+            awaitRendered("Star title", "Star group")
             assertEquals("Star title", driver.text("favorite-config-title"))
             assertEquals("Star group", driver.text("favorite-config-group"))
             scenario.onActivity { activity ->
@@ -130,7 +164,7 @@ class RssFavoriteConfigRestoreTest {
                 ids += legacy.requireArguments().getString("requestId")!!
             }
             await(scenario)
-            driver.awaitIdentifier("favorite-config-title")
+            awaitRendered("", "Legacy group")
             assertEquals("", driver.text("favorite-config-title"))
             assertEquals("Legacy group", driver.text("favorite-config-group"))
             val loaded = runBlocking { FileRssFavoriteConfigRepository(context).load(ids.last()) }
