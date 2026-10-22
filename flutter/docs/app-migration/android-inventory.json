@@ -281,8 +281,6 @@
       "app/src/main/java/io/legado/app/ui/rss/article/RssCategoryScreen.kt",
       "app/src/main/java/io/legado/app/ui/rss/article/RssReadRecordRoute.kt",
       "app/src/main/java/io/legado/app/ui/rss/article/RssReadRecordScreen.kt",
-      "app/src/main/java/io/legado/app/ui/rss/favorites/RssFavoriteConfigRoute.kt",
-      "app/src/main/java/io/legado/app/ui/rss/favorites/RssFavoriteConfigScreen.kt",
       "app/src/main/java/io/legado/app/ui/rss/favorites/RssFavoriteListRoute.kt",
       "app/src/main/java/io/legado/app/ui/rss/favorites/RssFavoriteListScreen.kt",
       "app/src/main/java/io/legado/app/ui/rss/read/RssReaderRoute.kt",
