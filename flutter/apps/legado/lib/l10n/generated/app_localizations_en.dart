@@ -727,6 +727,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'The legacy backup contains duplicate sourceUrl identities. Fix the ambiguity and restore again. Original data is preserved.';
 
   @override
+  String get rssFavoritesTitle => 'RSS favorites';
+
+  @override
+  String get rssFavoritesGroups => 'Groups';
+
+  @override
+  String get rssFavoritesMenu => 'Menu';
+
+  @override
+  String get rssFavoritesDeleteGroup => 'Delete current group';
+
+  @override
+  String get rssFavoritesDeleteAll => 'Delete all favorites';
+
+  @override
+  String get rssFavoritesError => 'Favorites operation failed. Please retry.';
+
+  @override
+  String get rssFavoritesConfirmDelete => 'Confirm deletion?';
+
+  @override
   String get rssEditorTitle => 'RSS source editor';
 
   @override
