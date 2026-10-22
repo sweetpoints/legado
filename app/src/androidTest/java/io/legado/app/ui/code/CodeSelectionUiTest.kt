@@ -1604,7 +1604,7 @@ class CodeSelectionUiTest {
                 "ready=${value.editorReady},busy=${value.busy},readOnly=${value.session?.writable == false}"
         }
         fun safeScalars(value: com.google.gson.JsonObject?): String =
-            listOf("initialCursor", "sel", "end", "active", "readOnly", "ready")
+            listOf("initialCursor", "bootstrapped", "sel", "end", "active", "readOnly", "ready")
                 .joinToString(",") { key -> "$key=${value?.get(key)}" }
         scenario =
             ActivityScenario.launchActivityForResult(
@@ -1682,7 +1682,7 @@ class CodeSelectionUiTest {
             val model = ViewModelProvider(activity)[CodeEditorComposeViewModel::class.java]
             val vmBefore = nativeScalars(model)
             newPage.web.evaluateJavascript(
-                "(function(){function scalars(){return {initialCursor:initialCursor," +
+                "(function(){function scalars(){return {initialCursor:initialCursor,bootstrapped:bootstrapComplete," +
                     "sel:editor.selectionStart,end:editor.selectionEnd," +
                     "active:document.activeElement===editor,readOnly:editor.readOnly,ready:document.readyState};}" +
                     "var before=scalars();var state=window.__getEditorState && window.__getEditorState();" +
