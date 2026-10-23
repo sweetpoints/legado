@@ -104,6 +104,9 @@ void main() {
       if (['keep', 'discard'].contains(args['op'])) {
         native = {...native, 'exit': false};
       }
+      if (args['op'] == 'scroll') {
+        native = {...native, 'scroll': args['offset']};
+      }
       if (args['op'] == 'clearFocus') native = {...native, 'focus': null};
       if (args['op'] == 'focus') native = {...native, 'focus': args['key']};
       native = {...native, 'revision': (native['revision'] as int) + 1};
@@ -334,6 +337,110 @@ void main() {
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
+    },
+  );
+  Future<Map<Object?, Object?>> rendered(
+    WidgetTester tester, [
+    Object? args,
+  ]) async {
+    final reply = Completer<ByteData?>();
+    unawaited(
+      binding.defaultBinaryMessenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('renderedState', args),
+        ),
+        reply.complete,
+      ),
+    );
+    await tester.pump();
+    return const StandardMethodCodec().decodeEnvelope((await reply.future)!)
+        as Map<Object?, Object?>;
+  }
+
+  testWidgets(
+    'restoration keeps actual offset through delayed focus and IME viewport frames',
+    (tester) async {
+      final fields = Map<String, Object?>.from(native['fields'] as Map);
+      fields['Name'] = {
+        ...(fields['Name'] as Map),
+        'text': 'Long name\n' * 100,
+        'start': 27,
+        'end': 4,
+      };
+      native = {...native, 'fields': fields, 'focus': 'Name', 'scroll': 500};
+      final bridge = ReplaceEditorBridge();
+      await tester.pumpWidget(
+        MaterialApp(home: ReplaceEditorPage(bridge: bridge)),
+      );
+      await tester.pumpAndSettle();
+      var actual = await rendered(tester);
+      expect(actual['restoring'], isFalse);
+      expect(actual['scrollOffset'], 500);
+      expect(actual['restoreArmed'], isTrue);
+      final name = (actual['fields'] as Map)['Name'] as Map;
+      expect(name['focused'], isTrue);
+      expect(name['start'], 27);
+      expect(name['end'], 4);
+      // The platform IME arrives after the first focus/layout frames. Exercise
+      // multiple real metric changes, rather than treating the initial zero inset
+      // as proof that keyboard geometry has finished changing.
+      addTearDown(tester.view.resetViewInsets);
+      for (final inset in [100.0, 250.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pumpAndSettle();
+        actual = await rendered(tester);
+        expect(actual['restoring'], isFalse);
+        expect(actual['scrollOffset'], 500);
+        expect(native['scroll'], 500);
+      }
+      expect(
+        commands.where(
+          (command) => command['op'] == 'scroll' && command['offset'] != 500,
+        ),
+        isEmpty,
+      );
+      // A genuine touch scroll relinquishes the checkpoint and persists the
+      // resulting viewport instead of forcing the user back to 500.
+      final list = find.byType(SingleChildScrollView);
+      await tester.drag(list, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      actual = await rendered(tester);
+      expect(actual['restoreArmed'], isFalse);
+      expect(actual['scrollOffset'], isNot(500));
+      expect(native['scroll'], (actual['scrollOffset'] as double).round());
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'renderedState is read only and rejects arguments and detached owner',
+    (tester) async {
+      final bridge = ReplaceEditorBridge();
+      await tester.pumpWidget(
+        MaterialApp(home: ReplaceEditorPage(bridge: bridge)),
+      );
+      await tester.pumpAndSettle();
+      final initialCommands = commands.length;
+      final value = await rendered(tester);
+      expect(value['generation'], 1);
+      expect(value['scrollOffset'], 0);
+      expect(commands.length, initialCommands);
+      Object? rejected;
+      try {
+        await rendered(tester, {'offset': 500});
+      } catch (error) {
+        rejected = error;
+      }
+      expect(rejected, isA<PlatformException>());
+      expect(commands.length, initialCommands);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(
+        () => bridge.attachRenderedState(Object(), () => {}),
+        throwsStateError,
+      );
     },
   );
 }

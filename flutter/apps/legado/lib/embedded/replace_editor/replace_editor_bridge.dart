@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 
 const replaceFields = [
   'Name',
@@ -107,6 +108,45 @@ class ReplaceEditorBridge {
     snapshots.add(next);
   }
 
+  Object? _renderedOwner;
+  Map<String, Object?> Function()? _readRendered;
+  void attachRenderedState(Object owner, Map<String, Object?> Function() read) {
+    if (_closed || _renderedOwner != null) {
+      throw StateError('replace_rendered_owner');
+    }
+    _renderedOwner = owner;
+    _readRendered = read;
+    channel.setMethodCallHandler((call) async {
+      if (call.method != 'renderedState' ||
+          (call.arguments != null &&
+              (call.arguments is! Map || (call.arguments as Map).isNotEmpty))) {
+        throw PlatformException(code: 'invalid_request');
+      }
+      final expectedOwner = _renderedOwner;
+      final generation = latest?.generation;
+      await SchedulerBinding.instance.endOfFrame;
+      if (_closed ||
+          expectedOwner == null ||
+          _renderedOwner != expectedOwner ||
+          generation == null ||
+          latest?.generation != generation) {
+        throw PlatformException(code: 'retired');
+      }
+      return {
+        'generation': generation,
+        'revision': latest!.revision,
+        ..._readRendered!(),
+      };
+    });
+  }
+
+  void detachRenderedState(Object owner) {
+    if (_renderedOwner != owner) return;
+    _renderedOwner = null;
+    _readRendered = null;
+    channel.setMethodCallHandler(null);
+  }
+
   Future<void> start() async {
     _events ??= events.receiveBroadcastStream().listen(
       (value) {
@@ -183,6 +223,9 @@ class ReplaceEditorBridge {
 
   Future<void> close() async {
     _closed = true;
+    _renderedOwner = null;
+    _readRendered = null;
+    channel.setMethodCallHandler(null);
     await _events?.cancel();
     await snapshots.close();
   }

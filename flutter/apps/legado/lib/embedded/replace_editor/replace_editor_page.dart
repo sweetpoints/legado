@@ -12,7 +12,8 @@ class ReplaceEditorPage extends StatefulWidget {
   State<ReplaceEditorPage> createState() => _ReplaceEditorPageState();
 }
 
-class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
+class _ReplaceEditorPageState extends State<ReplaceEditorPage>
+    with WidgetsBindingObserver {
   late final bridge = widget.bridge ?? ReplaceEditorBridge();
   final controllers = {
     for (final key in replaceFields) key: TextEditingController(),
@@ -25,9 +26,47 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
   bool reflecting = false, failed = false, restoredScroll = false;
   String? focused;
   bool returning = false, exitDialogShowing = false;
+  bool restoring = false,
+      restoreFrameScheduled = false,
+      restoreFocusRequested = false;
+  double? restoreTarget;
+  String? restoreFocus;
+  (double, double, double)? restoreGeometry;
+  int stableRestoreFrames = 0;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    bridge.attachRenderedState(
+      this,
+      () => {
+        'scrollOffset': scroll.hasClients ? scroll.offset : null,
+        'viewportDimension': scroll.hasClients
+            ? scroll.position.viewportDimension
+            : null,
+        'minScrollExtent': scroll.hasClients
+            ? scroll.position.minScrollExtent
+            : null,
+        'maxScrollExtent': scroll.hasClients
+            ? scroll.position.maxScrollExtent
+            : null,
+        'viewInsetsBottom':
+            View.of(context).viewInsets.bottom /
+            View.of(context).devicePixelRatio,
+        'restoring': restoring,
+        'restoreArmed': restoreTarget != null,
+        'fields': {
+          for (final key in replaceFields)
+            key: {
+              'text': controllers[key]!.text,
+              'start': controllers[key]!.selection.baseOffset,
+              'end': controllers[key]!.selection.extentOffset,
+              'focused': focusNodes[key]!.hasFocus,
+            },
+        },
+      },
+    );
     for (final key in replaceFields) {
       controllers[key]!.addListener(() => changed(key));
       focusNodes[key]!.addListener(() {
@@ -38,7 +77,13 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
       });
     }
     scroll.addListener(() {
-      if (restoredScroll && !reflecting && state?.flag('loaded') == true) {
+      if (reflecting || state?.flag('loaded') != true) return;
+      if (restoring) {
+        scheduleRestore();
+      } else if (restoredScroll) {
+        // After restoration, a new scroll belongs to the live editor. Late IME
+        // metrics only reapply the checkpoint while no newer scroll/input exists.
+        restoreTarget = null;
         unawaited(command('scroll', {'offset': scroll.offset.round()}));
       }
     });
@@ -117,27 +162,15 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
       focused = next.focus;
       failed = bridge.hasRejectedField;
     });
-    if (next.flag('loaded') && !restoredScroll) {
-      restoredScroll = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && scroll.hasClients) {
-          reflecting = true;
-          scroll.jumpTo(
-            (next.raw['scroll'] as int).toDouble().clamp(
-              0,
-              scroll.position.maxScrollExtent,
-            ),
-          );
-          reflecting = false;
-        }
-        final key = next.focus;
-        if (mounted &&
-            next.flag('editable') &&
-            key != null &&
-            !next.fields[key]!.external) {
-          focusNodes[key]!.requestFocus();
-        }
-      });
+    if (next.flag('loaded') && !restoredScroll && restoreTarget == null) {
+      restoreTarget = (next.raw['scroll'] as int).toDouble();
+      restoreFocus =
+          next.flag('editable') &&
+              next.focus != null &&
+              !next.fields[next.focus]!.external
+          ? next.focus
+          : null;
+      scheduleRestore();
     }
     final nowReturning = next.flag('editorReturning') || !next.flag('editable');
     if (returning && !nowReturning && next.focus != null) {
@@ -150,6 +183,78 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
     returning = nowReturning;
   }
 
+  @override
+  void didChangeMetrics() {
+    if (restoreTarget != null) {
+      stableRestoreFrames = 0;
+      restoreGeometry = null;
+      scheduleRestore();
+    }
+  }
+
+  // Focus and IME both ask EditableText to reveal its caret in a later frame.
+  // Keep the actual viewport checkpoint until that geometry has settled; never
+  // publish those intermediate automatic offsets as the user's new checkpoint.
+  void scheduleRestore() {
+    if (!mounted || restoreTarget == null || restoreFrameScheduled) return;
+    if (!restoring) setState(() => restoring = true);
+    restoreFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      restoreFrameScheduled = false;
+      if (!mounted || restoreTarget == null) return;
+      if (!scroll.hasClients || !scroll.position.hasContentDimensions) {
+        scheduleRestore();
+        return;
+      }
+      if (!restoreFocusRequested) {
+        restoreFocusRequested = true;
+        if (restoreFocus != null) focusNodes[restoreFocus]?.requestFocus();
+      }
+      final position = scroll.position;
+      final geometry = (
+        position.viewportDimension,
+        position.maxScrollExtent,
+        View.of(context).viewInsets.bottom / View.of(context).devicePixelRatio,
+      );
+      final actualTarget = restoreTarget!.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      reflecting = true;
+      scroll.jumpTo(actualTarget);
+      reflecting = false;
+      final focused =
+          restoreFocus == null || focusNodes[restoreFocus]!.hasFocus;
+      if (geometry == restoreGeometry &&
+          focused &&
+          (scroll.offset - actualTarget).abs() < .5) {
+        stableRestoreFrames++;
+      } else {
+        stableRestoreFrames = 0;
+      }
+      restoreGeometry = geometry;
+      if (stableRestoreFrames < 2) {
+        scheduleRestore();
+        return;
+      }
+      // This value comes from the attached controller after layout and jumpTo,
+      // rather than echoing the requested/native number.
+      final renderedOffset = scroll.offset.round();
+      restoredScroll = true;
+      setState(() => restoring = false);
+      if (state?.raw['scroll'] != renderedOffset) {
+        unawaited(command('scroll', {'offset': renderedOffset}));
+      }
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void releaseRestoration() {
+    restoreTarget = null;
+    restoredScroll = true;
+    if (restoring && mounted) setState(() => restoring = false);
+  }
+
   void changed(String key) {
     final value = controllers[key]!.value;
     if (reflecting ||
@@ -157,6 +262,7 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
         !value.selection.isValid) {
       return;
     }
+    releaseRestoration();
     pending[key] = value;
     unawaited(() async {
       try {
@@ -199,6 +305,8 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    bridge.detachRenderedState(this);
     unawaited(subscription?.cancel());
     unawaited(bridge.close());
     for (final c in controllers.values) {
@@ -370,71 +478,78 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
               Expanded(
                 child: tagged(
                   'fields',
-                  SingleChildScrollView(
-                    controller: scroll,
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final key in replaceFields) ...[
-                          field(key),
-                          const SizedBox(height: 12),
-                          if (key == 'Pattern')
-                            Row(
-                              children: [
-                                Expanded(child: flag('regex')),
-                                tagged(
-                                  'help',
-                                  IconButton(
-                                    tooltip: label('help'),
-                                    onPressed: editable
-                                        ? () => unawaited(command('help'))
-                                        : null,
-                                    icon: const Icon(Icons.help_outline),
+                  Listener(
+                    onPointerDown: (_) => releaseRestoration(),
+                    onPointerSignal: (_) => releaseRestoration(),
+                    child: SingleChildScrollView(
+                      physics: restoring
+                          ? const _RestoreViewportPhysics()
+                          : null,
+                      controller: scroll,
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final key in replaceFields) ...[
+                            field(key),
+                            const SizedBox(height: 12),
+                            if (key == 'Pattern')
+                              Row(
+                                children: [
+                                  Expanded(child: flag('regex')),
+                                  tagged(
+                                    'help',
+                                    IconButton(
+                                      tooltip: label('help'),
+                                      onPressed: editable
+                                          ? () => unawaited(command('help'))
+                                          : null,
+                                      icon: const Icon(Icons.help_outline),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          if (key == 'Replacement') ...[
-                            flag('title'),
-                            flag('source'),
-                            flag('content'),
+                                ],
+                              ),
+                            if (key == 'Replacement') ...[
+                              flag('title'),
+                              flag('source'),
+                              flag('content'),
+                            ],
                           ],
-                        ],
-                        Text(
-                          label('output'),
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                        tagged(
-                          'output',
-                          Listener(
-                            onPointerDown: (_) {
-                              setState(() => focused = null);
-                              FocusScope.of(context).unfocus();
-                              unawaited(command('clearFocus'));
-                            },
-                            child: tagged(
-                              'output-text',
-                              SelectableText(
-                                s?.raw['preview'] as String? ?? '',
-                              ),
-                            ),
+                          Text(
+                            label('output'),
+                            style: Theme.of(context).textTheme.labelLarge,
                           ),
-                        ),
-                        if (s?.flag('previewFailed') == true)
                           tagged(
-                            'preview-error',
-                            Text(
-                              label(
-                                s?.raw['previewError'] as String? ??
-                                    'previewError',
-                              ),
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
+                            'output',
+                            Listener(
+                              onPointerDown: (_) {
+                                setState(() => focused = null);
+                                FocusScope.of(context).unfocus();
+                                unawaited(command('clearFocus'));
+                              },
+                              child: tagged(
+                                'output-text',
+                                SelectableText(
+                                  s?.raw['preview'] as String? ?? '',
+                                ),
                               ),
                             ),
                           ),
-                      ],
+                          if (s?.flag('previewFailed') == true)
+                            tagged(
+                              'preview-error',
+                              Text(
+                                label(
+                                  s?.raw['previewError'] as String? ??
+                                      'previewError',
+                                ),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -492,4 +607,15 @@ class _ReplaceEditorPageState extends State<ReplaceEditorPage> {
       ),
     );
   }
+}
+
+/// Suppress only implicit caret-driven ancestor scrolling during restoration.
+/// Explicit touch, wheel and accessibility scroll actions remain available.
+class _RestoreViewportPhysics extends ScrollPhysics {
+  const _RestoreViewportPhysics({super.parent});
+  @override
+  bool get allowImplicitScrolling => false;
+  @override
+  _RestoreViewportPhysics applyTo(ScrollPhysics? ancestor) =>
+      _RestoreViewportPhysics(parent: buildParent(ancestor));
 }
