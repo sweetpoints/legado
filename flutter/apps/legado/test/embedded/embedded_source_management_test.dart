@@ -160,6 +160,32 @@ void main() {
     expect(config.theme, 'light');
   });
 
+  for (final route in [
+    '/dictionary-rule-editor',
+    '/dictionary-manager',
+    '/replace-editor',
+  ]) {
+    test(
+      'native bootstrap accepts $route without source repository access',
+      () async {
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+          call,
+        ) async {
+          expect(call.method, 'bootstrap');
+          return {'route': route, 'locale': 'en', 'theme': 'system'};
+        });
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final config = await container.read(
+          embeddedSourceConfigurationProvider.future,
+        );
+        expect(config.route, route);
+        expect(config.locale, 'en');
+        expect(config.theme, 'system');
+      },
+    );
+  }
+
   test('standalone repository adapter retains complete records and leaves the shared service owner in control', () async {
     final repository = SourceTestRepository();
     final service = BookSourceService(repository);
